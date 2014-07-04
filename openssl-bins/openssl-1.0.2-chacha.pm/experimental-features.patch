@@ -1,0 +1,31 @@
+--- ./ssl/tls1.h.orig	2014-07-03 19:08:22.277405719 +0200
++++ ./ssl/tls1.h	2014-07-03 19:08:36.799536119 +0200
+@@ -157,7 +157,7 @@
+ extern "C" {
+ #endif
+ 
+-#define TLS1_ALLOW_EXPERIMENTAL_CIPHERSUITES	0
++#define TLS1_ALLOW_EXPERIMENTAL_CIPHERSUITES	1
+ 
+ #define TLS1_2_VERSION			0x0303
+ #define TLS1_2_VERSION_MAJOR		0x03
+--- ./ssl/s2_lib.c.orig	2014-07-03 10:04:32.035552187 +0200
++++ ./ssl/s2_lib.c	2014-07-03 19:08:22.280405746 +0200
+@@ -122,7 +122,7 @@
+ 
+ /* list of available SSLv2 ciphers (sorted by id) */
+ OPENSSL_GLOBAL const SSL_CIPHER ssl2_ciphers[]={
+-#if 0
++#if 1
+ /* NULL_WITH_MD5 v3 */
+ 	{
+ 	1,
+@@ -254,7 +254,7 @@
+ 	168,
+ 	},
+ 
+-#if 0
++#if 1
+ /* RC4_64_WITH_MD5 */
+ 	{
+ 	1,

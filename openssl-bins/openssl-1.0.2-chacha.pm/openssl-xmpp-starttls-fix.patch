@@ -1,0 +1,11 @@
+--- apps/s_client.c.org	2014-05-23 16:01:41.000000000 +0200
++++ apps/s_client.c	2014-05-23 16:02:25.414679645 +0200
+@@ -1478,7 +1478,7 @@
+ 		int seen = 0;
+ 		BIO_printf(sbio,"<stream:stream "
+ 		    "xmlns:stream='http://etherx.jabber.org/streams' "
+-		    "xmlns='jabber:client' to='%s' version='1.0'>", host);
++		    "xmlns='jabber:client' to='%s' version='1.0'>", servername?servername:host);
+ 		seen = BIO_read(sbio,mbuf,BUFSIZZ);
+ 		mbuf[seen] = 0;
+ 		while (!strstr(mbuf, "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'"))
