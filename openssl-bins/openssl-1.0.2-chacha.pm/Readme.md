@@ -2,17 +2,16 @@
 Compilation instructions
 ========================
 
-Currrent precompiled versions are are from OpenSSL 1.0.2i* You can
-also pull a snapshot from git. This is a fork of OpenSSL from Peter Mosmans,
-just to get chacha20+poly1305 support (thx!). Please note that the support
-from official OpenSSL git repo doesn't work correctly and is not supported
+Currrent precompiled versions are are from OpenSSL 1.0.2. 
+The ones I were using is a fork of OpenSSL from Peter Mosmans,
+just to get chacha20+poly1305 support (thx!). The one from
+the official git repo  didn't work for me work correctly,
+it's also likely to disappear shortly.
 (https://www.mail-archive.com/openssl-dev@openssl.org/msg34756.html)
 
+    $ git clone https://github.com/PeterMosmans/openssl
+    $ cd openssl
 
->
-> $ git clone https://github.com/PeterMosmans/openssl
-> $ cd openssl
->
 
 General instructions
 --------------------
@@ -66,12 +65,10 @@ libs which you compiled statically as ".a".
 7.) "openssl ciphers -V ALL:COMPLEMENTOFALL | wc -l" lists for me w/ kerberos and w/o GOST cipher engine
      167 ciphers as opposed to 111/109 from Ubuntu or Opensuse.
 
-**Never use my binaries for anything else then for testing**
+**Never use these binaries for anything else then for testing**
 
 
-Enjoy,
-
-Dirk
+Enjoy!  Dirk
 
 
 [1] https://en.wikipedia.org/wiki/GOST_%28block_cipher%29
