@@ -2,10 +2,10 @@
 Compilation instructions
 ========================
 
-Currrent precompiled versions are are from OpenSSL 1.0.2. 
-The ones I were using is a fork of OpenSSL from Peter Mosmans,
+The precompiled versions here are from OpenSSL 1.0.2 and
+they are a fork of OpenSSL from Peter Mosmans,
 just to get chacha20+poly1305 support (thx!). The one from
-the official git repo  didn't work for me work correctly,
+the official git repo didn't work for me work correctly,
 it's also likely they'll disappear shortly
 (https://www.mail-archive.com/openssl-dev@openssl.org/msg34756.html).
 
@@ -40,10 +40,10 @@ If you want to compile OpenSSL yourself, here are the instructions:
 3.) configure the damned thing. Options I used:
 
 * for 64Bit: 
->./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa enable-seed enable-camellia enable-idea enable-rfc3779 enable-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT experimental-jpake  
+    ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa enable-seed enable-camellia enable-idea enable-rfc3779 enable-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT experimental-jpake  
 
 * for 32 Bit: 
-> ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT experimental-jpake 
+    ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT experimental-jpake 
 
 Don't use -DTEMP_GOST_TLS, it breaks things!
 
@@ -57,14 +57,18 @@ as you don't want your openssl binary to end up loading system libraries like li
 libcrypto. Alternatively you can hack the Makefile and include those
 libs which you compiled statically as ".a".
 
-4.) make depend
+4.) 
+    make depend
 
-5.) make
+5.) 
+    make
 
-6.) make report (check whether it runs ok)
+6.) 
+    make report (check whether it runs ok)
 
 7.) "openssl ciphers -V ALL:COMPLEMENTOFALL | wc -l" lists for me w/ kerberos and w/o GOST cipher engine
      167 ciphers as opposed to 111/109 from Ubuntu or Opensuse.
+
 
 **Never use these binaries for anything else then for testing**
 
