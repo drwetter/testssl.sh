@@ -1,12 +1,17 @@
 
-Compilation instructions
-========================
+Instructions
+============
 
-The precompiled versions here are from an OpenSSL 1.0.2 fork
+The precompiled binarres here provide extended support for everything
+which is normally not configured to be compiled (56 Bit, some other
+old ciphers) and provide extended support for new cipher suites and/or
+features which are not yet in the official branch.
+
+They are all compiled from an OpenSSL 1.0.2 fork
 from Peter Mosmans. He has patched the master git branch
-to support chacha20+poly1305 and other ciphers (CAMELIA 256 Bit).
+to support CHACHA20 + POLY1305 and other ciphers (like CAMELIA 256 Bit).
 
-CHACHA20+POLY1305 cipher suites from the official git repo didn't 
+CHACHA20 + POLY1305 cipher suites from the official git repo didn't 
 work for me work correctly, it's also likely they'll disappear shortly
 (https://www.mail-archive.com/openssl-dev@openssl.org/msg34756.html).
 
@@ -54,10 +59,9 @@ If you want to compile OpenSSL yourself, here are the instructions:
     enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa enable-seed enable-camellia \
     enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT experimental-jpake 
 
-Don't use -DTEMP_GOST_TLS, it currently breaks things and it is not needed for general GOST support.
+Don't use -DTEMP_GOST_TLS, it currently breaks things and it is not needed for general GOST [1] support.
 
-If you don't have / don't want Kerberos libraries and devel rpms/debs, omit "--with-krb5-flavor=MIT". 
-If you have other Kerberos flavors you need to figure out by yourself.
+If you don't have / don't want Kerberos libraries and devel rpms/debs, omit "--with-krb5-flavor=MIT". If you have other Kerberos flavors you need to figure out by yourself.
 
 3.) make depend
 
