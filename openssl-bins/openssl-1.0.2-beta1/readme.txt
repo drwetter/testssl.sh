@@ -7,8 +7,7 @@ Both are statically linked, except a few libraries which
 are nowadays sometimes hard to link in, i.e. the dynamic
 loader (libdl) and glibc (libc).
 
-If you want to compile OpenSSL yourself, here are the configure
-options:
+If you want to compile OpenSSL yourself, here are my configure options:
 
 for 32 Bit:
 --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 enable-gost enable-cms enable-md2 enable-mdc2 enable-rc5 enable-ec enable-ec2m enable-ecdh enable-ecdsa enable-seed enable-idea -Wa,--noexecstack no-dane no-ec_nistp_64_gcc_128 no-gmp no-jpake no-krb5 no-libunbound no-multiblock no-rfc3779 no-sctp no-shared no-ssl-trace no-store no-zlib-dynamic static-engine
