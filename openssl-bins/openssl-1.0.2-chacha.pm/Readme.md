@@ -67,7 +67,7 @@ If you have other Kerberos flavors you need to figure out by yourself.
 
 6.) "openssl ciphers -V ALL:COMPLEMENTOFALL | wc -l" lists now for me 
 * 187(+4 GOST) ciphers -- including kerberos
-* 173+(4 GOST) ciphers without kerberos
+* 173(+4 GOST) ciphers without kerberos
 
 as opposed to 111/109 from Ubuntu or Opensuse. 
 
