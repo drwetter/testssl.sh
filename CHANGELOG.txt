@@ -22,6 +22,32 @@
 ---------------------
 Details:
 
+1.112
+- IPv6 display fix
+
+1.111
+- NEW: tested unter FreeBSD (works with exception of xxd in CCS)
+- getent now works under Linux and FreeBSD
+- sed -i in hsts sacrificed for compatibility
+- reomved query for IP for finishing banner, is now called once in parse_hn_port
+- GOST warning after banner
+- empty build date is not displayed anymore
+- long build date strings minimized
+- FIXED: IPv6 address are displayed again
+
+1.110
+- NEW: adding Russian GOST cipher support by providing a config file on the fly
+- adding the compile date of openssl in the banner
+
+1.109
+- minor IPv6 fixes
+
+1.108
+- NEW: Major rewrite of output functions. Now using printf instead of "echo -e" for BSD and MacOSX compatibility
+
+1.107
+- improved IP address stuff
+
 1.106
 - minor fixes
 
