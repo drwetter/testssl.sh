@@ -491,6 +491,43 @@ neat_list(){
 	[ -r $MAP_RFC_FNAME ] && show_rfc_style $HEXC 73
 }
 
+test_just_one(){
+
+	ciph=""
+	for arg in $@; do
+		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph restofline; do
+			normalize_ciphercode $hexcode
+			grep arg 
+		done
+	done
+
+	neat_header
+
+	$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslversmin kx auth enc mac export; do
+		for ciph in $@; do
+			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE  </dev/null
+			ret=$?
+			if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ]; then
+				continue		# no successful connect AND not verbose displaying each cipher
+			fi
+			normalize_ciphercode $hexcode
+			neat_list $HEXC $ciph $kx $enc
+			if [ "$SHOW_EACH_C" -ne 0 ]; then
+				[ -r $MAP_RFC_FNAME ] && go2_column 114
+				if [ $ret -eq 0 ]; then
+					cyan "  available"
+				else
+					out "  not a/v"
+				fi
+			fi
+		done
+		outln
+		rm $TMPFILE
+	done
+
+	return 0
+}
+
 
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad
 allciphers(){
@@ -641,7 +678,7 @@ simple_preference() {
 	outln
 	blue "--> Testing server defaults (Server Hello)"; outln "\n"
 	# throwing every cipher/protocol at the server and displaying its pick
-	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -tlsextdebug </dev/null 2>/dev/null >$TMPFILE
+	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -tlsextdebug -status </dev/null 2>/dev/null >$TMPFILE
 	localtime=`date "+%s"`
 	if [ $? -ne 0 ]; then
 		magentaln "This shouldn't happen. "
@@ -683,7 +720,7 @@ simple_preference() {
 			esac
 		fi
 
-		out " TLS server extensions:    "
+		out " TLS server extensions     "
 		extensions=`grep -w "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g'`
 		if [ -z "$extensions" ]; then
 			outln "(none)"
@@ -700,7 +737,22 @@ simple_preference() {
 			unit=`echo $sessticket_str | grep lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g'`
 			outln "$lifetime $unit"
 		fi
-		ret=0
+
+		out " OCSP stapling            "
+		if grep "OCSP response" $TMPFILE | grep -q "no response sent" ; then
+			out " not offered"
+		else
+			if grep "OCSP Response Status" $TMPFILE | grep -q successful; then
+				litegreen " OCSP stapling offered"
+			else
+				outln " not sure what's going on here, debug:"
+				grep -A 20 "OCSP response"  $TMPFILE
+				ret=2
+			fi
+		fi
+	fi
+	outln
+
 
 		#gmt_unix_time, removed since 1.0.1f
 		#
@@ -715,7 +767,6 @@ simple_preference() {
 		#	outln " $localtime"
 		#fi
 		#http://www.moserware.com/2009/06/first-few-milliseconds-of-https.html
-	fi
 
 	rm $TMPFILE
 	return $ret
@@ -1641,6 +1692,13 @@ case "$1" in
 		initialize_engine 	# GOST support
 		prettyprint_local "$2"
 		exit $? ;;
+	-x|--single-test)
+		parse_hn_port "$3"
+		maketempf
+		test_just_one $2
+		ret=$?
+		cleanup
+		exit $ret ;;
 	-t|--starttls)			
 		parse_hn_port "$2" "$3" # here comes hostname:port and protocol to signal starttls
 		maketempf
@@ -1783,7 +1841,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.112 2014/07/16 16:54:10 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.114 2014/08/29 12:56:35 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
