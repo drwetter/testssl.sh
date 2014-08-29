@@ -2,9 +2,9 @@
 Instructions
 ============
 
-The precompiled binarres here provide extended support for everything
+The precompiled binaries provided here have extended support for everything
 which is normally not configured to be compiled (56 Bit, some other
-old ciphers) and provide extended support for new cipher suites and/or
+old ciphers) and come with extended support for new cipher suites and/or
 features which are not yet in the official branch.
 
 They are all compiled from an OpenSSL 1.0.2 fork
