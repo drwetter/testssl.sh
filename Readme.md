@@ -8,6 +8,7 @@ It's designed to provide clear output for a "is this good or bad" decision.
 It is working on every Linux distribution which has OpenSSL, /bin/bash and
 standard tools like GNU sed and awk installed.
 
-For a more thorough description see http://testssl.sh/
+On github (here) you will find development versions of the software -- with new features and maybe some bugs. The stable version and a more thorough description please see http://testssl.sh/
 
+I am happy for any help.
 
