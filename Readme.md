@@ -10,5 +10,4 @@ standard tools like GNU sed and awk installed.
 
 On github (here) you will find development versions of the software -- with new features and maybe some bugs. The stable version and a more thorough description please see http://testssl.sh/
 
-I am happy for any help.
 
