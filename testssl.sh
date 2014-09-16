@@ -78,6 +78,7 @@ OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 NODEIP=""
 IPS=""
+MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
 
 go2_column() { $ECHO "\033[${1}G"; }
 
@@ -450,6 +451,7 @@ std_cipherlists() {
 	[ "$VERBERR" -eq 0 ] && echo
 }
 
+
 # sockets inspired by http://blog.chris007.de/?p=238
 # ARG1: hexbyte, ARG2: hexode for TLS Version, ARG3: sleep
 socksend() {
@@ -458,8 +460,38 @@ socksend() {
 	out "$data" >&5 &
 	sleep $3
 }
+
+#sockread() {
+	#SOCKREPLY=`dd bs=$1 count=1 <&5 2>/dev/null`
+#}
+
 sockread() {
-	SOCKREPLY=`dd bs=$1 count=1 <&5 2>/dev/null`
+	maxsleep=$MAX_WAITSOCK
+	ret=0
+
+	ddreply=`mktemp /tmp/ddreply.XXXXXX` || exit 7
+	dd bs=$1 of=$ddreply count=1 <&5 2>/dev/null &
+	pid=$!
+	
+	while true; do
+		if ! ps ax | grep -v grep | grep -q $pid; then
+			break  # didn't reach maxsleep yet
+			kill $pid >&2 2>/dev/null
+		fi
+		sleep 1
+		maxsleep=`expr $maxsleep - 1`
+		test $maxsleep -eq 0 && break
+	done
+	if ps ax | grep -v grep | grep -q $pid; then
+		# time's up and dd is still alive --> tiemout
+		kill $pid
+		wait $pid 2>/dev/null
+		ret=3 # means killed
+	fi
+	SOCKREPLY=`cat $ddreply`
+	rm $ddreply
+
+	return $ret
 }
 
 
@@ -795,7 +827,7 @@ pfs() {
 	ret=$?
 	outln
 	if [ $ret -ne 0 ] || [ `grep -c "BEGIN CERTIFICATE" $TMPFILE` -eq 0 ]; then
-		brown "no PFS available"
+		brown "No PFS available"
 	else
 		litegreen "PFS seems generally available. Now testing specific ciphers ..."; outln "\n"
 		noone=0
@@ -1016,6 +1048,7 @@ ccs_injection(){
 	socksend $ccs_message $tls_hexcode 1 || ok_ids
 	socksend $ccs_message $tls_hexcode 2 || ok_ids
 	sockread 16384
+	retval=$?
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n reply: "
@@ -1027,12 +1060,14 @@ ccs_injection(){
 	lines=`echo "$SOCKREPLY" | xxd -c32 | wc -l`
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
-		greenln "NOT vulnerable (ok)"
+		green "NOT vulnerable (ok)"
 		ret=0
 	else
-		redln "VULNERABLE"
+		red "VULNERABLE"
 		ret=1
 	fi
+	[ $retval -eq 3 ] && out ", timed out"
+	outln 
 	rm $TMPFILE
 	return $ret
 }
@@ -1043,7 +1078,7 @@ heartbleed(){
 	$OPENSSL s_client -tlsextdebug 2>&1 | grep -wq '^usage'
 	if [ $? -eq 0 ]; then
 		magenta "Local problem: Your $OPENSSL cannot run the pretest for this - "
-		outln "continueing at your own risks"
+		outln "continuing at your own risks"
 	fi
 # we don't need SNI here:
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -tlsextdebug &>$TMPFILE </dev/null
@@ -1127,6 +1162,7 @@ heartbleed(){
 
 		socksend $heartbleed_payload $tls_hexcode 1
 		sockread 16384
+		retval=$?
 
 		if [ $VERBOSE -eq 1 ]; then
 			outln "\n heartbleed reply: "
@@ -1136,12 +1172,14 @@ heartbleed(){
 
 		lines_returned=`echo "$SOCKREPLY" | xxd | wc -l`
 		if [ $lines_returned -gt 1 ]; then
-			redln "VULNERABLE"
+			red "VULNERABLE"
 			ret=1
 		else
-			greenln "NOT vulnerable (ok)"
+			green "NOT vulnerable (ok)"
 			ret=0
 		fi
+		[ $retval -eq 3 ] && green ", timed out"
+		outln 
 	fi
 	rm $TMPFILE
 	return $ret
@@ -1841,7 +1879,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.114 2014/08/29 12:56:35 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.115 2014/09/16 20:16:07 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
