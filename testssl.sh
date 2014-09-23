@@ -82,7 +82,7 @@ MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
 
 # The various hexdump commands we need to replace xdd
 HEXDUMP=(hexdump -ve '"%07_ax  " 16/2 "%06o  " " \n"')
-HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')
+HEXDUMPPLAIN=(hexdump -ve '30/1 "%.2x" "\n"')
         
 go2_column() { $ECHO "\033[${1}G"; }
 
