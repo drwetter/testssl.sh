@@ -293,7 +293,8 @@ hsts() {
 	grep -i '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 # fix Markus Manzke:
-		AGE_SEC=`sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE` 
+		# iS - We need to make sure we only keep digits
+		AGE_SEC=$(cat $TMPFILE| grep -oP "[0-9]*(?<=max-age=)?")
 		AGE_DAYS=`expr $AGE_SEC \/ 86400`
 		if [ $AGE_DAYS -gt $HSTS_MIN ]; then
 			litegreen "$AGE_DAYS days \c" ; outln "($AGE_SEC s)"
