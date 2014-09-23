@@ -293,7 +293,8 @@ hsts() {
 	grep -i '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 # fix Markus Manzke:
-		AGE_SEC=`sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE` 
+		# iS - Extract the digits from the header
+		AGE_SEC=$(cat $TMPFILE | tr -cd [:digit:])
 		AGE_DAYS=`expr $AGE_SEC \/ 86400`
 		if [ $AGE_DAYS -gt $HSTS_MIN ]; then
 			litegreen "$AGE_DAYS days \c" ; outln "($AGE_SEC s)"
@@ -652,7 +653,7 @@ runprotocols() {
 	blue "--> Testing Protocols"; outln "\n"
 	# e.g. ubuntu's 12.04 openssl binary + soon others don't want sslv2 anymore: bugs.launchpad.net/ubuntu/+source/openssl/+bug/955675
 	# Sonderlocke hier #FIXME kann woanders auch auftauchen!
-	testprotohelper -ssl2 " SSLv2     " 
+	testprotohelper "-ssl2" " SSLv2     " 
 	ret=$?; 
 	if [ $ret -ne 7 ]; then
 		if [ $ret -eq 0 ]; then
@@ -660,9 +661,11 @@ runprotocols() {
 		else
 			ok 0 1		# green "not offered (ok)"
 		fi
+	else
+		ok 0 1		# green "not offered (ok)"
 	fi
 	
-	if testprotohelper -ssl3 " SSLv3     " ; then
+	if testprotohelper "-ssl3" " SSLv3     " ; then
 		ok 3 0			# brown "offered" 
 	else
 		ok 0 1			# green "not offered (ok)"
