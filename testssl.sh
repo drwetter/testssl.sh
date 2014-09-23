@@ -653,7 +653,7 @@ runprotocols() {
 	blue "--> Testing Protocols"; outln "\n"
 	# e.g. ubuntu's 12.04 openssl binary + soon others don't want sslv2 anymore: bugs.launchpad.net/ubuntu/+source/openssl/+bug/955675
 	# Sonderlocke hier #FIXME kann woanders auch auftauchen!
-	testprotohelper -ssl2 " SSLv2     " 
+	testprotohelper "-ssl2" " SSLv2     " 
 	ret=$?; 
 	if [ $ret -ne 7 ]; then
 		if [ $ret -eq 0 ]; then
@@ -661,9 +661,11 @@ runprotocols() {
 		else
 			ok 0 1		# green "not offered (ok)"
 		fi
+	else
+		ok 0 1		# green "not offered (ok)"
 	fi
 	
-	if testprotohelper -ssl3 " SSLv3     " ; then
+	if testprotohelper "-ssl3" " SSLv3     " ; then
 		ok 3 0			# brown "offered" 
 	else
 		ok 0 1			# green "not offered (ok)"
