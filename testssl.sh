@@ -80,6 +80,10 @@ NODEIP=""
 IPS=""
 MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
 
+# The various hexdump commands we need to replace xdd
+HEXDUMP=(hexdump -ve '"%07_ax  " 16/2 "%06o  " " \n"')
+HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')
+        
 go2_column() { $ECHO "\033[${1}G"; }
 
 out() {
@@ -1040,7 +1044,7 @@ ccs_injection(){
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n server hello:"
-		echo "$SOCKREPLY" | xxd -c32 | head -20
+		echo "$SOCKREPLY" | "${HEXDUMP[@]}" | head -20
 		outln "[...]"
 		outln "payload with TLS version $tls_hexcode:"
 	fi
@@ -1052,12 +1056,12 @@ ccs_injection(){
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n reply: "
-		echo "$SOCKREPLY" | xxd -c32
+		echo "$SOCKREPLY" | "${HEXDUMP[@]}"
 		outln
 	fi
 
-	reply_sanitized=`echo "$SOCKREPLY" | xxd -p | tr -cd '[:print:]' | sed 's/^..........//'`
-	lines=`echo "$SOCKREPLY" | xxd -c32 | wc -l`
+	reply_sanitized=`echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | tr -cd '[:print:]' | sed 's/^..........//'`
+	lines=`echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l`
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
 		green "NOT vulnerable (ok)"
@@ -1155,7 +1159,7 @@ heartbleed(){
 
 		if [ $VERBOSE -eq 1 ]; then
 			outln "\n server hello:"
-			echo "$SOCKREPLY" | xxd -c32 | head -20
+			echo "$SOCKREPLY" | "${HEXDUMP[@]}" | head -20
 			outln "[...]"
 			outln " sending payload with TLS version $tls_hexcode:"
 		fi
@@ -1166,11 +1170,12 @@ heartbleed(){
 
 		if [ $VERBOSE -eq 1 ]; then
 			outln "\n heartbleed reply: "
-			echo "$SOCKREPLY" | xxd -c32
+			echo "$SOCKREPLY" | "${HEXDUMP[@]}"
 			outln
 		fi
 
-		lines_returned=`echo "$SOCKREPLY" | xxd | wc -l`
+		# iS - Does this need to be a different hexdump command?
+		lines_returned=`echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l`
 		if [ $lines_returned -gt 1 ]; then
 			red "VULNERABLE"
 			ret=1
