@@ -462,7 +462,7 @@ std_cipherlists() {
 socksend() {
 	data=`echo $1 | sed 's/tls_version/'"$2"'/g'`
 	[ $VERBOSE -eq 1 ] && echo "\"$data\""
-	out "$data" >&5 &
+	printf $data >&5 &
 	sleep $3
 }
 
@@ -1062,7 +1062,7 @@ ccs_injection(){
 		outln
 	fi
 
-	reply_sanitized=`echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | tr -cd '[:print:]' | sed 's/^..........//'`
+	reply_sanitized=`echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//'`
 	lines=`echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l`
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
