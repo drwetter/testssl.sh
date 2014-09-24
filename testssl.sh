@@ -81,8 +81,9 @@ IPS=""
 MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
 
 # The various hexdump commands we need to replace xdd
-HEXDUMP=(hexdump -ve '"%07_ax  " 16/2 "%06o  " " \n"')
-HEXDUMPPLAIN=(hexdump -ve '30/1 "%.2x" "\n"')
+HEXDUMPVIEW=(hexdump -C)	# This is used in verbose mode to see what's going on
+HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"')	# This is used to analyse the reply
+HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')	# Replaces both xxd -p and tr -cd '[:print:]'
         
 go2_column() { $ECHO "\033[${1}G"; }
 
@@ -1044,7 +1045,7 @@ ccs_injection(){
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n server hello:"
-		echo "$SOCKREPLY" | "${HEXDUMP[@]}" | head -20
+		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
 		outln "[...]"
 		outln "payload with TLS version $tls_hexcode:"
 	fi
@@ -1056,7 +1057,7 @@ ccs_injection(){
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n reply: "
-		echo "$SOCKREPLY" | "${HEXDUMP[@]}"
+		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
 		outln
 	fi
 
@@ -1159,7 +1160,7 @@ heartbleed(){
 
 		if [ $VERBOSE -eq 1 ]; then
 			outln "\n server hello:"
-			echo "$SOCKREPLY" | "${HEXDUMP[@]}" | head -20
+			echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
 			outln "[...]"
 			outln " sending payload with TLS version $tls_hexcode:"
 		fi
@@ -1170,11 +1171,10 @@ heartbleed(){
 
 		if [ $VERBOSE -eq 1 ]; then
 			outln "\n heartbleed reply: "
-			echo "$SOCKREPLY" | "${HEXDUMP[@]}"
+			echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
 			outln
 		fi
 
-		# iS - Does this need to be a different hexdump command?
 		lines_returned=`echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l`
 		if [ $lines_returned -gt 1 ]; then
 			red "VULNERABLE"
