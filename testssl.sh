@@ -199,13 +199,13 @@ ok(){
 	if [ "$2" -eq 1 ] ; then		
 		case $1 in
 			1) redln "offered (NOT ok)" ;;   # 1 1
-			0) greenln "NOT offered (ok)" ;; # 0 1
+			0) greenln "not offered (OK)" ;; # 0 1
 		esac
 	else	
 		case $1 in
 			3) brownln "offered" ;;  		# 2 0
 			2) boldln "offered" ;;  		# 2 0
-			1) greenln "offered (ok)" ;;  	# 1 0
+			1) greenln "offered (OK)" ;;  	# 1 0
 			0) boldln "not offered" ;;    	# 0 0
 		esac
 	fi
@@ -904,7 +904,7 @@ rc4() {
 		outln "RC4 is kind of broken, for e.g. IE6 consider 0x13 or 0x0a"
 	else
 		outln
-		litegreenln "No RC4 ciphers detected (OK)"
+		litegreenln "no RC4 ciphers detected (OK)"
 		bad=0
 	fi
 
@@ -1059,7 +1059,7 @@ ccs_injection(){
 	lines=`echo "$SOCKREPLY" | xxd -c32 | wc -l`
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
-		green "NOT vulnerable (ok)"
+		green "not vulnerable (OK)"
 		ret=0
 	else
 		red "VULNERABLE"
@@ -1083,7 +1083,7 @@ heartbleed(){
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -tlsextdebug &>$TMPFILE </dev/null
 	grep "server extension" $TMPFILE | grep -wq heartbeat
 	if [ $? -ne 0 ]; then
-		greenln "No TLS heartbeat extension (ok)"
+		greenln "No TLS heartbeat extension (OK)"
 		ret=0
 	else
 		# mainly adapted from https://gist.github.com/takeshixx/10107280
@@ -1174,7 +1174,7 @@ heartbleed(){
 			red "VULNERABLE"
 			ret=1
 		else
-			green "NOT vulnerable (ok)"
+			green "not vulnerable (OK)"
 			ret=0
 		fi
 		[ $retval -eq 3 ] && green ", timed out"
@@ -1212,11 +1212,11 @@ renego() {
 
 	if [ $reneg_ok -eq 0 ] && [ $secreg -eq 0 ]; then
 		# Client side renegotiation is accepted and secure renegotiation IS NOT supported 
-		redln "is vulnerable (not ok)"
+		redln "IS vulnerable (NOT ok)"
 		return 1
 	fi
 	if [ $reneg_ok -eq 1 ] && [ $secreg -eq 1 ]; then
-		greenln "NOT vulnerable (ok)"
+		greenln "not vulnerable (OK)"
 		return 0
 	fi
 	if [ $reneg_ok -eq 1 ] ; then   # 1,0
@@ -1255,10 +1255,10 @@ crime() {
 
 	STR=`$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null | grep Compression `
 	if echo $STR | grep -q NONE >/dev/null; then
-		greenln "NOT vulnerable (ok) "
+		greenln "not vulnerable (OK) "
 		ret=0
 	else
-		redln "is vulnerable (not ok)"
+		redln "IS vulnerable (NOT ok)"
 		ret=1
 	fi
 
@@ -1286,10 +1286,10 @@ crime() {
 
 #			STR=`grep Compression $TMPFILE `
 #			if echo $STR | grep -q NONE >/dev/null; then
-#				green "NOT vulnerable (ok)"
+#				green "not vulnerable (OK)"
 #				ret=`expr $ret + 0`
 #			else
-#				red "is vulnerable (not ok)"
+#				red "IS vulnerable (NOT ok)"
 #				ret=`expr $ret + 1`
 #			fi
 #		fi
@@ -1878,7 +1878,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.115 2014/09/16 20:16:07 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.116 2014/09/24 09:29:05 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
