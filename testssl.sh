@@ -80,6 +80,11 @@ NODEIP=""
 IPS=""
 MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
 
+# The various hexdump commands we need to replace xdd
+HEXDUMPVIEW=(hexdump -C)	# This is used in verbose mode to see what's going on
+HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"')	# This is used to analyse the reply
+HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')	# Replaces both xxd -p and tr -cd '[:print:]'
+        
 go2_column() { $ECHO "\033[${1}G"; }
 
 out() {
@@ -456,7 +461,7 @@ std_cipherlists() {
 socksend() {
 	data=`echo $1 | sed 's/tls_version/'"$2"'/g'`
 	[ $VERBOSE -eq 1 ] && echo "\"$data\""
-	out "$data" >&5 &
+	printf $data >&5 &
 	sleep $3
 }
 
@@ -1000,11 +1005,11 @@ ccs_injection(){
 
 	client_hello="
 	# TLS header ( 5 bytes)
-	,x16,               # Content type (x16 for handshake)
+	,x16,               # Content type (0x16 for handshake)
 	x03, tls_version,   # TLS Version
 	x00, x93,           # Length
 	# Handshake header
-	x01,                # Type (x01 for ClientHello)
+	x01,                # Type (0x01 for ClientHello)
 	x00, x00, x8f,      # Length
 	x03, tls_version,   # TLS Version
 	# Random (32 byte) 
@@ -1029,8 +1034,9 @@ ccs_injection(){
 	x00, x07, x00, x06, x00, x05, x00, x04,
 	x00, x03, x00, x02, x00, x01, x01, x00"
 
-	msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' -e 's/[ \t]//g' | tr -d '\n'`
-
+	msg=`echo "$client_hello" | grep -o '\bx[[:xdigit:]]\{2\}\b\|tls_version' | sed -e 's/x/\\\x/g' -e 's/tls_version/\\\tls_version/g' | tr -d '\n'`
+	#msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' -e 's/[ \t]//g' | tr -d '\n'`
+	
 	fd_socket 5 || return 6
 
 	[ $VERBOSE -eq 1 ] && out " sending client hello, "
@@ -1039,7 +1045,7 @@ ccs_injection(){
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n server hello:"
-		echo "$SOCKREPLY" | xxd -c32 | head -20
+		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
 		outln "[...]"
 		outln "payload with TLS version $tls_hexcode:"
 	fi
@@ -1051,12 +1057,12 @@ ccs_injection(){
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n reply: "
-		echo "$SOCKREPLY" | xxd -c32
+		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
 		outln
 	fi
 
-	reply_sanitized=`echo "$SOCKREPLY" | xxd -p | tr -cd '[:print:]' | sed 's/^..........//'`
-	lines=`echo "$SOCKREPLY" | xxd -c32 | wc -l`
+	reply_sanitized=`echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//'`
+	lines=`echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l`
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
 		green "not vulnerable (OK)"
@@ -1098,11 +1104,11 @@ heartbleed(){
 
 		client_hello="
 		# TLS header ( 5 bytes)
-		,x16,                      # Content type (x16 for handshake)
+		,x16,                      # Content type (0x16 for handshake)
 		x03, tls_version,          # TLS Version
 		x00, xdc,                  # Length
 		# Handshake header
-		x01,                       # Type (x01 for ClientHello)
+		x01,                       # Type (0x01 for ClientHello)
 		x00, x00, xd8,             # Length
 		x03, tls_version,          # TLS Version
           # Random (32 byte)
@@ -1127,7 +1133,7 @@ heartbleed(){
 		x00, x09, x00, x14, x00, x11, x00, x08,
 		x00, x06, x00, x03, x00, xff,
 		x01,                       # Compression methods length
-		x00,                       # Compression method (x00 for NULL)
+		x00,                       # Compression method (0x00 for NULL)
 		x00, x49,                  # Extensions length
           # Extension: ec_point_formats
 		x00, x0b, x00, x04, x03, x00, x01, x02,
@@ -1144,7 +1150,8 @@ heartbleed(){
           # Extension: Heartbeat
 		x00, x0f, x00, x01, x01"
 
-		msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' -e 's/[ \t]//g' | tr -d '\n'`
+		msg=`echo "$client_hello" | grep -o '\bx[[:xdigit:]]\{2\}\b\|tls_version' | sed -e 's/x/\\\x/g' -e 's/tls_version/\\\tls_version/g' | tr -d '\n'`
+		#msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' -e 's/[ \t]//g' | tr -d '\n'`
 
 		fd_socket 5 || return 6
 
@@ -1154,7 +1161,7 @@ heartbleed(){
 
 		if [ $VERBOSE -eq 1 ]; then
 			outln "\n server hello:"
-			echo "$SOCKREPLY" | xxd -c32 | head -20
+			echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
 			outln "[...]"
 			outln " sending payload with TLS version $tls_hexcode:"
 		fi
@@ -1165,11 +1172,11 @@ heartbleed(){
 
 		if [ $VERBOSE -eq 1 ]; then
 			outln "\n heartbleed reply: "
-			echo "$SOCKREPLY" | xxd -c32
+			echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
 			outln
 		fi
 
-		lines_returned=`echo "$SOCKREPLY" | xxd | wc -l`
+		lines_returned=`echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l`
 		if [ $lines_returned -gt 1 ]; then
 			red "VULNERABLE"
 			ret=1
