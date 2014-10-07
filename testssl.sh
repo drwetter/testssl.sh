@@ -1628,34 +1628,40 @@ parse_hn_port() {
 
 
 get_dns_entries() {
-	# for security testing sometimes we have local host entries, so getent is preferred
-	if which getent 2>&1 >/dev/null ; then
-		getent ahostsv4 $NODE 2>/dev/null >/dev/null
-		if [ $? -eq 0 ]; then
-			# Linux, no BSD
-			key2get=ahostsv4
-		else
-			key2get=hosts
+	test4iponly=`printf $NODE | sed -e 's/[0-9]//g' -e 's/\.//g'`
+	if [ "x$test4iponly" == "x" ]; then  # only an IPv4 address was supplied
+		IP4=$NODE
+		SNI=""	# override this as we test the IP only
+	else
+		# for security testing sometimes we have local host entries, so getent is preferred
+		if which getent 2>&1 >/dev/null ; then
+			getent ahostsv4 $NODE 2>/dev/null >/dev/null
+			if [ $? -eq 0 ]; then
+				# Linux, no BSD
+				key2get=ahostsv4
+			else
+				key2get=hosts
+			fi
 		fi
-	fi
-	IP4=`getent $key2get $NODE &>/dev/null | grep $NODE | grep -v ':' | awk '{ print $1}' | uniq`
-	# getent returned nothing:
-	if [ -z "$IP4" ] ; then
-		IP4=`host -t a $NODE | grep -v alias | sed 's/^.*address //'`
-		if  echo "$IP4" | grep -q NXDOMAIN  ; then
-			magenta "Can't proceed: No IP resultion from \"$NODE\""; outln "\n"
-			exit 1
+		IP4=`getent $key2get $NODE &>/dev/null | grep $NODE | grep -v ':' | awk '{ print $1}' | uniq`
+		# getent returned nothing:
+		if [ -z "$IP4" ] ; then
+			IP4=`host -t a $NODE | grep -v alias | sed 's/^.*address //'`
+			if  echo "$IP4" | grep -q NXDOMAIN  ; then
+				magenta "Can't proceed: No IP resultion from \"$NODE\""; outln "\n"
+				exit 1
+			fi
 		fi
-	fi
 
-	# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
-	#which getent 2>&1 >/dev/null && IP6=`getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq`
+		# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
+		#which getent 2>&1 >/dev/null && IP6=`getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq`
 
-	if [ -z "$IP6" ] ; then
-		if host -t aaaa $NODE 2>&1 >/dev/null ; then
-			IP6=`host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'`
-		else
-			IP6=""
+		if [ -z "$IP6" ] ; then
+			if host -t aaaa $NODE 2>&1 >/dev/null ; then
+				IP6=`host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'`
+			else
+				IP6=""
+			fi
 		fi
 	fi
 	
@@ -1878,7 +1884,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.116 2014/09/24 09:29:05 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.118 2014/10/07 09:12:53 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
