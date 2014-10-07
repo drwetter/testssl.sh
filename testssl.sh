@@ -292,10 +292,11 @@ hsts() {
 	bold " HSTS        "
 	grep -i '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		AGE_SEC=`sed -e 's/[^0-9]*//g' $TMPFILE` 
+		grep -c '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
+		AGE_SEC=`sed -e 's/[^0-9]*//g' $TMPFILE | head -1` 
 		AGE_DAYS=`expr $AGE_SEC \/ 86400`
 		if [ $AGE_DAYS -gt $HSTS_MIN ]; then
-			litegreen "$AGE_DAYS days \c" ; outln "($AGE_SEC s)"
+			litegreen "$AGE_DAYS days \c" ; out "($AGE_SEC s)"
 		else
 			brown "$AGE_DAYS days (<$HSTS_MIN is not good enough)"
 		fi
@@ -1644,7 +1645,7 @@ get_dns_entries() {
 		if [ -z "$IP4" ] ; then
 			IP4=`host -t a $NODE | grep -v alias | sed 's/^.*address //'`
 			if  echo "$IP4" | grep -q NXDOMAIN  ; then
-				magenta "Can't proceed: No IP resultion from \"$NODE\""; outln "\n"
+				magenta "Can't proceed: No DNS resolution from \"$NODE\""; outln "\n"
 				exit 1
 			fi
 		fi
@@ -1880,7 +1881,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.119 2014/10/07 10:03:47 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.120 2014/10/07 23:02:32 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
