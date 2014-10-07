@@ -8,6 +8,8 @@
 ##### THIS WILL BE INTEGRATED INTO testssl.sh 
 ##### it has no production qualiity yet and I'll likely disregard
 ##### any issues/patches until this will be done
+#
+# license is GPLv2, see file LICENSE
 
 
 DAYS2WARN=60
