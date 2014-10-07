@@ -970,9 +970,15 @@ spdy(){
 fd_socket() {
 # arg doesn't work here
 	if ! exec 5<> /dev/tcp/$NODEIP/$PORT; then
-		echo "`basename $0`: unable to make bash socket connection to $NODEIP:$PORT"
+		magenta "`basename $0`: unable to open a socket to $NODEIP:$PORT"
 		return 6
 	fi
+	return 0
+}
+
+close_socket(){
+	exec 5<&-
+	exec 5>&-
 	return 0
 }
 
@@ -1067,6 +1073,8 @@ ccs_injection(){
 	fi
 	[ $retval -eq 3 ] && out ", timed out"
 	outln 
+
+	close_socket
 	rm $TMPFILE
 	return $ret
 }
@@ -1180,6 +1188,8 @@ heartbleed(){
 		[ $retval -eq 3 ] && green ", timed out"
 		outln 
 	fi
+
+	close_socket
 	rm $TMPFILE
 	return $ret
 }
@@ -1369,19 +1379,6 @@ find_openssl_binary() {
 }
 
 
-find_nc_binary() {
-## FIXME: only the openbsd netcat understands IPv6 addresses! ==> bash sockets?
-	NC=`which netcat 2>/dev/null` 
-	if [ "$?" -ne 0 ]; then
-	 	NC=`which nc 2>/dev/null`
-		if [ "$?" -ne 0 ]; then
-			outln "sorry. No netcat found, bye."
-			return 1 
-		fi
-	fi
-	return 0
-}
-
 starttls() {
 	protocol=`echo "$1" | sed 's/s$//'`	 # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s) 
 	case "$1" in
@@ -1558,7 +1555,7 @@ ignore_no_or_lame() {
 	if [ "$WARNINGS" = "off" -o "$WARNINGS" = "false" ]; then
 		return 0
 	fi
-	outln
+	#outln
 	out "$1 "
 	read a
 	case $a in
@@ -1603,19 +1600,18 @@ parse_hn_port() {
 	# now get NODEIP
 	get_dns_entries
 
-	# check if netcat can connect to port 
-	if find_nc_binary; then
-		if ! $NC -z -v -w 2 $NODEIP $PORT &>/dev/null; then
-			ignore_no_or_lame "Supply a correct host/port pair. On $NODEIP:$PORT doesn't seem to be any service. Ignore? "
-			[ $? -ne 0 ] && exit 3
-		fi
+	# check if we can connect to port 
+	if ! fd_socket; then
+		ignore_no_or_lame "Ignore? "
+		[ $? -ne 0 ] && exit 3
 	fi
+	close_socket
 
 	if [ -z "$2" ]; then	# for starttls we don't want this check
 		# is ssl service listening on port? FIXME: better with bash on IP!
 		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null >/dev/null 2>&1 
 		if [ $? -ne 0 ]; then
-			ignore_no_or_lame "On port $PORT @ $NODE seems a server but not TLS/SSL enabled. Ignore? "
+			ignore_no_or_lame "On port $PORT @ $NODE doesn't seem a TLS/SSL enabled server. Really really ignore? \n (Pls note that he results might look ok but they are not) "
 			[ $? -ne 0 ] && exit 3
 		fi
 	fi
@@ -1884,7 +1880,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.118 2014/10/07 09:12:53 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.119 2014/10/07 10:03:47 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
