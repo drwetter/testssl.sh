@@ -457,7 +457,7 @@ std_cipherlists() {
 socksend() {
 	data=`echo $1 | sed 's/tls_version/'"$2"'/g'`
 	[ $VERBOSE -eq 1 ] && echo "\"$data\""
-	out "$data" >&5 &
+	out "$data" >&5 2>/dev/null &
 	sleep $3
 }
 
@@ -483,8 +483,8 @@ sockread() {
 		test $maxsleep -eq 0 && break
 	done
 	if ps ax | grep -v grep | grep -q $pid; then
-		# time's up and dd is still alive --> tiemout
-		kill $pid
+		# time's up and dd is still alive --> timeout
+		kill $pid 
 		wait $pid 2>/dev/null
 		ret=3 # means killed
 	fi
@@ -994,7 +994,7 @@ ccs_injection(){
 	# see https://www.openssl.org/news/secadv_20140605.txt
 	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
 	bold " CCS "; out " (CVE-2014-0224), experimental        "
-	ccs_message="\x14\x03\tls_version\x00\x01\x01"
+	ccs_message="\x14\x03\tls_version\x00\x01\x01" # ChangeCipherSpec, TLS version 2 bytes, lenght 2 bytes, payload CCS 1 byte
 
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT &>$TMPFILE </dev/null
 
@@ -1067,7 +1067,7 @@ ccs_injection(){
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
 		green "not vulnerable (OK)"
-		ret=0
+		ret=1
 	else
 		red "VULNERABLE"
 		ret=1
@@ -1881,7 +1881,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.120 2014/10/07 23:02:32 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.121 2014/10/08 12:30:05 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
