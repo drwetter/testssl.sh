@@ -143,8 +143,9 @@ fi
 
 echo "##### sending client hello:"
 socksend "$msg" $TLSV
+sleep 1
 
-sockread 5000
+sockread 10000
 echo -e "\n##### server hello\c"
 if test $DEBUG ; then
 	echo ":"
@@ -157,6 +158,7 @@ echo "##### sending ccs injection with TLS version $TLSV:"
 socksend "$ccs_message" $TLSV || ok_ids
 sleep 1
 socksend "$ccs_message" $TLSV || ok_ids
+sleep 1
 
 sockread 65534
 echo
@@ -183,4 +185,4 @@ exit $ret
 
 
 #  vim:tw=100:ts=5:sw=5
-#  $Id: ccs-injection.sh,v 1.3 2014/06/14 21:44:42 dirkw Exp $ 
+#  $Id: ccs-injection.sh,v 1.4 2014/10/08 11:06:47 dirkw Exp $ 
