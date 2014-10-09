@@ -1644,15 +1644,14 @@ get_dns_entries() {
 		# getent returned nothing:
 		if [ -z "$IP4" ] ; then
 			IP4=`host -t a $NODE | grep -v alias | sed 's/^.*address //'`
-			if  echo "$IP4" | grep -q NXDOMAIN  ; then
-				magenta "Can't proceed: No DNS resolution from \"$NODE\""; outln "\n"
+			if  echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
+				magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
 				exit 1
 			fi
 		fi
 
 		# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
 		#which getent 2>&1 >/dev/null && IP6=`getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq`
-
 		if [ -z "$IP6" ] ; then
 			if host -t aaaa $NODE 2>&1 >/dev/null ; then
 				IP6=`host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'`
@@ -1660,7 +1659,7 @@ get_dns_entries() {
 				IP6=""
 			fi
 		fi
-	fi
+	fi # test4iponly
 	
 	IPADDRs=`echo $IP4`
 	[ ! -z "$IP6" ] && IPADDRs=`echo $IP4`" "`echo $IP6`
@@ -1881,7 +1880,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.121 2014/10/08 12:30:05 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.122 2014/10/09 09:22:22 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
