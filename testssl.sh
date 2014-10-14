@@ -1372,7 +1372,7 @@ find_openssl_binary() {
 			esac
 			;;
 	esac
-	if [ $OSSL_VER_MAJOR -le 1 ]; then ## mm: Patch for libressl
+	if [ $OSSL_VER_MAJOR -lt 1 ]; then ## mm: Patch for libressl
 		magentaln "<Enter> at your own risk. $OPENSSL version < 1.0 is too old for this program"
 		read a
 	fi
@@ -1880,7 +1880,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.123 2014/10/14 14:07:31 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.124 2014/10/14 14:28:17 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
