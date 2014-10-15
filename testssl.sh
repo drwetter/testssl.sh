@@ -203,7 +203,8 @@ ok(){
 		esac
 	else	
 		case $1 in
-			3) brownln "offered" ;;  		# 2 0
+			6) literedln "offered (NOT ok): POODLE" ;;  	# 4 0
+			3) brownln "offered" ;;  		# 3 0
 			2) boldln "offered" ;;  		# 2 0
 			1) greenln "offered (OK)" ;;  	# 1 0
 			0) boldln "not offered" ;;    	# 0 0
@@ -253,6 +254,23 @@ result=`echo $result | tr -cd '\40-\176'`
 	return $ret
 }
 
+# Padding Oracle On Downgraded Legacy Encryption
+poodle() {
+	bold " POODLE "; out "(CVE-2014-3566), experimental      "
+# w/o downgrade check as of now https://tools.ietf.org/html/draft-ietf-tls-downgrade-scsv-00 | TLS_FALLBACK_SCSV
+	$OPENSSL s_client -ssl3 $STARTTLS -connect $NODEIP:$PORT $SNI 2>$TMPFILE >/dev/null </dev/null
+	ret=$?
+	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	if [ $ret -eq 0 ]; then
+		litered "VULNERABLE "; out "(uses SSLv3)"
+	else
+		green "not vulnerable (OK) "
+	fi
+	outln
+
+	rm $TMPFILE
+	return $ret
+}
 
 #problems not handled: chunked, 302
 http_header() {
@@ -663,7 +681,7 @@ runprotocols() {
 	fi
 	
 	if testprotohelper "-ssl3" " SSLv3     " ; then
-		ok 3 0			# brown "offered" 
+		ok 6 0			# poodle hack" 
 	else
 		ok 0 1			# green "not offered (ok)"
 	fi
@@ -723,7 +741,7 @@ simple_preference() {
 			*TLSv1.1)		litegreenln $TLS_PROTO_OFFERED ;;
 			*TLSv1)		outln $TLS_PROTO_OFFERED ;;
 			*SSLv2)		redln $TLS_PROTO_OFFERED ;;
-			*SSLv3)		brownln $TLS_PROTO_OFFERED ;;
+			*SSLv3)		redln $TLS_PROTO_OFFERED ;;
 			*)			outln "FIXME: $TLS_PROTO_OFFERED" ;;
 		esac
 
@@ -1448,6 +1466,7 @@ where <options> is *one* of
     	<-R|--renegotiation>        tests only for renegotiation vulnerability
     	<-C|--compression|--crime>  tests only for CRIME vulnerability
     	<-T|--breach>               tests only for BREACH vulnerability
+    	<-0|--poodle>               tests only for POODLE vulnerability
     	<-s|--pfs|--fs|--nsa>       checks (perfect) forward secrecy settings
  	<-4|--rc4|--appelbaum>      which RC4 ciphers are being offered?
 	<-H|--header|--headers>     check for HSTS and server banner string
@@ -1828,6 +1847,15 @@ case "$1" in
 		ret=`expr $? + $ret`
 		cleanup
 		exit $ret ;;
+	-0|--poodle)
+		parse_hn_port "$2"
+		maketempf
+		outln; blue "--> Testing for POODLE (Padding Oracle On Downgraded Legacy Encryption) vulnerability"; outln "\n"
+		poodle
+		ret=$?
+		ret=`expr $? + $ret`
+		cleanup
+		exit $ret ;;
 	-4|--rc4|--appelbaum)
 		parse_hn_port "$2"
 		maketempf
@@ -1868,6 +1896,7 @@ case "$1" in
 		crime			; ret=`expr $? + $ret`
 		breach			; ret=`expr $? + $ret`
 		beast			; ret=`expr $? + $ret`
+		poodle			; ret=`expr $? + $ret`
 
 		outln; blue "--> Testing HTTP Header response"; outln "\n"
 		hsts 			; ret=`expr $? + $ret`
@@ -1880,7 +1909,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.125 2014/10/15 09:56:39 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.126 2014/10/15 11:10:05 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
