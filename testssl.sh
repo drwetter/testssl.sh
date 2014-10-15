@@ -1640,7 +1640,7 @@ get_dns_entries() {
 				key2get=hosts
 			fi
 		fi
-		IP4=`getent $key2get $NODE &>/dev/null | grep $NODE | grep -v ':' | awk '{ print $1}' | uniq`
+		IP4=`getent $key2get $NODE 2>/dev/null | grep STREAM | awk '{ print $1}' | uniq`
 		# getent returned nothing:
 		if [ -z "$IP4" ] ; then
 			IP4=`host -t a $NODE | grep -v alias | sed 's/^.*address //'`
@@ -1880,7 +1880,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.124 2014/10/14 14:28:17 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.125 2014/10/15 09:56:39 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
