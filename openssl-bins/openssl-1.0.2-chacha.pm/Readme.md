@@ -49,15 +49,17 @@ If you want to compile OpenSSL yourself, here are the instructions:
 
 **for 64Bit:**
 
-    ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 enable-GOST \
-    enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa enable-seed enable-camellia \   
-    enable-idea enable-rfc3779 enable-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT experimental-jpake  
+    ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 \
+    enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
+    enable-seed enable-camellia enable-idea enable-rfc3779 enable-ec_nistp_64_gcc_128 \   
+    --with-krb5-flavor=MIT experimental-jpake  
 
 **for 32 Bit:**
 
-    ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 enable-GOST \
-    enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa enable-seed enable-camellia \
-    enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT experimental-jpake 
+    ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 \
+    enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \ 
+    enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 \
+    --with-krb5-flavor=MIT experimental-jpake 
 
 Don't use -DTEMP_GOST_TLS, it currently breaks things and it is not needed for general GOST [1] support.
 
