@@ -203,7 +203,7 @@ ok(){
 		esac
 	else	
 		case $1 in
-			6) literedln "offered (NOT ok): POODLE" ;;  	# 4 0
+			6) literedln "offered (NOT ok)" ;;  	# 4 0
 			3) brownln "offered" ;;  		# 3 0
 			2) boldln "offered" ;;  		# 2 0
 			1) greenln "offered (OK)" ;;  	# 1 0
@@ -262,11 +262,11 @@ poodle() {
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
-		litered "VULNERABLE "; out "(uses SSLv3)"
+		litered "VULNERABLE"; out ", uses SSLv3 (no TLS_FALLBACK_SCSV tested)"
 	else
-		green "not vulnerable (OK) "
+		green "not vulnerable (OK)"
 	fi
-	outln
+	outln 
 
 	rm $TMPFILE
 	return $ret
@@ -1909,7 +1909,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.126 2014/10/15 11:10:05 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.127 2014/10/17 20:16:36 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
