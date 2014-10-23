@@ -641,7 +641,7 @@ locally_supported() {
 	out "$2 "
 	$OPENSSL s_client "$1" 2>&1 | grep -q "unknown option"
 	if [ $? -eq 0 ]; then
-		magenta "Local problem: $OPENSSL doesn't support \"s_client $1\""
+		magentaln "Local problem: $OPENSSL doesn't support \"s_client $1\""
 		return 7
 	else
 		return 0
@@ -826,10 +826,13 @@ simple_preference() {
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 pfs() {
 	outln
-	blue "--> Testing (Perfect) Forward Secrecy  (P)FS)"; outln
+	blue "--> Testing (Perfect) Forward Secrecy  (P)FS)"; outln " -- omitting 3DES, RC4 and Null Encryption here"
 # https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy
 	PFSOK='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
+# ^^^ remark: the exclusing via ! doesn't work with libressl. 
+#
 #	PFSOK='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA384 EECDH+ECDSA+SHA256 EECDH+aRSA+SHA384 EECDH'
+# this catches also ECDHE-ECDSA-NULL-SHA  or  ECDHE-RSA-RC4-SHA
 
 	$OPENSSL ciphers -V "$PFSOK" >$TMPFILE
 	if [ $? -ne 0 ] || [ `wc -l $TMPFILE | awk '{ print $1 }' ` -lt 3 ]; then
@@ -1909,7 +1912,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.127 2014/10/17 20:16:36 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.128 2014/10/23 13:40:14 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
