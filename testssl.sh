@@ -462,7 +462,8 @@ std_cipherlists() {
 	fi
 	rm $TMPFILE
 	else
-		magenta "Local problem: No $2 configured in $OPENSSL" ; outln
+		singlespaces=`echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g'`
+		magentaln "Local problem: No $singlespaces configured in $OPENSSL" 
 	fi
 	# we need lf in those cases:
 	[ "$LOCERR" -eq 0 ] && echo
@@ -1912,7 +1913,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.128 2014/10/23 13:40:14 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.129 2014/10/23 13:52:05 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
