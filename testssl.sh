@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# bash is needed for some distros which use dash as /bin/sh and for the heartbleed check!
+# bash is needed for some distros which use dash as /bin/sh and for tcp sockets which 
+# this program uses a couple of times
 
 # Program for spotting weak SSL encryption, ciphers, version and some vulnerablities or features
 
@@ -64,6 +65,7 @@ DEBUG=${DEBUG:-0}			# if 1 the temp file won't be erased. Currently only keeps t
 VERBOSE=${VERBOSE:-0}		# if 1 it shows what's going on. Currently only used for heartbleed and ccs injection
 VERB_CLIST=""	     		# ... and if so, "-V" shows them row by row cipher, SSL-version, KX, Au, Enc and Mac
 HSTS_MIN=180				#>180 days is ok for HSTS
+HPKP_MIN=9				#>9 days should be ok for HPKP_MIN, practical hiints?
 NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 
 #global vars:
@@ -304,13 +306,21 @@ EOF
 	  return $ret
 }
 
+includeSubDomains() {
+	if grep -q includeSubDomains "$1"; then
+		litegreen ", includeSubDomains"
+	else
+		litecyan ", just this domain"
+	fi
+}
+
 #FIXME: it doesn't follow a 30x. At least a path should be possible to provide
 hsts() {
 	[ -s $HEADERFILE ] || http_header
 	bold " HSTS        "
-	grep -i '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
+	grep -iw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		grep -c '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
+		grep -ciw '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
 		AGE_SEC=`sed -e 's/[^0-9]*//g' $TMPFILE | head -1` 
 		AGE_DAYS=`expr $AGE_SEC \/ 86400`
 		if [ $AGE_DAYS -gt $HSTS_MIN ]; then
@@ -318,14 +328,41 @@ hsts() {
 		else
 			brown "$AGE_DAYS days (<$HSTS_MIN is not good enough)"
 		fi
+		includeSubDomains "$TMPFILE"
 	else
-		litecyan "no"
+		out "no"
 	fi
 	outln
 
 	rm $TMPFILE
 	return $?
 }
+
+hpkp() {
+	[ -s $HEADERFILE ] || http_header
+	bold " HPKP        "
+	egrep -iw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
+	if [ $? -eq 0 ]; then
+		egrep -ciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
+		AGE_SEC=`sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE`
+		AGE_DAYS=`expr $AGE_SEC \/ 86400`
+		if [ $AGE_DAYS -gt $HPKP_MIN ]; then
+			litegreen "$AGE_DAYS days \c" ; out "($AGE_SEC s)"
+		else
+			brown "$AGE_DAYS days (<$HPKP_MIN is not good enough)"
+		fi
+		includeSubDomains "$TMPFILE"
+		out ", fingerprints not checked"
+	else
+		out "no"
+	fi
+	outln
+
+	rm $TMPFILE
+	return $?
+}
+#FIXME: report-uri
+#FIXME: once checkcert.sh is here: fingerprints!
 
 serverbanner() {
 	[ -s $HEADERFILE ] || http_header
@@ -462,7 +499,7 @@ std_cipherlists() {
 	fi
 	rm $TMPFILE
 	else
-		singlespaces=`echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g'``
+		singlespaces=`echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g'`
 		magentaln "Local problem: No $singlespaces configured in $OPENSSL" 
 	fi
 	# we need lf in those cases:
@@ -1879,6 +1916,7 @@ case "$1" in
 		maketempf
 		outln; blue "--> Testing HTTP Header response"; outln "\n"
 		hsts
+		hpkp
 		ret=$?
 		serverbanner
 		ret=`expr $? + $ret`
@@ -1904,6 +1942,7 @@ case "$1" in
 
 		outln; blue "--> Testing HTTP Header response"; outln "\n"
 		hsts 			; ret=`expr $? + $ret`
+		hpkp 			; ret=`expr $? + $ret`
 		serverbanner		; ret=`expr $? + $ret`
 
 		rc4				; ret=`expr $? + $ret`
@@ -1913,7 +1952,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.129 2014/10/23 13:52:05 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.130 2014/10/29 20:24:42 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
