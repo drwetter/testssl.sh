@@ -462,7 +462,7 @@ std_cipherlists() {
 	fi
 	rm $TMPFILE
 	else
-		singlespaces=`echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g'`
+		singlespaces=`echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g'``
 		magentaln "Local problem: No $singlespaces configured in $OPENSSL" 
 	fi
 	# we need lf in those cases:
