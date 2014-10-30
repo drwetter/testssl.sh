@@ -4,7 +4,7 @@
 
 # Program for spotting weak SSL encryption, ciphers, version and some vulnerablities or features
 
-VERSION="2.1alpha"
+VERSION="2.1beta"
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -66,9 +66,11 @@ VERBOSE=${VERBOSE:-0}		# if 1 it shows what's going on. Currently only used for 
 VERB_CLIST=""	     		# ... and if so, "-V" shows them row by row cipher, SSL-version, KX, Au, Enc and Mac
 HSTS_MIN=180				#>180 days is ok for HSTS
 HPKP_MIN=9				#>9 days should be ok for HPKP_MIN, practical hiints?
+MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
 NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
+RUN_DIR=`dirname $0`
 
-#global vars:
+# more global vars:
 TLS_PROTO_OFFERED=""
 SOCKREPLY=""
 HEXC=""
@@ -80,7 +82,8 @@ OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 NODEIP=""
 IPS=""
-MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
+
+
 
 go2_column() { $ECHO "\033[${1}G"; }
 
@@ -1952,7 +1955,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.130 2014/10/29 20:24:42 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.131 2014/10/30 20:12:17 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
