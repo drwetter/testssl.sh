@@ -584,37 +584,29 @@ neat_list(){
 
 test_just_one(){
 
-	ciph=""
-	for arg in $@; do
-		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph restofline; do
-			normalize_ciphercode $hexcode
-			grep arg 
-		done
-	done
-
+	# erstmal überprüfen, ob openssl den cipher überhaupt hat | oder per socket
 	neat_header
+	for arg in `echo $@ | sed 's/,/ /g'`; do 
+		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
+			normalize_ciphercode $hexcode 
+			neat_list $HEXC $ciph $kx $enc | strings | grep -qwai "$arg"  # -w doesn't work yest for cipher strings --> column positioning
+			if [ $? -eq 0 ]; then
+				$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
+				ret=$?
+				neat_list $HEXC $ciph $kx $enc
 
-	$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslversmin kx auth enc mac export; do
-		for ciph in $@; do
-			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE  </dev/null
-			ret=$?
-			if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ]; then
-				continue		# no successful connect AND not verbose displaying each cipher
-			fi
-			normalize_ciphercode $hexcode
-			neat_list $HEXC $ciph $kx $enc
-			if [ "$SHOW_EACH_C" -ne 0 ]; then
-				[ -r $MAP_RFC_FNAME ] && go2_column 114
 				if [ $ret -eq 0 ]; then
 					cyan "  available"
 				else
 					out "  not a/v"
 				fi
+				outln
 			fi
 		done
-		outln
-		rm $TMPFILE
 	done
+
+	outln
+	rm $TMPFILE
 
 	return 0
 }
@@ -1955,7 +1947,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.131 2014/10/30 20:12:17 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.132 2014/11/02 22:37:16 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
