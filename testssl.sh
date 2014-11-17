@@ -1612,7 +1612,7 @@ ignore_no_or_lame() {
 		return 0
 	fi
 	#outln
-	out "$1 "
+	magenta "$1 "
 	read a
 	case $a in
 		Y|y|Yes|YES|yes) 
@@ -1667,7 +1667,8 @@ parse_hn_port() {
 		# is ssl service listening on port? FIXME: better with bash on IP!
 		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null >/dev/null 2>&1 
 		if [ $? -ne 0 ]; then
-			ignore_no_or_lame "On port $PORT @ $NODE doesn't seem a TLS/SSL enabled server. Really really ignore? \n (Pls note that he results might look ok but they are not) "
+			boldln "$NODE:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate"; 
+			ignore_no_or_lame "Proceed (note that the results might look ok but they are nonsense) ? "
 			[ $? -ne 0 ] && exit 3
 		fi
 	fi
@@ -1947,7 +1948,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.132 2014/11/02 22:37:16 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.133 2014/11/17 16:05:41 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
