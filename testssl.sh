@@ -51,7 +51,7 @@ CAPATH="${CAPATH:-/etc/ssl/certs/}"	# same as previous. Doing nothing yet. FC ha
 OSSL_VER=""				# openssl version, will be autodetermined
 NC=""					# netcat will be autodetermined
 ECHO="/usr/bin/printf" 		# works under Linux, BSD, MacOS. watch out under Solaris, not tested yet under cygwin
-COLOR=0					# with screen, tee and friends put 1 here (i.e. no color)
+COLOR=${COLOR:-0}			# with screen, tee and friends put 1 here (i.e. no color)
 SHOW_LCIPHERS=no    		# determines whether the client side ciphers are displayed at all (makes no sense normally)
 VERBERR=${VERBERR:-1}		# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
 		# whether the handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
@@ -105,86 +105,91 @@ off() {
 }
 
 liteblue() { 
-	[ $COLOR = 0 ] && out "\033[0;34m$1 " || out "$1 "
+	[ "$COLOR" = 0 ] && out "\033[0;34m$1 " || out "$1 "
 	off
 }
 liteblueln() { liteblue "$1"; outln; }
 
 blue() { 
-	[ $COLOR = 0 ] && out "\033[1;34m$1 " || out "$1 "
+	[ "$COLOR" = 0 ] && out "\033[1;34m$1 " || out "$1 "
 	off
 }
 blueln() { blue "$1"; outln; }
 
+# idea: I have a non-color term. But it can do reverse, bold and underline. Bold
+#       in the result equals to an alarm, underline to s.th. not working (magenta), reverse stays
+#       reverse
+# FIXME: What bout folks who don't want color at all
+
 litered() { 
-	[ $COLOR = 0 ] && out "\033[0;31m$1 " || out "*$1* "
+	[ "$COLOR" = 0 ] && out "\033[0;31m$1 " || bold "$1 "
 	off
 }
 literedln() { litered "$1"; outln; }
 
 red() { 
-	[ $COLOR = 0 ] && out "\033[1;31m$1 " || "**$1** "
+	[ "$COLOR" = 0 ] && out "\033[1;31m$1 " || bold "$1 "
 	off
 }
 redln() { red "$1"; outln; }
 
 litemagenta() { 
-	[ $COLOR = 0 ] && out "\033[0;35m$1 " || out "$1 "
+	[ "$COLOR" = 0 ] && out "\033[0;35m$1 " || underline "$1 "
 	off
 }
 litemagentaln() { litemagenta "$1"; outln; }
 
 
 magenta() { 
-	[ $COLOR = 0 ] && out "\033[1;35m$1 " || out "**$1** "
+	[ "$COLOR" = 0 ] && out "\033[1;35m$1 " || underline "$1 "
 	off
 }
 magentaln() { magenta "$1"; outln; }
 
 litecyan() { 
-	[ $COLOR = 0 ] && out "\033[0;36m$1 " || out "$1 "
+	[ "$COLOR" = 0 ] && out "\033[0;36m$1 " || out "$1 "
 	off
 }
 litecyanln() { litecyan "$1"; outln; }
 
 cyan() { 
-	[ $COLOR = 0 ] && out "\033[1;36m$1 " || out "**$1** "
+	[ "$COLOR" = 0 ] && out "\033[1;36m$1 " || out "$1 "
 	off
 }
 cyanln() { cyan "$1"; outln; }
 
 grey() { 
-	[ $COLOR = 0 ] && out "\033[1;30m$1 " || out "$1 "
+	[ "$COLOR" = 0 ] && out "\033[1;30m$1 " || out "$1 "
 	off
 }
 greyln() { grey "$1"; outln; }
 
 litegrey() { 
-	[ $COLOR = 0 ] && out "\033[0;37m$1 " || out "$1 "
+	[ "$COLOR" = 0 ] && out "\033[0;37m$1 " || out "$1 "
 	off
 }
 litegreyln() { litegrey "$1"; outln; }
 
 litegreen() { 
-	[ $COLOR = 0 ] && out "\033[0;32m$1 " || out "$1 "
+	[ "$COLOR" = 0 ] && out "\033[0;32m$1 " || out "$1 "
 	off
 }
 litegreenln() { litegreen "$1"; outln; }
 
 green() { 
-	[ $COLOR = 0 ] && out "\033[1;32m$1 " || out "**$1** "
+	[ "$COLOR" = 0 ] && out "\033[1;32m$1 " || out "$1 "
 	off
 }
 greenln() { green "$1"; outln; }
 
 brown() { 
-	[ $COLOR = 0 ] && out "\033[0;33m$1 " || out "**$1** "
+	[ "$COLOR" = 0 ] && out "\033[0;33m$1 " || out "$1 "
 	off
 }
 brownln() { brown "$1"; outln; }
 
 yellow() { 
-	[ $COLOR = 0 ] && out "\033[1;33m$1 " || out "**$1** "
+	[ "$COLOR" = 0 ] && out "\033[1;33m$1 " || out "$1 "
 	off
 }
 yellowlnln() { yellowln "$1"; outln; }
@@ -1948,7 +1953,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.133 2014/11/17 16:05:41 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.134 2014/11/17 16:43:58 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
