@@ -521,12 +521,9 @@ socksend() {
 	sleep $3
 }
 
-#sockread() {
-	#SOCKREPLY=`dd bs=$1 count=1 <&5 2>/dev/null`
-#}
 
 sockread() {
-	maxsleep=$MAX_WAITSOCK
+	[ "x$2" = "x" ] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
 	ret=0
 
 	ddreply=`mktemp /tmp/ddreply.XXXXXX` || exit 7
@@ -1041,6 +1038,7 @@ ccs_injection(){
 	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
 	bold " CCS "; out " (CVE-2014-0224), experimental        "
 	ccs_message="\x14\x03\tls_version\x00\x01\x01" # ChangeCipherSpec, TLS version 2 bytes, lenght 2 bytes, payload CCS 1 byte
+	# 20/0x14=Change Ciipher Spexcc
 
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT &>$TMPFILE </dev/null
 
@@ -1086,29 +1084,40 @@ ccs_injection(){
 
 	fd_socket 5 || return 6
 
-	[ $VERBOSE -eq 1 ] && out " sending client hello, "
+	[ $VERBOSE -eq 1 ] && out "\n sending client hello, "
 	socksend "$msg" $tls_hexcode 1
-	sockread 10000 
+	sockread 16384 
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n server hello:"
 		echo "$SOCKREPLY" | xxd -c32 | head -20
 		outln "[...]"
-		outln "payload with TLS version $tls_hexcode:"
+		outln "\npayload #1 with TLS version $tls_hexcode:"
 	fi
 
 	socksend $ccs_message $tls_hexcode 1 || ok_ids
+	sockread 2048 5	# 5 seconds
+	if [ $VERBOSE -eq 1 ]; then
+		outln "\n1st reply: " 
+		out "$SOCKREPLY" | xxd -c32
+# ok:      15 | 0301 | 02 | 02 0a == ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
+		outln
+		outln "payload #2 with TLS version $tls_hexcode:"
+	fi
+
 	socksend $ccs_message $tls_hexcode 2 || ok_ids
-	sockread 16384
+	sockread 2048 5
 	retval=$?
 
 	if [ $VERBOSE -eq 1 ]; then
-		outln "\n reply: "
-		echo "$SOCKREPLY" | xxd -c32
+		outln "\n2nd reply: "
+		out "$SOCKREPLY" | xxd -c32
+# not ok:  15 | 0301 | 02 | 02 | 15 == ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
+# ok:  0a or nothing: ==> RST
 		outln
 	fi
 
-	reply_sanitized=`echo "$SOCKREPLY" | xxd -p | tr -cd '[:print:]' | sed 's/^..........//'`
+	reply_sanitized=`outln "$SOCKREPLY" | xxd -p | tr -cd '[:print:]' | sed 's/^..........//'`
 	lines=`echo "$SOCKREPLY" | xxd -c32 | wc -l`
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
@@ -1943,7 +1952,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.135 2014/11/17 17:49:54 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.136 2014/11/17 23:26:57 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
