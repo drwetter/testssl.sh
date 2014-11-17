@@ -51,7 +51,7 @@ CAPATH="${CAPATH:-/etc/ssl/certs/}"	# same as previous. Doing nothing yet. FC ha
 OSSL_VER=""				# openssl version, will be autodetermined
 NC=""					# netcat will be autodetermined
 ECHO="/usr/bin/printf" 		# works under Linux, BSD, MacOS. watch out under Solaris, not tested yet under cygwin
-COLOR=${COLOR:-0}			# with screen, tee and friends put 1 here (i.e. no color)
+COLOR=${COLOR:-2}			# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LCIPHERS=no    		# determines whether the client side ciphers are displayed at all (makes no sense normally)
 VERBERR=${VERBERR:-1}		# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
 		# whether the handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
@@ -85,11 +85,7 @@ IPS=""
 
 
 
-go2_column() { $ECHO "\033[${1}G"; }
-
 out() {
-	# if 2 args: second is column position
-	[ ! -z "$2" ] && go2_column "$2"
 	$ECHO "$1"
 }
 
@@ -101,17 +97,17 @@ outln() {
 # some functions for text (i know we could do this with tput, but what about systems having no terminfo?
 # http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
 off() {
-	out "\033[m\c"
+	[ "$COLOR" != 0 ] && out "\033[m\c"
 }
 
 liteblue() { 
-	[ "$COLOR" = 0 ] && out "\033[0;34m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[0;34m$1 " || out "$1 "
 	off
 }
 liteblueln() { liteblue "$1"; outln; }
 
 blue() { 
-	[ "$COLOR" = 0 ] && out "\033[1;34m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[1;34m$1 " || out "$1 "
 	off
 }
 blueln() { blue "$1"; outln; }
@@ -122,86 +118,86 @@ blueln() { blue "$1"; outln; }
 # FIXME: What bout folks who don't want color at all
 
 litered() { 
-	[ "$COLOR" = 0 ] && out "\033[0;31m$1 " || bold "$1 "
+	[ "$COLOR" = 2 ] && out "\033[0;31m$1 " || bold "$1 "
 	off
 }
 literedln() { litered "$1"; outln; }
 
 red() { 
-	[ "$COLOR" = 0 ] && out "\033[1;31m$1 " || bold "$1 "
+	[ "$COLOR" = 2 ] && out "\033[1;31m$1 " || bold "$1 "
 	off
 }
 redln() { red "$1"; outln; }
 
 litemagenta() { 
-	[ "$COLOR" = 0 ] && out "\033[0;35m$1 " || underline "$1 "
+	[ "$COLOR" = 2 ] && out "\033[0;35m$1 " || underline "$1 "
 	off
 }
 litemagentaln() { litemagenta "$1"; outln; }
 
 
 magenta() { 
-	[ "$COLOR" = 0 ] && out "\033[1;35m$1 " || underline "$1 "
+	[ "$COLOR" = 2 ] && out "\033[1;35m$1 " || underline "$1 "
 	off
 }
 magentaln() { magenta "$1"; outln; }
 
 litecyan() { 
-	[ "$COLOR" = 0 ] && out "\033[0;36m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[0;36m$1 " || out "$1 "
 	off
 }
 litecyanln() { litecyan "$1"; outln; }
 
 cyan() { 
-	[ "$COLOR" = 0 ] && out "\033[1;36m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[1;36m$1 " || out "$1 "
 	off
 }
 cyanln() { cyan "$1"; outln; }
 
 grey() { 
-	[ "$COLOR" = 0 ] && out "\033[1;30m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[1;30m$1 " || out "$1 "
 	off
 }
 greyln() { grey "$1"; outln; }
 
 litegrey() { 
-	[ "$COLOR" = 0 ] && out "\033[0;37m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[0;37m$1 " || out "$1 "
 	off
 }
 litegreyln() { litegrey "$1"; outln; }
 
 litegreen() { 
-	[ "$COLOR" = 0 ] && out "\033[0;32m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[0;32m$1 " || out "$1 "
 	off
 }
 litegreenln() { litegreen "$1"; outln; }
 
 green() { 
-	[ "$COLOR" = 0 ] && out "\033[1;32m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[1;32m$1 " || out "$1 "
 	off
 }
 greenln() { green "$1"; outln; }
 
 brown() { 
-	[ "$COLOR" = 0 ] && out "\033[0;33m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[0;33m$1 " || out "$1 "
 	off
 }
 brownln() { brown "$1"; outln; }
 
 yellow() { 
-	[ "$COLOR" = 0 ] && out "\033[1;33m$1 " || out "$1 "
+	[ "$COLOR" = 2 ] && out "\033[1;33m$1 " || out "$1 "
 	off
 }
 yellowlnln() { yellowln "$1"; outln; }
 
-bold() { out "\033[1m$1"; off; }
+bold() { [ "$COLOR" != 0 ] && out "\033[1m$1" || out "$1" ; off; }
 boldln() { bold "$1" ; outln; }
 
-underline() { out "\033[4m$1" ; off; }
+underline() { [ "$COLOR" != 0 ] && out "\033[4m$1" || out "$1" ; off; }
 
-boldandunder() { out "\033[1m\033[4m$1" ; off; }
+boldandunder() { [ "$COLOR" != 0 ] && out "\033[1m\033[4m$1" || out "$1" ; off; }
 
-reverse() { out "\033[7m$1" ; off; }
+reverse() { [ "$COLOR" != 0 ] && out "\033[7m$1" || out "$1" ; off; }
 
 
 # whether it is ok for offer/not offer enc/cipher/version
@@ -560,20 +556,16 @@ sockread() {
 
 
 show_rfc_style(){
+	[ ! -r "$MAP_RFC_FNAME" ] && return 1
 	RFCname=`grep -iw $1 $MAP_RFC_FNAME | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/'`
-     if [ -n "$RFCname" ] ; then
-		out "$RFCname" "$2";
-	fi
+     [ -n "$RFCname" ] && out "$RFCname" 
+	return 0
 }
 
 # header and list for all_ciphers+cipher_per_proto, and PFS+RC4
 neat_header(){
-	out " Hexcode";  out "Cipher Suite Name (OpenSSL)" 13; out "KeyExch." 43; out "Encryption" 52; out "Bits" 63
-	[ -r $MAP_RFC_FNAME ] && out "Cipher Suite Name (RFC)" 73
-	outln 
-	printf "%s-----------------------------------------------------------------------"
-	[ -r $MAP_RFC_FNAME ] && printf "%s---------------------------------------------"
-	outln 
+	outln " Hexcode        Cipher Suite Name (OpenSSL)   KeyExch.   Encryption Bits${MAP_RFC_FNAME:+       Cipher Suite Name (RFC)}"
+	outln "-------------------------------------------------------------------------${MAP_RFC_FNAME:+------------------------------------------------}"
 }
 
 neat_list(){
@@ -583,15 +575,14 @@ neat_list(){
 	strength=`echo $strength | sed -e 's/ChaCha20-Poly1305//g'` # workaround for empty strength=ChaCha20-Poly1305
 	enc=`echo $enc | sed -e 's/(.*)//g'`
 	echo "$export" | grep -iq export && strength="$strength,export"
-	out " [$1]"; out "$2" 13;  out "$kx" 43; out "$enc" 54; out "$strength" 63
-	[ -r $MAP_RFC_FNAME ] && show_rfc_style $HEXC 73
+	$ECHO " [%-8s]     %-29s %-10s %-10s %-9s${MAP_RFC_FNAME:+  %-40s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
 test_just_one(){
 
-	# erstmal überprüfen, ob openssl den cipher überhaupt hat | oder per socket
 	neat_header
 	for arg in `echo $@ | sed 's/,/ /g'`; do 
+		# 1st check whether openssl has cipher or not
 		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
 			normalize_ciphercode $hexcode 
 			neat_list $HEXC $ciph $kx $enc | strings | grep -qwai "$arg"  # -w doesn't work yest for cipher strings --> column positioning
@@ -631,7 +622,6 @@ allciphers(){
 		normalize_ciphercode $hexcode
 		neat_list $HEXC $ciph $kx $enc
 		if [ "$SHOW_EACH_C" -ne 0 ]; then
-			[ -r $MAP_RFC_FNAME ] && go2_column 114
 			if [ $ret -eq 0 ]; then
 				cyan "  available"
 			else
@@ -660,7 +650,6 @@ cipher_per_proto(){
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc
 			if [ "$SHOW_EACH_C" -ne 0 ]; then
-				[ -r $MAP_RFC_FNAME ] && go2_column 114
 				if [ $ret -eq 0 ]; then
 					cyan "  available"
 				else
@@ -900,7 +889,6 @@ pfs() {
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc $strength
 			if [ "$SHOW_EACH_C" -ne 0 ] ; then
-				[ -r $MAP_RFC_FNAME ] && go2_column 114
 				if [ $ret -eq 0 ]; then
 					green "works"
 				else
@@ -946,11 +934,10 @@ rc4() {
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc $strength
 			if [ "$SHOW_EACH_C" -ne 0 ]; then
-				[ -r $MAP_RFC_FNAME ] && go2_column 114
 				if [ $ret -eq 0 ]; then
-					litered "available "
+					litered "available"
 				else
-					out "not a/v "
+					out "not a/v"
 				fi
 			else
 				bad=1
@@ -1533,12 +1520,12 @@ mybanner() {
 	hn=`hostname`
 	#poor man's ident (nowadays not neccessarily installed)
 	idtag=`grep '\$Id' $0 | grep -w Exp | grep -v grep | sed -e 's/^#  //' -e 's/\$ $/\$/'`
-	idtagshy="\033[1;30m$idtag\033[m\033[1m"
+	[ "$COLOR" != 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=`cat <<EOF
 
 #########################################################
 $me v$VERSION  ($SWURL)
-($idtagshy)
+($idtag)
 
    This program is free software. Redistribution + 
    modification under GPLv2 is permitted. 
@@ -1779,8 +1766,11 @@ mybanner
 #PATH_TO_TESTSSL="$(cd "${0%/*}" 2>/dev/null; echo "$PWD"/"${0##*/}")"
 PATH_TO_TESTSSL=`readlink "$BASH_SOURCE"` 2>/dev/null
 [ -z $PATH_TO_TESTSSL ] && PATH_TO_TESTSSL="."
-MAP_RFC_FNAME=`dirname $PATH_TO_TESTSSL`"/mapping-rfc.txt" 	# this file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1)
-												# and https://www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
+#
+# next file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
+# https://www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
+[ -r "$(dirname $PATH_TO_TESTSSL)/mapping-rfc.txt" ] && MAP_RFC_FNAME=`dirname $PATH_TO_TESTSSL`"/mapping-rfc.txt"
+
 
 #FIXME: I know this sucks and getoptS is better
 
@@ -1953,7 +1943,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.134 2014/11/17 16:43:58 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.135 2014/11/17 17:49:54 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
