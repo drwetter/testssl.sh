@@ -9,6 +9,9 @@
  - Fix for HSTS + subdomains
  - LibreSSL patch
 
+* Peter Mosmans
+ - cleanups
+
 * Dmitri S
  - inspiration & help for Darwin port
 
