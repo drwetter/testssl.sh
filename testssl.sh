@@ -561,18 +561,19 @@ show_rfc_style(){
 
 # header and list for all_ciphers+cipher_per_proto, and PFS+RC4
 neat_header(){
-	outln " Hexcode  Cipher Suite Name (OpenSSL)   KeyExch.   Encryption Bits${MAP_RFC_FNAME:+        Cipher Suite Name (RFC)}"
-	outln "-------------------------------------------------------------------------${MAP_RFC_FNAME:+------------------------------------------------}"
+	outln "Hexcode  Cipher Suite Name (OpenSSL)    KeyExch.   Encryption Bits${MAP_RFC_FNAME:+        Cipher Suite Name (RFC)}"
+	outln "-------------------------------------------------------------------------${MAP_RFC_FNAME:+----------------------------------------------}"
 }
 
 neat_list(){
+	hexc=`echo $1 | sed 's/0x/x/'`
 	kx=`echo $3 | sed 's/Kx=//g'`
 	enc=`echo $4 | sed 's/Enc=//g'`
 	strength=`echo $enc | sed -e 's/.*(//' -e 's/)//'`					# strength = encryption bits
 	strength=`echo $strength | sed -e 's/ChaCha20-Poly1305/ly1305/g'` 		# workaround for empty bits ChaCha20-Poly1305
 	enc=`echo $enc | sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g'` # workaround for empty bits ChaCha20-Poly1305
 	echo "$export" | grep -iq export && strength="$strength,export"
-	$ECHO " %-8s %-29s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
+	$ECHO " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$hexc" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
 test_just_one(){
@@ -1481,39 +1482,41 @@ help() {
 	PRG=`basename $0`
 	cat << EOF
 
+$PRG <options>       
+
+    <-h|--help>                           what you're looking at
+    <-b|--banner>                         displays banner + version
+    <-v|--version>                        same as above
+    <-V|--local>                          pretty print all local ciphers
+    <-V|--local> <hexcode>                what cipher is <pattern hexcode>?
+
 $PRG <options> URI
 
-where <options> is *one* of
+    <-e|--each-cipher>                    check each local ciphers remotely 
+    <-E|-ee|--cipher-per-proto>           check those per protocol
+    <-f|--ciphers>                        check cipher suites
+    <-p|--protocols>                      check TLS/SSL protocols only
+    <-P|--preference>                     displays the servers picks: protocol+cipher
+    <-y|--spdy>                           checks for SPDY/NPN
+    <-x|--single-ciphers-test> <pattern>  tests matched <pattern> of cipher
+    <-B|--heartbleed>                     tests only for heartbleed vulnerability
+    <-I|--ccs|--ccs_injection>            tests only for CCS injection vulnerability
+    <-R|--renegotiation>                  tests only for renegotiation vulnerability
+    <-C|--compression|--crime>            tests only for CRIME vulnerability
+    <-T|--breach>                         tests only for BREACH vulnerability
+    <-0|--poodle>                         tests only for POODLE vulnerability
+    <-s|--pfs|--fs|--nsa>                 checks (perfect) forward secrecy settings
+    <-4|--rc4|--appelbaum>                which RC4 ciphers are being offered?
+    <-H|--header|--headers>               check for HSTS, HPKP and server/application banner string
 
-	<-h|--help>                 what you're looking at
-	<-b|--banner>               displays banner + version
-	<-v|--version>              same as above
-	<-V|--local>                pretty print all local ciphers
-	<-V|--local> <hexcode>      what cipher is <pattern hexcode>?
-
-	<-e|--each-cipher>          check each local ciphers remotely 
-	<-E|-ee|--cipher-per-proto> check those per protocol
-	<-f|--ciphers>              check cipher suites
-	<-p|--protocols>            check TLS/SSL protocols only
-	<-P|--preference>           displays the servers picks: protocol+cipher
-	<-y|--spdy>                 checks for SPDY/NPN
-	<-B|--heartbleed>           tests only for heartbleed vulnerability
-	<-I|--ccs|--ccs_injection>  tests only for CCS injection vulnerability
-    	<-R|--renegotiation>        tests only for renegotiation vulnerability
-    	<-C|--compression|--crime>  tests only for CRIME vulnerability
-    	<-T|--breach>               tests only for BREACH vulnerability
-    	<-0|--poodle>               tests only for POODLE vulnerability
-    	<-s|--pfs|--fs|--nsa>       checks (perfect) forward secrecy settings
- 	<-4|--rc4|--appelbaum>      which RC4 ciphers are being offered?
-	<-H|--header|--headers>     check for HSTS and server banner string
-
-URI is  host|host:port|URL|URL:port
-        (port 443 is assumed unless otherwise specified)
-
-	<-t|--starttls> host:port <ftp|smtp|pop3|imap|xmpp|telnet> <SNI hostname> *)
+    <-t|--starttls> host:port <ftp|smtp|pop3|imap|xmpp|telnet> <SNI hostname> *)
 
 
-*) for telnet STARTTLS support you need a/my patched openssl version
+<URI> is  host|host:port|URL|URL:port
+         (port 443 is assumed unless otherwise specified)
+
+
+*) for telnet STARTTLS support you need the supplied patched openssl version
 
 
 EOF
@@ -1526,7 +1529,7 @@ mybanner() {
 	osslver=`$OPENSSL version`
 	osslpath=`which $OPENSSL`
 	hn=`hostname`
-	#poor man's ident (nowadays not neccessarily installed)
+	#poor man's ident (nowadays ident not neccessarily installed)
 	idtag=`grep '\$Id' $0 | grep -w Exp | grep -v grep | sed -e 's/^#  //' -e 's/\$ $/\$/'`
 	[ "$COLOR" != 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=`cat <<EOF
@@ -1539,8 +1542,8 @@ $me v$VERSION  ($SWURL)
    modification under GPLv2 is permitted. 
    USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
- Note you can only check the server against what is
- available (ciphers/protocols) locally on your machine
+ Note: you can only check the server with what is
+ available (ciphers/protocols) locally on your machine!
 #########################################################
 EOF
 `
@@ -1790,7 +1793,7 @@ case "$1" in
 		initialize_engine 	# GOST support
 		prettyprint_local "$2"
 		exit $? ;;
-	-x|--single-test)
+	-x|--single-ciphers-test)
 		parse_hn_port "$3"
 		maketempf
 		test_just_one $2
@@ -1951,7 +1954,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.137 2014/11/18 00:36:28 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.138 2014/11/18 09:29:10 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
