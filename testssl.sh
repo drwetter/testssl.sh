@@ -431,27 +431,33 @@ normalize_ciphercode() {
 		fi
 		HEXC="$part1$part2$part3"
 	fi
-	HEXC=`echo $HEXC | tr 'A-Z' 'a-z'` #tolower
+	HEXC=`echo $HEXC | tr 'A-Z' 'a-z' |  sed 's/0x/x/'` #tolower + strip leading 0
 	return 0
 }
 
 prettyprint_local() {
-	if [ -z "$1" ]; then
-		blue "--> Displaying all local ciphers"; outln "\n"
+	blue "--> Displaying all local ciphers"; 
+	if [ ! -z "$1" ]; then
+		blue "matching word pattern "\"$1\"" (ignore case)"; 
 	fi
+	outln "\n"
 
 	neat_header
 
-	$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslversmin kx auth enc mac export; do
-	normalize_ciphercode $hexcode
-		if [ -n "$1" ]; then
-			echo $HEXC | grep -iq "$1" || continue
-		fi
-		neat_list $HEXC $ciph $kx $enc
-		outln
-	done
+	if [ -z "$1" ]; then
+		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
+			normalize_ciphercode $hexcode
+			neat_list $HEXC $ciph $kx $enc | strings  
+		done
+	else
+		for arg in `echo $@ | sed 's/,/ /g'`; do
+			$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
+				normalize_ciphercode $hexcode
+				neat_list $HEXC $ciph $kx $enc | strings | grep -wai "$arg"
+			done
+     	done
+	fi
 	outln
-
 	return 0
 }
 
@@ -566,14 +572,13 @@ neat_header(){
 }
 
 neat_list(){
-	hexc=`echo $1 | sed 's/0x/x/'`
 	kx=`echo $3 | sed 's/Kx=//g'`
 	enc=`echo $4 | sed 's/Enc=//g'`
 	strength=`echo $enc | sed -e 's/.*(//' -e 's/)//'`					# strength = encryption bits
 	strength=`echo $strength | sed -e 's/ChaCha20-Poly1305/ly1305/g'` 		# workaround for empty bits ChaCha20-Poly1305
 	enc=`echo $enc | sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g'` # workaround for empty bits ChaCha20-Poly1305
 	echo "$export" | grep -iq export && strength="$strength,export"
-	$ECHO " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$hexc" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
+	$ECHO " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
 test_just_one(){
@@ -1488,7 +1493,7 @@ $PRG <options>
     <-b|--banner>                         displays banner + version
     <-v|--version>                        same as above
     <-V|--local>                          pretty print all local ciphers
-    <-V|--local> <hexcode>                what cipher is <pattern hexcode>?
+    <-V|--local> <pattern>                what local cipher with <pattern> is a/v?
 
 $PRG <options> URI
 
@@ -1510,13 +1515,13 @@ $PRG <options> URI
     <-H|--header|--headers>               check for HSTS, HPKP and server/application banner string
 
     <-t|--starttls> host:port <ftp|smtp|pop3|imap|xmpp|telnet> <SNI hostname> *)
+       *) for telnet STARTTLS support you need the supplied patched openssl 
+
+<URI>     is  host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
+
+<pattern> is an ignore case word pattern of cipher hexcode or any other string in the name, kx, bits
 
 
-<URI> is  host|host:port|URL|URL:port
-         (port 443 is assumed unless otherwise specified)
-
-
-*) for telnet STARTTLS support you need the supplied patched openssl version
 
 
 EOF
@@ -1954,7 +1959,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.138 2014/11/18 09:29:10 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.139 2014/11/18 10:03:01 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
