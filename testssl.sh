@@ -4,7 +4,7 @@
 
 # Program for spotting weak SSL encryption, ciphers, version and some vulnerablities or features
 
-VERSION="2.1beta"
+VERSION="2.1rc1"
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -443,7 +443,7 @@ prettyprint_local() {
 	neat_header
 
 	$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslversmin kx auth enc mac export; do
-		normalize_ciphercode $hexcode
+	normalize_ciphercode $hexcode
 		if [ -n "$1" ]; then
 			echo $HEXC | grep -iq "$1" || continue
 		fi
@@ -554,35 +554,35 @@ sockread() {
 
 show_rfc_style(){
 	[ ! -r "$MAP_RFC_FNAME" ] && return 1
-	RFCname=`grep -iw $1 $MAP_RFC_FNAME | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/'`
+	RFCname=`grep -iw $1 "$MAP_RFC_FNAME" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/'`
      [ -n "$RFCname" ] && out "$RFCname" 
 	return 0
 }
 
 # header and list for all_ciphers+cipher_per_proto, and PFS+RC4
 neat_header(){
-	outln " Hexcode        Cipher Suite Name (OpenSSL)   KeyExch.   Encryption Bits${MAP_RFC_FNAME:+       Cipher Suite Name (RFC)}"
+	outln " Hexcode  Cipher Suite Name (OpenSSL)   KeyExch.   Encryption Bits${MAP_RFC_FNAME:+        Cipher Suite Name (RFC)}"
 	outln "-------------------------------------------------------------------------${MAP_RFC_FNAME:+------------------------------------------------}"
 }
 
 neat_list(){
 	kx=`echo $3 | sed 's/Kx=//g'`
 	enc=`echo $4 | sed 's/Enc=//g'`
-	strength=`echo $enc | sed -e 's/.*(//' -e 's/)//'`
-	strength=`echo $strength | sed -e 's/ChaCha20-Poly1305//g'` # workaround for empty strength=ChaCha20-Poly1305
-	enc=`echo $enc | sed -e 's/(.*)//g'`
+	strength=`echo $enc | sed -e 's/.*(//' -e 's/)//'`					# strength = encryption bits
+	strength=`echo $strength | sed -e 's/ChaCha20-Poly1305/ly1305/g'` 		# workaround for empty bits ChaCha20-Poly1305
+	enc=`echo $enc | sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g'` # workaround for empty bits ChaCha20-Poly1305
 	echo "$export" | grep -iq export && strength="$strength,export"
-	$ECHO " [%-8s]     %-29s %-10s %-10s %-9s${MAP_RFC_FNAME:+  %-40s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
+	$ECHO " %-8s %-29s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
 test_just_one(){
-
+	blue "--> Testing single cipher with word pattern "\"$1\"" (ignore case)"; outln "\n"
 	neat_header
 	for arg in `echo $@ | sed 's/,/ /g'`; do 
 		# 1st check whether openssl has cipher or not
 		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
 			normalize_ciphercode $hexcode 
-			neat_list $HEXC $ciph $kx $enc | strings | grep -qwai "$arg"  # -w doesn't work yest for cipher strings --> column positioning
+			neat_list $HEXC $ciph $kx $enc | strings | grep -qwai "$arg" 
 			if [ $? -eq 0 ]; then
 				$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 				ret=$?
@@ -826,7 +826,6 @@ simple_preference() {
 		fi
 	fi
 	outln
-
 
 		#gmt_unix_time, removed since 1.0.1f
 		#
@@ -1952,7 +1951,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.136 2014/11/17 23:26:57 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.137 2014/11/18 00:36:28 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
