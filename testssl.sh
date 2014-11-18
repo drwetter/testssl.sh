@@ -569,7 +569,7 @@ show_rfc_style(){
 # header and list for all_ciphers+cipher_per_proto, and PFS+RC4
 neat_header(){
 	outln "Hexcode  Cipher Suite Name (OpenSSL)    KeyExch.   Encryption Bits${MAP_RFC_FNAME:+        Cipher Suite Name (RFC)}"
-	outln "-------------------------------------------------------------------------${MAP_RFC_FNAME:+----------------------------------------------}"
+	outln "%s-------------------------------------------------------------------------${MAP_RFC_FNAME:+----------------------------------------------}"
 }
 
 neat_list(){
@@ -1576,8 +1576,7 @@ cleanup () {
 		rm ${TMPFILE} ${HEADERFILE} ${HEADERFILE_BREACH} ${LOGFILE} ${GOST_CONF} 2>/dev/null
 	fi
 	outln
-	outln
-	datebanner "Done"
+	[ -n "$NODE" ] && datebanner "Done"  # only if running against server
 	outln
 }
 
@@ -1698,15 +1697,14 @@ get_dns_entries() {
 		if which getent 2>&1 >/dev/null ; then
 			getent ahostsv4 $NODE 2>/dev/null >/dev/null
 			if [ $? -eq 0 ]; then
-				# Linux, no BSD
-				key2get=ahostsv4
-			else
-				key2get=hosts
+				# Linux:
+				IP4=`getent ahostsv4 $NODE 2>/dev/null | grep -v ':' | grep STREAM | awk '{ print $1}' | uniq`
+			#else
+			#	IP4=`getent hosts $NODE 2>/dev/null | grep -v ':' | awk '{ print $1}' | uniq`
+			#FIXME: FreeBSD returns only one entry 
 			fi
 		fi
-		IP4=`getent $key2get $NODE 2>/dev/null | grep STREAM | awk '{ print $1}' | uniq`
-		# getent returned nothing:
-		if [ -z "$IP4" ] ; then
+		if [ -z "$IP4" ] ; then 		# getent returned nothing:
 			IP4=`host -t a $NODE | grep -v alias | sed 's/^.*address //'`
 			if  echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
 				magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
@@ -1755,8 +1753,9 @@ display_rdns_etc() {
 
 datebanner() {
 	tojour=`date +%F`" "`date +%R`
+	outln
 	reverse "$1 now ($tojour) ---> $NODEIP:$PORT ($NODE) <---"; outln
-     if [ "$1" = "Testing" ] ; then
+	if [ "$1" = "Testing" ] ; then
 		outln
 		display_rdns_etc 
 		outln 
@@ -1940,7 +1939,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.140 2014/11/18 19:23:16 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.141 2014/11/18 22:12:54 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
