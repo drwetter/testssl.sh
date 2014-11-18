@@ -1090,12 +1090,12 @@ ccs_injection(){
 
 	fd_socket 5 || return 6
 
-	[ $VERBOSE -eq 1 ] && out "\n sending client hello, "
+	[ $VERBOSE -eq 1 ] && out "\nsending client hello, "
 	socksend "$msg" $tls_hexcode 1
 	sockread 16384 
 
 	if [ $VERBOSE -eq 1 ]; then
-		outln "\n server hello:"
+		outln "\nserver hello:"
 		echo "$SOCKREPLY" | xxd -c32 | head -20
 		outln "[...]"
 		outln "\npayload #1 with TLS version $tls_hexcode:"
@@ -1218,12 +1218,12 @@ heartbleed(){
 
 		fd_socket 5 || return 6
 
-		[ $VERBOSE -eq 1 ] && out " sending client hello, "
+		[ $VERBOSE -eq 1 ] && out "\nsending client hello, "
 		socksend "$msg" $tls_hexcode 1
-		sockread 10000 
+		sockread 16384 
 
 		if [ $VERBOSE -eq 1 ]; then
-			outln "\n server hello:"
+			outln "\nserver hello:"
 			echo "$SOCKREPLY" | xxd -c32 | head -20
 			outln "[...]"
 			outln " sending payload with TLS version $tls_hexcode:"
@@ -1261,8 +1261,7 @@ renego() {
 	ADDCMD=""
 	# This tests for CVE-2009-3555 / RFC5746, OSVDB: 59968-59974
 	case "$OSSL_VER" in
-		# =< 0.9.7 is weeded out before
-		0.9.8*)
+		0.9.8*)  # we need this for Mac OSX unfortunately
 			case "$OSSL_VER_APPENDIX" in
 				[a-l])
 					magenta "Your $OPENSSL $OSSL_VER cannot test the secure renegotiation vulnerability"
@@ -1941,7 +1940,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.139 2014/11/18 10:03:01 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.140 2014/11/18 19:23:16 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
