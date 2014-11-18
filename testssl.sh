@@ -83,7 +83,8 @@ OSSL_VER_APPENDIX="none"
 NODEIP=""
 IPS=""
 
-
+# make sure that temporary files are cleaned up after use
+trap cleanup QUIT EXIT
 
 out() {
 	$ECHO "$1"
@@ -1565,7 +1566,7 @@ cleanup () {
 		[ -e $HEADERFILE_BREACH ] && cat $HEADERFILE_BREACH
 		#[ -e $LOGFILE ] && cat $LOGFILE 
 	else
-		rm $TMPFILE $HEADERFILE $LOGFILE $GOST_CONF 2>/dev/null
+		rm ${TMPFILE} ${HEADERFILE} ${HEADERFILE_BREACH} ${LOGFILE} ${GOST_CONF} 2>/dev/null
 	fi
 	outln
 	outln
@@ -1795,56 +1796,48 @@ case "$1" in
 		maketempf
 		test_just_one $2
 		ret=$?
-		cleanup
 		exit $ret ;;
 	-t|--starttls)			
 		parse_hn_port "$2" "$3" # here comes hostname:port and protocol to signal starttls
 		maketempf
 		starttls "$3"		# protocol
 		ret=$?
-		cleanup
 		exit $ret ;;
 	-e|--each-cipher)
 		parse_hn_port "$2"
 		maketempf
 		allciphers 
 		ret=$?
-		cleanup 
 		exit $ret ;;
 	-E|-ee|--cipher-per-proto)  
 		parse_hn_port "$2"
 		maketempf
 		cipher_per_proto
 		ret=$?
-		cleanup 
 		exit $ret ;;
 	-p|--protocols)
 		parse_hn_port "$2"
 		maketempf
 		runprotocols 	; ret=$?
 		spdy			; ret=`expr $? + $ret`
-		cleanup
 		exit $ret ;;
 	-f|--ciphers)
 		parse_hn_port "$2"
 		maketempf
 		run_std_cipherlists
 		ret=$?
-		cleanup
 		exit $ret ;;
      -P|--preference)   
 		parse_hn_port "$2"
 		maketempf
 		simple_preference
 		ret=$?
-		cleanup
 		exit $ret ;;
 	-y|--spdy|--google)
 		parse_hn_port "$2"
 		maketempf
 		spdy
 		ret=$?
-		cleanup
 		exit $?  ;;
 	-B|--heartbleet)
 		parse_hn_port "$2"
@@ -1852,7 +1845,6 @@ case "$1" in
 		outln; blue "--> Testing for heartbleed vulnerability"; outln "\n"
 		heartbleed
 		ret=$?
-		cleanup
 		exit $?  ;;
 	-I|--ccs|--ccs_injection)
 		parse_hn_port "$2"
@@ -1860,7 +1852,6 @@ case "$1" in
 		outln; blue "--> Testing for CCS injection vulnerability"; outln "\n"
 		ccs_injection
 		ret=$?
-		cleanup
 		exit $?  ;;
 	-R|--renegotiation)
 		parse_hn_port "$2"
@@ -1868,7 +1859,6 @@ case "$1" in
 		outln; blue "--> Testing for Renegotiation vulnerability"; outln "\n"
 		renego
 		ret=$?
-		cleanup
 		exit $?  ;;
 	-C|--compression|--crime)
 		parse_hn_port "$2"
@@ -1876,7 +1866,6 @@ case "$1" in
 		outln; blue "--> Testing for CRIME vulnerability"; outln "\n"
 		crime
 		ret=$?
-		cleanup
 		exit $?  ;;
 	-T|--breach)
 		parse_hn_port "$2"
@@ -1885,7 +1874,6 @@ case "$1" in
 		breach
 		ret=$?
 		ret=`expr $? + $ret`
-		cleanup
 		exit $ret ;;
 	-0|--poodle)
 		parse_hn_port "$2"
@@ -1894,21 +1882,18 @@ case "$1" in
 		poodle
 		ret=$?
 		ret=`expr $? + $ret`
-		cleanup
 		exit $ret ;;
 	-4|--rc4|--appelbaum)
 		parse_hn_port "$2"
 		maketempf
 		rc4
 		ret=$?
-		cleanup
 		exit $?  ;;
 	-s|--pfs|--fs|--nsa)
 		parse_hn_port "$2"
 		maketempf
 		pfs
 		ret=$?
-		cleanup
 		exit $ret ;;
 	-H|--header|--headers)  
 		parse_hn_port "$2"
@@ -1919,7 +1904,6 @@ case "$1" in
 		ret=$?
 		serverbanner
 		ret=`expr $? + $ret`
-		cleanup
 		exit $ret ;;
 	*)
 		parse_hn_port "$1"
@@ -1946,8 +1930,6 @@ case "$1" in
 
 		rc4				; ret=`expr $? + $ret`
 		pfs				; ret=`expr $? + $ret`
-
-		cleanup 
 		exit $ret ;;
 esac
 
