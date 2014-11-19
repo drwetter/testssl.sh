@@ -1273,7 +1273,7 @@ heartbleed(){
 	outln 
 
 	close_socket
-	rm $TMPFILE
+#	rm $TMPFILE
 	return $ret
 }
 
@@ -1540,11 +1540,11 @@ $PRG <options> URI
     <-H|--header|--headers>               check for HSTS, HPKP and server/application banner string
 
     <-t|--starttls> host:port <ftp|smtp|pop3|imap|xmpp|telnet> <SNI hostname> *)
-       *) for telnet STARTTLS support you need the supplied patched openssl 
+                 *) for telnet STARTTLS support you need the supplied openssl 
 
-<URI>     is  host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
+<URI>      host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
 
-<pattern> is an ignore case word pattern of cipher hexcode or any other string in the name, kx, bits
+<pattern>  an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
 
 
 
@@ -1593,11 +1593,11 @@ maketempf () {
 }
 
 cleanup () {
-	if [ $DEBUG -eq 1 ] ; then
-		[ -e $TMPFILE ] && cat $TMPFILE 
-		[ -e $HEADERFILE ] && cat $HEADERFILE 
-		[ -e $HEADERFILE_BREACH ] && cat $HEADERFILE_BREACH
-		#[ -e $LOGFILE ] && cat $LOGFILE 
+	if [ "$DEBUG" -eq 1 ] ; then
+		[ -n "$TMPFILE" ] && [ -r ${TMPFILE} ] && cat ${TMPFILE}
+		[ -r "$HEADERFILE_BREACH" ] && cat ${HEADERFILE_BREACH}
+		[ -r "$HEADERFILE" ] && cat ${HEADERFILE}
+		#[ -e "$LOGFILE" ] && cat ${LOGFILE}
 	else
 		rm ${TMPFILE} ${HEADERFILE} ${HEADERFILE_BREACH} ${LOGFILE} ${GOST_CONF} 2>/dev/null
 	fi
@@ -1937,6 +1937,7 @@ case "$1" in
 		serverbanner
 		ret=`expr $? + $ret`
 		exit $ret ;;
+	-*)  help ;;    # wrong argument
 	*)
 		parse_hn_port "$1"
 		maketempf
@@ -1965,7 +1966,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.144 2014/11/19 17:04:42 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.145 2014/11/19 21:23:12 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
