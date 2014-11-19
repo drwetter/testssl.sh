@@ -67,6 +67,7 @@ VERB_CLIST=""	     		# ... and if so, "-V" shows them row by row cipher, SSL-ver
 HSTS_MIN=180				#>180 days is ok for HSTS
 HPKP_MIN=9				#>9 days should be ok for HPKP_MIN, practical hiints?
 MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
+CLIENT_MIN_PFS=5		# number of ciphers needed to run a test for PFS
 NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 RUN_DIR=`dirname $0`
 
@@ -679,16 +680,26 @@ locally_supported() {
 	$OPENSSL s_client "$1" 2>&1 | grep -q "unknown option"
 	if [ $? -eq 0 ]; then
 		magentaln "Local problem: $OPENSSL doesn't support \"s_client $1\""
-		return 7
+		ret=7
 	else
-		return 0
+		ret=0
 	fi
+
+	return $ret
+	
 }
 
 testversion_new() {
 	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	
+	if grep -q "no cipher list" $TMPFILE ; then
+		litered "supported but couldn't detect a cipher"
+		outln "(check manually)"
+		ret=3
+	fi
+
 	rm $TMPFILE
 	return $ret
 }
@@ -706,40 +717,59 @@ testprotohelper() {
 runprotocols() {
 	blue "--> Testing Protocols"; outln "\n"
 	# e.g. ubuntu's 12.04 openssl binary + soon others don't want sslv2 anymore: bugs.launchpad.net/ubuntu/+source/openssl/+bug/955675
-	# Sonderlocke hier #FIXME kann woanders auch auftauchen!
+
 	testprotohelper "-ssl2" " SSLv2     " 
 	ret=$?; 
 	if [ $ret -ne 7 ]; then
 		if [ $ret -eq 0 ]; then
 			ok 1 1		# red 
+		elif [ $ret -eq 3 ] ; then
+			:
 		else
 			ok 0 1		# green "not offered (ok)"
 		fi
 	fi
 	
-	if testprotohelper "-ssl3" " SSLv3     " ; then
-		ok 6 0			# poodle hack" 
-	else
-		ok 0 1			# green "not offered (ok)"
+	testprotohelper "-ssl3" " SSLv3     " 
+	ret=$?; 
+	if [ $ret -ne 7 ]; then
+		if [ $ret -eq 0 ]; then
+			ok 6 0			# poodle hack" 
+		else
+			ok 0 1			# green "not offered (ok)"
+		fi
 	fi
 
-	if testprotohelper "-tls1" " TLSv1     "; then
-		ok 1 0
-	else
-		ok 0 0  
+	testprotohelper "-tls1" " TLSv1     "
+	ret=$?;
+	if [ $ret -ne 7 ]; then
+		if [ $ret -eq 0 ]; then
+			ok 1 0
+		else
+			ok 0 0  
+		fi
 	fi
 
-	if testprotohelper "-tls1_1" " TLSv1.1   "; then
-		ok 1 0
-	else
-		ok 0 0  
+	testprotohelper "-tls1_1" " TLSv1.1   "
+	ret=$?;
+	if [ $ret -ne 7 ]; then
+		if [ $ret -eq 0 ]; then
+			ok 1 0
+		else
+			ok 0 0  
+		fi
 	fi
 
-	if testprotohelper "-tls1_2" " TLSv1.2   "; then
-		ok 1 0
-	else
-		ok 0 0  
+	testprotohelper "-tls1_2" " TLSv1.2   "
+	ret=$?;
+	if [ $ret -ne 7 ]; then
+		if [ $ret -eq 0 ]; then
+			ok 1 0
+		else
+			ok 0 0  
+		fi
 	fi
+
 	return 0
 }
 
@@ -870,12 +900,16 @@ pfs() {
 #	PFSOK='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA384 EECDH+ECDSA+SHA256 EECDH+aRSA+SHA384 EECDH'
 # this catches also ECDHE-ECDSA-NULL-SHA  or  ECDHE-RSA-RC4-SHA
 
-	$OPENSSL ciphers -V "$PFSOK" >$TMPFILE
-	if [ $? -ne 0 ] || [ `wc -l $TMPFILE | awk '{ print $1 }' ` -lt 3 ]; then
-		out "Note: you have the following client side ciphers only for PFS. "
-		out "Thus it doesn't make sense to test PFS"
-		cat $TMPFILE 
-		return 1
+	$OPENSSL ciphers -V "$PFSOK" >$TMPFILE 2>/dev/null
+	if [ $? -ne 0 ] ; then
+		number_pfs=`wc -l $TMPFILE | awk '{ print $1 }'`
+		if [ "$number_pfs" -le "$CLIENT_MIN_PFS" ] ; then
+			outln
+			magentaln " Local problem: you have only $number_pfs client side PFS ciphers "
+			outln " Thus it doesn't make sense to test PFS"
+			[ $number_pfs -ne 0 ] && cat $TMPFILE 
+			return 1
+		fi
 	fi
 	savedciphers=`cat $TMPFILE`
 	[ x$SHOW_LCIPHERS = "xyes" ] && echo "local ciphers available for testing PFS:" && echo `cat $TMPFILE`
@@ -992,8 +1026,8 @@ spdy(){
 	# first, does the current openssl support it?
 	$OPENSSL s_client help 2>&1 | grep -qw nextprotoneg
 	if [ $? -ne 0 ]; then
-		magenta "Local problem: $OPENSSL cannot test SPDY"; outln
-		ret=3
+		magenta "Local problem: $OPENSSL doesn't support SPDY"; outln
+		return 0
 	fi
 	$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs </dev/null 2>/dev/null >$TMPFILE
 	if [ $? -eq 0 ]; then
@@ -1431,7 +1465,8 @@ find_openssl_binary() {
 	esac
 	if [ $OSSL_VER_MAJOR -lt 1 ]; then ## mm: Patch for libressl
 		outln
-		magentaln " ¡¡¡ <Enter> at your own risk !!!\n $OPENSSL version < 1.0 is too old"
+		magentaln " ¡¡¡ <Enter> at your own risk !!! $OPENSSL is way too old (< version 1.0)"
+		outln " Proceeding may likely result in false negatives or positives\n"
 		read a
 	fi
 	return 0
@@ -1938,7 +1973,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.142 2014/11/19 12:22:21 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.143 2014/11/19 16:08:58 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
