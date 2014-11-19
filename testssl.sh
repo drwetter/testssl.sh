@@ -208,7 +208,7 @@ boldandunder() { [ "$COLOR" != 0 ] && out "\033[1m\033[4m$1" || out "$1" ; off; 
 reverse() { [ "$COLOR" != 0 ] && out "\033[7m$1" || out "$1" ; off; }
 
 
-# whether it is ok for offer/not offer enc/cipher/version
+# whether it is ok to offer/not to offer enc/cipher/version
 ok(){
 	if [ "$2" -eq 1 ] ; then		
 		case $1 in
@@ -217,9 +217,11 @@ ok(){
 		esac
 	else	
 		case $1 in
-			6) literedln "offered (NOT ok)" ;;  	# 4 0
+			6) literedln "offered (NOT ok)" ;;  	# 6 0
+			5) litered "supported but couldn't detect a cipher"; outln "(check manually)"  ;;		# 5 5
+			4) litegreenln "offered (OK)" ;;  	# 4 0
 			3) brownln "offered" ;;  		# 3 0
-			2) boldln "offered" ;;  		# 2 0
+			2) boldln "offered" ;;  			# 2 0
 			1) greenln "offered (OK)" ;;  	# 1 0
 			0) boldln "not offered" ;;    	# 0 0
 		esac
@@ -690,14 +692,15 @@ locally_supported() {
 }
 
 testversion_new() {
-	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
+	local sni=$SNI
+	[ "x$1" = "x-ssl2" ] && sni=""  # newer openssl throw an error if SNI with SSLv2
+
+	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
 	
 	if grep -q "no cipher list" $TMPFILE ; then
-		litered "supported but couldn't detect a cipher"
-		outln "(check manually)"
-		ret=3
+		ret=5
 	fi
 
 	rm $TMPFILE
@@ -718,57 +721,46 @@ runprotocols() {
 	blue "--> Testing Protocols"; outln "\n"
 	# e.g. ubuntu's 12.04 openssl binary + soon others don't want sslv2 anymore: bugs.launchpad.net/ubuntu/+source/openssl/+bug/955675
 
-	testprotohelper "-ssl2" " SSLv2     " 
-	ret=$?; 
-	if [ $ret -ne 7 ]; then
-		if [ $ret -eq 0 ]; then
-			ok 1 1		# red 
-		elif [ $ret -eq 3 ] ; then
-			:
-		else
-			ok 0 1		# green "not offered (ok)"
-		fi
-	fi
+	testprotohelper "-ssl2" " SSLv2     "  
+	case $? in
+		0) 	ok 1 1 ;;	# red 
+		5) 	ok 5 5 ;;	# protocol ok, but no cipher
+		1) 	ok 0 1 ;; # green "not offered (ok)"
+		7) ;;		# no local support
+	esac
 	
 	testprotohelper "-ssl3" " SSLv3     " 
-	ret=$?; 
-	if [ $ret -ne 7 ]; then
-		if [ $ret -eq 0 ]; then
-			ok 6 0			# poodle hack" 
-		else
-			ok 0 1			# green "not offered (ok)"
-		fi
-	fi
+	case $? in
+		0) ok 6 0 ;;	# poodle hack"
+		1) ok 0 1 ;;	# green "not offered (ok)"
+		5) ok 5 5 ;;	# protocol ok, but no cipher
+		7) ;;		# no local support
+	esac
+
 
 	testprotohelper "-tls1" " TLSv1     "
-	ret=$?;
-	if [ $ret -ne 7 ]; then
-		if [ $ret -eq 0 ]; then
-			ok 1 0
-		else
-			ok 0 0  
-		fi
-	fi
+	case $? in
+		0) ok 4 0 ;;   # no GCM, thus in litegreen
+		1) ok 0 0 ;;
+		5) ok 5 5 ;;	# protocol ok, but no cipher
+		7) ;;		# no local support
+	esac
 
 	testprotohelper "-tls1_1" " TLSv1.1   "
-	ret=$?;
-	if [ $ret -ne 7 ]; then
-		if [ $ret -eq 0 ]; then
-			ok 1 0
-		else
-			ok 0 0  
-		fi
-	fi
+	case $? in
+		0) ok 1 0 ;;
+		1) ok 0 0 ;;
+		5) ok 5 5 ;;	# protocol ok, but no cipher
+		7) ;;		# no local support
+	esac
 
 	testprotohelper "-tls1_2" " TLSv1.2   "
-	ret=$?;
-	if [ $ret -ne 7 ]; then
-		if [ $ret -eq 0 ]; then
-			ok 1 0
-		else
-			ok 0 0  
-		fi
-	fi
+	case $? in
+		0) ok 1 0 ;;
+		1) ok 0 0 ;;
+		5) ok 5 5 ;;	# protocol ok, but no cipher
+		7) ;;		# no local support
+	esac
 
 	return 0
 }
@@ -1039,7 +1031,7 @@ spdy(){
 		else
 			# now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
 			if echo $tmpstr | egrep -q "spdy|http" ; then
-				green "$tmpstr" ; out " (advertised)"
+				bold "$tmpstr" ; out " (advertised)"
 				ret=0
 			else
 				litemagenta "please check manually, response from server was ambigious ..."
@@ -1973,7 +1965,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.143 2014/11/19 16:08:58 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.144 2014/11/19 17:04:42 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
