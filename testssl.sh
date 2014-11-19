@@ -86,6 +86,12 @@ IPS=""
 # make sure that temporary files are cleaned up after use
 trap cleanup QUIT EXIT
 
+# The various hexdump commands we need to replace xxd (BSD compatability))
+HEXDUMPVIEW=(hexdump -C) 				# This is used in verbose mode to see what's going on
+HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"') 	# This is used to analyse the reply
+HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"') 	# Replaces both xxd -p and tr -cd '[:print:]'
+        
+
 out() {
 	$ECHO "$1"
 }
@@ -524,7 +530,7 @@ std_cipherlists() {
 socksend() {
 	data=`echo $1 | sed 's/tls_version/'"$2"'/g'`
 	[ $VERBOSE -eq 1 ] && echo "\"$data\""
-	out "$data" >&5 2>/dev/null &
+	printf $data >&5 2>/dev/null &
 	sleep $3
 }
 
@@ -1086,6 +1092,7 @@ ccs_injection(){
 	x00, x07, x00, x06, x00, x05, x00, x04,
 	x00, x03, x00, x02, x00, x01, x01, x00"
 
+	#msg=`echo "$client_hello" | grep -o '\bx[[:xdigit:]]\{2\}\b\|tls_version' | sed -e 's/x/\\\x/g' -e 's/tls_version/\\\tls_version/g' | tr -d '\n'`
 	msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' -e 's/[ \t]//g' | tr -d '\n'`
 
 	fd_socket 5 || return 6
@@ -1096,7 +1103,7 @@ ccs_injection(){
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\nserver hello:"
-		echo "$SOCKREPLY" | xxd -c32 | head -20
+		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
 		outln "[...]"
 		outln "\npayload #1 with TLS version $tls_hexcode:"
 	fi
@@ -1105,7 +1112,7 @@ ccs_injection(){
 	sockread 2048 5	# 5 seconds
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n1st reply: " 
-		out "$SOCKREPLY" | xxd -c32
+		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
 # ok:      15 | 0301 | 02 | 02 0a == ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
 		outln
 		outln "payload #2 with TLS version $tls_hexcode:"
@@ -1117,14 +1124,14 @@ ccs_injection(){
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n2nd reply: "
-		out "$SOCKREPLY" | xxd -c32
+		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
 # not ok:  15 | 0301 | 02 | 02 | 15 == ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
 # ok:  0a or nothing: ==> RST
 		outln
 	fi
 
-	reply_sanitized=`outln "$SOCKREPLY" | xxd -p | tr -cd '[:print:]' | sed 's/^..........//'`
-	lines=`echo "$SOCKREPLY" | xxd -c32 | wc -l`
+	reply_sanitized=`echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//'`
+	lines=`echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l`
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
 		green "not vulnerable (OK)"
@@ -1143,113 +1150,101 @@ ccs_injection(){
 
 heartbleed(){
 	bold " Heartbleed\c"; out " (CVE-2014-0160), experimental  "
-# see  http://heartbleed.com/
-	$OPENSSL s_client -tlsextdebug 2>&1 | grep -wq '^usage'
-	if [ $? -eq 0 ]; then
-		magenta "Local problem: Your $OPENSSL cannot run the pretest for this - "
-		outln "continuing at your own risks"
+
+	# mainly adapted from https://gist.github.com/takeshixx/10107280
+	heartbleed_payload="\x18\x03\tls_version\x00\x03\x01\x40\x00"
+
+	tls_hexcode=x01
+	proto_offered=`grep -w Protocol $TMPFILE | sed -e 's/^ \+Protocol \+://'`
+	case $tls_proto_offered in
+		*TLSv1.2*)	tls_hexcode=x03 ;;
+		*TLSv1.1*)	tls_hexcode=x02 ;;
+	esac
+
+	client_hello="
+	# TLS header ( 5 bytes)
+	,x16,                      # Content type (x16 for handshake)
+	x03, tls_version,          # TLS Version
+	x00, xdc,                  # Length
+	# Handshake header
+	x01,                       # Type (x01 for ClientHello)
+	x00, x00, xd8,             # Length
+	x03, tls_version,          # TLS Version
+	# Random (32 byte)
+	x53, x43, x5b, x90, x9d, x9b, x72, x0b,
+	xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
+	xcf, xbd, x39, x04, xcc, x16, x0a, x85,
+	x03, x90, x9f, x77, x04, x33, xd4, xde,
+	x00,                       # Session ID length
+	x00, x66,                  # Cipher suites length
+						  # Cipher suites (51 suites)
+	xc0, x14, xc0, x0a, xc0, x22, xc0, x21,
+	x00, x39, x00, x38, x00, x88, x00, x87,
+	xc0, x0f, xc0, x05, x00, x35, x00, x84,
+	xc0, x12, xc0, x08, xc0, x1c, xc0, x1b,
+	x00, x16, x00, x13, xc0, x0d, xc0, x03,
+	x00, x0a, xc0, x13, xc0, x09, xc0, x1f,
+	xc0, x1e, x00, x33, x00, x32, x00, x9a,
+	x00, x99, x00, x45, x00, x44, xc0, x0e,
+	xc0, x04, x00, x2f, x00, x96, x00, x41,
+	xc0, x11, xc0, x07, xc0, x0c, xc0, x02,
+	x00, x05, x00, x04, x00, x15, x00, x12,
+	x00, x09, x00, x14, x00, x11, x00, x08,
+	x00, x06, x00, x03, x00, xff,
+	x01,                       # Compression methods length
+	x00,                       # Compression method (x00 for NULL)
+	x00, x49,                  # Extensions length
+	# Extension: ec_point_formats
+	x00, x0b, x00, x04, x03, x00, x01, x02,
+	# Extension: elliptic_curves
+	x00, x0a, x00, x34, x00, x32, x00, x0e,
+	x00, x0d, x00, x19, x00, x0b, x00, x0c,
+	x00, x18, x00, x09, x00, x0a, x00, x16,
+	x00, x17, x00, x08, x00, x06, x00, x07,
+	x00, x14, x00, x15, x00, x04, x00, x05,
+	x00, x12, x00, x13, x00, x01, x00, x02,
+	x00, x03, x00, x0f, x00, x10, x00, x11,
+	# Extension: SessionTicket TLS
+	x00, x23, x00, x00,
+	# Extension: Heartbeat
+	x00, x0f, x00, x01, x01"
+
+	#msg=`echo "$client_hello" | grep -o '\bx[[:xdigit:]]\{2\}\b\|tls_version' | sed -e 's/x/\\\x/g' -e 's/tls_version/\\\tls_version/g' | tr -d '\n'`
+	msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' -e 's/[ \t]//g' | tr -d '\n'`
+
+	fd_socket 5 || return 6
+
+	[ $VERBOSE -eq 1 ] && out "\nsending client hello, "
+	socksend "$msg" $tls_hexcode 1
+	sockread 16384 
+
+	if [ $VERBOSE -eq 1 ]; then
+		outln "\nserver hello:"
+		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
+		outln "[...]"
+		outln " sending payload with TLS version $tls_hexcode:"
 	fi
-# we don't need SNI here:
-	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -tlsextdebug &>$TMPFILE </dev/null
-	grep "server extension" $TMPFILE | grep -wq heartbeat
-	if [ $? -ne 0 ]; then
-		greenln "No TLS heartbeat extension (OK)"
-		ret=0
+
+	socksend $heartbleed_payload $tls_hexcode 1
+	sockread 16384
+	retval=$?
+
+	if [ $VERBOSE -eq 1 ]; then
+		outln "\n heartbleed reply: "
+		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
+		outln
+	fi
+
+	lines_returned=`echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l`
+	if [ $lines_returned -gt 1 ]; then
+		red "VULNERABLE"
+		ret=1
 	else
-		# mainly adapted from https://gist.github.com/takeshixx/10107280
-		heartbleed_payload="\x18\x03\tls_version\x00\x03\x01\x40\x00"
-
-		tls_hexcode=x01
-		proto_offered=`grep -w Protocol $TMPFILE | sed -e 's/^ \+Protocol \+://'`
-		case $tls_proto_offered in
-			*TLSv1.2*)	tls_hexcode=x03 ;;
-			*TLSv1.1*)	tls_hexcode=x02 ;;
-		esac
-
-		client_hello="
-		# TLS header ( 5 bytes)
-		,x16,                      # Content type (x16 for handshake)
-		x03, tls_version,          # TLS Version
-		x00, xdc,                  # Length
-		# Handshake header
-		x01,                       # Type (x01 for ClientHello)
-		x00, x00, xd8,             # Length
-		x03, tls_version,          # TLS Version
-          # Random (32 byte)
-		x53, x43, x5b, x90, x9d, x9b, x72, x0b,
-		xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
-		xcf, xbd, x39, x04, xcc, x16, x0a, x85,
-		x03, x90, x9f, x77, x04, x33, xd4, xde,
-		x00,                       # Session ID length
-		x00, x66,                  # Cipher suites length
-                                     # Cipher suites (51 suites)
-		xc0, x14, xc0, x0a, xc0, x22, xc0, x21,
-		x00, x39, x00, x38, x00, x88, x00, x87,
-		xc0, x0f, xc0, x05, x00, x35, x00, x84,
-		xc0, x12, xc0, x08, xc0, x1c, xc0, x1b,
-		x00, x16, x00, x13, xc0, x0d, xc0, x03,
-		x00, x0a, xc0, x13, xc0, x09, xc0, x1f,
-		xc0, x1e, x00, x33, x00, x32, x00, x9a,
-		x00, x99, x00, x45, x00, x44, xc0, x0e,
-		xc0, x04, x00, x2f, x00, x96, x00, x41,
-		xc0, x11, xc0, x07, xc0, x0c, xc0, x02,
-		x00, x05, x00, x04, x00, x15, x00, x12,
-		x00, x09, x00, x14, x00, x11, x00, x08,
-		x00, x06, x00, x03, x00, xff,
-		x01,                       # Compression methods length
-		x00,                       # Compression method (x00 for NULL)
-		x00, x49,                  # Extensions length
-          # Extension: ec_point_formats
-		x00, x0b, x00, x04, x03, x00, x01, x02,
-          # Extension: elliptic_curves
-		x00, x0a, x00, x34, x00, x32, x00, x0e,
-		x00, x0d, x00, x19, x00, x0b, x00, x0c,
-		x00, x18, x00, x09, x00, x0a, x00, x16,
-		x00, x17, x00, x08, x00, x06, x00, x07,
-		x00, x14, x00, x15, x00, x04, x00, x05,
-		x00, x12, x00, x13, x00, x01, x00, x02,
-		x00, x03, x00, x0f, x00, x10, x00, x11,
-          # Extension: SessionTicket TLS
-		x00, x23, x00, x00,
-          # Extension: Heartbeat
-		x00, x0f, x00, x01, x01"
-
-		msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' -e 's/[ \t]//g' | tr -d '\n'`
-
-		fd_socket 5 || return 6
-
-		[ $VERBOSE -eq 1 ] && out "\nsending client hello, "
-		socksend "$msg" $tls_hexcode 1
-		sockread 16384 
-
-		if [ $VERBOSE -eq 1 ]; then
-			outln "\nserver hello:"
-			echo "$SOCKREPLY" | xxd -c32 | head -20
-			outln "[...]"
-			outln " sending payload with TLS version $tls_hexcode:"
-		fi
-
-		socksend $heartbleed_payload $tls_hexcode 1
-		sockread 16384
-		retval=$?
-
-		if [ $VERBOSE -eq 1 ]; then
-			outln "\n heartbleed reply: "
-			echo "$SOCKREPLY" | xxd -c32
-			outln
-		fi
-
-		lines_returned=`echo "$SOCKREPLY" | xxd | wc -l`
-		if [ $lines_returned -gt 1 ]; then
-			red "VULNERABLE"
-			ret=1
-		else
-			green "not vulnerable (OK)"
-			ret=0
-		fi
-		[ $retval -eq 3 ] && green ", timed out"
-		outln 
+		green "not vulnerable (OK)"
+		ret=0
 	fi
+	[ $retval -eq 3 ] && green ", timed out"
+	outln 
 
 	close_socket
 	rm $TMPFILE
@@ -1419,9 +1414,10 @@ find_openssl_binary() {
 	OSSL_VER_MAJOR=`echo "$OSSL_VER" | sed 's/\..*$//'`
 	OSSL_VER_MINOR=`echo "$OSSL_VER" | sed -e 's/^.\.//' | sed 's/\..*.//'`
 	OSSL_VER_APPENDIX=`echo "$OSSL_VER" | tr -d '[0-9.]'`
+	OSSL_VER_PLATFORM=`$OPENSSL version -p | sed 's/^platform: //'`
 	OSSL_BUILD_DATE=`$OPENSSL version -a | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//'`
-	echo $OSSL_BUILD_DATE | grep -q "not available" && OSSL_BUILD_DATE=""
-	export OPENSSL OSSL_VER OSSL_BUILD_DATE
+	echo $OSSL_BUILD_DATE | grep -q "not available" && OSSL_BUILD_DATE="" 
+	export OPENSSL OSSL_VER OSSL_BUILD_DATE OSSL_VER_PLATFORM
 	case "$OSSL_VER" in
 		0.9.7*|0.9.6*|0.9.5*)
 			# 0.9.5a was latest in 0.9.5 an released 2000/4/1, that'll NOT suffice for this test
@@ -1429,11 +1425,13 @@ find_openssl_binary() {
 		0.9.8)
 			case $OSSL_VER_APPENDIX in
 				a|b|c|d|e) old_fart;; # no SNI!
+				# other than that we leave this for MacOSX but it's a pain and no guarantees!
 			esac
 			;;
 	esac
 	if [ $OSSL_VER_MAJOR -lt 1 ]; then ## mm: Patch for libressl
-		magentaln "<Enter> at your own risk. $OPENSSL version < 1.0 is too old for this program"
+		outln
+		magentaln " ¡¡¡ <Enter> at your own risk !!!\n $OPENSSL version < 1.0 is too old"
 		read a
 	fi
 	return 0
@@ -1554,8 +1552,9 @@ EOF
 `
 bold "$bb"
 outln "\n"
-outln "Using \"$osslver\" [$OSSL_BUILD_DATE]
-      on \"$hn:$osslpath\"\n"
+outln " Using \"$osslver\" from
+ $hn:$osslpath
+ (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 
 }
 
@@ -1939,7 +1938,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.141 2014/11/18 22:12:54 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.142 2014/11/19 12:22:21 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
