@@ -5,6 +5,9 @@
 * Maciej Grela 
  * colorless handling
 
+* Olivier Paroz
+ * conversion xxd --> hexdump stuff 
+
 * Markus Manzke: 
  - Fix for HSTS + subdomains
  - LibreSSL patch
