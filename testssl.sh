@@ -4,7 +4,7 @@
 
 # Program for spotting weak SSL encryption, ciphers, version and some vulnerablities or features
 
-VERSION="2.1rc1"
+VERSION="2.1rc2"
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -217,11 +217,12 @@ ok(){
 		esac
 	else	
 		case $1 in
-			6) literedln "offered (NOT ok)" ;;  	# 6 0
+			7) brownln "not offered" ;;   	# 7 0
+			6) literedln "offered (NOT ok)" ;; # 6 0
 			5) litered "supported but couldn't detect a cipher"; outln "(check manually)"  ;;		# 5 5
 			4) litegreenln "offered (OK)" ;;  	# 4 0
 			3) brownln "offered" ;;  		# 3 0
-			2) boldln "offered" ;;  			# 2 0
+			2) outln "offered" ;;  			# 2 0
 			1) greenln "offered (OK)" ;;  	# 1 0
 			0) boldln "not offered" ;;    	# 0 0
 		esac
@@ -740,7 +741,7 @@ runprotocols() {
 
 	testprotohelper "-tls1" " TLSv1     "
 	case $? in
-		0) ok 4 0 ;;   # no GCM, thus in litegreen
+		0) ok 4 0 ;;   # no GCM, thus only in litegreen
 		1) ok 0 0 ;;
 		5) ok 5 5 ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
@@ -749,7 +750,7 @@ runprotocols() {
 	testprotohelper "-tls1_1" " TLSv1.1   "
 	case $? in
 		0) ok 1 0 ;;
-		1) ok 0 0 ;;
+		1) ok 7 0 ;;   # no GCM, penalty
 		5) ok 5 5 ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
@@ -757,7 +758,7 @@ runprotocols() {
 	testprotohelper "-tls1_2" " TLSv1.2   "
 	case $? in
 		0) ok 1 0 ;;
-		1) ok 0 0 ;;
+		1) ok 7 0 ;;   # no GCM, penalty
 		5) ok 5 5 ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
@@ -794,7 +795,7 @@ simple_preference() {
 		ret=6
 	else
 		out " Negotiated protocol       "
-		TLS_PROTO_OFFERED=`grep -w "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g'`
+		TLS_PROTO_OFFERED=`grep -w "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g'`
 		case "$TLS_PROTO_OFFERED" in
 			*TLSv1.2)		greenln $TLS_PROTO_OFFERED ;;
 			*TLSv1.1)		litegreenln $TLS_PROTO_OFFERED ;;
@@ -805,13 +806,14 @@ simple_preference() {
 		esac
 
 		out " Negotiated cipher         "
-		default=`grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g'`
+		default=`grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g'`
 		case "$default" in
 			*NULL*|*EXP*)	redln "$default" ;;
 			*RC4*)		literedln "$default" ;;
 			*CBC*)		literedln "$default" ;; #FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
-			*GCM*)		litegreenln "$default" ;; # best ones
-			ECDHE*AES*)    brownln "$default" ;; # it's CBC. so lucky13
+			*GCM*)		greenln "$default" ;;   # best ones
+			*CHACHA20*)	greenln "$default" ;;   # best ones
+			ECDHE*AES*)    brownln "$default" ;;   # it's CBC. so lucky13
 			*)			outln "$default" ;;
 		esac
 		outln
@@ -983,7 +985,7 @@ rc4() {
 		# https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
 		# http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 		outln
-		outln "RC4 is kind of broken, for e.g. IE6 consider 0x13 or 0x0a"
+		outln "RC4 is broken, for legacy support (IE6) rather consider x13 or x0a"
 	else
 		outln
 		litegreenln "no RC4 ciphers detected (OK)"
@@ -1166,7 +1168,7 @@ ccs_injection(){
 		red "VULNERABLE"
 		ret=1
 	fi
-	[ $retval -eq 3 ] && out ", timed out"
+	[ $retval -eq 3 ] && out "(timed out)"
 	outln 
 
 	close_socket
@@ -1180,6 +1182,9 @@ heartbleed(){
 	# mainly adapted from https://gist.github.com/takeshixx/10107280
 	heartbleed_payload="\x18\x03\tls_version\x00\x03\x01\x40\x00"
 
+	# determine TLS versions available:
+	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -tlsextdebug &>$TMPFILE </dev/null
+		
 	tls_hexcode=x01
 	proto_offered=`grep -w Protocol $TMPFILE | sed -e 's/^ \+Protocol \+://'`
 	case $tls_proto_offered in
@@ -1269,11 +1274,11 @@ heartbleed(){
 		green "not vulnerable (OK)"
 		ret=0
 	fi
-	[ $retval -eq 3 ] && green ", timed out"
+	[ $retval -eq 3 ] && out "(timed out)"
 	outln 
 
 	close_socket
-#	rm $TMPFILE
+	rm $TMPFILE
 	return $ret
 }
 
@@ -1341,7 +1346,7 @@ crime() {
 	# first we need to test whether OpenSSL binary has zlib support
 	$OPENSSL zlib -e -a  -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib 
 	if [ $? -eq 0 ]; then
-		magentaln "Seems your $OPENSSL hasn't zlib support, so you cannot test for CRIME"; echo
+		magentaln "Local Problem: Your $OPENSSL lacks zlib support"
 		return 0  #FIXME
 	fi
 
@@ -1966,7 +1971,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.145 2014/11/19 21:23:12 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.146 2014/11/20 09:46:54 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
