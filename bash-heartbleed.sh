@@ -115,7 +115,7 @@ fi
 echo "##### sending client hello:"
 socksend "$msg" $TLSV
 
-sockread 10000 
+sockread 16384 
 echo "##### server hello:"
 echo -e "$reply" | xxd | head -20
 echo "[...]"
