@@ -50,7 +50,7 @@ SWCONTACT="dirk aet testssl dot sh"
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# same as previous. Doing nothing yet. FC has only a CA bundle per default, ==> openssl version -d
 OSSL_VER=""				# openssl version, will be autodetermined
 NC=""					# netcat will be autodetermined
-ECHO="/usr/bin/printf" 		# works under Linux, BSD, MacOS. watch out under Solaris, not tested yet under cygwin
+ECHO="/usr/bin/printf --"	# works under Linux, BSD, MacOS. watch out under Solaris, not tested yet under cygwin
 COLOR=${COLOR:-2}			# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LCIPHERS=no    		# determines whether the client side ciphers are displayed at all (makes no sense normally)
 VERBERR=${VERBERR:-1}		# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
