@@ -1725,7 +1725,7 @@ get_dns_entries() {
 		SNI=""	# override this as we test the IP only
 	else
 		# for security testing sometimes we have local host entries, so getent is preferred
-		if which getent 2>&1 >/dev/null ; then
+	    if which getent &>/dev/null; then
 			getent ahostsv4 $NODE 2>/dev/null >/dev/null
 			if [ $? -eq 0 ]; then
 				# Linux:
