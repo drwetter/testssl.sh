@@ -71,7 +71,7 @@ If you don't have / don't want Kerberos libraries and devel rpms/debs, omit "--w
 
 5.) make report (check whether it runs ok)
 
-6.) "openssl ciphers -V ALL:COMPLEMENTOFALL | wc -l" lists now for me 
+6.) "./apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l" lists now for me 
 * 187(+4 GOST) ciphers -- including kerberos
 * 173(+4 GOST) ciphers without kerberos
 
