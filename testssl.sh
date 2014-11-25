@@ -55,7 +55,7 @@ COLOR=${COLOR:-2}			# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LCIPHERS=no    		# determines whether the client side ciphers are displayed at all (makes no sense normally)
 VERBERR=${VERBERR:-1}		# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
 		# whether the handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
-LOCERR=${LOCERR:-1}			# Same as before, just displays am error if local cipher isn't support
+LOCERR=${LOCERR:-0}			# displays the local error 
 SHOW_EACH_C=${SHOW_EACH_C:-0}	# where individual ciphers are tested show just the positively ones tested
 SNEAKY=${SNEAKY:-1}			# if zero: the referer and useragent we leave while checking the http header is just usual
 #FIXME: consequently we should mute the initial netcat and openssl s_client -connect as they cause a 400 (nginx, apache)
@@ -105,17 +105,17 @@ outln() {
 # some functions for text (i know we could do this with tput, but what about systems having no terminfo?
 # http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
 off() {
-	[ "$COLOR" != 0 ] && out "\033[m\c"
+	[[ "$COLOR" != 0 ]] && out "\033[m\c"
 }
 
 liteblue() { 
-	[ "$COLOR" = 2 ] && out "\033[0;34m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[0;34m$1 " || out "$1 "
 	off
 }
 liteblueln() { liteblue "$1"; outln; }
 
 blue() { 
-	[ "$COLOR" = 2 ] && out "\033[1;34m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[1;34m$1 " || out "$1 "
 	off
 }
 blueln() { blue "$1"; outln; }
@@ -126,86 +126,86 @@ blueln() { blue "$1"; outln; }
 # FIXME: What bout folks who don't want color at all
 
 litered() { 
-	[ "$COLOR" = 2 ] && out "\033[0;31m$1 " || bold "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[0;31m$1 " || bold "$1 "
 	off
 }
 literedln() { litered "$1"; outln; }
 
 red() { 
-	[ "$COLOR" = 2 ] && out "\033[1;31m$1 " || bold "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[1;31m$1 " || bold "$1 "
 	off
 }
 redln() { red "$1"; outln; }
 
 litemagenta() { 
-	[ "$COLOR" = 2 ] && out "\033[0;35m$1 " || underline "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[0;35m$1 " || underline "$1 "
 	off
 }
 litemagentaln() { litemagenta "$1"; outln; }
 
 
 magenta() { 
-	[ "$COLOR" = 2 ] && out "\033[1;35m$1 " || underline "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[1;35m$1 " || underline "$1 "
 	off
 }
 magentaln() { magenta "$1"; outln; }
 
 litecyan() { 
-	[ "$COLOR" = 2 ] && out "\033[0;36m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[0;36m$1 " || out "$1 "
 	off
 }
 litecyanln() { litecyan "$1"; outln; }
 
 cyan() { 
-	[ "$COLOR" = 2 ] && out "\033[1;36m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[1;36m$1 " || out "$1 "
 	off
 }
 cyanln() { cyan "$1"; outln; }
 
 grey() { 
-	[ "$COLOR" = 2 ] && out "\033[1;30m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[1;30m$1 " || out "$1 "
 	off
 }
 greyln() { grey "$1"; outln; }
 
 litegrey() { 
-	[ "$COLOR" = 2 ] && out "\033[0;37m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[0;37m$1 " || out "$1 "
 	off
 }
 litegreyln() { litegrey "$1"; outln; }
 
 litegreen() { 
-	[ "$COLOR" = 2 ] && out "\033[0;32m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[0;32m$1 " || out "$1 "
 	off
 }
 litegreenln() { litegreen "$1"; outln; }
 
 green() { 
-	[ "$COLOR" = 2 ] && out "\033[1;32m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[1;32m$1 " || out "$1 "
 	off
 }
 greenln() { green "$1"; outln; }
 
 brown() { 
-	[ "$COLOR" = 2 ] && out "\033[0;33m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[0;33m$1 " || out "$1 "
 	off
 }
 brownln() { brown "$1"; outln; }
 
 yellow() { 
-	[ "$COLOR" = 2 ] && out "\033[1;33m$1 " || out "$1 "
+	[[ "$COLOR" = 2 ]] && out "\033[1;33m$1 " || out "$1 "
 	off
 }
 yellowlnln() { yellowln "$1"; outln; }
 
-bold() { [ "$COLOR" != 0 ] && out "\033[1m$1" || out "$1" ; off; }
+bold() { [[ "$COLOR" != 0 ]] && out "\033[1m$1" || out "$1" ; off; }
 boldln() { bold "$1" ; outln; }
 
-underline() { [ "$COLOR" != 0 ] && out "\033[4m$1" || out "$1" ; off; }
+underline() { [[ "$COLOR" != 0 ]] && out "\033[4m$1" || out "$1" ; off; }
 
-boldandunder() { [ "$COLOR" != 0 ] && out "\033[1m\033[4m$1" || out "$1" ; off; }
+boldandunder() { [[ "$COLOR" != 0 ]] && out "\033[1m\033[4m$1" || out "$1" ; off; }
 
-reverse() { [ "$COLOR" != 0 ] && out "\033[7m$1" || out "$1" ; off; }
+reverse() { [[ "$COLOR" != 0 ]] && out "\033[7m$1" || out "$1" ; off; }
 
 
 # whether it is ok to offer/not to offer enc/cipher/version
@@ -476,12 +476,10 @@ prettyprint_local() {
 # list ciphers (and makes sure you have them locally configured)
 # arg[1]: cipher list (or anything else)
 listciphers() {
-	if [ $LOCERR = 0 ]; then
-		$OPENSSL ciphers "$VERB_CLIST" $1 2>&1 >$TMPFILE
-	else
-		$OPENSSL ciphers "$VERB_CLIST" $1  &>$TMPFILE
-	fi
-	return $?
+	$OPENSSL ciphers "$VERB_CLIST" $1  &>$TMPFILE
+	ret=$?
+	[[ "$LOCERR" = 1 ]] && cat $TMPFILE 
+	return $ret
 }
 
 
@@ -490,42 +488,40 @@ listciphers() {
 # argv[3]: ok to offer? 0: yes, 1: no
 std_cipherlists() {
 	out "$2 "; 
-	if listciphers $1; then
+	if listciphers $1; then  # is that locally available??
 		[ x$SHOW_LCIPHERS = "xyes" ] && out "local ciphers are: " && cat $TMPFILE | sed 's/:/, /g'
 		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $SNI 2>$TMPFILE >/dev/null </dev/null
 		ret=$?
-		if [ $VERBERR -eq 0 ]; then
-		#	echo | $OPENSSL s_client -cipher $1  -connect "$NODE:$PORT" >&1 >$TMPFILE
-			head -2 $TMPFILE | egrep -v "depth|num="
-		fi
-		if [ $3 -eq 0 ]; then 		# ok to offer
-			if [ $ret -eq 0 ]; then	# was offered
-				ok 1 0			# green
-			else
-				ok 0 0			# black
-			fi
-		elif [ $3 -eq 2 ]; then		# not really bad
-			if [ $ret -eq 0 ]; then
-				ok 2 0			# offered in bold
-			else
-				ok 0 0              # not offered also in bold
-			fi
-		else
-			if [ $ret -eq 0 ]; then
-				ok 1 1			# was offered! --> red
-			else
-				#ok 0 0			# was not offered, that's ok
-				ok 0 1			# was not offered --> green
-		fi
-	fi
-	rm $TMPFILE
+		[[ $VERBOSE -eq 1 ]] && cat $TMPFILE
+		case $3 in
+			0)	# ok to offer
+				if [[ $ret -eq 0 ]]; then	# was offered
+					ok 1 0			# green
+				else
+					ok 0 0			# black
+				fi ;;
+			2) 	# not really bad
+				if [[ $ret -eq 0 ]]; then
+					ok 2 0			# offered in bold
+				else
+					ok 0 0              # not offered also in bold
+				fi;;
+			*) # the ugly rest
+				if [[ $ret -eq 0 ]]; then
+					ok 1 1			# was offered! --> red
+				else
+					#ok 0 0			# was not offered, that's ok
+					ok 0 1			# was not offered --> green
+				fi ;;
+		esac
+		rm $TMPFILE
 	else
 		singlespaces=`echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g'`
 		magentaln "Local problem: No $singlespaces configured in $OPENSSL" 
 	fi
 	# we need lf in those cases:
-	[ "$LOCERR" -eq 0 ] && echo
-	[ "$VERBERR" -eq 0 ] && echo
+	[[ "$LOCERR" -eq 1 ]] && echo
+	[[ "$VERBOSE" -eq 1 ]] && echo
 }
 
 
@@ -1971,7 +1967,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.146 2014/11/20 09:46:54 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.148 2014/11/25 12:11:34 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
