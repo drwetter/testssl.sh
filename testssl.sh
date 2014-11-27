@@ -4,7 +4,7 @@
 
 # Program for spotting weak SSL encryption, ciphers, version and some vulnerablities or features
 
-VERSION="2.1rc2"
+VERSION="2.1rc3"
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -48,41 +48,43 @@ SWCONTACT="dirk aet testssl dot sh"
 
 #OPENSSL="${OPENSSL:-/usr/bin/openssl}"	# private openssl version --> is now evaluated below
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# same as previous. Doing nothing yet. FC has only a CA bundle per default, ==> openssl version -d
-OSSL_VER=""				# openssl version, will be autodetermined
-NC=""					# netcat will be autodetermined
-ECHO="/usr/bin/printf --"	# works under Linux, BSD, MacOS. watch out under Solaris, not tested yet under cygwin
+ECHO="/usr/bin/printf --"		# works under Linux, BSD, MacOS. watch out under Solaris, not tested yet under cygwin
 COLOR=${COLOR:-2}			# 2: Full color, 1: b/w+positioning, 0: no ESC at all
-SHOW_LCIPHERS=no    		# determines whether the client side ciphers are displayed at all (makes no sense normally)
-VERBERR=${VERBERR:-1}		# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
-		# whether the handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
+SHOW_LCIPHERS=no    			# determines whether the client side ciphers are displayed at all (makes no sense normally)
+VERBERR=${VERBERR:-1}			# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
+					# whether the handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
 LOCERR=${LOCERR:-0}			# displays the local error 
-SHOW_EACH_C=${SHOW_EACH_C:-0}	# where individual ciphers are tested show just the positively ones tested
+SHOW_EACH_C=${SHOW_EACH_C:-0}		# where individual ciphers are tested show just the positively ones tested
 SNEAKY=${SNEAKY:-1}			# if zero: the referer and useragent we leave while checking the http header is just usual
-#FIXME: consequently we should mute the initial netcat and openssl s_client -connect as they cause a 400 (nginx, apache)
+#FIXME: consequently we should mute the initial openssl s_client -connect as they cause a 400 (nginx, apache)
 
 #FIXME: still to be filled with (more) sense:
-DEBUG=${DEBUG:-0}			# if 1 the temp file won't be erased. Currently only keeps the last output anyway
+DEBUG=${DEBUG:-0}		# if 1 the temp file won't be erased. Currently only keeps the last output anyway
 VERBOSE=${VERBOSE:-0}		# if 1 it shows what's going on. Currently only used for heartbleed and ccs injection
 VERB_CLIST=""	     		# ... and if so, "-V" shows them row by row cipher, SSL-version, KX, Au, Enc and Mac
-HSTS_MIN=180				#>180 days is ok for HSTS
-HPKP_MIN=9				#>9 days should be ok for HPKP_MIN, practical hiints?
+
+HSTS_MIN=180			# >180 days is ok for HSTS
+HPKP_MIN=30			# >30 days should be ok for HPKP_MIN, practical hints?
 MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
 CLIENT_MIN_PFS=5		# number of ciphers needed to run a test for PFS
-NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
-RUN_DIR=`dirname $0`
 
-# more global vars:
+# more global vars, empty:
 TLS_PROTO_OFFERED=""
 SOCKREPLY=""
 HEXC=""
 SNI=""
 IP4=""
 IP6=""
+OSSL_VER=""			# openssl version, will be autodetermined
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 NODEIP=""
 IPS=""
+
+NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
+RUN_DIR=`dirname $0`
+
 
 # make sure that temporary files are cleaned up after use
 trap cleanup QUIT EXIT
@@ -98,7 +100,7 @@ out() {
 }
 
 outln() {
-	[ ! -z "$1" ] && $ECHO "$1"
+	[[ -z "$1" ]] || $ECHO "$1"
 	$ECHO "\n"
 }
 
@@ -526,12 +528,14 @@ std_cipherlists() {
 
 
 # sockets inspired by http://blog.chris007.de/?p=238
-# ARG1: hexbyte, ARG2: hexode for TLS Version, ARG3: sleep
+# ARG1: hexbyte with a leading comma (!!), seperated by commas
+# ARG2: sleep
 socksend() {
-	data=`echo $1 | sed 's/tls_version/'"$2"'/g'`
+	# the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
+	data=`echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\\/g' | tr -d '\n'`
 	[ $VERBOSE -eq 1 ] && echo "\"$data\""
-	printf $data >&5 2>/dev/null &
-	sleep $3
+	printf -- "$data" >&5 2>/dev/null &
+	sleep $2
 }
 
 
@@ -568,7 +572,7 @@ sockread() {
 show_rfc_style(){
 	[ ! -r "$MAP_RFC_FNAME" ] && return 1
 	RFCname=`grep -iw $1 "$MAP_RFC_FNAME" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/'`
-     [ -n "$RFCname" ] && out "$RFCname" 
+	[ -n "$RFCname" ] && out "$RFCname" 
 	return 0
 }
 
@@ -585,7 +589,7 @@ neat_list(){
 	strength=`echo $strength | sed -e 's/ChaCha20-Poly1305/ly1305/g'` 		# workaround for empty bits ChaCha20-Poly1305
 	enc=`echo $enc | sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g'` # workaround for empty bits ChaCha20-Poly1305
 	echo "$export" | grep -iq export && strength="$strength,export"
-	$ECHO " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
+	printf -- " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
 test_just_one(){
@@ -1069,38 +1073,39 @@ ok_ids(){
 	exit 0
 }
 
+
 ccs_injection(){
 	# see https://www.openssl.org/news/secadv_20140605.txt
 	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
 	bold " CCS "; out " (CVE-2014-0224), experimental        "
-	ccs_message="\x14\x03\tls_version\x00\x01\x01" # ChangeCipherSpec, TLS version 2 bytes, lenght 2 bytes, payload CCS 1 byte
-	# 20/0x14=Change Ciipher Spexcc
 
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT &>$TMPFILE </dev/null
 
-	tls_hexcode=x01
-	proto_offered=`grep -w Protocol $TMPFILE | sed -e 's/^ \+Protocol \+://'`
+	tls_proto_offered=`grep -w Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g'`
+	#tls_proto_offered=`grep -w Protocol $TMPFILE | sed 's/^.*Protocol//'`
 	case $tls_proto_offered in
-		*TLSv1.2*)	tls_hexcode=x03 ;;
-		*TLSv1.1*)	tls_hexcode=x02 ;;
+		12)	tls_hexcode="x03, x03" ;;
+		11)	tls_hexcode="x03, x02" ;;
+		*) tls_hexcode="x03, x01" ;;
 	esac
+	ccs_message=", x14, $tls_hexcode ,x00, x01, x01"
 
 	client_hello="
-	# TLS header ( 5 bytes)
-	,x16,               # Content type (x16 for handshake)
-	x03, tls_version,   # TLS Version
-	x00, x93,           # Length
+	# TLS header (5 bytes)
+	,x16,               # content type (x16 for handshake)
+	$tls_hexcode,       # TLS version
+	x00, x93,           # length
 	# Handshake header
-	x01,                # Type (x01 for ClientHello)
-	x00, x00, x8f,      # Length
-	x03, tls_version,   # TLS Version
+	x01,                # type (x01 for ClientHello)
+	x00, x00, x8f,      # length
+	$tls_hexcode,       # TLS version
 	# Random (32 byte) 
 	x53, x43, x5b, x90, x9d, x9b, x72, x0b,
 	xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
 	xcf, xbd, x39, x04, xcc, x16, x0a, x85,
 	x03, x90, x9f, x77, x04, x33, xd4, xde,
-	x00,                # Session ID length
-	x00, x68,           # Cipher suites length
+	x00,                # session ID length
+	x00, x68,           # cipher suites length
 	# Cipher suites (51 suites)
 	xc0, x13, xc0, x12, xc0, x11, xc0, x10,
 	xc0, x0f, xc0, x0e, xc0, x0d, xc0, x0c,
@@ -1116,13 +1121,10 @@ ccs_injection(){
 	x00, x07, x00, x06, x00, x05, x00, x04,
 	x00, x03, x00, x02, x00, x01, x01, x00"
 
-	#msg=`echo "$client_hello" | grep -o '\bx[[:xdigit:]]\{2\}\b\|tls_version' | sed -e 's/x/\\\x/g' -e 's/tls_version/\\\tls_version/g' | tr -d '\n'`
-	msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' -e 's/[ \t]//g' | tr -d '\n'`
-
 	fd_socket 5 || return 6
 
 	[ $VERBOSE -eq 1 ] && out "\nsending client hello, "
-	socksend "$msg" $tls_hexcode 1
+	socksend "$client_hello" 1
 	sockread 16384 
 
 	if [ $VERBOSE -eq 1 ]; then
@@ -1132,8 +1134,8 @@ ccs_injection(){
 		outln "\npayload #1 with TLS version $tls_hexcode:"
 	fi
 
-	socksend $ccs_message $tls_hexcode 1 || ok_ids
-	sockread 2048 5	# 5 seconds
+	socksend "$ccs_message" 1 || ok_ids
+	sockread 2048 5		# 5 seconds
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\n1st reply: " 
 		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
@@ -1142,7 +1144,7 @@ ccs_injection(){
 		outln "payload #2 with TLS version $tls_hexcode:"
 	fi
 
-	socksend $ccs_message $tls_hexcode 2 || ok_ids
+	socksend "$ccs_message" 2 || ok_ids
 	sockread 2048 5
 	retval=$?
 
@@ -1174,37 +1176,36 @@ ccs_injection(){
 
 heartbleed(){
 	bold " Heartbleed\c"; out " (CVE-2014-0160), experimental  "
-
 	# mainly adapted from https://gist.github.com/takeshixx/10107280
-	heartbleed_payload="\x18\x03\tls_version\x00\x03\x01\x40\x00"
 
 	# determine TLS versions available:
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -tlsextdebug &>$TMPFILE </dev/null
 		
-	tls_hexcode=x01
-	proto_offered=`grep -w Protocol $TMPFILE | sed -e 's/^ \+Protocol \+://'`
+	tls_proto_offered=`grep -w Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g'`
 	case $tls_proto_offered in
-		*TLSv1.2*)	tls_hexcode=x03 ;;
-		*TLSv1.1*)	tls_hexcode=x02 ;;
+		12)	tls_hexcode="x03, x03" ;;
+		11)	tls_hexcode="x03, x02" ;;
+		*) tls_hexcode="x03, x01" ;;
 	esac
+	heartbleed_payload=", x18, $tls_hexcode, x00, x03, x01, x40, x00"
 
 	client_hello="
 	# TLS header ( 5 bytes)
-	,x16,                      # Content type (x16 for handshake)
-	x03, tls_version,          # TLS Version
-	x00, xdc,                  # Length
+	,x16,                      # content type (x16 for handshake)
+	$tls_hexcode,              # TLS version
+	x00, xdc,                  # length
 	# Handshake header
-	x01,                       # Type (x01 for ClientHello)
-	x00, x00, xd8,             # Length
-	x03, tls_version,          # TLS Version
+	x01,                       # type (x01 for ClientHello)
+	x00, x00, xd8,             # length
+	$tls_hexcode,              # TLS version
 	# Random (32 byte)
 	x53, x43, x5b, x90, x9d, x9b, x72, x0b,
 	xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
 	xcf, xbd, x39, x04, xcc, x16, x0a, x85,
 	x03, x90, x9f, x77, x04, x33, xd4, xde,
-	x00,                       # Session ID length
-	x00, x66,                  # Cipher suites length
-						  # Cipher suites (51 suites)
+	x00,                       # session ID length
+	x00, x66,                  # cipher suites length
+						  # cipher suites (51 suites)
 	xc0, x14, xc0, x0a, xc0, x22, xc0, x21,
 	x00, x39, x00, x38, x00, x88, x00, x87,
 	xc0, x0f, xc0, x05, x00, x35, x00, x84,
@@ -1218,12 +1219,12 @@ heartbleed(){
 	x00, x05, x00, x04, x00, x15, x00, x12,
 	x00, x09, x00, x14, x00, x11, x00, x08,
 	x00, x06, x00, x03, x00, xff,
-	x01,                       # Compression methods length
-	x00,                       # Compression method (x00 for NULL)
-	x00, x49,                  # Extensions length
-	# Extension: ec_point_formats
+	x01,                       # compression methods length
+	x00,                       # compression method (x00 for NULL)
+	x00, x49,                  # extensions length
+	# extension: ec_point_formats
 	x00, x0b, x00, x04, x03, x00, x01, x02,
-	# Extension: elliptic_curves
+	# extension: elliptic_curves
 	x00, x0a, x00, x34, x00, x32, x00, x0e,
 	x00, x0d, x00, x19, x00, x0b, x00, x0c,
 	x00, x18, x00, x09, x00, x0a, x00, x16,
@@ -1231,33 +1232,30 @@ heartbleed(){
 	x00, x14, x00, x15, x00, x04, x00, x05,
 	x00, x12, x00, x13, x00, x01, x00, x02,
 	x00, x03, x00, x0f, x00, x10, x00, x11,
-	# Extension: SessionTicket TLS
+	# extension: session ticket TLS
 	x00, x23, x00, x00,
-	# Extension: Heartbeat
+	# extension: heartbeat
 	x00, x0f, x00, x01, x01"
-
-	#msg=`echo "$client_hello" | grep -o '\bx[[:xdigit:]]\{2\}\b\|tls_version' | sed -e 's/x/\\\x/g' -e 's/tls_version/\\\tls_version/g' | tr -d '\n'`
-	msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' -e 's/[ \t]//g' | tr -d '\n'`
 
 	fd_socket 5 || return 6
 
-	[ $VERBOSE -eq 1 ] && out "\nsending client hello, "
-	socksend "$msg" $tls_hexcode 1
+	[ $VERBOSE -eq 1 ] && outln "\n\nsending client hello (TLS version $tls_hexcode)"
+	socksend "$client_hello" 1
 	sockread 16384 
 
 	if [ $VERBOSE -eq 1 ]; then
 		outln "\nserver hello:"
 		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
 		outln "[...]"
-		outln " sending payload with TLS version $tls_hexcode:"
+		outln "\nsending payload with TLS version $tls_hexcode:"
 	fi
 
-	socksend $heartbleed_payload $tls_hexcode 1
+	socksend "$heartbleed_payload" 1
 	sockread 16384
 	retval=$?
 
 	if [ $VERBOSE -eq 1 ]; then
-		outln "\n heartbleed reply: "
+		outln "\nheartbleed reply: "
 		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
 		outln
 	fi
@@ -1967,7 +1965,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.148 2014/11/25 12:11:34 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.149 2014/11/27 20:32:36 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
