@@ -1,32 +1,33 @@
 #!/usr/bin/env bash
 # bash is needed for some distros which use dash as /bin/sh and for tcp sockets which 
-# this program uses a couple of times
+# this program uses a couple of times. Also some expressions are bashisms as I expect
+# the to be faster. Idea is to not overdo it.
 
-# Program for spotting weak SSL encryption, ciphers, version and some vulnerablities or features
+# Program for spotting weak SSL encryption, ciphers, version and some vulnerablities or 
+# features
+# Devel version from https://github.com/drwetter/testssl.sh,
+# stable: https://testssl.sh
 
-VERSION="2.1rc3"
+VERSION="2.1rc4"
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
-# Author: Dirk Wetter, copyleft: 2007-2014
+# Author: Dirk Wetter, copyleft: 2007-2014, contributions so far see CREDIT.md
 #
 # License: GPLv2, see http://www.fsf.org/licensing/licenses/info/GPLv2.html
 # and accompanying license "LICENSE.txt". Redistribution + modification under this
 # license permitted. 
 # If you enclose this script or parts of it in your software, it has to
 # be accompanied by the same license (see link) and the place where to get
-# the recent version of this program: https://testssl.sh
-# Don't violate the license.
+# the recent version of this program. Don't violate the license!
 #
 # USAGE WITHOUT ANY WARRANTY, THE SOFTWARE IS PROVIDED "AS IS". USE IT AT
 # your OWN RISK
 
-# I know reading this shell script is neither nice nor it's rocket science.  However openssl 
-# is a such a good swiss army knife (e.g. wiki.openssl.org/index.php/Command_Line_Utilities)
-# that it was difficult to resist wrapping it with some shell commandos. That's how everything
-# started -- but that was (and still is) a long way to go.
-#
-# One can do the same in other languages and/or choose another crypto provider as openssl -- YMMV.
+# HISTORY: I know reading this shell script is sometimes neither nice nor is it rocket science
+# As openssl is a such a good swiss army knife (e.g. wiki.openssl.org/index.php/Command_Line_Utilities)
+# it was difficult to resist wrapping it with some shell commandos. That's how everything
+# started
 
 # Q: So what's the difference between https://www.ssllabs.com/ssltest or
 #    https://sslcheck.globalsign.com/?
@@ -37,35 +38,32 @@ SWCONTACT="dirk aet testssl dot sh"
 # Note that 56Bit ciphers are disabled during compile time in $OPENSSL > 0.9.8c
 # (http://rt.$OPENSSL.org/Ticket/Display.html?user=guest&pass=guest&id=1461)
 # ---> TLS1_ALLOW_EXPERIMENTAL_CIPHERSUITES in ssl/tls1.h . For testing it's recommended 
-# to change this to 1 and recompile e.g. w/ ./config --prefix=/usr/  --openssldir=/etc/ssl .
+# to change this to 1 and recompile e.g. w/ ./config --prefix=/usr/  --openssldir=/etc/ssl 
+# or use the supplied binaries!
 # Also some distributions disable SSLv2. Please note: Everything which is disabled or not
-# supported on the client side is not possible to test on the server side!
-# Thus as a courtesy I provide openssl binaries for Linux which have everything you need
-# enabled, see website
-#
+# supported on the client side is not possible to test on the server side! You'll get
+# a warning though
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
-
-#OPENSSL="${OPENSSL:-/usr/bin/openssl}"	# private openssl version --> is now evaluated below
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# same as previous. Doing nothing yet. FC has only a CA bundle per default, ==> openssl version -d
-ECHO="/usr/bin/printf --"		# works under Linux, BSD, MacOS. watch out under Solaris, not tested yet under cygwin
-COLOR=${COLOR:-2}			# 2: Full color, 1: b/w+positioning, 0: no ESC at all
-SHOW_LCIPHERS=no    			# determines whether the client side ciphers are displayed at all (makes no sense normally)
-VERBERR=${VERBERR:-1}			# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
-					# whether the handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
-LOCERR=${LOCERR:-0}			# displays the local error 
-SHOW_EACH_C=${SHOW_EACH_C:-0}		# where individual ciphers are tested show just the positively ones tested
-SNEAKY=${SNEAKY:-1}			# if zero: the referer and useragent we leave while checking the http header is just usual
+ECHO="/usr/bin/printf --"			# works under Linux, BSD, MacOS. 
+COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
+SHOW_LOC_CIPH=${SHOW_LOC_CIPH}=0 		# determines whether the client side ciphers are displayed at all (makes no sense normally)
+VERBERR=${VERBERR:-1}				# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
+								# whether handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
+LOCERR=${LOCERR:-0}					# displays the local error 
+SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested
+SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while checking the http header is just usual
 #FIXME: consequently we should mute the initial openssl s_client -connect as they cause a 400 (nginx, apache)
 
 #FIXME: still to be filled with (more) sense:
 DEBUG=${DEBUG:-0}		# if 1 the temp file won't be erased. Currently only keeps the last output anyway
-VERBOSE=${VERBOSE:-0}		# if 1 it shows what's going on. Currently only used for heartbleed and ccs injection
-VERB_CLIST=""	     		# ... and if so, "-V" shows them row by row cipher, SSL-version, KX, Au, Enc and Mac
+VERBOSE=${VERBOSE:-0}	# if 1 it shows what's going on. Currently only used for heartbleed and ccs injection
+VERB_CLIST=""	     	# ... and if so, "-V" shows them row by row cipher, SSL-version, KX, Au, Enc and Mac
 
 HSTS_MIN=180			# >180 days is ok for HSTS
 HPKP_MIN=30			# >30 days should be ok for HPKP_MIN, practical hints?
-MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
+MAX_WAITSOCK=10		# waiting at max 10 seconds for socket reply
 CLIENT_MIN_PFS=5		# number of ciphers needed to run a test for PFS
 
 # more global vars, empty:
@@ -81,6 +79,8 @@ OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 NODEIP=""
 IPS=""
+SERVICE=""			# is the server running an HTTP server, SMTP, POP or IMAP?
+HEADER_MAXSLEEP=4		# we wait this long before killing the process to retrieve a service banner / http header
 
 NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 RUN_DIR=`dirname $0`
@@ -232,12 +232,30 @@ ok(){
 	return $2
 }
 
+
+# ARG1= pid which is in the backgnd and we wait for ($2 seconds)
+wait_kill(){
+	pid=$1
+	maxsleep=$2
+	while true; do
+		if ! ps ax | grep -v grep | grep -q $pid; then
+			return 0 	# didn't reach maxsleep yet
+		fi
+		sleep 1
+		maxsleep=`expr $maxsleep - 1`
+		test $maxsleep -eq 0 && break
+	done # needs to be killed:
+	kill $pid >&2 2>/dev/null
+	wait $pid 2>/dev/null
+	return 3   # killed
+}
+
 # in a nutshell: It's HTTP-level compression & an attack which works against any cipher suite and 
 # is agnostic to the version of TLS/SSL, more: http://www.breachattack.com/
+# foreign referers are the important thing here!
 breach() {
 	bold " BREACH"; out " =HTTP Compression, experimental    "
 	[ -z "$1" ] && url="/"
-# referers are important here!
 	if [ $SNEAKY -eq 0 ] ; then
 		referer="Referer: http://google.com/" # see https://community.qualys.com/message/20360
 		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
@@ -256,20 +274,50 @@ $referer
 Connection: close
 
 EOF
-) &>$HEADERFILE_BREACH
-ret=$?
-# sometimes it hangs here. Currently only kill helps
-#test  $DEBUG -eq 1 && \
-result=`cat $HEADERFILE_BREACH | grep -a '^Content-Encoding' | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g'`
-result=`echo $result | tr -cd '\40-\176'`
-     if [ -z $result ]; then
-		green "no HTTP compression " 
+) &>$HEADERFILE_BREACH &
+	pid=$!
+	if wait_kill $pid $HEADER_MAXSLEEP; then
+		result=`cat $HEADERFILE_BREACH | grep -a '^Content-Encoding' | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g'`
+		result=`echo $result | tr -cd '\40-\176'`
+		if [ -z $result ]; then
+			green "no HTTP compression " 
+			ret=0
+		else
+			litered "uses $result compression "
+			ret=1
+		fi
+		# Catch: any URL can be vulnerable. I am testing now only the root. URL!
+		outln "(only \"$url\" tested)"
 	else
-		litered "uses $result compression "
+		magentaln "Test failed (requsting header stalled)"
+		ret=3
 	fi
-# Catch: any URL cvan be vulnerable. I am testing now only the root
-	outln "(only \"$url\" tested)"
+	return $ret
+}
 
+
+# determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
+runs_HTTP() {
+	ret=1
+
+	# SNI is nonsense for !HTTP but fortunately SMTP and friends don't care
+	printf "GET / HTTP/1.1\r\nServer: $NODE\r\n\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
+	wait_kill $! $HEADER_MAXSLEEP
+	grep -q ^HTTP $TMPFILE && SERVICE=HTTP && ret=0
+	grep -q SMTP $TMPFILE && SERVICE=SMTP 
+	grep -q POP $TMPFILE && SERVICE=POP
+	grep -q IMAP $TMPFILE && SERVICE=IMAP
+# $TMPFILE contains also a banner which we could use if there's a need for it
+
+	case $SERVICE in
+		HTTP) 
+			;;
+		IMAP|POP|SMTP) 
+			outln " $SERVICE service detected, thus skipping HTTP checks\n" ;;
+		*)   outln " Couldn't determine what's running on port $PORT, assuming not HTTP\n" ;;
+	esac
+
+	rm $TMPFILE
 	return $ret
 }
 
@@ -311,16 +359,21 @@ $referer
 Connection: close
 
 EOF
-) &>$HEADERFILE
-	ret=$?
-	# sometimes it hangs here ^^^. Currently only kill helps
-	test $DEBUG -eq 1 && cat $HEADERFILE
-	sed  -e '/^<HTML/,$d' -e '/^<html/,$d' -e '/^<XML /,$d' -e '/<?XML /,$d' \
-          -e '/^<xml /,$d' -e '/<?xml /,$d'  -e '/^<\!DOCTYPE/,$d' -e '/^<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
+) &>$HEADERFILE &
+	pid=$!
+	if wait_kill $pid $HEADER_MAXSLEEP; then
+		test $DEBUG -eq 1 && cat $HEADERFILE
+		sed  -e '/^<HTML/,$d' -e '/^<html/,$d' -e '/^<XML /,$d' -e '/<?XML /,$d' \
+			-e '/^<xml /,$d' -e '/<?xml /,$d'  -e '/^<\!DOCTYPE/,$d' -e '/^<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
 #### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
-	mv $HEADERFILE.2  $HEADERFILE	 # sed'ing in place doesn't work with BSD and Linux simultaneously
-
-	  return $ret
+		mv $HEADERFILE.2  $HEADERFILE	 # sed'ing in place doesn't work with BSD and Linux simultaneously
+		ret=0
+	else
+		rm $HEADERFILE.2  $HEADERFILE 2>/dev/null
+		magentaln " Test failed (requsting header stalled)"
+		ret=3
+	fi
+	return $ret
 }
 
 includeSubDomains() {
@@ -333,8 +386,10 @@ includeSubDomains() {
 
 #FIXME: it doesn't follow a 30x. At least a path should be possible to provide
 hsts() {
-	[ -s $HEADERFILE ] || http_header
 	bold " HSTS        "
+	if [ ! -s $HEADERFILE ] ; then
+		http_header || return 3
+	fi
 	grep -iw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		grep -ciw '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
@@ -356,8 +411,10 @@ hsts() {
 }
 
 hpkp() {
-	[ -s $HEADERFILE ] || http_header
 	bold " HPKP        "
+	if [ ! -s $HEADERFILE ] ; then
+		http_header || return 3
+	fi
 	egrep -iw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		egrep -ciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
@@ -382,8 +439,10 @@ hpkp() {
 #FIXME: once checkcert.sh is here: fingerprints!
 
 serverbanner() {
-	[ -s $HEADERFILE ] || http_header
 	bold " Server      "
+	if [ ! -s $HEADERFILE ] ; then
+		http_header || return 3
+	fi
 	grep -i '^Server' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		#out=`cat $TMPFILE | sed -e 's/^Server: //' -e 's/^server: //' -e 's/^[[:space:]]//'`
@@ -404,7 +463,7 @@ serverbanner() {
 		#cat $TMPFILE | sed 's/^.*:/:/'  | sed -e :a -e '$!N;s/\n:/ \n\             +/;ta' -e 'P;D' | sed 's/://g' 
 		cat $TMPFILE | sed 's/^/ /' 
 	else
-		litegrey " (None)"
+		litegrey " (None, checked \"/\")"
 	fi
 	outln
 
@@ -414,7 +473,9 @@ serverbanner() {
 
 #dead function as of now
 secure_cookie() {	# ARG1: Path
-	[ -s $HEADERFILE ] || http_header
+	if [ -s $HEADERFILE ] ; then
+		http_header || return 3
+	fi
 	grep -i '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		outln "Cookie issued, status: "
@@ -425,6 +486,7 @@ secure_cookie() {	# ARG1: Path
 			outln "no secure flag"
 		fi
 	fi
+	return 0
 }
 #FIXME: Access-Control-Allow-Origin, CSP, Upgrade, X-Frame-Options, X-XSS-Protection, X-Content-Type-Options
 # https://en.wikipedia.org/wiki/List_of_HTTP_header_fields
@@ -480,7 +542,7 @@ prettyprint_local() {
 listciphers() {
 	$OPENSSL ciphers "$VERB_CLIST" $1  &>$TMPFILE
 	ret=$?
-	[[ "$LOCERR" = 1 ]] && cat $TMPFILE 
+	[[ $LOCERR -eq 1 ]] && cat $TMPFILE 
 	return $ret
 }
 
@@ -491,7 +553,7 @@ listciphers() {
 std_cipherlists() {
 	out "$2 "; 
 	if listciphers $1; then  # is that locally available??
-		[ x$SHOW_LCIPHERS = "xyes" ] && out "local ciphers are: " && cat $TMPFILE | sed 's/:/, /g'
+		[ $SHOW_LOC_CIPH = "1" ] && out "local ciphers are: " && cat $TMPFILE | sed 's/:/, /g'
 		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $SNI 2>$TMPFILE >/dev/null </dev/null
 		ret=$?
 		[[ $VERBOSE -eq 1 ]] && cat $TMPFILE
@@ -522,8 +584,8 @@ std_cipherlists() {
 		magentaln "Local problem: No $singlespaces configured in $OPENSSL" 
 	fi
 	# we need lf in those cases:
-	[[ "$LOCERR" -eq 1 ]] && echo
-	[[ "$VERBOSE" -eq 1 ]] && echo
+	[[ $LOCERR -eq 1 ]] && echo
+	[[ $VERBOSE -eq 1 ]] && echo
 }
 
 
@@ -556,6 +618,8 @@ sockread() {
 		maxsleep=`expr $maxsleep - 1`
 		test $maxsleep -eq 0 && break
 	done
+#FIXME: cleanup, we have extra function for this now:w
+
 	if ps ax | grep -v grep | grep -q $pid; then
 		# time's up and dd is still alive --> timeout
 		kill $pid 
@@ -572,7 +636,7 @@ sockread() {
 show_rfc_style(){
 	[ ! -r "$MAP_RFC_FNAME" ] && return 1
 	RFCname=`grep -iw $1 "$MAP_RFC_FNAME" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/'`
-	[ -n "$RFCname" ] && out "$RFCname" 
+	[[ -n "$RFCname" ]] && out "$RFCname" 
 	return 0
 }
 
@@ -906,7 +970,7 @@ pfs() {
 		fi
 	fi
 	savedciphers=`cat $TMPFILE`
-	[ x$SHOW_LCIPHERS = "xyes" ] && echo "local ciphers available for testing PFS:" && echo `cat $TMPFILE`
+	[ $SHOW_LOC_CIPH = "1" ] && echo "local ciphers available for testing PFS:" && echo `cat $TMPFILE`
 
 	$OPENSSL s_client -cipher 'ECDH:DH' $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
@@ -955,7 +1019,7 @@ rc4() {
 	outln
 	blue "--> Checking RC4 Ciphers" ; outln
 	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
-	[ x$SHOW_LCIPHERS = "xyes" ] && echo "local ciphers available for testing RC4:" && echo `cat $TMPFILE`
+	[ $SHOW_LOC_CIPH = "1" ] && echo "local ciphers available for testing RC4:" && echo `cat $TMPFILE`
 	$OPENSSL s_client -cipher `$OPENSSL ciphers RC4` $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	RC4=$?
 	if [ $RC4 -eq 0 ]; then
@@ -1014,7 +1078,7 @@ lucky13() {
 spdy(){
 	out " SPDY/NPN   "
 	if [ "x$STARTTLS" != "x" ]; then
-		outln "SPDY is an HTTP protocol"
+		outln "SPDY probably doesn't work with !HTPP"
 		ret=2
 	fi
 	# first, does the current openssl support it?
@@ -1325,6 +1389,7 @@ crime() {
      # Please note that it is an attack where you need client side control, so in regular situations this
 	# means anyway "game over", w/wo CRIME
 	# www.h-online.com/security/news/item/Vulnerability-in-SSL-encryption-is-barely-exploitable-1708604.html
+	#
 
 	ADDCMD=""
 	case "$OSSL_VER" in
@@ -1346,12 +1411,20 @@ crime() {
 
 	STR=`$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null | grep Compression `
 	if echo $STR | grep -q NONE >/dev/null; then
-		greenln "not vulnerable (OK) "
+		green "not vulnerable (OK)"
+		[[ $SERVICE == "HTTP" ]] || out " (not using HTTP anyway)"
 		ret=0
 	else
-		redln "IS vulnerable (NOT ok)"
+		if [[ $SERVICE == "HTTP" ]]; then
+			red "IS vulnerable (NOT ok)"
+		else	 
+			brown "IS vulnerable" ; out ", but not using HTTP: probably no exploit known"
+		fi
 		ret=1
 	fi
+	# not clear whether this is a protocol != HTTP as one needs to have the ability to modify the 
+	# compression input which is done via javascript in the context of HTTP
+	outln
 
 # this needs to be re-done i order to remove the redundant check for spdy
 
@@ -1596,7 +1669,7 @@ cleanup () {
 		[ -n "$TMPFILE" ] && [ -r ${TMPFILE} ] && cat ${TMPFILE}
 		[ -r "$HEADERFILE_BREACH" ] && cat ${HEADERFILE_BREACH}
 		[ -r "$HEADERFILE" ] && cat ${HEADERFILE}
-		#[ -e "$LOGFILE" ] && cat ${LOGFILE}
+		[ -e "$LOGFILE" ] && cat ${LOGFILE}
 	else
 		rm ${TMPFILE} ${HEADERFILE} ${HEADERFILE_BREACH} ${LOGFILE} ${GOST_CONF} 2>/dev/null
 	fi
@@ -1695,7 +1768,7 @@ parse_hn_port() {
 	fi
 	close_socket
 
-	if [ -z "$2" ]; then	# for starttls we don't want this check
+	if  [[ -z "$2" ]] ; then	# for starttls we don't want this check
 		# is ssl service listening on port? FIXME: better with bash on IP!
 		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null >/dev/null 2>&1 
 		if [ $? -ne 0 ]; then
@@ -1707,7 +1780,9 @@ parse_hn_port() {
 
 	datebanner "Testing"
 
-	[ "$PORT" != 443 ] && bold "A non standard port or testing no web servers might show lame reponses (then just wait)\n"
+	runs_HTTP
+
+	#[ "$PORT" != 443 ] && bold "A non standard port or testing no web servers might show lame reponses (then just wait)\n"
 	initialize_engine
 }
 
@@ -1754,14 +1829,15 @@ get_dns_entries() {
 # FIXME: we could test more than one IPv4 addresses if available, same IPv6. For now we test the first IPv4:
 	NODEIP=`echo "$IP4" | head -1`
 
-# we can't do this as some checks are not yet IPv6 safe (sorry!)
+	# we can't do this as some checks and even openssl are not yet IPv6 safe
 	#NODEIP=`echo "$IP6" | head -1`
 	rDNS=`host -t PTR $NODEIP | grep -v "is an alias for" | sed -e 's/^.*pointer //' -e 's/\.$//'`
 	echo $rDNS | grep -q NXDOMAIN  && rDNS=" - "
 }
 
+
 display_rdns_etc() {
-     if [ `echo "$IPADDRs" | wc -w` -gt 1 ]; then
+     if [ `printf "$IPADDRs" | wc -w` -gt 1 ]; then
           out " further IP addresses:  "
           for i in $IPADDRs; do
                [ "$i" == "$NODEIP" ] && continue
@@ -1770,20 +1846,16 @@ display_rdns_etc() {
 		outln
 	fi
 	if  [ -n "$rDNS" ] ; then
-		out  " rDNS ($NODEIP):"
-		out "$rDNS" 26
-		outln
+		printf " %-23s %s\n" "rDNS ($NODEIP):" "$rDNS"
 	fi
 }
 
 datebanner() {
 	tojour=`date +%F`" "`date +%R`
 	outln
-	reverse "$1 now ($tojour) ---> $NODEIP:$PORT ($NODE) <---"; outln
+	reverse "$1 now ($tojour) ---> $NODEIP:$PORT ($NODE) <---"; outln "\n"
 	if [ "$1" = "Testing" ] ; then
-		outln
 		display_rdns_etc 
-		outln 
 	fi
 	outln
 }
@@ -1823,149 +1895,164 @@ case "$1" in
 		prettyprint_local "$2"
 		exit $? ;;
 	-x|--single-ciphers-test)
-		parse_hn_port "$3"
 		maketempf
+		parse_hn_port "$3"
 		test_just_one $2
 		ret=$?
 		exit $ret ;;
 	-t|--starttls)			
-		parse_hn_port "$2" "$3" # here comes hostname:port and protocol to signal starttls
 		maketempf
+		parse_hn_port "$2" "$3" # here comes hostname:port and protocol to signal starttls
 		starttls "$3"		# protocol
 		ret=$?
 		exit $ret ;;
 	-e|--each-cipher)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		allciphers 
 		ret=$?
 		exit $ret ;;
 	-E|-ee|--cipher-per-proto)  
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		cipher_per_proto
 		ret=$?
 		exit $ret ;;
 	-p|--protocols)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		runprotocols 	; ret=$?
 		spdy			; ret=`expr $? + $ret`
 		exit $ret ;;
 	-f|--ciphers)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		run_std_cipherlists
 		ret=$?
 		exit $ret ;;
      -P|--preference)   
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		simple_preference
 		ret=$?
 		exit $ret ;;
 	-y|--spdy|--google)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		spdy
 		ret=$?
 		exit $?  ;;
 	-B|--heartbleet)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		outln; blue "--> Testing for heartbleed vulnerability"; outln "\n"
 		heartbleed
 		ret=$?
 		exit $?  ;;
 	-I|--ccs|--ccs_injection)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		outln; blue "--> Testing for CCS injection vulnerability"; outln "\n"
 		ccs_injection
 		ret=$?
 		exit $?  ;;
 	-R|--renegotiation)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		outln; blue "--> Testing for Renegotiation vulnerability"; outln "\n"
 		renego
 		ret=$?
 		exit $?  ;;
 	-C|--compression|--crime)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		outln; blue "--> Testing for CRIME vulnerability"; outln "\n"
 		crime
 		ret=$?
 		exit $?  ;;
 	-T|--breach)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		outln; blue "--> Testing for BREACH (HTTP compression) vulnerability"; outln "\n"
-		breach
-		ret=$?
+		if [[ $SERVICE != "HTTP" ]] ; then
+			litemagentaln " Wrong usage: You're not targetting a HTTP service"
+			ret=2
+		else
+			breach 
+			ret=$?
+		fi
 		ret=`expr $? + $ret`
 		exit $ret ;;
 	-0|--poodle)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		outln; blue "--> Testing for POODLE (Padding Oracle On Downgraded Legacy Encryption) vulnerability"; outln "\n"
 		poodle
 		ret=$?
 		ret=`expr $? + $ret`
 		exit $ret ;;
 	-4|--rc4|--appelbaum)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		rc4
 		ret=$?
 		exit $?  ;;
 	-s|--pfs|--fs|--nsa)
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		pfs
 		ret=$?
 		exit $ret ;;
 	-H|--header|--headers)  
-		parse_hn_port "$2"
 		maketempf
+		parse_hn_port "$2"
 		outln; blue "--> Testing HTTP Header response"; outln "\n"
-		hsts
-		hpkp
-		ret=$?
-		serverbanner
-		ret=`expr $? + $ret`
+		if [[ $SERVICE == "HTTP" ]]; then
+			hsts
+			hpkp
+			ret=$?
+			serverbanner
+			ret=`expr $? + $ret`
+		else
+			litemagentaln " Wrong usage: You're not targetting a HTTP service"
+			ret=2
+		fi
 		exit $ret ;;
 	-*)  help ;;    # wrong argument
 	*)
-		parse_hn_port "$1"
 		maketempf
+		parse_hn_port "$1"
 
+		outln
 		runprotocols		; ret=$?
 		spdy 			; ret=`expr $? + $ret`
 		run_std_cipherlists	; ret=`expr $? + $ret`
 		simple_preference 	; ret=`expr $? + $ret`
 
-		outln; blue "--> Testing specific vulnerabilities"; outln "\n"
+		outln; blue "--> Testing specific vulnerabilities" 
+		outln "\n"
 		heartbleed          ; ret=`expr $? + $ret`
 		ccs_injection       ; ret=`expr $? + $ret`
 		renego			; ret=`expr $? + $ret`
 		crime			; ret=`expr $? + $ret`
-		breach			; ret=`expr $? + $ret`
+		[[ $SERVICE == "HTTP" ]] && breach			; ret=`expr $? + $ret`
 		beast			; ret=`expr $? + $ret`
 		poodle			; ret=`expr $? + $ret`
 
-		outln; blue "--> Testing HTTP Header response"; outln "\n"
-		hsts 			; ret=`expr $? + $ret`
-		hpkp 			; ret=`expr $? + $ret`
-		serverbanner		; ret=`expr $? + $ret`
+		if [[ $SERVICE == "HTTP" ]]; then
+			outln; blue "--> Testing HTTP Header response"
+			outln "\n"
+			hsts 			; ret=`expr $? + $ret`
+			hpkp 			; ret=`expr $? + $ret`
+			serverbanner		; ret=`expr $? + $ret`
+		fi
 
 		rc4				; ret=`expr $? + $ret`
 		pfs				; ret=`expr $? + $ret`
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.149 2014/11/27 20:32:36 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.150 2014/11/30 00:30:19 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
