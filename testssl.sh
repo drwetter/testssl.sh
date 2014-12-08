@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
+#
 # bash is needed for some distros which use dash as /bin/sh and for tcp sockets which 
 # this program uses a couple of times. Also some expressions are bashisms as I expect
-# the to be faster. Idea is to not overdo it.
+# them to be faster. Idea is to not overdo it though
 
-# Program for spotting weak SSL encryption, ciphers, version and some vulnerablities or 
-# features
-# Devel version from https://github.com/drwetter/testssl.sh,
-# stable: https://testssl.sh
+# testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some 
+# vulnerablities or features
+#
+# Devel version is availabe from https://github.com/drwetter/testssl.sh,
+# stable version from            https://testssl.sh
 
-VERSION="2.1rc4"
+VERSION="2.2"				# any char suffixes denotes non=stable
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -35,14 +37,11 @@ SWCONTACT="dirk aet testssl dot sh"
 #    the internet. And those are 3rd parties. If those four restrictions are fine
 #    with you, they might tell you more than this tool -- as of now.
 
-# Note that 56Bit ciphers are disabled during compile time in $OPENSSL > 0.9.8c
-# (http://rt.$OPENSSL.org/Ticket/Display.html?user=guest&pass=guest&id=1461)
-# ---> TLS1_ALLOW_EXPERIMENTAL_CIPHERSUITES in ssl/tls1.h . For testing it's recommended 
-# to change this to 1 and recompile e.g. w/ ./config --prefix=/usr/  --openssldir=/etc/ssl 
-# or use the supplied binaries!
-# Also some distributions disable SSLv2. Please note: Everything which is disabled or not
-# supported on the client side is not possible to test on the server side! You'll get
-# a warning though
+# Note that for "standard" openssl binaries a lot of features (ciphers, protocols, vulnerabilities)
+# are disabled as they'll impact security otherwise. For security testing though we
+# need all those features. Thus it's highly recommended to use the suppied binaries.
+# Except on-available local ciphers you'll get a warning about missing features
+
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# same as previous. Doing nothing yet. FC has only a CA bundle per default, ==> openssl version -d
@@ -62,7 +61,7 @@ VERBOSE=${VERBOSE:-0}	# if 1 it shows what's going on. Currently only used for h
 VERB_CLIST=""	     	# ... and if so, "-V" shows them row by row cipher, SSL-version, KX, Au, Enc and Mac
 
 HSTS_MIN=180			# >180 days is ok for HSTS
-HPKP_MIN=30			# >30 days should be ok for HPKP_MIN, practical hints?
+HPKP_MIN=30			# >=30 days should be ok for HPKP_MIN, practical hints?
 MAX_WAITSOCK=10		# waiting at max 10 seconds for socket reply
 CLIENT_MIN_PFS=5		# number of ciphers needed to run a test for PFS
 
@@ -420,7 +419,7 @@ hpkp() {
 		egrep -ciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
 		AGE_SEC=`sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE`
 		AGE_DAYS=`expr $AGE_SEC \/ 86400`
-		if [ $AGE_DAYS -gt $HPKP_MIN ]; then
+		if [ $AGE_DAYS -ge $HPKP_MIN ]; then
 			litegreen "$AGE_DAYS days \c" ; out "($AGE_SEC s)"
 		else
 			brown "$AGE_DAYS days (<$HPKP_MIN is not good enough)"
@@ -1572,7 +1571,7 @@ starttls() {
 				pfs			; ret=`expr $? + $ret`
 			fi
 			;;
-		*) outln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet allowed" >&2
+		*) litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet allowed" >&2
 			ret=2
 			;;
 	esac
@@ -1590,7 +1589,7 @@ $PRG <options>
     <-b|--banner>                         displays banner + version
     <-v|--version>                        same as above
     <-V|--local>                          pretty print all local ciphers
-    <-V|--local> <pattern>                what local cipher with <pattern> is a/v?
+    <-V|--local> pattern                  what local cipher with <pattern> is a/v?
 
 $PRG <options> URI
 
@@ -1611,14 +1610,14 @@ $PRG <options> URI
     <-4|--rc4|--appelbaum>                which RC4 ciphers are being offered?
     <-H|--header|--headers>               check for HSTS, HPKP and server/application banner string
 
-    <-t|--starttls> host:port <ftp|smtp|pop3|imap|xmpp|telnet> <SNI hostname> *)
-                 *) for telnet STARTTLS support you need the supplied openssl 
-
-<URI>      host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
-
-<pattern>  an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
+    <-t|--starttls> protocol              does a default run against a STARTTLS enabled service
 
 
+partly mandatory parameters:
+
+    URI                   host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
+    pattern               an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
+    protocol              is one of ftp,smtp,pop3,imap,xmpp,telnet (for the latter you need e.g. the supplied openssl)
 
 
 EOF
@@ -1902,8 +1901,8 @@ case "$1" in
 		exit $ret ;;
 	-t|--starttls)			
 		maketempf
-		parse_hn_port "$2" "$3" # here comes hostname:port and protocol to signal starttls
-		starttls "$3"		# protocol
+		parse_hn_port "$3" "$2" # here comes protocol to signal starttls and  hostname:port 
+		starttls "$2"		# protocol
 		ret=$?
 		exit $ret ;;
 	-e|--each-cipher)
@@ -2052,7 +2051,7 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.150 2014/11/30 00:30:19 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.151 2014/12/08 09:32:50 dirkw Exp $ 
 # vim:ts=5:sw=5
 
 
