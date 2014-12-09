@@ -1,7 +1,7 @@
 
 ## Intro
 
-testssl.sh is a free Unix command line tool which checks a server's service on 
+testssl.sh is a free command line tool which checks a server's service on 
 any port for the support of TLS/SSL ciphers, protocols as well as some cryptographic flaws.
 It's designed to provide clear output for a "is this good or bad" decision.
 
