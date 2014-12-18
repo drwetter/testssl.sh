@@ -10,7 +10,7 @@
 # Devel version is availabe from https://github.com/drwetter/testssl.sh,
 # stable version from            https://testssl.sh
 
-VERSION="2.2"				# any char suffixes denotes non=stable
+VERSION="2.3dev"				# any char suffixes denotes non=stable
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -56,7 +56,8 @@ SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while chec
 #FIXME: consequently we should mute the initial openssl s_client -connect as they cause a 400 (nginx, apache)
 
 #FIXME: still to be filled with (more) sense:
-DEBUG=${DEBUG:-0}		# if 1 the temp file won't be erased. Currently only keeps the last output anyway
+DEBUG=${DEBUG:-0}		# if 1 the temp files won't be erased. Currently only keeps the last output for TMFILE 
+TEMPDIR=""
 VERBOSE=${VERBOSE:-0}	# if 1 it shows what's going on. Currently only used for heartbleed and ccs injection
 VERB_CLIST=""	     	# ... and if so, "-V" shows them row by row cipher, SSL-version, KX, Au, Enc and Mac
 
@@ -64,6 +65,8 @@ HSTS_MIN=180			# >180 days is ok for HSTS
 HPKP_MIN=30			# >=30 days should be ok for HPKP_MIN, practical hints?
 MAX_WAITSOCK=10		# waiting at max 10 seconds for socket reply
 CLIENT_MIN_PFS=5		# number of ciphers needed to run a test for PFS
+DAYS2WARN1=60			# days to warn before cert expires, threshold 1
+DAYS2WARN2=30			# days to warn before cert expires, threshold 2
 
 # more global vars, empty:
 TLS_PROTO_OFFERED=""
@@ -208,6 +211,10 @@ boldandunder() { [[ "$COLOR" != 0 ]] && out "\033[1m\033[4m$1" || out "$1" ; off
 
 reverse() { [[ "$COLOR" != 0 ]] && out "\033[7m$1" || out "$1" ; off; }
 
+tmpfile_handle() {
+	[[ "$DEBUG" -eq 0 ]] && rm $TMPFILE
+}
+
 
 # whether it is ok to offer/not to offer enc/cipher/version
 ok(){
@@ -316,7 +323,7 @@ runs_HTTP() {
 		*)   outln " Couldn't determine what's running on port $PORT, assuming not HTTP\n" ;;
 	esac
 
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $ret
 }
 
@@ -334,7 +341,7 @@ poodle() {
 	fi
 	outln 
 
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $ret
 }
 
@@ -361,14 +368,13 @@ EOF
 ) &>$HEADERFILE &
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
-		test $DEBUG -eq 1 && cat $HEADERFILE
 		sed  -e '/^<HTML/,$d' -e '/^<html/,$d' -e '/^<XML /,$d' -e '/<?XML /,$d' \
 			-e '/^<xml /,$d' -e '/<?xml /,$d'  -e '/^<\!DOCTYPE/,$d' -e '/^<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
 #### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
 		mv $HEADERFILE.2  $HEADERFILE	 # sed'ing in place doesn't work with BSD and Linux simultaneously
 		ret=0
 	else
-		rm $HEADERFILE.2  $HEADERFILE 2>/dev/null
+		[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2  $HEADERFILE 2>/dev/null
 		magentaln " Test failed (requsting header stalled)"
 		ret=3
 	fi
@@ -405,7 +411,7 @@ hsts() {
 	fi
 	outln
 
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $?
 }
 
@@ -431,7 +437,7 @@ hpkp() {
 	fi
 	outln
 
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $?
 }
 #FIXME: report-uri
@@ -466,7 +472,7 @@ serverbanner() {
 	fi
 	outln
 
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $?
 }
 
@@ -577,7 +583,7 @@ std_cipherlists() {
 					ok 0 1			# was not offered --> green
 				fi ;;
 		esac
-		rm $TMPFILE
+		tmpfile_handle $TMPFILE
 	else
 		singlespaces=`echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g'`
 		magentaln "Local problem: No $singlespaces configured in $OPENSSL" 
@@ -679,7 +685,7 @@ test_just_one(){
 	done
 
 	outln
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 
 	return 0
 }
@@ -706,7 +712,7 @@ allciphers(){
 			fi
 		fi
 		outln
-		rm $TMPFILE
+		tmpfile_handle $TMPFILE
 	done
 	return 0
 }
@@ -734,7 +740,7 @@ cipher_per_proto(){
 				fi
 			fi
 			outln
-			rm $TMPFILE
+			tmpfile_handle $TMPFILE
 		done
 	done
 
@@ -767,7 +773,7 @@ testversion_new() {
 		ret=5
 	fi
 
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $ret
 }
 
@@ -847,17 +853,19 @@ run_std_cipherlists() {
 	return 0
 }
 
-simple_preference() {
+server_defaults() {
 	outln
 	blue "--> Testing server defaults (Server Hello)"; outln "\n"
 	# throwing every cipher/protocol at the server and displaying its pick
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -tlsextdebug -status </dev/null 2>/dev/null >$TMPFILE
+	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT
+
 	localtime=`date "+%s"`
 	if [ $? -ne 0 ]; then
 		magentaln "This shouldn't happen. "
 		ret=6
 	else
-		out " Negotiated protocol       "
+		out " Negotiated protocol          "
 		TLS_PROTO_OFFERED=`grep -w "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g'`
 		case "$TLS_PROTO_OFFERED" in
 			*TLSv1.2)		greenln $TLS_PROTO_OFFERED ;;
@@ -868,7 +876,7 @@ simple_preference() {
 			*)			outln "FIXME: $TLS_PROTO_OFFERED" ;;
 		esac
 
-		out " Negotiated cipher         "
+		out " Negotiated cipher            "
 		default=`grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g'`
 		case "$default" in
 			*NULL*|*EXP*)	redln "$default" ;;
@@ -881,7 +889,25 @@ simple_preference() {
 		esac
 		outln
 
-		out " Server key size           "
+		out " TLS server extensions        "
+		extensions=`grep -w "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g'`
+		if [ -z "$extensions" ]; then
+			outln "(none)"
+		else
+			echo $extensions | sed 's/,$//'	# remove last comma
+		fi
+
+		out " Session Tickets RFC 5077     "
+		sessticket_str=`grep -w "session ticket" $TMPFILE | grep lifetime`
+		if [ -z "$sessticket_str" ]; then
+			outln "(none)"
+		else
+			lifetime=`echo $sessticket_str | grep lifetime | sed 's/[A-Za-z:() ]//g'`
+			unit=`echo $sessticket_str | grep lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g'`
+			outln "$lifetime $unit"
+		fi
+
+		out " Server key size              "
 		keysize=`grep -w "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //'`
 		if [ -z "$keysize" ]; then
 			outln "(couldn't determine)"
@@ -893,26 +919,66 @@ simple_preference() {
 				*) outln "$keysize" ;;
 			esac
 		fi
+# google seems to have EC keys which displays as 256 Bit
 
-		out " TLS server extensions     "
-		extensions=`grep -w "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g'`
-		if [ -z "$extensions" ]; then
-			outln "(none)"
+		out " Signature Algorithm          "
+		algo=`$OPENSSL x509 -in $HOSTCERT -noout -text  | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u `
+		case $algo in
+     		sha1WithRSAEncryption) 	brownln "SHA1withRSA" ;;
+	     	sha256WithRSAEncryption) litegreenln "SHA256withRSA" ;;
+		     sha512WithRSAEncryption) litegreenln "SHA512withRSA" ;;
+		     md5*) 				redln "MD5" ;;
+			*) 					outln "$algo" ;;
+		esac
+		# old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
+
+		out " Common Name (CN)             "
+		CN=`$OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//'`
+		outln "$CN"
+
+		SAN=`$OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g'`
+		[ x"$SAN" != "x" ] && SAN=`echo "$SAN" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g'` && outln " SAN                          $SAN"
+										# replace line feed by " "
+
+		out " Issuer                       "
+		issuer=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed -e 's/^.*CN=//g' -e 's/\/.*$//g'`
+		issuer_o=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*O=//g' | sed 's/\/.*$//g'`
+		issuer_c=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*C=//g' | sed 's/\/.*$//g'`
+		outln "$issuer ($issuer_o from $issuer_c)"
+
+		out " Certificate Expiration       "
+		expire=`$OPENSSL x509 -in $HOSTCERT -checkend 0`
+		if ! echo $expire | grep -qw not; then
+	     	red "expired!"
 		else
-			echo $extensions | sed 's/,$//'	# remove last comma
+			SECS2WARN=`expr 24 \* 60 \* 60 \* $DAYS2WARN1`  # red threshold first
+		     expire=`$OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN`
+			if echo "$expire" | grep -qw not; then
+				SECS2WARN=`expr 24 \* 60 \* 60 \* $DAYS2WARN2`
+				expire=`$OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN`
+				if echo "$expire" | grep -qw not; then
+					litegreen ">= $DAYS2WARN1 days"
+				else
+		     		litered "expires < $DAYS2WARN2 days"
+				fi
+			else
+		     		brown "expires < $DAYS2WARN1 days"
+			fi
 		fi
+		enddate=`date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z"`
+		startdate=`date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M"`
+		outln " ($startdate --> $enddate)"
 
-		out " Session Tickets RFC 5077  "
-		sessticket_str=`grep -w "session ticket" $TMPFILE | grep lifetime`
-		if [ -z "$sessticket_str" ]; then
-			outln "(none)"
-		else
-			lifetime=`echo $sessticket_str | grep lifetime | sed 's/[A-Za-z:() ]//g'`
-			unit=`echo $sessticket_str | grep lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g'`
-			outln "$lifetime $unit"
-		fi
 
-		out " OCSP stapling            "
+		out " Certificate Revocation List  "
+		crl=`$OPENSSL x509 -in $HOSTCERT -noout -text | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://'`
+		[ x"$crl" == "x" ] && literedln "--" || echo "$crl"
+
+		out " OCSP URI                     "
+		ocsp_uri=`$OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri`
+		[ x"$ocsp_uri" == "x" ] && literedln "--" || echo "$ocsp_uri"
+
+		out " OCSP stapling               "
 		if grep "OCSP response" $TMPFILE | grep -q "no response sent" ; then
 			out " not offered"
 		else
@@ -941,7 +1007,8 @@ simple_preference() {
 		#fi
 		#http://www.moserware.com/2009/06/first-few-milliseconds-of-https.html
 
-	rm $TMPFILE
+	cp -p $TMPFILE $TMPFILE.tlsextdebug+status
+	tmpfile_handle $TMPFILE
 	return $ret
 }
 
@@ -1009,7 +1076,7 @@ pfs() {
 		fi
 		outln
 	fi
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $ret
 }
 
@@ -1055,7 +1122,7 @@ rc4() {
 		bad=0
 	fi
 
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $bad
 }
 
@@ -1110,7 +1177,7 @@ spdy(){
 	outln
 	# btw: nmap can do that too http://nmap.org/nsedoc/scripts/tls-nextprotoneg.html
 	# nmap --script=tls-nextprotoneg #NODE -p $PORT is your friend if your openssl doesn't want to test this
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $ret
 }
 
@@ -1233,7 +1300,7 @@ ccs_injection(){
 	outln 
 
 	close_socket
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $ret
 }
 
@@ -1335,7 +1402,7 @@ heartbleed(){
 	outln 
 
 	close_socket
-	rm $TMPFILE
+	tmpfile_handle $TMPFILE
 	return $ret
 }
 
@@ -1553,7 +1620,7 @@ starttls() {
 				export STARTTLS
 				runprotocols		; ret=`expr $? + $ret`
 				run_std_cipherlists	; ret=`expr $? + $ret`
-				simple_preference	; ret=`expr $? + $ret`
+				server_defaults	; ret=`expr $? + $ret`
 
 				outln; blue "--> Testing specific vulnerabilities" ; outln "\n"
 #FIXME: heartbleed + CCS won't work this way yet
@@ -1597,6 +1664,7 @@ $PRG <options> URI
     <-E|-ee|--cipher-per-proto>           check those per protocol
     <-f|--ciphers>                        check cipher suites
     <-p|--protocols>                      check TLS/SSL protocols only
+    <-S|--server_defaults>                displays the servers default picks and cert info
     <-P|--preference>                     displays the servers picks: protocol+cipher
     <-y|--spdy>                           checks for SPDY/NPN
     <-x|--single-ciphers-test> <pattern>  tests matched <pattern> of cipher
@@ -1657,20 +1725,20 @@ outln " Using \"$osslver\" from
 }
 
 maketempf () {
-	TMPFILE=`mktemp /tmp/ssltester.$NODE.XXXXXX` || exit 6
-	HEADERFILE=`mktemp /tmp/ssltester.header$NODE.XXXXXX` || exit 6
-	HEADERFILE_BREACH=`mktemp /tmp/ssltester.header$NODE.XXXXXX` || exit 6
-	#LOGFILE=`mktemp /tmp/ssltester.$NODE.XXXXXX.log` || exit 6
+	TEMPDIR=`mktemp -d /tmp/ssltester.XXXXXX` || exit 6
+	TMPFILE=$TEMPDIR/tempfile.txt || exit 6
+	HOSTCERT=$TEMPDIR/host_cerificate.txt
+	HEADERFILE=$TEMPDIR/http_header.txt
+	HEADERFILE_BREACH=$TEMPDIR/http_header_breach.txt
+	LOGFILE=$TEMPDIR/logfile.txt
 }
 
 cleanup () {
-	if [ "$DEBUG" -eq 1 ] ; then
-		[ -n "$TMPFILE" ] && [ -r ${TMPFILE} ] && cat ${TMPFILE}
-		[ -r "$HEADERFILE_BREACH" ] && cat ${HEADERFILE_BREACH}
-		[ -r "$HEADERFILE" ] && cat ${HEADERFILE}
-		[ -e "$LOGFILE" ] && cat ${LOGFILE}
+	if [[ "$DEBUG" -eq 1 ]] ; then
+		outln
+		underline "DEBUG: see files in $TEMPDIR"
 	else
-		rm ${TMPFILE} ${HEADERFILE} ${HEADERFILE_BREACH} ${LOGFILE} ${GOST_CONF} 2>/dev/null
+		[ -d "$TEMPDIR" ] && rm -rf ${TEMPDIR};
 	fi
 	outln
 	[ -n "$NODE" ] && datebanner "Done"  # only if running against server
@@ -1929,12 +1997,18 @@ case "$1" in
 		run_std_cipherlists
 		ret=$?
 		exit $ret ;;
-     -P|--preference)   
+     -S|--server_defaults)   
 		maketempf
 		parse_hn_port "$2"
-		simple_preference
+		server_defaults
 		ret=$?
 		exit $ret ;;
+#     -P|--server_preference)   
+#		maketempf
+#		parse_hn_port "$2"
+#		server_preference
+#		ret=$?
+#		exit $ret ;;
 	-y|--spdy|--google)
 		maketempf
 		parse_hn_port "$2"
@@ -2026,7 +2100,7 @@ case "$1" in
 		runprotocols		; ret=$?
 		spdy 			; ret=`expr $? + $ret`
 		run_std_cipherlists	; ret=`expr $? + $ret`
-		simple_preference 	; ret=`expr $? + $ret`
+		server_defaults 	; ret=`expr $? + $ret`
 
 		outln; blue "--> Testing specific vulnerabilities" 
 		outln "\n"
@@ -2051,7 +2125,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.151 2014/12/08 09:32:50 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.155 2014/12/18 07:58:56 dirkw Exp $ 
 # vim:ts=5:sw=5
-
 
