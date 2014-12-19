@@ -212,7 +212,11 @@ boldandunder() { [[ "$COLOR" != 0 ]] && out "\033[1m\033[4m$1" || out "$1" ; off
 reverse() { [[ "$COLOR" != 0 ]] && out "\033[7m$1" || out "$1" ; off; }
 
 tmpfile_handle() {
-	[[ "$DEBUG" -eq 0 ]] && rm $TMPFILE
+	if [[ "$DEBUG" -eq 0 ]] ; then
+		rm $TMPFILE
+	else
+		mv $TMPFILE "$TEMPDIR/$1"
+	fi
 }
 
 
@@ -323,7 +327,7 @@ runs_HTTP() {
 		*)   outln " Couldn't determine what's running on port $PORT, assuming not HTTP\n" ;;
 	esac
 
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -341,7 +345,7 @@ poodle() {
 	fi
 	outln 
 
-	tmpfile_handle $TMPFILE
+	tmpfile_handle  $FUNCNAME.txt
 	return $ret
 }
 
@@ -411,7 +415,7 @@ hsts() {
 	fi
 	outln
 
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $?
 }
 
@@ -437,7 +441,7 @@ hpkp() {
 	fi
 	outln
 
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $?
 }
 #FIXME: report-uri
@@ -472,7 +476,7 @@ serverbanner() {
 	fi
 	outln
 
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $?
 }
 
@@ -491,6 +495,8 @@ secure_cookie() {	# ARG1: Path
 			outln "no secure flag"
 		fi
 	fi
+
+	tmpfile_handle $FUNCNAME.txt
 	return 0
 }
 #FIXME: Access-Control-Allow-Origin, CSP, Upgrade, X-Frame-Options, X-XSS-Protection, X-Content-Type-Options
@@ -548,6 +554,8 @@ listciphers() {
 	$OPENSSL ciphers "$VERB_CLIST" $1  &>$TMPFILE
 	ret=$?
 	[[ $LOCERR -eq 1 ]] && cat $TMPFILE 
+
+     tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -583,7 +591,7 @@ std_cipherlists() {
 					ok 0 1			# was not offered --> green
 				fi ;;
 		esac
-		tmpfile_handle $TMPFILE
+		tmpfile_handle $FUNCNAME.txt
 	else
 		singlespaces=`echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g'`
 		magentaln "Local problem: No $singlespaces configured in $OPENSSL" 
@@ -683,10 +691,9 @@ test_just_one(){
 			fi
 		done
 	done
-
 	outln
-	tmpfile_handle $TMPFILE
 
+	tmpfile_handle $FUNCNAME.txt
 	return 0
 }
 
@@ -712,7 +719,7 @@ allciphers(){
 			fi
 		fi
 		outln
-		tmpfile_handle $TMPFILE
+		tmpfile_handle $FUNCNAME.txt
 	done
 	return 0
 }
@@ -740,7 +747,7 @@ cipher_per_proto(){
 				fi
 			fi
 			outln
-			tmpfile_handle $TMPFILE
+			tmpfile_handle $FUNCNAME.txt
 		done
 	done
 
@@ -773,7 +780,7 @@ testversion_new() {
 		ret=5
 	fi
 
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -1007,8 +1014,7 @@ server_defaults() {
 		#fi
 		#http://www.moserware.com/2009/06/first-few-milliseconds-of-https.html
 
-	cp -p $TMPFILE $TMPFILE.tlsextdebug+status
-	tmpfile_handle $TMPFILE
+	tmpfile_handle tlsextdebug+status.txt
 	return $ret
 }
 
@@ -1076,7 +1082,7 @@ pfs() {
 		fi
 		outln
 	fi
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -1122,7 +1128,7 @@ rc4() {
 		bad=0
 	fi
 
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $bad
 }
 
@@ -1177,7 +1183,7 @@ spdy(){
 	outln
 	# btw: nmap can do that too http://nmap.org/nsedoc/scripts/tls-nextprotoneg.html
 	# nmap --script=tls-nextprotoneg #NODE -p $PORT is your friend if your openssl doesn't want to test this
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -1300,7 +1306,7 @@ ccs_injection(){
 	outln 
 
 	close_socket
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -1402,7 +1408,7 @@ heartbleed(){
 	outln 
 
 	close_socket
-	tmpfile_handle $TMPFILE
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -1642,6 +1648,7 @@ starttls() {
 			ret=2
 			;;
 	esac
+
 	return $ret
 }
 
@@ -1750,10 +1757,12 @@ initialize_engine(){
 		litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln "\n"
 		return 1
 	else 
-		if [ -z "$OPENSSL_CONF" ]; then
-			GOST_CONF=`mktemp /tmp/ssltester.GOST.XXXXXX` || exit 6
+		if [ ! -z "$OPENSSL_CONF" ]; then
+			litemagenta "For now I am providing the config file in to have GOST support"; outln
+		else
+			OPENSSL_CONF=$TMPDIR/gost.conf || exit 6
 			# see https://www.mail-archive.com/openssl-users@openssl.org/msg65395.html
-			cat >$GOST_CONF << EOF
+			cat >$OPENSSL_CONF << EOF
 openssl_conf            = openssl_def
 
 [ openssl_def ]
@@ -1768,11 +1777,7 @@ default_algorithms = ALL
 CRYPT_PARAMS = id-Gost28147-89-CryptoPro-A-ParamSet
 
 EOF
-			export OPENSSL_CONF=$GOST_CONF
-		else
-			litemagenta "For now I am providing the config file in to have GOST support"; outln
-			sleep 2
-			outln
+			export OPENSSL_CONF
 		fi
 	fi
 	return 0
@@ -2125,6 +2130,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.156 2014/12/19 06:12:18 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.157 2014/12/19 16:02:25 dirkw Exp $ 
 # vim:ts=5:sw=5
 
