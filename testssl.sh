@@ -937,7 +937,7 @@ server_defaults() {
 		outln "$CN"
 
 		SAN=`$OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g'`
-		[ x"$SAN" != "x" ] && SAN=`echo "$SAN" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g'` && outln " SAN                          $SAN"
+		[ x"$SAN" != "x" ] && SAN=`echo "$SAN" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g'` && outln " subjectAltName (SAN)         $SAN"
 										# replace line feed by " "
 
 		out " Issuer                       "
@@ -2125,6 +2125,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.155 2014/12/18 07:58:56 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.156 2014/12/19 06:12:18 dirkw Exp $ 
 # vim:ts=5:sw=5
 
