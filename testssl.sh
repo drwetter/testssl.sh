@@ -700,10 +700,14 @@ test_just_one(){
 
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad
 allciphers(){
-# FIXME: e.g. OpenSSL < 1.0 doesn't understand "-V"
-	blue "--> Testing all locally available ciphers against the server"; outln "\n"
+
+	nr_ciphers=`$OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w`
+
+	blue "--> Testing all locally available $nr_ciphers ciphers against the server"; outln "\n"
 	neat_header
+
 	$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode n ciph sslvers kx auth enc mac export; do
+	# FIXME: e.g. OpenSSL < 1.0 doesn't understand "-V" --> we can't do anything about it!
 		$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE  </dev/null
 		ret=$?
 		if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ]; then
@@ -860,42 +864,84 @@ run_std_cipherlists() {
 	return 0
 }
 
+openssl_error() {
+	magenta "$OPENSSL returned an error. This shouldn't happen. "
+	outln "continuing anyway"
+	return 0
+}
+
+server_preference() {
+	list1="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA:AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:DHE-DSS-AES256-GCM-SHA384"
+	outln;
+	blue "--> Testing server preferences"; outln "\n"
+
+	$OPENSSL s_client $STARTTLS -cipher $list1 -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
+	if [ $? -ne 0 ]; then
+          openssl_error
+          ret=6
+	else
+		cipher1=`grep -w Cipher $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g'`
+		list2=`echo $list1 | tr ':' '\n' | sort -r | tr '\n' ':'`	# reverse the list
+		$OPENSSL s_client $STARTTLS -cipher $list2 -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
+		cipher2=`grep -w Cipher $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g'`
+
+		out " Has server cipher order?     "
+		if [[ "$cipher1" != "$cipher2" ]]; then
+			red "nope (NOT ok)"
+			remark4default_cipher=" (limited sense as client will pick)"
+		else
+			green "yes (OK)"
+			remark4default_cipher=""
+		fi
+		[[ $VERBOSE -eq 1 ]] && out "  $cipher1 | $cipher2"
+		outln
+
+		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
+		out " Negotiated protocol          "
+		default_proto=`grep -w "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g'`
+		case "$default_proto" in
+			*TLSv1.2)		greenln $default_proto ;;
+			*TLSv1.1)		litegreenln $default_proto ;;
+			*TLSv1)		outln $default_proto ;;
+			*SSLv2)		redln $default_proto ;;
+			*SSLv3)		redln $default_proto ;;
+			*)			outln "FIXME: $default_proto" ;;
+		esac
+ 
+		out " Negotiated cipher            "
+		default_cipher=`grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g'`
+		case "$default_cipher" in
+			*NULL*|*EXP*)	red "$default_cipher" ;;
+			*RC4*)		litered "$default_cipher" ;;
+			*CBC*)		litered "$default_cipher" ;; #FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
+			*GCM*)		green "$default_cipher" ;;   # best ones
+			*CHACHA20*)	green "$default_cipher" ;;   # best ones
+			ECDHE*AES*)    brown "$default_cipher" ;;   # it's CBC. so lucky13
+			*)			out "$default_cipher" ;;
+		esac
+		outln "$remark4default_cipher"
+		outln
+
+	fi
+
+
+	return 0
+}
+
+
 server_defaults() {
 	outln
 	blue "--> Testing server defaults (Server Hello)"; outln "\n"
+	localtime=`date "+%s"`
+
 	# throwing every cipher/protocol at the server and displaying its pick
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -tlsextdebug -status </dev/null 2>/dev/null >$TMPFILE
+	ret=$?
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT
-
-	localtime=`date "+%s"`
-	if [ $? -ne 0 ]; then
-		magentaln "This shouldn't happen. "
+	if [ $? -ne 0 ] || [ $ret -ne 0 ]; then
+		openssl_error
 		ret=6
 	else
-		out " Negotiated protocol          "
-		TLS_PROTO_OFFERED=`grep -w "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g'`
-		case "$TLS_PROTO_OFFERED" in
-			*TLSv1.2)		greenln $TLS_PROTO_OFFERED ;;
-			*TLSv1.1)		litegreenln $TLS_PROTO_OFFERED ;;
-			*TLSv1)		outln $TLS_PROTO_OFFERED ;;
-			*SSLv2)		redln $TLS_PROTO_OFFERED ;;
-			*SSLv3)		redln $TLS_PROTO_OFFERED ;;
-			*)			outln "FIXME: $TLS_PROTO_OFFERED" ;;
-		esac
-
-		out " Negotiated cipher            "
-		default=`grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g'`
-		case "$default" in
-			*NULL*|*EXP*)	redln "$default" ;;
-			*RC4*)		literedln "$default" ;;
-			*CBC*)		literedln "$default" ;; #FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
-			*GCM*)		greenln "$default" ;;   # best ones
-			*CHACHA20*)	greenln "$default" ;;   # best ones
-			ECDHE*AES*)    brownln "$default" ;;   # it's CBC. so lucky13
-			*)			outln "$default" ;;
-		esac
-		outln
-
 		out " TLS server extensions        "
 		extensions=`grep -w "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g'`
 		if [ -z "$extensions" ]; then
@@ -951,7 +997,11 @@ server_defaults() {
 		issuer=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed -e 's/^.*CN=//g' -e 's/\/.*$//g'`
 		issuer_o=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*O=//g' | sed 's/\/.*$//g'`
 		issuer_c=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*C=//g' | sed 's/\/.*$//g'`
-		outln "$issuer ($issuer_o from $issuer_c)"
+		if [ "$issuer_o" == "issuer=" ] || [ "$issuer" == "$CN" ] ; then
+			redln "selfsigned (not OK)"
+		else
+			outln "$issuer ($issuer_o from $issuer_c)"
+		fi
 
 		out " Certificate Expiration       "
 		expire=`$OPENSSL x509 -in $HOSTCERT -checkend 0`
@@ -1626,6 +1676,7 @@ starttls() {
 				export STARTTLS
 				runprotocols		; ret=`expr $? + $ret`
 				run_std_cipherlists	; ret=`expr $? + $ret`
+				server_preference	; ret=`expr $? + $ret`
 				server_defaults	; ret=`expr $? + $ret`
 
 				outln; blue "--> Testing specific vulnerabilities" ; outln "\n"
@@ -2008,12 +2059,12 @@ case "$1" in
 		server_defaults
 		ret=$?
 		exit $ret ;;
-#     -P|--server_preference)   
-#		maketempf
-#		parse_hn_port "$2"
-#		server_preference
-#		ret=$?
-#		exit $ret ;;
+     -P|--server_preference)   
+		maketempf
+		parse_hn_port "$2"
+		server_preference
+		ret=$?
+		exit $ret ;;
 	-y|--spdy|--google)
 		maketempf
 		parse_hn_port "$2"
@@ -2105,6 +2156,7 @@ case "$1" in
 		runprotocols		; ret=$?
 		spdy 			; ret=`expr $? + $ret`
 		run_std_cipherlists	; ret=`expr $? + $ret`
+		server_preference	; ret=`expr $? + $ret`
 		server_defaults 	; ret=`expr $? + $ret`
 
 		outln; blue "--> Testing specific vulnerabilities" 
@@ -2130,6 +2182,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.157 2014/12/19 16:02:25 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.160 2014/12/20 19:06:36 dirkw Exp $ 
 # vim:ts=5:sw=5
 
