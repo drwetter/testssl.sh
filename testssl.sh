@@ -772,7 +772,7 @@ locally_supported() {
 	
 }
 
-testversion_new() {
+testversion() {
 	local sni=$SNI
 	[ "x$1" = "x-ssl2" ] && sni=""  # newer openssl throw an error if SNI with SSLv2
 
@@ -790,7 +790,7 @@ testversion_new() {
 
 testprotohelper() {
 	if locally_supported "$1" "$2" ; then
-		testversion_new "$1" "$2" 
+		testversion "$1" "$2" 
 		return $?
 	else
 		return 7
@@ -920,11 +920,60 @@ server_preference() {
 			*)			out "$default_cipher" ;;
 		esac
 		outln "$remark4default_cipher"
-		outln
 
+		out " Negotiated cipher per proto $remark4default_cipher"
+		i=1
+		for p in sslv2 ssl3 tls1 tls1_1 tls1_2; do
+		# proto-check b4!
+			$OPENSSL s_client  $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
+			if [ $ret -eq 0 ]; then
+				 proto[i]=`grep -w "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g'`
+				 cipher[i]=`grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g'`
+				 [[ ${cipher[i]} == "0000" ]] && cipher[i]=""  # Hack!
+				 [[ $VERBOSE -eq 1 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
+			else
+				 proto[i]=""
+				 cipher[i]=""
+			fi
+			i=`expr $i + 1`
+		done
+
+		if spdy_pre ; then		# is NPN/SPDY supported and is this no STARTTLS?
+			$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$NPN_PROTOs" </dev/null 2>/dev/null  >$TMPFILE
+			if [ $? -eq 0 ]; then
+				proto[i]=`grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g'`
+				if [ -z "${proto[i]}" ]; then
+					cipher[i]=""
+				else
+					cipher[i]=`grep -aw "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g'`
+					[[ $VERBOSE -eq 1 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
+				fi
+			fi
+		fi
+
+		for i in 1 2 3 4 5 6; do
+			if [[ -n "${cipher[i]}" ]]; then                              # cipher nicht leer
+				 if [[ -z "${cipher[i-1]}" ]]; then                      # der davor leer
+					 	outln
+						printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"            # beides ausgeben
+				 else                                                    # davor nihct leer
+					    if [[ "${cipher[i-1]}" == "${cipher[i]}" ]]; then       # und bei vorigem Protokoll selber cipher
+							  out ", ${proto[i]}"                         # selber Cipher --> Nur Protokoll dahinter
+					    else
+							outln
+							printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"            # beides ausgeben
+					    fi
+				 fi
+			fi
+		done
 	fi
+	outln
+# 
+#	otiated cipher per proto  
+#	     0000:                          SSLv3
 
 
+	tmpfile_handle
 	return 0
 }
 
@@ -1197,18 +1246,23 @@ lucky13() {
 }
 
 
-spdy(){
-	out " SPDY/NPN   "
+spdy_pre(){
 	if [ "x$STARTTLS" != "x" ]; then
-		outln "SPDY probably doesn't work with !HTPP"
-		ret=2
+		[[ $VERBOSE -eq 1 ]] && outln "SPDY doesn't work with !HTTP"
+		return 1
 	fi
 	# first, does the current openssl support it?
 	$OPENSSL s_client help 2>&1 | grep -qw nextprotoneg
 	if [ $? -ne 0 ]; then
 		magenta "Local problem: $OPENSSL doesn't support SPDY"; outln
-		return 0
+		return 7
 	fi
+	return 0
+}
+
+spdy() {
+	out " SPDY/NPN   "
+	spdy_pre || return 0
 	$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs </dev/null 2>/dev/null >$TMPFILE
 	if [ $? -eq 0 ]; then
 		# we need -a here 
@@ -1755,6 +1809,7 @@ mybanner() {
 	me=`basename $0`
 	osslver=`$OPENSSL version`
 	osslpath=`which $OPENSSL`
+	nr_ciphers=`$OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w`
 	hn=`hostname`
 	#poor man's ident (nowadays ident not neccessarily installed)
 	idtag=`grep '\$Id' $0 | grep -w Exp | grep -v grep | sed -e 's/^#  //' -e 's/\$ $/\$/'`
@@ -1776,7 +1831,7 @@ EOF
 `
 bold "$bb"
 outln "\n"
-outln " Using \"$osslver\" from
+outln " Using \"$osslver\" [$nr_ciphers ciphers] on
  $hn:$osslpath
  (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 
@@ -2182,6 +2237,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.160 2014/12/20 19:06:36 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.161 2014/12/21 22:22:48 dirkw Exp $ 
 # vim:ts=5:sw=5
 
