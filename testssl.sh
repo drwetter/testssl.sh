@@ -1036,20 +1036,38 @@ server_defaults() {
 
 		out " Common Name (CN)             "
 		CN=`$OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//'`
-		outln "$CN"
+		out "$CN"
 
-		SAN=`$OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g'`
+		CN_nosni=`$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  | \
+			$OPENSSL x509 -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//'`
+		[[ $VERBOSE -eq 1 ]] && out "$NODE | $CN | $CN_nosni"
+		if [[ $NODE == $CN_nosni ]]; then
+			outln " (works w/o SNI)"
+		else
+			outln " (CN response to request w/o SNI: '$CN_nosni')"
+		fi
+
+
+		SAN=`$OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
+			sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g' -e 's/othername:<unsupported>//g'`
+#                                                               ^^^ CACert
 		[ x"$SAN" != "x" ] && SAN=`echo "$SAN" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g'` && outln " subjectAltName (SAN)         $SAN"
 										# replace line feed by " "
 
 		out " Issuer                       "
 		issuer=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed -e 's/^.*CN=//g' -e 's/\/.*$//g'`
 		issuer_o=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*O=//g' | sed 's/\/.*$//g'`
-		issuer_c=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*C=//g' | sed 's/\/.*$//g'`
+		if $OPENSSL x509 -in $HOSTCERT -noout -issuer | grep -q 'C=' ; then 
+			issuer_c=`$OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*C=//g' | sed 's/\/.*$//g'`
+		else
+			issuer_c="" 		# CACert would have 'issuer= ' here otherwise
+		fi
 		if [ "$issuer_o" == "issuer=" ] || [ "$issuer" == "$CN" ] ; then
 			redln "selfsigned (not OK)"
 		else
-			outln "$issuer ($issuer_o from $issuer_c)"
+			[ "$issuer_c" == "" ] && \
+				outln "$issuer ('$issuer_o')" || \
+				outln "$issuer ('$issuer_o' from '$issuer_c')"
 		fi
 
 		out " Certificate Expiration       "
@@ -2237,6 +2255,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.161 2014/12/21 22:22:48 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.162 2014/12/23 08:57:52 dirkw Exp $ 
 # vim:ts=5:sw=5
 
