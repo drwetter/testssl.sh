@@ -1969,8 +1969,8 @@ parse_hn_port() {
 		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null >/dev/null 2>&1 
 		if [ $? -ne 0 ]; then
 			boldln "$NODE:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate"; 
-			ignore_no_or_lame "Proceed (note that the results might look ok but they are nonsense) ? "
-			[ $? -ne 0 ] && exit 3
+			ignore_no_or_lame "Do you want to exit (note that otherwise results might look ok but they are nonsense) ? "
+			[ $? -eq 0 ] && exit 3
 		fi
 	fi
 
