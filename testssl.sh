@@ -1909,10 +1909,8 @@ EOF
 
 
 ignore_no_or_lame() {
-	if [ "$WARNINGS" = "off" -o "$WARNINGS" = "false" ]; then
-		return 0
-	fi
-	#outln
+	[ "$WARNINGS" = "off" -o "$WARNINGS" = "false" ] && return 0
+	[ "$WARNINGS" = "batch" ] && return 1
 	magenta "$1 "
 	read a
 	case $a in
@@ -1969,8 +1967,8 @@ parse_hn_port() {
 		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null >/dev/null 2>&1 
 		if [ $? -ne 0 ]; then
 			boldln "$NODE:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate"; 
-			ignore_no_or_lame "Do you want to exit (note that otherwise results might look ok but they are nonsense) ? "
-			[ $? -eq 0 ] && exit 3
+			ignore_no_or_lame "Proceed (note that the results might look ok but they are nonsense) ? "
+			[ $? -ne 0 ] && exit 3
 		fi
 	fi
 
@@ -2255,6 +2253,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.162 2014/12/23 08:57:52 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.163 2015/01/06 15:25:18 dirkw Exp $ 
 # vim:ts=5:sw=5
 
