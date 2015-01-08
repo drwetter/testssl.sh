@@ -1884,7 +1884,7 @@ initialize_engine(){
 		if [ ! -z "$OPENSSL_CONF" ]; then
 			litemagenta "For now I am providing the config file in to have GOST support"; outln
 		else
-			OPENSSL_CONF=$TMPDIR/gost.conf || exit 6
+			OPENSSL_CONF=$TEMPDIR/gost.conf || exit 6
 			# see https://www.mail-archive.com/openssl-users@openssl.org/msg65395.html
 			cat >$OPENSSL_CONF << EOF
 openssl_conf            = openssl_def
@@ -2253,6 +2253,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.163 2015/01/06 15:25:18 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.164 2015/01/08 13:16:21 dirkw Exp $ 
 # vim:ts=5:sw=5
 
