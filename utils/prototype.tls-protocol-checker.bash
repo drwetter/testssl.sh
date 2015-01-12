@@ -22,6 +22,8 @@
 
 IFILE=./mapping-rfc.txt
 NODE=""
+SN_HEX=""
+LEN_SN_HEX=0
 COL_WIDTH=32
 DEBUG=${DEBUG:-0}
 USLEEP_REC=${USLEEP_REC:-0.2}
@@ -66,26 +68,13 @@ c0, 0d, c0, 03, 00, 0a, 00, 63, 00, 15, 00, 12, 00, 0f, 00, 0c,
 00, 62, 00, 09, 00, 65, 00, 64, 00, 14, 00, 11, 00, 0e, 00, 0b,
 00, 08, 00, 06, 00, 03, 00, ff" 
 
-
-# example 1: for SNI
-#00 00 # extention server_name
-#00 0b # length
-#00 09 # server_name list_length
-#00    # server_name type (hostname)
-#00 06 # server_name length
-#66 66 66 66 66 66 # server_name target
-
-# example 2: for SNI
-#00 00 00 1a 00 18 00 00 15 66 66 66 66 66 66 2e  .........target.
-#66 66 66 66 66 66 66 66 66 66 2e 66 66 66        mydomain1.tld
-
-#formatted:
-#00 00 
-#00 1a 
-#00 18 
-#00 
-#00 15 
-#66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld
+#formatted example for SNI
+#00 00 	# extention server_name
+#00 1a    # length       			= the following +2 = server_name length + 5
+#00 18    # server_name list_length	= server_name length +3
+#00 		# server_name type (hostname)
+#00 15 	# server_name length
+#66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
 
 
 help() {
@@ -111,7 +100,9 @@ parse_hn_port() {
 	echo $NODE | grep -q ':' && PORT=`echo $NODE | sed 's/^.*\://'` && NODE=`echo $NODE | sed 's/\:.*$//'`
 
 	# servername to network bytes:
-	SNIHEX=`printf $NODE | hexdump -v -e '16/1 "%02X"'`
+	LEN_SN_HEX=`echo ${#NODE}`
+	hexdump_format_str="$LEN_SN_HEX/1 \"%02x,\""
+	SN_HEX=`printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//'`
 }
 
 # arg1: formatted string here in the code
@@ -135,32 +126,40 @@ socksend_clienthello() {
 
 	if [[ "$1" != "ff" ]]; then	# internally we use 00 to indicate SSLv2
 		len_sni=`echo ${#3}`
-		#len_ciph_suites=`echo ${#SNIHEX}`
+		#tls_ver=printf "%02x\n" $1"
 
 		code2network "$2"
 		cipher_suites="$NW_STR"	# we don't have the leading \x here so string length is two byte less, see next
+
+		# convert length's from dec to hex:
+		hex_len_sn_hex=`printf "%02x\n" $LEN_SN_HEX`
+		hex_len_sn_hex3=`printf "%02x\n" $((LEN_SN_HEX+3))`
+		hex_len_sn_hex5=`printf "%02x\n" $((LEN_SN_HEX+5))`
+		hex_len_extention=`printf "%02x\n" $((LEN_SN_HEX+9))`
 		
 		len_ciph_suites_byte=`echo ${#cipher_suites}`
 		let "len_ciph_suites_byte += 2"
 
 		# we have additional 2 chars \x in each 2 byte string and 2 byte ciphers, so we need to divide by 4:
-		len_ciph_suites=`printf "%X\n" $(($len_ciph_suites_byte / 4 ))`
+		len_ciph_suites=`printf "%02x\n" $(($len_ciph_suites_byte / 4 ))`
 		len2twobytes "$len_ciph_suites"
 		len_ciph_suites_word="$LEN_STR"
 		[[ $DEBUG -ge 4 ]] && echo $len_ciph_suites_word
 
-		len2twobytes `printf "%X\n" $((0x$len_ciph_suites + 0x27))`
+		len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$hex_len_extention + 0x2))`
+		#len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x27))`
 		len_c_hello_word="$LEN_STR"
 		[[ $DEBUG -ge 4 ]] && echo $len_c_hello_word
 
-		len2twobytes `printf "%X\n" $((0x$len_ciph_suites + 0x2b))`
+		len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$hex_len_extention + 0x2))`
+		#len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x2b))`
 		len_all_word="$LEN_STR"
 		[[ $DEBUG -ge 4 ]] && echo $len_all_word
 
 		TLS_CLIENT_HELLO="
 		# TLS header ( 5 bytes)
-		,16, 03, $1             # TLS Version
-		,$len_all_word          # Length
+		,16, 03, $1            # TLS Version
+		,$len_all_word          # Length  <---
 		# Handshake header:
 		,01                     # Type (x01 for ClientHello)
 		,00, $len_c_hello_word  # Length ClientHello
@@ -175,11 +174,21 @@ socksend_clienthello() {
 		# Cipher suites 
 		,$cipher_suites
 		,01                     # Compression methods length
-		,00                     # Compression method (x00 for NULL)
-		"
+		,00"                    # Compression method (x00 for NULL)
+
+		EXTENSION_CONTAINING_SNI="
+		,00, $hex_len_extention  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
+		,00, 00                  # extention server_name
+		,00, $hex_len_sn_hex5    # length SNI EXT
+		,00, $hex_len_sn_hex3    # server_name list_length
+		,00                      # server_name type (hostname)
+		,00, $hex_len_sn_hex     # server_name length
+		,$SN_HEX"                # server_name target
+
 	fi
 
-	code2network "$TLS_CLIENT_HELLO"
+	code2network "$TLS_CLIENT_HELLO$EXTENSION_CONTAINING_SNI"
+	#code2network "$TLS_CLIENT_HELLO"
 	data=`echo $NW_STR`
 	
 	[[ "$DEBUG" -ge 3 ]] && echo "\"$data\"" 
@@ -352,4 +361,4 @@ echo
 exit 0
 
 #  vim:tw=110:ts=5:sw=5
-#  $Id: prototype.tls-protocol-checker.bash,v 1.8 2015/01/08 08:57:26 dirkw Exp $ 
+#  $Id: prototype.tls-protocol-checker.bash,v 1.11 2015/01/12 21:56:06 dirkw Exp $ 
