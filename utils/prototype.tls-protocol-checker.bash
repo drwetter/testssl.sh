@@ -14,8 +14,6 @@
 # debug is easier for response:
 # /<path>/openssl s_client -tls1 -debug -connect target:443 </dev/null
 
-
-# todo: SNI
 # todo: NPN     (/<path>/openssl s_client -host target -port 443 -nextprotoneg 'spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1'
 # todo: TLS 1.3 (https://tools.ietf.org/html/draft-ietf-tls-tls13-03#section-7.4)
 # todo: DTLS    (https://tools.ietf.org/html/rfc4347#section-4.2.2)
@@ -371,4 +369,4 @@ echo
 exit 0
 
 #  vim:tw=110:ts=5:sw=5
-#  $Id: prototype.tls-protocol-checker.bash,v 1.12 2015/01/12 22:15:12 dirkw Exp $ 
+#  $Id: prototype.tls-protocol-checker.bash,v 1.13 2015/01/12 22:28:35 dirkw Exp $ 
