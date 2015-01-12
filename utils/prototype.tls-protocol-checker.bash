@@ -275,12 +275,15 @@ display_tls_serverhello() {
 	tls_compression_method="${tls_hello_ascii:$sid_offset:2}"
 
 	if [[ $DEBUG -ge 2 ]]; then
+
 		echo "tls_hello_initbyte:  0x$tls_hello_initbyte"
 		echo "tls_hello:           0x$tls_hello"
 		echo "tls_hello_protocol:  0x$tls_hello_protocol"
-		echo "tls_hello_protocol2: 0x$tls_hello_protocol2"
-		echo "tls_len_all:         $tls_len_all"
-		echo "tls_sid_len:         $tls_sid_len"
+		if [[ $DEBUG -ge 4 ]]; then
+			echo "tls_hello_protocol2: 0x$tls_hello_protocol2"
+			echo "tls_len_all:         $tls_len_all"
+			echo "tls_sid_len:         $tls_sid_len"
+		fi
 		echo "tls_hello_time:      0x$tls_hello_time ($tls_time)"
 		echo "tls_cipher_suite:    0x$tls_cipher_suite"
 		echo "tls_compression_method: 0x$tls_compression_method"
@@ -326,7 +329,14 @@ for tls_low_byte in "00" "01" "02" "03"; do
 	# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
 	lines=`cat "$SOCK_REPLY_FILE" 2>/dev/null | hexdump -v -e '"%04_ax:  " 32/1 "%02X " "\n"' | wc -l` 
 
-	printf "Protokoll "; tput bold; printf "$tls_low_byte"; tput sgr0; printf ":  "
+	case $tls_low_byte in
+		00) tls_str="SSLv3" ;;
+		01) tls_str="TLS 1" ;;
+		02) tls_str="TLS 1.1" ;;
+		03) tls_str="TLS 1.2" ;;
+	esac
+
+	printf "Protokoll "; tput bold; printf "$tls_low_byte = $tls_str"; tput sgr0; printf ":  "
 
 	if [[ $ret -eq 1 ]] || [[ $lines -eq 1 ]] ; then
 		tput setaf 3; echo "NOT available"
@@ -343,7 +353,7 @@ for tls_low_byte in "00" "01" "02" "03"; do
 	fi
 	tput sgr0
 
-	[[ "$DEBUG" -ge 2 ]] && printf "  ($lines lines)" && echo
+	[[ "$DEBUG" -ge 4 ]] && printf "  (returned $lines lines)" && echo
 	echo
 
 	# closing fd:
@@ -361,4 +371,4 @@ echo
 exit 0
 
 #  vim:tw=110:ts=5:sw=5
-#  $Id: prototype.tls-protocol-checker.bash,v 1.11 2015/01/12 21:56:06 dirkw Exp $ 
+#  $Id: prototype.tls-protocol-checker.bash,v 1.12 2015/01/12 22:15:12 dirkw Exp $ 
