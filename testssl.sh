@@ -265,7 +265,8 @@ wait_kill(){
 # foreign referers are the important thing here!
 breach() {
 	bold " BREACH"; out " =HTTP Compression, experimental    "
-	[ -z "$1" ] && url="/"
+	url="$1"
+	[ -z "$url" ] && url="/"
 	if [ $SNEAKY -eq 0 ] ; then
 		referer="Referer: http://google.com/" # see https://community.qualys.com/message/20360
 		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
@@ -380,9 +381,9 @@ EOF
 		ret=0
 	else
 		magenta " header request stalled"
-		egrep -wq "301|302|^Location" $HEADERFILE
+		egrep -awq "301|302|^Location" $HEADERFILE
 		if [ $? -eq 0 ]; then
-			redir2=`grep '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n'`
+			redir2=`grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n'`
 			outln " (30x to $redir2, tried this URL?)"
 		fi
 		[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2  $HEADERFILE 2>/dev/null
@@ -392,22 +393,21 @@ EOF
 }
 
 includeSubDomains() {
-	if grep -q includeSubDomains "$1"; then
+	if grep -aiq includeSubDomains "$1"; then
 		litegreen ", includeSubDomains"
 	else
 		litecyan ", just this domain"
 	fi
 }
 
-#FIXME: it doesn't follow a 30x. At least a path should be possible to provide
 hsts() {
 	bold " HSTS          "
 	if [ ! -s $HEADERFILE ] ; then
-		http_header || return 3
+		http_header "$1" || return 3
 	fi
-	grep -iw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
+	grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		grep -ciw '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
+		grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
 		AGE_SEC=`sed -e 's/[^0-9]*//g' $TMPFILE | head -1` 
 		AGE_DAYS=`expr $AGE_SEC \/ 86400`
 		if [ $AGE_DAYS -gt $HSTS_MIN ]; then
@@ -428,11 +428,11 @@ hsts() {
 hpkp() {
 	bold " HPKP          "
 	if [ ! -s $HEADERFILE ] ; then
-		http_header || return 3
+		http_header "$1" || return 3
 	fi
-	egrep -iw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
+	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		egrep -ciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
+		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
 		AGE_SEC=`sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE`
 		AGE_DAYS=`expr $AGE_SEC \/ 86400`
 		if [ $AGE_DAYS -ge $HPKP_MIN ]; then
@@ -450,15 +450,14 @@ hpkp() {
 	tmpfile_handle $FUNCNAME.txt
 	return $?
 }
-#FIXME: report-uri
 #FIXME: once checkcert.sh is here: fingerprints!
 
 serverbanner() {
 	bold " Server        "
 	if [ ! -s $HEADERFILE ] ; then
-		http_header || return 3
+		http_header "$1" || return 3
 	fi
-	grep -i '^Server' $HEADERFILE >$TMPFILE
+	grep -ai '^Server' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		#out=`cat $TMPFILE | sed -e 's/^Server: //' -e 's/^server: //' -e 's/^[[:space:]]//'`
 		serverbanner=`cat $TMPFILE | sed -e 's/^Server: //' -e 's/^server: //'`
@@ -472,8 +471,8 @@ serverbanner() {
 	fi
 
 	bold " Application  "
-# examples: php.net, asp.net , www.regonline.com
-	egrep -i '^X-Powered-By|^X-AspNet-Version|^X-Runtime|^X-Version' $HEADERFILE >$TMPFILE
+# examples: dev.testssl.sh, php.net, asp.net , www.regonline.com
+	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Runtime|^X-Version' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		#cat $TMPFILE | sed 's/^.*:/:/'  | sed -e :a -e '$!N;s/\n:/ \n\             +/;ta' -e 'P;D' | sed 's/://g' 
 		sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  '
@@ -494,29 +493,33 @@ serverbanner() {
 	return $?
 }
 
-#dead function as of now
 cookieflags() {	# ARG1: Path, ARG2: path
 	bold " Cookie(s)     "
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	grep -i '^Set-Cookie' $HEADERFILE >$TMPFILE
-# lines!
+	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		out $(wc -l $TMPFILE)
-		out ": "
-		if grep -q -i secure $TMPFILE; then
-			litegreen "Secure, "
+		nr_cookies=`cat $TMPFILE | wc -l`
+		if [ $nr_cookies -gt 1 ] ; then
+			out $(wc -l $TMPFILE)
+			out " issued: "
+			negative_word="NOONE"
 		else
-			out "NOT secure, "
+			negative_word="NOT"
 		fi
-		if grep -q -i httponly $TMPFILE; then
-			litegreen "HttpOnly "
-		else
-			out "NOT HttpOnly"
-		fi
+		nr_secure=`grep -iac secure $TMPFILE`
+		case $nr_secure in
+			0) out "$negative_word secure, " ;;
+			[123456789]) litegreen "$nr_secure/$nr_cookies secure" ; out ", ";;
+		esac
+		nr_httponly=`grep -cai httponly $TMPFILE`
+		case $nr_httponly in
+			0) out "$negative_word HttpOnly" ;;
+			[123456789]) litegreen "$nr_secure/$nr_cookies HttpOnly" ;;
+		esac
 	else
-		out "none issued"
+		out "none issued at \"$url\""
 	fi
 	outln
 
@@ -1973,8 +1976,8 @@ parse_hn_port() {
 	fi
 	SNI="-servername $NODE" 
 
-	#URLP=`echo $1 | sed 's/'"${PROTO}"':\/\/'"${NODE}"'//'`
-	#URLP=`echo $URLP | sed 's/\/\//\//g'`                             # // -> /
+	URL_PATH=`echo $1 | sed 's/.*'"${NODE}"'//'`			# remove protocol and node part
+	URL_PATH=`echo $URL_PATH | sed 's/\/\//\//g'`                  # we rather want // -> /
 
 	# now get NODEIP
 	get_dns_entries
@@ -2202,7 +2205,7 @@ case "$1" in
 			litemagentaln " Wrong usage: You're not targetting a HTTP service"
 			ret=2
 		else
-			breach 
+			breach "$URL_PATH"
 			ret=$?
 		fi
 		ret=`expr $? + $ret`
@@ -2232,12 +2235,12 @@ case "$1" in
 		parse_hn_port "$2"
 		outln; blue "--> Testing HTTP Header response"; outln "\n"
 		if [[ $SERVICE == "HTTP" ]]; then
-			hsts
-			hpkp
+			hsts "$URL_PATH"
+			hpkp "$URL_PATH"
 			ret=$?
-			serverbanner
+			serverbanner "$URL_PATH"
 			ret=`expr $? + $ret`
-			cookieflags
+			cookieflags "$URL_PATH"
 			ret=`expr $? + $ret`
 		else
 			litemagentaln " Wrong usage: You're not targetting a HTTP service"
@@ -2262,16 +2265,17 @@ case "$1" in
 		ccs_injection       ; ret=`expr $? + $ret`
 		renego			; ret=`expr $? + $ret`
 		crime			; ret=`expr $? + $ret`
-		[[ $SERVICE == "HTTP" ]] && breach			; ret=`expr $? + $ret`
+		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=`expr $? + $ret`
 		beast			; ret=`expr $? + $ret`
 		poodle			; ret=`expr $? + $ret`
 
 		if [[ $SERVICE == "HTTP" ]]; then
 			outln; blue "--> Testing HTTP Header response"
 			outln "\n"
-			hsts 			; ret=`expr $? + $ret`
-			hpkp 			; ret=`expr $? + $ret`
-			serverbanner		; ret=`expr $? + $ret`
+			hsts $URL_PATH"			; ret=`expr $? + $ret`
+			hpkp $URL_PATH"			; ret=`expr $? + $ret`
+			serverbanner $URL_PATH"		; ret=`expr $? + $ret`
+			cookieflags  $URL_PATH"		; ret=`expr $? + $ret`
 		fi
 
 		rc4				; ret=`expr $? + $ret`
@@ -2279,6 +2283,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.165 2015/01/14 08:48:02 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.166 2015/01/14 11:23:52 dirkw Exp $ 
 # vim:ts=5:sw=5
 
