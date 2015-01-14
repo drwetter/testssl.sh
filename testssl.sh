@@ -14,7 +14,7 @@ VERSION="2.3dev"				# any char suffixes denotes non=stable
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
-# Author: Dirk Wetter, copyleft: 2007-2014, contributions so far see CREDIT.md
+# Author: Dirk Wetter, copyleft: 2007-2015, contributions so far see CREDIT.md
 #
 # License: GPLv2, see http://www.fsf.org/licensing/licenses/info/GPLv2.html
 # and accompanying license "LICENSE.txt". Redistribution + modification under this
@@ -34,7 +34,7 @@ SWCONTACT="dirk aet testssl dot sh"
 # Q: So what's the difference between https://www.ssllabs.com/ssltest or
 #    https://sslcheck.globalsign.com/?
 # A: As of now ssllabs only check webservers on standard ports, reachable from
-#    the internet. And those are 3rd parties. If those four restrictions are fine
+#    the internet. And the two above are 3rd parties. If those restrictions are fine
 #    with you, they might tell you more than this tool -- as of now.
 
 # Note that for "standard" openssl binaries a lot of features (ciphers, protocols, vulnerabilities)
@@ -44,7 +44,7 @@ SWCONTACT="dirk aet testssl dot sh"
 
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
-CAPATH="${CAPATH:-/etc/ssl/certs/}"	# same as previous. Doing nothing yet. FC has only a CA bundle per default, ==> openssl version -d
+CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet. FC has only a CA bundle per default, ==> openssl version -d
 ECHO="/usr/bin/printf --"			# works under Linux, BSD, MacOS. 
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LOC_CIPH=${SHOW_LOC_CIPH}=0 		# determines whether the client side ciphers are displayed at all (makes no sense normally)
@@ -82,7 +82,7 @@ OSSL_VER_APPENDIX="none"
 NODEIP=""
 IPS=""
 SERVICE=""			# is the server running an HTTP server, SMTP, POP or IMAP?
-HEADER_MAXSLEEP=4		# we wait this long before killing the process to retrieve a service banner / http header
+HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}		# we wait this long before killing the process to retrieve a service banner / http header
 
 NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 RUN_DIR=`dirname $0`
@@ -349,11 +349,11 @@ poodle() {
 	return $ret
 }
 
-#problems not handled: chunked, 302
+#problems not handled: chunked
 http_header() {
-	[ -z "$1" ] && url="/"
+	[ -z "$1" ] && url="/" || url="$1"
 	if [ $SNEAKY -eq 0 ] ; then
-		referer="Referer: " 
+		referer="Referer: http://google.com/"
 		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
 	else
 		referer="Referer: TLS/SSL-Tester from $SWURL"
@@ -363,8 +363,9 @@ http_header() {
 	$OPENSSL  s_client -quiet -connect $NODEIP:$PORT $SNI << EOF
 GET $url HTTP/1.1
 Host: $NODE
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.7,de-de;q=0.3
 $useragent
-Accept-Language: en-US,en
 $referer
 Connection: close
 
@@ -378,8 +379,13 @@ EOF
 		mv $HEADERFILE.2  $HEADERFILE	 # sed'ing in place doesn't work with BSD and Linux simultaneously
 		ret=0
 	else
+		magenta " header request stalled"
+		egrep -wq "301|302|^Location" $HEADERFILE
+		if [ $? -eq 0 ]; then
+			redir2=`grep '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n'`
+			outln " (30x to $redir2, tried this URL?)"
+		fi
 		[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2  $HEADERFILE 2>/dev/null
-		magentaln " Test failed (requsting header stalled)"
 		ret=3
 	fi
 	return $ret
@@ -395,7 +401,7 @@ includeSubDomains() {
 
 #FIXME: it doesn't follow a 30x. At least a path should be possible to provide
 hsts() {
-	bold " HSTS        "
+	bold " HSTS          "
 	if [ ! -s $HEADERFILE ] ; then
 		http_header || return 3
 	fi
@@ -420,7 +426,7 @@ hsts() {
 }
 
 hpkp() {
-	bold " HPKP        "
+	bold " HPKP          "
 	if [ ! -s $HEADERFILE ] ; then
 		http_header || return 3
 	fi
@@ -448,7 +454,7 @@ hpkp() {
 #FIXME: once checkcert.sh is here: fingerprints!
 
 serverbanner() {
-	bold " Server      "
+	bold " Server        "
 	if [ ! -s $HEADERFILE ] ; then
 		http_header || return 3
 	fi
@@ -465,36 +471,54 @@ serverbanner() {
 		outln "(None, interesting!)"
 	fi
 
-	bold " Application"
+	bold " Application  "
 # examples: php.net, asp.net , www.regonline.com
 	egrep -i '^X-Powered-By|^X-AspNet-Version|^X-Runtime|^X-Version' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		#cat $TMPFILE | sed 's/^.*:/:/'  | sed -e :a -e '$!N;s/\n:/ \n\             +/;ta' -e 'P;D' | sed 's/://g' 
-		cat $TMPFILE | sed 's/^/ /' 
+		sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  '
+		outln
+		#i=0
+		#cat $TMPFILE | sed 's/^/ /' | while read line; do
+		#	out "$line" 
+		#	if [[ $i -eq 0 ]] ; then
+		#		out "               " 
+		#		i=1
+		#	fi
+		#done
 	else
-		litegrey " (None, checked \"/\")"
+		litegreyln " (None, checked \"/\")"
 	fi
-	outln
 
 	tmpfile_handle $FUNCNAME.txt
 	return $?
 }
 
 #dead function as of now
-secure_cookie() {	# ARG1: Path
-	if [ -s $HEADERFILE ] ; then
-		http_header || return 3
+cookieflags() {	# ARG1: Path, ARG2: path
+	bold " Cookie(s)     "
+	if [ ! -s $HEADERFILE ] ; then
+		http_header "$1" || return 3
 	fi
 	grep -i '^Set-Cookie' $HEADERFILE >$TMPFILE
+# lines!
 	if [ $? -eq 0 ]; then
-		outln "Cookie issued, status: "
+		out $(wc -l $TMPFILE)
+		out ": "
 		if grep -q -i secure $TMPFILE; then
-			litegreenln "Secure Flag"
-			echo $TMPFILE
+			litegreen "Secure, "
 		else
-			outln "no secure flag"
+			out "NOT secure, "
 		fi
+		if grep -q -i httponly $TMPFILE; then
+			litegreen "HttpOnly "
+		else
+			out "NOT HttpOnly"
+		fi
+	else
+		out "none issued"
 	fi
+	outln
 
 	tmpfile_handle $FUNCNAME.txt
 	return 0
@@ -2213,6 +2237,8 @@ case "$1" in
 			ret=$?
 			serverbanner
 			ret=`expr $? + $ret`
+			cookieflags
+			ret=`expr $? + $ret`
 		else
 			litemagentaln " Wrong usage: You're not targetting a HTTP service"
 			ret=2
@@ -2253,6 +2279,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.164 2015/01/08 13:16:21 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.165 2015/01/14 08:48:02 dirkw Exp $ 
 # vim:ts=5:sw=5
 
