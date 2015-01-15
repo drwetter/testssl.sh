@@ -300,7 +300,7 @@ EOF
 		# Catch: any URL can be vulnerable. I am testing now only the root. URL!
 		outln "(only \"$url\" tested)"
 	else
-		magentaln "Test failed (requsting header stalled)"
+		litemagentaln "failed (HTTP header request stalled)"
 		ret=3
 	fi
 	return $ret
@@ -380,7 +380,7 @@ EOF
 		mv $HEADERFILE.2  $HEADERFILE	 # sed'ing in place doesn't work with BSD and Linux simultaneously
 		ret=0
 	else
-		magenta " header request stalled"
+		litemagentaln "failed (HTTP header request stalled)"
 		egrep -awq "301|302|^Location" $HEADERFILE
 		if [ $? -eq 0 ]; then
 			redir2=`grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n'`
@@ -459,15 +459,14 @@ serverbanner() {
 	fi
 	grep -ai '^Server' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		#out=`cat $TMPFILE | sed -e 's/^Server: //' -e 's/^server: //' -e 's/^[[:space:]]//'`
 		serverbanner=`cat $TMPFILE | sed -e 's/^Server: //' -e 's/^server: //'`
-#		if [ x"$out" == "x\n" -o x"$out" == "x\n\r" -o x"$out" == "x" ]; then
-#			outln "(line exists but empty string)"
-#		else
+		if [ x"$serverbanner" == "x\n" -o x"$serverbanner" == "x\n\r" -o x"$serverbanner" == "x" ]; then
+			outln "banner exists but empty string"
+		else
 			outln "$serverbanner"
-#		fi
+		fi
 	else
-		outln "(None, interesting!)"
+		outln "no HTTP header, interesting!"
 	fi
 
 	bold " Application  "
@@ -486,7 +485,7 @@ serverbanner() {
 		#	fi
 		#done
 	else
-		litegreyln " (None, checked \"/\")"
+		greyln " no banner at \"/\""
 	fi
 
 	tmpfile_handle $FUNCNAME.txt
@@ -2272,10 +2271,10 @@ case "$1" in
 		if [[ $SERVICE == "HTTP" ]]; then
 			outln; blue "--> Testing HTTP Header response"
 			outln "\n"
-			hsts $URL_PATH"			; ret=`expr $? + $ret`
-			hpkp $URL_PATH"			; ret=`expr $? + $ret`
-			serverbanner $URL_PATH"		; ret=`expr $? + $ret`
-			cookieflags  $URL_PATH"		; ret=`expr $? + $ret`
+			hsts "$URL_PATH"			; ret=`expr $? + $ret`
+			hpkp "$URL_PATH"			; ret=`expr $? + $ret`
+			serverbanner "$URL_PATH"		; ret=`expr $? + $ret`
+			cookieflags  "$URL_PATH"		; ret=`expr $? + $ret`
 		fi
 
 		rc4				; ret=`expr $? + $ret`
@@ -2283,6 +2282,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.166 2015/01/14 11:23:52 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.167 2015/01/15 19:29:45 dirkw Exp $ 
 # vim:ts=5:sw=5
 
