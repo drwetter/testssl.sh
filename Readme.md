@@ -13,6 +13,7 @@ New features in this release are / will be
 * more HTTP header infos (partly done, needs cleanup and redir check), 
 * protocol check via bash sockets (not integrated yet, see directory utils)
 * maybe cipher check via bash sockets (not done yet)
+* debug file handling (ongoing)
 * BEAST
 
 Contributions, feedback, also bug reports are welcome.
