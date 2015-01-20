@@ -86,10 +86,11 @@ HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}		# we wait this long before killing the pr
 
 NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 RUN_DIR=`dirname $0`
+BLA=""
 
 
 # make sure that temporary files are cleaned up after use
-trap cleanup QUIT EXIT
+trap "cleanup" QUIT EXIT
 
 # The various hexdump commands we need to replace xxd (BSD compatability))
 HEXDUMPVIEW=(hexdump -C) 				# This is used in verbose mode to see what's going on
@@ -1231,13 +1232,13 @@ pfs() {
 
 
 rc4() {
+	shopt -s lastpipe
 	outln
 	blue "--> Checking RC4 Ciphers" ; outln
 	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
 	[ $SHOW_LOC_CIPH = "1" ] && echo "local ciphers available for testing RC4:" && echo `cat $TMPFILE`
 	$OPENSSL s_client -cipher `$OPENSSL ciphers RC4` $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
-	RC4=$?
-	if [ $RC4 -eq 0 ]; then
+	if [ $? -eq 0 ]; then
 		litered "\nRC4 seems generally available. Now testing specific ciphers..."; outln "\n"
 		bad=1
 		neat_header
@@ -1271,6 +1272,7 @@ rc4() {
 		bad=0
 	fi
 
+	shopt -u lastpipe
 	tmpfile_handle $FUNCNAME.txt
 	return $bad
 }
@@ -1354,7 +1356,7 @@ ok_ids(){
 	echo
 	tput bold; tput setaf 2; echo "ok -- something resetted our ccs packets"; tput sgr0
 	echo
-	exit 0
+	return 0
 }
 
 
@@ -1683,41 +1685,61 @@ crime() {
 	return $ret
 }
 
+detected_cbc_cipher=""
+
 # Browser Exploit Against SSL/TLS
 beast(){
-	local cbc_ciphers
+	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
+	local hexcode dash cbc_cipher sslvers kx auth enc mac export
 	local detected_proto
-	local detected_cbc
 	local higher_proto_supported=""
+	local -i ret=0
+	local spaces="                                           "
 	#in a nutshell: don't use CBC Ciphers in SSLv3 TLSv1.0
 	#
-	bold " BEAST"; out " (CVE-2011-3389)     "
+	bold " BEAST"; out " (CVE-2011-3389)                     "
 
-	# 1) support for TLS 1.1+1.2?
+	# 2) test handfull of common CBC ciphers
+	#set -x
+	for proto in ssl3 tls1; do
+		$OPENSSL s_client -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
+		if [ $? -ne 0 ]; then
+			continue	# protocol no supported, so we do not need to check each cipher with that protocol
+		fi
+		$OPENSSL ciphers -V 'ALL:eNULL' | grep CBC | while read hexcode dash cbc_cipher sslvers kx auth enc mac export ; do
+			$OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
+			#normalize_ciphercode $hexcode
+			#neat_list $HEXC $ciph $kx $enc | strings | grep -wai "$arg"
+			if [ $? -eq 0 ]; then
+				detected_cbc_cipher="$detected_cbc_cipher ""$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
+			fi
+		done
+		#detected_cbc_cipher=`echo $detected_cbc_cipher | sed 's/ //g'`
+		if [ -z "$detected_cbc_cipher" ]; then
+			litegreenln "no CBC ciphers for $proto (OK)"
+		else
+			detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e 's/ /\n      '"${spaces}"'/9' -e 's/ /\n      '"${spaces}"'/6' -e 's/ /\n      '"${spaces}"'/3')
+			[ $ret -eq 1 ] && out "$spaces"
+			out "$(echo $proto | tr '[a-z]' '[A-Z]'):"; literedln "$detected_cbc_cipher"
+			ret=1
+			detected_cbc_cipher=""
+		fi
+	done
+
+	# 2) support for TLS 1.1+1.2?
 	for proto in tls1_1 tls1_2; do
 		$OPENSSL s_client -state -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null >$TMPFILE </dev/null
 		if [ $? -eq 0 ]; then
 			higher_proto_supported="$higher_proto_supported ""$(grep -w "Protocol" $TMPFILE | sed -e 's/^.*Protocol .*://' -e 's/ //g')"
 		fi
 	done
-	[ ! -z "$higher_proto_supported" ] && outln "supports also higher protocols: $higher_proto_supported"
+	[ $ret -eq 1 ] && but="but" || but=""
+	[ ! -z "$higher_proto_supported" ] && outln "$spaces$but also supports higher protocols: $higher_proto_supported (possible mitigation)"
 
-	# 2) test handfull of common CBC ciphers
-	cbc_ciphers=`$OPENSSL ciphers 'ALL:eNULL' | grep CBC`
-	for proto in ssl3 tls1; do
-		$OPENSSL s_client -cipher "$cbc_ciphers" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
-		ret=$?
-		if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ]; then
-			continue       # no successful connect AND not verbose displaying each cipher
-		else
-			detected_cbc_cipher=`grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g'`
-			echo "$proto: $detected_cbc_cipher"
-		fi
-	done
+#	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
 
-	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
-
-	return 0
+	shopt -u lastpipe				# othwise for some reason it segfaults
+	return $ret
 }
 
 youknowwho() {
@@ -1812,6 +1834,7 @@ starttls() {
 #				ccs_injection  ; ret=`expr $? + $ret`
 				renego		; ret=`expr $? + $ret`
 				crime		; ret=`expr $? + $ret`
+				poodle		; ret=`expr $? + $ret`
 				beast		; ret=`expr $? + $ret`
 
 				outln
@@ -1859,6 +1882,7 @@ $PRG <options> URI
     <-C|--compression|--crime>            tests only for CRIME vulnerability
     <-T|--breach>                         tests only for BREACH vulnerability
     <-0|--poodle>                         tests only for POODLE vulnerability
+    <-A|--beast>                          tests only for BEAST vulnerability
     <-s|--pfs|--fs|--nsa>                 checks (perfect) forward secrecy settings
     <-4|--rc4|--appelbaum>                which RC4 ciphers are being offered?
     <-H|--header|--headers>               check for HSTS, HPKP and server/application banner string
@@ -2243,7 +2267,7 @@ case "$1" in
 		parse_hn_port "$2"
 		pfs
 		exit $? ;;
-	-q|--beast)
+	-A|--beast)
 		maketempf 
 		parse_hn_port "$2"
 		beast
@@ -2284,8 +2308,8 @@ case "$1" in
 		renego			; ret=`expr $? + $ret`
 		crime			; ret=`expr $? + $ret`
 		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=`expr $? + $ret`
-		beast			; ret=`expr $? + $ret`
 		poodle			; ret=`expr $? + $ret`
+		beast			; ret=`expr $? + $ret`
 
 		if [[ $SERVICE == "HTTP" ]]; then
 			outln; blue "--> Testing HTTP Header response"
@@ -2301,6 +2325,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.167 2015/01/15 19:29:45 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.169 2015/01/20 20:59:20 dirkw Exp $ 
 # vim:ts=5:sw=5
 
