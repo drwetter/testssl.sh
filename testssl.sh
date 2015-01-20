@@ -913,7 +913,7 @@ server_preference() {
 
 		out " Has server cipher order?     "
 		if [[ "$cipher1" != "$cipher2" ]]; then
-			red "nope (NOT ok)"
+			litered "nope (NOT ok)"
 			remark4default_cipher=" (limited sense as client will pick)"
 		else
 			green "yes (OK)"
@@ -1683,11 +1683,40 @@ crime() {
 	return $ret
 }
 
+# Browser Exploit Against SSL/TLS
 beast(){
-	#FIXME: to do
-#in a nutshell: don't use CBC Ciphers in TLSv1.0
-# need to provide a list with bad ciphers. Not sure though whether
-# it can be fixed in the OpenSSL/NSS/whatsover stack
+	local cbc_ciphers
+	local detected_proto
+	local detected_cbc
+	local higher_proto_supported=""
+	#in a nutshell: don't use CBC Ciphers in SSLv3 TLSv1.0
+	#
+	bold " BEAST"; out " (CVE-2011-3389)     "
+
+	# 1) support for TLS 1.1+1.2?
+	for proto in tls1_1 tls1_2; do
+		$OPENSSL s_client -state -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null >$TMPFILE </dev/null
+		if [ $? -eq 0 ]; then
+			higher_proto_supported="$higher_proto_supported ""$(grep -w "Protocol" $TMPFILE | sed -e 's/^.*Protocol .*://' -e 's/ //g')"
+		fi
+	done
+	[ ! -z "$higher_proto_supported" ] && outln "supports also higher protocols: $higher_proto_supported"
+
+	# 2) test handfull of common CBC ciphers
+	cbc_ciphers=`$OPENSSL ciphers 'ALL:eNULL' | grep CBC`
+	for proto in ssl3 tls1; do
+		$OPENSSL s_client -cipher "$cbc_ciphers" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
+		ret=$?
+		if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ]; then
+			continue       # no successful connect AND not verbose displaying each cipher
+		else
+			detected_cbc_cipher=`grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g'`
+			echo "$proto: $detected_cbc_cipher"
+		fi
+	done
+
+	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
+
 	return 0
 }
 
@@ -1910,6 +1939,7 @@ initialize_engine(){
 		if [ ! -z "$OPENSSL_CONF" ]; then
 			litemagenta "For now I am providing the config file in to have GOST support"; outln
 		else
+			[ -z "$TEMPDIR" ] && maketempf
 			OPENSSL_CONF=$TEMPDIR/gost.conf || exit 6
 			# see https://www.mail-archive.com/openssl-users@openssl.org/msg65395.html
 			cat >$OPENSSL_CONF << EOF
@@ -2118,26 +2148,22 @@ case "$1" in
 		maketempf
 		parse_hn_port "$3"
 		test_just_one $2
-		ret=$?
-		exit $ret ;;
+		exit $? ;;
 	-t|--starttls)			
 		maketempf
 		parse_hn_port "$3" "$2" # here comes protocol to signal starttls and  hostname:port 
 		starttls "$2"		# protocol
-		ret=$?
-		exit $ret ;;
+		exit $? ;;
 	-e|--each-cipher)
 		maketempf
 		parse_hn_port "$2"
 		allciphers 
-		ret=$?
-		exit $ret ;;
+		exit $? ;;
 	-E|-ee|--cipher-per-proto)  
 		maketempf
 		parse_hn_port "$2"
 		cipher_per_proto
-		ret=$?
-		exit $ret ;;
+		exit $? ;;
 	-p|--protocols)
 		maketempf
 		parse_hn_port "$2"
@@ -2148,54 +2174,46 @@ case "$1" in
 		maketempf
 		parse_hn_port "$2"
 		run_std_cipherlists
-		ret=$?
-		exit $ret ;;
+		exit $? ;;
      -S|--server_defaults)   
 		maketempf
 		parse_hn_port "$2"
 		server_defaults
-		ret=$?
-		exit $ret ;;
+		exit $? ;;
      -P|--server_preference)   
 		maketempf
 		parse_hn_port "$2"
 		server_preference
-		ret=$?
-		exit $ret ;;
+		exit $? ;;
 	-y|--spdy|--google)
 		maketempf
 		parse_hn_port "$2"
 		spdy
-		ret=$?
 		exit $?  ;;
 	-B|--heartbleet)
 		maketempf
 		parse_hn_port "$2"
 		outln; blue "--> Testing for heartbleed vulnerability"; outln "\n"
 		heartbleed
-		ret=$?
 		exit $?  ;;
 	-I|--ccs|--ccs_injection)
 		maketempf
 		parse_hn_port "$2"
 		outln; blue "--> Testing for CCS injection vulnerability"; outln "\n"
 		ccs_injection
-		ret=$?
 		exit $?  ;;
 	-R|--renegotiation)
 		maketempf
 		parse_hn_port "$2"
 		outln; blue "--> Testing for Renegotiation vulnerability"; outln "\n"
 		renego
-		ret=$?
 		exit $?  ;;
 	-C|--compression|--crime)
 		maketempf
 		parse_hn_port "$2"
 		outln; blue "--> Testing for CRIME vulnerability"; outln "\n"
 		crime
-		ret=$?
-		exit $?  ;;
+		exit $? ;;
 	-T|--breach)
 		maketempf
 		parse_hn_port "$2"
@@ -2214,21 +2232,22 @@ case "$1" in
 		parse_hn_port "$2"
 		outln; blue "--> Testing for POODLE (Padding Oracle On Downgraded Legacy Encryption) vulnerability"; outln "\n"
 		poodle
-		ret=$?
-		ret=`expr $? + $ret`
-		exit $ret ;;
+		exit $? ;;
 	-4|--rc4|--appelbaum)
 		maketempf
 		parse_hn_port "$2"
 		rc4
-		ret=$?
-		exit $?  ;;
+		exit $? ;;
 	-s|--pfs|--fs|--nsa)
 		maketempf
 		parse_hn_port "$2"
 		pfs
-		ret=$?
-		exit $ret ;;
+		exit $? ;;
+	-q|--beast)
+		maketempf 
+		parse_hn_port "$2"
+		beast
+		exit $? ;;
 	-H|--header|--headers)  
 		maketempf
 		parse_hn_port "$2"
