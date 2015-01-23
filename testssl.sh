@@ -495,9 +495,8 @@ applicationbanner() {
 	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Runtime|^X-Version' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		#cat $TMPFILE | sed 's/^.*:/:/'  | sed -e :a -e '$!N;s/\n:/ \n\             +/;ta' -e 'P;D' | sed 's/://g' 
-		sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ' | sed "s/\([0-9]\)/$red\1$off/g"
+		#sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ' | sed "s/\([0-9]\)/$red\1$off/g"
 		emphasize_numbers_in_headers "$(sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ')"
-		outln 
 		#i=0
 		#cat $TMPFILE | sed 's/^/ /' | while read line; do
 		#	out "$line" 
@@ -1952,7 +1951,7 @@ EOF
 `
 bold "$bb"
 outln "\n"
-outln " Using \"$osslver\" [$nr_ciphers ciphers] on
+outln " Using \"$osslver\" [~$nr_ciphers ciphers] on
  $hn:$osslpath
  (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 
@@ -2018,6 +2017,7 @@ cleanup () {
 	outln
 }
 
+# for now only GOST engine
 initialize_engine(){
 	if uname -s | grep -q BSD || ! $OPENSSL engine gost -vvvv -t -c 2>&1 >/dev/null; then
 		litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln "\n"
@@ -2391,6 +2391,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.171 2015/01/23 11:01:31 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.172 2015/01/23 11:17:26 dirkw Exp $ 
 # vim:ts=5:sw=5
 
