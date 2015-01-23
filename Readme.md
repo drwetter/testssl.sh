@@ -14,7 +14,7 @@ New features in this release are / will be
 * protocol check via bash sockets (not integrated yet, see directory utils)
 * maybe cipher check via bash sockets (not done yet)
 * debug file handling (ongoing)
-* BEAST
+* BEAST (works, need some output polish)
 
 Contributions, feedback, also bug reports are welcome.
 
