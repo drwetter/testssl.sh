@@ -531,12 +531,12 @@ cookieflags() {	# ARG1: Path, ARG2: path
 		nr_secure=`grep -iac secure $TMPFILE`
 		case $nr_secure in
 			0) out "$negative_word secure, " ;;
-			[123456789]) litegreen "$nr_secure/$nr_cookies secure" ; out ", ";;
+			[123456789]) litegreen "$nr_secure/$nr_cookies"; out "secure, ";;
 		esac
 		nr_httponly=`grep -cai httponly $TMPFILE`
 		case $nr_httponly in
 			0) out "$negative_word HttpOnly" ;;
-			[123456789]) litegreen "$nr_secure/$nr_cookies HttpOnly" ;;
+			[123456789]) litegreen "$nr_httponly/$nr_cookies"; out "HttpOnly" ;;
 		esac
 	else
 		out "none issued at \"$url\""
@@ -2391,6 +2391,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.172 2015/01/23 11:17:26 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.173 2015/01/23 14:09:34 dirkw Exp $ 
 # vim:ts=5:sw=5
 
