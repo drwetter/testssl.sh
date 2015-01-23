@@ -263,7 +263,7 @@ wait_kill(){
 # is agnostic to the version of TLS/SSL, more: http://www.breachattack.com/
 # foreign referers are the important thing here!
 breach() {
-	bold " BREACH"; out " =HTTP Compression, experimental    "
+	bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
 	url="$1"
 	[ -z "$url" ] && url="/"
 	if [ $SNEAKY -eq 0 ] ; then
@@ -451,6 +451,20 @@ hpkp() {
 }
 #FIXME: once checkcert.sh is here: fingerprints!
 
+# arg1: number
+emphasize_numbers_in_headers(){
+	local number=""
+	local letter=""
+
+# that works with #red=$(tput setaf 1) / off=$(tput sgr0)
+# see http://www.grymoire.com/Unix/Sed.html#uh-3
+	#outln "$1" | sed "s/[0-9]*/$red&$off/g"
+	          #  sed "s/\([0-9]\)/$red\1$off/g"
+	outln "$1"
+
+}
+
+
 serverbanner() {
 	bold " Server        "
 	if [ ! -s $HEADERFILE ] ; then
@@ -462,7 +476,7 @@ serverbanner() {
 		if [ x"$serverbanner" == "x\n" -o x"$serverbanner" == "x\n\r" -o x"$serverbanner" == "x" ]; then
 			outln "banner exists but empty string"
 		else
-			outln "$serverbanner"
+			emphasize_numbers_in_headers "$serverbanner"
 		fi
 	else
 		outln "no HTTP header, interesting!"
@@ -481,8 +495,9 @@ applicationbanner() {
 	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Runtime|^X-Version' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		#cat $TMPFILE | sed 's/^.*:/:/'  | sed -e :a -e '$!N;s/\n:/ \n\             +/;ta' -e 'P;D' | sed 's/://g' 
-		sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  '
-		outln
+		sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ' | sed "s/\([0-9]\)/$red\1$off/g"
+		emphasize_numbers_in_headers "$(sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ')"
+		outln 
 		#i=0
 		#cat $TMPFILE | sed 's/^/ /' | while read line; do
 		#	out "$line" 
@@ -1200,7 +1215,8 @@ pfs() {
 	if [ $ret -ne 0 ] || [ `grep -c "BEGIN CERTIFICATE" $TMPFILE` -eq 0 ]; then
 		brown "No PFS available"
 	else
-		litegreen "PFS seems generally available. Now testing specific ciphers ..."; outln "\n"
+		litegreenln "PFS seems generally available. Now testing specific ciphers ..."; 
+		outln "(it depends on the browser/client whether one of them will be used)\n"
 		noone=0
 		neat_header
 		$OPENSSL ciphers -V "$PFSOK" | while read hexcode n ciph sslvers kx auth enc mac; do
@@ -1224,21 +1240,20 @@ pfs() {
 		done
 		outln
 		if [ "$noone" -eq 0 ] ; then
-			 out "Please note: detected PFS ciphers don't necessarily mean any client/browser will use them"
 			 ret=0
 		else
 			 magenta "no PFS ciphers found"
 			 ret=1
 		fi
-		outln
 	fi
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
+#FIXME: setopt or something different
 }
 
 
 rc4() {
-	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
+#	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
 	outln
 	blue "--> Checking RC4 Ciphers" ; outln
 	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
@@ -1246,7 +1261,7 @@ rc4() {
 	$OPENSSL s_client -cipher `$OPENSSL ciphers RC4` $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
 		literedln "\nRC4 is broken. It seems generally available. Now testing specific ciphers..."; 
-		outln "(for legacy support (e.g. IE6) rather consider x13 or x0a)\n"
+		outln "(for legacy support e.g. IE6 rather consider x13 or x0a)\n"
 		bad=1
 		neat_header
 		cat $TMPFILE | while read hexcode n ciph sslvers kx auth enc mac; do
@@ -1278,7 +1293,7 @@ rc4() {
 		bad=0
 	fi
 
-	shopt -u lastpipe				# othwise for some reason it segfaults
+#	shopt -u lastpipe				# othwise for some reason it segfaults
 # FIXME: still segfaults: see https://www.mail-archive.com/bug-bash@gnu.org/msg14428.html | 
 # maybe use @PIPESTATUS as a workaround
 	tmpfile_handle $FUNCNAME.txt
@@ -1469,7 +1484,7 @@ ccs_injection(){
 }
 
 heartbleed(){
-	bold " Heartbleed\c"; out " (CVE-2014-0160), experimental  "
+	bold " Heartbleed\c"; out " (CVE-2014-0160)                "
 	# mainly adapted from https://gist.github.com/takeshixx/10107280
 
 	# determine TLS versions available:
@@ -1820,6 +1835,7 @@ starttls() {
 	protocol=`echo "$1" | sed 's/s$//'`	 # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s) 
 	case "$1" in
 		ftp|smtp|pop3|imap|xmpp|telnet)
+			outln " Trying STARTTLS via $(echo $protocol| tr '[a-z]' '[A-Z]')\n"
 			$OPENSSL s_client -connect $NODEIP:$PORT $SNI -starttls $protocol </dev/null >$TMPFILE 2>&1
 			ret=$?
 			if [ $ret -ne 0 ]; then
@@ -1845,12 +1861,12 @@ starttls() {
 				poodle		; ret=`expr $? + $ret`
 				beast		; ret=`expr $? + $ret`
 
+				rc4			; ret=`expr $? + $ret`
+				pfs			; ret=`expr $? + $ret`
+
 				outln
 				#cipher_per_proto   ; ret=`expr $? + $ret`
 				allciphers		; ret=`expr $? + $ret`
-
-				rc4			; ret=`expr $? + $ret`
-				pfs			; ret=`expr $? + $ret`
 			fi
 			;;
 		*) litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet allowed" >&2
@@ -2101,7 +2117,7 @@ parse_hn_port() {
 
 	datebanner "Testing"
 
-	runs_HTTP
+	[[ -z "$2" ]] && runs_HTTP	# for starttl all is clear
 
 	#[ "$PORT" != 443 ] && bold "A non standard port or testing no web servers might show lame reponses (then just wait)\n"
 	initialize_engine
@@ -2350,16 +2366,6 @@ case "$1" in
 		server_preference	; ret=`expr $? + $ret`
 		server_defaults 	; ret=`expr $? + $ret`
 
-		outln; blue "--> Testing specific vulnerabilities" 
-		outln "\n"
-		heartbleed          ; ret=`expr $? + $ret`
-		ccs_injection       ; ret=`expr $? + $ret`
-		renego			; ret=`expr $? + $ret`
-		crime			; ret=`expr $? + $ret`
-		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=`expr $? + $ret`
-		poodle			; ret=`expr $? + $ret`
-		beast			; ret=`expr $? + $ret`
-
 		if [[ $SERVICE == "HTTP" ]]; then
 			outln; blue "--> Testing HTTP Header response"
 			outln "\n"
@@ -2370,11 +2376,21 @@ case "$1" in
 			cookieflags  "$URL_PATH"		; ret=`expr $? + $ret`
 		fi
 
+		outln; blue "--> Testing specific vulnerabilities" 
+		outln "\n"
+		heartbleed          ; ret=`expr $? + $ret`
+		ccs_injection       ; ret=`expr $? + $ret`
+		renego			; ret=`expr $? + $ret`
+		crime			; ret=`expr $? + $ret`
+		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=`expr $? + $ret`
+		poodle			; ret=`expr $? + $ret`
+		beast			; ret=`expr $? + $ret`
+
 		rc4				; ret=`expr $? + $ret`
 		pfs				; ret=`expr $? + $ret`
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.170 2015/01/21 11:52:59 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.171 2015/01/23 11:01:31 dirkw Exp $ 
 # vim:ts=5:sw=5
 
