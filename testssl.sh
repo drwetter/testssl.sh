@@ -2019,10 +2019,12 @@ cleanup () {
 
 # for now only GOST engine
 initialize_engine(){
-	if uname -s | grep -q BSD || ! $OPENSSL engine gost -vvvv -t -c 2>&1 >/dev/null; then
+	if uname -s | grep -q BSD || ! $OPENSSL engine gost -vvvv -t -c >/dev/null 2>&1; then
 		litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln "\n"
 		return 1
-	else 
+	elif echo $osslver | grep -q LibreSSL; then
+		return 1
+	else
 		if [ ! -z "$OPENSSL_CONF" ]; then
 			litemagenta "For now I am providing the config file in to have GOST support"; outln
 		else
