@@ -426,7 +426,7 @@ hsts() {
 		fi
 		includeSubDomains "$TMPFILE"
 	else
-		out "no"
+		out "--"
 	fi
 	outln
 
@@ -452,7 +452,7 @@ hpkp() {
 		includeSubDomains "$TMPFILE"
 		out ", fingerprints not checked"
 	else
-		out "no"
+		out "--"
 	fi
 	outln
 
@@ -509,7 +509,7 @@ applicationbanner() {
 		#	fi
 		#done
 	else
-		pr_greyln " no banner at \"/\""
+		outln " (no banner at \"$url\")"
 	fi
 
 	tmpfile_handle $FUNCNAME.txt
@@ -524,9 +524,8 @@ cookieflags() {	# ARG1: Path, ARG2: path
 	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		nr_cookies=`cat $TMPFILE | wc -l`
+		out "$nr_cookies issued: "
 		if [ $nr_cookies -gt 1 ] ; then
-			out $(wc -l $TMPFILE)
-			out " issued: "
 			negative_word="NOONE"
 		else
 			negative_word="NOT"
@@ -542,7 +541,7 @@ cookieflags() {	# ARG1: Path, ARG2: path
 			[123456789]) pr_litegreen "$nr_httponly/$nr_cookies"; out "HttpOnly" ;;
 		esac
 	else
-		out "none issued at \"$url\""
+		out "(none issued at \"$url\")"
 	fi
 	outln
 
@@ -1216,7 +1215,7 @@ pfs() {
 	if [ $ret -ne 0 ] || [ `grep -c "BEGIN CERTIFICATE" $TMPFILE` -eq 0 ]; then
 		pr_brown "No PFS available"
 	else
-		pr_litegreenln "PFS is generally offered. Now testing specific ciphers ..."; 
+		pr_litegreenln "In general PFS is offered. Now testing specific ciphers ..."; 
 		outln "(it depends on the browser/client whether one of them will be used)\n"
 		noone=0
 		neat_header
@@ -1910,8 +1909,9 @@ beast(){
 			higher_proto_supported="$higher_proto_supported ""$(grep -w "Protocol" $TMPFILE | sed -e 's/^.*Protocol .*://' -e 's/ //g')"
 		fi
 	done
-	[ $ret -eq 1 ] && but="but" || but=""
-	[ ! -z "$higher_proto_supported" ] && outln "$spaces$but also supports higher protocols: $higher_proto_supported (possible mitigation)"
+	if [ $ret -eq 1 ] ; then
+		[ ! -z "$higher_proto_supported" ] && outln "$spaces but also supports higher protocols (possible mitigation):$higher_proto_supported"
+	fi
 
 #	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
 
@@ -2548,6 +2548,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.175 2015/01/29 09:46:15 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.176 2015/01/29 22:20:57 dirkw Exp $ 
 # vim:ts=5:sw=5
 
