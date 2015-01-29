@@ -850,7 +850,7 @@ runprotocols() {
 	pr_blue "--> Testing Protocols"; outln "\n"
 	# e.g. ubuntu's 12.04 openssl binary + soon others don't want sslv2 anymore: bugs.launchpad.net/ubuntu/+source/openssl/+bug/955675
 
-	if [ $SSL_NATIVE -eq 1 ] || [ "$SERVICE" != "HTTP" ]; then
+	if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
 		testprotohelper "-ssl2" " SSLv2     "  
 		case $? in
 			0) 	ok 1 1 ;;	# pr_red 
@@ -2548,6 +2548,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.176 2015/01/29 22:20:57 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.177 2015/01/29 22:24:48 dirkw Exp $ 
 # vim:ts=5:sw=5
 
