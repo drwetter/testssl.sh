@@ -12,6 +12,9 @@
  - Fix for HSTS + subdomains
  - LibreSSL patch
 
+* @nvsofts (NV)
+ - LibreSSL patch for GOST
+
 * Peter Mosmans
  - cleanups
 
@@ -21,14 +24,13 @@
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena
 
-
 ##### Last but not least:
 
 * OpenSSL team
   - for providing openssl ;-)
 
 * Peter Mosmans
-  - openssl binary support
+  - openssl binary support with the "missing" features
 
 
 
