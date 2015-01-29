@@ -44,8 +44,6 @@ SWCONTACT="dirk aet testssl dot sh"
 
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
-CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet. FC has only a CA bundle per default, ==> openssl version -d
-ECHO="/usr/bin/printf --"			# works under Linux, BSD, MacOS. 
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-0} 		# determines whether the client side ciphers are displayed at all (makes no sense normally)
 VERBERR=${VERBERR:-1}				# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
@@ -53,11 +51,15 @@ VERBERR=${VERBERR:-1}				# 0 means to be more verbose (some like the errors to b
 LOCERR=${LOCERR:-0}					# displays the local error 
 SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested
 SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while checking the http header is just usual
+HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}	# we wait this long before killing the process to retrieve a service banner / http header
+SSL_NATIVE=${SSL_NATIVE:-0}			# we do per default bash sockets!
 #FIXME: consequently we should mute the initial openssl s_client -connect as they cause a 400 (nginx, apache)
 
 #FIXME: still to be filled with (more) sense:
 DEBUG=${DEBUG:-0}		# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1), 3: slight hexdumps
 					# and other info, 4: the whole nine yards of output
+
+CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet. FC has only a CA bundle per default, ==> openssl version -d
 HSTS_MIN=180			# >180 days is ok for HSTS
 HPKP_MIN=30			# >=30 days should be ok for HPKP_MIN, practical hints?
 MAX_WAITSOCK=10		# waiting at max 10 seconds for socket reply
@@ -66,6 +68,9 @@ DAYS2WARN1=60			# days to warn before cert expires, threshold 1
 DAYS2WARN2=30			# days to warn before cert expires, threshold 2
 
 # more global vars, here just declared
+ECHO="/usr/bin/printf --"			# works under Linux, BSD, MacOS. 
+NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
+RUN_DIR=`dirname $0`
 TEMPDIR=""
 TLS_PROTO_OFFERED=""
 SOCKREPLY=""
@@ -80,10 +85,7 @@ OSSL_VER_APPENDIX="none"
 NODEIP=""
 IPS=""
 SERVICE=""			# is the server running an HTTP server, SMTP, POP or IMAP?
-HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}		# we wait this long before killing the process to retrieve a service banner / http header
 
-NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
-RUN_DIR=`dirname $0`
 BLA=""
 
 
@@ -188,7 +190,7 @@ pr_brown() {
 	pr_off
 }
 
-pr_yellowln() { pr_yellowln "$1"; outln; }
+pr_yellowln() { pr_yellow "$1"; outln; }
 pr_yellow() { 
 	[[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1 " || out "$1 "
 	pr_off
@@ -238,7 +240,7 @@ ok(){
 		case $1 in
 			7) pr_brownln "not offered" ;;   	# 7 0
 			6) pr_literedln "offered (NOT ok)" ;; # 6 0
-			5) pr_litered "supported but couldn't detect a cipher"; outln "(check manually)"  ;;		# 5 5
+			5) pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"  ;;		# 5 5
 			4) pr_litegreenln "offered (OK)" ;;  	# 4 0
 			3) pr_brownln "offered" ;;  		# 3 0
 			2) outln "offered" ;;  			# 2 0
@@ -849,13 +851,17 @@ runprotocols() {
 	pr_blue "--> Testing Protocols"; outln "\n"
 	# e.g. ubuntu's 12.04 openssl binary + soon others don't want sslv2 anymore: bugs.launchpad.net/ubuntu/+source/openssl/+bug/955675
 
-	testprotohelper "-ssl2" " SSLv2     "  
-	case $? in
-		0) 	ok 1 1 ;;	# pr_red 
-		5) 	ok 5 5 ;;	# protocol ok, but no cipher
-		1) 	ok 0 1 ;; # pr_green "not offered (ok)"
-		7) ;;		# no local support
-	esac
+	if [ $SSL_NATIVE -eq 1 ] || [ "$SERVICE" != "HTTP" ]; then
+		testprotohelper "-ssl2" " SSLv2     "  
+		case $? in
+			0) 	ok 1 1 ;;	# pr_red 
+			5) 	ok 5 5 ;;	# protocol ok, but no cipher
+			1) 	ok 0 1 ;; # pr_green "not offered (ok)"
+			7) ;;		# no local support
+		esac
+	else
+		sslv2_sockets
+	fi
 	
 	testprotohelper "-ssl3" " SSLv3     " 
 	case $? in
@@ -963,7 +969,7 @@ server_preference() {
 			*CBC*)		pr_brown "$default_cipher" ;; #FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
 			*GCM*)		pr_green "$default_cipher" ;;   # best ones
 			*CHACHA20*)	pr_green "$default_cipher" ;;   # best ones
-			ECDHE*AES*)    pr_yellow "$default_cipher" ;;   # it's CBC. so lucky13
+			ECDHE*AES*)    pr_yellow "$default_cipher" ;;   # it's CBC. --> lucky13
 			*)			out "$default_cipher" ;;
 		esac
 		outln "$remark4default_cipher"
@@ -1210,7 +1216,7 @@ pfs() {
 	if [ $ret -ne 0 ] || [ `grep -c "BEGIN CERTIFICATE" $TMPFILE` -eq 0 ]; then
 		pr_brown "No PFS available"
 	else
-		pr_litegreenln "PFS seems generally available. Now testing specific ciphers ..."; 
+		pr_litegreenln "PFS is generally offered. Now testing specific ciphers ..."; 
 		outln "(it depends on the browser/client whether one of them will be used)\n"
 		noone=0
 		neat_header
@@ -1255,7 +1261,7 @@ rc4() {
 	[ $SHOW_LOC_CIPH = "1" ] && echo "local ciphers available for testing RC4:" && echo `cat $TMPFILE`
 	$OPENSSL s_client -cipher `$OPENSSL ciphers RC4` $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
-		pr_literedln "\nRC4 is broken. It seems generally available. Now testing specific ciphers..."; 
+		pr_literedln "\nRC4 is broken and is offered! Now testing specific ciphers..."; 
 		outln "(for legacy support e.g. IE6 rather consider x13 or x0a)\n"
 		bad=1
 		neat_header
@@ -1370,10 +1376,164 @@ close_socket(){
 	return 0
 }
 
+## old network code ^^^^^^
+
+
+### new funcs for network follow
+
+socksend_clienthello() {
+	code2network "$SSLv2_CLIENT_HELLO"
+	data=`echo $NW_STR`
+	[[ "$DEBUG" -ge 3 ]] && echo "\"$data\""
+	printf -- "$data" >&5 2>/dev/null &
+	sleep $USLEEP_SND
+}
+
+sockread_serverhello() {
+     [[ "x$2" = "x" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
+     ret=0
+
+     SOCK_REPLY_FILE=`mktemp /tmp/ddreply.XXXXXX` || exit 7
+     dd bs=$1 of=$SOCK_REPLY_FILE count=1 <&5 2>/dev/null &
+     pid=$!
+
+     while true; do
+          if ! ps ax | grep -v grep | grep -q $pid; then
+               break  # didn't reach maxsleep yet
+               kill $pid >&2 2>/dev/null
+          fi
+          sleep $USLEEP_REC
+          maxsleep=$(($maxsleep - 1))
+          [[ $maxsleep -le 0 ]] && break
+     done
+
+     if ps ax | grep -v grep | grep -q $pid; then
+          # time's up and dd is still alive --> timeout
+          kill $pid >&2 2>/dev/null
+          wait $pid 2>/dev/null
+          ret=3 # means killed
+     fi
+
+     return $ret
+}
+
+display_sslv2serverhello() {
+# server hello:									in hex representation, see below
+# byte 1+2: length of server hello						0123
+# 3:        04=Handshake message, server hello			45
+# 4:        session id hit or not (boolean: 00=false, this  67
+#           is the normal case)						
+# 5:        certificate type, 01 = x509					89
+# 6+7       version (00 02 = SSLv2)					10-13
+# 8+9       certificate length						14-17
+# 10+11     cipher spec length						17-20
+# 12+13     connection id length						
+# [certificate length] ==> certificate				
+# [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
+
+	v2_hello_ascii=`hexdump -v -e '16/1 "%02X"' $1`
+	[[ "$DEBUG" -ge 4 ]] && echo $v2_hello_ascii 	# one line without any blanks
+	[[ -z $v2_hello_ascii ]] && return 0			# no server hello received
+
+	# now scrape two bytes out of the reply per byte
+	v2_hello_initbyte="${v2_hello_ascii:0:1}"  # normally this belongs to the next, should be 8!
+	v2_hello_length="${v2_hello_ascii:1:3}"  # + 0x8000 see above
+	v2_hello_handshake="${v2_hello_ascii:4:2}"
+	v2_hello_cert_length="${v2_hello_ascii:14:4}"
+	v2_hello_cipherspec_length="${v2_hello_ascii:18:4}"
+	V2_HELLO_CIPHERSPEC_LENGTH=`printf "%d\n" "0x$v2_hello_cipherspec_length"`
+
+	if [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
+		[[ $DEBUG -ge 2 ]] && echo "$v2_hello_initbyte / $v2_hello_handshake"
+		return 1
+	fi
+
+	if [[ $DEBUG -ge 3 ]]; then
+		echo "SSLv2 server hello length: 0x0$v2_hello_length"
+		echo "SSLv2 certificate length:  0x$v2_hello_cert_length"
+		echo "SSLv2 cipher spec length:  0x$v2_hello_cipherspec_length"
+	fi
+	return 0
+}
+
+
+# helper function for protocol checks
+# arg1: formatted string here in the code
+code2network() {
+	NW_STR=`echo "$1" | sed -e 's/,/\\\x/g' | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t'`
+}
+
+
+sslv2_sockets() {
+	V2_HELLO_CIPHERSPEC_LENGTH=0	# initialize
+	USLEEP_REC=${USLEEP_REC:-0.2}
+	USLEEP_SND=${USLEEP_SND:-0.1}	# 1 second wait until otherwise specified
+	SOCK_REPLY_FILE=""			# we do this with a file here. At a certain point heartbleed and ccs needs to be changed and make use of code2network
+	NW_STR=""
+
+	out " SSLv2      ";
+
+	# SSLV2 chello:
+	SSLv2_CLIENT_HELLO="
+	,80,34    # length (here: 52)
+	,01       # Client Hello 
+	,00,02    # SSLv2
+	,00,1b    # cipher spec length (here: 27 )
+	,00,00    # session ID length
+	,00,10    # challenge length
+	,05,00,80 # 1st cipher	9 cipher specs, only classical V2 ciphers are used here, see  http://max.euston.net/d/tip_sslciphers.html
+	,03,00,80 # 2nd          there are v3 in v2!!! : https://tools.ietf.org/html/rfc6101#appendix-E
+	,01,00,80 # 3rd          Cipher specifications introduced in version 3.0 can be included in version 2.0 client hello messages using
+	,07,00,c0 # 4th          the syntax below. [..] # V2CipherSpec (see Version 3.0 name) = { 0x00, CipherSuite }; !!!!
+	,08,00,80 # 5th
+	,06,00,40 # 6th
+	,04,00,80 # 7th
+	,02,00,80 # 8th
+	,00,00,00 # 9th
+	,29,22,be,b3,5a,01,8b,04,fe,5f,80,03,a0,13,eb,c4" # Challenge
+
+	fd_socket 5 || return 6
+
+	[[ "$DEBUG" -ge 2 ]] && out "sending client hello... "
+	socksend_clienthello 
+
+	sockread_serverhello 32768 0
+	[[ "$DEBUG" -ge 2 ]] && out "reading server hello... "
+	if [[ "$DEBUG" -eq 3 ]]; then
+		hexdump -C $SOCK_REPLY_FILE | head -6
+		outln
+	fi
+
+	display_sslv2serverhello "$SOCK_REPLY_FILE"
+
+	# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
+	lines=`cat "$SOCK_REPLY_FILE" 2>/dev/null | hexdump -C | wc -l` 
+	[[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
+
+	if [[ "$lines" -gt 1 ]] ;then
+		ciphers_detected=$(($V2_HELLO_CIPHERSPEC_LENGTH / 3 ))
+		if [ 0 -eq $ciphers_detected ] ; then
+			pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"
+		else
+			pr_red "offered (NOT ok)"; outln " -- $ciphers_detected ciphers"
+		fi
+		ret=1
+	else
+		pr_greenln "not offered (OK)"
+		ret=0
+	fi
+	pr_off
+
+	close_socket
+	TMPFILE=$SOCK_REPLY_FILE
+	tmpfile_handle $FUNCNAME.dd
+	return $ret
+}
+
+
+
 ok_ids(){
-	echo
-	tput pr_bold; tput setaf 2; echo "ok -- something resetted our ccs packets"; tput sgr0
-	echo
+	greenln "\n ok -- something resetted our ccs packets"
 	return 0
 }
 
@@ -1465,7 +1625,7 @@ ccs_injection(){
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
 		pr_green "not vulnerable (OK)"
-		ret=1
+		ret=0
 	else
 		pr_red "VULNERABLE"
 		ret=1
@@ -1714,11 +1874,10 @@ beast(){
 	local -i ret=0
 	local spaces="                                           "
 	#in a nutshell: don't use CBC Ciphers in SSLv3 TLSv1.0
-	#
+	
 	pr_bold " BEAST"; out " (CVE-2011-3389)                     "
 
 	# 2) test handfull of common CBC ciphers
-	#set -x
 	for proto in ssl3 tls1; do
 		$OPENSSL s_client -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
 		if [ $? -ne 0 ]; then
@@ -2389,6 +2548,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.174 2015/01/29 08:33:33 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.175 2015/01/29 09:46:15 dirkw Exp $ 
 # vim:ts=5:sw=5
 
