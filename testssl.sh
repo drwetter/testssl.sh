@@ -2,7 +2,7 @@
 #
 # bash is needed for some distros which use dash as /bin/sh and for tcp sockets which 
 # this program uses a couple of times. Also some expressions are bashisms as I expect
-# them to be faster. Idea is to not overdo it though
+# them to be faster. Idea is to not overdo it though.
 
 # testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some 
 # vulnerablities or features
@@ -27,14 +27,17 @@ SWCONTACT="dirk aet testssl dot sh"
 # your OWN RISK
 
 # HISTORY: I know reading this shell script is sometimes neither nice nor is it rocket science
-# As openssl is a such a good swiss army knife (e.g. wiki.openssl.org/index.php/Command_Line_Utilities)
-# it was difficult to resist wrapping it with some shell commandos. That's how everything
-# started
+# (well ok, maybe the bash sockets are kind of cool).
+# It all started with a few openssl commands. It is a such a good swiss army knife (see e.g.
+#  wiki.openssl.org/index.php/Command_Line_Utilities) that it was difficult to resist wrapping 
+# with some shell commandos around it. This is how everything started
+# Probably you can achieve the same result with my favorite zsh (zmodload zsh/net/socket b4
+# -- checkout zsh/net/tcp too! -- but bash is way more often used, within Linux and: cross-platform!
 
 # Q: So what's the difference between https://www.ssllabs.com/ssltest or
 #    https://sslcheck.globalsign.com/?
 # A: As of now ssllabs only check webservers on standard ports, reachable from
-#    the internet. And the two above are 3rd parties. If those restrictions are fine
+#    the internet. And the examples above are 3rd parties. If those restrictions are fine
 #    with you, they might tell you more than this tool -- as of now.
 
 # Note that for "standard" openssl binaries a lot of features (ciphers, protocols, vulnerabilities)
@@ -349,7 +352,7 @@ poodle() {
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
-		pr_litered "VULNERABLE"; out ", uses SSLv3 (no TLS_FALLBACK_SCSV tested)"
+		pr_litered "VULNERABLE"; out ", uses SSLv3 (no TLS_FALLBACK_SCSV mitigation tested)"
 	else
 		pr_green "not vulnerable (OK)"
 	fi
@@ -1123,7 +1126,7 @@ server_defaults() {
 		if ! echo $expire | grep -qw not; then
 	     	pr_red "expired!"
 		else
-			SECS2WARN=`expr 24 \* 60 \* 60 \* $DAYS2WARN1`  # pr_red threshold first
+			SECS2WARN=`expr 24 \* 60 \* 60 \* $DAYS2WARN2`  # low threshold first
 		     expire=`$OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN`
 			if echo "$expire" | grep -qw not; then
 				SECS2WARN=`expr 24 \* 60 \* 60 \* $DAYS2WARN2`
@@ -1131,10 +1134,10 @@ server_defaults() {
 				if echo "$expire" | grep -qw not; then
 					pr_litegreen ">= $DAYS2WARN1 days"
 				else
-		     		pr_litered "expires < $DAYS2WARN2 days"
+		     		pr_brown "expires < $DAYS2WARN1 days"
 				fi
 			else
-		     		pr_brown "expires < $DAYS2WARN1 days"
+		     		pr_litered "expires < $DAYS2WARN2 days!"
 			fi
 		fi
 		enddate=`date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z"`
@@ -2050,7 +2053,7 @@ $PRG <options> URI
     <-E|-ee|--cipher-per-proto>           check those per protocol
     <-f|--ciphers>                        check cipher suites
     <-p|--protocols>                      check TLS/SSL protocols only
-    <-S|--server_defaults>                displays the servers default picks and cert info
+    <-S|--server_defaults>                displays the servers default picks and certificate info
     <-P|--preference>                     displays the servers picks: protocol+cipher
     <-y|--spdy>                           checks for SPDY/NPN
     <-x|--single-ciphers-test> <pattern>  tests matched <pattern> of cipher
@@ -2548,6 +2551,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.177 2015/01/29 22:24:48 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.178 2015/01/30 15:26:54 dirkw Exp $ 
 # vim:ts=5:sw=5
 
