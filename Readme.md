@@ -13,10 +13,10 @@ New features in this release are / will be
 
 * certificate information (done), 
 * more HTTP header infos (partly done, needs cleanup and redir check), 
-* protocol check via bash sockets (not integrated yet, see directory utils)
+* protocol check via bash sockets (SSLv2: done, rest to be integrated, see directory utils)
 * maybe cipher check via bash sockets (not done yet)
 * debug file handling (ongoing)
-* BEAST (works, need some output polish)
+* BEAST (works, need some polishing for the output)
 
 Contributions, feedback, also bug reports are welcome.
 
