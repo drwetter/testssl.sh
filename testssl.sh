@@ -463,6 +463,8 @@ hpkp() {
 	return $?
 }
 #FIXME: once checkcert.sh is here: fingerprints!
+# FIXME: revoked, see checkcert.sh
+# FIXME: Trust (only CN)
 
 emphasize_numbers_in_headers(){
 # see http://www.grymoire.com/Unix/Sed.html#uh-3
@@ -631,9 +633,9 @@ std_cipherlists() {
 				fi ;;
 			2) 	# not really bad
 				if [[ $ret -eq 0 ]]; then
-					ok 2 0			# offered in pr_bold
+					ok 2 0			# offered in normal
 				else
-					ok 0 0              # not offered also in pr_bold
+					ok 2 0              # not offered also in normal
 				fi;;
 			*) # the ugly rest
 				if [[ $ret -eq 0 ]]; then
@@ -851,8 +853,6 @@ testprotohelper() {
 
 runprotocols() {
 	pr_blue "--> Testing Protocols"; outln "\n"
-	# e.g. ubuntu's 12.04 openssl binary + soon others don't want sslv2 anymore: bugs.launchpad.net/ubuntu/+source/openssl/+bug/955675
-
 	if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
 		testprotohelper "-ssl2" " SSLv2     "  
 		case $? in
@@ -876,7 +876,7 @@ runprotocols() {
 
 	testprotohelper "-tls1" " TLSv1     "
 	case $? in
-		0) ok 4 0 ;;   # no GCM, thus only in pr_litegreen
+		0) ok 2 0 ;;   # no GCM, thus only normal print
 		1) ok 0 0 ;;
 		5) ok 5 5 ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
@@ -884,7 +884,7 @@ runprotocols() {
 
 	testprotohelper "-tls1_1" " TLSv1.1   "
 	case $? in
-		0) ok 1 0 ;;
+		0) ok 2 0 ;;   # normal print
 		1) ok 7 0 ;;   # no GCM, penalty
 		5) ok 5 5 ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
@@ -1895,7 +1895,7 @@ beast(){
 		done
 		#detected_cbc_cipher=`echo $detected_cbc_cipher | sed 's/ //g'`
 		if [ -z "$detected_cbc_cipher" ]; then
-			pr_litegreenln "no CBC ciphers for $proto (OK)"
+			pr_litegreenln "no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
 		else
 			detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e 's/ /\n      '"${spaces}"'/9' -e 's/ /\n      '"${spaces}"'/6' -e 's/ /\n      '"${spaces}"'/3')
 			[ $ret -eq 1 ] && out "$spaces"
@@ -2276,10 +2276,7 @@ parse_hn_port() {
 	fi
 
 	datebanner "Testing"
-
-	[[ -z "$2" ]] && runs_HTTP	# for starttl all is clear
-
-	#[ "$PORT" != 443 ] && pr_bold "A non standard port or testing no web servers might show lame reponses (then just wait)\n"
+	[[ -z "$2" ]] && runs_HTTP	# for starttls all is clear
 	initialize_engine
 }
 
@@ -2302,11 +2299,15 @@ get_dns_entries() {
 			fi
 		fi
 		if [ -z "$IP4" ] ; then 		# getent returned nothing:
-			IP4=`host -t a $NODE | grep -v alias | sed 's/^.*address //'`
+			IP4=`host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //'`
 			if  echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
 				pr_magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
 				exit 1
 			fi
+		fi
+		# MSYS2 has no host or getent, so we do this
+		if [ -z "$IP4" ] ; then
+			IP4=`nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//'`
 		fi
 
 		# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
@@ -2318,15 +2319,20 @@ get_dns_entries() {
 				IP6=""
 			fi
 		fi
+		# MSYS2 has no host or getent, so we do this
+          if [ -z "$IP6" ] ; then
+               IP6=`nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//'`
+          fi
+
 	fi # test4iponly
 	
 	IPADDRs=`echo $IP4`
 	[ ! -z "$IP6" ] && IPADDRs=`echo $IP4`" "`echo $IP6`
 
-# FIXME: we could test more than one IPv4 addresses if available, same IPv6. For now we test the first IPv4:
+	# FIXME: we could/should test more than one IPv4 addresses if available, same IPv6. For now we test the first IPv4:
 	NODEIP=`echo "$IP4" | head -1`
 
-	# we can't do this as some checks and even openssl are not yet IPv6 safe
+	# we can't do this as some checks and even openssl are not yet IPv6 safe. BTW: bash sockets do IPv6 transparently!
 	#NODEIP=`echo "$IP6" | head -1`
 	rDNS=`host -t PTR $NODEIP 2>/dev/null | grep -v "is an alias for" | sed -e 's/^.*pointer //' -e 's/\.$//'`
 	echo $rDNS | grep -q NXDOMAIN  && rDNS=" - "
@@ -2551,6 +2557,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.178 2015/01/30 15:26:54 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.179 2015/02/03 22:20:58 dirkw Exp $ 
 # vim:ts=5:sw=5
 
