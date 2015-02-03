@@ -462,9 +462,6 @@ hpkp() {
 	tmpfile_handle $FUNCNAME.txt
 	return $?
 }
-#FIXME: once checkcert.sh is here: fingerprints!
-# FIXME: revoked, see checkcert.sh
-# FIXME: Trust (only CN)
 
 emphasize_numbers_in_headers(){
 # see http://www.grymoire.com/Unix/Sed.html#uh-3
@@ -753,9 +750,7 @@ test_just_one(){
 
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad
 allciphers(){
-
 	nr_ciphers=`$OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w`
-
 	pr_blue "--> Testing all locally available $nr_ciphers ciphers against the server"; outln "\n"
 	neat_header
 
@@ -1085,6 +1080,9 @@ server_defaults() {
 		esac
 		# old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
+		out " Fingerprint / Serial         "
+		outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint | sed 's/Fingerprint=//' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial | sed 's/serial=//')"
+
 		out " Common Name (CN)             "
 		CN=`$OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//'`
 		out "$CN"
@@ -1185,6 +1183,9 @@ server_defaults() {
 	tmpfile_handle tlsextdebug+status.txt
 	return $ret
 }
+# FIXME: revoked, see checkcert.sh 
+# FIXME: Trust (only CN)
+
 
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
@@ -2557,6 +2558,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.179 2015/02/03 22:20:58 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.180 2015/02/03 22:46:46 dirkw Exp $ 
 # vim:ts=5:sw=5
 
