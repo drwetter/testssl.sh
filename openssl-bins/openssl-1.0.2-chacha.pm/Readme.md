@@ -1,4 +1,5 @@
 
+
 Instructions
 ============
 
@@ -15,14 +16,12 @@ CHACHA20 + POLY1305 cipher suites from the official git repo didn't
 work for me work correctly, it's also likely they'll disappear shortly
 (https://www.mail-archive.com/openssl-dev@openssl.org/msg34756.html).
 
+Pls note bug #38 (https://github.com/drwetter/testssl.sh/issues/38)
 
 General
 -------
 
-* 64+32 bit versions were compiled under Ubuntu 12.04 LTS
-
-Likely you cannot use older distributions, younger should work.
-I provide for each distributions two sets of binaries:
+Both 64+32 bit versions were compiled under Ubuntu 12.04 LTS. Likely you cannot use older distributions, younger should work. I provide for each distributions two sets of binaries:
 
 * statically linked binaries (except a few libs which are nowadays difficult to statically link)
 * dynamically linked binaries with MIT Kerberos support ("krb5" in the name)
