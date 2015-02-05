@@ -225,5 +225,8 @@ parse_hn_port "$1"
 echo
 exit 0
 
+#test: dragon,  simhq.com=gryphon1.gryphoninternet.com  misim.gov.il,   shop4-heating.co.uk, service.hamburgwasser.de
+#                74.116.0.167                           147.237.80.2    85.92.77.27
+
 #  vim:tw=110:ts=5:sw=5
 #  $Id: prototype.ssl2proto-check.bash,v 1.9 2015/01/07 22:56:22 dirkw Exp $ 
