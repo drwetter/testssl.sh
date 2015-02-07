@@ -528,7 +528,7 @@ cookieflags() {	# ARG1: Path, ARG2: path
 		nr_cookies=`cat $TMPFILE | wc -l`
 		out "$nr_cookies issued: "
 		if [ $nr_cookies -gt 1 ] ; then
-			negative_word="NOONE"
+			negative_word="NONE"
 		else
 			negative_word="NOT"
 		fi
@@ -1221,7 +1221,7 @@ pfs() {
 	else
 		pr_litegreenln "In general PFS is offered. Now testing specific ciphers ..."; 
 		outln "(it depends on the browser/client whether one of them will be used)\n"
-		noone=0
+		none=0
 		neat_header
 		$OPENSSL ciphers -V "$PFSOK" | while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
@@ -1238,12 +1238,12 @@ pfs() {
 					out "not a/v"
 				fi
 			else
-				noone=1
+				none=1
 			fi
 			outln
 		done
 		outln
-		if [ "$noone" -eq 0 ] ; then
+		if [ "$none" -eq 0 ] ; then
 			 ret=0
 		else
 			 pr_magenta "no PFS ciphers found"
