@@ -1961,7 +1961,7 @@ heartbleed(){
 
 	fd_socket 5 || return 6
 
-	[[ $DEBUG -ge 2 ]] && outln "\n\nsending client hello (TLS version $tls_hexcode)"
+	[[ $DEBUG -ge 2 ]] && outln "\nsending client hello (TLS version $tls_hexcode)"
 	socksend "$client_hello" 1
 	sockread 16384 
 
@@ -2245,9 +2245,9 @@ find_openssl_binary() {
 
 
 starttls() {
-	protocol=`echo "$1" | sed 's/s$//'`	 # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s) 
+	protocol=`echo "$1" | sed 's/s$//'`	 # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
 	case "$1" in
-		ftp|smtp|pop3|imap|xmpp|telnet)
+		ftp|smtp|pop3|imap|xmpp|telnet|ldap)
 			outln " Trying STARTTLS via $(echo $protocol| tr '[a-z]' '[A-Z]')\n"
 			$OPENSSL s_client -connect $NODEIP:$PORT $SNI -starttls $protocol </dev/null >$TMPFILE 2>&1
 			ret=$?
@@ -2282,7 +2282,7 @@ starttls() {
 				allciphers		; ret=`expr $? + $ret`
 			fi
 			;;
-		*) pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet allowed" >&2
+		*) pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet, ldap allowed" >&2
 			ret=2
 			;;
 	esac
@@ -2331,7 +2331,7 @@ partly mandatory parameters:
 
     URI                   host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
     pattern               an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
-    protocol              is one of ftp,smtp,pop3,imap,xmpp,telnet (for the latter you need e.g. the supplied openssl)
+    protocol              is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
 
 
 EOF
