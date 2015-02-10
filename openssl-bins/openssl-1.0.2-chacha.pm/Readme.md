@@ -16,21 +16,19 @@ CHACHA20 + POLY1305 cipher suites from the official git repo didn't
 work for me work correctly, it's also likely they'll disappear shortly
 (https://www.mail-archive.com/openssl-dev@openssl.org/msg34756.html).
 
-Pls note bug #38 (https://github.com/drwetter/testssl.sh/issues/38) and https://github.com/PeterMosmans/openssl/issues/5: False negatives for 40Bit and export ciphers
+Pls note bug #38 https://github.com/drwetter/testssl.sh/issues/38) and https://github.com/PeterMosmans/openssl/issues/5: False negatives for 40Bit and export ciphers.
 
 General
 -------
 
 Both 64+32 bit versions were compiled under Ubuntu 12.04 LTS. Likely you cannot use older distributions, younger should work. I provide for each distributions two sets of binaries:
 
-* statically linked binaries (except a few libs which are nowadays difficult to statically link)
+* statically linked binaries
 * dynamically linked binaries with MIT Kerberos support ("krb5" in the name)
 
 For the latter you need a whopping bunch of kerberos libraries which you maybe need to 
 install from your distributor (libgssapi_krb5, libkrb5, libcom_err, libk5crypto, libkrb5support, 
 libkeyutils). For the 'static' binaries kerberos is not compiled in, so that's is not needed.
-
-All binaries are signed with my gpg key (.asc files).
 
 
 Compilation instructions
