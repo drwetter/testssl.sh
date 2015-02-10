@@ -16,9 +16,7 @@ CHACHA20 + POLY1305 cipher suites from the official git repo didn't
 work for me work correctly, it's also likely they'll disappear shortly
 (https://www.mail-archive.com/openssl-dev@openssl.org/msg34756.html).
 
-*Pls note bug [#38](https://github.com/drwetter/testssl.sh/issues/38) = bug [#6](https://github.com/PeterMosmans/openssl/issues/5): False negatives for 40Bit and export ciphers.*
-
-Workaround: use the binaries from the vanilla tree, see https://github.com/drwetter/testssl.sh/openssl-bins/openssl-1.0.2-vanilla. 
+**Pls note bug [#38](https://github.com/drwetter/testssl.sh/issues/38) = bug [#5  @PeterMosmans openssl](https://github.com/PeterMosmans/openssl/issues/5): False negatives for 40Bit and export ciphers.** Workaround: use the binaries from the vanilla tree, see https://github.com/drwetter/testssl.sh/openssl-bins/openssl-1.0.2-vanilla. 
 
 
 General
