@@ -61,6 +61,7 @@ SSL_NATIVE=${SSL_NATIVE:-0}			# we do per default bash sockets!
 #FIXME: still to be filled with (more) sense:
 DEBUG=${DEBUG:-0}		# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1), 3: slight hexdumps
 					# and other info, 4: the whole nine yards of output
+PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet. FC has only a CA bundle per default, ==> openssl version -d
 HSTS_MIN=180			# >180 days is ok for HSTS
@@ -223,6 +224,15 @@ fi
 
 ###### function definitions
 
+debugme() {
+	if [[ $DEBUG -ge 2 ]]; then
+		echo "$@"
+		"$@" 
+	else
+		:
+	fi
+}
+
 tmpfile_handle() {
 	if [[ "$DEBUG" -eq 0 ]] ; then
 		rm $TMPFILE
@@ -358,7 +368,7 @@ poodle() {
 	fi
 	outln 
 
-	tmpfile_handle  $FUNCNAME.txt
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -1999,9 +2009,9 @@ heartbleed(){
 }
 
 
+# This tests for CVE-2009-3555 / RFC5746, OSVDB: 59968-59974
 renego() {
 	ADDCMD=""
-	# This tests for CVE-2009-3555 / RFC5746, OSVDB: 59968-59974
 	case "$OSSL_VER" in
 		0.9.8*)  # we need this for Mac OSX unfortunately
 			case "$OSSL_VER_APPENDIX" in
@@ -2011,33 +2021,33 @@ renego() {
 				[m-z])
 					# all ok ;;
 			esac ;;
-		1.0.1*)
+		1.0.1*|1.0.2*)
 			ADDCMD="-legacy_renegotiation" ;;
 		0.9.9*|1.0*)
 			# all ok ;;
 	esac
+	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746, community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
+	echo R | $OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE
+	reneg_ok=$?									# 0=client is renegotiating and does not get an error: vuln to DoS via client initiated renegotiation
+	case $reneg_ok in
+		0) pr_litered "IS vulnerable (NOT ok)"; outln ", DoS threat" ;;
+		1) pr_litegreenln "not vulnerable (OK)" ;;
+		*) outln "FIXME: $reneg_ok" ;;
+	esac
+
 	pr_bold " Renegotiation "; out "(CVE 2009-3555)             "
-	echo R | $OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null
-	reneg_ok=$?					# 0=client is renegotiating and does not gets an error: that should not be!
 	NEG_STR="Secure Renegotiation IS NOT"
 	echo "R" | $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 | grep -iq "$NEG_STR"
 	secreg=$?						# 0= Secure Renegotiation IS NOT supported
+	case $secreg in
+		0) pr_redln "IS vulnerable (NOT ok)" ;;
+		1) pr_greenln "not vulnerable (OK)" ;;
+		*) outln "FIXME: $secreg" ;;
+	esac
 
-	if [ $reneg_ok -eq 0 ] && [ $secreg -eq 0 ]; then
-		# Client side renegotiation is accepted and secure renegotiation IS NOT supported 
-		pr_redln "IS vulnerable (NOT ok)"
-		return 1
-	fi
-	if [ $reneg_ok -eq 1 ] && [ $secreg -eq 1 ]; then
-		pr_greenln "not vulnerable (OK)"
-		return 0
-	fi
-	if [ $reneg_ok -eq 1 ] ; then   # 1,0
-		pr_litegreenln "got an error from the server while renegotiating on client: should be ok ($reneg_ok,$secreg)"
-		return 0
-	fi
-	pr_litegreenln "Patched Server detected ($reneg_ok,$secreg), probably ok"	# 0,1
-	return 0
+	tmpfile_handle $FUNCNAME.txt
+	return $secreg
+	# https://community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
 }
 
 crime() {
@@ -2064,11 +2074,12 @@ crime() {
 	$OPENSSL zlib -e -a  -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib 
 	if [ $? -eq 0 ]; then
 		pr_magentaln "Local Problem: Your $OPENSSL lacks zlib support"
-		return 0  #FIXME
+		return 7  
 	fi
 
-	STR=`$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null | grep Compression `
-	if echo $STR | grep -q NONE >/dev/null; then
+	#STR=`$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null | grep Compression `
+	$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null >$TMPFILE
+	if grep Compression | grep -q NONE >/dev/null; then
 		pr_green "not vulnerable (OK)"
 		[[ $SERVICE == "HTTP" ]] || out " (not using HTTP anyway)"
 		ret=0
@@ -2118,6 +2129,7 @@ crime() {
 #	fi
 	[ $VERBERR -eq 0 ] && outln "$STR"
 	#echo
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -2175,6 +2187,7 @@ beast(){
 #	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
 
 	shopt -u lastpipe				# othwise for some reason it segfaults
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -2286,7 +2299,7 @@ starttls() {
 			ret=2
 			;;
 	esac
-
+	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
@@ -2812,6 +2825,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.181 2015/02/04 08:48:33 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.184 2015/02/11 08:43:03 dirkw Exp $ 
 # vim:ts=5:sw=5
 
