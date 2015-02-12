@@ -35,7 +35,7 @@ If you want to compile OpenSSL yourself, here are the instructions:
 
      git clone https://github.com/openssl/openssl
      cd openssl
-     git branch OpenSSL_1_0_2-stable
+     git checkout OpenSSL_1_0_2-stable
 
 2.)  patch it, see https://github.com/drwetter/testssl.sh/blob/master/openssl-bins/openssl-1.0.2-beta1/vanilla.patch
 
