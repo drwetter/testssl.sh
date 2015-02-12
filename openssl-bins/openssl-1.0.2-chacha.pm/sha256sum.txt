@@ -1,0 +1,4 @@
+617af0dcd797f5f50d28bcef7f0bb819db2dc8bb949c4f58a3adc396e0a2183d  openssl32-1.0.2pm-krb5.chacha+poly
+2e16c274c512b6f07115452ea13c7f5c8262f94f3e2723ffd6367e9bb55180d2  openssl32-1.0.2pm-static.chacha+poly
+8fa209e3214bc26e7c2f0730c08fa7a19e9e59fac08948421e79f3f8d476f651  openssl64-1.0.2pm-krb5.chacha+poly
+4d00b401b5c808b84b4a4a14ed9bf0831c51b1f3ff9ba95c052b86e63db147ad  openssl64-1.0.2pm-static.chacha+poly
