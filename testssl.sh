@@ -331,8 +331,6 @@ EOF
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 runs_HTTP() {
-	ret=1
-
 	# SNI is nonsense for !HTTP but fortunately SMTP and friends don't care
 	printf "GET / HTTP/1.1\r\nServer: $NODE\r\n\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
 	wait_kill $! $HEADER_MAXSLEEP
@@ -344,10 +342,13 @@ runs_HTTP() {
 
 	case $SERVICE in
 		HTTP) 
-			;;
+			outln " HTTP service detected\n" 
+			ret=0 ;;
 		IMAP|POP|SMTP) 
-			outln " $SERVICE service detected, thus skipping HTTP checks\n" ;;
-		*)   outln " Couldn't determine what's running on port $PORT, assuming not HTTP\n" ;;
+			outln " $SERVICE service detected, thus skipping HTTP checks\n" 
+			ret=0 ;;
+		*)   outln " Couldn't determine what's running on port $PORT, assuming not HTTP\n"
+			ret=1;;
 	esac
 
 	tmpfile_handle $FUNCNAME.txt
@@ -2086,8 +2087,8 @@ crime() {
 	fi
 
 	#STR=`$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null | grep Compression `
-	$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null >$TMPFILE
-	if grep Compression | grep -q NONE >/dev/null; then
+	$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>$TMPFILE
+	if grep Compression $TMPFILE | grep -q NONE >/dev/null; then
 		pr_green "not vulnerable (OK)"
 		[[ $SERVICE == "HTTP" ]] || out " (not using HTTP anyway)"
 		ret=0
@@ -2528,8 +2529,8 @@ parse_hn_port() {
 	fi
 	SNI="-servername $NODE" 
 
-	URL_PATH=`echo $1 | sed 's/.*'"${NODE}"'//'`			# remove protocol and node part
-	URL_PATH=`echo $URL_PATH | sed 's/\/\//\//g'`                  # we rather want // -> /
+	URL_PATH=`echo $1 | sed 's/.*'"${NODE}"'//' | sed 's/.*'"${PORT}"'//'`		# remove protocol and node part and port
+	URL_PATH=`echo $URL_PATH | sed 's/\/\//\//g'`    	# we rather want // -> /
 
 	# now get NODEIP
 	get_dns_entries
@@ -2833,6 +2834,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.185 2015/02/12 08:32:46 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.186 2015/02/12 12:40:52 dirkw Exp $ 
 # vim:ts=5:sw=5
 
