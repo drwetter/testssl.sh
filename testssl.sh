@@ -56,7 +56,7 @@ SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just 
 SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while checking the http header is just usual
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}	# we wait this long before killing the process to retrieve a service banner / http header
 SSL_NATIVE=${SSL_NATIVE:-0}			# we do per default bash sockets!
-#FIXME: consequently we should mute the initial openssl s_client -connect as they cause a 400 (nginx, apache)
+ASSUMING_HTTP=${ASSUMING_HTTP:-0}		# in seldom cases (WAF, old servers/grumpy SSL) the service detection fails. Set to 1 for HTTP
 
 #FIXME: still to be filled with (more) sense:
 DEBUG=${DEBUG:-0}		# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1), 3: slight hexdumps
@@ -332,25 +332,36 @@ EOF
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 runs_HTTP() {
 	# SNI is nonsense for !HTTP but fortunately SMTP and friends don't care
-	printf "GET / HTTP/1.1\r\nServer: $NODE\r\n\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
+	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
 	wait_kill $! $HEADER_MAXSLEEP
-	grep -q ^HTTP $TMPFILE && SERVICE=HTTP && ret=0
-	grep -q SMTP $TMPFILE && SERVICE=SMTP 
-	grep -q POP $TMPFILE && SERVICE=POP
-	grep -q IMAP $TMPFILE && SERVICE=IMAP
+	head $TMPFILE | grep -q ^HTTP && SERVICE=HTTP
+	head $TMPFILE | grep -q SMTP && SERVICE=SMTP
+	head $TMPFILE | grep -q POP && SERVICE=POP
+	head $TMPFILE | grep -q IMAP && SERVICE=IMAP
+	debugme head $TMPFILE
 # $TMPFILE contains also a banner which we could use if there's a need for it
 
+	out " Service detected:      "
 	case $SERVICE in
 		HTTP) 
-			outln " HTTP service detected\n" 
+			out " $SERVICE" 
 			ret=0 ;;
 		IMAP|POP|SMTP) 
-			outln " $SERVICE service detected, thus skipping HTTP checks\n" 
+			out " $SERVICE, thus skipping HTTP specific checks" 
 			ret=0 ;;
-		*)   outln " Couldn't determine what's running on port $PORT, assuming not HTTP\n"
-			ret=1;;
+		*)   out " Couldn't determine what's running on port $PORT"
+			if [[ $ASSUMING_HTTP -eq 1 ]]; then
+				SERVICE=HTTP
+				out " -- ASSUMING_HTTP set though"
+				ret=0
+			else
+				out ", assuming not HTTP, skipping HTTP checks"
+				ret=1
+			fi
+			;;
 	esac
 
+	outln
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
@@ -397,6 +408,12 @@ EOF
 ) &>$HEADERFILE &
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
+		if ! egrep -iq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
+			pr_litemagenta "likely HTTP header request failed (#lines: $(cat $HEADERFILE | wc -l))."
+			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\""
+			debugme cat $HEADERFILE
+			ret=7
+		fi
 		sed  -e '/^<HTML/,$d' -e '/^<html/,$d' -e '/^<XML /,$d' -e '/<?XML /,$d' \
 			-e '/^<xml /,$d' -e '/<?xml /,$d'  -e '/^<\!DOCTYPE/,$d' -e '/^<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
 #### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
@@ -412,6 +429,7 @@ EOF
 		[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2  $HEADERFILE 2>/dev/null
 		ret=3
 	fi
+	
 	return $ret
 }
 
@@ -495,7 +513,7 @@ serverbanner() {
 			emphasize_numbers_in_headers "$serverbanner"
 		fi
 	else
-		outln "no HTTP header, interesting!"
+		outln "no \"Server\" line in header, interesting!"
 	fi
 
 	tmpfile_handle $FUNCNAME.txt
@@ -2443,7 +2461,7 @@ EOF
 
 cleanup () {
 	if [[ "$DEBUG" -ge 1 ]] ; then
-		outln
+		outln "\n"
 		pr_underline "DEBUG (level $DEBUG): see files in $TEMPDIR"
 	else
 		[ -d "$TEMPDIR" ] && rm -rf ${TEMPDIR};
@@ -2626,7 +2644,7 @@ display_rdns_etc() {
 		outln
 	fi
 	if  [ -n "$rDNS" ] ; then
-		printf " %-23s %s\n" "rDNS ($NODEIP):" "$rDNS"
+		printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS"
 	fi
 }
 
@@ -2834,6 +2852,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.186 2015/02/12 12:40:52 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.187 2015/02/13 15:01:45 dirkw Exp $ 
 # vim:ts=5:sw=5
 
