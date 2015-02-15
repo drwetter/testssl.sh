@@ -422,14 +422,13 @@ EOF
 		ret=0
 	else
 		pr_litemagentaln "failed (HTTP header request stalled)"
-		egrep -awq "301|302|^Location" $HEADERFILE
-		if [ $? -eq 0 ]; then
-			redir2=`grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n'`
-			outln " (30x to $redir2, tried this URL?)"
-		fi
-		[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2  $HEADERFILE 2>/dev/null
 		ret=3
 	fi
+	if egrep -awq "301|302|^Location" $HEADERFILE; then
+		redir2=`grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n'`
+		outln " (got 30x to $redir2, may be better try this URL?)\n"
+	fi
+	[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2 2>/dev/null
 	
 	return $ret
 }
@@ -447,10 +446,10 @@ preload() {
 }
 
 hsts() {
-	pr_bold " HSTS          "
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
+	pr_bold " HSTS          "
 	grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
@@ -473,10 +472,10 @@ hsts() {
 }
 
 hpkp() {
-	pr_bold " HPKP          "
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
+	pr_bold " HPKP          "
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
@@ -507,10 +506,10 @@ emphasize_numbers_in_headers(){
 
 
 serverbanner() {
-	pr_bold " Server        "
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
+	pr_bold " Server        "
 	grep -ai '^Server' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		serverbanner=`cat $TMPFILE | sed -e 's/^Server: //' -e 's/^server: //'`
@@ -528,10 +527,10 @@ serverbanner() {
 }
 
 applicationbanner() {
-	pr_bold " Application  "
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
+	pr_bold " Application  "
 # examples: dev.testssl.sh, php.net, asp.net , www.regonline.com
 	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Runtime|^X-Version' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
@@ -555,10 +554,10 @@ applicationbanner() {
 }
 
 cookieflags() {	# ARG1: Path, ARG2: path
-	pr_bold " Cookie(s)     "
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
+	pr_bold " Cookie(s)     "
 	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		nr_cookies=`cat $TMPFILE | wc -l`
@@ -2859,6 +2858,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.190 2015/02/15 12:37:43 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.191 2015/02/15 13:00:12 dirkw Exp $ 
 # vim:ts=5:sw=5
 
