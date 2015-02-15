@@ -1118,7 +1118,8 @@ server_defaults() {
 		# old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
 		out " Fingerprint / Serial         "
-		outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint | sed 's/Fingerprint=//' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial | sed 's/serial=//')"
+		outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial | sed 's/serial=//')"
+		outln "                              $($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 | sed 's/Fingerprint=//' | sed 's/://g' )"
 
 		out " Common Name (CN)             "
 		CN=`$OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//'`
@@ -1132,7 +1133,6 @@ server_defaults() {
 		else
 			outln " (CN response to request w/o SNI: '$CN_nosni')"
 		fi
-
 
 		SAN=`$OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
 			sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g' -e 's/othername:<unsupported>//g'`
@@ -2852,6 +2852,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.187 2015/02/13 15:01:45 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.188 2015/02/15 11:58:50 dirkw Exp $ 
 # vim:ts=5:sw=5
 
