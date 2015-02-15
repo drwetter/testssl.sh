@@ -12,8 +12,8 @@ On github you will find in the master branch the development version of the soft
 New features in this release are / will be
 
 * certificate information (done), 
-* more HTTP header infos (partly done, needs cleanup and redir check), 
-* protocol check via bash sockets (SSLv2: done, rest to be integrated, see directory utils)
+* more HTTP header infos (partly done, needs a bit f cleanup), 
+* protocol check via bash sockets (SSLv2: done, for others: function need to be called)
 * maybe cipher check via bash sockets (not done yet)
 * debug file handling (ongoing)
 * BEAST (works, need some polishing for the output)
