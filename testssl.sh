@@ -301,6 +301,7 @@ breach() {
 GET $url HTTP/1.1
 Host: $NODE
 $useragent
+Accept: text/*
 Accept-Language: en-US,en
 Accept-encoding: gzip,deflate,compress
 $referer
@@ -332,7 +333,7 @@ EOF
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 runs_HTTP() {
 	# SNI is nonsense for !HTTP but fortunately SMTP and friends don't care
-	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
+	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
 	wait_kill $! $HEADER_MAXSLEEP
 	head $TMPFILE | grep -q ^HTTP && SERVICE=HTTP
 	head $TMPFILE | grep -q SMTP && SERVICE=SMTP
@@ -2852,6 +2853,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.188 2015/02/15 11:58:50 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.189 2015/02/15 12:14:10 dirkw Exp $ 
 # vim:ts=5:sw=5
 
