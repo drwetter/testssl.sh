@@ -435,11 +435,15 @@ EOF
 }
 
 includeSubDomains() {
-	if grep -aiq includeSubDomains "$1"; then
+	if grep -aiqw includeSubDomains "$1"; then
 		pr_litegreen ", includeSubDomains"
 	else
 		pr_litecyan ", just this domain"
 	fi
+}
+
+preload() {
+	grep -aiqw preload "$1" && pr_litegreen ", preload"
 }
 
 hsts() {
@@ -458,6 +462,7 @@ hsts() {
 			pr_brown "$AGE_DAYS days (<$HSTS_MIN is not good enough)"
 		fi
 		includeSubDomains "$TMPFILE"
+		preload "$TMPFILE"  #FIXME: To be checked against: e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc and https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
 	else
 		out "--"
 	fi
@@ -483,6 +488,7 @@ hpkp() {
 			pr_brown "$AGE_DAYS days (<$HPKP_MIN is not good enough)"
 		fi
 		includeSubDomains "$TMPFILE"
+		preload "$TMPFILE"
 		out ", fingerprints not checked"
 	else
 		out "--"
@@ -2853,6 +2859,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.189 2015/02/15 12:14:10 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.190 2015/02/15 12:37:43 dirkw Exp $ 
 # vim:ts=5:sw=5
 
