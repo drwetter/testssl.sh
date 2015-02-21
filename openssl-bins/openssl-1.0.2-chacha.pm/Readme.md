@@ -1,12 +1,11 @@
 
-
 Instructions
 ============
 
 The precompiled binaries provided here have extended support for everything
-which is normally not configured to be compiled (56 Bit, export/ANOn ciphers, SSLv2 etc.)
-The bninraies come also with extended support for new cipher suites and/or
-features which are not yet in the official branch.
+which is normally not configured to be compiled (40+56 Bit, export/ANON ciphers, 
+SSLv2 etc.). The binaraies come also with extended support for new cipher suites 
+and/or features which are not yet in the official branch.
 
 The binaries in this directory are all compiled from an OpenSSL 1.0.2 fork
 from Peter Mosmans. He has patched the master git branch
@@ -16,20 +15,23 @@ CHACHA20 + POLY1305 cipher suites from the official git repo didn't
 work for me work correctly, it's also likely they'll disappear shortly
 (https://www.mail-archive.com/openssl-dev@openssl.org/msg34756.html).
 
-**Pls note bug [#38](https://github.com/drwetter/testssl.sh/issues/38) = bug [#5  @PeterMosmans openssl](https://github.com/PeterMosmans/openssl/issues/5): False negatives for 40Bit and export ciphers.** Workaround: use the binaries from the vanilla tree, see https://github.com/drwetter/testssl.sh/openssl-bins/openssl-1.0.2-vanilla. 
-
 
 General
 -------
 
-Both 64+32 bit versions were compiled under Ubuntu 12.04 LTS. Likely you cannot use older distributions, younger should work. I provide for each distributions two sets of binaries:
+Both 64+32 bit versions were compiled under Ubuntu 12.04 LTS. Likely you
+cannot use older distributions, younger should work. I provide for each
+distributions two sets of binaries:
 
-* statically linked binaries
-* dynamically linked binaries with MIT Kerberos support ("krb5" in the name)
+* completely statically linked binaries
+* dynamically linked binaries with MIT Kerberos support ("krb5" in the name).
+  They provide additionally  KRB5-* and EXP-KRB5-* support (in OpenSSL 
+  terminology, see krb5-ciphers.txt). 
 
-For the latter you need a whopping bunch of kerberos libraries which you maybe need to 
+For the latter you need a whopping bunch of kerberos runtime libraries which you maybe need to 
 install from your distributor (libgssapi_krb5, libkrb5, libcom_err, libk5crypto, libkrb5support, 
-libkeyutils). For the 'static' binaries kerberos is not compiled in, so that's is not needed.
+libkeyutils). The 'static' binaries do not have MIT kerberos support as there are no
+static kerberos libs and I did not bother to compile them from the sources.
 
 
 Compilation instructions
@@ -74,13 +76,14 @@ If you want to compile OpenSSL yourself, here are the instructions:
 
 Don't use -DTEMP_GOST_TLS, it currently breaks things and it is not needed for general GOST [1] support.
 
-If you don't have / don't want Kerberos libraries and devel rpms/debs, omit "--with-krb5-flavor=MIT" (see examples). If you have other Kerberos flavors you need to figure out by yourself.
+If you don't have / don't want Kerberos libraries and devel rpms/debs, omit "--with-krb5-flavor=MIT" (see examples). 
+If you have other Kerberos flavors you need to figure out by yourself.
 
 3.) make depend
 
 4.) make
 
-5.) make report (check whether it runs ok)
+5.) make report (check whether it runs ok!)
 
 6.) "./apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l" lists now for me 
 * 191(+4 GOST) ciphers -- including kerberos
