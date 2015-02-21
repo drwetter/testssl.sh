@@ -314,10 +314,10 @@ EOF
 		result=`cat $HEADERFILE_BREACH | grep -a '^Content-Encoding' | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g'`
 		result=`echo $result | tr -cd '\40-\176'`
 		if [ -z $result ]; then
-			pr_green "no HTTP compression " 
+			pr_green "no HTTP compression (OK) " 
 			ret=0
 		else
-			pr_litered "uses $result compression "
+			pr_litered "NOT ok, uses $result compression "
 			ret=1
 		fi
 		# Catch: any URL can be vulnerable. I am testing now only the root. URL!
@@ -375,7 +375,7 @@ poodle() {
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
-		pr_litered "VULNERABLE"; out ", uses SSLv3 (no TLS_FALLBACK_SCSV mitigation tested)"
+		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3 (no TLS_FALLBACK_SCSV mitigation tested)"
 	else
 		pr_green "not vulnerable (OK)"
 	fi
@@ -410,8 +410,8 @@ EOF
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
 		if ! egrep -iq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
-			pr_litemagenta "likely HTTP header request failed (#lines: $(cat $HEADERFILE | wc -l))."
-			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\""
+			pr_litemagenta "likely HTTP header requests failed (#lines: $(cat $HEADERFILE | wc -l))."
+			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
 			debugme cat $HEADERFILE
 			ret=7
 		fi
@@ -980,7 +980,7 @@ server_preference() {
 
 		out " Has server cipher order?     "
 		if [[ "$cipher1" != "$cipher2" ]]; then
-			pr_brown "nope (NOT ok)"
+			pr_litered "nope (NOT ok)"
 			remark4default_cipher=" (limited sense as client will pick)"
 		else
 			pr_green "yes (OK)"
@@ -1185,6 +1185,12 @@ server_defaults() {
 		startdate=`date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M"`
 		outln " ($startdate --> $enddate)"
 
+		savedir=`pwd`; cd $TEMPDIR
+		$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | \
+     		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
+		nrsaved=`ls $TEMPDIR/level?.crt | wc -w`
+		outln " # of certificates provided   $nrsaved"
+		cd $savedir
 
 		out " Certificate Revocation List  "
 		crl=`$OPENSSL x509 -in $HOSTCERT -noout -text | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://'`
@@ -1928,7 +1934,7 @@ ccs_injection(){
 		pr_green "not vulnerable (OK)"
 		ret=0
 	else
-		pr_red "VULNERABLE"
+		pr_red "VULNERABLE (not OK)"
 		ret=1
 	fi
 	[ $retval -eq 3 ] && out "(timed out)"
@@ -2063,7 +2069,7 @@ renego() {
 	echo R | $OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE
 	reneg_ok=$?									# 0=client is renegotiating and does not get an error: vuln to DoS via client initiated renegotiation
 	case $reneg_ok in
-		0) pr_litered "IS vulnerable (NOT ok)"; outln ", DoS threat" ;;
+		0) pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" ;;
 		1) pr_litegreenln "not vulnerable (OK)" ;;
 		*) outln "FIXME: $reneg_ok" ;;
 	esac
@@ -2073,7 +2079,7 @@ renego() {
 	echo "R" | $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 | grep -iq "$NEG_STR"
 	secreg=$?						# 0= Secure Renegotiation IS NOT supported
 	case $secreg in
-		0) pr_redln "IS vulnerable (NOT ok)" ;;
+		0) pr_redln "VULNERABLE (NOT ok)" ;;
 		1) pr_greenln "not vulnerable (OK)" ;;
 		*) outln "FIXME: $secreg" ;;
 	esac
@@ -2118,9 +2124,9 @@ crime() {
 		ret=0
 	else
 		if [[ $SERVICE == "HTTP" ]]; then
-			pr_red "IS vulnerable (NOT ok)"
+			pr_red "VULNERABLE (NOT ok)"
 		else	 
-			pr_brown "IS vulnerable" ; out ", but not using HTTP: probably no exploit known"
+			pr_brown "VULNERABLE (NOT ok), but not using HTTP: probably no exploit known"
 		fi
 		ret=1
 	fi
@@ -2155,7 +2161,7 @@ crime() {
 #				pr_green "not vulnerable (OK)"
 #				ret=`expr $ret + 0`
 #			else
-#				pr_red "IS vulnerable (NOT ok)"
+#				pr_red "VULNERABLE (NOT ok)"
 #				ret=`expr $ret + 1`
 #			fi
 #		fi
@@ -2858,6 +2864,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.192 2015/02/21 09:38:03 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.193 2015/02/21 10:47:11 dirkw Exp $ 
 # vim:ts=5:sw=5
 
