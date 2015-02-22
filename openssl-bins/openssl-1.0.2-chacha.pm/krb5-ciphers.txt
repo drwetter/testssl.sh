@@ -1,0 +1,54 @@
+--- 1   2015-02-21 10:22:39.293080000 +0100
++++ 2   2015-02-21 10:22:48.241080000 +0100
+@@ -114,8 +114,6 @@
+      0x03,0x00,0x80 - RC2-CBC-MD5             SSLv2 Kx=RSA      Au=RSA  Enc=RC2(128)  Mac=MD5 
+           0x00,0x94 - RSA-PSK-AES128-CBC-SHA  SSLv3 Kx=RSAPSK   Au=RSA  Enc=AES(128)  Mac=SHA1
+           0x00,0x8C - PSK-AES128-CBC-SHA      SSLv3 Kx=PSK      Au=PSK  Enc=AES(128)  Mac=SHA1
+-          0x00,0x21 - KRB5-IDEA-CBC-SHA       SSLv3 Kx=KRB5     Au=KRB5 Enc=IDEA(128) Mac=SHA1
+-          0x00,0x25 - KRB5-IDEA-CBC-MD5       SSLv3 Kx=KRB5     Au=KRB5 Enc=IDEA(128) Mac=MD5 
+           0xC0,0x11 - ECDHE-RSA-RC4-SHA       SSLv3 Kx=ECDH     Au=RSA  Enc=RC4(128)  Mac=SHA1
+           0xC0,0x07 - ECDHE-ECDSA-RC4-SHA     SSLv3 Kx=ECDH     Au=ECDSA Enc=RC4(128)  Mac=SHA1
+           0x00,0x66 - DHE-DSS-RC4-SHA         SSLv3 Kx=DH       Au=DSS  Enc=RC4(128)  Mac=SHA1
+@@ -128,8 +126,6 @@
+      0x01,0x00,0x80 - RC4-MD5                 SSLv2 Kx=RSA      Au=RSA  Enc=RC4(128)  Mac=MD5 
+           0x00,0x92 - RSA-PSK-RC4-SHA         SSLv3 Kx=RSAPSK   Au=RSA  Enc=RC4(128)  Mac=SHA1
+           0x00,0x8A - PSK-RC4-SHA             SSLv3 Kx=PSK      Au=PSK  Enc=RC4(128)  Mac=SHA1
+-          0x00,0x20 - KRB5-RC4-SHA            SSLv3 Kx=KRB5     Au=KRB5 Enc=RC4(128)  Mac=SHA1
+-          0x00,0x24 - KRB5-RC4-MD5            SSLv3 Kx=KRB5     Au=KRB5 Enc=RC4(128)  Mac=MD5 
+           0xC0,0x12 - ECDHE-RSA-DES-CBC3-SHA  SSLv3 Kx=ECDH     Au=RSA  Enc=3DES(168) Mac=SHA1
+           0xC0,0x08 - ECDHE-ECDSA-DES-CBC3-SHA SSLv3 Kx=ECDH     Au=ECDSA Enc=3DES(168) Mac=SHA1
+           0xC0,0x1C - SRP-DSS-3DES-EDE-CBC-SHA SSLv3 Kx=SRP      Au=DSS  Enc=3DES(168) Mac=SHA1
+@@ -147,8 +143,6 @@
+      0x07,0x00,0xC0 - DES-CBC3-MD5            SSLv2 Kx=RSA      Au=RSA  Enc=3DES(168) Mac=MD5 
+           0x00,0x93 - RSA-PSK-3DES-EDE-CBC-SHA SSLv3 Kx=RSAPSK   Au=RSA  Enc=3DES(168) Mac=SHA1
+           0x00,0x8B - PSK-3DES-EDE-CBC-SHA    SSLv3 Kx=PSK      Au=PSK  Enc=3DES(168) Mac=SHA1
+-          0x00,0x1F - KRB5-DES-CBC3-SHA       SSLv3 Kx=KRB5     Au=KRB5 Enc=3DES(168) Mac=SHA1
+-          0x00,0x23 - KRB5-DES-CBC3-MD5       SSLv3 Kx=KRB5     Au=KRB5 Enc=3DES(168) Mac=MD5 
+      0x08,0x00,0x80 - RC4-64-MD5              SSLv2 Kx=RSA      Au=RSA  Enc=RC4(64)   Mac=MD5 
+           0x00,0x63 - EXP1024-DHE-DSS-DES-CBC-SHA SSLv3 Kx=DH(1024) Au=DSS  Enc=DES(56)   Mac=SHA1 export
+           0x00,0x15 - EDH-RSA-DES-CBC-SHA     SSLv3 Kx=DH       Au=RSA  Enc=DES(56)   Mac=SHA1
+@@ -159,8 +153,6 @@
+           0x00,0x62 - EXP1024-DES-CBC-SHA     SSLv3 Kx=RSA(1024) Au=RSA  Enc=DES(56)   Mac=SHA1 export
+           0x00,0x09 - DES-CBC-SHA             SSLv3 Kx=RSA      Au=RSA  Enc=DES(56)   Mac=SHA1
+      0x06,0x00,0x40 - DES-CBC-MD5             SSLv2 Kx=RSA      Au=RSA  Enc=DES(56)   Mac=MD5 
+-          0x00,0x1E - KRB5-DES-CBC-SHA        SSLv3 Kx=KRB5     Au=KRB5 Enc=DES(56)   Mac=SHA1
+-          0x00,0x22 - KRB5-DES-CBC-MD5        SSLv3 Kx=KRB5     Au=KRB5 Enc=DES(56)   Mac=MD5 
+           0x00,0x65 - EXP1024-DHE-DSS-RC4-SHA SSLv3 Kx=DH(1024) Au=DSS  Enc=RC4(56)   Mac=SHA1 export
+           0x00,0x64 - EXP1024-RC4-SHA         SSLv3 Kx=RSA(1024) Au=RSA  Enc=RC4(56)   Mac=SHA1 export
+           0x00,0x14 - EXP-EDH-RSA-DES-CBC-SHA SSLv3 Kx=DH(512)  Au=RSA  Enc=DES(40)   Mac=SHA1 export
+@@ -171,15 +163,9 @@
+           0x00,0x08 - EXP-DES-CBC-SHA         SSLv3 Kx=RSA(512) Au=RSA  Enc=DES(40)   Mac=SHA1 export
+           0x00,0x06 - EXP-RC2-CBC-MD5         SSLv3 Kx=RSA(512) Au=RSA  Enc=RC2(40)   Mac=MD5  export
+      0x04,0x00,0x80 - EXP-RC2-CBC-MD5         SSLv2 Kx=RSA(512) Au=RSA  Enc=RC2(40)   Mac=MD5  export
+-          0x00,0x27 - EXP-KRB5-RC2-CBC-SHA    SSLv3 Kx=KRB5     Au=KRB5 Enc=RC2(40)   Mac=SHA1 export
+-          0x00,0x26 - EXP-KRB5-DES-CBC-SHA    SSLv3 Kx=KRB5     Au=KRB5 Enc=DES(40)   Mac=SHA1 export
+-          0x00,0x2A - EXP-KRB5-RC2-CBC-MD5    SSLv3 Kx=KRB5     Au=KRB5 Enc=RC2(40)   Mac=MD5  export
+-          0x00,0x29 - EXP-KRB5-DES-CBC-MD5    SSLv3 Kx=KRB5     Au=KRB5 Enc=DES(40)   Mac=MD5  export
+           0x00,0x17 - EXP-ADH-RC4-MD5         SSLv3 Kx=DH(512)  Au=None Enc=RC4(40)   Mac=MD5  export
+           0x00,0x03 - EXP-RC4-MD5             SSLv3 Kx=RSA(512) Au=RSA  Enc=RC4(40)   Mac=MD5  export
+      0x02,0x00,0x80 - EXP-RC4-MD5             SSLv2 Kx=RSA(512) Au=RSA  Enc=RC4(40)   Mac=MD5  export
+-          0x00,0x28 - EXP-KRB5-RC4-SHA        SSLv3 Kx=KRB5     Au=KRB5 Enc=RC4(40)   Mac=SHA1 export
+-          0x00,0x2B - EXP-KRB5-RC4-MD5        SSLv3 Kx=KRB5     Au=KRB5 Enc=RC4(40)   Mac=MD5  export
+           0xC0,0x10 - ECDHE-RSA-NULL-SHA      SSLv3 Kx=ECDH     Au=RSA  Enc=None      Mac=SHA1
+           0xC0,0x06 - ECDHE-ECDSA-NULL-SHA    SSLv3 Kx=ECDH     Au=ECDSA Enc=None      Mac=SHA1
+           0xC0,0x15 - AECDH-NULL-SHA          SSLv3 Kx=ECDH     Au=None Enc=None      Mac=SHA1
