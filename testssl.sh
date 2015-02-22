@@ -836,17 +836,9 @@ run_std_cipherlists() {
 	std_cipherlists NULL:eNULL                   " Null Cipher             " 1
 	std_cipherlists aNULL                        " Anonymous NULL Cipher   " 1
 	std_cipherlists ADH                          " Anonymous DH Cipher     " 1
-	if [[ "$OSSL_VER" = *chacha* ]]; then
-		out " 40 Bit encryption        "; magentaln "Local problem: $OPENSSL has a bug here"
-	else
-		std_cipherlists EXPORT40                     " 40 Bit encryption       " 1
-	fi
+	std_cipherlists EXPORT40                     " 40 Bit encryption       " 1
 	std_cipherlists EXPORT56                     " 56 Bit encryption       " 1
-	if [[ "$OSSL_VER" = *chacha* ]]; then
-		out " Export Cipher (general)  "; magentaln "Local problem: $OPENSSL has a bug here"
-	else
-		std_cipherlists EXPORT                       " Export Cipher (general) " 1
-	fi
+	std_cipherlists EXPORT                       " Export Cipher (general) " 1
 	std_cipherlists LOW                          " Low (<=64 Bit)          " 1
 	std_cipherlists DES                          " DES Cipher              " 1
 	std_cipherlists 3DES                         " Triple DES Cipher       " 2
