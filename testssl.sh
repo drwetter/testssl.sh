@@ -2489,7 +2489,10 @@ cleanup () {
 
 # for now only GOST engine
 initialize_engine(){
-	if uname -s | grep -q BSD || ! $OPENSSL engine gost -vvvv -t -c >/dev/null 2>&1; then
+	if ! $OPENSSL engine gost -vvvv -t -c >/dev/null 2>&1; then
+		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln "\n"
+		return 1
+	elif $OPENSSL engine gost -vvvv -t -c 2>&1 | grep -iq "No such" ; then
 		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln "\n"
 		return 1
 	elif echo $osslver | grep -q LibreSSL; then
@@ -2868,6 +2871,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.194 2015/02/22 22:05:39 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.195 2015/02/23 09:40:09 dirkw Exp $ 
 # vim:ts=5:sw=5
 
