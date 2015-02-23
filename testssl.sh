@@ -2081,10 +2081,16 @@ renego() {
 	pr_bold " Renegotiation "; out "(CVE 2009-3555)             "
 	NEG_STR="Secure Renegotiation IS NOT"
 	echo "R" | $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 | grep -iq "$NEG_STR"
-	secreg=$?						# 0= Secure Renegotiation IS NOT supported
+    pipe_result=("${PIPESTATUS[@]}") # catch the return values of all commands
+    secreg=${pipe_result[2]} 	# 0= Secure Renegotiation IS NOT supported
+    if [[ ${pipe_result[1]} -ge 1 ]]; then
+        let secreg+=2 # OpenSSL didn't exit correctly
+    fi
 	case $secreg in
 		0) pr_redln "VULNERABLE (NOT ok)" ;;
 		1) pr_greenln "not vulnerable (OK)" ;;
+        2) pr_magentaln "Looks vulnerable but generates error" ;;
+        3) pr_magentaln "probably not vulnerable but error (OK)" ;;
 		*) outln "FIXME: $secreg" ;;
 	esac
 
