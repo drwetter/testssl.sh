@@ -1166,8 +1166,19 @@ server_defaults() {
 		     		pr_litered "expires < $DAYS2WARN2 days!"
 			fi
 		fi
-		enddate=`date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z"`
-		startdate=`date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M"`
+		startdate=$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)
+		enddate=$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)
+		if [ $(uname) == 'Darwin' ]; then
+			# workaround to resolve Mar, May, ... #
+			LANG_prev=$LANG
+			LANG='en_US.UTF-8'
+			startdate=$(date -jf '%b %d %T %Y %Z' "$startdate" +'%F %R %z')
+			enddate=$(date -jf '%b %d %T %Y %Z' "$enddate" +'%F %R %z')
+			LANG=$LANG_prev
+		else
+			startdate=`date --date="$startdate" +'%F %R %z'`
+			enddate=`date --date="$enddate" +'%F %R %z'`
+		fi
 		outln " ($startdate --> $enddate)"
 
 		savedir=`pwd`; cd $TEMPDIR
