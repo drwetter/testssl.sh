@@ -2637,26 +2637,22 @@ get_dns_entries() {
 			#FIXME: FreeBSD returns only one entry 
 			fi
 		fi
-		if [ -z "$IP4" ] ; then 		# getent returned nothing:
-			IP4=`host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //'`
-			if  echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
-				pr_magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
+		if which host &> /dev/null && [ -z "$IP4" ] ; then 		# getent returned nothing:
+			IP4=$(host -t A $NODE 2> /dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
+			if echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
+				pr_magenta "Can't proceed: No IPv4 address for \"$NODE\" available"; outln "\n"
 				exit 1
 			fi
 		fi
 		# MSYS2 has no host or getent, so we do this
 		if [ -z "$IP4" ] ; then
-			IP4=`nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//'`
+			IP4=`nslookup $NODE 2>/dev/null | grep -A10 Name | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}'`
 		fi
 
 		# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
 		#which getent 2>&1 >/dev/null && IP6=`getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq`
-		if [ -z "$IP6" ] ; then
-			if host -t aaaa $NODE &>/dev/null ; then
-				IP6=`host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'`
-			else
-				IP6=""
-			fi
+		if which host &> /dev/null && [ -z "$IP6" ] ; then
+			IP6=$(host -t AAAA $NODE | egrep -oE '([0-9a-f]{1,4}:+)+[0-9a-f]{1,4}')
 		fi
 		# MSYS2 has no host or getent, so we do this
           if [ -z "$IP6" ] ; then
@@ -2673,8 +2669,12 @@ get_dns_entries() {
 
 	# we can't do this as some checks and even openssl are not yet IPv6 safe. BTW: bash sockets do IPv6 transparently!
 	#NODEIP=`echo "$IP6" | head -1`
-	rDNS=`host -t PTR $NODEIP 2>/dev/null | grep -v "is an alias for" | sed -e 's/^.*pointer //' -e 's/\.$//'`
-	echo $rDNS | grep -q NXDOMAIN  && rDNS=" - "
+	if which host &> /dev/null; then
+		rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep 'pointer' | sed -e 's/^.*pointer //' -e 's/\.$//')
+	elif which nslookup &> /dev/null; then
+		rDNS=$(nslookup -type=PTR $NODEIP 2> /dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
+	fi
+	[ -z "$rDNS" ] && rDNS=' - '
 }
 
 
