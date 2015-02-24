@@ -2308,7 +2308,7 @@ starttls() {
 			$OPENSSL s_client -connect $NODEIP:$PORT $SNI -starttls $protocol </dev/null >$TMPFILE 2>&1
 			ret=$?
 			if [ $ret -ne 0 ]; then
-				pr_bold "Problem: $OPENSSL couldn't estabilish STARTTLS via $protocol"; outln
+				pr_bold "Problem: $OPENSSL couldn't establish STARTTLS via $protocol"; outln
 				cat $TMPFILE
 				return 3
 			else
