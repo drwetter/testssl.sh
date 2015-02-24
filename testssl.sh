@@ -2812,7 +2812,7 @@ case "$1" in
 		parse_hn_port "$2"
 		spdy
 		exit $?  ;;
-	-B|--heartbleet)
+	-B|--heartbleed)
 		maketempf
 		parse_hn_port "$2"
 		outln; pr_blue "--> Testing for heartbleed vulnerability"; outln "\n"
