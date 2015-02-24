@@ -1192,7 +1192,7 @@ server_defaults() {
 		savedir=`pwd`; cd $TEMPDIR
 		$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | \
      		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
-		nrsaved=`ls $TEMPDIR/level?.crt | wc -w`
+		nrsaved=`ls $TEMPDIR/level?.crt 2>/dev/null | wc -w`
 		outln " # of certificates provided   $nrsaved"
 		cd $savedir
 
