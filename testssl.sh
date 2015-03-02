@@ -2589,7 +2589,7 @@ parse_hn_port() {
 	# check if we can connect to port 
 	if ! fd_socket; then
 		ignore_no_or_lame "Ignore? "
-		[ $? -ne 0 ] && exit 3
+		[ $? -ne 0 ] && return 3
 	fi
 	close_socket
 
@@ -2610,6 +2610,7 @@ parse_hn_port() {
 
 
 get_dns_entries() {
+	IP4=''; IP6=''
 	test4iponly=`printf $NODE | sed -e 's/[0-9]//g' -e 's/\.//g'`
 	if [ "x$test4iponly" == "x" ]; then  # only an IPv4 address was supplied
 		IP4=$NODE
@@ -2692,6 +2693,32 @@ datebanner() {
 }
 
 
+mx_allentries() {
+
+	HOST=$1
+	if which dig &> /dev/null; then
+		MXs=$(dig +short -t MX $HOST | grep '\d ')
+	elif which host &> /dev/null; then
+		MXs=$(host -t MX $HOST | grep 'handled by' | sed -e 's/^.*by //' -e 's/\.$//')
+	elif which nslookup &> /dev/null; then
+		MXs=$(nslookup -type=MX $HOST 2> /dev/null | grep 'mail exchanger = ' | awk '$5 ~ /[0-9]+/ {print $5 " " $NF}')
+	else
+		pr_redln 'No dig, host or nslookup'
+		exit -1
+	fi
+
+	MXs=$(echo "$MXs" | sort -n | sed -e 's/^.* //' -e 's/\.$//')
+
+	if [ -n "$MXs" ] ; then
+		for MX in $MXs; do
+			parse_hn_port "$MX:25" 'smtp' && starttls 'smtp'
+		done
+	else
+		pr_magentaln "$HOST has no Mail Server(s)"
+	fi
+}
+
+
 
 ################# main: #################
 
@@ -2720,6 +2747,10 @@ PATH_TO_TESTSSL=`readlink "$BASH_SOURCE"` 2>/dev/null
 case "$1" in
      -b|--banner|-banner|-v|--version|-version)
 		exit 0 
+		;;
+	--mx)
+		mx_allentries $2
+		exit $?
 		;;
 	-V|--local)
 		initialize_engine 	# GOST support
