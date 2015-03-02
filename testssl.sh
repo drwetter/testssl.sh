@@ -1290,6 +1290,7 @@ pfs() {
 }
 
 
+# new ietf rfc is very strict: https://tools.ietf.org/html/rfc7465
 rc4() {
 #	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
 	outln
