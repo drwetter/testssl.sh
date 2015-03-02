@@ -12,6 +12,9 @@
  - Fix for HSTS + subdomains
  - LibreSSL patch
 
+* Rechi
+ - initial MX stuff
+
 * @nvsofts (NV)
  - LibreSSL patch for GOST
 
