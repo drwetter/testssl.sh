@@ -18,6 +18,6 @@ New features in this release are / will be
 * debug file handling (ongoing)
 * BEAST (works, need some polishing for the output)
 
-Contributions, feedback, also bug reports are welcome.
+Contributions, feedback, also bug reports are welcome. For contributions please note: One patch per feature -- bug fix/improvement.
 
 
