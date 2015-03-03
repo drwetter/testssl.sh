@@ -2708,7 +2708,7 @@ mx_allentries() {
 	fi
 
 	# test first higher priority servers
-	MXs=$(echo "$MXs" | sort -nr | sed -e 's/^.* //' -e 's/\.$//')
+	MXs=$(echo "$MXs" | sort -n | sed -e 's/^.* //' -e 's/\.$//')
 
 	if [ -n "$MXs" ] ; then
 		for MX in $MXs; do
@@ -2917,6 +2917,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.197 2015/03/02 13:42:18 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.198 2015/03/03 06:21:20 dirkw Exp $ 
 # vim:ts=5:sw=5
 
