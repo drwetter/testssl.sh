@@ -367,24 +367,6 @@ runs_HTTP() {
 	return $ret
 }
 
-# Padding Oracle On Downgraded Legacy Encryption
-poodle() {
-	pr_bold " POODLE "; out "(CVE-2014-3566), experimental      "
-# w/o downgrade check as of now https://tools.ietf.org/html/draft-ietf-tls-downgrade-scsv-00 | TLS_FALLBACK_SCSV
-	$OPENSSL s_client -ssl3 $STARTTLS -connect $NODEIP:$PORT $SNI 2>$TMPFILE >/dev/null </dev/null
-	ret=$?
-	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
-	if [ $ret -eq 0 ]; then
-		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3 (no TLS_FALLBACK_SCSV mitigation tested)"
-	else
-		pr_green "not vulnerable (OK)"
-	fi
-	outln 
-
-	tmpfile_handle $FUNCNAME.txt
-	return $ret
-}
-
 #problems not handled: chunked
 http_header() {
 	[ -z "$1" ] && url="/" || url="$1"
@@ -907,7 +889,6 @@ runprotocols() {
 		7) ;;		# no local support
 	esac
 
-
 	testprotohelper "-tls1" " TLSv1     "
 	case $? in
 		0) ok 2 0 ;;   # no GCM, thus only normal print
@@ -1192,7 +1173,7 @@ server_defaults() {
 		savedir=`pwd`; cd $TEMPDIR
 		$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | \
      		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
-		nrsaved=`ls $TEMPDIR/level?.crt | wc -w`
+		nrsaved=`ls $TEMPDIR/level?.crt 2>/dev/null | wc -w`
 		outln " # of certificates provided   $nrsaved"
 		cd $savedir
 
@@ -1309,6 +1290,7 @@ pfs() {
 }
 
 
+# new ietf rfc is very strict: https://tools.ietf.org/html/rfc7465
 rc4() {
 #	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
 	outln
@@ -2176,7 +2158,40 @@ crime() {
 	return $ret
 }
 
+# for appliance which use padding, no fallack needed
+tls_poodle() {
+	pr_bold " POODLE, SSL"; out " CVE-2014-8730), experimental "
+	#FIXME
+	echo "#FIXME"
+	return 7
+}
 
+
+# Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3 
+ssl_poodle() {
+	local ret
+	local cbc_ciphers
+
+	pr_bold " POODLE, SSL"; out " (CVE-2014-3566), experimental "
+	cbc_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | grep CBC | awk '{ print $1 }' | tr '\n' ':'`
+	debugme echo $cbc_ciphers
+	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
+	ret=$?
+	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	if [ $ret -eq 0 ]; then
+		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (no TLS_FALLBACK_SCSV mitigation tested)"
+	else
+		pr_green "not vulnerable (OK)"
+	fi
+	outln 
+
+	tmpfile_handle $FUNCNAME.txt
+	return $ret	
+}
+
+
+
+#in a nutshell: don't use CBC Ciphers in SSLv3 TLSv1.0
 # Browser Exploit Against SSL/TLS
 beast(){
 	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
@@ -2186,7 +2201,6 @@ beast(){
 	local higher_proto_supported=""
 	local -i ret=0
 	local spaces="                                           "
-	#in a nutshell: don't use CBC Ciphers in SSLv3 TLSv1.0
 	
 	pr_bold " BEAST"; out " (CVE-2011-3389)                     "
 
@@ -2308,7 +2322,7 @@ starttls() {
 			$OPENSSL s_client -connect $NODEIP:$PORT $SNI -starttls $protocol </dev/null >$TMPFILE 2>&1
 			ret=$?
 			if [ $ret -ne 0 ]; then
-				pr_bold "Problem: $OPENSSL couldn't estabilish STARTTLS via $protocol"; outln
+				pr_bold "Problem: $OPENSSL couldn't establish STARTTLS via $protocol"; outln
 				cat $TMPFILE
 				return 3
 			else
@@ -2327,7 +2341,7 @@ starttls() {
 #				ccs_injection  ; ret=`expr $? + $ret`
 				renego		; ret=`expr $? + $ret`
 				crime		; ret=`expr $? + $ret`
-				poodle		; ret=`expr $? + $ret`
+				ssl_poodle	; ret=`expr $? + $ret`
 				beast		; ret=`expr $? + $ret`
 
 				rc4			; ret=`expr $? + $ret`
@@ -2374,13 +2388,14 @@ $PRG <options> URI
     <-R|--renegotiation>                  tests only for renegotiation vulnerability
     <-C|--compression|--crime>            tests only for CRIME vulnerability
     <-T|--breach>                         tests only for BREACH vulnerability
-    <-0|--poodle>                         tests only for POODLE vulnerability
+    <-O|--poodle>                         tests only for POODLE vulnerability
     <-A|--beast>                          tests only for BEAST vulnerability
     <-s|--pfs|--fs|--nsa>                 checks (perfect) forward secrecy settings
     <-4|--rc4|--appelbaum>                which RC4 ciphers are being offered?
     <-H|--header|--headers>               check for HSTS, HPKP and server/application banner string
 
     <-t|--starttls> protocol              does a default run against a STARTTLS enabled service
+    <--mx>                                tests MX records from high to low priority (STARTTLS, port 25)
 
 
 partly mandatory parameters:
@@ -2489,7 +2504,10 @@ cleanup () {
 
 # for now only GOST engine
 initialize_engine(){
-	if uname -s | grep -q BSD || ! $OPENSSL engine gost -vvvv -t -c >/dev/null 2>&1; then
+	if ! $OPENSSL engine gost -vvvv -t -c >/dev/null 2>&1; then
+		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln "\n"
+		return 1
+	elif $OPENSSL engine gost -vvvv -t -c 2>&1 | grep -iq "No such" ; then
 		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln "\n"
 		return 1
 	elif echo $osslver | grep -q LibreSSL; then
@@ -2589,6 +2607,8 @@ parse_hn_port() {
 	datebanner "Testing"
 	[[ -z "$2" ]] && runs_HTTP	# for starttls we don't check the protocol as it is supplied on the cmd line
 	initialize_engine
+
+	return 0
 }
 
 
@@ -2675,6 +2695,31 @@ datebanner() {
 }
 
 
+mx_allentries() {
+	if which dig &> /dev/null; then
+		MXs=$(dig +short -t MX $1)
+	elif which host &> /dev/null; then
+		MXs=$(host -t MX $1 | grep 'handled by' | sed -e 's/^.*by //' -e 's/\.$//')
+	elif which nslookup &> /dev/null; then
+		MXs=$(nslookup -type=MX $1 2> /dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
+	else
+		pr_magentaln 'No dig, host or nslookup'
+		exit 3
+	fi
+
+	# test first higher priority servers
+	MXs=$(echo "$MXs" | sort -n | sed -e 's/^.* //' -e 's/\.$//')
+
+	if [ -n "$MXs" ] ; then
+		for MX in $MXs; do
+			parse_hn_port "$MX:25" 'smtp' && starttls 'smtp'
+		done
+	else
+		pr_boldln "$1 has no mail server(s)"
+	fi
+}
+
+
 
 ################# main: #################
 
@@ -2703,6 +2748,10 @@ PATH_TO_TESTSSL=`readlink "$BASH_SOURCE"` 2>/dev/null
 case "$1" in
      -b|--banner|-banner|-v|--version|-version)
 		exit 0 
+		;;
+	--mx) 
+		mx_allentries $2
+		exit $?
 		;;
 	-V|--local)
 		initialize_engine 	# GOST support
@@ -2791,11 +2840,11 @@ case "$1" in
 		fi
 		ret=`expr $? + $ret`
 		exit $ret ;;
-	-0|--poodle)
+	-O|--ssl_poodle|poodle)
 		maketempf
 		parse_hn_port "$2"
-		outln; pr_blue "--> Testing for POODLE (Padding Oracle On Downgraded Legacy Encryption) vulnerability"; outln "\n"
-		poodle
+		outln; pr_blue "--> Testing for POODLE (Padding Oracle On Downgraded Legacy Encryption) vulnerability, SSLv3"; outln "\n"
+		ssl_poodle
 		exit $? ;;
 	-4|--rc4|--appelbaum)
 		maketempf
@@ -2860,7 +2909,7 @@ case "$1" in
 		renego			; ret=`expr $? + $ret`
 		crime			; ret=`expr $? + $ret`
 		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=`expr $? + $ret`
-		poodle			; ret=`expr $? + $ret`
+		ssl_poodle		; ret=`expr $? + $ret`
 		beast			; ret=`expr $? + $ret`
 
 		rc4				; ret=`expr $? + $ret`
@@ -2868,6 +2917,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.194 2015/02/22 22:05:39 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.198 2015/03/03 06:21:20 dirkw Exp $ 
 # vim:ts=5:sw=5
 
