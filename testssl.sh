@@ -428,6 +428,9 @@ preload() {
 }
 
 hsts() {
+	local hsts_age_sec
+	local hsts_age_days
+
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
@@ -435,12 +438,12 @@ hsts() {
 	grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
-		AGE_SEC=`sed -e 's/[^0-9]*//g' $TMPFILE | head -1` 
-		AGE_DAYS=`expr $AGE_SEC \/ 86400`
-		if [ $AGE_DAYS -gt $HSTS_MIN ]; then
-			pr_litegreen "$AGE_DAYS days \c" ; out "($AGE_SEC s)"
+		hsts_age_sec=`sed -e 's/[^0-9]*//g' $TMPFILE | head -1` 
+		hsts_age_days=$(( hsts_age_sec / 86400))
+		if [ $hsts_age_days -gt $HSTS_MIN ]; then
+			pr_litegreen "$hsts_age_days days \c" ; out "($hsts_age_sec s)"
 		else
-			pr_brown "$AGE_DAYS days (<$HSTS_MIN is not good enough)"
+			pr_brown "$hsts_age_days days (<$HSTS_MIN is not good enough)"
 		fi
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"  #FIXME: To be checked against: e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc and https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
@@ -454,6 +457,9 @@ hsts() {
 }
 
 hpkp() {
+	local hpkp_age_sec
+	local hpkp_age_days
+	
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
@@ -461,16 +467,21 @@ hpkp() {
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
-		AGE_SEC=`sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE`
-		AGE_DAYS=`expr $AGE_SEC \/ 86400`
-		if [ $AGE_DAYS -ge $HPKP_MIN ]; then
-			pr_litegreen "$AGE_DAYS days \c" ; out "($AGE_SEC s)"
-		else
-			pr_brown "$AGE_DAYS days (<$HPKP_MIN is not good enough)"
+		# dirty trick so that grep -c really counts occurances and not lines w/ occurances:
+		if [ `sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -c pin-sha` -eq 1 ]; then
+			pr_brown "One key is not sufficent, "
 		fi
+		hpkp_age_sec=`sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE`
+		hpkp_age_days=$((hpkp_age_sec / 86400))
+		if [ $hpkp_age_days -ge $HPKP_MIN ]; then
+			pr_litegreen "$hpkp_age_days days \c" ; out "= $hpkp_age_sec s"
+		else
+			pr_brown "$hpkp_age_days days (<$HPKP_MIN is not good enough)"
+		fi
+		
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"
-		out ", fingerprints not checked"
+		out " (fingerprints not checked)"
 	else
 		out "--"
 	fi
@@ -1035,8 +1046,8 @@ server_preference() {
 				 	outln
 					printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"            # beides ausgeben
 				 else                                                    # davor nihct leer
-					if [[ "${cipher[i-1]}" == "${cipher[i]}" ]]; then       # und bei vorigem Protokoll selber cipher
-						out ", ${proto[i]}"                         # selber Cipher --> Nur Protokoll dahinter
+					if [[ "${cipher[i-1]}" == "${cipher[i]}" ]]; then   # und bei vorigem Protokoll selber cipher
+						out ", ${proto[i]}"                         	  # selber Cipher --> Nur Protokoll dahinter
 					else
 						outln
 						printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"            # beides ausgeben
@@ -2190,6 +2201,43 @@ ssl_poodle() {
 }
 
 
+# freak attack: don't use EXPORT RSA ciphers, see https://freakattack.com/
+freak() {
+	local ret
+	local exportrsa_ciphers
+	local addtl_warning=""
+
+	pr_bold " FREAK "; out " (CVE-2015-0204), experimental      "
+	no_exportrsa_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | grep RSA | grep EXP | wc -l`
+	exportrsa_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | grep RSA | grep EXP | awk '{ print $1 }' | tr '\n' ':'`
+	debugme echo $exportrsa_ciphers
+	# with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
+	# EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5
+	case $no_exportrsa_ciphers in
+		0) 	pr_magentaln "Local problem: your $OPENSSL doesn't have any EXPORT RSA ciphers configured" 
+			return 3
+			;;
+		1,2,3) 
+			addtl_warning=" (tested only with $no_exportrsa_ciphers out of 9 ciphers)" ;;
+		7,8,9,10,11)
+			addtl_warning="";;
+		4,5,6) 
+			addtl_warning=" (tested with $no_exportrsa_ciphers/9 ciphers)" ;;
+	esac
+	$OPENSSL s_client $STARTTLS -cipher $exportrsa_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
+	ret=$?
+	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	if [ $ret -eq 0 ]; then
+		pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
+	else
+		pr_green "not vulnerable (OK)"; out "$addtl_warning"
+	fi
+	outln 
+
+	tmpfile_handle $FUNCNAME.txt
+	return $ret	
+}
+
 
 #in a nutshell: don't use CBC Ciphers in SSLv3 TLSv1.0
 # Browser Exploit Against SSL/TLS
@@ -2342,6 +2390,7 @@ starttls() {
 				renego		; ret=`expr $? + $ret`
 				crime		; ret=`expr $? + $ret`
 				ssl_poodle	; ret=`expr $? + $ret`
+				freak		; ret=`expr $? + $ret`
 				beast		; ret=`expr $? + $ret`
 
 				rc4			; ret=`expr $? + $ret`
@@ -2388,7 +2437,8 @@ $PRG <options> URI
     <-R|--renegotiation>                  tests only for renegotiation vulnerability
     <-C|--compression|--crime>            tests only for CRIME vulnerability
     <-T|--breach>                         tests only for BREACH vulnerability
-    <-O|--poodle>                         tests only for POODLE vulnerability
+    <-O|--poodle>                         tests only for POODLE (SSL) vulnerability
+    <-F|--freak>                          tests only for FREAK vulnerability
     <-A|--beast>                          tests only for BEAST vulnerability
     <-s|--pfs|--fs|--nsa>                 checks (perfect) forward secrecy settings
     <-4|--rc4|--appelbaum>                which RC4 ciphers are being offered?
@@ -2846,6 +2896,12 @@ case "$1" in
 		outln; pr_blue "--> Testing for POODLE (Padding Oracle On Downgraded Legacy Encryption) vulnerability, SSLv3"; outln "\n"
 		ssl_poodle
 		exit $? ;;
+	-F|--freak)
+		maketempf
+		parse_hn_port "$2"
+		outln; pr_blue "--> Testing for FREAK attack"; outln "\n"
+		freak
+		exit $? ;;
 	-4|--rc4|--appelbaum)
 		maketempf
 		parse_hn_port "$2"
@@ -2910,6 +2966,7 @@ case "$1" in
 		crime			; ret=`expr $? + $ret`
 		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=`expr $? + $ret`
 		ssl_poodle		; ret=`expr $? + $ret`
+		freak			; ret=`expr $? + $ret`
 		beast			; ret=`expr $? + $ret`
 
 		rc4				; ret=`expr $? + $ret`
@@ -2917,6 +2974,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.198 2015/03/03 06:21:20 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.200 2015/03/07 08:33:30 dirkw Exp $ 
 # vim:ts=5:sw=5
 
