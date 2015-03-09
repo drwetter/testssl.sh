@@ -1235,6 +1235,11 @@ server_defaults() {
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 pfs() {
+	local ret
+	local none
+	local number_pfs
+	local hexcode n ciph sslvers kx auth enc mac
+
 	outln
 	pr_blue "--> Testing (Perfect) Forward Secrecy  (P)FS)"; outln " -- omitting 3DES, RC4 and Null Encryption here"
 # https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy
@@ -1268,42 +1273,45 @@ pfs() {
 		outln "(it depends on the browser/client whether one of them will be used)\n"
 		none=0
 		neat_header
-		$OPENSSL ciphers -V "$PFSOK" | while read hexcode n ciph sslvers kx auth enc mac; do
+		while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
-			ret=$?
-			if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ] ; then
+			ret2=$?
+			if [ $ret2 -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ] ; then
 				continue # no successful connect AND not verbose displaying each cipher
 			fi
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc $strength
+			let "none++"
+			((none++))
 			if [ "$SHOW_EACH_C" -ne 0 ] ; then
-				if [ $ret -eq 0 ]; then
+				if [ $ret2 -eq 0 ]; then
 					pr_green "works"
 				else
 					out "not a/v"
 				fi
-			else
-				none=1
 			fi
 			outln
-		done
+		done < <($OPENSSL ciphers -V "$PFSOK")
+		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
 		outln
+		debugme echo $none
+
 		if [ "$none" -eq 0 ] ; then
-			 ret=0
-		else
-			 pr_magenta "no PFS ciphers found"
+			 pr_brown "no PFS ciphers found"
 			 ret=1
+		else
+			 ret=0
 		fi
 	fi
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
-#FIXME: setopt or something different
 }
 
 
+# https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
+# http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 # new ietf rfc is very strict: https://tools.ietf.org/html/rfc7465
 rc4() {
-#	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
 	outln
 	pr_blue "--> Checking RC4 Ciphers" ; outln
 	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
@@ -1314,7 +1322,7 @@ rc4() {
 		outln "(for legacy support e.g. IE6 rather consider x13 or x0a)\n"
 		bad=1
 		neat_header
-		cat $TMPFILE | while read hexcode n ciph sslvers kx auth enc mac; do
+		while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
 			ret=$?
 			if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ] ; then
@@ -1333,9 +1341,8 @@ rc4() {
 				out
 			fi
 			outln
-		done
-		# https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
-		# http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
+		done < $TMPFILE
+		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
 		outln
 	else
 		outln
@@ -1343,9 +1350,6 @@ rc4() {
 		bad=0
 	fi
 
-#	shopt -u lastpipe				# othwise for some reason it segfaults
-# FIXME: still segfaults: see https://www.mail-archive.com/bug-bash@gnu.org/msg14428.html | 
-# maybe use @PIPESTATUS as a workaround
 	tmpfile_handle $FUNCNAME.txt
 	return $bad
 }
@@ -2242,7 +2246,6 @@ freak() {
 #in a nutshell: don't use CBC Ciphers in SSLv3 TLSv1.0
 # Browser Exploit Against SSL/TLS
 beast(){
-	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
 	local hexcode dash cbc_cipher sslvers kx auth enc mac export
 	local detected_proto
 	local detected_cbc_cipher=""
@@ -2258,14 +2261,16 @@ beast(){
 		if [ $? -ne 0 ]; then
 			continue	# protocol no supported, so we do not need to check each cipher with that protocol
 		fi
-		$OPENSSL ciphers -V 'ALL:eNULL' | grep CBC | while read hexcode dash cbc_cipher sslvers kx auth enc mac export ; do
+		while read hexcode dash cbc_cipher sslvers kx auth enc mac export ; do
 			$OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
 			#normalize_ciphercode $hexcode
 			#neat_list $HEXC $ciph $kx $enc | strings | grep -wai "$arg"
 			if [ $? -eq 0 ]; then
 				detected_cbc_cipher="$detected_cbc_cipher ""$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
 			fi
-		done
+		done < <($OPENSSL ciphers -V 'ALL:eNULL' | grep CBC)   
+		#    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
+
 		#detected_cbc_cipher=`echo $detected_cbc_cipher | sed 's/ //g'`
 		if [ -z "$detected_cbc_cipher" ]; then
 			pr_litegreenln "no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
@@ -2291,7 +2296,6 @@ beast(){
 
 #	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
 
-	shopt -u lastpipe				# othwise for some reason it segfaults
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
@@ -2974,6 +2978,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.200 2015/03/07 08:33:30 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.201 2015/03/09 07:07:40 dirkw Exp $ 
 # vim:ts=5:sw=5
 
