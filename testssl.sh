@@ -505,7 +505,7 @@ serverbanner() {
 	pr_bold " Server        "
 	grep -ai '^Server' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		serverbanner=$(cat $TMPFILE | sed -e 's/^Server: //' -e 's/^server: //')
+		serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
 		if [ x"$serverbanner" == "x\n" -o x"$serverbanner" == "x\n\r" -o x"$serverbanner" == "x" ]; then
 			outln "banner exists but empty string"
 		else
@@ -553,7 +553,7 @@ cookieflags() {	# ARG1: Path, ARG2: path
 	pr_bold " Cookie(s)     "
 	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		nr_cookies=$(cat $TMPFILE | wc -l)
+		nr_cookies=$(wc -l $TMPFILE)
 		out "$nr_cookies issued: "
 		if [ $nr_cookies -gt 1 ] ; then
 			negative_word="NONE"
@@ -645,7 +645,7 @@ listciphers() {
 std_cipherlists() {
 	out "$2 "; 
 	if listciphers $1; then  # is that locally available??
-		[ $SHOW_LOC_CIPH = "1" ] && out "local ciphers are: " && cat $TMPFILE | sed 's/:/, /g'
+		[ $SHOW_LOC_CIPH = "1" ] && out "local ciphers are: " && sed 's/:/, /g' $TMPFILE
 		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $SNI 2>$TMPFILE >/dev/null </dev/null
 		ret=$?
 		[[ $DEBUG -ge 2 ]] && cat $TMPFILE
@@ -712,7 +712,7 @@ sockread() {
 	done
 #FIXME: cleanup, we have extra function for this now
 
-	if ps $pid 2&>1 >/dev/null ; then
+	if ps $pid >/dev/null ; then
 		# time's up and dd is still alive --> timeout
 		kill $pid 
 		wait $pid 2>/dev/null
@@ -1460,7 +1460,7 @@ sockread_serverhello() {
           [[ $maxsleep -le 0 ]] && break
      done
 
-     if ps $pid 2>&1 >/dev/null ; then
+     if ps $pid >/dev/null ; then
           # time's up and dd is still alive --> timeout
           kill $pid >&2 2>/dev/null
           wait $pid 2>/dev/null
