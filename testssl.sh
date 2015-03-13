@@ -505,7 +505,7 @@ serverbanner() {
 	pr_bold " Server        "
 	grep -ai '^Server' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		serverbanner=$(cat $TMPFILE | sed -e 's/^Server: //' -e 's/^server: //')
+		serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
 		if [ x"$serverbanner" == "x\n" -o x"$serverbanner" == "x\n\r" -o x"$serverbanner" == "x" ]; then
 			outln "banner exists but empty string"
 		else
@@ -553,7 +553,7 @@ cookieflags() {	# ARG1: Path, ARG2: path
 	pr_bold " Cookie(s)     "
 	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		nr_cookies=$(cat $TMPFILE | wc -l)
+		nr_cookies=$(wc -l $TMPFILE)
 		out "$nr_cookies issued: "
 		if [ $nr_cookies -gt 1 ] ; then
 			negative_word="NONE"
@@ -645,7 +645,7 @@ listciphers() {
 std_cipherlists() {
 	out "$2 "; 
 	if listciphers $1; then  # is that locally available??
-		[ $SHOW_LOC_CIPH = "1" ] && out "local ciphers are: " && cat $TMPFILE | sed 's/:/, /g'
+		[ $SHOW_LOC_CIPH = "1" ] && out "local ciphers are: " && sed 's/:/, /g' $TMPFILE
 		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $SNI 2>$TMPFILE >/dev/null </dev/null
 		ret=$?
 		[[ $DEBUG -ge 2 ]] && cat $TMPFILE
@@ -2203,7 +2203,7 @@ ssl_poodle() {
 	debugme echo $cbc_ciphers
 	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -v "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (no TLS_FALLBACK_SCSV mitigation tested)"
 	else
@@ -2241,7 +2241,7 @@ freak() {
 	esac
 	$OPENSSL s_client $STARTTLS -cipher $exportrsa_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -v "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
 	else
