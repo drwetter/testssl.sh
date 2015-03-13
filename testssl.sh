@@ -270,7 +270,7 @@ wait_kill(){
 	pid=$1
 	maxsleep=$2
 	while true; do
-		if ! ps $pid 2>&1 >/dev/null ; then
+		if ! ps $pid >/dev/null ; then
 			return 0 	# didn't reach maxsleep yet
 		fi
 		sleep 1
@@ -702,7 +702,7 @@ sockread() {
 	pid=$!
 	
 	while true; do
-		if ! ps $pid 2>&1 >/dev/null ; then
+		if ! ps $pid >/dev/null ; then
 			break  # didn't reach maxsleep yet
 			kill $pid >&2 2>/dev/null
 		fi
@@ -2203,7 +2203,7 @@ ssl_poodle() {
 	debugme echo $cbc_ciphers
 	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -v "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (no TLS_FALLBACK_SCSV mitigation tested)"
 	else
@@ -2241,7 +2241,7 @@ freak() {
 	esac
 	$OPENSSL s_client $STARTTLS -cipher $exportrsa_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -v "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
 	else
