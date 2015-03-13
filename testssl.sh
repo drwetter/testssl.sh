@@ -1446,7 +1446,7 @@ sockread_serverhello() {
      [[ "x$2" = "x" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
      ret=0
 
-     SOCK_REPLY_FILE=`mktemp /tmp/ddreply.XXXXXX` || exit 7
+     SOCK_REPLY_FILE=`mktemp $TEMPDIR/ddreply.XXXXXX` || exit 7
      dd bs=$1 of=$SOCK_REPLY_FILE count=1 <&5 2>/dev/null &
      pid=$!
 
@@ -1487,27 +1487,32 @@ display_sslv2serverhello() {
 
 	v2_hello_ascii=`hexdump -v -e '16/1 "%02X"' $1`
 	[[ "$DEBUG" -ge 4 ]] && echo $v2_hello_ascii 	# one line without any blanks
-	[[ -z $v2_hello_ascii ]] && return 0			# no server hello received
+	if [[ -z $v2_hello_ascii ]] ; then
+		ret=0								# no server hello received
+		debugme echo "server hello empty"
+	else
+		# now scrape two bytes out of the reply per byte
+		v2_hello_initbyte="${v2_hello_ascii:0:1}"  # normally this belongs to the next, should be 8!
+		v2_hello_length="${v2_hello_ascii:1:3}"  # + 0x8000 see above
+		v2_hello_handshake="${v2_hello_ascii:4:2}"
+		v2_hello_cert_length="${v2_hello_ascii:14:4}"
+		v2_hello_cipherspec_length="${v2_hello_ascii:18:4}"
 
-	# now scrape two bytes out of the reply per byte
-	v2_hello_initbyte="${v2_hello_ascii:0:1}"  # normally this belongs to the next, should be 8!
-	v2_hello_length="${v2_hello_ascii:1:3}"  # + 0x8000 see above
-	v2_hello_handshake="${v2_hello_ascii:4:2}"
-	v2_hello_cert_length="${v2_hello_ascii:14:4}"
-	v2_hello_cipherspec_length="${v2_hello_ascii:18:4}"
-	V2_HELLO_CIPHERSPEC_LENGTH=`printf "%d\n" "0x$v2_hello_cipherspec_length"`
+		if [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
+			[[ $DEBUG -ge 2 ]] && echo "$v2_hello_initbyte / $v2_hello_handshake"
+			ret=1
+		fi
 
-	if [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
-		[[ $DEBUG -ge 2 ]] && echo "$v2_hello_initbyte / $v2_hello_handshake"
-		return 1
+		if [[ $DEBUG -ge 3 ]]; then
+			echo "SSLv2 server hello length: 0x0$v2_hello_length"
+			echo "SSLv2 certificate length:  0x$v2_hello_cert_length"
+			echo "SSLv2 cipher spec length:  0x$v2_hello_cipherspec_length"
+		fi
+
+		V2_HELLO_CIPHERSPEC_LENGTH=`printf "%d\n" "0x$v2_hello_cipherspec_length" 2>/dev/null`
+		[ $? -ne 0 ] && ret=7
 	fi
-
-	if [[ $DEBUG -ge 3 ]]; then
-		echo "SSLv2 server hello length: 0x0$v2_hello_length"
-		echo "SSLv2 certificate length:  0x$v2_hello_cert_length"
-		echo "SSLv2 cipher spec length:  0x$v2_hello_cipherspec_length"
-	fi
-	return 0
+	return $ret
 }
 
 
@@ -1634,22 +1639,28 @@ sslv2_sockets() {
 	fi
 
 	display_sslv2serverhello "$SOCK_REPLY_FILE"
-
-	# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
-	lines=`cat "$SOCK_REPLY_FILE" 2>/dev/null | hexdump -C | wc -l` 
-	[[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
-
-	if [[ "$lines" -gt 1 ]] ;then
-		ciphers_detected=$(($V2_HELLO_CIPHERSPEC_LENGTH / 3 ))
-		if [ 0 -eq $ciphers_detected ] ; then
-			pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"
-		else
-			pr_red "offered (NOT ok)"; outln " -- $ciphers_detected ciphers"
-		fi
-		ret=1
+	if [ $? -eq 7 ]; then
+		# strange reply
+		pr_litemagenta "strange v2 reply "
+		outln " (rerun with DEBUG=2)"
+		[[ $DEBUG -ge 2 ]] && hexdump -C $SOCK_REPLY_FILE | head -1
 	else
-		pr_greenln "not offered (OK)"
-		ret=0
+		# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
+		lines=`cat "$SOCK_REPLY_FILE" 2>/dev/null | hexdump -C | wc -l` 
+		[[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
+
+		if [[ "$lines" -gt 1 ]] ;then
+			ciphers_detected=$(($V2_HELLO_CIPHERSPEC_LENGTH / 3 ))
+			if [ 0 -eq $ciphers_detected ] ; then
+				pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"
+			else
+				pr_red "offered (NOT ok)"; outln " -- $ciphers_detected ciphers"
+			fi
+			ret=1
+		else
+			pr_greenln "not offered (OK)"
+			ret=0
+		fi
 	fi
 	pr_off
 
@@ -2978,6 +2989,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.201 2015/03/09 07:07:40 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.203 2015/03/13 11:20:18 dirkw Exp $ 
 # vim:ts=5:sw=5
 
