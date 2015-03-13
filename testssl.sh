@@ -270,7 +270,7 @@ wait_kill(){
 	pid=$1
 	maxsleep=$2
 	while true; do
-		if ! ps ax | grep -v grep | grep -q $pid; then
+		if ! ps $pid 2>&1 >/dev/null; then
 			return 0 	# didn't reach maxsleep yet
 		fi
 		sleep 1
@@ -702,7 +702,7 @@ sockread() {
 	pid=$!
 	
 	while true; do
-		if ! ps ax | grep -v grep | grep -q $pid; then
+		if ! ps $pid 2>&1 >/dev/null; then
 			break  # didn't reach maxsleep yet
 			kill $pid >&2 2>/dev/null
 		fi
@@ -712,7 +712,7 @@ sockread() {
 	done
 #FIXME: cleanup, we have extra function for this now
 
-	if ps ax | grep -v grep | grep -q $pid; then
+	if ps $pid 2>&1 >/dev/null; then
 		# time's up and dd is still alive --> timeout
 		kill $pid 
 		wait $pid 2>/dev/null
@@ -858,7 +858,7 @@ testversion() {
 
 	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -v "unable to get local|verify error"
 	
 	if grep -q "no cipher list" $TMPFILE ; then
 		ret=5
@@ -1460,7 +1460,7 @@ sockread_serverhello() {
           [[ $maxsleep -le 0 ]] && break
      done
 
-     if ps ax | grep -v grep | grep -q $pid; then
+     if ps $pid 2>&1 >/dev/null; then
           # time's up and dd is still alive --> timeout
           kill $pid >&2 2>/dev/null
           wait $pid 2>/dev/null
@@ -2188,7 +2188,7 @@ ssl_poodle() {
 	local cbc_ciphers
 
 	pr_bold " POODLE, SSL"; out " (CVE-2014-3566), experimental "
-	cbc_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | grep CBC | awk '{ print $1 }' | tr '\n' ':'`
+	cbc_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | awk '/CBC/ { print $1 }' | tr '\n' ':'`
 	debugme echo $cbc_ciphers
 	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
@@ -2212,8 +2212,8 @@ freak() {
 	local addtl_warning=""
 
 	pr_bold " FREAK "; out " (CVE-2015-0204), experimental      "
-	no_exportrsa_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | grep RSA | grep EXP | wc -l`
-	exportrsa_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | grep RSA | grep EXP | awk '{ print $1 }' | tr '\n' ':'`
+	no_exportrsa_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | egrep "^EXP.*RSA" | wc -l`
+	exportrsa_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | awk '/^EXP.*RSA/ {print $1}' | tr '\n' ':'`
 	debugme echo $exportrsa_ciphers
 	# with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
 	# EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5
@@ -2471,7 +2471,7 @@ mybanner() {
 	nr_ciphers=`$OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w`
 	hn=`hostname`
 	#poor man's ident (nowadays ident not neccessarily installed)
-	idtag=`grep '\$Id' $0 | grep -w Exp | grep -v grep | sed -e 's/^#  //' -e 's/\$ $/\$/'`
+	idtag=`grep '\$Id' $0 | grep -w [E]xp | sed -e 's/^#  //' -e 's/\$ $/\$/'`
 	[ "$COLOR" -ne 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=`cat <<EOF
 
@@ -2677,7 +2677,7 @@ get_dns_entries() {
 			getent ahostsv4 $NODE 2>/dev/null >/dev/null
 			if [ $? -eq 0 ]; then
 				# Linux:
-				IP4=`getent ahostsv4 $NODE 2>/dev/null | grep -v ':' | grep STREAM | awk '{ print $1}' | uniq`
+				IP4=`getent ahostsv4 $NODE 2>/dev/null | grep -v ':' | awk '/STREAM/ { print $1}' | uniq`
 			#else
 			#	IP4=`getent hosts $NODE 2>/dev/null | grep -v ':' | awk '{ print $1}' | uniq`
 			#FIXME: FreeBSD returns only one entry 
