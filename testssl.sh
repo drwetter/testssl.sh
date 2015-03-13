@@ -274,7 +274,7 @@ wait_kill(){
 			return 0 	# didn't reach maxsleep yet
 		fi
 		sleep 1
-		maxsleep=$(expr $maxsleep - 1)
+		maxsleep=$(($maxsleep - 1))
 		test $maxsleep -eq 0 && break
 	done # needs to be killed:
 	kill $pid >&2 2>/dev/null
@@ -686,7 +686,7 @@ std_cipherlists() {
 # ARG2: sleep
 socksend() {
 	# the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
-	data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\\/g' | tr -d '\n')
+	data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
 	[[ $DEBUG -ge 4 ]] && echo "\"$data\""
 	printf -- "$data" >&5 2>/dev/null &
 	sleep $2
@@ -707,7 +707,7 @@ sockread() {
 			kill $pid >&2 2>/dev/null
 		fi
 		sleep 1
-		maxsleep=$(expr $maxsleep - 1)
+		maxsleep=$(($maxsleep - 1))
 		test $maxsleep -eq 0 && break
 	done
 #FIXME: cleanup, we have extra function for this now
@@ -1024,7 +1024,7 @@ server_preference() {
 				 proto[i]=""
 				 cipher[i]=""
 			fi
-			i=$(expr $i + 1)
+			i=$(($i + 1))
 		done
 
 		if spdy_pre ; then		# is NPN/SPDY supported and is this no STARTTLS?
@@ -1163,10 +1163,10 @@ server_defaults() {
 		if ! echo $expire | grep -qw not; then
 	     	pr_red "expired!"
 		else
-			SECS2WARN=$(expr 24 \* 60 \* 60 \* $DAYS2WARN2)  # low threshold first
+			SECS2WARN=$((24 * 60 * 60 * $DAYS2WARN2))  # low threshold first
 		     expire=$($OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN)
 			if echo "$expire" | grep -qw not; then
-				SECS2WARN=$(expr 24 \* 60 \* 60 \* $DAYS2WARN2)
+				SECS2WARN=$((24 * 60 * 60 * $DAYS2WARN2))
 				expire=$($OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN)
 				if echo "$expire" | grep -qw not; then
 					pr_litegreen ">= $DAYS2WARN1 days"
@@ -1216,7 +1216,7 @@ server_defaults() {
 		#remotetime=$(grep -w "Start Time" $TMPFILE | sed 's/[A-Za-z:() ]//g')
 		#if [ ! -z "$remotetime" ]; then
 		#	remotetime_stdformat=$(date --date="@$remotetime" "+%Y-%m-%d %r")
-		#	difftime=$(expr $localtime - $remotetime)
+		#	difftime=$(($localtime - $remotetime))
 		#	[ $difftime -gt 0 ] && difftime="+"$difftime
 		#	difftime=$difftime" s"
 		#	outln " remotetime? : $remotetime ($difftime) = $remotetime_stdformat"
@@ -2171,10 +2171,10 @@ crime() {
 #			STR=$(grep Compression $TMPFILE )
 #			if echo $STR | grep -q NONE >/dev/null; then
 #				pr_green "not vulnerable (OK)"
-#				ret=$(expr $ret + 0)
+#				ret=$(($ret + 0))
 #			else
 #				pr_red "VULNERABLE (NOT ok)"
-#				ret=$(expr $ret + 1)
+#				ret=$(($ret + 1))
 #			fi
 #		fi
 #	fi
@@ -2393,27 +2393,27 @@ starttls() {
 # of the cmdline e.g. with getopts. 
 				STARTTLS="-starttls $protocol"
 				export STARTTLS
-				runprotocols		; ret=$(expr $? + $ret)
-				run_std_cipherlists	; ret=$(expr $? + $ret)
-				server_preference	; ret=$(expr $? + $ret)
-				server_defaults	; ret=$(expr $? + $ret)
+				runprotocols		; ret=$(($? + $ret))
+				run_std_cipherlists	; ret=$(($? + $ret))
+				server_preference	; ret=$(($? + $ret))
+				server_defaults	; ret=$(($? + $ret))
 
 				outln; pr_blue "--> Testing specific vulnerabilities" ; outln "\n"
 #FIXME: heartbleed + CCS won't work this way yet
-#				heartbleed     ; ret=$(expr $? + $ret)
-#				ccs_injection  ; ret=$(expr $? + $ret)
-				renego		; ret=$(expr $? + $ret)
-				crime		; ret=$(expr $? + $ret)
-				ssl_poodle	; ret=$(expr $? + $ret)
-				freak		; ret=$(expr $? + $ret)
-				beast		; ret=$(expr $? + $ret)
+#				heartbleed     ; ret=$(($? + $ret))
+#				ccs_injection  ; ret=$(($? + $ret))
+				renego		; ret=$(($? + $ret))
+				crime		; ret=$(($? + $ret))
+				ssl_poodle	; ret=$(($? + $ret))
+				freak		; ret=$(($? + $ret))
+				beast		; ret=$(($? + $ret))
 
-				rc4			; ret=$(expr $? + $ret)
-				pfs			; ret=$(expr $? + $ret)
+				rc4			; ret=$(($? + $ret))
+				pfs			; ret=$(($? + $ret))
 
 				outln
-				#cipher_per_proto   ; ret=$(expr $? + $ret)
-				allciphers		; ret=$(expr $? + $ret)
+				#cipher_per_proto   ; ret=$(($? + $ret))
+				allciphers		; ret=$(($? + $ret))
 			fi
 			;;
 		*) pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet, ldap allowed" >&2
@@ -2846,7 +2846,7 @@ case "$1" in
 		maketempf
 		parse_hn_port "$2"
 		runprotocols 	; ret=$?
-		spdy			; ret=$(expr $? + $ret)
+		spdy			; ret=$(($? + $ret))
 		exit $ret ;;
 	-f|--ciphers)
 		maketempf
@@ -2903,7 +2903,7 @@ case "$1" in
 			breach "$URL_PATH"
 			ret=$?
 		fi
-		ret=$(expr $? + $ret)
+		ret=$(($? + $ret))
 		exit $ret ;;
 	-O|--ssl_poodle|poodle)
 		maketempf
@@ -2941,11 +2941,11 @@ case "$1" in
 			hpkp "$URL_PATH"
 			ret=$?
 			serverbanner "$URL_PATH"
-			ret=$(expr $? + $ret)
+			ret=$(($? + $ret))
 			applicationbanner "$URL_PATH"
-			ret=$(expr $? + $ret)
+			ret=$(($? + $ret))
 			cookieflags "$URL_PATH"
-			ret=$(expr $? + $ret)
+			ret=$(($? + $ret))
 		else
 			pr_litemagentaln " Wrong usage: You're not targetting a HTTP service"
 			ret=2
@@ -2958,34 +2958,34 @@ case "$1" in
 
 		outln
 		runprotocols		; ret=$?
-		spdy 			; ret=$(expr $? + $ret)
-		run_std_cipherlists	; ret=$(expr $? + $ret)
-		server_preference	; ret=$(expr $? + $ret)
-		server_defaults 	; ret=$(expr $? + $ret)
+		spdy 			; ret=$(($? + $ret))
+		run_std_cipherlists	; ret=$(($? + $ret))
+		server_preference	; ret=$(($? + $ret))
+		server_defaults 	; ret=$(($? + $ret))
 
 		if [[ $SERVICE == "HTTP" ]]; then
 			outln; pr_blue "--> Testing HTTP Header response"
 			outln "\n"
-			hsts "$URL_PATH"			; ret=$(expr $? + $ret)
-			hpkp "$URL_PATH"			; ret=$(expr $? + $ret)
-			serverbanner "$URL_PATH"		; ret=$(expr $? + $ret)
-			applicationbanner "$URL_PATH"		; ret=$(expr $? + $ret)
-			cookieflags  "$URL_PATH"		; ret=$(expr $? + $ret)
+			hsts "$URL_PATH"			; ret=$(($? + $ret))
+			hpkp "$URL_PATH"			; ret=$(($? + $ret))
+			serverbanner "$URL_PATH"		; ret=$(($? + $ret))
+			applicationbanner "$URL_PATH"		; ret=$(($? + $ret))
+			cookieflags  "$URL_PATH"		; ret=$(($? + $ret))
 		fi
 
 		outln; pr_blue "--> Testing specific vulnerabilities" 
 		outln "\n"
-		heartbleed          ; ret=$(expr $? + $ret)
-		ccs_injection       ; ret=$(expr $? + $ret)
-		renego			; ret=$(expr $? + $ret)
-		crime			; ret=$(expr $? + $ret)
-		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=$(expr $? + $ret)
-		ssl_poodle		; ret=$(expr $? + $ret)
-		freak			; ret=$(expr $? + $ret)
-		beast			; ret=$(expr $? + $ret)
+		heartbleed          ; ret=$(($? + $ret))
+		ccs_injection       ; ret=$(($? + $ret))
+		renego			; ret=$(($? + $ret))
+		crime			; ret=$(($? + $ret))
+		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=$(($? + $ret))
+		ssl_poodle		; ret=$(($? + $ret))
+		freak			; ret=$(($? + $ret))
+		beast			; ret=$(($? + $ret))
 
-		rc4				; ret=$(expr $? + $ret)
-		pfs				; ret=$(expr $? + $ret)
+		rc4				; ret=$(($? + $ret))
+		pfs				; ret=$(($? + $ret))
 		exit $ret ;;
 esac
 
