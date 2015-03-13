@@ -1177,14 +1177,25 @@ server_defaults() {
 		     		pr_litered "expires < $DAYS2WARN2 days!"
 			fi
 		fi
-		enddate=`date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z"`
-		startdate=`date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M"`
+		startdate=$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)
+		enddate=$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)
+		if [ $(uname) == 'Darwin' ]; then
+			# workaround to resolve Mar, May, ... #
+			LANG_prev=$LANG
+			LANG='en_US.UTF-8'
+			startdate=$(date -jf '%b %d %T %Y %Z' "$startdate" +'%F %R %z')
+			enddate=$(date -jf '%b %d %T %Y %Z' "$enddate" +'%F %R %z')
+			LANG=$LANG_prev
+		else
+			startdate=`date --date="$startdate" +'%F %R %z'`
+			enddate=`date --date="$enddate" +'%F %R %z'`
+		fi
 		outln " ($startdate --> $enddate)"
 
 		savedir=`pwd`; cd $TEMPDIR
 		$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | \
      		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
-		nrsaved=`ls $TEMPDIR/level?.crt 2>/dev/null | wc -w`
+		nrsaved=`ls $TEMPDIR/level?.crt 2>/dev/null | wc -w | sed 's/^ *//'`
 		outln " # of certificates provided   $nrsaved"
 		cd $savedir
 
@@ -2694,26 +2705,22 @@ get_dns_entries() {
 			#FIXME: FreeBSD returns only one entry 
 			fi
 		fi
-		if [ -z "$IP4" ] ; then 		# getent returned nothing:
-			IP4=`host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //'`
-			if  echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
-				pr_magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
+		if which host &> /dev/null && [ -z "$IP4" ] ; then 		# getent returned nothing:
+			IP4=$(host -t A $NODE 2> /dev/null | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
+			if echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
+				pr_magenta "Can't proceed: No IPv4 address for \"$NODE\" available"; outln "\n"
 				exit 1
 			fi
 		fi
 		# MSYS2 has no host or getent, so we do this
 		if [ -z "$IP4" ] ; then
-			IP4=`nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//'`
+			IP4=`nslookup $NODE 2>/dev/null | grep -A10 Name | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}'`
 		fi
 
 		# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
 		#which getent 2>&1 >/dev/null && IP6=`getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq`
-		if [ -z "$IP6" ] ; then
-			if host -t aaaa $NODE &>/dev/null ; then
-				IP6=`host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'`
-			else
-				IP6=""
-			fi
+		if which host &> /dev/null && [ -z "$IP6" ] ; then
+			IP6=$(host -t AAAA $NODE | egrep -oE '([0-9a-f]{1,4}:+)+[0-9a-f]{1,4}')
 		fi
 		# MSYS2 has no host or getent, so we do this
           if [ -z "$IP6" ] ; then
@@ -2730,8 +2737,12 @@ get_dns_entries() {
 
 	# we can't do this as some checks and even openssl are not yet IPv6 safe. BTW: bash sockets do IPv6 transparently!
 	#NODEIP=`echo "$IP6" | head -1`
-	rDNS=`host -t PTR $NODEIP 2>/dev/null | grep -v "is an alias for" | sed -e 's/^.*pointer //' -e 's/\.$//'`
-	echo $rDNS | grep -q NXDOMAIN  && rDNS=" - "
+	if which host &> /dev/null; then
+		rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep 'pointer' | sed -e 's/^.*pointer //' -e 's/\.$//')
+	elif which nslookup &> /dev/null; then
+		rDNS=$(nslookup -type=PTR $NODEIP 2> /dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
+	fi
+	[ -z "$rDNS" ] && rDNS=' - '
 }
 
 
@@ -2868,7 +2879,7 @@ case "$1" in
 		parse_hn_port "$2"
 		spdy
 		exit $?  ;;
-	-B|--heartbleet)
+	-B|--heartbleed)
 		maketempf
 		parse_hn_port "$2"
 		outln; pr_blue "--> Testing for heartbleed vulnerability"; outln "\n"
