@@ -270,7 +270,7 @@ wait_kill(){
 	pid=$1
 	maxsleep=$2
 	while true; do
-		if ! ps $pid 2>&1 >/dev/null; then
+		if ! ps $pid >/dev/null 2>&1; then
 			return 0 	# didn't reach maxsleep yet
 		fi
 		sleep 1
@@ -702,7 +702,7 @@ sockread() {
 	pid=$!
 	
 	while true; do
-		if ! ps $pid 2>&1 >/dev/null; then
+		if ! ps $pid >/dev/null 2>&1; then
 			break  # didn't reach maxsleep yet
 			kill $pid >&2 2>/dev/null
 		fi
@@ -712,7 +712,7 @@ sockread() {
 	done
 #FIXME: cleanup, we have extra function for this now
 
-	if ps $pid 2>&1 >/dev/null; then
+	if ps $pid >/dev/null 2&>1; then
 		# time's up and dd is still alive --> timeout
 		kill $pid 
 		wait $pid 2>/dev/null
@@ -1460,7 +1460,7 @@ sockread_serverhello() {
           [[ $maxsleep -le 0 ]] && break
      done
 
-     if ps $pid 2>&1 >/dev/null; then
+     if ps $pid >/dev/null 2>&1; then
           # time's up and dd is still alive --> timeout
           kill $pid >&2 2>/dev/null
           wait $pid 2>/dev/null
