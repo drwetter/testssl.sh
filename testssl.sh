@@ -1139,7 +1139,7 @@ server_defaults() {
 		SAN=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
 			sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g' -e 's/othername:<unsupported>//g')
 #                                                               ^^^ CACert
-		[ x"$SAN" != "x" ] && SAN=$(echo "$SAN" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g) && outln " subjectAltName (SAN)         $SAN"
+		[ x"$SAN" != "x" ] && SAN=$(echo "$SAN" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g') && outln " subjectAltName (SAN)         $SAN"
 										# replace line feed by " "
 
 		out " Issuer                       "
