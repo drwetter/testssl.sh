@@ -311,7 +311,7 @@ EOF
 ) &>$HEADERFILE_BREACH &
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
-		result=$(cat $HEADERFILE_BREACH | grep -a '^Content-Encoding' | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g')
+		result=$(grep -a '^Content-Encoding' $HEADERFILE_BREACH | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g')
 		result=$(echo $result | tr -cd '\40-\176')
 		if [ -z $result ]; then
 			pr_green "no HTTP compression (OK) " 
@@ -392,7 +392,7 @@ EOF
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
 		if ! egrep -iq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
-			pr_litemagenta "likely HTTP header requests failed (#lines: $(cat $HEADERFILE | wc -l))."
+			pr_litemagenta "likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE))."
 			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
 			debugme cat $HEADERFILE
 			ret=7
