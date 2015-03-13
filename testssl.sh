@@ -270,7 +270,7 @@ wait_kill(){
 	pid=$1
 	maxsleep=$2
 	while true; do
-		if ! ps ax | grep -v grep | grep -q $pid; then
+		if ! ps $pid 2>&1 >/dev/null; then
 			return 0 	# didn't reach maxsleep yet
 		fi
 		sleep 1
@@ -428,6 +428,9 @@ preload() {
 }
 
 hsts() {
+	local hsts_age_sec
+	local hsts_age_days
+
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
@@ -435,12 +438,12 @@ hsts() {
 	grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
-		AGE_SEC=`sed -e 's/[^0-9]*//g' $TMPFILE | head -1` 
-		AGE_DAYS=`expr $AGE_SEC \/ 86400`
-		if [ $AGE_DAYS -gt $HSTS_MIN ]; then
-			pr_litegreen "$AGE_DAYS days \c" ; out "($AGE_SEC s)"
+		hsts_age_sec=`sed -e 's/[^0-9]*//g' $TMPFILE | head -1` 
+		hsts_age_days=$(( hsts_age_sec / 86400))
+		if [ $hsts_age_days -gt $HSTS_MIN ]; then
+			pr_litegreen "$hsts_age_days days \c" ; out "($hsts_age_sec s)"
 		else
-			pr_brown "$AGE_DAYS days (<$HSTS_MIN is not good enough)"
+			pr_brown "$hsts_age_days days (<$HSTS_MIN is not good enough)"
 		fi
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"  #FIXME: To be checked against: e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc and https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
@@ -454,6 +457,9 @@ hsts() {
 }
 
 hpkp() {
+	local hpkp_age_sec
+	local hpkp_age_days
+	
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
@@ -461,16 +467,21 @@ hpkp() {
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
-		AGE_SEC=`sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE`
-		AGE_DAYS=`expr $AGE_SEC \/ 86400`
-		if [ $AGE_DAYS -ge $HPKP_MIN ]; then
-			pr_litegreen "$AGE_DAYS days \c" ; out "($AGE_SEC s)"
-		else
-			pr_brown "$AGE_DAYS days (<$HPKP_MIN is not good enough)"
+		# dirty trick so that grep -c really counts occurances and not lines w/ occurances:
+		if [ `sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -c pin-sha` -eq 1 ]; then
+			pr_brown "One key is not sufficent, "
 		fi
+		hpkp_age_sec=`sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE`
+		hpkp_age_days=$((hpkp_age_sec / 86400))
+		if [ $hpkp_age_days -ge $HPKP_MIN ]; then
+			pr_litegreen "$hpkp_age_days days \c" ; out "= $hpkp_age_sec s"
+		else
+			pr_brown "$hpkp_age_days days (<$HPKP_MIN is not good enough)"
+		fi
+		
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"
-		out ", fingerprints not checked"
+		out " (fingerprints not checked)"
 	else
 		out "--"
 	fi
@@ -691,7 +702,7 @@ sockread() {
 	pid=$!
 	
 	while true; do
-		if ! ps ax | grep -v grep | grep -q $pid; then
+		if ! ps $pid 2>&1 >/dev/null; then
 			break  # didn't reach maxsleep yet
 			kill $pid >&2 2>/dev/null
 		fi
@@ -701,7 +712,7 @@ sockread() {
 	done
 #FIXME: cleanup, we have extra function for this now
 
-	if ps ax | grep -v grep | grep -q $pid; then
+	if ps $pid 2>&1 >/dev/null; then
 		# time's up and dd is still alive --> timeout
 		kill $pid 
 		wait $pid 2>/dev/null
@@ -847,7 +858,7 @@ testversion() {
 
 	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -v "unable to get local|verify error"
 	
 	if grep -q "no cipher list" $TMPFILE ; then
 		ret=5
@@ -1035,8 +1046,8 @@ server_preference() {
 				 	outln
 					printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"            # beides ausgeben
 				 else                                                    # davor nihct leer
-					if [[ "${cipher[i-1]}" == "${cipher[i]}" ]]; then       # und bei vorigem Protokoll selber cipher
-						out ", ${proto[i]}"                         # selber Cipher --> Nur Protokoll dahinter
+					if [[ "${cipher[i-1]}" == "${cipher[i]}" ]]; then   # und bei vorigem Protokoll selber cipher
+						out ", ${proto[i]}"                         	  # selber Cipher --> Nur Protokoll dahinter
 					else
 						outln
 						printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"            # beides ausgeben
@@ -1224,6 +1235,11 @@ server_defaults() {
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 pfs() {
+	local ret
+	local none
+	local number_pfs
+	local hexcode n ciph sslvers kx auth enc mac
+
 	outln
 	pr_blue "--> Testing (Perfect) Forward Secrecy  (P)FS)"; outln " -- omitting 3DES, RC4 and Null Encryption here"
 # https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy
@@ -1257,42 +1273,45 @@ pfs() {
 		outln "(it depends on the browser/client whether one of them will be used)\n"
 		none=0
 		neat_header
-		$OPENSSL ciphers -V "$PFSOK" | while read hexcode n ciph sslvers kx auth enc mac; do
+		while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
-			ret=$?
-			if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ] ; then
+			ret2=$?
+			if [ $ret2 -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ] ; then
 				continue # no successful connect AND not verbose displaying each cipher
 			fi
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc $strength
+			let "none++"
+			((none++))
 			if [ "$SHOW_EACH_C" -ne 0 ] ; then
-				if [ $ret -eq 0 ]; then
+				if [ $ret2 -eq 0 ]; then
 					pr_green "works"
 				else
 					out "not a/v"
 				fi
-			else
-				none=1
 			fi
 			outln
-		done
+		done < <($OPENSSL ciphers -V "$PFSOK")
+		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
 		outln
+		debugme echo $none
+
 		if [ "$none" -eq 0 ] ; then
-			 ret=0
-		else
-			 pr_magenta "no PFS ciphers found"
+			 pr_brown "no PFS ciphers found"
 			 ret=1
+		else
+			 ret=0
 		fi
 	fi
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
-#FIXME: setopt or something different
 }
 
 
+# https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
+# http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 # new ietf rfc is very strict: https://tools.ietf.org/html/rfc7465
 rc4() {
-#	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
 	outln
 	pr_blue "--> Checking RC4 Ciphers" ; outln
 	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
@@ -1303,7 +1322,7 @@ rc4() {
 		outln "(for legacy support e.g. IE6 rather consider x13 or x0a)\n"
 		bad=1
 		neat_header
-		cat $TMPFILE | while read hexcode n ciph sslvers kx auth enc mac; do
+		while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
 			ret=$?
 			if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ] ; then
@@ -1322,9 +1341,8 @@ rc4() {
 				out
 			fi
 			outln
-		done
-		# https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
-		# http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
+		done < $TMPFILE
+		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
 		outln
 	else
 		outln
@@ -1332,9 +1350,6 @@ rc4() {
 		bad=0
 	fi
 
-#	shopt -u lastpipe				# othwise for some reason it segfaults
-# FIXME: still segfaults: see https://www.mail-archive.com/bug-bash@gnu.org/msg14428.html | 
-# maybe use @PIPESTATUS as a workaround
 	tmpfile_handle $FUNCNAME.txt
 	return $bad
 }
@@ -1445,7 +1460,7 @@ sockread_serverhello() {
           [[ $maxsleep -le 0 ]] && break
      done
 
-     if ps ax | grep -v grep | grep -q $pid; then
+     if ps $pid 2>&1 >/dev/null; then
           # time's up and dd is still alive --> timeout
           kill $pid >&2 2>/dev/null
           wait $pid 2>/dev/null
@@ -2173,7 +2188,7 @@ ssl_poodle() {
 	local cbc_ciphers
 
 	pr_bold " POODLE, SSL"; out " (CVE-2014-3566), experimental "
-	cbc_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | grep CBC | awk '{ print $1 }' | tr '\n' ':'`
+	cbc_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | awk '/CBC/ { print $1 }' | tr '\n' ':'`
 	debugme echo $cbc_ciphers
 	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
@@ -2190,11 +2205,47 @@ ssl_poodle() {
 }
 
 
+# freak attack: don't use EXPORT RSA ciphers, see https://freakattack.com/
+freak() {
+	local ret
+	local exportrsa_ciphers
+	local addtl_warning=""
+
+	pr_bold " FREAK "; out " (CVE-2015-0204), experimental      "
+	no_exportrsa_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | egrep "^EXP.*RSA" | wc -l`
+	exportrsa_ciphers=`$OPENSSL ciphers -v 'ALL:eNULL' | awk '/^EXP.*RSA/ {print $1}' | tr '\n' ':'`
+	debugme echo $exportrsa_ciphers
+	# with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
+	# EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5
+	case $no_exportrsa_ciphers in
+		0) 	pr_magentaln "Local problem: your $OPENSSL doesn't have any EXPORT RSA ciphers configured" 
+			return 3
+			;;
+		1,2,3) 
+			addtl_warning=" (tested only with $no_exportrsa_ciphers out of 9 ciphers)" ;;
+		7,8,9,10,11)
+			addtl_warning="";;
+		4,5,6) 
+			addtl_warning=" (tested with $no_exportrsa_ciphers/9 ciphers)" ;;
+	esac
+	$OPENSSL s_client $STARTTLS -cipher $exportrsa_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
+	ret=$?
+	[ "$VERBERR" -eq 0 ] && cat $TMPFILE | egrep "error|failure" | egrep -v "unable to get local|verify error"
+	if [ $ret -eq 0 ]; then
+		pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
+	else
+		pr_green "not vulnerable (OK)"; out "$addtl_warning"
+	fi
+	outln 
+
+	tmpfile_handle $FUNCNAME.txt
+	return $ret	
+}
+
 
 #in a nutshell: don't use CBC Ciphers in SSLv3 TLSv1.0
 # Browser Exploit Against SSL/TLS
 beast(){
-	shopt -s lastpipe		# otherwise it's more tricky to access variables in a while loop
 	local hexcode dash cbc_cipher sslvers kx auth enc mac export
 	local detected_proto
 	local detected_cbc_cipher=""
@@ -2210,14 +2261,16 @@ beast(){
 		if [ $? -ne 0 ]; then
 			continue	# protocol no supported, so we do not need to check each cipher with that protocol
 		fi
-		$OPENSSL ciphers -V 'ALL:eNULL' | grep CBC | while read hexcode dash cbc_cipher sslvers kx auth enc mac export ; do
+		while read hexcode dash cbc_cipher sslvers kx auth enc mac export ; do
 			$OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
 			#normalize_ciphercode $hexcode
 			#neat_list $HEXC $ciph $kx $enc | strings | grep -wai "$arg"
 			if [ $? -eq 0 ]; then
 				detected_cbc_cipher="$detected_cbc_cipher ""$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
 			fi
-		done
+		done < <($OPENSSL ciphers -V 'ALL:eNULL' | grep CBC)   
+		#    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
+
 		#detected_cbc_cipher=`echo $detected_cbc_cipher | sed 's/ //g'`
 		if [ -z "$detected_cbc_cipher" ]; then
 			pr_litegreenln "no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
@@ -2243,7 +2296,6 @@ beast(){
 
 #	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
 
-	shopt -u lastpipe				# othwise for some reason it segfaults
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
@@ -2342,6 +2394,7 @@ starttls() {
 				renego		; ret=`expr $? + $ret`
 				crime		; ret=`expr $? + $ret`
 				ssl_poodle	; ret=`expr $? + $ret`
+				freak		; ret=`expr $? + $ret`
 				beast		; ret=`expr $? + $ret`
 
 				rc4			; ret=`expr $? + $ret`
@@ -2388,7 +2441,8 @@ $PRG <options> URI
     <-R|--renegotiation>                  tests only for renegotiation vulnerability
     <-C|--compression|--crime>            tests only for CRIME vulnerability
     <-T|--breach>                         tests only for BREACH vulnerability
-    <-O|--poodle>                         tests only for POODLE vulnerability
+    <-O|--poodle>                         tests only for POODLE (SSL) vulnerability
+    <-F|--freak>                          tests only for FREAK vulnerability
     <-A|--beast>                          tests only for BEAST vulnerability
     <-s|--pfs|--fs|--nsa>                 checks (perfect) forward secrecy settings
     <-4|--rc4|--appelbaum>                which RC4 ciphers are being offered?
@@ -2417,7 +2471,7 @@ mybanner() {
 	nr_ciphers=`$OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w`
 	hn=`hostname`
 	#poor man's ident (nowadays ident not neccessarily installed)
-	idtag=`grep '\$Id' $0 | grep -w Exp | grep -v grep | sed -e 's/^#  //' -e 's/\$ $/\$/'`
+	idtag=`grep '\$Id' $0 | grep -w [E]xp | sed -e 's/^#  //' -e 's/\$ $/\$/'`
 	[ "$COLOR" -ne 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=`cat <<EOF
 
@@ -2623,7 +2677,7 @@ get_dns_entries() {
 			getent ahostsv4 $NODE 2>/dev/null >/dev/null
 			if [ $? -eq 0 ]; then
 				# Linux:
-				IP4=`getent ahostsv4 $NODE 2>/dev/null | grep -v ':' | grep STREAM | awk '{ print $1}' | uniq`
+				IP4=`getent ahostsv4 $NODE 2>/dev/null | grep -v ':' | awk '/STREAM/ { print $1}' | uniq`
 			#else
 			#	IP4=`getent hosts $NODE 2>/dev/null | grep -v ':' | awk '{ print $1}' | uniq`
 			#FIXME: FreeBSD returns only one entry 
@@ -2846,6 +2900,12 @@ case "$1" in
 		outln; pr_blue "--> Testing for POODLE (Padding Oracle On Downgraded Legacy Encryption) vulnerability, SSLv3"; outln "\n"
 		ssl_poodle
 		exit $? ;;
+	-F|--freak)
+		maketempf
+		parse_hn_port "$2"
+		outln; pr_blue "--> Testing for FREAK attack"; outln "\n"
+		freak
+		exit $? ;;
 	-4|--rc4|--appelbaum)
 		maketempf
 		parse_hn_port "$2"
@@ -2910,6 +2970,7 @@ case "$1" in
 		crime			; ret=`expr $? + $ret`
 		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=`expr $? + $ret`
 		ssl_poodle		; ret=`expr $? + $ret`
+		freak			; ret=`expr $? + $ret`
 		beast			; ret=`expr $? + $ret`
 
 		rc4				; ret=`expr $? + $ret`
@@ -2917,6 +2978,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.198 2015/03/03 06:21:20 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.201 2015/03/09 07:07:40 dirkw Exp $ 
 # vim:ts=5:sw=5
 
