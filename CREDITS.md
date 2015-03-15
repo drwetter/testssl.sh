@@ -12,7 +12,8 @@
  - initial MX stuff
 
 * Mark Felder
- - minor cleanups
+ - lots of cleanups
+ - Shellcheck static analysis
 
 * Peter Mosmans
  - cleanups
