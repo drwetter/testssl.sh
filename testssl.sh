@@ -90,8 +90,6 @@ NODEIP=""
 IPS=""
 SERVICE=""			# is the server running an HTTP server, SMTP, POP or IMAP?
 
-BLA=""
-
 
 # make sure that temporary files are cleaned up after use
 trap "cleanup" QUIT EXIT
@@ -459,6 +457,8 @@ hsts() {
 hpkp() {
 	local hpkp_age_sec
 	local hpkp_age_days
+	local hpkp_nr_keys
+	local hpkp_key
 	
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
@@ -468,7 +468,8 @@ hpkp() {
 	if [ $? -eq 0 ]; then
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
 		# dirty trick so that grep -c really counts occurances and not lines w/ occurances:
-		if [ $(sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -c pin-sha) -eq 1 ]; then
+		hpkp_nr_keys=$(sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -c pin-sha)
+		if [ $hpkp_nr_keys -eq 1 ]; then
 			pr_brown "One key is not sufficent, "
 		fi
 		hpkp_age_sec=$(sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE)
@@ -481,6 +482,15 @@ hpkp() {
 		
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"
+
+		# get the key fingerprints:
+		sed -i -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE
+		while read hpkp_key; do
+			#FIXME: to be checked against level0.crt
+			# like openssl x509 -in level0.crt -pubkey -noout | openssl rsa -pubin -outform der | openssl dgst -sha256 -binary | openssl base64 -d
+			debugme echo "$hpkp_key="
+		done < <(sed -e 's/;/\n/g' -e 's/ //g'  $TMPFILE | awk -F'=' '/pin.*=/ { print $2 }')
+		
 		out " (fingerprints not checked)"
 	else
 		out "--"
@@ -2336,7 +2346,7 @@ old_fart() {
 find_openssl_binary() {
 # 0. check environment variable whether it's executable
 	if [ ! -z "$OPENSSL" ] && [ ! -x "$OPENSSL" ]; then
-		pr_redln "\ncannot execute specified ($OPENSSL) openssl binary."
+		pr_redln "\ncannot find (\$OPENSSL=$OPENSSL) binary."
 		outln "continuing ..."
 	fi
 	if [ -x "$OPENSSL" ]; then
@@ -2997,6 +3007,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.203 2015/03/13 11:20:18 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.205 2015/03/15 09:18:36 dirkw Exp $ 
 # vim:ts=5:sw=5
 
