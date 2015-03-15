@@ -390,7 +390,7 @@ EOF
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
 		if ! egrep -iq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
-			pr_litemagenta "likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE))."
+			pr_litemagenta "likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE))."
 			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
 			debugme cat $HEADERFILE
 			ret=7
@@ -563,7 +563,7 @@ cookieflags() {	# ARG1: Path, ARG2: path
 	pr_bold " Cookie(s)     "
 	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		nr_cookies=$(wc -l $TMPFILE)
+		nr_cookies=$(wc -l < $TMPFILE)
 		out "$nr_cookies issued: "
 		if [ $nr_cookies -gt 1 ] ; then
 			negative_word="NONE"
@@ -710,24 +710,10 @@ sockread() {
 	ddreply=$(mktemp /tmp/ddreply.XXXXXX) || exit 7
 	dd bs=$1 of=$ddreply count=1 <&5 2>/dev/null &
 	pid=$!
-	
-	while true; do
-		if ! ps $pid >/dev/null ; then
-			break  # didn't reach maxsleep yet
-			kill $pid >&2 2>/dev/null
-		fi
-		sleep 1
-		maxsleep=$(($maxsleep - 1))
-		test $maxsleep -eq 0 && break
-	done
-#FIXME: cleanup, we have extra function for this now
 
-	if ps $pid >/dev/null ; then
-		# time's up and dd is still alive --> timeout
-		kill $pid 
-		wait $pid 2>/dev/null
-		ret=3 # means killed
-	fi
+	wait_kill $pid $maxsleep
+	ret=$?
+	
 	SOCKREPLY=$(cat $ddreply)
 	rm $ddreply
 
@@ -1269,7 +1255,7 @@ pfs() {
 
 	$OPENSSL ciphers -V "$PFSOK" >$TMPFILE 2>/dev/null
 	if [ $? -ne 0 ] ; then
-		number_pfs=$(wc -l $TMPFILE | awk '{ print $1 }')
+		number_pfs=$(wc -l < $TMPFILE)
 		if [ "$number_pfs" -le "$CLIENT_MIN_PFS" ] ; then
 			outln
 			pr_magentaln " Local problem: you have only $number_pfs client side PFS ciphers "
@@ -3007,6 +2993,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.205 2015/03/15 09:18:36 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.206 2015/03/15 13:41:33 dirkw Exp $ 
 # vim:ts=5:sw=5
 
