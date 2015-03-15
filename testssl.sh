@@ -2267,6 +2267,7 @@ beast(){
 	local higher_proto_supported=""
 	local -i ret=0
 	local spaces="                                           "
+	local cr=$'\n'
 	
 	pr_bold " BEAST"; out " (CVE-2011-3389)                     "
 
@@ -2290,7 +2291,7 @@ beast(){
 		if [ -z "$detected_cbc_cipher" ]; then
 			pr_litegreenln "no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
 		else
-			detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e 's/ /\n      '"${spaces}"'/9' -e 's/ /\n      '"${spaces}"'/6' -e 's/ /\n      '"${spaces}"'/3')
+			detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
 			[ $ret -eq 1 ] && out "$spaces"
 			out "$(echo $proto | tr '[a-z]' '[A-Z]'):"; pr_brownln "$detected_cbc_cipher"
 			ret=1
@@ -2934,6 +2935,7 @@ case "$1" in
 	-A|--beast)
 		maketempf 
 		parse_hn_port "$2"
+		outln; pr_blue "--> Testing for BEAST vulnerability"; outln "\n"
 		beast
 		exit $? ;;
 	-H|--header|--headers)  
@@ -2993,6 +2995,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.206 2015/03/15 13:41:33 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.207 2015/03/15 15:10:13 dirkw Exp $ 
 # vim:ts=5:sw=5
 
