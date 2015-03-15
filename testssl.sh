@@ -49,27 +49,28 @@ SWCONTACT="dirk aet testssl dot sh"
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-0} 		# determines whether the client side ciphers are displayed at all (makes no sense normally)
-VERBERR=${VERBERR:-1}				# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
-								# whether handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
-LOCERR=${LOCERR:-0}					# displays the local error 
 SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested
 SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while checking the http header is just usual
-HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}	# we wait this long before killing the process to retrieve a service banner / http header
 SSL_NATIVE=${SSL_NATIVE:-0}			# we do per default bash sockets!
 ASSUMING_HTTP=${ASSUMING_HTTP:-0}		# in seldom cases (WAF, old servers/grumpy SSL) the service detection fails. Set to 1 for HTTP
+DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1), 
+								# 3: slight hexdumps and other info, 4: the whole nine yards of output
+								#FIXME: still to be filled with (more) sense or following to be included:
+LOCERR=${LOCERR:-0}					# displays the local error 
+VERBERR=${VERBERR:-1}				# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
+								# whether handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
 
-#FIXME: still to be filled with (more) sense:
-DEBUG=${DEBUG:-0}		# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1), 3: slight hexdumps
-					# and other info, 4: the whole nine yards of output
-PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}	# we wait this long before killing the process to retrieve a service banner / http header
+MAX_WAITSOCK=10					# waiting at max 10 seconds for socket reply
+USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
+USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet. FC has only a CA bundle per default, ==> openssl version -d
-HSTS_MIN=180			# >180 days is ok for HSTS
-HPKP_MIN=30			# >=30 days should be ok for HPKP_MIN, practical hints?
-MAX_WAITSOCK=10		# waiting at max 10 seconds for socket reply
-CLIENT_MIN_PFS=5		# number of ciphers needed to run a test for PFS
-DAYS2WARN1=60			# days to warn before cert expires, threshold 1
-DAYS2WARN2=30			# days to warn before cert expires, threshold 2
+HSTS_MIN=180						# >180 days is ok for HSTS
+HPKP_MIN=30						# >=30 days should be ok for HPKP_MIN, practical hints?
+CLIENT_MIN_PFS=5					# number of ciphers needed to run a test for PFS
+DAYS2WARN1=60						# days to warn before cert expires, threshold 1
+DAYS2WARN2=30						# days to warn before cert expires, threshold 2
 
 # more global vars, here just declared
 ECHO="/usr/bin/printf --"			# works under Linux, BSD, MacOS. 
@@ -77,8 +78,12 @@ NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 RUN_DIR=$(dirname $0)
 TEMPDIR=""
 TLS_PROTO_OFFERED=""
+DETECTED_TLS_VERSION=""
 SOCKREPLY=""
+SOCK_REPLY_FILE=""
 HEXC=""
+NW_STR=""
+LEN_STR=""
 SNI=""
 IP4=""
 IP6=""
@@ -91,15 +96,76 @@ IPS=""
 SERVICE=""			# is the server running an HTTP server, SMTP, POP or IMAP?
 
 
+# debugging help:
+PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
 # make sure that temporary files are cleaned up after use
 trap "cleanup" QUIT EXIT
+
 
 # The various hexdump commands we need to replace xxd (BSD compatability))
 HEXDUMPVIEW=(hexdump -C) 				# This is used in verbose mode to see what's going on
 HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"') 	# This is used to analyse the reply
 HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"') 	# Replaces both xxd -p and tr -cd '[:print:]'
+
+
+###### some hexbytes for bash network sockets ######
+
+# 133 standard cipher for TLS 1.2 and SPDY/NPN
+TLS12_CIPHER="
+cc, 14, cc, 13, cc, 15, c0, 30, c0, 2c, c0, 28, c0, 24, c0, 14,
+c0, 0a, c0, 22, c0, 21, c0, 20, 00, a5, 00, a3, 00, a1, 00, 9f,
+00, 6b, 00, 6a, 00, 69, 00, 68, 00, 39, 00, 38, 00, 37, 00, 36,
+c0, 77, c0, 73, 00, c4, 00, c3, 00, c2, 00, c1, 00, 88, 00, 87,
+00, 86, 00, 85, c0, 32, c0, 2e, c0, 2a, c0, 26, c0, 0f, c0, 05,
+c0, 79, c0, 75, 00, 9d, 00, 3d, 00, 35, 00, c0, 00, 84, c0, 2f,
+c0, 2b, c0, 27, c0, 23, c0, 13, c0, 09, c0, 1f, c0, 1e, c0, 1d,
+00, a4, 00, a2, 00, a0, 00, 9e, 00, 67, 00, 40, 00, 3f, 00, 3e,
+00, 33, 00, 32, 00, 31, 00, 30, c0, 76, c0, 72, 00, be, 00, bd,
+00, bc, 00, bb, 00, 9a, 00, 99, 00, 98, 00, 97, 00, 45, 00, 44,
+00, 43, 00, 42, c0, 31, c0, 2d, c0, 29, c0, 25, c0, 0e, c0, 04,
+c0, 78, c0, 74, 00, 9c, 00, 3c, 00, 2f, 00, ba, 00, 96, 00, 41,
+00, 07, c0, 11, c0, 07, 00, 66, c0, 0c, c0, 02, 00, 05, 00, 04,
+c0, 12, c0, 08, c0, 1c, c0, 1b, c0, 1a, 00, 16, 00, 13, 00, 10,
+00, 0d, c0, 0d, c0, 03, 00, 0a, 00, 63, 00, 15, 00, 12, 00, 0f,
+00, 0c, 00, 62, 00, 09, 00, 65, 00, 64, 00, 14, 00, 11, 00, 0e,
+00, 0b, 00, 08, 00, 06, 00, 03, 00, ff"
+
+# 76 standard cipher for SSLv3, TLS 1, TLS 1.1
+TLS_CIPHER="
+c0, 14, c0, 0a, c0, 22, c0, 21, c0, 20, 00, 39, 00, 38, 00, 37,
+00, 36, 00, 88, 00, 87, 00, 86, 00, 85, c0, 0f, c0, 05, 00, 35,
+00, 84, c0, 13, c0, 09, c0, 1f, c0, 1e, c0, 1d, 00, 33, 00, 32,
+00, 31, 00, 30, 00, 9a, 00, 99, 00, 98, 00, 97, 00, 45, 00, 44,
+00, 43, 00, 42, c0, 0e, c0, 04, 00, 2f, 00, 96, 00, 41, 00, 07,
+c0, 11, c0, 07, 00, 66, c0, 0c, c0, 02, 00, 05, 00, 04, c0, 12,
+c0, 08, c0, 1c, c0, 1b, c0, 1a, 00, 16, 00, 13, 00, 10, 00, 0d,
+c0, 0d, c0, 03, 00, 0a, 00, 63, 00, 15, 00, 12, 00, 0f, 00, 0c,
+00, 62, 00, 09, 00, 65, 00, 64, 00, 14, 00, 11, 00, 0e, 00, 0b,
+00, 08, 00, 06, 00, 03, 00, ff" 
+
+SSLv2_CLIENT_HELLO="
+,80,34    # length (here: 52)
+,01       # Client Hello 
+,00,02    # SSLv2
+,00,1b    # cipher spec length (here: 27 )
+,00,00    # session ID length
+,00,10    # challenge length
+,05,00,80 # 1st cipher	9 cipher specs, only classical V2 ciphers are used here, see  http://max.euston.net/d/tip_sslciphers.html
+,03,00,80 # 2nd          there are v3 in v2!!! : https://tools.ietf.org/html/rfc6101#appendix-E
+,01,00,80 # 3rd          Cipher specifications introduced in version 3.0 can be included in version 2.0 client hello messages using
+,07,00,c0 # 4th          the syntax below. [..] # V2CipherSpec (see Version 3.0 name) = { 0x00, CipherSuite }; !!!!
+,08,00,80 # 5th
+,06,00,40 # 6th
+,04,00,80 # 7th
+,02,00,80 # 8th
+,00,00,00 # 9th
+,29,22,be,b3,5a,01,8b,04,fe,5f,80,03,a0,13,eb,c4" # Challenge
+
+
+###### output functions ######
         
-out()   { 
+out() { 
 	$ECHO "$1" 
 }
 outln() { 
@@ -107,8 +173,7 @@ outln() {
 	$ECHO "\n"
 }
 
-# http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
-#### color print functions
+# color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
 
 pr_off() { 
 	[[ "$COLOR" -ne 0 ]] && out "\033[m\c" 
@@ -220,7 +285,7 @@ if [[ "$COLOR" -ge 1 ]]; then
 fi
 
 
-###### function definitions
+###### helper function definitions ######
 
 debugme() {
 	if [[ $DEBUG -ge 2 ]]; then
@@ -280,53 +345,8 @@ wait_kill(){
 	return 3   # killed
 }
 
-# in a nutshell: It's HTTP-level compression & an attack which works against any cipher suite and 
-# is agnostic to the version of TLS/SSL, more: http://www.breachattack.com/
-# foreign referers are the important thing here!
-breach() {
-	pr_bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
-	url="$1"
-	[ -z "$url" ] && url="/"
-	if [ $SNEAKY -eq 0 ] ; then
-		referer="Referer: http://google.com/" # see https://community.qualys.com/message/20360
-		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
-	else
-		referer="Referer: TLS/SSL-Tester from $SWURL"
-		useragent="User-Agent: Mozilla/4.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox/42.0"
-	fi
-	(
-	$OPENSSL  s_client -quiet -connect $NODEIP:$PORT $SNI << EOF
-GET $url HTTP/1.1
-Host: $NODE
-$useragent
-Accept: text/*
-Accept-Language: en-US,en
-Accept-encoding: gzip,deflate,compress
-$referer
-Connection: close
 
-EOF
-) &>$HEADERFILE_BREACH &
-	pid=$!
-	if wait_kill $pid $HEADER_MAXSLEEP; then
-		result=$(grep -a '^Content-Encoding' $HEADERFILE_BREACH | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g')
-		result=$(echo $result | tr -cd '\40-\176')
-		if [ -z $result ]; then
-			pr_green "no HTTP compression (OK) " 
-			ret=0
-		else
-			pr_litered "NOT ok, uses $result compression "
-			ret=1
-		fi
-		# Catch: any URL can be vulnerable. I am testing now only the root. URL!
-		outln "(only \"$url\" tested)"
-	else
-		pr_litemagentaln "failed (HTTP header request stalled)"
-		ret=3
-	fi
-	return $ret
-}
-
+###### check code starts here ######
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 runs_HTTP() {
@@ -444,7 +464,9 @@ hsts() {
 			pr_brown "$hsts_age_days days (<$HSTS_MIN is not good enough)"
 		fi
 		includeSubDomains "$TMPFILE"
-		preload "$TMPFILE"  #FIXME: To be checked against: e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc and https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
+		preload "$TMPFILE"  
+		#FIXME: To be checked against e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc 
+		# 						 and https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
 	else
 		out "--"
 	fi
@@ -925,21 +947,13 @@ runprotocols() {
 run_std_cipherlists() {
 	outln
 	pr_blue "--> Testing standard cipher lists"; outln "\n"
-# see man ciphers
+# see ciphers(1ssl)
 	std_cipherlists NULL:eNULL                   " Null Cipher             " 1
 	std_cipherlists aNULL                        " Anonymous NULL Cipher   " 1
 	std_cipherlists ADH                          " Anonymous DH Cipher     " 1
-	#if [[ "$OSSL_VER" = *chacha* ]]; then
-		#out " 40 Bit encryption        "; pr_magentaln "Local problem: $OPENSSL has a bug here"
-	#else
-		std_cipherlists EXPORT40                     " 40 Bit encryption       " 1
-	#fi
+	std_cipherlists EXPORT40                     " 40 Bit encryption       " 1
 	std_cipherlists EXPORT56                     " 56 Bit encryption       " 1
-	#if [[ "$OSSL_VER" = *chacha* ]]; then
-	#	out " Export Cipher (general)  "; pr_magentaln "Local problem: $OPENSSL has a bug here"
-	#else
-		std_cipherlists EXPORT                       " Export Cipher (general) " 1
-	#fi
+	std_cipherlists EXPORT                       " Export Cipher (general) " 1
 	std_cipherlists LOW                          " Low (<=64 Bit)          " 1
 	std_cipherlists DES                          " DES Cipher              " 1
 	std_cipherlists 3DES                         " Triple DES Cipher       " 2
@@ -1101,7 +1115,7 @@ server_defaults() {
 				*) outln "$keysize" ;;
 			esac
 		fi
-# google seems to have EC keys which displays as 256 Bit
+#FIXME: google seems to have EC keys which displays as 256 Bit
 
 		out " Signature Algorithm          "
 		algo=$($OPENSSL x509 -in $HOSTCERT -noout -text  | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
@@ -1173,13 +1187,13 @@ server_defaults() {
 			fi
 		fi
 		case $(uname -s) in
-			Linux)
-				enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
-				startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
-				;;
-			FreeBSD)
+			FreeBSD|Mac*)
 				enddate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
 				startdate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
+				;;
+			*)
+				enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
+				startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
 				;;
 		esac
 		outln " ($startdate --> $enddate)"
@@ -1242,17 +1256,17 @@ pfs() {
 	local none
 	local number_pfs
 	local hexcode n ciph sslvers kx auth enc mac
+	local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
+	# ^^^ the exclusing via ! doesn't work with libressl. 
+	# https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy
+
+	# pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA384 EECDH+ECDSA+SHA256 EECDH+aRSA+SHA384 EECDH'
+	# this catches also ECDHE-ECDSA-NULL-SHA or ECDHE-RSA-RC4-SHA
 
 	outln
 	pr_blue "--> Testing (Perfect) Forward Secrecy  (P)FS)"; outln " -- omitting 3DES, RC4 and Null Encryption here"
-# https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy
-	PFSOK='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
-# ^^^ remark: the exclusing via ! doesn't work with libressl. 
-#
-#	PFSOK='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA384 EECDH+ECDSA+SHA256 EECDH+aRSA+SHA384 EECDH'
-# this catches also ECDHE-ECDSA-NULL-SHA  or  ECDHE-RSA-RC4-SHA
 
-	$OPENSSL ciphers -V "$PFSOK" >$TMPFILE 2>/dev/null
+	$OPENSSL ciphers -V "$pfs_ciphers" >$TMPFILE 2>/dev/null
 	if [ $? -ne 0 ] ; then
 		number_pfs=$(wc -l < $TMPFILE)
 		if [ "$number_pfs" -le "$CLIENT_MIN_PFS" ] ; then
@@ -1279,22 +1293,21 @@ pfs() {
 		while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 			ret2=$?
-			if [ $ret2 -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ] ; then
+			if [[ $ret2 -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
 				continue # no successful connect AND not verbose displaying each cipher
 			fi
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc $strength
 			let "none++"
-			((none++))
-			if [ "$SHOW_EACH_C" -ne 0 ] ; then
-				if [ $ret2 -eq 0 ]; then
+			if [[ "$SHOW_EACH_C" -ne 0 ]] ; then
+				if [[ $ret2 -eq 0 ]]; then
 					pr_green "works"
 				else
 					out "not a/v"
 				fi
 			fi
 			outln
-		done < <($OPENSSL ciphers -V "$PFSOK")
+		done < <($OPENSSL ciphers -V "$pfs_ciphers")
 		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
 		outln
 		debugme echo $none
@@ -1328,13 +1341,13 @@ rc4() {
 		while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
 			ret=$?
-			if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ] ; then
+			if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
 				continue # no successful connect AND not verbose displaying each cipher
 			fi
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc $strength
-			if [ "$SHOW_EACH_C" -ne 0 ]; then
-				if [ $ret -eq 0 ]; then
+			if [[ "$SHOW_EACH_C" -ne 0 ]]; then
+				if [[ $ret -eq 0 ]]; then
 					pr_litered "available"
 				else
 					out "not a/v"
@@ -1360,6 +1373,55 @@ rc4() {
 
 # good source for configuration and bugs: https://wiki.mozilla.org/Security/Server_Side_TLS
 # good start to read: http://en.wikipedia.org/wiki/Transport_Layer_Security#Attacks_against_TLS.2FSSL
+
+
+# in a nutshell: It's HTTP-level compression & an attack which works against any cipher suite and 
+# is agnostic to the version of TLS/SSL, more: http://www.breachattack.com/
+# foreign referers are the important thing here!
+breach() {
+	pr_bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
+	url="$1"
+	[ -z "$url" ] && url="/"
+	if [ $SNEAKY -eq 0 ] ; then
+		referer="Referer: http://google.com/" # see https://community.qualys.com/message/20360
+		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
+	else
+		referer="Referer: TLS/SSL-Tester from $SWURL"
+		useragent="User-Agent: Mozilla/4.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox/42.0"
+	fi
+	(
+	$OPENSSL  s_client -quiet -connect $NODEIP:$PORT $SNI << EOF
+GET $url HTTP/1.1
+Host: $NODE
+$useragent
+Accept: text/*
+Accept-Language: en-US,en
+Accept-encoding: gzip,deflate,compress
+$referer
+Connection: close
+
+EOF
+) &>$HEADERFILE_BREACH &
+	pid=$!
+	if wait_kill $pid $HEADER_MAXSLEEP; then
+		result=$(grep -a '^Content-Encoding' $HEADERFILE_BREACH | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g')
+		result=$(echo $result | tr -cd '\40-\176')
+		if [ -z $result ]; then
+			pr_green "no HTTP compression (OK) " 
+			ret=0
+		else
+			pr_litered "NOT ok, uses $result compression "
+			ret=1
+		fi
+		# Catch: any URL can be vulnerable. I am testing now only the root. URL!
+		outln "(only \"$url\" tested)"
+	else
+		pr_litemagentaln "failed (HTTP header request stalled)"
+		ret=3
+	fi
+	return $ret
+}
+
 
 
 lucky13() {
@@ -1435,9 +1497,23 @@ close_socket(){
 ## old network code ^^^^^^
 
 
-### new funcs for network follow
+###### new funcs for network follow 
 
-socksend_clienthello() {
+# first: helper function for protocol checks
+
+code2network() {
+	# arg1: formatted string here in the code
+	NW_STR=$(echo "$1" | sed -e 's/,/\\\x/g' | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
+}
+
+len2twobytes() {
+     len_arg1=$(echo ${#1})
+     [[ $len_arg1 -le 2 ]] && LEN_STR=$(printf "00, %02s \n" $1)
+     [[ $len_arg1 -eq 3 ]] && LEN_STR=$(printf "%02s, %02s \n" ${1:0:1} ${1:1:2})
+     [[ $len_arg1 -eq 4 ]] && LEN_STR=$(printf "%02s, %02s \n" ${1:0:2} ${1:2:2})
+}
+
+socksend_sslv2_clienthello() {
 	code2network "$SSLv2_CLIENT_HELLO"
 	data=$(echo $NW_STR)
 	[[ "$DEBUG" -ge 3 ]] && echo "\"$data\""
@@ -1445,6 +1521,7 @@ socksend_clienthello() {
 	sleep $USLEEP_SND
 }
 
+# for SSLv2 to TLS 1.2:
 sockread_serverhello() {
      [[ "x$2" = "x" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
      ret=0
@@ -1463,6 +1540,7 @@ sockread_serverhello() {
           [[ $maxsleep -le 0 ]] && break
      done
 
+	#FIXME: wait_kill
      if ps $pid >/dev/null ; then
           # time's up and dd is still alive --> timeout
           kill $pid >&2 2>/dev/null
@@ -1474,19 +1552,19 @@ sockread_serverhello() {
 }
 
 # arg1: name of file with socket reply
-display_sslv2serverhello() {
-# server hello:									in hex representation, see below
-# byte 1+2: length of server hello						0123
-# 3:        04=Handshake message, server hello			45
-# 4:        session id hit or not (boolean: 00=false, this  67
-#           is the normal case)						
-# 5:        certificate type, 01 = x509					89
-# 6+7       version (00 02 = SSLv2)					10-13
-# 8+9       certificate length						14-17
-# 10+11     cipher spec length						17-20
-# 12+13     connection id length						
-# [certificate length] ==> certificate				
-# [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
+display_sslv2_serverhello() {
+	# server hello:									in hex representation, see below
+	# byte 1+2: length of server hello						0123
+	# 3:        04=Handshake message, server hello			45
+	# 4:        session id hit or not (boolean: 00=false, this  67
+	#           is the normal case)						
+	# 5:        certificate type, 01 = x509					89
+	# 6+7       version (00 02 = SSLv2)					10-13
+	# 8+9       certificate length						14-17
+	# 10+11     cipher spec length						17-20
+	# 12+13     connection id length						
+	# [certificate length] ==> certificate				
+	# [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
 
 	v2_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
 	[[ "$DEBUG" -ge 4 ]] && echo $v2_hello_ascii 	# one line without any blanks
@@ -1587,52 +1665,13 @@ display_tls_serverhello() {
 }
 
 
-# helper function for protocol checks
-# arg1: formatted string here in the code
-code2network() {
-	NW_STR=$(echo "$1" | sed -e 's/,/\\\x/g' | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
-}
-
-len2twobytes() {
-     len_arg1=$(echo ${#1})
-     [[ $len_arg1 -le 2 ]] && LEN_STR=$(printf "00, %02s \n" $1)
-     [[ $len_arg1 -eq 3 ]] && LEN_STR=$(printf "%02s, %02s \n" ${1:0:1} ${1:1:2})
-     [[ $len_arg1 -eq 4 ]] && LEN_STR=$(printf "%02s, %02s \n" ${1:0:2} ${1:2:2})
-}
-
-
 sslv2_sockets() {
-	V2_HELLO_CIPHERSPEC_LENGTH=0	# initialize
-	USLEEP_REC=${USLEEP_REC:-0.2}
-	USLEEP_SND=${USLEEP_SND:-0.1}	# 1 second wait until otherwise specified
-	SOCK_REPLY_FILE=""			# we do this with a file here. At a certain point heartbleed and ccs needs to be changed and make use of code2network
-	NW_STR=""
-
 	out " SSLv2      ";
-
-	# SSLV2 chello:
-	SSLv2_CLIENT_HELLO="
-	,80,34    # length (here: 52)
-	,01       # Client Hello 
-	,00,02    # SSLv2
-	,00,1b    # cipher spec length (here: 27 )
-	,00,00    # session ID length
-	,00,10    # challenge length
-	,05,00,80 # 1st cipher	9 cipher specs, only classical V2 ciphers are used here, see  http://max.euston.net/d/tip_sslciphers.html
-	,03,00,80 # 2nd          there are v3 in v2!!! : https://tools.ietf.org/html/rfc6101#appendix-E
-	,01,00,80 # 3rd          Cipher specifications introduced in version 3.0 can be included in version 2.0 client hello messages using
-	,07,00,c0 # 4th          the syntax below. [..] # V2CipherSpec (see Version 3.0 name) = { 0x00, CipherSuite }; !!!!
-	,08,00,80 # 5th
-	,06,00,40 # 6th
-	,04,00,80 # 7th
-	,02,00,80 # 8th
-	,00,00,00 # 9th
-	,29,22,be,b3,5a,01,8b,04,fe,5f,80,03,a0,13,eb,c4" # Challenge
 
 	fd_socket 5 || return 6
 
 	[[ "$DEBUG" -ge 2 ]] && out "sending client hello... "
-	socksend_clienthello 
+	socksend_sslv2_clienthello 
 
 	sockread_serverhello 32768 0
 	[[ "$DEBUG" -ge 2 ]] && out "reading server hello... "
@@ -1641,7 +1680,7 @@ sslv2_sockets() {
 		outln
 	fi
 
-	display_sslv2serverhello "$SOCK_REPLY_FILE"
+	display_sslv2_serverhello "$SOCK_REPLY_FILE"
 	if [ $? -eq 7 ]; then
 		# strange reply
 		pr_litemagenta "strange v2 reply "
@@ -1649,7 +1688,7 @@ sslv2_sockets() {
 		[[ $DEBUG -ge 2 ]] && hexdump -C $SOCK_REPLY_FILE | head -1
 	else
 		# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
-		lines=$(cat "$SOCK_REPLY_FILE" 2>/dev/null | hexdump -C | wc -l)
+		lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
 		[[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
 
 		if [[ "$lines" -gt 1 ]] ;then
@@ -1674,79 +1713,40 @@ sslv2_sockets() {
 }
 
 
-#for tls_low_byte in "00" "01" "02" "03"; do
-tls_sockets() {
-	SN_HEX=""
-	LEN_SN_HEX=0
-	COL_WIDTH=32
-	USLEEP_REC=${USLEEP_REC:-0.2}
-	USLEEP_SND=${USLEEP_SND:-0.1}	# 1 second wait until otherwise specified
-	MAX_WAITSOCK=2
-	SOCK_REPLY_FILE=""
-	NW_STR=""
-	LEN_STR=""
-	DETECTED_TLS_VERSION=""
+# ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
+# ARG2: CIPHER_SUITES string
+socksend_tls_clienthello() {
+	local len_sni
+	local tls_low_byte
+	local tls_low_byte
+	local len_servername
+	local hexdump_format_str
+	local servername_hexstr
 
-	# 133 cipher: spdy, TLS 1.2
-	TLS12_CIPHER="
-	cc, 14, cc, 13, cc, 15, c0, 30, c0, 2c, c0, 28, c0, 24, c0, 14,
-	c0, 0a, c0, 22, c0, 21, c0, 20, 00, a5, 00, a3, 00, a1, 00, 9f,
-	00, 6b, 00, 6a, 00, 69, 00, 68, 00, 39, 00, 38, 00, 37, 00, 36,
-	c0, 77, c0, 73, 00, c4, 00, c3, 00, c2, 00, c1, 00, 88, 00, 87,
-	00, 86, 00, 85, c0, 32, c0, 2e, c0, 2a, c0, 26, c0, 0f, c0, 05,
-	c0, 79, c0, 75, 00, 9d, 00, 3d, 00, 35, 00, c0, 00, 84, c0, 2f,
-	c0, 2b, c0, 27, c0, 23, c0, 13, c0, 09, c0, 1f, c0, 1e, c0, 1d,
-	00, a4, 00, a2, 00, a0, 00, 9e, 00, 67, 00, 40, 00, 3f, 00, 3e,
-	00, 33, 00, 32, 00, 31, 00, 30, c0, 76, c0, 72, 00, be, 00, bd,
-	00, bc, 00, bb, 00, 9a, 00, 99, 00, 98, 00, 97, 00, 45, 00, 44,
-	00, 43, 00, 42, c0, 31, c0, 2d, c0, 29, c0, 25, c0, 0e, c0, 04,
-	c0, 78, c0, 74, 00, 9c, 00, 3c, 00, 2f, 00, ba, 00, 96, 00, 41,
-	00, 07, c0, 11, c0, 07, 00, 66, c0, 0c, c0, 02, 00, 05, 00, 04,
-	c0, 12, c0, 08, c0, 1c, c0, 1b, c0, 1a, 00, 16, 00, 13, 00, 10,
-	00, 0d, c0, 0d, c0, 03, 00, 0a, 00, 63, 00, 15, 00, 12, 00, 0f,
-	00, 0c, 00, 62, 00, 09, 00, 65, 00, 64, 00, 14, 00, 11, 00, 0e,
-	00, 0b, 00, 08, 00, 06, 00, 03, 00, ff"
+	tls_low_byte=$1
+	len_servername=$(echo ${#NODE})
+	hexdump_format_str="$len_servername/1 \"%02x,\""
+	servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
+	len_sni=$(echo ${#3})
 
-	# 76 cipher for SSLv3, TLS 1, TLS 1.1:
-	TLS_CIPHER="
-	c0, 14, c0, 0a, c0, 22, c0, 21, c0, 20, 00, 39, 00, 38, 00, 37,
-	00, 36, 00, 88, 00, 87, 00, 86, 00, 85, c0, 0f, c0, 05, 00, 35,
-	00, 84, c0, 13, c0, 09, c0, 1f, c0, 1e, c0, 1d, 00, 33, 00, 32,
-	00, 31, 00, 30, 00, 9a, 00, 99, 00, 98, 00, 97, 00, 45, 00, 44,
-	00, 43, 00, 42, c0, 0e, c0, 04, 00, 2f, 00, 96, 00, 41, 00, 07,
-	c0, 11, c0, 07, 00, 66, c0, 0c, c0, 02, 00, 05, 00, 04, c0, 12,
-	c0, 08, c0, 1c, c0, 1b, c0, 1a, 00, 16, 00, 13, 00, 10, 00, 0d,
-	c0, 0d, c0, 03, 00, 0a, 00, 63, 00, 15, 00, 12, 00, 0f, 00, 0c,
-	00, 62, 00, 09, 00, 65, 00, 64, 00, 14, 00, 11, 00, 0e, 00, 0b,
-	00, 08, 00, 06, 00, 03, 00, ff" 
+	code2network "$2" # CIPHER_SUITES
+	cipher_suites="$NW_STR"	# we don't have the leading \x here so string length is two byte less, see next
 
 #formatted example for SNI
-#00 00 	# extention server_name
+#00 00 	# extension server_name
 #00 1a    # length       			= the following +2 = server_name length + 5
 #00 18    # server_name list_length	= server_name length +3
 #00 		# server_name type (hostname)
 #00 15 	# server_name length
 #66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
 
-
-
-# arg1: TLS_VER_LSB
-# arg2: CIPHER_SUITES string
-# arg3: SERVERNAME
-# ??? more extensions?
-
-	len_sni=$(echo ${#3})
-	#tls_ver=printf "%02x\n" $1"
-
-	code2network "$2"
-	cipher_suites="$NW_STR"	# we don't have the leading \x here so string length is two byte less, see next
-
 	# convert length's from dec to hex:
-	hex_len_sn_hex=$(printf "%02x\n" $LEN_SN_HEX)
-	hex_len_sn_hex3=$(printf "%02x\n" $((LEN_SN_HEX+3)))
-	hex_len_sn_hex5=$(printf "%02x\n" $((LEN_SN_HEX+5)))
-	hex_len_extention=$(printf "%02x\n" $((LEN_SN_HEX+9)))
-	
+	hex_len_sn_hex=$(printf "%02x\n" $len_servername)
+	hex_len_sn_hex3=$(printf "%02x\n" $((len_servername+3)))
+	hex_len_sn_hex5=$(printf "%02x\n" $((len_servername+5)))
+	hex_len_extention=$(printf "%02x\n" $((len_servername+9)))
+
+### continue here	
 	len_ciph_suites_byte=$(echo ${#cipher_suites})
 	let "len_ciph_suites_byte += 2"
 
@@ -1757,34 +1757,32 @@ tls_sockets() {
 	[[ $DEBUG -ge 4 ]] && echo $len_ciph_suites_word
 
 	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$hex_len_extention + 0x2)))
-	#len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27)))
 	len_c_hello_word="$LEN_STR"
 	[[ $DEBUG -ge 4 ]] && echo $len_c_hello_word
 
 	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$hex_len_extention + 0x2)))
-	#len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b)))
 	len_all_word="$LEN_STR"
 	[[ $DEBUG -ge 4 ]] && echo $len_all_word
 
 	TLS_CLIENT_HELLO="
 	# TLS header ( 5 bytes)
-	,16, 03, $1            # TLS Version
-	,$len_all_word          # Length  <---
+	,16, 03, $tls_low_byte   # TLS Version
+	,$len_all_word           # Length  <---
 	# Handshake header:
-	,01                     # Type (x01 for ClientHello)
-	,00, $len_c_hello_word  # Length ClientHello
-	,03, $1                 # TLS Version (again)
-	,54, 51, 1e, 7a         # Unix time since  see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
-	,de, ad, be, ef         # Random 28 bytes
+	,01                      # Type (x01 for ClientHello)
+	,00, $len_c_hello_word   # Length ClientHello
+	,03, $tls_low_byte       # TLS Version (again)
+	,54, 51, 1e, 7a          # Unix time since  see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
+	,de, ad, be, ef          # Random 28 bytes
 	,31, 33, 07, 00, 00, 00, 00, 00
 	,cf, bd, 39, 04, cc, 16, 0a, 85
 	,03, 90, 9f, 77, 04, 33, d4, de
-	,00                     # Session ID length
-	,$len_ciph_suites_word  # Cipher suites length
+	,00                      # Session ID length
+	,$len_ciph_suites_word   # Cipher suites length
 	# Cipher suites 
 	,$cipher_suites
-	,01                     # Compression methods length
-	,00"                    # Compression method (x00 for NULL)
+	,01                      # Compression methods length
+	,00"                     # Compression method (x00 for NULL)
 
 	EXTENSION_CONTAINING_SNI="
 	,00, $hex_len_extention  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
@@ -1793,19 +1791,25 @@ tls_sockets() {
 	,00, $hex_len_sn_hex3    # server_name list_length
 	,00                      # server_name type (hostname)
 	,00, $hex_len_sn_hex     # server_name length
-	,$SN_HEX"                # server_name target
+	,$servername_hexstr"     # server_name target
 
 	fd_socket 5 || return 6
 
 	code2network "$TLS_CLIENT_HELLO$EXTENSION_CONTAINING_SNI"
-	#code2network "$TLS_CLIENT_HELLO"
 	data=$(echo $NW_STR)
+	[[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
+	printf -- "$data" >&5 2>/dev/null &
+	sleep $USLEEP_SND
 
-	[[ "$DEBUG" -ge 2 ]] && printf "sending client hello..."
+	return 0
+}
+
+tls_sockets() {
+	[[ "$DEBUG" -ge 2 ]] && echo "sending client hello..."
 	if [[ "$tls_low_byte" == "03" ]] ; then
-		socksend_clienthello $tls_low_byte "$TLS12_CIPHER" $SNIHEX
+		socksend_tls_clienthello $tls_low_byte "$TLS12_CIPHER"
 	else
-		socksend_clienthello $tls_low_byte "$TLS_CIPHER" $SNIHEX
+		socksend_tls_clienthello $tls_low_byte "$TLS_CIPHER"
 	fi
 
 	sockread_serverhello 32768 0
@@ -1819,7 +1823,7 @@ tls_sockets() {
 	ret=$?
 
 	# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
-	lines=$(cat "$SOCK_REPLY_FILE" 2>/dev/null | hexdump -C | wc -l)
+	lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
 	[[ "$DEBUG" -ge 2 ]] && out "  (returned $lines lines)  " 
 
 #	case $tls_low_byte in
@@ -1845,7 +1849,6 @@ tls_sockets() {
 		fi
 	fi
 
-
 	close_socket
 	TMPFILE=$SOCK_REPLY_FILE
 	tmpfile_handle $FUNCNAME.dd
@@ -1853,6 +1856,7 @@ tls_sockets() {
 }
 
 
+###### ccs, heartbleed
 
 ok_ids(){
 	greenln "\n ok -- something resetted our ccs packets"
@@ -1860,6 +1864,7 @@ ok_ids(){
 }
 
 
+#FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
 ccs_injection(){
 	# see https://www.openssl.org/news/secadv_20140605.txt
 	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
@@ -2048,7 +2053,7 @@ heartbleed(){
 
 	lines_returned=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l)
 	if [ $lines_returned -gt 1 ]; then
-		pr_red "VULNERABLE"
+		pr_red "VULNERABLE (NOT ok)"
 		ret=1
 	else
 		pr_green "not vulnerable (OK)"
@@ -2306,7 +2311,7 @@ beast(){
 		fi
 	done
 	if [ $ret -eq 1 ] ; then
-		[ ! -z "$higher_proto_supported" ] && outln "$spaces but also supports higher protocols (possible mitigation):$higher_proto_supported"
+		[ ! -z "$higher_proto_supported" ] && outln "${spaces}but also supports higher protocols (possible mitigation):$higher_proto_supported"
 	fi
 
 #	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
@@ -2994,6 +2999,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.208 2015/03/15 15:59:28 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.209 2015/03/15 23:22:50 dirkw Exp $ 
 # vim:ts=5:sw=5
 
