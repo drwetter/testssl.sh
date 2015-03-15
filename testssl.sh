@@ -272,7 +272,7 @@ wait_kill(){
 			return 0 	# didn't reach maxsleep yet
 		fi
 		sleep 1
-		maxsleep=$(($maxsleep - 1))
+		maxsleep=$((maxsleep - 1))
 		test $maxsleep -eq 0 && break
 	done # needs to be killed:
 	kill $pid >&2 2>/dev/null
@@ -713,7 +713,6 @@ sockread() {
 
 	wait_kill $pid $maxsleep
 	ret=$?
-	
 	SOCKREPLY=$(cat $ddreply)
 	rm $ddreply
 
@@ -1421,7 +1420,7 @@ spdy() {
 fd_socket() {
 # arg doesn't work here
 	if ! exec 5<> /dev/tcp/$NODEIP/$PORT; then
-		pr_magenta "$(basename $0): unable to open a socket to $NODEIP:$PORT"
+		pr_magenta "$(basename "$0"): unable to open a socket to $NODEIP:$PORT"
 		return 6
 	fi
 	return 0
@@ -1455,12 +1454,12 @@ sockread_serverhello() {
      pid=$!
 
      while true; do
-          if ! ps ax | grep -v grep | grep -q $pid; then
+          if ! ps $pid >/dev/null; then
                break  # didn't reach maxsleep yet
                kill $pid >&2 2>/dev/null
           fi
           sleep $USLEEP_REC
-          maxsleep=$(($maxsleep - 1))
+          maxsleep=$((maxsleep - 1))
           [[ $maxsleep -le 0 ]] && break
      done
 
@@ -2398,27 +2397,27 @@ starttls() {
 # of the cmdline e.g. with getopts. 
 				STARTTLS="-starttls $protocol"
 				export STARTTLS
-				runprotocols		; ret=$(($? + $ret))
-				run_std_cipherlists	; ret=$(($? + $ret))
-				server_preference	; ret=$(($? + $ret))
-				server_defaults	; ret=$(($? + $ret))
+				runprotocols		; ret=$(($? + ret))
+				run_std_cipherlists	; ret=$(($? + ret))
+				server_preference	; ret=$(($? + ret))
+				server_defaults	; ret=$(($? + ret))
 
 				outln; pr_blue "--> Testing specific vulnerabilities" ; outln "\n"
 #FIXME: heartbleed + CCS won't work this way yet
-#				heartbleed     ; ret=$(($? + $ret))
-#				ccs_injection  ; ret=$(($? + $ret))
-				renego		; ret=$(($? + $ret))
-				crime		; ret=$(($? + $ret))
-				ssl_poodle	; ret=$(($? + $ret))
-				freak		; ret=$(($? + $ret))
-				beast		; ret=$(($? + $ret))
+#				heartbleed     ; ret=$(($? + ret))
+#				ccs_injection  ; ret=$(($? + ret))
+				renego		; ret=$(($? + ret))
+				crime		; ret=$(($? + ret))
+				ssl_poodle	; ret=$(($? + ret))
+				freak		; ret=$(($? + ret))
+				beast		; ret=$(($? + ret))
 
-				rc4			; ret=$(($? + $ret))
-				pfs			; ret=$(($? + $ret))
+				rc4			; ret=$(($? + ret))
+				pfs			; ret=$(($? + ret))
 
 				outln
-				#cipher_per_proto   ; ret=$(($? + $ret))
-				allciphers		; ret=$(($? + $ret))
+				#cipher_per_proto   ; ret=$(($? + ret))
+				allciphers		; ret=$(($? + ret))
 			fi
 			;;
 		*) pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet, ldap allowed" >&2
@@ -2431,7 +2430,7 @@ starttls() {
 
 
 help() {
-	PRG=$(basename $0)
+	PRG=$(basename "$0")
 	cat << EOF
 
 $PRG <options>       
@@ -2481,13 +2480,13 @@ EOF
 
 
 mybanner() {
-	me=$(basename $0)
+	me=$(basename "$0")
 	osslver=$($OPENSSL version)
 	osslpath=$(which $OPENSSL)
 	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w)
 	hn=$(hostname)
 	#poor man's ident (nowadays ident not neccessarily installed)
-	idtag=$(grep '\$Id' $0 | grep -w [E]xp | sed -e 's/^#  //' -e 's/\$ $/\$/')
+	idtag=$(grep '\$Id' $0 | grep -w "[E]xp" | sed -e 's/^#  //' -e 's/\$ $/\$/')
 	[ "$COLOR" -ne 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=$(cat <<EOF
 
@@ -2512,7 +2511,7 @@ outln " Using \"$osslver\" [~$nr_ciphers ciphers] on
 
 }
 
-maketempf () {
+maketempf() {
 	TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit 6
 	TMPFILE=$TEMPDIR/tempfile.txt || exit 6
 	HOSTCERT=$TEMPDIR/host_cerificate.txt
@@ -2727,8 +2726,8 @@ get_dns_entries() {
 
 	fi # test4iponly
 	
-	IPADDRs=$(echo $IP4)
-	[ ! -z "$IP6" ] && IPADDRs=$(echo $IP4)" "$(echo $IP6)
+	IPADDRs="$IP4"
+	[ ! -z "$IP6" ] && IPADDRs="$IP4 $IP6"
 
 	# FIXME: we could/should test more than one IPv4 addresses if available, same IPv6. For now we test the first IPv4:
 	NODEIP=$(echo "$IP4" | head -1)
@@ -2767,11 +2766,11 @@ datebanner() {
 
 mx_allentries() {
 	if which dig &> /dev/null; then
-		MXs=$(dig +short -t MX $1)
+		MXs=$(dig +short -t MX "$1")
 	elif which host &> /dev/null; then
-		MXs=$(host -t MX $1 | grep 'handled by' | sed -e 's/^.*by //' -e 's/\.$//')
+		MXs=$(host -t MX "$1" | grep 'handled by' | sed -e 's/^.*by //' -e 's/\.$//')
 	elif which nslookup &> /dev/null; then
-		MXs=$(nslookup -type=MX $1 2> /dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
+		MXs=$(nslookup -type=MX "$1" 2> /dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
 	else
 		pr_magentaln 'No dig, host or nslookup'
 		exit 3
@@ -2806,7 +2805,7 @@ mybanner
 
 #PATH_TO_TESTSSL="$(cd "${0%/*}" 2>/dev/null; echo "$PWD"/"${0##*/}")"
 PATH_TO_TESTSSL=$(readlink "$BASH_SOURCE") 2>/dev/null
-[ -z $PATH_TO_TESTSSL ] && PATH_TO_TESTSSL="."
+[ -z "$PATH_TO_TESTSSL" ] && PATH_TO_TESTSSL="."
 #
 # next file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
 # https://www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
@@ -2820,7 +2819,7 @@ case "$1" in
 		exit 0 
 		;;
 	--mx) 
-		mx_allentries $2
+		mx_allentries "$2"
 		exit $?
 		;;
 	-V|--local)
@@ -2851,7 +2850,7 @@ case "$1" in
 		maketempf
 		parse_hn_port "$2"
 		runprotocols 	; ret=$?
-		spdy			; ret=$(($? + $ret))
+		spdy			; ret=$(($? + ret))
 		exit $ret ;;
 	-f|--ciphers)
 		maketempf
@@ -2908,7 +2907,7 @@ case "$1" in
 			breach "$URL_PATH"
 			ret=$?
 		fi
-		ret=$(($? + $ret))
+		ret=$(($? + ret))
 		exit $ret ;;
 	-O|--ssl_poodle|poodle)
 		maketempf
@@ -2947,11 +2946,11 @@ case "$1" in
 			hpkp "$URL_PATH"
 			ret=$?
 			serverbanner "$URL_PATH"
-			ret=$(($? + $ret))
+			ret=$(($? + ret))
 			applicationbanner "$URL_PATH"
-			ret=$(($? + $ret))
+			ret=$(($? + ret))
 			cookieflags "$URL_PATH"
-			ret=$(($? + $ret))
+			ret=$(($? + ret))
 		else
 			pr_litemagentaln " Wrong usage: You're not targetting a HTTP service"
 			ret=2
@@ -2964,37 +2963,37 @@ case "$1" in
 
 		outln
 		runprotocols		; ret=$?
-		spdy 			; ret=$(($? + $ret))
-		run_std_cipherlists	; ret=$(($? + $ret))
-		server_preference	; ret=$(($? + $ret))
-		server_defaults 	; ret=$(($? + $ret))
+		spdy 			; ret=$(($? + ret))
+		run_std_cipherlists	; ret=$(($? + ret))
+		server_preference	; ret=$(($? + ret))
+		server_defaults 	; ret=$(($? + ret))
 
 		if [[ $SERVICE == "HTTP" ]]; then
 			outln; pr_blue "--> Testing HTTP Header response"
 			outln "\n"
-			hsts "$URL_PATH"			; ret=$(($? + $ret))
-			hpkp "$URL_PATH"			; ret=$(($? + $ret))
-			serverbanner "$URL_PATH"		; ret=$(($? + $ret))
-			applicationbanner "$URL_PATH"		; ret=$(($? + $ret))
-			cookieflags  "$URL_PATH"		; ret=$(($? + $ret))
+			hsts "$URL_PATH"			; ret=$(($? + ret))
+			hpkp "$URL_PATH"			; ret=$(($? + ret))
+			serverbanner "$URL_PATH"		; ret=$(($? + ret))
+			applicationbanner "$URL_PATH"		; ret=$(($? + ret))
+			cookieflags  "$URL_PATH"		; ret=$(($? + ret))
 		fi
 
 		outln; pr_blue "--> Testing specific vulnerabilities" 
 		outln "\n"
-		heartbleed          ; ret=$(($? + $ret))
-		ccs_injection       ; ret=$(($? + $ret))
-		renego			; ret=$(($? + $ret))
-		crime			; ret=$(($? + $ret))
-		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=$(($? + $ret))
-		ssl_poodle		; ret=$(($? + $ret))
-		freak			; ret=$(($? + $ret))
-		beast			; ret=$(($? + $ret))
+		heartbleed          ; ret=$(($? + ret))
+		ccs_injection       ; ret=$(($? + ret))
+		renego			; ret=$(($? + ret))
+		crime			; ret=$(($? + ret))
+		[[ $SERVICE == "HTTP" ]] && breach "$URL_PATH"	; ret=$(($? + ret))
+		ssl_poodle		; ret=$(($? + ret))
+		freak			; ret=$(($? + ret))
+		beast			; ret=$(($? + ret))
 
-		rc4				; ret=$(($? + $ret))
-		pfs				; ret=$(($? + $ret))
+		rc4				; ret=$(($? + ret))
+		pfs				; ret=$(($? + ret))
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.207 2015/03/15 15:10:13 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.208 2015/03/15 15:59:28 dirkw Exp $ 
 # vim:ts=5:sw=5
 
