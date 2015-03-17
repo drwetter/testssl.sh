@@ -693,7 +693,7 @@ std_cipherlists() {
 				if [[ $ret -eq 0 ]]; then
 					ok 2 0			# offered in normal
 				else
-					ok 2 0              # not offered also in normal
+					ok 0 1              # not offered also in normal
 				fi;;
 			*) # the ugly rest
 				if [[ $ret -eq 0 ]]; then
@@ -3037,5 +3037,5 @@ case "$1" in
 esac
 
 
-#  $Id: testssl.sh,v 1.213 2015/03/17 21:02:22 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.214 2015/03/17 21:12:24 dirkw Exp $ 
 # vim:ts=5:sw=5
