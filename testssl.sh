@@ -54,7 +54,7 @@ SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while chec
 SSL_NATIVE=${SSL_NATIVE:-0}			# we do per default bash sockets!
 ASSUMING_HTTP=${ASSUMING_HTTP:-0}		# in seldom cases (WAF, old servers/grumpy SSL) the service detection fails. Set to 1 for HTTP
 DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1), 
-								# 3: slight hexdumps and other info, 4: the whole nine yards of output
+								# 3: slight hexdumps + other info, 4: send bytes via sockets, 5: received, 6: whole 9 yards 
 								#FIXME: still to be filled with (more) sense or following to be included:
 VERBERR=${VERBERR:-1}				# 0 means/to be more verbose (some like the errors to be dispayed so that one can tell better
 								# whether handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
@@ -729,7 +729,7 @@ sockread() {
 	[ "x$2" = "x" ] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
 	ret=0
 
-	ddreply=$(mktemp /tmp/ddreply.XXXXXX) || exit 7
+	ddreply=$(mktemp /tmp/ddreply.XXXXXX) || return 7
 	dd bs=$1 of=$ddreply count=1 <&5 2>/dev/null &
 	pid=$!
 
@@ -1536,7 +1536,7 @@ sockread_serverhello() {
      [[ "x$2" = "x" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
      ret=0
 
-     SOCK_REPLY_FILE=$(mktemp $TEMPDIR/ddreply.XXXXXX) || exit 7
+     SOCK_REPLY_FILE=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
      dd bs=$1 of=$SOCK_REPLY_FILE count=1 <&5 2>/dev/null &
      pid=$!
 
@@ -1550,7 +1550,7 @@ sockread_serverhello() {
           [[ $maxsleep -le 0 ]] && break
      done
 
-	#FIXME: wait_kill
+#FIXME: wait_kill $pid $maxsleep
      if ps $pid >/dev/null ; then
           # time's up and dd is still alive --> timeout
           kill $pid >&2 2>/dev/null
@@ -1726,20 +1726,19 @@ sslv2_sockets() {
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # ARG2: CIPHER_SUITES string
 socksend_tls_clienthello() {
-	local len_sni
 	local tls_low_byte
-	local tls_low_byte
-	local len_servername
+	local servername_hexstr len_servername len_servername_hex
 	local hexdump_format_str
-	local servername_hexstr
+	local len_sni_listlen len_sni_ext len_extension_hex
+	local cipher_suites len_ciph_suites len_ciph_suites_word
+	local len_client_hello_word len_all_word
 
-	tls_low_byte=$1
+	tls_low_byte="$1"
 	len_servername=$(echo ${#NODE})
 	hexdump_format_str="$len_servername/1 \"%02x,\""
 	servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
-	len_sni=$(echo ${#3})
 
-	code2network "$2" # CIPHER_SUITES
+	code2network "$2"        # CIPHER_SUITES
 	cipher_suites="$NW_STR"	# we don't have the leading \x here so string length is two byte less, see next
 
 #formatted example for SNI
@@ -1750,13 +1749,12 @@ socksend_tls_clienthello() {
 #00 15 	# server_name length
 #66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
 
-	# convert length's from dec to hex:
-	hex_len_sn_hex=$(printf "%02x\n" $len_servername)
-	hex_len_sn_hex3=$(printf "%02x\n" $((len_servername+3)))
-	hex_len_sn_hex5=$(printf "%02x\n" $((len_servername+5)))
-	hex_len_extention=$(printf "%02x\n" $((len_servername+9)))
+	# convert lengths we need to fill in from dec to hex:
+	len_servername_hex=$(printf "%02x\n" $len_servername)
+	len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
+	len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
+	len_extension_hex=$(printf "%02x\n" $((len_servername+9)))
 
-### continue here	
 	len_ciph_suites_byte=$(echo ${#cipher_suites})
 	let "len_ciph_suites_byte += 2"
 
@@ -1764,15 +1762,15 @@ socksend_tls_clienthello() {
 	len_ciph_suites=$(printf "%02x\n" $(($len_ciph_suites_byte / 4 )))
 	len2twobytes "$len_ciph_suites"
 	len_ciph_suites_word="$LEN_STR"
-	[[ $DEBUG -ge 4 ]] && echo $len_ciph_suites_word
+	[[ $DEBUG -ge 3 ]] && echo $len_ciph_suites_word
 
-	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$hex_len_extention + 0x2)))
-	len_c_hello_word="$LEN_STR"
-	[[ $DEBUG -ge 4 ]] && echo $len_c_hello_word
+	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$len_extension_hex + 0x2)))
+	len_client_hello_word="$LEN_STR"
+	[[ $DEBUG -ge 3 ]] && echo $len_client_hello_word
 
-	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$hex_len_extention + 0x2)))
+	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2)))
 	len_all_word="$LEN_STR"
-	[[ $DEBUG -ge 4 ]] && echo $len_all_word
+	[[ $DEBUG -ge 3 ]] && echo $len_all_word
 
 	TLS_CLIENT_HELLO="
 	# TLS header ( 5 bytes)
@@ -1780,7 +1778,7 @@ socksend_tls_clienthello() {
 	,$len_all_word           # Length  <---
 	# Handshake header:
 	,01                      # Type (x01 for ClientHello)
-	,00, $len_c_hello_word   # Length ClientHello
+	,00, $len_client_hello_word   # Length ClientHello
 	,03, $tls_low_byte       # TLS Version (again)
 	,54, 51, 1e, 7a          # Unix time since  see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
 	,de, ad, be, ef          # Random 28 bytes
@@ -1789,18 +1787,17 @@ socksend_tls_clienthello() {
 	,03, 90, 9f, 77, 04, 33, d4, de
 	,00                      # Session ID length
 	,$len_ciph_suites_word   # Cipher suites length
-	# Cipher suites 
 	,$cipher_suites
 	,01                      # Compression methods length
 	,00"                     # Compression method (x00 for NULL)
 
 	EXTENSION_CONTAINING_SNI="
-	,00, $hex_len_extention  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
-	,00, 00                  # extention server_name
-	,00, $hex_len_sn_hex5    # length SNI EXT
-	,00, $hex_len_sn_hex3    # server_name list_length
+	,00, $len_extension_hex  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
+	,00, 00                  # extension server_name
+	,00, $len_sni_ext        # length SNI EXT
+	,00, $len_sni_listlen    # server_name list_length
 	,00                      # server_name type (hostname)
-	,00, $hex_len_sn_hex     # server_name length
+	,00, $len_servername_hex # server_name length
 	,$servername_hexstr"     # server_name target
 
 	fd_socket 5 || return 6
@@ -1814,7 +1811,15 @@ socksend_tls_clienthello() {
 	return 0
 }
 
+# ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 tls_sockets() {
+
+	tls_low_byte="$1"
+	if [ ! -z "$2" ] ; then
+		TLS_CIPHER="$2" 
+		TLS12_CIPHER="$2"
+	fi
+
 	[[ "$DEBUG" -ge 2 ]] && echo "sending client hello..."
 	if [[ "$tls_low_byte" == "03" ]] ; then
 		socksend_tls_clienthello $tls_low_byte "$TLS12_CIPHER"
@@ -2987,6 +2992,16 @@ case "$1" in
 			ret=2
 		fi
 		exit $ret ;;
+
+### following is a development feature and will disappear:
+	-q)
+		maketempf
+          parse_hn_port "$2"
+		tls_sockets "$3" "$4"
+		exit $?
+# DEBUG=3  ./testssl.sh -q google.de 03 "cc, 13, c0, 13"
+# DEBUG=3  ./testssl.sh -q yandex.ru 01
+		;;
 	-*)  help ;;    # wrong argument
 	*)
 		maketempf
@@ -3005,7 +3020,7 @@ case "$1" in
 			hsts "$URL_PATH"			; ret=$(($? + ret))
 			hpkp "$URL_PATH"			; ret=$(($? + ret))
 			serverbanner "$URL_PATH"		; ret=$(($? + ret))
-			applicationbanner "$URL_PATH"		; ret=$(($? + ret))
+			applicationbanner "$URL_PATH"	; ret=$(($? + ret))
 			cookieflags  "$URL_PATH"		; ret=$(($? + ret))
 		fi
 
@@ -3026,5 +3041,5 @@ case "$1" in
 esac
 
 
-#  $Id: testssl.sh,v 1.211 2015/03/17 14:14:57 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.212 2015/03/17 17:11:17 dirkw Exp $ 
 # vim:ts=5:sw=5
