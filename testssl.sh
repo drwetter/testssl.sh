@@ -2366,6 +2366,12 @@ find_openssl_binary() {
 		fi
 	fi
 
+	if ! $OPENSSL version -a 2>&1 >/dev/null; then
+		outln
+		pr_magentaln "FATAL: cannot exec $OPENSSL"
+		exit -1
+	fi
+
 	# http://www.openssl.org/news/openssl-notes.html
 	OSSL_VER=$($OPENSSL version | awk -F' ' '{ print $2 }')
 	OSSL_VER_MAJOR=$(echo "$OSSL_VER" | sed 's/\..*$//')
@@ -2487,6 +2493,11 @@ partly mandatory parameters:
     URI                   host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
     pattern               an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
     protocol              is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
+
+
+For HTML output you need to pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like 
+
+   "$PRG <options> <URI> | aha >output.html"
 
 
 EOF
@@ -2835,7 +2846,7 @@ PATH_TO_TESTSSL=$(readlink "$BASH_SOURCE") 2>/dev/null
 #FIXME: I know this sucks and getoptS is better
 
 case "$1" in
-     -b|--banner|-banner|-v|--version|-version)
+	-b|--banner|-banner|-v|--version|-version)
 		exit 0 
 		;;
 	--mx) 
@@ -2877,12 +2888,12 @@ case "$1" in
 		parse_hn_port "$2"
 		run_std_cipherlists
 		exit $? ;;
-     -S|--server_defaults)   
+	-S|--server_defaults)   
 		maketempf
 		parse_hn_port "$2"
 		server_defaults
 		exit $? ;;
-     -P|--server_preference)   
+	-P|--server_preference)   
 		maketempf
 		parse_hn_port "$2"
 		server_preference
@@ -3014,6 +3025,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.210 2015/03/17 11:22:20 dirkw Exp $ 
-# vim:ts=5:sw=5
 
+#  $Id: testssl.sh,v 1.211 2015/03/17 14:14:57 dirkw Exp $ 
+# vim:ts=5:sw=5
