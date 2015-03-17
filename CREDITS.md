@@ -22,6 +22,9 @@
  - Fix for HSTS + subdomains
  - LibreSSL patch
 
+* Дилян Палаузов
+ - bug fix for 3des report
+
 * @nvsofts (NV)
  - LibreSSL patch for GOST
 
