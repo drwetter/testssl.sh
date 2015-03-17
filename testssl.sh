@@ -56,12 +56,13 @@ ASSUMING_HTTP=${ASSUMING_HTTP:-0}		# in seldom cases (WAF, old servers/grumpy SS
 DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1), 
 								# 3: slight hexdumps and other info, 4: the whole nine yards of output
 								#FIXME: still to be filled with (more) sense or following to be included:
-LOCERR=${LOCERR:-0}					# displays the local error 
-VERBERR=${VERBERR:-1}				# 0 means to be more verbose (some like the errors to be dispayed so that one can tell better
+VERBERR=${VERBERR:-1}				# 0 means/to be more verbose (some like the errors to be dispayed so that one can tell better
 								# whether handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
 
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}	# we wait this long before killing the process to retrieve a service banner / http header
-MAX_WAITSOCK=10					# waiting at max 10 seconds for socket reply
+MAX_WAITSOCK=10					# waiting at max 10 seconds for socket reply 
+CCS_MAX_WAITSOCK=5					# for the two CCS payload (each)
+HEARTBLEED_MAX_WAITSOCK=8			# for the heartbleed payload
 USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
@@ -289,7 +290,7 @@ fi
 
 debugme() {
 	if [[ $DEBUG -ge 2 ]]; then
-		echo "$@"
+		#echo "$@"
 		"$@" 
 	else
 		:
@@ -664,7 +665,7 @@ prettyprint_local() {
 listciphers() {
 	$OPENSSL ciphers $1 &>$TMPFILE
 	ret=$?
-	[[ $LOCERR -eq 1 ]] && cat $TMPFILE 
+	debugme cat $TMPFILE 
 
      tmpfile_handle $FUNCNAME.txt
 	return $ret
@@ -708,7 +709,6 @@ std_cipherlists() {
 		pr_magentaln "Local problem: No $singlespaces configured in $OPENSSL" 
 	fi
 	# we need lf in those cases:
-	[[ $LOCERR -eq 1 ]] && echo
 	[[ $DEBUG -ge 2 ]] && echo
 }
 
@@ -1025,6 +1025,7 @@ server_preference() {
 		# proto-check b4!
 			$OPENSSL s_client  $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
 			if [ $ret -eq 0 ]; then
+				#FIXME: BSD output is not so fine
 				 proto[i]=$(grep -w "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g')
 				 cipher[i]=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 				 [[ ${cipher[i]} == "0000" ]] && cipher[i]=""  # Hack!
@@ -1140,9 +1141,17 @@ server_defaults() {
 			$OPENSSL x509 -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
 		[[ $DEBUG -ge 2 ]] && out "$NODE | $CN | $CN_nosni"
 		if [[ $NODE == $CN_nosni ]]; then
-			outln " (works w/o SNI)"
+			if [[ $SERVICE != "HTTP" ]] ; then
+				outln " (matches certificate directly)"
+			else
+				outln " (works w/o SNI)"
+			fi
 		else
-			outln " (CN response to request w/o SNI: '$CN_nosni')"
+			if [[ $SERVICE != "HTTP" ]] ; then
+				pr_brownln " (CN doesn't match but for non-HTTP services it might be ok)"
+			else
+				outln " (CN response to request w/o SNI: '$CN_nosni')"
+			fi
 		fi
 
 		SAN=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
@@ -1187,7 +1196,7 @@ server_defaults() {
 			fi
 		fi
 		case $(uname -s) in
-			FreeBSD|Mac*)
+			*BSD|Mac*)
 				enddate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
 				startdate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
 				;;
@@ -1257,7 +1266,7 @@ pfs() {
 	local number_pfs
 	local hexcode n ciph sslvers kx auth enc mac
 	local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
-	# ^^^ the exclusing via ! doesn't work with libressl. 
+	# ^^^ the exclusion via ! doesn't work with libressl. 
 	# https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy
 
 	# pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA384 EECDH+ECDSA+SHA256 EECDH+aRSA+SHA384 EECDH'
@@ -1284,10 +1293,10 @@ pfs() {
 	ret=$?
 	outln
 	if [ $ret -ne 0 ] || [ $(grep -c "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]; then
-		pr_brown "No PFS available"
+		pr_brownln "Not OK: No ciphers supporting Forward Secrecy offered"
 	else
-		pr_litegreenln "In general PFS is offered. Now testing specific ciphers ..."; 
-		outln "(it depends on the browser/client whether one of them will be used)\n"
+		pr_litegreen "OK: PFS is offered. "; 
+		outln "Client/browser support is important here. Offered PFS server ciphers follow... \n"
 		none=0
 		neat_header
 		while read hexcode n ciph sslvers kx auth enc mac; do
@@ -1309,7 +1318,6 @@ pfs() {
 			outln
 		done < <($OPENSSL ciphers -V "$pfs_ciphers")
 		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
-		outln
 		debugme echo $none
 
 		if [ "$none" -eq 0 ] ; then
@@ -1319,6 +1327,8 @@ pfs() {
 			 ret=0
 		fi
 	fi
+	outln
+
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
@@ -1334,9 +1344,9 @@ rc4() {
 	[ $SHOW_LOC_CIPH = "1" ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
 	$OPENSSL s_client -cipher $($OPENSSL ciphers RC4) $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
-		pr_literedln "\nRC4 is broken and is offered! Now testing specific ciphers..."; 
-		outln "(for legacy support e.g. IE6 rather consider x13 or x0a)\n"
-		bad=1
+		pr_litered "\nNOT ok: borken RC4 is being offered!"
+		outln " Now testing specific ciphers...\n"
+		rc4_offered=1
 		neat_header
 		while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
@@ -1353,7 +1363,7 @@ rc4() {
 					out "not a/v"
 				fi
 			else
-				bad=1
+				rc4_offered=1
 				out
 			fi
 			outln
@@ -1363,11 +1373,11 @@ rc4() {
 	else
 		outln
 		pr_litegreenln "no RC4 ciphers detected (OK)"
-		bad=0
+		rc4_offered=0
 	fi
 
 	tmpfile_handle $FUNCNAME.txt
-	return $bad
+	return $rc4_offered
 }
 
 
@@ -1410,7 +1420,7 @@ EOF
 			pr_green "no HTTP compression (OK) " 
 			ret=0
 		else
-			pr_litered "NOT ok, uses $result compression "
+			pr_litered "NOT ok: uses $result compression "
 			ret=1
 		fi
 		# Catch: any URL can be vulnerable. I am testing now only the root. URL!
@@ -1926,7 +1936,7 @@ ccs_injection(){
 	fi
 
 	socksend "$ccs_message" 1 || ok_ids
-	sockread 2048 5		# 5 seconds
+	sockread 2048 $CCS_MAX_WAITSOCK
 	if [[ $DEBUG -ge 3 ]]; then
 		outln "\n1st reply: " 
 		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
@@ -1936,7 +1946,7 @@ ccs_injection(){
 	fi
 
 	socksend "$ccs_message" 2 || ok_ids
-	sockread 2048 5
+	sockread 2048 $CCS_MAX_WAITSOCK
 	retval=$?
 
 	if [[ $DEBUG -ge 3 ]]; then
@@ -1954,7 +1964,7 @@ ccs_injection(){
 		pr_green "not vulnerable (OK)"
 		ret=0
 	else
-		pr_red "VULNERABLE (not OK)"
+		pr_red "VULNERABLE (NOT ok)"
 		ret=1
 	fi
 	[ $retval -eq 3 ] && out "(timed out)"
@@ -2042,7 +2052,7 @@ heartbleed(){
 	fi
 
 	socksend "$heartbleed_payload" 1
-	sockread 16384
+	sockread 16384 $HEARTBLEED_MAX_WAITSOCK
 	retval=$?
 
 	if [[ $DEBUG -ge 3 ]]; then
@@ -2543,19 +2553,22 @@ CAPATH:  $CAPATH
 ECHO: $ECHO
 COLOR: $COLOR
 SHOW_LOC_CIPH: $SHOW_LOC_CIPH
-VERBERR: $VERBERR 
-LOCERR: $LOCERR
-SHOW_EACH_C: $SHOW_EACH_C
+SSL_NATIVE: $SSL_NATIVE
+ASSUMING_HTTP $ASSUMING_HTTP
 SNEAKY: $SNEAKY
+
+VERBERR: $VERBERR 
+SHOW_EACH_C: $SHOW_EACH_C
 DEBUG: $DEBUG
 
 HSTS_MIN: $HSTS_MIN
 HPKP_MIN: $HPKP_MIN
 MAX_WAITSOCK: $MAX_WAITSOCK
-HEADER_MAXSLEEP: $HEADER_MAXSLEEP
-CLIENT_MIN_PFS: $CLIENT_MIN_PFS
-DAYS2WARN1: $DAYS2WARN1
-DAYS2WARN2: $DAYS2WARN2
+CCS_MAX_WAITSOCK: $CCS_MAX_WAITSOCK
+HEARTBLEED_MAX_WAITSOCK: $HEARTBLEED_MAX_WAITSOCK
+
+USLEEP_SND $USLEEP_SND
+USLEEP_REC $USLEEP_REC
 
 EOF
 		$OPENSSL ciphers -V $1  &>$TEMPDIR/all_local_ciphers.txt
@@ -2673,7 +2686,7 @@ parse_hn_port() {
 		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null >/dev/null 2>&1 
 		if [ $? -ne 0 ]; then
 			pr_boldln "$NODE:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate"; 
-			ignore_no_or_lame "Proceed (note that the results might look ok but they are nonsense) ? "
+			ignore_no_or_lame "Note that the results might look ok but they are nonsense. Proceed ? "
 			[ $? -ne 0 ] && exit 3
 		fi
 	fi
@@ -2681,6 +2694,7 @@ parse_hn_port() {
 	datebanner "Testing"
 	[[ -z "$2" ]] && runs_HTTP	# for starttls we don't check the protocol as it is supplied on the cmd line
 	initialize_engine
+	outln
 
 	return 0
 }
@@ -2782,9 +2796,10 @@ mx_allentries() {
 	fi
 
 	# test first higher priority servers
-	MXs=$(echo "$MXs" | sort -n | sed -e 's/^.* //' -e 's/\.$//')
+	MXs=$(echo "$MXs" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
 
 	if [ -n "$MXs" ] ; then
+		pr_bold "Testing now all MX records (on port 25): "; outln "$MXs"
 		for MX in $MXs; do
 			parse_hn_port "$MX:25" 'smtp' && starttls 'smtp'
 		done
@@ -2999,6 +3014,6 @@ case "$1" in
 		exit $ret ;;
 esac
 
-#  $Id: testssl.sh,v 1.209 2015/03/15 23:22:50 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.210 2015/03/17 11:22:20 dirkw Exp $ 
 # vim:ts=5:sw=5
 
