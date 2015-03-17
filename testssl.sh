@@ -962,20 +962,17 @@ run_std_cipherlists() {
 	return 0
 }
 
-openssl_error() {
-	pr_magenta "$OPENSSL returned an error. This shouldn't happen. "
-	outln "continuing anyway"
-	return 0
-}
-
 server_preference() {
-	list1="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA:AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:DHE-DSS-AES256-GCM-SHA384"
+	list1="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
 	outln;
 	pr_blue "--> Testing server preferences"; outln "\n"
 
+	out " Has server cipher order?     "
 	$OPENSSL s_client $STARTTLS -cipher $list1 -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
 	if [ $? -ne 0 ]; then
-          openssl_error
+		pr_magenta "no matching cipher in list found"
+		outln "$list1"
+		outln "Please report this"
           ret=6
 	else
 		cipher1=$(grep -w Cipher $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
@@ -983,7 +980,6 @@ server_preference() {
 		$OPENSSL s_client $STARTTLS -cipher $list2 -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
 		cipher2=$(grep -w Cipher $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 
-		out " Has server cipher order?     "
 		if [[ "$cipher1" != "$cipher2" ]]; then
 			pr_litered "nope (NOT ok)"
 			remark4default_cipher=" (limited sense as client will pick)"
@@ -3041,5 +3037,5 @@ case "$1" in
 esac
 
 
-#  $Id: testssl.sh,v 1.212 2015/03/17 17:11:17 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.213 2015/03/17 21:02:22 dirkw Exp $ 
 # vim:ts=5:sw=5
