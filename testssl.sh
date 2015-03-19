@@ -2304,11 +2304,11 @@ beast(){
 
 		#detected_cbc_cipher=$(echo $detected_cbc_cipher | sed 's/ //g')
 		if [ -z "$detected_cbc_cipher" ]; then
-			pr_litegreenln "no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
+			pr_litegreenln "no CBC ciphers for $(echo $proto | tr 'a-z' 'A-Z') (OK)"
 		else
 			detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
 			[ $ret -eq 1 ] && out "$spaces"
-			out "$(echo $proto | tr '[a-z]' '[A-Z]'):"; pr_brownln "$detected_cbc_cipher"
+			out "$(echo $proto | tr 'a-z' 'A-Z'):"; pr_brownln "$detected_cbc_cipher"
 			ret=1
 			detected_cbc_cipher=""
 		fi
@@ -2407,7 +2407,7 @@ starttls() {
 	protocol=$(echo "$1" | sed 's/s$//')	 # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
 	case "$1" in
 		ftp|smtp|pop3|imap|xmpp|telnet|ldap)
-			outln " Trying STARTTLS via $(echo $protocol| tr '[a-z]' '[A-Z]')\n"
+			outln " Trying STARTTLS via $(echo $protocol| tr 'a-z' 'A-Z')\n"
 			$OPENSSL s_client -connect $NODEIP:$PORT $SNI -starttls $protocol </dev/null >$TMPFILE 2>&1
 			ret=$?
 			if [ $ret -ne 0 ]; then
