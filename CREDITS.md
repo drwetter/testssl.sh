@@ -8,18 +8,25 @@
 * Olivier Paroz
  * conversion xxd --> hexdump stuff 
 
+* Rechi
+ - initial MX stuff
+
+* Mark Felder
+ - lots of cleanups
+ - Shellcheck static analysis
+
+* Peter Mosmans
+ - cleanups
+
 * Markus Manzke: 
  - Fix for HSTS + subdomains
  - LibreSSL patch
 
-* Rechi
- - initial MX stuff
+* Дилян Палаузов
+ - bug fix for 3des report
 
 * @nvsofts (NV)
  - LibreSSL patch for GOST
-
-* Peter Mosmans
- - cleanups
 
 * Dmitri S
  - inspiration & help for Darwin port
