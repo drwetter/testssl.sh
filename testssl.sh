@@ -829,7 +829,7 @@ allciphers(){
 cipher_per_proto(){
 	pr_blue "--> Testing all locally available ciphers per protocol against the server"; outln "\n"
 	neat_header
-	outln " -ssl2 SSLv2\n -ssl3 SSLv3\n -tls1 TLSv1\n -tls1_1 TLSv1.1\n -tls1_2 TLSv1.2"| while read proto prtext; do
+	outln " -ssl2 SSLv2\n -ssl3 SSLv3\n -tls1 TLS 1\n -tls1_1 TLS 1.1\n -tls1_2 TLS 1.2"| while read proto prtext; do
 		locally_supported "$proto" "$prtext" || continue
 		outln
 		$OPENSSL ciphers $proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode n ciph sslvers kx auth enc mac export; do
@@ -856,7 +856,7 @@ cipher_per_proto(){
 }
 
 locally_supported() {
-	out "$2 "
+	[ ! -z "$2" ] && out "$2 "
 	$OPENSSL s_client "$1" 2>&1 | grep -q "unknown option"
 	if [ $? -eq 0 ]; then
 		pr_magentaln "Local problem: $OPENSSL doesn't support \"s_client $1\""
@@ -864,9 +864,7 @@ locally_supported() {
 	else
 		ret=0
 	fi
-
 	return $ret
-	
 }
 
 testversion() {
@@ -889,6 +887,9 @@ testprotohelper() {
 	if locally_supported "$1" "$2" ; then
 		testversion "$1" "$2" 
 		return $?
+		# 0: offered
+		# 1: not offered
+		# 5: protocol ok, but no cipher
 	else
 		return 7
 	fi
@@ -901,8 +902,8 @@ runprotocols() {
 		testprotohelper "-ssl2" " SSLv2     "  
 		case $? in
 			0) 	ok 1 1 ;;	# pr_red 
-			5) 	ok 5 5 ;;	# protocol ok, but no cipher
 			1) 	ok 0 1 ;; # pr_green "not offered (ok)"
+			5) 	ok 5 5 ;;	# protocol ok, but no cipher
 			7) ;;		# no local support
 		esac
 	else
@@ -1522,7 +1523,7 @@ len2twobytes() {
 socksend_sslv2_clienthello() {
 	code2network "$SSLv2_CLIENT_HELLO"
 	data=$(echo $NW_STR)
-	[[ "$DEBUG" -ge 3 ]] && echo "\"$data\""
+	[[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
 	printf -- "$data" >&5 2>/dev/null &
 	sleep $USLEEP_SND
 }
@@ -1573,7 +1574,7 @@ display_sslv2_serverhello() {
 	# [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
 
 	v2_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
-	[[ "$DEBUG" -ge 4 ]] && echo $v2_hello_ascii 	# one line without any blanks
+	[[ "$DEBUG" -ge 5 ]] && echo $v2_hello_ascii 	# one line without any blanks
 	if [[ -z $v2_hello_ascii ]] ; then
 		ret=0								# no server hello received
 		debugme echo "server hello empty"
@@ -1629,8 +1630,8 @@ display_tls_serverhello() {
 	tls_len_all=$(printf "%d\n" ${tls_hello_ascii:6:4})
 
 	if [[ $tls_hello_initbyte != "16" ]] ; then
-		[[ $DEBUG -ge 1 ]] && echo "tls_hello_initbyte:  0x$tls_hello_initbyte"
 		if [[ $DEBUG -ge 2 ]]; then
+			echo "tls_hello_initbyte:  0x$tls_hello_initbyte"
 			echo "tls_hello_protocol:  0x$tls_hello_protocol"
 			echo "tls_len_all:         $tls_len_all"
 			echo "tls_err_level:       ${tls_hello_ascii:10:2}"
@@ -1645,7 +1646,10 @@ display_tls_serverhello() {
 	tls_hello_protocol2="${tls_hello_ascii:18:4}"
 	tls_hello_time="${tls_hello_ascii:22:8}"
 	tls_time=$(printf "%d\n" 0x$tls_hello_time)
-	tls_time=$(date --date="@$tls_time" "+%Y-%m-%d %r")
+	case $(uname -s) in
+		*BSD|Darwin)	tls_time=$(date -j -f %s "$tls_time" "+%Y-%m-%d %r") ;;
+		*) 			tls_time=$(date --date="@$tls_time" "+%Y-%m-%d %r") ;;
+	esac
 	tls_sid_len=$(printf "%d\n" 0x${tls_hello_ascii:86:2})
 	let sid_offset=88+$tls_sid_len*2
 	tls_cipher_suite="${tls_hello_ascii:$sid_offset:4}"
@@ -1653,18 +1657,15 @@ display_tls_serverhello() {
 	tls_compression_method="${tls_hello_ascii:$sid_offset:2}"
 
 	if [[ $DEBUG -ge 2 ]]; then
-
-		echo "tls_hello_initbyte:  0x$tls_hello_initbyte"
 		echo "tls_hello:           0x$tls_hello"
-		echo "tls_hello_protocol:  0x$tls_hello_protocol"
 		if [[ $DEBUG -ge 4 ]]; then
 			echo "tls_hello_protocol2: 0x$tls_hello_protocol2"
-			echo "tls_len_all:         $tls_len_all"
 			echo "tls_sid_len:         $tls_sid_len"
 		fi
 		echo "tls_hello_time:      0x$tls_hello_time ($tls_time)"
 		echo "tls_cipher_suite:    0x$tls_cipher_suite"
 		echo "tls_compression_method: 0x$tls_compression_method"
+		outln
 	fi
 
 	return 0
@@ -1672,16 +1673,17 @@ display_tls_serverhello() {
 
 
 sslv2_sockets() {
+	local ciphers_detected
+
 	out " SSLv2      ";
 
 	fd_socket 5 || return 6
-
-	[[ "$DEBUG" -ge 2 ]] && out "sending client hello... "
+	[[ "$DEBUG" -ge 2 ]] && outln "sending client hello... "
 	socksend_sslv2_clienthello 
 
 	sockread_serverhello 32768 0
-	[[ "$DEBUG" -ge 2 ]] && out "reading server hello... "
-	if [[ "$DEBUG" -eq 3 ]]; then
+	[[ "$DEBUG" -ge 2 ]] && outln "reading server hello... "
+	if [[ "$DEBUG" -eq 4 ]]; then
 		hexdump -C $SOCK_REPLY_FILE | head -6
 		outln
 	fi
@@ -1691,7 +1693,7 @@ sslv2_sockets() {
 		# strange reply
 		pr_litemagenta "strange v2 reply "
 		outln " (rerun with DEBUG=2)"
-		[[ $DEBUG -ge 2 ]] && hexdump -C $SOCK_REPLY_FILE | head -1
+		[[ $DEBUG -ge 3 ]] && hexdump -C $SOCK_REPLY_FILE | head -1
 	else
 		# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
 		lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
@@ -1711,6 +1713,7 @@ sslv2_sockets() {
 		fi
 	fi
 	pr_off
+	debugme outln
 
 	close_socket
 	TMPFILE=$SOCK_REPLY_FILE
@@ -1758,15 +1761,15 @@ socksend_tls_clienthello() {
 	len_ciph_suites=$(printf "%02x\n" $(($len_ciph_suites_byte / 4 )))
 	len2twobytes "$len_ciph_suites"
 	len_ciph_suites_word="$LEN_STR"
-	[[ $DEBUG -ge 3 ]] && echo $len_ciph_suites_word
+	#[[ $DEBUG -ge 3 ]] && echo $len_ciph_suites_word
 
 	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$len_extension_hex + 0x2)))
 	len_client_hello_word="$LEN_STR"
-	[[ $DEBUG -ge 3 ]] && echo $len_client_hello_word
+	#[[ $DEBUG -ge 3 ]] && echo $len_client_hello_word
 
 	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2)))
 	len_all_word="$LEN_STR"
-	[[ $DEBUG -ge 3 ]] && echo $len_all_word
+	#[[ $DEBUG -ge 3 ]] && echo $len_all_word
 
 	TLS_CLIENT_HELLO="
 	# TLS header ( 5 bytes)
@@ -1809,6 +1812,9 @@ socksend_tls_clienthello() {
 
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 tls_sockets() {
+	local ret save
+	local lines
+	local tls_low_byte
 
 	tls_low_byte="$1"
 	if [ ! -z "$2" ] ; then
@@ -1818,20 +1824,20 @@ tls_sockets() {
 
 	[[ "$DEBUG" -ge 2 ]] && echo "sending client hello..."
 	if [[ "$tls_low_byte" == "03" ]] ; then
-		socksend_tls_clienthello $tls_low_byte "$TLS12_CIPHER"
+		socksend_tls_clienthello "$tls_low_byte" "$TLS12_CIPHER"
 	else
-		socksend_tls_clienthello $tls_low_byte "$TLS_CIPHER"
+		socksend_tls_clienthello "$tls_low_byte" "$TLS_CIPHER"
 	fi
 
 	sockread_serverhello 32768 0
-	[[ "$DEBUG" -ge 2 ]] && printf "reading server hello..."
+	[[ "$DEBUG" -ge 2 ]] && outln "reading server hello..."
 	if [[ "$DEBUG" -ge 3 ]]; then
 		hexdump -C $SOCK_REPLY_FILE | head -6
 		echo
 	fi
 
 	display_tls_serverhello "$SOCK_REPLY_FILE"
-	ret=$?
+	save=$?
 
 	# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
 	lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
@@ -1846,7 +1852,7 @@ tls_sockets() {
 
 #	printf "Protokoll "; tput bold; printf "$tls_low_byte = $tls_str"; tput sgr0; printf ":  "
 
-	if [[ $ret -eq 1 ]] || [[ $lines -eq 1 ]] ; then
+	if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]] ; then
 		outln "NOT available"
 		ret=1
 	else
@@ -1856,15 +1862,18 @@ tls_sockets() {
 		else
 			out "NOT available "
 			[[ $DEBUG -ge 2 ]] && echo -n "send: 0x03$tls_low_byte, returned: 0x$DETECTED_TLS_VERSION" 
+			ret=2
 			echo
 		fi
 	fi
+	debugme outln
 
 	close_socket
 	TMPFILE=$SOCK_REPLY_FILE
 	tmpfile_handle $FUNCNAME.dd
 	return $ret
 }
+
 
 
 ###### ccs, heartbleed
@@ -2846,7 +2855,7 @@ mybanner
 #PATH_TO_TESTSSL="$(cd "${0%/*}" 2>/dev/null; echo "$PWD"/"${0##*/}")"
 PATH_TO_TESTSSL=$(readlink "$BASH_SOURCE") 2>/dev/null
 [ -z "$PATH_TO_TESTSSL" ] && PATH_TO_TESTSSL="."
-#
+
 # next file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
 # https://www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
 [ -r "$(dirname $PATH_TO_TESTSSL)/mapping-rfc.txt" ] && MAP_RFC_FNAME=$(dirname $PATH_TO_TESTSSL)"/mapping-rfc.txt"
@@ -2860,6 +2869,7 @@ case "$1" in
 		;;
 	--mx) 
 		mx_allentries "$2"
+		#FIXME: argument: port 587, 465 once Peter has the pasing done
 		exit $?
 		;;
 	-V|--local)
@@ -2873,7 +2883,8 @@ case "$1" in
 		exit $? ;;
 	-t|--starttls)			
 		maketempf
-		parse_hn_port "$3" "$2" # here comes protocol to signal starttls and  hostname:port 
+		parse_hn_port "$3" "$2"	# here comes protocol to signal starttls and  hostname:port 
+		#FIXME: once proper arg handling is done, we don't call within starttls everything again, just filling the variables
 		starttls "$2"		# protocol
 		exit $? ;;
 	-e|--each-cipher)
@@ -3045,5 +3056,5 @@ case "$1" in
 esac
 
 
-#  $Id: testssl.sh,v 1.215 2015/03/30 12:59:10 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.216 2015/03/30 21:09:18 dirkw Exp $ 
 # vim:ts=5:sw=5
