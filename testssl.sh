@@ -352,7 +352,7 @@ wait_kill(){
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 runs_HTTP() {
 	# SNI is nonsense for !HTTP but fortunately SMTP and friends don't care
-	printf "GET / HTTP/1.1\r\nHost: %s\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nAccept: text/*\r\n\r\n" "$NODE" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
+	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
 	wait_kill $! $HEADER_MAXSLEEP
 	head $TMPFILE | grep -q ^HTTP && SERVICE=HTTP
 	head $TMPFILE | grep -q SMTP && SERVICE=SMTP
@@ -1192,7 +1192,7 @@ server_defaults() {
 			fi
 		fi
 		case $(uname -s) in
-			*BSD|Mac*)
+			*BSD|Darwin*)
 				enddate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
 				startdate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
 				;;
@@ -1206,7 +1206,7 @@ server_defaults() {
 		savedir=$(pwd); cd $TEMPDIR
 		$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | \
      		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
-		nrsaved=$(ls $TEMPDIR/level?.crt 2>/dev/null | wc -w)
+		nrsaved=$(ls $TEMPDIR/level?.crt 2>/dev/null | wc -w | sed 's/^ *//')
 		outln " # of certificates provided   $nrsaved"
 		cd $savedir
 
@@ -2304,11 +2304,11 @@ beast(){
 
 		#detected_cbc_cipher=$(echo $detected_cbc_cipher | sed 's/ //g')
 		if [ -z "$detected_cbc_cipher" ]; then
-			pr_litegreenln "no CBC ciphers for $(echo $proto | tr 'a-z' 'A-Z') (OK)"
+			pr_litegreenln "no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
 		else
 			detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
 			[ $ret -eq 1 ] && out "$spaces"
-			out "$(echo $proto | tr 'a-z' 'A-Z'):"; pr_brownln "$detected_cbc_cipher"
+			out "$(echo $proto | tr '[a-z]' '[A-Z]'):"; pr_brownln "$detected_cbc_cipher"
 			ret=1
 			detected_cbc_cipher=""
 		fi
@@ -2407,7 +2407,7 @@ starttls() {
 	protocol=$(echo "$1" | sed 's/s$//')	 # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
 	case "$1" in
 		ftp|smtp|pop3|imap|xmpp|telnet|ldap)
-			outln " Trying STARTTLS via $(echo $protocol| tr 'a-z' 'A-Z')\n"
+			outln " Trying STARTTLS via $(echo $protocol| tr '[a-z]' '[A-Z]')\n"
 			$OPENSSL s_client -connect $NODEIP:$PORT $SNI -starttls $protocol </dev/null >$TMPFILE 2>&1
 			ret=$?
 			if [ $ret -ne 0 ]; then
@@ -2604,10 +2604,12 @@ cleanup () {
 # for now only GOST engine
 initialize_engine(){
 	if ! $OPENSSL engine gost -vvvv -t -c >/dev/null 2>&1; then
-		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln "\n"
+		outln
+		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln 
 		return 1
 	elif $OPENSSL engine gost -vvvv -t -c 2>&1 | grep -iq "No such" ; then
-		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln "\n"
+		outln
+		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln 
 		return 1
 	elif echo $osslver | grep -q LibreSSL; then
 		return 1
@@ -2729,9 +2731,10 @@ get_dns_entries() {
 			#FIXME: FreeBSD returns only one entry 
 			fi
 		fi
-		if [ -z "$IP4" ] ; then 		# getent returned nothing:
+		if which host &> /dev/null && [ -z "$IP4" ] ; then 
+			# getent returned nothing:
 			IP4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-			if  echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
+			if echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
 				pr_magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
 				exit 1
 			fi
@@ -2765,8 +2768,13 @@ get_dns_entries() {
 
 	# we can't do this as some checks and even openssl are not yet IPv6 safe. BTW: bash sockets do IPv6 transparently!
 	#NODEIP=$(echo "$IP6" | head -1)
-	rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep -v "is an alias for" | sed -e 's/^.*pointer //' -e 's/\.$//')
-	echo $rDNS | grep -q NXDOMAIN  && rDNS=" - "
+	if which host &> /dev/null; then
+		#rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep -v "is an alias for" | sed -e 's/^.*pointer //' -e 's/\.$//')
+		rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep 'pointer' | sed -e 's/^.*pointer //' -e 's/\.$//')
+	elif which nslookup &> /dev/null; then
+		rDNS=$(nslookup -type=PTR $NODEIP 2> /dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
+	fi
+	[ -z "$rDNS" ] && rDNS="---"
 }
 
 
@@ -2904,7 +2912,7 @@ case "$1" in
 		parse_hn_port "$2"
 		spdy
 		exit $?  ;;
-	-B|--heartbleet)
+	-B|--heartbleed)
 		maketempf
 		parse_hn_port "$2"
 		outln; pr_blue "--> Testing for heartbleed vulnerability"; outln "\n"
@@ -3037,5 +3045,5 @@ case "$1" in
 esac
 
 
-#  $Id: testssl.sh,v 1.214 2015/03/17 21:12:24 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.215 2015/03/30 12:59:10 dirkw Exp $ 
 # vim:ts=5:sw=5
