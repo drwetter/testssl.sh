@@ -10,6 +10,7 @@
 
 * Rechi
  - initial MX stuff
+ - fixes
 
 * Mark Felder
  - lots of cleanups
