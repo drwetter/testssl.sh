@@ -897,9 +897,20 @@ testprotohelper() {
 
 
 runprotocols() {
-	pr_blue "--> Testing Protocols"; outln "\n"
+	local using_sockets=0
+
+	pr_blue "--> Testing Protocols"; 
+
 	if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
-		testprotohelper "-ssl2" " SSLv2     "  
+		using_sockets=1
+		outln "(via native openssl)\n"
+	else
+		outln "(via sockets for SSLv2, SSLv3)\n"
+	fi
+
+	out " SSLv2      ";
+	if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
+		testprotohelper "-ssl2"
 		case $? in
 			0) 	ok 1 1 ;;	# pr_red 
 			1) 	ok 0 1 ;; # pr_green "not offered (ok)"
@@ -907,26 +918,39 @@ runprotocols() {
 			7) ;;		# no local support
 		esac
 	else
-		sslv2_sockets
+		sslv2_sockets #FIXME: --> Umschreiben, Interpretation mit CASE wie native
 	fi
-	
-	testprotohelper "-ssl3" " SSLv3     " 
+
+	out " SSLv3      ";
+	if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
+		testprotohelper "-ssl3"
+	else
+		tls_sockets "00" "$TLS_CIPHER"
+	fi
 	case $? in
-		0) ok 6 0 ;;	# poodle hack"
+		0) ok 6 0 ;;	# pr_litered offered (NOT ok)
 		1) ok 0 1 ;;	# pr_green "not offered (ok)"
+		2) ok 0 1 ;;   #FIXME: downgraded. still missing a testcase here
 		5) ok 5 5 ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
 
-	testprotohelper "-tls1" " TLSv1     "
+	out " TLS 1      ";
+	#if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
+		testprotohelper "-tls1"
+	#else
+		#tls_sockets "01" "$TLS_CIPHER"
+	#fi
 	case $? in
 		0) ok 2 0 ;;   # no GCM, thus only normal print
 		1) ok 0 0 ;;
+		# 2) ok 0 0 ;; downgraded 
 		5) ok 5 5 ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
 
-	testprotohelper "-tls1_1" " TLSv1.1   "
+	out " TLS 1.1    ";
+	testprotohelper "-tls1_1"
 	case $? in
 		0) ok 2 0 ;;   # normal print
 		1) ok 7 0 ;;   # no GCM, penalty
@@ -934,7 +958,8 @@ runprotocols() {
 		7) ;;		# no local support
 	esac
 
-	testprotohelper "-tls1_2" " TLSv1.2   "
+	out " TLS 1.2    ";
+	testprotohelper "-tls1_2"
 	case $? in
 		0) ok 1 0 ;;
 		1) ok 7 0 ;;   # no GCM, penalty
@@ -1627,7 +1652,7 @@ display_tls_serverhello() {
 	# now scrape two bytes out of the reply per byte
 	tls_hello_initbyte="${tls_hello_ascii:0:2}"  # normally this is x16
 	tls_hello_protocol="${tls_hello_ascii:2:4}"
-	tls_len_all=$(printf "%d\n" ${tls_hello_ascii:6:4})
+	tls_len_all=${tls_hello_ascii:6:4}
 
 	if [[ $tls_hello_initbyte != "16" ]] ; then
 		if [[ $DEBUG -ge 2 ]]; then
@@ -1648,7 +1673,7 @@ display_tls_serverhello() {
 	tls_time=$(printf "%d\n" 0x$tls_hello_time)
 	case $(uname -s) in
 		*BSD|Darwin)	tls_time=$(date -j -f %s "$tls_time" "+%Y-%m-%d %r") ;;
-		*) 			tls_time=$(date --date="@$tls_time" "+%Y-%m-%d %r") ;;
+		*)			tls_time=$(date --date="@$tls_time" "+%Y-%m-%d %r") ;;
 	esac
 	tls_sid_len=$(printf "%d\n" 0x${tls_hello_ascii:86:2})
 	let sid_offset=88+$tls_sid_len*2
@@ -1675,15 +1700,13 @@ display_tls_serverhello() {
 sslv2_sockets() {
 	local ciphers_detected
 
-	out " SSLv2      ";
-
 	fd_socket 5 || return 6
 	[[ "$DEBUG" -ge 2 ]] && outln "sending client hello... "
 	socksend_sslv2_clienthello 
 
 	sockread_serverhello 32768 0
 	[[ "$DEBUG" -ge 2 ]] && outln "reading server hello... "
-	if [[ "$DEBUG" -eq 4 ]]; then
+	if [[ "$DEBUG" -ge 4 ]]; then
 		hexdump -C $SOCK_REPLY_FILE | head -6
 		outln
 	fi
@@ -1763,11 +1786,20 @@ socksend_tls_clienthello() {
 	len_ciph_suites_word="$LEN_STR"
 	#[[ $DEBUG -ge 3 ]] && echo $len_ciph_suites_word
 
-	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$len_extension_hex + 0x2)))
+	# RFC 3546 doesn't specify SSLv3 to have SNI, openssl just ignores the switch if supplied
+	if [ "$tls_low_byte" == "00" ]; then
+		len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27)))
+	else
+		len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$len_extension_hex + 0x2)))
+	fi
 	len_client_hello_word="$LEN_STR"
 	#[[ $DEBUG -ge 3 ]] && echo $len_client_hello_word
 
-	len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2)))
+	if [ "$tls_low_byte" == "00" ]; then
+		len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b)))
+	else
+		len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2)))
+	fi
 	len_all_word="$LEN_STR"
 	#[[ $DEBUG -ge 3 ]] && echo $len_all_word
 
@@ -1790,15 +1822,18 @@ socksend_tls_clienthello() {
 	,01                      # Compression methods length
 	,00"                     # Compression method (x00 for NULL)
 
-	EXTENSION_CONTAINING_SNI="
-	,00, $len_extension_hex  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
-	,00, 00                  # extension server_name
-	,00, $len_sni_ext        # length SNI EXT
-	,00, $len_sni_listlen    # server_name list_length
-	,00                      # server_name type (hostname)
-	,00, $len_servername_hex # server_name length
-	,$servername_hexstr"     # server_name target
-
+	if [ "$tls_low_byte" == "00" ]; then
+		EXTENSION_CONTAINING_SNI=""  # RFC 3546 doesn't specify SSLv3 to have SNI, openssl just ignores the switch if supplied
+	else
+		EXTENSION_CONTAINING_SNI="
+		,00, $len_extension_hex  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
+		,00, 00                  # extension server_name
+		,00, $len_sni_ext        # length SNI EXT
+		,00, $len_sni_listlen    # server_name list_length
+		,00                      # server_name type (hostname)
+		,00, $len_servername_hex # server_name length
+		,$servername_hexstr"     # server_name target
+	fi
 	fd_socket 5 || return 6
 
 	code2network "$TLS_CLIENT_HELLO$EXTENSION_CONTAINING_SNI"
@@ -1843,24 +1878,17 @@ tls_sockets() {
 	lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
 	[[ "$DEBUG" -ge 2 ]] && out "  (returned $lines lines)  " 
 
-#	case $tls_low_byte in
-#		00) tls_str="SSLv3" ;;
-#		01) tls_str="TLS 1" ;;
-#		02) tls_str="TLS 1.1" ;;
-#		03) tls_str="TLS 1.2" ;;
-#	esac
-
 #	printf "Protokoll "; tput bold; printf "$tls_low_byte = $tls_str"; tput sgr0; printf ":  "
 
 	if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]] ; then
-		outln "NOT available"
+		#outln "NOT available"
 		ret=1
 	else
 		if [[ 03$tls_low_byte -eq $DETECTED_TLS_VERSION ]]; then
-			outln "available"
+			#outln "available"
 			ret=0
 		else
-			out "NOT available "
+			#out "NOT available "
 			[[ $DEBUG -ge 2 ]] && echo -n "send: 0x03$tls_low_byte, returned: 0x$DETECTED_TLS_VERSION" 
 			ret=2
 			echo
@@ -3056,5 +3084,5 @@ case "$1" in
 esac
 
 
-#  $Id: testssl.sh,v 1.216 2015/03/30 21:09:18 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.217 2015/03/31 08:34:29 dirkw Exp $ 
 # vim:ts=5:sw=5
