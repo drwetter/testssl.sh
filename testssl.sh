@@ -425,9 +425,12 @@ EOF
 		pr_litemagentaln "failed (HTTP header request stalled)"
 		ret=3
 	fi
-	if egrep -awq "301|302|^Location" $HEADERFILE; then
+	if egrep -aq "^HTTP.1.. 301|^HTTP.1.. 302|^Location" $HEADERFILE; then
 		redir2=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
 		outln " (got 30x to $redir2, may be better try this URL?)\n"
+	fi
+	if egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
+		outln " (got 401 / WWW-Authenticate, can't look beyond it)\n"
 	fi
 	[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2 2>/dev/null
 	
@@ -2846,7 +2849,7 @@ get_dns_entries() {
 	elif which nslookup &> /dev/null; then
 		rDNS=$(nslookup -type=PTR $NODEIP 2> /dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
 	fi
-	[ -z "$rDNS" ] && rDNS="---"
+	[ -z "$rDNS" ] && rDNS="--"
 }
 
 
@@ -3122,5 +3125,5 @@ case "$1" in
 esac
 
 
-#  $Id: testssl.sh,v 1.219 2015/04/02 11:04:56 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.220 2015/04/02 11:35:21 dirkw Exp $ 
 # vim:ts=5:sw=5
