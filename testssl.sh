@@ -645,13 +645,15 @@ prettyprint_local() {
 	if [ -z "$1" ]; then
 		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
 			normalize_ciphercode $hexcode
-			neat_list $HEXC $ciph $kx $enc | strings  
+			neat_list $HEXC $ciph $kx $enc 
+			outln
 		done
 	else
 		for arg in $(echo $@ | sed 's/,/ /g'); do
 			$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
 				normalize_ciphercode $hexcode
-				neat_list $HEXC $ciph $kx $enc | strings | grep -wai "$arg"
+				neat_list $HEXC $ciph $kx $enc | grep -wai "$arg"
+				outln
 			done
      	done
 	fi
@@ -775,7 +777,7 @@ test_just_one(){
 		# 1st check whether openssl has cipher or not
 		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
 			normalize_ciphercode $hexcode 
-			neat_list $HEXC $ciph $kx $enc | strings | grep -qwai "$arg" 
+			neat_list $HEXC $ciph $kx $enc | grep -qwai "$arg" 
 			if [ $? -eq 0 ]; then
 				$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 				ret=$?
@@ -2332,7 +2334,7 @@ beast(){
 		while read hexcode dash cbc_cipher sslvers kx auth enc mac export ; do
 			$OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
 			#normalize_ciphercode $hexcode
-			#neat_list $HEXC $ciph $kx $enc | strings | grep -wai "$arg"
+			#neat_list $HEXC $ciph $kx $enc | grep -wai "$arg"
 			if [ $? -eq 0 ]; then
 				detected_cbc_cipher="$detected_cbc_cipher ""$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
 			fi
@@ -3084,5 +3086,5 @@ case "$1" in
 esac
 
 
-#  $Id: testssl.sh,v 1.217 2015/03/31 08:34:29 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.218 2015/04/02 10:19:22 dirkw Exp $ 
 # vim:ts=5:sw=5
