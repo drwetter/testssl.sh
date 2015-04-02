@@ -453,7 +453,7 @@ hsts() {
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " HSTS          "
+	pr_bold " HSTS              "
 	grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
@@ -486,7 +486,7 @@ hpkp() {
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " HPKP          "
+	pr_bold " HPKP              "
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
@@ -535,7 +535,7 @@ serverbanner() {
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " Server        "
+	pr_bold " Server            "
 	grep -ai '^Server' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
@@ -556,10 +556,12 @@ applicationbanner() {
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " Application  "
+	pr_bold " Application      "
 # examples: dev.testssl.sh, php.net, asp.net , www.regonline.com
 	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Runtime|^X-Version' $HEADERFILE >$TMPFILE
-	if [ $? -eq 0 ]; then
+	if [ $? -ne 0 ]; then
+		outln " (no banner at \"$url\")"
+	else
 		#cat $TMPFILE | sed 's/^.*:/:/'  | sed -e :a -e '$!N;s/\n:/ \n\             +/;ta' -e 'P;D' | sed 's/://g' 
 		#sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ' | sed "s/\([0-9]\)/$pr_red\1$off/g"
 		emphasize_numbers_in_headers "$(sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ')"
@@ -571,8 +573,6 @@ applicationbanner() {
 		#		i=1
 		#	fi
 		#done
-	else
-		outln " (no banner at \"$url\")"
 	fi
 
 	tmpfile_handle $FUNCNAME.txt
@@ -583,7 +583,7 @@ cookieflags() {	# ARG1: Path, ARG2: path
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " Cookie(s)     "
+	pr_bold " Cookie(s)         "
 	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		nr_cookies=$(wc -l < $TMPFILE)
@@ -611,8 +611,41 @@ cookieflags() {	# ARG1: Path, ARG2: path
 	tmpfile_handle $FUNCNAME.txt
 	return 0
 }
-#FIXME: Access-Control-Allow-Origin, CSP, Upgrade, X-Frame-Options, X-XSS-Protection, X-Content-Type-Options
-# https://en.wikipedia.org/wiki/List_of_HTTP_header_fields
+
+
+moreflags() {
+	local flags2test="Access-Control-Allow-Origin Upgrade X-Frame-Options X-XSS-Protection X-Content-Type-Options Via Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP" 
+	local egrep_pattern=""
+	local f2t result_str
+	local blanks="                   "
+
+	if [ ! -s $HEADERFILE ] ; then
+		http_header "$1" || return 3
+	fi
+	pr_bold " Security headers  "
+	egrep_pattern=$(echo $flags2test| sed -e 's/ /|\^/g' -e 's/^/\^/g')
+	egrep -ai $egrep_pattern $HEADERFILE >$TMPFILE
+	if [ $? -ne 0 ]; then
+		outln " (none at \"$url\")"
+		ret=1
+	else
+		ret=0
+		first=true
+		for f2t in $flags2test; do
+			result_str=$(grep "^$f2t" $TMPFILE)
+			[ -z "$result_str" ] && continue
+			if $first; then
+				pr_litegreenln "$result_str"
+				first=false
+			else
+				out "$blanks"; pr_litegreenln "$result_str"
+			fi
+		done
+	fi
+
+	tmpfile_handle $FUNCNAME.txt
+	return $ret
+}
 
 
 # #1: string with 2 opensssl codes, HEXC= same in NSS/ssllab terminology
@@ -3030,6 +3063,8 @@ case "$1" in
 			ret=$(($? + ret))
 			applicationbanner "$URL_PATH"
 			ret=$(($? + ret))
+			moreflags "$URL_PATH"
+			ret=$(($? + ret))
 			cookieflags "$URL_PATH"
 			ret=$(($? + ret))
 		else
@@ -3066,6 +3101,7 @@ case "$1" in
 			hpkp "$URL_PATH"			; ret=$(($? + ret))
 			serverbanner "$URL_PATH"		; ret=$(($? + ret))
 			applicationbanner "$URL_PATH"	; ret=$(($? + ret))
+			moreflags  "$URL_PATH"		; ret=$(($? + ret))
 			cookieflags  "$URL_PATH"		; ret=$(($? + ret))
 		fi
 
@@ -3086,5 +3122,5 @@ case "$1" in
 esac
 
 
-#  $Id: testssl.sh,v 1.218 2015/04/02 10:19:22 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.219 2015/04/02 11:04:56 dirkw Exp $ 
 # vim:ts=5:sw=5
