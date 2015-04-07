@@ -2781,7 +2781,7 @@ parse_hn_port() {
 
 	if  [[ -z "$2" ]] ; then	# for starttls we don't want this check
 		# is ssl service listening on port? FIXME: better with bash on IP!
-		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null >/dev/null 2>&1 
+		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null &>/dev/null
 		if [ $? -ne 0 ]; then
 			pr_boldln "$NODE:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate"; 
 			ignore_no_or_lame "Note that the results might look ok but they are nonsense. Proceed ? "
@@ -2975,17 +2975,8 @@ set_scanning_defaults() {
 
 # Parses options
 startup() {
-    # Verify options
-    if ! options=$(getopt -o :4,A,B,b,C,E,e,F,f,H,h,I,O,P,p,q::,R,S,s,T,t:,V:,v,x:,z -l appelbaum,banner,beast,breach,cipher-per-proto,ccs,ccs_injection,ciphers,compression,crime,each-cipher,freak,fs,header,headers,heartbleed,help,local:,mx,nsa,poodle,protocols,pfs,rc4,renegotiation,server_defaults,server_preference,single-ciphers-test:,ssl_poodle,starttls:,version -- "$@"); then
-        help
-        exit 1
-    fi
-
-    # Parse all options
-    eval set --$options
-
-    # Set defaults if only a URI was specified
-    [[ "$#" -eq 2 ]] && set_scanning_defaults
+    # Set defaults if only an URI was specified
+    [[ "$#" -eq 1 ]] && set_scanning_defaults
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -3031,7 +3022,7 @@ startup() {
             do_crime=true;;
         -T|--breach)
             do_breach=true;;
-        -O|--ssl_poodle|poodle)
+        -O|--poodle)
             do_ssl_poodle=true;;
         -F|--freak)
             do_freak=true;;
@@ -3121,7 +3112,7 @@ main() {
             ret=$(($? + ret))
         fi
     fi
-    ${do_ssl_poodle} && { poodle; ret=$(($? + ret)); }
+    ${do_ssl_poodle} && { ssl_poodle; ret=$(($? + ret)); }
     ${do_freak} && { freak; ret=$(($? + ret)); }
     ${do_rc4} && { rc4; ret=$(($? + ret)); }
     ${do_tls_sockets} && { tls_sockets ${low_byte} ${hex_cipher}; \
