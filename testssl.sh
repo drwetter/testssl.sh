@@ -93,8 +93,14 @@ OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 NODEIP=""
+VULN_COUNT=0
 IPS=""
 SERVICE=""			# is the server running an HTTP server, SMTP, POP or IMAP?
+URI=""
+
+# Devel stuff, see -q below
+TLS_LOW_BYTE=""
+HEX_CIPHER=""
 
 
 # debugging help:
@@ -388,7 +394,8 @@ runs_HTTP() {
 
 #problems not handled: chunked
 http_header() {
-    outln; pr_blue "--> Testing HTTP Header response"; outln "\n"
+	outln; pr_blue "--> Testing HTTP Header response"; outln "\n"
+
 	[ -z "$1" ] && url="/" || url="$1"
 	if [ $SNEAKY -eq 0 ] ; then
 		referer="Referer: http://google.com/"
@@ -630,7 +637,7 @@ moreflags() {
 	egrep_pattern=$(echo $flags2test| sed -e 's/ /|\^/g' -e 's/^/\^/g')
 	egrep -ai $egrep_pattern $HEADERFILE >$TMPFILE
 	if [ $? -ne 0 ]; then
-		outln " (none at \"$url\")"
+		outln "(none at \"$url\")"
 		ret=1
 	else
 		ret=0
@@ -1450,8 +1457,9 @@ rc4() {
 # is agnostic to the version of TLS/SSL, more: http://www.breachattack.com/
 # foreign referers are the important thing here!
 breach() {
-    outln; pr_blue "--> Testing for BREACH (HTTP compression) vulnerability"; outln "\n"
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for BREACH (HTTP compression) vulnerability" && outln "\n"
 	pr_bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
+
 	url="$1"
 	[ -z "$url" ] && url="/"
 	if [ $SNEAKY -eq 0 ] ; then
@@ -1956,7 +1964,7 @@ ok_ids(){
 ccs_injection(){
 	# see https://www.openssl.org/news/secadv_20140605.txt
 	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
-    outln; pr_blue "--> Testing for CCS injection vulnerability"; outln "\n"
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
 	pr_bold " CCS "; out " (CVE-2014-0224), experimental        "
 
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT &>$TMPFILE </dev/null
@@ -2054,10 +2062,10 @@ ccs_injection(){
 	return $ret
 }
 
+# mainly adapted from https://gist.github.com/takeshixx/10107280
 heartbleed(){
-    outln; pr_blue "--> Testing for heartbleed vulnerability"; outln "\n"
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for heartbleed vulnerability" && outln "\n"
 	pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
-	# mainly adapted from https://gist.github.com/takeshixx/10107280
 
 	# determine TLS versions available:
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -tlsextdebug &>$TMPFILE </dev/null
@@ -2150,7 +2158,7 @@ heartbleed(){
 		ret=0
 	fi
 	[ $retval -eq 3 ] && out "(timed out)"
-	outln 
+	outln
 
 	close_socket
 	tmpfile_handle $FUNCNAME.txt
@@ -2160,6 +2168,9 @@ heartbleed(){
 
 # This tests for CVE-2009-3555 / RFC5746, OSVDB: 59968-59974
 renego() {
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for Renegotiation vulnerability" && outln "\n"
+	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746, community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
+
 	ADDCMD=""
 	case "$OSSL_VER" in
 		0.9.8*)  # we need this for Mac OSX unfortunately
@@ -2167,17 +2178,16 @@ renego() {
 				[a-l])
 					pr_magenta "Your $OPENSSL $OSSL_VER cannot test the secure renegotiation vulnerability"
 					return 3 ;;
-				[m-z])
-					# all ok ;;
+				[m-z]) # all ok 
+					;;
 			esac ;;
 		1.0.1*|1.0.2*)
 			ADDCMD="-legacy_renegotiation" ;;
-		0.9.9*|1.0*)
-			# all ok ;;
+		0.9.9*|1.0*) 
+			# all ok 
+			;;
 	esac
 
-    outln; pr_blue "--> Testing for Renegotiation vulnerability"; outln "\n"
-	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746, community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
 	echo R | $OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE
 	reneg_ok=$?									# 0=client is renegotiating and does not get an error: vuln to DoS via client initiated renegotiation
 	case $reneg_ok in
@@ -2203,23 +2213,18 @@ renego() {
 
 crime() {
 	# in a nutshell: don't offer TLS/SPDY compression on the server side
-	# 
 	# This tests for CRIME Vulnerability (www.ekoparty.org/2012/juliano-rizzo.php) on HTTPS, not SPDY (yet)
      # Please note that it is an attack where you need client side control, so in regular situations this
 	# means anyway "game over", w/wo CRIME
 	# www.h-online.com/security/news/item/Vulnerability-in-SSL-encryption-is-barely-exploitable-1708604.html
-	#
 
-	ADDCMD=""
-	case "$OSSL_VER" in
-		# =< 0.9.7 was weeded out before
-		0.9.8)
-			ADDCMD="-no_ssl2" ;;
-		0.9.9*|1.0*)
-		;;
-	esac
-	outln; pr_blue "--> Testing for CRIME vulnerability"; outln "\n"
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for CRIME vulnerability" && outln "\n"
 	pr_bold " CRIME, TLS " ; out "(CVE-2012-4929)                "
+
+	case "$OSSL_VER" in
+		0.9.8*)      ADDCMD="-no_ssl2" ;;
+		0.9.9*|1.0*) ADDCMD="" ;;
+	esac
 
 	# first we need to test whether OpenSSL binary has zlib support
 	$OPENSSL zlib -e -a  -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib 
@@ -2297,7 +2302,8 @@ tls_poodle() {
 ssl_poodle() {
 	local ret
 	local cbc_ciphers
-    outln; pr_blue "--> Testing for POODLE (Padding Oracle On Downgraded Legacy Encryption) vulnerability, SSLv3"; outln "\n"
+
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption)" && outln "\n"
 	pr_bold " POODLE, SSL"; out " (CVE-2014-3566), experimental "
 	cbc_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/CBC/ { print $1 }' | tr '\n' ':')
 	debugme echo $cbc_ciphers
@@ -2321,7 +2327,8 @@ freak() {
 	local ret
 	local exportrsa_ciphers
 	local addtl_warning=""
-    outln; pr_blue "--> Testing for FREAK attack"; outln "\n"
+
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for FREAK attack" && outln "\n"
 	pr_bold " FREAK "; out " (CVE-2015-0204), experimental      "
 	no_exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | egrep "^EXP.*RSA" | wc -l)
 	exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/^EXP.*RSA/ {print $1}' | tr '\n' ':')
@@ -2365,7 +2372,7 @@ beast(){
 	local spaces="                                           "
 	local cr=$'\n'
 
-    outln; pr_blue "--> Testing for BEAST vulnerability"; outln "\n"
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for BEAST vulnerability" && outln "\n"
 	pr_bold " BEAST"; out " (CVE-2011-3389)                     "
 
 	# 2) test handfull of common CBC ciphers
@@ -2554,7 +2561,7 @@ $PRG <options> URI
     <-p|--protocols>                      check TLS/SSL protocols only
     <-S|--server_defaults>                displays the servers default picks and certificate info
     <-P|--preference>                     displays the servers picks: protocol+cipher
-    <-y|--spdy>                           checks for SPDY/NPN
+    <-y|--spdy|--npn>                     checks for SPDY/NPN
     <-x|--single-ciphers-test> <pattern>  tests matched <pattern> of cipher
     <-B|--heartbleed>                     tests only for heartbleed vulnerability
     <-I|--ccs|--ccs_injection>            tests only for CCS injection vulnerability
@@ -2913,63 +2920,59 @@ mx_allentries() {
 }
 
 
-# This function intializes all used global variables
-# It's primarily meant to keep track of them (quite a lot, you see...) and
-# strictly spoken unneccesary
+# This function intializes all used global variables, meant primarily to keep track of them
+# (strictly spoken unneccesary_
 initialize_globals() {
-    # variables
-    low_byte=""
-    hex_cipher=""
-    protocol=""
-    uri=""
-
-    # scan options (BOOLEANS)
-    do_allciphers=false
-    do_beast=false
-    do_breach=false
-    do_ccs_injection=false
-    do_cipher_per_proto=false
-    do_crime=false
-    do_freak=false
-    do_header=false
-    do_heartbleed=false
-    do_mx_allentries=false
-    do_pfs=false
-    do_prettyprint_local=false
-    do_protocols=false
-    do_rc4=false
-    do_renego=false
-    do_run_std_cipherlists=false
-    do_server_defaults=false
-    do_server_preference=false
-    do_spdy=false
-    do_ssl_poodle=false
-    do_starttls=false
-    do_test_just_one=false
-    do_tls_sockets=false
-    run_server_preference=false
+     protocol=""  #FIXME
+ 
+     # scan options (BOOLEANS)
+     do_allciphers=false
+     do_beast=false
+     do_breach=false
+     do_ccs_injection=false
+     do_cipher_per_proto=false
+     do_crime=false
+     do_freak=false
+     do_header=false
+     do_heartbleed=false
+     do_mx_allentries=false
+     do_pfs=false
+     do_prettyprint_local=false
+     do_protocols=false
+     do_rc4=false
+     do_renego=false
+     do_run_std_cipherlists=false
+     do_server_defaults=false
+     do_server_preference=false
+     do_spdy=false
+     do_ssl_poodle=false
+     do_starttls=false
+     do_test_just_one=false
+     do_tls_sockets=false
+     run_server_preference=false
 }
 
 
 # Set default scanning options
 set_scanning_defaults() {
-    do_beast=true
-    do_breach=true
-    do_ccs_injection=true
-    do_crime=true
-    do_freak=true
-    do_header=true
-    do_heartbleed=true
-    do_pfs=true
-    do_protocols=true
-    do_rc4=true
-    do_renego=true
-    do_run_std_cipherlists=true
-    do_server_defaults=true
-    do_spdy=true
-    do_ssl_poodle=true
-    do_starttls=true
-    run_server_preference=true
+     do_beast=true
+     do_breach=true
+     do_ccs_injection=true
+     do_crime=true
+     do_freak=true
+     do_header=true
+     do_heartbleed=true
+     do_pfs=true
+     do_protocols=true
+     do_rc4=true
+     do_renego=true
+     do_run_std_cipherlists=true
+     do_server_defaults=true
+     do_spdy=true
+     do_ssl_poodle=true
+     do_starttls=false
+     run_server_preference=true
+	VULN_COUNT=10
 }
 
 
@@ -3004,43 +3007,56 @@ startup() {
         -p|--protocols)
             do_protocols=true
             do_spdy=true;;
+        -y|--spdy|--npn)
+            do_spdy=true;;
         -f|--ciphers)
             do_run_std_cipherlists=true;;
         -S|--server_defaults)
             do_server_defaults=true;;
         -P|--server_preference)
             do_server_preference=true;;
-        -y|--spdy|--google)
-            do_spdy=true;;
+        -H|--header|--headers)
+            do_header=true;;
         -B|--heartbleed)
-            do_heartbleed=true;;
+            do_heartbleed=true
+            let "VULN_COUNT++" ;;
         -I|--ccs|--ccs_injection)
-            do_ccs_injection=true;;
+            do_ccs_injection=true
+            let "VULN_COUNT++" ;;
         -R|--renegotiation)
-            do_renego=true;;
+            do_renego=true
+            let "VULN_COUNT++" ;;
         -C|--compression|--crime)
-            do_crime=true;;
+            do_crime=true
+            let "VULN_COUNT++" ;;
         -T|--breach)
-            do_breach=true;;
+            do_breach=true
+		  let "VULN_COUNT++" ;;
         -O|--poodle)
-            do_ssl_poodle=true;;
+            do_ssl_poodle=true
+		  let "VULN_COUNT++" ;;
         -F|--freak)
-            do_freak=true;;
+            do_freak=true
+		  let "VULN_COUNT++" ;;
+        -A|--beast)
+            do_beast=true
+		  let "VULN_COUNT++" ;;
         -4|--rc4|--appelbaum)
             do_rc4=true;;
         -s|--pfs|--fs|--nsa)
             do_pfs=true;;
-        -A|--beast)
-            do_beast=true;;
-        -H|--header|--headers)
-            do_header=true;;
         -q) ### following is a development feature and will disappear:
             # DEBUG=3  ./testssl.sh -q 03 "cc, 13, c0, 13" google.de
             # DEBUG=3  ./testssl.sh -q 01 yandex.ru
-            low_byte=$2
-            hex_cipher=$3
+            TLS_LOW_BYTE="$2"
+            if [ $# -eq 4 ]; then
+            	HEX_CIPHER="$3"
+            	shift 
+            fi
+            shift
             do_tls_sockets=true
-            shift 2;;
+		echo $TLS_LOW_BYTE $HEX_CIPHER
+            ;;
         (--) shift
              break;;
         (-*) echo "$0: unrecognized option $1" 1>&2; exit 1;;
@@ -3055,88 +3071,96 @@ startup() {
         exit 0
     fi
 
-    uri=$1
+    URI=$1
 }
 
 
 ################# main: #################
+
 main() {
-    # auto determine where bins are
-    find_openssl_binary
-    mybanner
+     # auto determine where bins are
+     find_openssl_binary
+     mybanner
+ 
+     PATH_TO_TESTSSL=$(readlink "$BASH_SOURCE") 2>/dev/null
+     [ -z "$PATH_TO_TESTSSL" ] && PATH_TO_TESTSSL="."
+ 
+     # next file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
+     # https://www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
+     [ -r "$(dirname $PATH_TO_TESTSSL)/mapping-rfc.txt" ] && MAP_RFC_FNAME=$(dirname $PATH_TO_TESTSSL)"/mapping-rfc.txt"
+ 
+     initialize_globals
+ 
+     ret=0       
+     startup "$@"
+     maketempf
+     parse_hn_port "${URI}" "${protocol}"
+ 
+     # OK, let's roll..
+     ${do_mx_allentries} && { mx_allentries "${URI}"; ret=$(($? + ret)); }
+     if ${do_prettyprint_local}; then
+         initialize_engine 	# GOST support-
+         prettyprint_local "${URI}"
+     fi
+ 
+     ${do_test_just_one} && test_just_one ${single_cipher}
+     ${do_starttls} && { starttls ${protocol}; ret=$(($? + ret)); }
+     ${do_allciphers} && { allciphers; ret=$(($? + ret)); }
+     ${do_cipher_per_proto} && { cipher_per_proto; ret=$(($? + ret)); }
+     ${do_protocols} && { runprotocols; ret=$(($? + ret)); }
+     ${do_spdy} && { spdy; ret=$(($? + ret)); }
+     ${do_run_std_cipherlists} && { run_std_cipherlists; ret=$(($? + ret)); }
+     ${do_server_preference} && { server_preference; ret=$(($? + ret)); }
+     ${do_server_defaults} && { server_defaults; ret=$(($? + ret)); }
+ 
+     if ${do_header}; then
+          #TODO: refactor this into other functions
+         if [[ $SERVICE == "HTTP" ]]; then
+             hsts "$URL_PATH"
+             hpkp "$URL_PATH"
+             serverbanner "$URL_PATH"
+             applicationbanner "$URL_PATH"
+             cookieflags "$URL_PATH"
+         else
+             pr_litemagentaln " Wrong usage: You're not targetting a HTTP service"
+             ret=$((2 + ret))
+         fi
+     fi
 
-    #PATH_TO_TESTSSL="$(cd "${0%/*}" 2>/dev/null; echo "$PWD"/"${0##*/}")"
-    PATH_TO_TESTSSL=$(readlink "$BASH_SOURCE") 2>/dev/null
-    [ -z "$PATH_TO_TESTSSL" ] && PATH_TO_TESTSSL="."
-
-    # next file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
-    # https://www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
-    [ -r "$(dirname $PATH_TO_TESTSSL)/mapping-rfc.txt" ] && MAP_RFC_FNAME=$(dirname $PATH_TO_TESTSSL)"/mapping-rfc.txt"
-
-    initialize_globals
-    # TODO: ret variable could be changed to a global variable
-    # this would make the code probably a bit cleaner
-    ret=0
-    startup "$@"
-    maketempf
-    parse_hn_port "${uri}" "${protocol}"
-
-    # OK, let's roll..
-    ${do_mx_allentries} && { mx_allentries "${uri}"; ret=$(($? + ret)); }
-    if ${do_prettyprint_local}; then
-        initialize_engine 	# GOST support-
-        prettyprint_local "${uri}"
-    fi
-
-    ${do_test_just_one} && test_just_one ${single_cipher}
-    ${do_starttls} && { starttls ${protocol}; ret=$(($? + ret)); }
-    ${do_allciphers} && { allciphers; ret=$(($? + ret)); }
-    ${do_cipher_per_proto} && { cipher_per_proto; ret=$(($? + ret)); }
-    ${do_protocols} && { runprotocols; ret=$(($? + ret)); }
-    ${do_spdy} && { spdy; ret=$(($? + ret)); }
-    ${do_run_std_cipherlists} && { run_std_cipherlists; ret=$(($? + ret)); }
-    ${do_server_preference} && { server_preference; ret=$(($? + ret)); }
-    ${do_server_defaults} && { server_defaults; ret=$(($? + ret)); }
-    ${do_heartbleed} && { heartbleed; ret=$(($? + ret)); }
-    ${do_ccs_injection} && { ccs_injection; ret=$(($? + ret)); }
-    ${do_renego} && { renego; ret=$(($? + ret)); }
-    # if you can't do the time, don't do the crime ;)
-    ${do_crime} && { crime; ret=$(($? + ret)); }
-    if ${do_breach}; then
-        #TODO: refactor this into breach()
-        if [[ $SERVICE != "HTTP" ]] ; then
-            pr_litemagentaln " Wrong usage: You're not targetting a HTTP service"
-            ret=$((2 + ret))
-        else
-            breach "$URL_PATH"
-            ret=$(($? + ret))
-        fi
-    fi
-    ${do_ssl_poodle} && { ssl_poodle; ret=$(($? + ret)); }
-    ${do_freak} && { freak; ret=$(($? + ret)); }
-    ${do_rc4} && { rc4; ret=$(($? + ret)); }
-    ${do_tls_sockets} && { tls_sockets ${low_byte} ${hex_cipher}; \
-                        ret=$(($? + ret)); }
-    if ${do_header}; then
-         #TODO: refactor this into other functions
-        if [[ $SERVICE == "HTTP" ]]; then
-            hsts "$URL_PATH"
-            hpkp "$URL_PATH"
-            serverbanner "$URL_PATH"
-            applicationbanner "$URL_PATH"
-            cookieflags "$URL_PATH"
-        else
-            pr_litemagentaln " Wrong usage: You're not targetting a HTTP service"
-            ret=$((2 + ret))
-        fi
-    fi
-    ${do_pfs} && { pfs; ret=$(($? + ret)); }
-
-    exit $ret
+     # vulnerabilities
+	if [ $VULN_COUNT -gt 1 ]; then
+		outln; pr_blue "--> Testing specific vulnerabilities" 
+		outln "\n"
+	fi
+     ${do_heartbleed} && { heartbleed; ret=$(($? + ret)); }
+     ${do_ccs_injection} && { ccs_injection; ret=$(($? + ret)); }
+     ${do_renego} && { renego; ret=$(($? + ret)); }
+     ${do_crime} && { crime; ret=$(($? + ret)); }
+     if ${do_breach}; then
+         #TODO: refactor this into breach()
+         if [[ $SERVICE != "HTTP" ]] ; then
+             pr_litemagentaln " Wrong usage: You're not targetting a HTTP service"
+             ret=$((2 + ret))
+         else
+             breach "$URL_PATH"
+             ret=$(($? + ret))
+         fi
+     fi
+     ${do_ssl_poodle} && { ssl_poodle; ret=$(($? + ret)); }
+     ${do_freak} && { freak; ret=$(($? + ret)); }
+     ${do_beast} && { beast; ret=$(($? + ret)); }
+ 
+     ${do_rc4} && { rc4; ret=$(($? + ret)); }
+ 
+     ${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; ret=$(($? + ret)); }
+ 
+     ${do_pfs} && { pfs; ret=$(($? + ret)); }
+ 
+     exit $ret
 }
 
 
 main "$@"
 
-#  $Id: testssl.sh,v 1.220 2015/04/02 11:35:21 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.221 2015/04/09 19:42:51 dirkw Exp $ 
 # vim:ts=5:sw=5
