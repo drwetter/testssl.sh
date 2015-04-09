@@ -17,6 +17,7 @@
  - Shellcheck static analysis
 
 * Peter Mosmans
+ - way better cmd line parsing
  - cleanups
 
 * Markus Manzke: 
