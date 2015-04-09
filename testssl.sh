@@ -75,6 +75,9 @@ DAYS2WARN2=30						# days to warn before cert expires, threshold 2
 
 # more global vars, here just declared
 ECHO="/usr/bin/printf --"			# works under Linux, BSD, MacOS. 
+TERM_DWITH=${COLUMNS:-$(tput cols)} 	# for future costum line wrapping 
+TERM_CURRPOS=0						#   ^^^ we also need to find out the length or current pos in the line
+
 NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 RUN_DIR=$(dirname $0)
 TEMPDIR=""
@@ -1035,7 +1038,7 @@ run_std_cipherlists() {
 }
 
 server_preference() {
-	list1="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
+	local list1="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
 	outln;
 	pr_blue "--> Testing server preferences"; outln "\n"
 
@@ -1087,55 +1090,112 @@ server_preference() {
 		esac
 		outln "$remark4default_cipher"
 
-		out " Negotiated cipher per proto $remark4default_cipher"
-		i=1
-		for p in sslv2 ssl3 tls1 tls1_1 tls1_2; do
-		# proto-check b4!
-			$OPENSSL s_client  $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
-			if [ $ret -eq 0 ]; then
-				#FIXME: BSD output is not so fine
-				 proto[i]=$(grep -w "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g')
-				 cipher[i]=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
-				 [[ ${cipher[i]} == "0000" ]] && cipher[i]=""  # Hack!
-				 [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
-			else
-				 proto[i]=""
-				 cipher[i]=""
-			fi
-			i=$(($i + 1))
-		done
-
-		if spdy_pre ; then		# is NPN/SPDY supported and is this no STARTTLS?
-			$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$NPN_PROTOs" </dev/null 2>/dev/null  >$TMPFILE
-			if [ $? -eq 0 ]; then
-				proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
-				if [ -z "${proto[i]}" ]; then
-					cipher[i]=""
+		if [ ! -z "$remark4default_cipher" ]; then
+			out " Negotiated cipher per proto $remark4default_cipher"
+			i=1
+			for p in sslv2 ssl3 tls1 tls1_1 tls1_2; do
+			# proto-check b4!
+				$OPENSSL s_client  $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
+				if [ $ret -eq 0 ]; then
+					#FIXME: BSD output is not so fine
+					 proto[i]=$(grep -w "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g')
+					 cipher[i]=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+					 [[ ${cipher[i]} == "0000" ]] && cipher[i]=""  # Hack!
+					 [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
 				else
-					cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
-					[[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
+					 proto[i]=""
+					 cipher[i]=""
+				fi
+				i=$(($i + 1))
+			done
+
+			if spdy_pre ; then		# is NPN/SPDY supported and is this no STARTTLS?
+				$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$NPN_PROTOs" </dev/null 2>/dev/null  >$TMPFILE
+				if [ $? -eq 0 ]; then
+					proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
+					if [ -z "${proto[i]}" ]; then
+						cipher[i]=""
+					else
+						cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+						[[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
+					fi
 				fi
 			fi
-		fi
 
-		for i in 1 2 3 4 5 6; do
-			if [[ -n "${cipher[i]}" ]]; then                              # cipher nicht leer
-				 if [[ -z "${cipher[i-1]}" ]]; then                      # der davor leer
-				 	outln
-					printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"            # beides ausgeben
-				 else                                                    # davor nihct leer
-					if [[ "${cipher[i-1]}" == "${cipher[i]}" ]]; then   # und bei vorigem Protokoll selber cipher
-						out ", ${proto[i]}"                         	  # selber Cipher --> Nur Protokoll dahinter
-					else
+			for i in 1 2 3 4 5 6; do
+				if [[ -n "${cipher[i]}" ]]; then                              # cipher nicht leer
+					 if [[ -z "${cipher[i-1]}" ]]; then                      # der davor leer
 						outln
 						printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"            # beides ausgeben
-				    fi
-				 fi
-			fi
+					 else                                                    # davor nihct leer
+						if [[ "${cipher[i-1]}" == "${cipher[i]}" ]]; then   # und bei vorigem Protokoll selber cipher
+							out ", ${proto[i]}"                         	  # selber Cipher --> Nur Protokoll dahinter
+						else
+							outln
+							printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"            # beides ausgeben
+					    fi
+					 fi
+				fi
+			done
+		fi
+	fi
+
+	tmpfile_handle $FUNCNAME.txt
+
+	if [ -z "$remark4default_cipher" ]; then
+		cipher_pref_check
+	else
+		outln "\n No further cipher order check as order is determined by the client"
+	fi
+
+	return 0
+}
+
+cipher_pref_check() {
+	local p proto protos
+	local tested_cipher cipher
+
+	out " Cipher order"
+
+	for p in sslv2 ssl3 tls1 tls1_1 tls1_2; do
+		$OPENSSL s_client $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
+		if [ $? -eq 0 ]; then
+			tested_cipher=""
+			proto=$(grep -w "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g')
+			cipher=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+			outln
+			printf "     %-10s %s " "$proto:" "$cipher"
+			tested_cipher="-"$cipher
+			while true; do
+				$OPENSSL s_client $STARTTLS -"$p" -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
+				[ $? -ne 0 ] && break
+				cipher=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+				out "$cipher "
+				tested_cipher="$tested_cipher:-$cipher"
+			done
+		fi
+	done
+
+	if ! spdy_pre ; then		# is NPN/SPDY supported and is this no STARTTLS?
+		:
+	else
+		protos=$($OPENSSL s_client -host $NODE -port $PORT -nextprotoneg  \"\" </dev/null 2>/dev/null | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')  
+		for p in $protos; do
+			$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$p" </dev/null 2>/dev/null >$TMPFILE
+			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+			printf "\n     %-10s %s " "$p:" "$cipher"
+			tested_cipher="-"$cipher
+			while true; do
+				$OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT -nextprotoneg "$p" </dev/null 2>/dev/null >$TMPFILE
+				[ $? -ne 0 ] && break
+				cipher=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+				out "$cipher "
+				tested_cipher="$tested_cipher:-$cipher"
+			done
 		done
 	fi
 	outln
-
+	
 	tmpfile_handle $FUNCNAME.txt
 	return 0
 }
@@ -2949,7 +3009,6 @@ initialize_globals() {
      do_starttls=false
      do_test_just_one=false
      do_tls_sockets=false
-     run_server_preference=false
 }
 
 
@@ -2968,10 +3027,10 @@ set_scanning_defaults() {
      do_renego=true
      do_run_std_cipherlists=true
      do_server_defaults=true
+     do_server_preference=true
      do_spdy=true
      do_ssl_poodle=true
      do_starttls=false
-     run_server_preference=true
 	VULN_COUNT=10
 }
 
@@ -3162,5 +3221,5 @@ main() {
 
 main "$@"
 
-#  $Id: testssl.sh,v 1.221 2015/04/09 19:42:51 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.222 2015/04/09 20:08:47 dirkw Exp $ 
 # vim:ts=5:sw=5
