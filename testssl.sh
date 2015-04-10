@@ -281,6 +281,16 @@ pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off;
 
 ### colorswitcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
+
+# empty vars if we have no color:
+red=""
+green=""
+yellow=""
+blue=""
+off=""
+bold=""
+underline=""
+
 if [[ "$COLOR" -eq 2 ]]; then
 	red=$(tput setaf 1) 
 	green=$(tput setaf 2) 
@@ -1263,11 +1273,11 @@ server_defaults() {
 
 		out " Common Name (CN)             "
 		CN=$($OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
-		out "$CN"
+		pr_underline "$CN"
 
 		CN_nosni=$($OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  | \
 			$OPENSSL x509 -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
-		[[ $DEBUG -ge 2 ]] && out "$NODE | $CN | $CN_nosni"
+		[[ $DEBUG -ge 2 ]] && out "\'$NODE\' | \'$CN\' | \'$CN_nosni\'"
 		if [[ $NODE == $CN_nosni ]]; then
 			if [[ $SERVICE != "HTTP" ]] ; then
 				outln " (matches certificate directly)"
@@ -1278,16 +1288,21 @@ server_defaults() {
 			if [[ $SERVICE != "HTTP" ]] ; then
 				pr_brownln " (CN doesn't match but for non-HTTP services it might be ok)"
 			else
-				outln " (CN response to request w/o SNI: '$CN_nosni')"
+				out " (CN response to request w/o SNI: "; pr_underline "$CN_nosni"; outln ")"
 			fi
 		fi
 
 		SAN=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
 			sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g' -e 's/othername:<unsupported>//g')
 #                                                               ^^^ CACert
-		[ x"$SAN" != "x" ] && SAN=$(echo "$SAN" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g') && outln " subjectAltName (SAN)         $SAN"
-										# replace line feed by " "
-
+		if [ x"$SAN" != "x" ]; then
+			SAN=$(echo "$SAN" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g') # replace line feed by " "
+			out " subjectAltName (SAN)         "
+			for san in $SAN; do
+				out "$underline$san$off "
+			done
+			outln
+		fi
 		out " Issuer                       "
 		issuer=$($OPENSSL x509 -in $HOSTCERT -noout -issuer | sed -e 's/^.*CN=//g' -e 's/\/.*$//g')
 		issuer_o=$($OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*O=//g' | sed 's/\/.*$//g')
@@ -1300,8 +1315,8 @@ server_defaults() {
 			pr_redln "selfsigned (not OK)"
 		else
 			[ "$issuer_c" == "" ] && \
-				outln "$issuer ('$issuer_o')" || \
-				outln "$issuer ('$issuer_o' from '$issuer_c')"
+				outln "$underline$issuer$off ($underline$issuer_o$off" || \
+				outln "$underline$issuer$off ($underline$issuer_o$off from $underline$issuer_c$off)"
 		fi
 
 		out " Certificate Expiration       "
@@ -2015,7 +2030,7 @@ tls_sockets() {
 ###### ccs, heartbleed
 
 ok_ids(){
-	greenln "\n ok -- something resetted our ccs packets"
+	pr_greenln "\n ok -- something resetted our ccs packets"
 	return 0
 }
 
@@ -3221,5 +3236,5 @@ main() {
 
 main "$@"
 
-#  $Id: testssl.sh,v 1.222 2015/04/09 20:08:47 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.223 2015/04/10 13:15:46 dirkw Exp $ 
 # vim:ts=5:sw=5
