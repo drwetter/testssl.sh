@@ -11,13 +11,16 @@ On github you will find in the master branch the development version of the soft
 
 New features in this release are / will be
 
-* certificate information (done), 
-* more HTTP header infos (partly done, needs a bit of cleanup), 
-* protocol check via bash sockets (SSLv2+v3: done)
-* maybe: cipher check via bash sockets (only with development option -q)
-* debug file handling (ongoing)
-* BEAST (works, need some polishing for the output)
+* "only one cmd line option at a time": gone (starttls integration pending)
+* certificate information: done, 
+* more HTTP header infos: done.
+* protocol check via bash sockets, SSLv2+v3: done
+* maybe: cipher check via bash sockets: for now only with development option -q
+* debug file handling: done so far
+* BEAST: done, maybe needs some polishing for the output
 
 Contributions, feedback, also bug reports are welcome. For contributions please note: One patch per feature -- bug fix/improvement.
+
+Update notification here or @ [twitter](https://twitter.com/drwetter). 
 
 
