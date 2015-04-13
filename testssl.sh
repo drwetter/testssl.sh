@@ -45,19 +45,20 @@ SWCONTACT="dirk aet testssl dot sh"
 # need all those features. Thus it's highly recommended to use the suppied binaries.
 # Except on-available local ciphers you'll get a warning about missing features
 
-
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
+# 0 is true here (if a 1/- switch)
+#
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
-SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-0} 		# determines whether the client side ciphers are displayed at all (makes no sense normally)
-SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested
+SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-1} 		# will client side ciphers displayed before an individual test (makes no sense normally)
+SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: wrong value
 SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while checking the http header is just usual
-SSL_NATIVE=${SSL_NATIVE:-0}			# we do per default bash sockets!
-ASSUMING_HTTP=${ASSUMING_HTTP:-0}		# in seldom cases (WAF, old servers/grumpy SSL) the service detection fails. Set to 1 for HTTP
+SSL_NATIVE=${SSL_NATIVE:-1}			# we do per default bash sockets where possible 0: switch back to native openssl
+ASSUMING_HTTP=${ASSUMING_HTTP:-1}		# in seldom cases (WAF, old servers/grumpy SSL) the service detection fails. Set to 0 for forcing HTTP
 DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1), 
 								# 3: slight hexdumps + other info, 4: send bytes via sockets, 5: received, 6: whole 9 yards 
 								#FIXME: still to be filled with (more) sense or following to be included:
-VERBERR=${VERBERR:-1}				# 0 means/to be more verbose (some like the errors to be dispayed so that one can tell better
-								# whether handshake succeeded or not. For errors with individual ciphers you also need to have SHOW_EACH_C=1
+VERBERR=${VERBERR:-1}				# 0 means to be more verbose (handshake errors to be displayed so that one can tell better
+								# whether handshake succeeded or not. While testing individual ciphers you also need to have SHOW_EACH_C=1
 
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}	# we wait this long before killing the process to retrieve a service banner / http header
 MAX_WAITSOCK=10					# waiting at max 10 seconds for socket reply 
@@ -389,7 +390,7 @@ runs_HTTP() {
 			out " $SERVICE, thus skipping HTTP specific checks" 
 			ret=0 ;;
 		*)   out " Couldn't determine what's running on port $PORT"
-			if [[ $ASSUMING_HTTP -eq 1 ]]; then
+			if [[ $ASSUMING_HTTP -eq 0 ]]; then
 				SERVICE=HTTP
 				out " -- ASSUMING_HTTP set though"
 				ret=0
@@ -696,7 +697,6 @@ prettyprint_local() {
 		pr_blue "matching word pattern "\"$1\"" (ignore case)"; 
 	fi
 	outln "\n"
-
 	neat_header
 
 	if [ -z "$1" ]; then
@@ -710,7 +710,6 @@ prettyprint_local() {
 			$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
 				normalize_ciphercode $hexcode
 				neat_list $HEXC $ciph $kx $enc | grep -wai "$arg"
-				outln
 			done
      	done
 	fi
@@ -737,7 +736,7 @@ listciphers() {
 std_cipherlists() {
 	out "$2 "; 
 	if listciphers $1; then  # is that locally available??
-		[ $SHOW_LOC_CIPH = "1" ] && out "local ciphers are: " && sed 's/:/, /g' $TMPFILE
+		[ $SHOW_LOC_CIPH -eq 0 ] && out "local ciphers are: " && sed 's/:/, /g' $TMPFILE
 		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $SNI 2>$TMPFILE >/dev/null </dev/null
 		ret=$?
 		[[ $DEBUG -ge 2 ]] && cat $TMPFILE
@@ -839,7 +838,6 @@ test_just_one(){
 				$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 				ret=$?
 				neat_list $HEXC $ciph $kx $enc
-
 				if [ $ret -eq 0 ]; then
 					pr_cyan "  available"
 				else
@@ -960,7 +958,7 @@ runprotocols() {
 
 	pr_blue "--> Testing Protocols"; 
 
-	if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
+	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		using_sockets=1
 		outln "(via native openssl)\n"
 	else
@@ -968,7 +966,7 @@ runprotocols() {
 	fi
 
 	out " SSLv2      ";
-	if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
+	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		testprotohelper "-ssl2"
 		case $? in
 			0) 	ok 1 1 ;;	# pr_red 
@@ -981,7 +979,7 @@ runprotocols() {
 	fi
 
 	out " SSLv3      ";
-	if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
+	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		testprotohelper "-ssl3"
 	else
 		tls_sockets "00" "$TLS_CIPHER"
@@ -995,7 +993,7 @@ runprotocols() {
 	esac
 
 	out " TLS 1      ";
-	#if [ $SSL_NATIVE -eq 1 ] || [ -n "$STARTTLS" ]; then
+	#if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		testprotohelper "-tls1"
 	#else
 		#tls_sockets "01" "$TLS_CIPHER"
@@ -1430,7 +1428,7 @@ pfs() {
 		fi
 	fi
 	savedciphers=$(cat $TMPFILE)
-	[ $SHOW_LOC_CIPH = "1" ] && echo "local ciphers available for testing PFS:" && echo $(cat $TMPFILE)
+	[ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing PFS:" && echo $(cat $TMPFILE)
 
 	$OPENSSL s_client -cipher 'ECDH:DH' $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
@@ -1484,7 +1482,7 @@ rc4() {
 	outln
 	pr_blue "--> Checking RC4 Ciphers" ; outln
 	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
-	[ $SHOW_LOC_CIPH = "1" ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
+	[ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
 	$OPENSSL s_client -cipher $($OPENSSL ciphers RC4) $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
 		pr_litered "\nNOT ok: borken RC4 is being offered!"
@@ -1535,6 +1533,12 @@ breach() {
 	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for BREACH (HTTP compression) vulnerability" && outln "\n"
 	pr_bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
 
+	if [[ $SERVICE != "HTTP" ]] ; then
+		pr_litemagenta " Wrong usage: You're not targetting a HTTP service"
+		outln " (how did you get here?)"
+		return 7
+	fi
+
 	url="$1"
 	[ -z "$url" ] && url="/"
 	if [ $SNEAKY -eq 0 ] ; then
@@ -1576,7 +1580,6 @@ EOF
 	fi
 	return $ret
 }
-
 
 
 lucky13() {
@@ -2521,19 +2524,20 @@ find_openssl_binary() {
 	else
 # 2. otherwise try openssl in path of testssl.sh
 		OPENSSL=$RUN_DIR/openssl
-		if [ ! -x $OPENSSL ] ; then
+		if [ ! -x "$OPENSSL" ] ; then
 # 3. with arch suffix
 			OPENSSL=$RUN_DIR/openssl.$(uname -m)
-			if [ ! -x $OPENSSL ] ; then
-#4. finally: didn't fiond anything, so we take the one propably from system:
-				OPENSSL=$(which openssl)
+			if [ ! -x "$OPENSSL" ] ; then
+#4. finally: didn't find anything, so we take the one from the system:
+				OPENSSL=$(which openssl 2>/dev/null)
 			fi
 		fi
 	fi
 
-	if ! $OPENSSL version -a 2>&1 >/dev/null; then
+	"$OPENSSL" version -a 2>&1 >/dev/null
+	if [ $? -ne 0 ] || [ ! -x "$OPENSSL" ]; then
 		outln
-		pr_magentaln "FATAL: cannot exec $OPENSSL"
+		pr_magentaln "FATAL: cannot exec or find any openssl binary "
 		exit -1
 	fi
 
@@ -2667,7 +2671,7 @@ For HTML output you need to pipe through "aha" (Ansi HTML Adapter: github.com/th
 
 
 EOF
-	return $?
+	exit $1
 }
 
 
@@ -3012,7 +3016,6 @@ initialize_globals() {
      do_heartbleed=false
      do_mx_allentries=false
      do_pfs=false
-     do_prettyprint_local=false
      do_protocols=false
      do_rc4=false
      do_renego=false
@@ -3049,6 +3052,35 @@ set_scanning_defaults() {
 	VULN_COUNT=10
 }
 
+debug_globals() {
+     echo "do_allciphers: $do_allciphers"
+     echo "do_beast: $do_beast"
+     echo "do_breach: $do_breach"
+	echo "do_ccs_injection: $do_ccs_injection"
+	echo "do_cipher_per_proto: $do_cipher_per_proto"
+     echo "do_crime: $do_crime"
+     echo "do_freak: $do_freak"
+     echo "do_header: $do_header"
+     echo "do_heartbleed: $do_heartbleed"
+     echo "do_mx_allentries $do_mx_allentries"
+     echo "do_pfs: $do_pfs"
+     echo "do_protocols: $do_protocols"
+     echo "do_rc4: $do_rc4"
+     echo "do_renego: $do_renego"
+     echo "do_run_std_cipherlists: $do_run_std_cipherlists"
+     echo "do_server_defaults: $do_server_defaults"
+     echo "do_server_preference: $do_server_preference"
+     echo "do_spdy: $do_spdy"
+     echo "do_ssl_poodle: $do_ssl_poodle"
+     echo "do_starttls: $do_starttls"
+     echo "do_test_just_one: $do_test_just_one"
+     echo "do_tls_sockets: $do_tls_sockets"
+
+     echo "URL: $URI"
+	read a
+}
+
+
 
 # Parses options
 startup() {
@@ -3061,8 +3093,10 @@ startup() {
             exit 0;;
         --mx)
             do_mx_allentries=true;;
-        -V|--local)
-            do_prettyprint_local=true;;
+       -V|--local)
+            initialize_engine 	# GOST support-
+            prettyprint_local "$2"
+            exit $? ;;
         -x|--single-ciphers-test)
             do_test_just_one=true
             single_cipher=$2
@@ -3076,8 +3110,8 @@ startup() {
         -E|--cipher-per-proto)
             do_cipher_per_proto=true;;
         -h|--help)
-            help
-            exit 0;;
+            help 0
+            ;;
         -p|--protocols)
             do_protocols=true
             do_spdy=true;;
@@ -3129,23 +3163,40 @@ startup() {
             fi
             shift
             do_tls_sockets=true
-		echo $TLS_LOW_BYTE $HEX_CIPHER
+		  #echo $TLS_LOW_BYTE $HEX_CIPHER
             ;;
+        --assuming-http|--assuming_http)
+          ASSUMING_HTTP=0 ;;
+        --sneaky)
+          SNEAKY=0 ;;
+        --color)
+          COLOR=$2
+          if [ $COLOR -ne 0 ] && [ $COLOR -ne 1 ] && [ $COLOR -ne 2 ] ; then
+              COLOR=2
+              pr_magentaln "$0: unrecognized color: $2" 1>&2
+              help 1
+          fi
+          shift 
+		;;
+        --ssl_native|--ssl-native)
+          SSL_NATIVE=0 ;;
         (--) shift
              break;;
-        (-*) echo "$0: unrecognized option $1" 1>&2; exit 1;;
-        (*) break;; 
+        (-*) pr_magentaln "$0: unrecognized option $1" 1>&2; 
+            help 1 ;;
+        (*) break ;; 
         esac
         shift
     done
 
     # Show usage if no options were specified
     if [ -z $1 ]; then
-        help
-        exit 0
+        help 0
     fi
 
     URI=$1
+
+    #debug_globals
 }
 
 
@@ -3172,10 +3223,6 @@ main() {
  
      # OK, let's roll..
      ${do_mx_allentries} && { mx_allentries "${URI}"; ret=$(($? + ret)); }
-     if ${do_prettyprint_local}; then
-         initialize_engine 	# GOST support-
-         prettyprint_local "${URI}"
-     fi
  
      ${do_test_just_one} && test_just_one ${single_cipher}
      ${do_starttls} && { starttls ${protocol}; ret=$(($? + ret)); }
@@ -3210,25 +3257,14 @@ main() {
      ${do_ccs_injection} && { ccs_injection; ret=$(($? + ret)); }
      ${do_renego} && { renego; ret=$(($? + ret)); }
      ${do_crime} && { crime; ret=$(($? + ret)); }
-     if ${do_breach}; then
-         #TODO: refactor this into breach()
-         if [[ $SERVICE != "HTTP" ]] ; then
-             pr_litemagentaln " Wrong usage: You're not targetting a HTTP service"
-             ret=$((2 + ret))
-         else
-             breach "$URL_PATH"
-             ret=$(($? + ret))
-         fi
-     fi
+     ${do_breach} && { breach "$URL_PATH" ; ret=$(($? + ret)); }
      ${do_ssl_poodle} && { ssl_poodle; ret=$(($? + ret)); }
      ${do_freak} && { freak; ret=$(($? + ret)); }
      ${do_beast} && { beast; ret=$(($? + ret)); }
- 
      ${do_rc4} && { rc4; ret=$(($? + ret)); }
+     ${do_pfs} && { pfs; ret=$(($? + ret)); }
  
      ${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; ret=$(($? + ret)); }
- 
-     ${do_pfs} && { pfs; ret=$(($? + ret)); }
  
      exit $ret
 }
@@ -3236,5 +3272,5 @@ main() {
 
 main "$@"
 
-#  $Id: testssl.sh,v 1.223 2015/04/10 13:15:46 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.224 2015/04/13 20:55:38 dirkw Exp $ 
 # vim:ts=5:sw=5
