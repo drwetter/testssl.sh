@@ -374,10 +374,10 @@ runs_HTTP() {
 	# SNI is nonsense for !HTTP but fortunately SMTP and friends don't care
 	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
 	wait_kill $! $HEADER_MAXSLEEP
-	head $TMPFILE | grep -q ^HTTP && SERVICE=HTTP
-	head $TMPFILE | grep -q SMTP && SERVICE=SMTP
-	head $TMPFILE | grep -q POP && SERVICE=POP
-	head $TMPFILE | grep -q IMAP && SERVICE=IMAP
+	head $TMPFILE | grep -aq ^HTTP && SERVICE=HTTP
+	head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
+	head $TMPFILE | grep -aq POP && SERVICE=POP
+	head $TMPFILE | grep -aq IMAP && SERVICE=IMAP
 	debugme head $TMPFILE
 # $TMPFILE contains also a banner which we could use if there's a need for it
 
@@ -432,7 +432,7 @@ EOF
 ) &>$HEADERFILE &
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
-		if ! egrep -iq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
+		if ! egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
 			pr_litemagenta "likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE))."
 			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
 			debugme cat $HEADERFILE
@@ -481,7 +481,7 @@ hsts() {
 	pr_bold " HSTS              "
 	grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -wq "1" || out "(two HSTS header, using 1st one) "
+		grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" || out "(two HSTS header, using 1st one) "
 		hsts_age_sec=$(sed -e 's/[^0-9]*//g' $TMPFILE | head -1)
 		hsts_age_days=$(( hsts_age_sec / 86400))
 		if [ $hsts_age_days -gt $HSTS_MIN ]; then
@@ -514,9 +514,9 @@ hpkp() {
 	pr_bold " HPKP              "
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -wq "1" || out "(two HPKP header, using 1st one) "
+		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || out "(two HPKP header, using 1st one) "
 		# dirty trick so that grep -c really counts occurances and not lines w/ occurances:
-		hpkp_nr_keys=$(sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -c pin-sha)
+		hpkp_nr_keys=$(sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -ac pin-sha)
 		if [ $hpkp_nr_keys -eq 1 ]; then
 			pr_brown "One key is not sufficent, "
 		fi
@@ -914,7 +914,7 @@ cipher_per_proto(){
 
 locally_supported() {
 	[ ! -z "$2" ] && out "$2 "
-	$OPENSSL s_client "$1" 2>&1 | grep -q "unknown option"
+	$OPENSSL s_client "$1" 2>&1 | grep -aq "unknown option"
 	if [ $? -eq 0 ]; then
 		pr_magentaln "Local problem: $OPENSSL doesn't support \"s_client $1\""
 		ret=7
@@ -930,9 +930,9 @@ testversion() {
 
 	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -v "unable to get local|verify error"
+	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	
-	if grep -q "no cipher list" $TMPFILE ; then
+	if grep -aq "no cipher list" $TMPFILE ; then
 		ret=5
 	fi
 
@@ -1058,10 +1058,10 @@ server_preference() {
 		outln "Please report this"
           ret=6
 	else
-		cipher1=$(grep -w Cipher $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+		cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 		list2=$(echo $list1 | tr ':' '\n' | sort -r | tr '\n' ':')	# pr_reverse the list
 		$OPENSSL s_client $STARTTLS -cipher $list2 -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
-		cipher2=$(grep -w Cipher $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+		cipher2=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 
 		if [[ "$cipher1" != "$cipher2" ]]; then
 			pr_litered "nope (NOT ok)"
@@ -1075,7 +1075,7 @@ server_preference() {
 
 		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
 		out " Negotiated protocol          "
-		default_proto=$(grep -w "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
+		default_proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
 		case "$default_proto" in
 			*TLSv1.2)		pr_greenln $default_proto ;;
 			*TLSv1.1)		pr_litegreenln $default_proto ;;
@@ -1086,7 +1086,7 @@ server_preference() {
 		esac
  
 		out " Negotiated cipher            "
-		default_cipher=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+		default_cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 		case "$default_cipher" in
 			*NULL*|*EXP*)	pr_red "$default_cipher" ;;
 			*RC4*)		pr_litered "$default_cipher" ;;
@@ -1106,8 +1106,8 @@ server_preference() {
 				$OPENSSL s_client  $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
 				if [ $ret -eq 0 ]; then
 					#FIXME: BSD output is not so fine
-					 proto[i]=$(grep -w "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g')
-					 cipher[i]=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+					 proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g')
+					 cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 					 [[ ${cipher[i]} == "0000" ]] && cipher[i]=""  # Hack!
 					 [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
 				else
@@ -1124,7 +1124,7 @@ server_preference() {
 					if [ -z "${proto[i]}" ]; then
 						cipher[i]=""
 					else
-						cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+						cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 						[[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
 					fi
 				fi
@@ -1169,15 +1169,15 @@ cipher_pref_check() {
 		$OPENSSL s_client $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
 		if [ $? -eq 0 ]; then
 			tested_cipher=""
-			proto=$(grep -w "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g')
-			cipher=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+			proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g')
+			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 			outln
 			printf "     %-10s %s " "$proto:" "$cipher"
 			tested_cipher="-"$cipher
 			while true; do
 				$OPENSSL s_client $STARTTLS -"$p" -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
 				[ $? -ne 0 ] && break
-				cipher=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+				cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 				out "$cipher "
 				tested_cipher="$tested_cipher:-$cipher"
 			done
@@ -1190,13 +1190,13 @@ cipher_pref_check() {
 		protos=$($OPENSSL s_client -host $NODE -port $PORT -nextprotoneg  \"\" </dev/null 2>/dev/null | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')  
 		for p in $protos; do
 			$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$p" </dev/null 2>/dev/null >$TMPFILE
-			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 			printf "\n     %-10s %s " "$p:" "$cipher"
 			tested_cipher="-"$cipher
 			while true; do
 				$OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT -nextprotoneg "$p" </dev/null 2>/dev/null >$TMPFILE
 				[ $? -ne 0 ] && break
-				cipher=$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+				cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 				out "$cipher "
 				tested_cipher="$tested_cipher:-$cipher"
 			done
@@ -1223,7 +1223,7 @@ server_defaults() {
 		ret=6
 	else
 		out " TLS server extensions        "
-		extensions=$(grep -w "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
+		extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
 		if [ -z "$extensions" ]; then
 			outln "(none)"
 		else
@@ -1231,17 +1231,17 @@ server_defaults() {
 		fi
 
 		out " Session Tickets RFC 5077     "
-		sessticket_str=$(grep -w "session ticket" $TMPFILE | grep lifetime)
+		sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
 		if [ -z "$sessticket_str" ]; then
 			outln "(none)"
 		else
-			lifetime=$(echo $sessticket_str | grep lifetime | sed 's/[A-Za-z:() ]//g')
-			unit=$(echo $sessticket_str | grep lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
+			lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
+			unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
 			outln "$lifetime $unit"
 		fi
 
 		out " Server key size              "
-		keysize=$(grep -w "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //')
+		keysize=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //')
 		if [ -z "$keysize" ]; then
 			outln "(couldn't determine)"
 		else
@@ -1433,7 +1433,7 @@ pfs() {
 	$OPENSSL s_client -cipher 'ECDH:DH' $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
 	outln
-	if [ $ret -ne 0 ] || [ $(grep -c "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]; then
+	if [ $ret -ne 0 ] || [ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]; then
 		pr_brownln "Not OK: No ciphers supporting Forward Secrecy offered"
 	else
 		pr_litegreen "OK: PFS is offered. "; 
@@ -1542,7 +1542,12 @@ breach() {
 	url="$1"
 	[ -z "$url" ] && url="/"
 	if [ $SNEAKY -eq 0 ] ; then
-		referer="Referer: http://google.com/" # see https://community.qualys.com/message/20360
+		# see https://community.qualys.com/message/20360
+		if [[ "$NODE" =~ google ]]; then  
+			referer="Referer: http://yandex.ru/" # otherwise we have a false positive for google.com 
+		else
+			referer="Referer: http://google.com/"
+		fi
 		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
 	else
 		referer="Referer: TLS/SSL-Tester from $SWURL"
@@ -1618,7 +1623,7 @@ spdy() {
 			ret=1
 		else
 			# now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
-			if echo $tmpstr | egrep -q "spdy|http" ; then
+			if echo $tmpstr | egrep -aq "spdy|http" ; then
 				pr_bold "$tmpstr" ; out " (advertised)"
 				ret=0
 			else
@@ -2047,8 +2052,8 @@ ccs_injection(){
 
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT &>$TMPFILE </dev/null
 
-	tls_proto_offered=$(grep -w Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
-	#tls_proto_offered=$(grep -w Protocol $TMPFILE | sed 's/^.*Protocol//')
+	tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
+	#tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed 's/^.*Protocol//')
 	case $tls_proto_offered in
 		12)	tls_hexcode="x03, x03" ;;
 		11)	tls_hexcode="x03, x02" ;;
@@ -2148,7 +2153,7 @@ heartbleed(){
 	# determine TLS versions available:
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -tlsextdebug &>$TMPFILE </dev/null
 		
-	tls_proto_offered=$(grep -w Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
+	tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
 	case $tls_proto_offered in
 		12)	tls_hexcode="x03, x03" ;;
 		11)	tls_hexcode="x03, x02" ;;
@@ -2276,7 +2281,7 @@ renego() {
 
 	pr_bold " Renegotiation "; out "(CVE 2009-3555)             "
 	NEG_STR="Secure Renegotiation IS NOT"
-	echo "R" | $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 | grep -iq "$NEG_STR"
+	echo "R" | $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 | grep -iaq "$NEG_STR"
 	secreg=$?						# 0= Secure Renegotiation IS NOT supported
 	case $secreg in
 		0) pr_redln "VULNERABLE (NOT ok)" ;;
@@ -2305,7 +2310,7 @@ crime() {
 	esac
 
 	# first we need to test whether OpenSSL binary has zlib support
-	$OPENSSL zlib -e -a  -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib 
+	$OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib 
 	if [ $? -eq 0 ]; then
 		pr_magentaln "Local Problem: Your $OPENSSL lacks zlib support"
 		return 7  
@@ -2313,7 +2318,7 @@ crime() {
 
 	#STR=$($OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null | grep Compression )
 	$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>$TMPFILE
-	if grep Compression $TMPFILE | grep -q NONE >/dev/null; then
+	if grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
 		pr_green "not vulnerable (OK)"
 		[[ $SERVICE == "HTTP" ]] || out " (not using HTTP anyway)"
 		ret=0
@@ -2387,7 +2392,7 @@ ssl_poodle() {
 	debugme echo $cbc_ciphers
 	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -v "unable to get local|verify error"
+	[ "$VERBERR" -eq 0 ] && egrep -q "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (no TLS_FALLBACK_SCSV mitigation tested)"
 	else
@@ -2408,7 +2413,7 @@ freak() {
 
 	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for FREAK attack" && outln "\n"
 	pr_bold " FREAK "; out " (CVE-2015-0204), experimental      "
-	no_exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | egrep "^EXP.*RSA" | wc -l)
+	no_exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | egrep -a "^EXP.*RSA" | wc -l)
 	exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/^EXP.*RSA/ {print $1}' | tr '\n' ':')
 	debugme echo $exportrsa_ciphers
 	# with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
@@ -2426,7 +2431,7 @@ freak() {
 	esac
 	$OPENSSL s_client $STARTTLS -cipher $exportrsa_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -v "unable to get local|verify error"
+	[ "$VERBERR" -eq 0 ] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
 	else
@@ -2464,9 +2469,9 @@ beast(){
 			#normalize_ciphercode $hexcode
 			#neat_list $HEXC $ciph $kx $enc | grep -wai "$arg"
 			if [ $? -eq 0 ]; then
-				detected_cbc_cipher="$detected_cbc_cipher ""$(grep -w "Cipher" $TMPFILE | egrep -vw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
+				detected_cbc_cipher="$detected_cbc_cipher ""$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
 			fi
-		done < <($OPENSSL ciphers -V 'ALL:eNULL' | grep CBC)   
+		done < <($OPENSSL ciphers -V 'ALL:eNULL' | grep -a CBC)   
 		#    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
 
 		#detected_cbc_cipher=$(echo $detected_cbc_cipher | sed 's/ //g')
@@ -2485,7 +2490,7 @@ beast(){
 	for proto in tls1_1 tls1_2; do
 		$OPENSSL s_client -state -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null >$TMPFILE </dev/null
 		if [ $? -eq 0 ]; then
-			higher_proto_supported="$higher_proto_supported ""$(grep -w "Protocol" $TMPFILE | sed -e 's/^.*Protocol .*://' -e 's/ //g')"
+			higher_proto_supported="$higher_proto_supported ""$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol .*://' -e 's/ //g')"
 		fi
 	done
 	if [ $ret -eq 1 ] ; then
@@ -2682,7 +2687,7 @@ mybanner() {
 	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w)
 	hn=$(hostname)
 	#poor man's ident (nowadays ident not neccessarily installed)
-	idtag=$(grep '\$Id' $0 | grep -w "[E]xp" | sed -e 's/^#  //' -e 's/\$ $/\$/')
+	idtag=$(grep -a '\$Id' $0 | grep -aw "[E]xp" | sed -e 's/^#  //' -e 's/\$ $/\$/')
 	[ "$COLOR" -ne 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=$(cat <<EOF
 
@@ -3272,5 +3277,5 @@ main() {
 
 main "$@"
 
-#  $Id: testssl.sh,v 1.224 2015/04/13 20:55:38 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.225 2015/04/14 08:14:43 dirkw Exp $ 
 # vim:ts=5:sw=5
