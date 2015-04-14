@@ -286,7 +286,7 @@ pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off;
 # empty vars if we have no color:
 red=""
 green=""
-yellow=""
+brown=""
 blue=""
 off=""
 bold=""
@@ -295,7 +295,7 @@ underline=""
 if [[ "$COLOR" -eq 2 ]]; then
 	red=$(tput setaf 1) 
 	green=$(tput setaf 2) 
-	yellow=$(tput setaf 3) 
+	brown=$(tput setaf 3) 
 	blue=$(tput setaf 4) 
 	off=$(tput sgr0)
 fi
@@ -551,8 +551,8 @@ hpkp() {
 
 emphasize_numbers_in_headers(){
 # see http://www.grymoire.com/Unix/Sed.html#uh-3
-#	outln "$1" | sed "s/[0-9]*/$yellow&$off/g"
-	outln "$1" | sed "s/\([0-9]\)/$yellow\1$off/g"
+#	outln "$1" | sed "s/[0-9]*/$brown&$off/g"
+	outln "$1" | sed "s/\([0-9]\)/$brown\1$off/g"
 }
 
 
@@ -620,14 +620,16 @@ cookieflags() {	# ARG1: Path, ARG2: path
 		fi
 		nr_secure=$(grep -iac secure $TMPFILE)
 		case $nr_secure in
-			0) out "$negative_word secure, " ;;
-			[123456789]) pr_litegreen "$nr_secure/$nr_cookies"; out "secure, ";;
+			0) pr_brown "$negative_word" ;;
+			[123456789]) pr_litegreen "$nr_secure/$nr_cookies";;
 		esac
+ 		out "secure, "
 		nr_httponly=$(grep -cai httponly $TMPFILE)
 		case $nr_httponly in
-			0) out "$negative_word HttpOnly" ;;
-			[123456789]) pr_litegreen "$nr_httponly/$nr_cookies"; out "HttpOnly" ;;
+			0) pr_brown "$negative_word" ;;
+			[123456789]) pr_litegreen "$nr_httponly/$nr_cookies";; 
 		esac
+		out "HttpOnly"
 	else
 		out "(none issued at \"$url\")"
 	fi
@@ -657,7 +659,7 @@ moreflags() {
 		ret=0
 		first=true
 		for f2t in $flags2test; do
-			result_str=$(grep "^$f2t" $TMPFILE)
+			result_str=$(grep -i "^$f2t" $TMPFILE)
 			[ -z "$result_str" ] && continue
 			if $first; then
 				pr_litegreenln "$result_str"
@@ -783,11 +785,12 @@ socksend() {
 }
 
 
+#FIXME: This is only for HB and CCS, others use sockread_serverhello()
 sockread() {
 	[ "x$2" = "x" ] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
 	ret=0
 
-	ddreply=$(mktemp /tmp/ddreply.XXXXXX) || return 7
+	ddreply=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
 	dd bs=$1 of=$ddreply count=1 <&5 2>/dev/null &
 	pid=$!
 
@@ -1644,8 +1647,8 @@ spdy() {
 
 fd_socket() {
 # arg doesn't work here
-	if ! exec 5<> /dev/tcp/$NODEIP/$PORT; then
-		pr_magenta "$(basename "$0"): unable to open a socket to $NODEIP:$PORT"
+	if ! exec 5<> /dev/tcp/$NODEIP/$PORT 2>/dev/null; then
+		pr_magentaln "$(basename "$0"): unable to open a socket to $NODEIP:$PORT"
 		return 6
 	fi
 	return 0
@@ -1991,41 +1994,46 @@ tls_sockets() {
 	[[ "$DEBUG" -ge 2 ]] && echo "sending client hello..."
 	if [[ "$tls_low_byte" == "03" ]] ; then
 		socksend_tls_clienthello "$tls_low_byte" "$TLS12_CIPHER"
+		ret=$?	# 6 means opensing socket didn't succeed, e.g. timeout
 	else
 		socksend_tls_clienthello "$tls_low_byte" "$TLS_CIPHER"
+		ret=$?    # 6 means opensing socket didn't succeed, e.g. timeout
 	fi
 
-	sockread_serverhello 32768 0
-	[[ "$DEBUG" -ge 2 ]] && outln "reading server hello..."
-	if [[ "$DEBUG" -ge 3 ]]; then
-		hexdump -C $SOCK_REPLY_FILE | head -6
-		echo
-	fi
+	# if sending didn't succeed we don't bother
+	if [ $ret -eq 0 ]; then
+		sockread_serverhello 32768 0
+		[[ "$DEBUG" -ge 2 ]] && outln "reading server hello..."
+		if [[ "$DEBUG" -ge 3 ]]; then
+			hexdump -C $SOCK_REPLY_FILE | head -6
+			echo
+		fi
 
-	display_tls_serverhello "$SOCK_REPLY_FILE"
-	save=$?
+		display_tls_serverhello "$SOCK_REPLY_FILE"
+		save=$?
 
-	# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
-	lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
-	[[ "$DEBUG" -ge 2 ]] && out "  (returned $lines lines)  " 
+		# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
+		lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
+		[[ "$DEBUG" -ge 2 ]] && out "  (returned $lines lines)  " 
 
 #	printf "Protokoll "; tput bold; printf "$tls_low_byte = $tls_str"; tput sgr0; printf ":  "
 
-	if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]] ; then
-		#outln "NOT available"
-		ret=1
-	else
-		if [[ 03$tls_low_byte -eq $DETECTED_TLS_VERSION ]]; then
-			#outln "available"
-			ret=0
+		if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]] ; then
+			#outln "NOT available"
+			ret=1
 		else
-			#out "NOT available "
-			[[ $DEBUG -ge 2 ]] && echo -n "send: 0x03$tls_low_byte, returned: 0x$DETECTED_TLS_VERSION" 
-			ret=2
-			echo
+			if [[ 03$tls_low_byte -eq $DETECTED_TLS_VERSION ]]; then
+				#outln "available"
+				ret=0
+			else
+				#out "NOT available "
+				[[ $DEBUG -ge 2 ]] && echo -n "send: 0x03$tls_low_byte, returned: 0x$DETECTED_TLS_VERSION" 
+				ret=2
+				echo
+			fi
 		fi
+		debugme outln
 	fi
-	debugme outln
 
 	close_socket
 	TMPFILE=$SOCK_REPLY_FILE
@@ -3247,6 +3255,7 @@ main() {
              serverbanner "$URL_PATH"
              applicationbanner "$URL_PATH"
              cookieflags "$URL_PATH"
+             moreflags "$URL_PATH"
          else
              pr_litemagentaln " Wrong usage: You're not targetting a HTTP service"
              ret=$((2 + ret))
@@ -3277,5 +3286,5 @@ main() {
 
 main "$@"
 
-#  $Id: testssl.sh,v 1.225 2015/04/14 08:14:43 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.226 2015/04/14 11:16:42 dirkw Exp $ 
 # vim:ts=5:sw=5
