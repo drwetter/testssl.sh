@@ -101,14 +101,19 @@ VULN_COUNT=0
 IPS=""
 SERVICE=""			# is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
+STARTTLS_PROTOCOL=""
 
+TLS_TIME=""
+HTTP_TIME=""
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
 HEX_CIPHER=""
 
 
+
 # debugging help:
-PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+#PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 # make sure that temporary files are cleaned up after use
 trap "cleanup" QUIT EXIT
@@ -122,6 +127,7 @@ HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"') 	# Replaces both xxd -p and tr -cd '[:pr
 
 ###### some hexbytes for bash network sockets ######
 
+#FIME: GOST cipher x80-x83
 # 133 standard cipher for TLS 1.2 and SPDY/NPN
 TLS12_CIPHER="
 cc, 14, cc, 13, cc, 15, c0, 30, c0, 2c, c0, 28, c0, 24, c0, 14,
@@ -451,6 +457,8 @@ EOF
 		redir2=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
 		outln " (got 30x to $redir2, may be better try this URL?)\n"
 	fi
+     HTTP_DATE=$(awk -F': ' '/Date/ { print $2 }' $HEADERFILE)
+	debugme echo "$HTTP_DATE"
 	if egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
 		outln " (got 401 / WWW-Authenticate, can't look beyond it)\n"
 	fi
@@ -569,6 +577,8 @@ serverbanner() {
 		else
 			emphasize_numbers_in_headers "$serverbanner"
 		fi
+		# mozilla.github.io/server-side-tls/ssl-config-generator/
+          # https://chappelow.eu/blog/hardening-tls-on-windows/, https://support.microsoft.com/en-us/kb/245030
 	else
 		outln "no \"Server\" line in header, interesting!"
 	fi
@@ -641,7 +651,8 @@ cookieflags() {	# ARG1: Path, ARG2: path
 
 
 moreflags() {
-	local flags2test="Access-Control-Allow-Origin Upgrade X-Frame-Options X-XSS-Protection X-Content-Type-Options Via Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP" 
+	local good_flags2test="Upgrade X-Frame-Options X-XSS-Protection X-Content-Type-Options Via Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP" 
+	local other_flags2test="Access-Control-Allow-Origin"
 	local egrep_pattern=""
 	local f2t result_str
 	local blanks="                   "
@@ -650,7 +661,7 @@ moreflags() {
 		http_header "$1" || return 3
 	fi
 	pr_bold " Security headers  "
-	egrep_pattern=$(echo $flags2test| sed -e 's/ /|\^/g' -e 's/^/\^/g')
+	egrep_pattern=$(echo $good_flags2test| sed -e 's/ /|\^/g' -e 's/^/\^/g')
 	egrep -ai $egrep_pattern $HEADERFILE >$TMPFILE
 	if [ $? -ne 0 ]; then
 		outln "(none at \"$url\")"
@@ -1056,9 +1067,9 @@ server_preference() {
 	out " Has server cipher order?     "
 	$OPENSSL s_client $STARTTLS -cipher $list1 -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
 	if [ $? -ne 0 ]; then
-		pr_magenta "no matching cipher in list found"
-		outln "$list1"
-		outln "Please report this"
+		pr_magenta "no matching cipher in this list found: "
+		out "$list1  . "
+		pr_magentaln "Please report this"
           ret=6
 	else
 		cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
@@ -1533,14 +1544,10 @@ rc4() {
 # is agnostic to the version of TLS/SSL, more: http://www.breachattack.com/
 # foreign referers are the important thing here!
 breach() {
+	[[ $SERVICE != "HTTP" ]] && return 7
+
 	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for BREACH (HTTP compression) vulnerability" && outln "\n"
 	pr_bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
-
-	if [[ $SERVICE != "HTTP" ]] ; then
-		pr_litemagenta " Wrong usage: You're not targetting a HTTP service"
-		outln " (how did you get here?)"
-		return 7
-	fi
 
 	url="$1"
 	[ -z "$url" ] && url="/"
@@ -1601,8 +1608,8 @@ lucky13() {
 
 
 spdy_pre(){
-	if [ "x$STARTTLS" != "x" ]; then
-		[[ $DEBUG -ge 2 ]] && outln "SPDY doesn't work with !HTTP"
+	if [ ! -z "$STARTTLS" ]; then
+		outln "(is a HTTP protocol thus not tested)"
 		return 1
 	fi
 	# first, does the current openssl support it?
@@ -1645,21 +1652,22 @@ spdy() {
 	return $ret
 }
 
+# arg for a fd doesn't work here
 fd_socket() {
-# arg doesn't work here
-	if ! exec 5<> /dev/tcp/$NODEIP/$PORT 2>/dev/null; then
-		pr_magentaln "$(basename "$0"): unable to open a socket to $NODEIP:$PORT"
+	if ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null removes an error message, but disables debugging, FIXME: subshell?
+		pr_magentaln "Unable to open a socket to $NODEIP:$PORT"
+		# It can last ~2 minutes but for for those rare occasions we don't do a tiemout handler here, KISS
 		return 6
-	fi
-	return 0
+       fi
+       return 0
 }
+
 
 close_socket(){
 	exec 5<&-
 	exec 5>&-
 	return 0
 }
-
 ## old network code ^^^^^^
 
 
@@ -1689,32 +1697,14 @@ socksend_sslv2_clienthello() {
 
 # for SSLv2 to TLS 1.2:
 sockread_serverhello() {
-     [[ "x$2" = "x" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
-     ret=0
+     [[ -z "$2" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
 
      SOCK_REPLY_FILE=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
      dd bs=$1 of=$SOCK_REPLY_FILE count=1 <&5 2>/dev/null &
      pid=$!
 
-     while true; do
-          if ! ps $pid >/dev/null; then
-               break  # didn't reach maxsleep yet
-               kill $pid >&2 2>/dev/null
-          fi
-          sleep $USLEEP_REC
-          maxsleep=$((maxsleep - 1))
-          [[ $maxsleep -le 0 ]] && break
-     done
-
-#FIXME: wait_kill $pid $maxsleep
-     if ps $pid >/dev/null ; then
-          # time's up and dd is still alive --> timeout
-          kill $pid >&2 2>/dev/null
-          wait $pid 2>/dev/null
-          ret=3 # means killed
-     fi
-
-     return $ret
+	wait_kill $pid $maxsleep
+	return $?
 }
 
 # arg1: name of file with socket reply
@@ -1781,7 +1771,7 @@ display_tls_serverhello() {
 
 	tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
 	[[ "$DEBUG" -eq 5 ]] && echo $tls_hello_ascii      # one line without any blanks
-	[[ -z $tls_hello_ascii ]] && return 0              # no server hello received
+	[[ -z $tls_hello_ascii ]] && debugme echo "server hello empty" && return 0              # no server hello received
 
 	# now scrape two bytes out of the reply per byte
 	tls_hello_initbyte="${tls_hello_ascii:0:2}"  # normally this is x16
@@ -1806,8 +1796,8 @@ display_tls_serverhello() {
 	tls_hello_time="${tls_hello_ascii:22:8}"
 	tls_time=$(printf "%d\n" 0x$tls_hello_time)
 	case $(uname -s) in
-		*BSD|Darwin)	tls_time=$(date -j -f %s "$tls_time" "+%Y-%m-%d %r") ;;
-		*)			tls_time=$(date --date="@$tls_time" "+%Y-%m-%d %r") ;;
+		*BSD|Darwin)	TLS_TIME=$(date -j -f %s "$tls_time" "+%Y-%m-%d %r") ;;
+		*)			TLS_TIME=$(date --date="@$tls_time" "+%Y-%m-%d %r") ;;
 	esac
 	tls_sid_len=$(printf "%d\n" 0x${tls_hello_ascii:86:2})
 	let sid_offset=88+$tls_sid_len*2
@@ -1821,7 +1811,7 @@ display_tls_serverhello() {
 			echo "tls_hello_protocol2: 0x$tls_hello_protocol2"
 			echo "tls_sid_len:         $tls_sid_len"
 		fi
-		echo "tls_hello_time:      0x$tls_hello_time ($tls_time)"
+		echo "tls_hello_time:      0x$tls_hello_time ($TLS_TIME)"
 		echo "tls_cipher_suite:    0x$tls_cipher_suite"
 		echo "tls_compression_method: 0x$tls_compression_method"
 		outln
@@ -1838,7 +1828,7 @@ sslv2_sockets() {
 	[[ "$DEBUG" -ge 2 ]] && outln "sending client hello... "
 	socksend_sslv2_clienthello 
 
-	sockread_serverhello 32768 0
+	sockread_serverhello 32768 
 	[[ "$DEBUG" -ge 2 ]] && outln "reading server hello... "
 	if [[ "$DEBUG" -ge 4 ]]; then
 		hexdump -C $SOCK_REPLY_FILE | head -6
@@ -1986,23 +1976,24 @@ tls_sockets() {
 	local tls_low_byte
 
 	tls_low_byte="$1"
-	if [ ! -z "$2" ] ; then
+	if [ ! -z "$2" ] ; then		# use std ciphers then
 		TLS_CIPHER="$2" 
 		TLS12_CIPHER="$2"
 	fi
 
 	[[ "$DEBUG" -ge 2 ]] && echo "sending client hello..."
-	if [[ "$tls_low_byte" == "03" ]] ; then
+	if [ "$tls_low_byte" = "03" ] ; then
 		socksend_tls_clienthello "$tls_low_byte" "$TLS12_CIPHER"
-		ret=$?	# 6 means opensing socket didn't succeed, e.g. timeout
+		ret=$?	# 6 means opening socket didn't succeed, e.g. timeout
 	else
 		socksend_tls_clienthello "$tls_low_byte" "$TLS_CIPHER"
-		ret=$?    # 6 means opensing socket didn't succeed, e.g. timeout
+		ret=$?    # 6 means opening socket didn't succeed, e.g. timeout
 	fi
+
 
 	# if sending didn't succeed we don't bother
 	if [ $ret -eq 0 ]; then
-		sockread_serverhello 32768 0
+		sockread_serverhello 32768 
 		[[ "$DEBUG" -ge 2 ]] && outln "reading server hello..."
 		if [[ "$DEBUG" -ge 3 ]]; then
 			hexdump -C $SOCK_REPLY_FILE | head -6
@@ -2018,21 +2009,20 @@ tls_sockets() {
 
 #	printf "Protokoll "; tput bold; printf "$tls_low_byte = $tls_str"; tput sgr0; printf ":  "
 
+		# determine the return value for higher level, so that they can tell what the result is
 		if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]] ; then
-			#outln "NOT available"
-			ret=1
+			ret=1	# NOT available
 		else
 			if [[ 03$tls_low_byte -eq $DETECTED_TLS_VERSION ]]; then
-				#outln "available"
-				ret=0
+				ret=0	# available
 			else
-				#out "NOT available "
 				[[ $DEBUG -ge 2 ]] && echo -n "send: 0x03$tls_low_byte, returned: 0x$DETECTED_TLS_VERSION" 
-				ret=2
-				echo
+				ret=2	# NOT available, server downgraded
 			fi
 		fi
 		debugme outln
+	else
+		debugme "stuck on sending: $ret"
 	fi
 
 	close_socket
@@ -2058,6 +2048,10 @@ ccs_injection(){
 	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
 	pr_bold " CCS "; out " (CVE-2014-0224), experimental        "
 
+     if [ ! -z "$STARTTLS" ] ; then
+		outln "(not yet implemented for STARTTLS)"
+		return 0
+	fi
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT &>$TMPFILE </dev/null
 
 	tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
@@ -2157,6 +2151,11 @@ ccs_injection(){
 heartbleed(){
 	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for heartbleed vulnerability" && outln "\n"
 	pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
+
+     if [ ! -z "$STARTTLS" ] ; then
+		outln "(not yet implemented for STARTTLS)"
+		return 0
+	fi
 
 	# determine TLS versions available:
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -tlsextdebug &>$TMPFILE </dev/null
@@ -2395,7 +2394,7 @@ ssl_poodle() {
 	local cbc_ciphers
 
 	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption)" && outln "\n"
-	pr_bold " POODLE, SSL"; out " (CVE-2014-3566), experimental "
+	pr_bold " POODLE, SSL"; out " (CVE-2014-3566)               "
 	cbc_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/CBC/ { print $1 }' | tr '\n' ':')
 	debugme echo $cbc_ciphers
 	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
@@ -2584,55 +2583,6 @@ find_openssl_binary() {
 }
 
 
-# Parameters: 1  protocol
-starttls() {
-	protocol=$(echo "$1" | sed 's/s$//')	 # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
-	case "$1" in
-		ftp|smtp|pop3|imap|xmpp|telnet|ldap)
-			outln " Trying STARTTLS via $(echo $protocol| tr '[a-z]' '[A-Z]')\n"
-			$OPENSSL s_client -connect $NODEIP:$PORT $SNI -starttls $protocol </dev/null >$TMPFILE 2>&1
-			ret=$?
-			if [ $ret -ne 0 ]; then
-				pr_bold "Problem: $OPENSSL couldn't establish STARTTLS via $protocol"; outln
-				cat $TMPFILE
-				return 3
-			else
-# now, this is lame: normally this should be handled by top level. Then I need to do proper parsing
-# of the cmdline e.g. with getopts. 
-				STARTTLS="-starttls $protocol"
-				export STARTTLS
-				runprotocols		; ret=$(($? + ret))
-				run_std_cipherlists	; ret=$(($? + ret))
-				server_preference	; ret=$(($? + ret))
-				server_defaults	; ret=$(($? + ret))
-
-				outln; pr_blue "--> Testing specific vulnerabilities" ; outln "\n"
-#FIXME: heartbleed + CCS won't work this way yet
-#				heartbleed     ; ret=$(($? + ret))
-#				ccs_injection  ; ret=$(($? + ret))
-				renego		; ret=$(($? + ret))
-				crime		; ret=$(($? + ret))
-				ssl_poodle	; ret=$(($? + ret))
-				freak		; ret=$(($? + ret))
-				beast		; ret=$(($? + ret))
-
-				rc4			; ret=$(($? + ret))
-				pfs			; ret=$(($? + ret))
-
-				outln
-				#cipher_per_proto   ; ret=$(($? + ret))
-				allciphers		; ret=$(($? + ret))
-			fi
-			;;
-		*) pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet, ldap allowed" >&2
-			ret=2
-			;;
-	esac
-	tmpfile_handle $FUNCNAME.txt
-	return $ret
-}
-
-
 help() {
 	PRG=$(basename "$0")
 	cat << EOF
@@ -2746,21 +2696,27 @@ RUN_DIR: $RUN_DIR
 CAPATH:  $CAPATH
 ECHO: $ECHO
 COLOR: $COLOR
+TERM_DWITH: $TERM_DWITH
+
 SHOW_LOC_CIPH: $SHOW_LOC_CIPH
+SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
 ASSUMING_HTTP $ASSUMING_HTTP
 SNEAKY: $SNEAKY
 
 VERBERR: $VERBERR 
-SHOW_EACH_C: $SHOW_EACH_C
 DEBUG: $DEBUG
 
 HSTS_MIN: $HSTS_MIN
 HPKP_MIN: $HPKP_MIN
-MAX_WAITSOCK: $MAX_WAITSOCK
-CCS_MAX_WAITSOCK: $CCS_MAX_WAITSOCK
-HEARTBLEED_MAX_WAITSOCK: $HEARTBLEED_MAX_WAITSOCK
+CLIENT_MIN_PFS: $CLIENT_MIN_PFS
+DAYS2WARN1: $DAYS2WARN1
+DAYS2WARN2: $DAYS2WARN2
 
+HEADER_MAXSLEEP: $HEADER_MAXSLEEP
+MAX_WAITSOCK: $MAX_WAITSOCK
+HEARTBLEED_MAX_WAITSOCK: $HEARTBLEED_MAX_WAITSOCK
+CCS_MAX_WAITSOCK: $CCS_MAX_WAITSOCK
 USLEEP_SND $USLEEP_SND
 USLEEP_REC $USLEEP_REC
 
@@ -2830,10 +2786,8 @@ ignore_no_or_lame() {
 	pr_magenta "$1 "
 	read a
 	case $a in
-		Y|y|Yes|YES|yes) 
-			return 0;;
-		default) 
-			;;
+		Y|y|Yes|YES|yes) return 0;;
+		default)         ;;
 	esac
 	return 1
 }
@@ -2878,19 +2832,36 @@ parse_hn_port() {
 	fi
 	close_socket
 
-	if  [[ -z "$2" ]] ; then	# for starttls we don't want this check
-		# is ssl service listening on port? FIXME: better with bash on IP!
+	datebanner "Testing"
+
+	if  [[ -z "$2" ]] ; then		# for starttls we want another check
 		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null &>/dev/null
 		if [ $? -ne 0 ]; then
-			pr_boldln "$NODE:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate"; 
-			ignore_no_or_lame "Note that the results might look ok but they are nonsense. Proceed ? "
+			pr_boldln " $NODE:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate"; 
+			ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
 			[ $? -ne 0 ] && exit 3
 		fi
+		runs_HTTP
+	else
+		protocol=$(echo "$2" | sed 's/s$//')     # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
+		case "$protocol" in
+			ftp|smtp|pop3|imap|xmpp|telnet|ldap)
+				STARTTLS="-starttls $protocol"; export STARTTLS
+				$OPENSSL s_client -connect $NODEIP:$PORT $STARTTLS 2>/dev/null >$TMPFILE </dev/null
+				if [ $? -ne 0 ]; then
+					pr_magentaln " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT"
+					debugme cat $TMPFILE
+					exit 3
+				fi
+				outln " Service set:            STARTTLS via " $(echo $protocol| tr '[a-z]' '[A-Z]')
+				;;
+			*)	pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet, ldap allowed" >&2
+				exit 1
+				;;
+		esac
 	fi
-
-	datebanner "Testing"
-	[[ -z "$2" ]] && runs_HTTP	# for starttls we don't check the protocol as it is supplied on the cmd line
-	initialize_engine
+					
+	${do_mx_allentries} || initialize_engine
 	outln
 
 	return 0
@@ -2899,23 +2870,13 @@ parse_hn_port() {
 
 get_dns_entries() {
 	test4iponly=$(printf $NODE | sed -e 's/[0-9]//g' -e 's/\.//g')
-	if [ "x$test4iponly" == "x" ]; then  # only an IPv4 address was supplied
+	if [ "x$test4iponly" == "x" ]; then	# only an IPv4 address was supplied
 		IP4=$NODE
-		SNI=""	# override this as we test the IP only
+		SNI=""						# override Server Name Indication as we test the IP only
 	else
-		# for security testing sometimes we have local host entries, so getent is preferred
-	    if which getent &>/dev/null; then
-			getent ahostsv4 $NODE 2>/dev/null >/dev/null
-			if [ $? -eq 0 ]; then
-				# Linux:
-				IP4=$(getent ahostsv4 $NODE 2>/dev/null | grep -v ':' | awk '/STREAM/ { print $1}' | uniq)
-			#else
-			#	IP4=$(getent hosts $NODE 2>/dev/null | grep -v ':' | awk '{ print $1}' | uniq)
-			#FIXME: FreeBSD returns only one entry 
-			fi
-		fi
+		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resulution
+		IP4=$(grep "$NODE" /etc/hosts | grep -v ':' | uniq | sed -e 's/localhost//g' -e 's/ //g')
 		if which host &> /dev/null && [ -z "$IP4" ] ; then 
-			# getent returned nothing:
 			IP4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
 			if echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
 				pr_magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
@@ -2987,304 +2948,319 @@ datebanner() {
 
 
 mx_allentries() {
+	local mxs mx
+
 	if which dig &> /dev/null; then
-		MXs=$(dig +short -t MX "$1")
+		mxs=$(dig +short -t MX "$1")
 	elif which host &> /dev/null; then
-		MXs=$(host -t MX "$1" | grep 'handled by' | sed -e 's/^.*by //' -e 's/\.$//')
+		mxs=$(host -t MX "$1" | grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
 	elif which nslookup &> /dev/null; then
-		MXs=$(nslookup -type=MX "$1" 2> /dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
+		mxs=$(nslookup -type=MX "$1" 2> /dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
 	else
 		pr_magentaln 'No dig, host or nslookup'
 		exit 3
 	fi
 
 	# test first higher priority servers
-	MXs=$(echo "$MXs" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
+	mxs=$(echo "$mxs" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
 
-	if [ -n "$MXs" ] ; then
-		pr_bold "Testing now all MX records (on port 25): "; outln "$MXs"
-		for MX in $MXs; do
-			parse_hn_port "$MX:25" 'smtp' && starttls 'smtp'
+	if [ -n "$mxs" ] && [ "$mxs" != ' ' ] ; then
+		pr_bold "Testing now all MX records (on port 25): "; outln "$mxs"
+		for mx in $mxs; do
+			parse_hn_port "$mx:25" smtp && lets_roll
 		done
 	else
-		pr_boldln "$1 has no mail server(s)"
+		pr_boldln " $1 has no MX records(s)"
 	fi
 }
 
 
-# This function intializes all used global variables, meant primarily to keep track of them
-# (strictly spoken unneccesary_
+# This intializes boolean global do_* variables, meant primarily to keep track of what to do
 initialize_globals() {
-     protocol=""  #FIXME
- 
-     # scan options (BOOLEANS)
-     do_allciphers=false
-     do_beast=false
-     do_breach=false
-     do_ccs_injection=false
-     do_cipher_per_proto=false
-     do_crime=false
-     do_freak=false
-     do_header=false
-     do_heartbleed=false
-     do_mx_allentries=false
-     do_pfs=false
-     do_protocols=false
-     do_rc4=false
-     do_renego=false
-     do_run_std_cipherlists=false
-     do_server_defaults=false
-     do_server_preference=false
-     do_spdy=false
-     do_ssl_poodle=false
-     do_starttls=false
-     do_test_just_one=false
-     do_tls_sockets=false
+	do_allciphers=false
+	do_beast=false
+	do_breach=false
+	do_ccs_injection=false
+	do_cipher_per_proto=false
+	do_crime=false
+	do_freak=false
+	do_header=false
+	do_heartbleed=false
+	do_mx_allentries=false
+	do_pfs=false
+	do_protocols=false
+	do_rc4=false
+	do_renego=false
+	do_run_std_cipherlists=false
+	do_server_defaults=false
+	do_server_preference=false
+	do_spdy=false
+	do_ssl_poodle=false
+	do_test_just_one=false
+	do_tls_sockets=false
 }
 
 
 # Set default scanning options
 set_scanning_defaults() {
-     do_beast=true
-     do_breach=true
-     do_ccs_injection=true
-     do_crime=true
-     do_freak=true
-     do_header=true
-     do_heartbleed=true
-     do_pfs=true
-     do_protocols=true
-     do_rc4=true
-     do_renego=true
-     do_run_std_cipherlists=true
-     do_server_defaults=true
-     do_server_preference=true
-     do_spdy=true
-     do_ssl_poodle=true
-     do_starttls=false
+	do_beast=true
+	do_breach=true
+	do_ccs_injection=true
+	do_crime=true
+	do_freak=true
+	do_header=true
+	do_heartbleed=true
+	do_pfs=true
+	do_protocols=true
+	do_rc4=true
+	do_renego=true
+	do_run_std_cipherlists=true
+	do_server_defaults=true
+	do_server_preference=true
+	do_spdy=true
+	do_ssl_poodle=true
 	VULN_COUNT=10
 }
 
-debug_globals() {
-     echo "do_allciphers: $do_allciphers"
-     echo "do_beast: $do_beast"
-     echo "do_breach: $do_breach"
-	echo "do_ccs_injection: $do_ccs_injection"
-	echo "do_cipher_per_proto: $do_cipher_per_proto"
-     echo "do_crime: $do_crime"
-     echo "do_freak: $do_freak"
-     echo "do_header: $do_header"
-     echo "do_heartbleed: $do_heartbleed"
-     echo "do_mx_allentries $do_mx_allentries"
-     echo "do_pfs: $do_pfs"
-     echo "do_protocols: $do_protocols"
-     echo "do_rc4: $do_rc4"
-     echo "do_renego: $do_renego"
-     echo "do_run_std_cipherlists: $do_run_std_cipherlists"
-     echo "do_server_defaults: $do_server_defaults"
-     echo "do_server_preference: $do_server_preference"
-     echo "do_spdy: $do_spdy"
-     echo "do_ssl_poodle: $do_ssl_poodle"
-     echo "do_starttls: $do_starttls"
-     echo "do_test_just_one: $do_test_just_one"
-     echo "do_tls_sockets: $do_tls_sockets"
+query_globals() {
+	local gbl
+	local true_nr=0
 
-     echo "URL: $URI"
-	read a
+	for gbl in do_allciphers do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
+     		do_freak do_header do_heartbleed do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
+     		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
+     		do_test_just_one do_tls_sockets; do
+				[ "${!gbl}" == "true" ] && let true_nr++
+	done
+	return $true_nr
+}
+
+
+debug_globals() {
+	local gbl
+
+	for gbl in do_allciphers do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
+     		do_freak do_header do_heartbleed do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
+     		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
+     		do_test_just_one do_tls_sockets; do
+		printf "%-22s = %s\n" $gbl "${!gbl}" 
+	done
+     printf "%-22s : %s\n" URI: "$URI"
 }
 
 
 
 # Parses options
 startup() {
-    # Set defaults if only an URI was specified
-    [[ "$#" -eq 1 ]] && set_scanning_defaults
+	# Set defaults if only an URI was specified, maybe ToDo: use "="-option, then: ${i#*=} i.e. substring removal
+	[[ "$#" -eq 1 ]] && set_scanning_defaults
 
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-        -b|--banner|-v|--version)
-            exit 0;;
-        --mx)
-            do_mx_allentries=true;;
-       -V|--local)
-            initialize_engine 	# GOST support-
-            prettyprint_local "$2"
-            exit $? ;;
-        -x|--single-ciphers-test)
-            do_test_just_one=true
-            single_cipher=$2
-            shift;;
-        -t|--starttls)
-            protocol=$2
-            do_starttls=true
-            shift;;
-        -e|--each-cipher)
-            do_allciphers=true;;
-        -E|--cipher-per-proto)
-            do_cipher_per_proto=true;;
-        -h|--help)
-            help 0
+	while [[ $# -gt 0 ]]; do
+	   case $1 in
+	   -b|--banner|-v|--version)
+		  exit 0;;
+	   --mx)
+		  do_mx_allentries=true;;
+	  -V|--local)
+		  initialize_engine 	# GOST support-
+		  prettyprint_local "$2"
+		  exit $? ;;
+	   -x|--single-ciphers-test)
+		  do_test_just_one=true
+		  single_cipher=$2
+		  shift;;
+	   -t|--starttls)
+		  STARTTLS_PROTOCOL=$2
+		  do_starttls=true
+		  shift;;
+	   -e|--each-cipher)
+		  do_allciphers=true;;
+	   -E|--cipher-per-proto)
+		  do_cipher_per_proto=true;;
+	   -h|--help)
+		  help 0
+		  ;;
+	   -p|--protocols)
+		  do_protocols=true
+		  do_spdy=true;;
+	   -y|--spdy|--npn)
+		  do_spdy=true;;
+	   -f|--ciphers)
+		  do_run_std_cipherlists=true;;
+	   -S|--server_defaults)
+		  do_server_defaults=true;;
+	   -P|--server_preference)
+		  do_server_preference=true;;
+	   -H|--header|--headers)
+		  do_header=true;;
+	   -B|--heartbleed)
+		  do_heartbleed=true
+		  let "VULN_COUNT++" ;;
+	   -I|--ccs|--ccs_injection)
+		  do_ccs_injection=true
+		  let "VULN_COUNT++" ;;
+	   -R|--renegotiation)
+		  do_renego=true
+		  let "VULN_COUNT++" ;;
+	   -C|--compression|--crime)
+		  do_crime=true
+		  let "VULN_COUNT++" ;;
+	   -T|--breach)
+		  do_breach=true
+		  let "VULN_COUNT++" ;;
+	   -O|--poodle)
+		  do_ssl_poodle=true
+		  let "VULN_COUNT++" ;;
+	   -F|--freak)
+		  do_freak=true
+		  let "VULN_COUNT++" ;;
+	   -A|--beast)
+		  do_beast=true
+		  let "VULN_COUNT++" ;;
+	   -4|--rc4|--appelbaum)
+		  do_rc4=true;;
+	   -s|--pfs|--fs|--nsa)
+		  do_pfs=true;;
+	   -q) ### following is a development feature and will disappear:
+		  # DEBUG=3  ./testssl.sh -q 03 "cc, 13, c0, 13" google.de
+		  # DEBUG=3  ./testssl.sh -q 01 yandex.ru
+		  TLS_LOW_BYTE="$2"; HEX_CIPHER=""
+		  if [ $# -eq 4 ]; then
+			HEX_CIPHER="$3"
+			shift 
+		  fi
+	       shift
+	       do_tls_sockets=true
+		  echo "TLS_LOW_BYTE: ${TLS_LOW_BYTE}" 
+		  echo "HEX_CIPHER: ${HEX_CIPHER}" 
             ;;
-        -p|--protocols)
-            do_protocols=true
-            do_spdy=true;;
-        -y|--spdy|--npn)
-            do_spdy=true;;
-        -f|--ciphers)
-            do_run_std_cipherlists=true;;
-        -S|--server_defaults)
-            do_server_defaults=true;;
-        -P|--server_preference)
-            do_server_preference=true;;
-        -H|--header|--headers)
-            do_header=true;;
-        -B|--heartbleed)
-            do_heartbleed=true
-            let "VULN_COUNT++" ;;
-        -I|--ccs|--ccs_injection)
-            do_ccs_injection=true
-            let "VULN_COUNT++" ;;
-        -R|--renegotiation)
-            do_renego=true
-            let "VULN_COUNT++" ;;
-        -C|--compression|--crime)
-            do_crime=true
-            let "VULN_COUNT++" ;;
-        -T|--breach)
-            do_breach=true
-		  let "VULN_COUNT++" ;;
-        -O|--poodle)
-            do_ssl_poodle=true
-		  let "VULN_COUNT++" ;;
-        -F|--freak)
-            do_freak=true
-		  let "VULN_COUNT++" ;;
-        -A|--beast)
-            do_beast=true
-		  let "VULN_COUNT++" ;;
-        -4|--rc4|--appelbaum)
-            do_rc4=true;;
-        -s|--pfs|--fs|--nsa)
-            do_pfs=true;;
-        -q) ### following is a development feature and will disappear:
-            # DEBUG=3  ./testssl.sh -q 03 "cc, 13, c0, 13" google.de
-            # DEBUG=3  ./testssl.sh -q 01 yandex.ru
-            TLS_LOW_BYTE="$2"
-            if [ $# -eq 4 ]; then
-            	HEX_CIPHER="$3"
-            	shift 
-            fi
-            shift
-            do_tls_sockets=true
-		  #echo $TLS_LOW_BYTE $HEX_CIPHER
-            ;;
-        --assuming-http|--assuming_http)
-          ASSUMING_HTTP=0 ;;
-        --sneaky)
-          SNEAKY=0 ;;
-        --color)
-          COLOR=$2
-          if [ $COLOR -ne 0 ] && [ $COLOR -ne 1 ] && [ $COLOR -ne 2 ] ; then
-              COLOR=2
-              pr_magentaln "$0: unrecognized color: $2" 1>&2
-              help 1
-          fi
-          shift 
-		;;
-        --ssl_native|--ssl-native)
-          SSL_NATIVE=0 ;;
-        (--) shift
-             break;;
-        (-*) pr_magentaln "$0: unrecognized option $1" 1>&2; 
-            help 1 ;;
-        (*) break ;; 
-        esac
-        shift
-    done
+		--assuming-http|--assuming_http|--assume_http|--assume-http)
+			ASSUMING_HTTP=0 ;;
+		--sneaky)
+			SNEAKY=0 ;;
+		--warnings)
+			WARNINGS="$2"
+			case $WARNINGS in
+				batch|off|false) ;;
+				default)   pr_magentaln "warnings can be either batch off false" ;;
+			esac
+			shift ;;
+		--debug)
+			DEBUG="$2"
+			shift ;;
+		--color)
+			COLOR=$2
+			if [ $COLOR -ne 0 ] && [ $COLOR -ne 1 ] && [ $COLOR -ne 2 ] ; then
+				COLOR=2
+				pr_magentaln "$0: unrecognized color: $2" 1>&2
+				help 1
+			fi
+			shift ;;
+		--ssl_native|--ssl-native)
+			SSL_NATIVE=0 
+			;;
+		(--) shift
+			break
+			;;
+		(-*) pr_magentaln "$0: unrecognized option $1" 1>&2; 
+			help 1 
+			;;
+		(*)	break 
+			;; 
+		esac
+		shift
+	done
 
-    # Show usage if no options were specified
-    if [ -z $1 ]; then
-        help 0
-    fi
+	# Show usage if no options were specified
+	[ -z $1 ] && help 0
 
-    URI=$1
+	# left off here is the URI
+	URI=$1
 
-    #debug_globals
+	debugme debug_globals
+	# if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
+	query_globals && set_scanning_defaults
 }
 
 
-################# main: #################
+lets_roll() {
+	local ret
 
-main() {
-     # auto determine where bins are
-     find_openssl_binary
-     mybanner
- 
-     PATH_TO_TESTSSL=$(readlink "$BASH_SOURCE") 2>/dev/null
-     [ -z "$PATH_TO_TESTSSL" ] && PATH_TO_TESTSSL="."
- 
-     # next file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
-     # https://www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
-     [ -r "$(dirname $PATH_TO_TESTSSL)/mapping-rfc.txt" ] && MAP_RFC_FNAME=$(dirname $PATH_TO_TESTSSL)"/mapping-rfc.txt"
- 
-     initialize_globals
- 
-     ret=0       
-     startup "$@"
-     maketempf
-     parse_hn_port "${URI}" "${protocol}"
- 
-     # OK, let's roll..
-     ${do_mx_allentries} && { mx_allentries "${URI}"; ret=$(($? + ret)); }
- 
-     ${do_test_just_one} && test_just_one ${single_cipher}
-     ${do_starttls} && { starttls ${protocol}; ret=$(($? + ret)); }
-     ${do_allciphers} && { allciphers; ret=$(($? + ret)); }
-     ${do_cipher_per_proto} && { cipher_per_proto; ret=$(($? + ret)); }
-     ${do_protocols} && { runprotocols; ret=$(($? + ret)); }
-     ${do_spdy} && { spdy; ret=$(($? + ret)); }
-     ${do_run_std_cipherlists} && { run_std_cipherlists; ret=$(($? + ret)); }
-     ${do_server_preference} && { server_preference; ret=$(($? + ret)); }
-     ${do_server_defaults} && { server_defaults; ret=$(($? + ret)); }
- 
-     if ${do_header}; then
-          #TODO: refactor this into other functions
-         if [[ $SERVICE == "HTTP" ]]; then
-             hsts "$URL_PATH"
-             hpkp "$URL_PATH"
-             serverbanner "$URL_PATH"
-             applicationbanner "$URL_PATH"
-             cookieflags "$URL_PATH"
-             moreflags "$URL_PATH"
-         else
-             pr_litemagentaln " Wrong usage: You're not targetting a HTTP service"
-             ret=$((2 + ret))
-         fi
-     fi
+	${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; exit $?; }
 
-     # vulnerabilities
+	${do_test_just_one} && test_just_one ${single_cipher}
+	${do_allciphers} && { allciphers; ret=$(($? + ret)); }
+	${do_cipher_per_proto} && { cipher_per_proto; ret=$(($? + ret)); }
+	${do_protocols} && { runprotocols; ret=$(($? + ret)); }
+	${do_spdy} && { spdy; ret=$(($? + ret)); }
+	${do_run_std_cipherlists} && { run_std_cipherlists; ret=$(($? + ret)); }
+	${do_server_preference} && { server_preference; ret=$(($? + ret)); }
+	${do_server_defaults} && { server_defaults; ret=$(($? + ret)); }
+
+	if ${do_header}; then
+		#TODO: refactor this into other functions
+		if [[ $SERVICE == "HTTP" ]]; then
+			hsts "$URL_PATH"
+			hpkp "$URL_PATH"
+			serverbanner "$URL_PATH"
+			applicationbanner "$URL_PATH"
+			cookieflags "$URL_PATH"
+			moreflags "$URL_PATH"
+	    fi
+	fi
+
+	# vulnerabilities
 	if [ $VULN_COUNT -gt 1 ]; then
 		outln; pr_blue "--> Testing specific vulnerabilities" 
 		outln "\n"
 	fi
-     ${do_heartbleed} && { heartbleed; ret=$(($? + ret)); }
-     ${do_ccs_injection} && { ccs_injection; ret=$(($? + ret)); }
-     ${do_renego} && { renego; ret=$(($? + ret)); }
-     ${do_crime} && { crime; ret=$(($? + ret)); }
-     ${do_breach} && { breach "$URL_PATH" ; ret=$(($? + ret)); }
-     ${do_ssl_poodle} && { ssl_poodle; ret=$(($? + ret)); }
-     ${do_freak} && { freak; ret=$(($? + ret)); }
-     ${do_beast} && { beast; ret=$(($? + ret)); }
-     ${do_rc4} && { rc4; ret=$(($? + ret)); }
-     ${do_pfs} && { pfs; ret=$(($? + ret)); }
- 
-     ${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; ret=$(($? + ret)); }
- 
-     exit $ret
+	${do_heartbleed} && { heartbleed; ret=$(($? + ret)); }
+	${do_ccs_injection} && { ccs_injection; ret=$(($? + ret)); }
+	${do_renego} && { renego; ret=$(($? + ret)); }
+	${do_crime} && { crime; ret=$(($? + ret)); }
+	${do_breach} && { breach "$URL_PATH" ; ret=$(($? + ret)); }
+	${do_ssl_poodle} && { ssl_poodle; ret=$(($? + ret)); }
+	${do_freak} && { freak; ret=$(($? + ret)); }
+	${do_beast} && { beast; ret=$(($? + ret)); }
+	${do_rc4} && { rc4; ret=$(($? + ret)); }
+	${do_pfs} && { pfs; ret=$(($? + ret)); }
+
+	return $ret
 }
 
 
-main "$@"
 
-#  $Id: testssl.sh,v 1.226 2015/04/14 11:16:42 dirkw Exp $ 
+################# main #################
+
+find_openssl_binary
+mybanner
+
+PATH_TO_TESTSSL=$(readlink "$BASH_SOURCE") 2>/dev/null
+[ -z "$PATH_TO_TESTSSL" ] && PATH_TO_TESTSSL="."
+
+# mapping file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
+# www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
+[ -r "$(dirname $PATH_TO_TESTSSL)/mapping-rfc.txt" ] && MAP_RFC_FNAME=$(dirname $PATH_TO_TESTSSL)"/mapping-rfc.txt"
+
+initialize_globals
+
+startup "$@"
+maketempf
+
+if ${do_mx_allentries} ; then
+     query_globals 
+     # if we have just one "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
+	[ $? -eq 1 ] && set_scanning_defaults
+	initialize_engine
+	mx_allentries "${URI}"
+	ret=$?
+else
+     parse_hn_port "${URI}" "${STARTTLS_PROTOCOL}"
+	lets_roll
+	ret=$?
+fi
+
+exit $ret
+
+#  $Id: testssl.sh,v 1.229 2015/04/16 18:28:28 dirkw Exp $ 
 # vim:ts=5:sw=5
