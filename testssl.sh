@@ -2875,7 +2875,7 @@ get_dns_entries() {
 		SNI=""						# override Server Name Indication as we test the IP only
 	else
 		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resulution
-		IP4=$(grep "$NODE" /etc/hosts | grep -v ':' | uniq | sed -e 's/localhost//g' -e 's/ //g')
+		IP4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
 		if which host &> /dev/null && [ -z "$IP4" ] ; then 
 			IP4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
 			if echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
