@@ -315,12 +315,7 @@ fi
 ###### helper function definitions ######
 
 debugme() {
-	if [[ $DEBUG -ge 2 ]]; then
-		#echo "$@"
-		"$@" 
-	else
-		:
-	fi
+	[[ $DEBUG -ge 2 ]] && "$@" 
 }
 
 tmpfile_handle() {
@@ -455,7 +450,7 @@ EOF
 	fi
 	if egrep -aq "^HTTP.1.. 301|^HTTP.1.. 302|^Location" $HEADERFILE; then
 		redir2=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
-		outln " (got 30x to $redir2, may be better try this URL?)\n"
+		outln " (got 30x to $redir2 - may be better try this URL?)\n"
 	fi
      HTTP_DATE=$(awk -F': ' '/Date/ { print $2 }' $HEADERFILE)
 	debugme echo "$HTTP_DATE"
@@ -1224,18 +1219,27 @@ cipher_pref_check() {
 
 
 server_defaults() {
+	local proto
+	local localtime
+	local extensions local sessticket_str lifetime unit keysize algo
+	local expire ocsp_uri crl savedir startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
+
 	outln
 	pr_blue "--> Testing server defaults (Server Hello)"; outln "\n"
 	localtime=$(date "+%s")
 
 	# throwing every cipher/protocol at the server and displaying its pick
-	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -tlsextdebug -status </dev/null 2>/dev/null >$TMPFILE
-	ret=$?
-	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT
-	if [ $? -ne 0 ] || [ $ret -ne 0 ]; then
-		openssl_error
-		ret=6
+	for proto in tls1_2 tls1_1 tls1; do
+		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -$proto -tlsextdebug -status </dev/null 2>/dev/null >$TMPFILE
+		ret=$?
+		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -$proto 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT
+		[ $? -eq 0 ] && [ $ret -eq 0 ] && break
+		ret=7
+	done		# this loop was need while testing a windows 2003 server
+	if [ $ret -eq 7 ]; then
+		pr_magenta "$OPENSSL returned an error. This shouldn't happen. "
 	else
+		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -$proto 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
 		out " TLS server extensions        "
 		extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
 		if [ -z "$extensions" ]; then
@@ -1284,12 +1288,11 @@ server_defaults() {
 		outln "                              $($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 | sed 's/Fingerprint=//' | sed 's/://g' )"
 
 		out " Common Name (CN)             "
-		CN=$($OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
-		pr_underline "$CN"
+		cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
+		pr_underline "$cn"
 
-		CN_nosni=$($OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  | \
-			$OPENSSL x509 -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
-		[[ $DEBUG -ge 2 ]] && out "\'$NODE\' | \'$CN\' | \'$CN_nosni\'"
+		cn_nosni=$($OPENSSL x509 -in $HOSTCERT.nosni -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
+		[[ $DEBUG -ge 2 ]] && out "\'$NODE\' | \'$cn\' | \'$cn_nosni\'"
 		if [[ $NODE == $CN_nosni ]]; then
 			if [[ $SERVICE != "HTTP" ]] ; then
 				outln " (matches certificate directly)"
@@ -1300,21 +1303,23 @@ server_defaults() {
 			if [[ $SERVICE != "HTTP" ]] ; then
 				pr_brownln " (CN doesn't match but for non-HTTP services it might be ok)"
 			else
-				out " (CN response to request w/o SNI: "; pr_underline "$CN_nosni"; outln ")"
+				out " (CN response to request w/o SNI: "; pr_underline "$cn_nosni"; outln ")"
 			fi
 		fi
 
-		SAN=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
+		sans=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
 			sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g' -e 's/othername:<unsupported>//g')
 #                                                               ^^^ CACert
-		if [ x"$SAN" != "x" ]; then
-			SAN=$(echo "$SAN" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g') # replace line feed by " "
-			out " subjectAltName (SAN)         "
-			for san in $SAN; do
+		out " subjectAltName (SAN)         "
+		if [ -n "$sans" ]; then
+			sans=$(echo "$sans" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g') # replace line feed by " "
+			for san in $sans; do
 				out "$underline$san$off "
 			done
-			outln
+		else
+			out "-- "
 		fi
+			outln
 		out " Issuer                       "
 		issuer=$($OPENSSL x509 -in $HOSTCERT -noout -issuer | sed -e 's/^.*CN=//g' -e 's/\/.*$//g')
 		issuer_o=$($OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*O=//g' | sed 's/\/.*$//g')
@@ -1654,8 +1659,9 @@ spdy() {
 
 # arg for a fd doesn't work here
 fd_socket() {
-	if ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null removes an error message, but disables debugging, FIXME: subshell?
-		pr_magentaln "Unable to open a socket to $NODEIP:$PORT"
+	if ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null removes an error message, but disables debugging
+		outln
+		pr_magenta "Unable to open a socket to $NODEIP:$PORT"
 		# It can last ~2 minutes but for for those rare occasions we don't do a tiemout handler here, KISS
 		return 6
        fi
@@ -2604,9 +2610,9 @@ $PRG <options> URI
     <-S|--server_defaults>                displays the servers default picks and certificate info
     <-P|--preference>                     displays the servers picks: protocol+cipher
     <-y|--spdy|--npn>                     checks for SPDY/NPN
-    <-x|--single-ciphers-test> <pattern>  tests matched <pattern> of cipher
+    <-x|--single-cipher-test> <pattern>   tests matched <pattern> of cipher
     <-B|--heartbleed>                     tests only for heartbleed vulnerability
-    <-I|--ccs|--ccs_injection>            tests only for CCS injection vulnerability
+    <-I|--ccs|--ccs-injection>            tests only for CCS injection vulnerability
     <-R|--renegotiation>                  tests only for renegotiation vulnerability
     <-C|--compression|--crime>            tests only for CRIME vulnerability
     <-T|--breach>                         tests only for BREACH vulnerability
@@ -2627,6 +2633,15 @@ partly mandatory parameters:
     pattern               an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
     protocol              is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
 
+tuning options:
+
+    --assuming-http                       if protocol check fails it assumes HTTP protocol and enforces HTTP checks
+    --ssl-native                          fallback to checks with OpenSSL where sockets are normally used
+    --sneaky                              tries to hide that testssl.sh is scanning
+    --warnings <batch|off|false>          "batch" doesn't wait for keypress, "off|false" skips connection warning
+    --color                               0: no escape or other codes 1: b/w escape codes 2: color (default)
+    --debug                               1: screen output normal but debug output in itemp files. 2-6: see line ~60
+    
 
 For HTML output you need to pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like 
 
@@ -2949,6 +2964,7 @@ datebanner() {
 
 mx_allentries() {
 	local mxs mx
+	local mxport
 
 	if which dig &> /dev/null; then
 		mxs=$(dig +short -t MX "$1")
@@ -2964,10 +2980,13 @@ mx_allentries() {
 	# test first higher priority servers
 	mxs=$(echo "$mxs" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
 
+	mxport=${2:-25}
 	if [ -n "$mxs" ] && [ "$mxs" != ' ' ] ; then
-		pr_bold "Testing now all MX records (on port 25): "; outln "$mxs"
+		starttls_proto="smtp"
+		[[ $mxport == "465" ]] && starttls_proto=""  # no starttls for Port 465
+		pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
 		for mx in $mxs; do
-			parse_hn_port "$mx:25" smtp && lets_roll
+			parse_hn_port "$mx:$mxport" $starttls_proto && lets_roll
 		done
 	else
 		pr_boldln " $1 has no MX records(s)"
@@ -3056,117 +3075,116 @@ startup() {
 	[[ "$#" -eq 1 ]] && set_scanning_defaults
 
 	while [[ $# -gt 0 ]]; do
-	   case $1 in
-	   -b|--banner|-v|--version)
-		  exit 0;;
-	   --mx)
-		  do_mx_allentries=true;;
-	  -V|--local)
-		  initialize_engine 	# GOST support-
-		  prettyprint_local "$2"
-		  exit $? ;;
-	   -x|--single-ciphers-test)
-		  do_test_just_one=true
-		  single_cipher=$2
-		  shift;;
-	   -t|--starttls)
-		  STARTTLS_PROTOCOL=$2
-		  do_starttls=true
-		  shift;;
-	   -e|--each-cipher)
-		  do_allciphers=true;;
-	   -E|--cipher-per-proto)
-		  do_cipher_per_proto=true;;
-	   -h|--help)
-		  help 0
-		  ;;
-	   -p|--protocols)
-		  do_protocols=true
-		  do_spdy=true;;
-	   -y|--spdy|--npn)
-		  do_spdy=true;;
-	   -f|--ciphers)
-		  do_run_std_cipherlists=true;;
-	   -S|--server_defaults)
-		  do_server_defaults=true;;
-	   -P|--server_preference)
-		  do_server_preference=true;;
-	   -H|--header|--headers)
-		  do_header=true;;
-	   -B|--heartbleed)
-		  do_heartbleed=true
-		  let "VULN_COUNT++" ;;
-	   -I|--ccs|--ccs_injection)
-		  do_ccs_injection=true
-		  let "VULN_COUNT++" ;;
-	   -R|--renegotiation)
-		  do_renego=true
-		  let "VULN_COUNT++" ;;
-	   -C|--compression|--crime)
-		  do_crime=true
-		  let "VULN_COUNT++" ;;
-	   -T|--breach)
-		  do_breach=true
-		  let "VULN_COUNT++" ;;
-	   -O|--poodle)
-		  do_ssl_poodle=true
-		  let "VULN_COUNT++" ;;
-	   -F|--freak)
-		  do_freak=true
-		  let "VULN_COUNT++" ;;
-	   -A|--beast)
-		  do_beast=true
-		  let "VULN_COUNT++" ;;
-	   -4|--rc4|--appelbaum)
-		  do_rc4=true;;
-	   -s|--pfs|--fs|--nsa)
-		  do_pfs=true;;
-	   -q) ### following is a development feature and will disappear:
-		  # DEBUG=3  ./testssl.sh -q 03 "cc, 13, c0, 13" google.de
-		  # DEBUG=3  ./testssl.sh -q 01 yandex.ru
-		  TLS_LOW_BYTE="$2"; HEX_CIPHER=""
-		  if [ $# -eq 4 ]; then
-			HEX_CIPHER="$3"
-			shift 
-		  fi
-	       shift
-	       do_tls_sockets=true
-		  echo "TLS_LOW_BYTE: ${TLS_LOW_BYTE}" 
-		  echo "HEX_CIPHER: ${HEX_CIPHER}" 
-            ;;
-		--assuming-http|--assuming_http|--assume_http|--assume-http)
-			ASSUMING_HTTP=0 ;;
-		--sneaky)
-			SNEAKY=0 ;;
-		--warnings)
-			WARNINGS="$2"
-			case $WARNINGS in
-				batch|off|false) ;;
-				default)   pr_magentaln "warnings can be either batch off false" ;;
-			esac
-			shift ;;
-		--debug)
-			DEBUG="$2"
-			shift ;;
-		--color)
-			COLOR=$2
-			if [ $COLOR -ne 0 ] && [ $COLOR -ne 1 ] && [ $COLOR -ne 2 ] ; then
-				COLOR=2
-				pr_magentaln "$0: unrecognized color: $2" 1>&2
-				help 1
-			fi
-			shift ;;
-		--ssl_native|--ssl-native)
-			SSL_NATIVE=0 
-			;;
-		(--) shift
-			break
-			;;
-		(-*) pr_magentaln "$0: unrecognized option $1" 1>&2; 
-			help 1 
-			;;
-		(*)	break 
-			;; 
+		case $1 in
+			-b|--banner|-v|--version)
+		  		exit 0;;
+			--mx)
+				do_mx_allentries=true;;
+			--mx465)  # doesn't work with major ISPs
+				do_mx_allentries=true
+				PORT=465 ;;
+			--mx587) # doesn't work with major ISPs
+				do_mx_allentries=true
+				PORT=587 ;;
+			-V|--local)
+				initialize_engine 	# GOST support-
+				prettyprint_local "$2"
+				exit $? ;;
+			-x|--single-ciphers-test|--single-cipher-test|--single_cipher_test|--single_ciphers_test)
+				do_test_just_one=true
+				single_cipher=$2
+				shift;;
+			-t|--starttls)
+				STARTTLS_PROTOCOL=$2
+				do_starttls=true
+				shift;;
+			-e|--each-cipher)
+				do_allciphers=true;;
+			-E|--cipher-per-proto|--cipher_per_proto)
+				do_cipher_per_proto=true;;
+			-h|--help)
+				help 0 ;;
+			-p|--protocols)
+				do_protocols=true
+				do_spdy=true;;
+			-y|--spdy|--npn)
+				do_spdy=true;;
+			-f|--ciphers)
+				do_run_std_cipherlists=true;;
+			-S|--server_defaults|--server-defaults)
+				do_server_defaults=true;;
+			-P|--server_preference|--server-preference)
+				do_server_preference=true;;
+			-H|--header|--headers)
+				do_header=true;;
+			-B|--heartbleed)
+				do_heartbleed=true
+				let "VULN_COUNT++" ;;
+			-I|--ccs|--ccs_injection|--ccs-injection)
+				do_ccs_injection=true
+				let "VULN_COUNT++" ;;
+			-R|--renegotiation)
+				do_renego=true
+				let "VULN_COUNT++" ;;
+			-C|--compression|--crime)
+				do_crime=true
+				let "VULN_COUNT++" ;;
+			-T|--breach)
+				do_breach=true
+				let "VULN_COUNT++" ;;
+			-O|--poodle)
+				do_ssl_poodle=true
+				let "VULN_COUNT++" ;;
+			-F|--freak)
+				do_freak=true
+				let "VULN_COUNT++" ;;
+			-A|--beast)
+				do_beast=true
+				let "VULN_COUNT++" ;;
+			-4|--rc4|--appelbaum)
+				do_rc4=true;;
+			-s|--pfs|--fs|--nsa)
+				do_pfs=true;;
+			-q) ### this is a development feature and will disappear:
+				# DEBUG=3  ./testssl.sh -q 03 "cc, 13, c0, 13" google.de
+				# DEBUG=3  ./testssl.sh -q 01 yandex.ru
+				TLS_LOW_BYTE="$2"; HEX_CIPHER=""
+				if [ $# -eq 4 ]; then  # protocol AND ciphers specified
+					HEX_CIPHER="$3"
+					shift 
+		 		fi
+				shift
+				do_tls_sockets=true
+				outln "TLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" ;;
+			--assuming-http|--assuming_http|--assume_http|--assume-http)
+				ASSUMING_HTTP=0 ;;
+			--sneaky)
+				SNEAKY=0 ;;
+			--warnings)
+				WARNINGS="$2"
+				case $WARNINGS in
+					batch|off|false) ;;
+					default)   pr_magentaln "warnings can be either batch off false" ;;
+				esac
+				shift ;;
+			--debug)
+				DEBUG="$2"
+				shift ;;
+			--color)
+				COLOR=$2
+				if [ $COLOR -ne 0 ] && [ $COLOR -ne 1 ] && [ $COLOR -ne 2 ] ; then
+					COLOR=2
+					pr_magentaln "$0: unrecognized color: $2" 1>&2
+					help 1
+				fi
+				shift ;;
+			--ssl_native|--ssl-native)
+				SSL_NATIVE=0 ;;
+			(--) shift
+				break ;;
+			(-*) pr_magentaln "$0: unrecognized option $1" 1>&2; 
+				help 1 ;;
+			(*)	break ;; 
 		esac
 		shift
 	done
@@ -3252,7 +3270,7 @@ if ${do_mx_allentries} ; then
      # if we have just one "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
 	[ $? -eq 1 ] && set_scanning_defaults
 	initialize_engine
-	mx_allentries "${URI}"
+	mx_allentries "${URI}" $PORT
 	ret=$?
 else
      parse_hn_port "${URI}" "${STARTTLS_PROTOCOL}"
@@ -3262,5 +3280,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.229 2015/04/16 18:28:28 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.231 2015/04/20 08:05:00 dirkw Exp $ 
 # vim:ts=5:sw=5
+# ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
