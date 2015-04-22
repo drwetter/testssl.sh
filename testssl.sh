@@ -573,7 +573,7 @@ serverbanner() {
 			emphasize_numbers_in_headers "$serverbanner"
 		fi
 		# mozilla.github.io/server-side-tls/ssl-config-generator/
-          # https://chappelow.eu/blog/hardening-tls-on-windows/, https://support.microsoft.com/en-us/kb/245030
+          # https://support.microsoft.com/en-us/kb/245030
 	else
 		outln "no \"Server\" line in header, interesting!"
 	fi
@@ -1425,15 +1425,13 @@ pfs() {
 	local none
 	local number_pfs
 	local hexcode n ciph sslvers kx auth enc mac
-	local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
-	# ^^^ the exclusion via ! doesn't work with libressl. 
-	# https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy
-
-	# pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA384 EECDH+ECDSA+SHA256 EECDH+aRSA+SHA384 EECDH'
-	# this catches also ECDHE-ECDSA-NULL-SHA or ECDHE-RSA-RC4-SHA
+	# https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy -- but with RC4:
+	#local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
+	local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EDH+aRSA EECDH !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
+	# ^^^ the exclusion via ! doesn't work with libressl and openssl 0.9.8
 
 	outln
-	pr_blue "--> Testing (Perfect) Forward Secrecy  (P)FS)"; outln " -- omitting 3DES, RC4 and Null Encryption here"
+	pr_blue "--> Testing Perfect Forward Secrecy (PFS)"; outln " -- omitting 3DES, RC4 and Null Encryption here"
 
 	$OPENSSL ciphers -V "$pfs_ciphers" >$TMPFILE 2>/dev/null
 	if [ $? -ne 0 ] ; then
@@ -1494,123 +1492,8 @@ pfs() {
 }
 
 
-# https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
-# http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
-# new ietf rfc is very strict: https://tools.ietf.org/html/rfc7465
-rc4() {
-	outln
-	pr_blue "--> Checking RC4 Ciphers" ; outln
-	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
-	[ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
-	$OPENSSL s_client -cipher $($OPENSSL ciphers RC4) $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
-	if [ $? -eq 0 ]; then
-		pr_litered "\nNOT ok: borken RC4 is being offered!"
-		outln " Now testing specific ciphers...\n"
-		rc4_offered=1
-		neat_header
-		while read hexcode n ciph sslvers kx auth enc mac; do
-			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
-			ret=$?
-			if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
-				continue # no successful connect AND not verbose displaying each cipher
-			fi
-			normalize_ciphercode $hexcode
-			neat_list $HEXC $ciph $kx $enc $strength
-			if [[ "$SHOW_EACH_C" -ne 0 ]]; then
-				if [[ $ret -eq 0 ]]; then
-					pr_litered "available"
-				else
-					out "not a/v"
-				fi
-			else
-				rc4_offered=1
-				out
-			fi
-			outln
-		done < $TMPFILE
-		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
-		outln
-	else
-		outln
-		pr_litegreenln "no RC4 ciphers detected (OK)"
-		rc4_offered=0
-	fi
-
-	tmpfile_handle $FUNCNAME.txt
-	return $rc4_offered
-}
-
-
 # good source for configuration and bugs: https://wiki.mozilla.org/Security/Server_Side_TLS
 # good start to read: http://en.wikipedia.org/wiki/Transport_Layer_Security#Attacks_against_TLS.2FSSL
-
-
-# in a nutshell: It's HTTP-level compression & an attack which works against any cipher suite and 
-# is agnostic to the version of TLS/SSL, more: http://www.breachattack.com/
-# foreign referers are the important thing here!
-breach() {
-	[[ $SERVICE != "HTTP" ]] && return 7
-
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for BREACH (HTTP compression) vulnerability" && outln "\n"
-	pr_bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
-
-	url="$1"
-	[ -z "$url" ] && url="/"
-	if [ $SNEAKY -eq 0 ] ; then
-		# see https://community.qualys.com/message/20360
-		if [[ "$NODE" =~ google ]]; then  
-			referer="Referer: http://yandex.ru/" # otherwise we have a false positive for google.com 
-		else
-			referer="Referer: http://google.com/"
-		fi
-		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
-	else
-		referer="Referer: TLS/SSL-Tester from $SWURL"
-		useragent="User-Agent: Mozilla/4.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox/42.0"
-	fi
-	(
-	$OPENSSL  s_client -quiet -connect $NODEIP:$PORT $SNI << EOF
-GET $url HTTP/1.1
-Host: $NODE
-$useragent
-Accept: text/*
-Accept-Language: en-US,en
-Accept-encoding: gzip,deflate,compress
-$referer
-Connection: close
-
-EOF
-) &>$HEADERFILE_BREACH &
-	pid=$!
-	if wait_kill $pid $HEADER_MAXSLEEP; then
-		result=$(grep -a '^Content-Encoding' $HEADERFILE_BREACH | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g')
-		result=$(echo $result | tr -cd '\40-\176')
-		if [ -z $result ]; then
-			pr_green "no HTTP compression (OK) " 
-			ret=0
-		else
-			pr_litered "NOT ok: uses $result compression "
-			ret=1
-		fi
-		# Catch: any URL can be vulnerable. I am testing now only the root. URL!
-		outln "(only \"$url\" tested)"
-	else
-		pr_litemagentaln "failed (HTTP header request stalled)"
-		ret=3
-	fi
-	return $ret
-}
-
-
-lucky13() {
-#FIXME: to do
-# CVE-2013-0169
-# in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough
-# best: TLS v1.2+ AES GCM
-	echo "FIXME"
-	echo
-}
-
 
 spdy_pre(){
 	if [ ! -z "$STARTTLS" ]; then
@@ -1761,16 +1644,16 @@ display_sslv2_serverhello() {
 
 # arg1: name of file with socket reply
 display_tls_serverhello() {
-	# server hello:					
-	# byte 0:     0x16=TLS, 0x15= TLS alert
-	# byte 1+2:   03, TLS version			
-	# byte 3+4:   length all				
-	# byte 5:     handshake type (2=hello)    TLS alert: level (2=fatal), descr (0x28=handshake failure)
-	# byte 6+7+8: length server hello       
-	# byte 9+10:  03, TLS version           (00: SSLv3, 01: TLS 1.0, 02: TLS 1.1, 03: TLS 1.2)
-	# byte 11-14: TLS timestamp
-	# byte 15-42: random 	 		(28 bytes)
-	# byte 43   : session id length
+	# server hello, handshake details see http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#TLS_record
+	# byte 0:      type: x16=TLS, 0x15=TLS alert, 0x14=CCS, 0x18=HB
+	# byte 1+2:    TLS version word, see below. 1st byte is always 03
+	# byte 3+4:    length all				
+	# byte 5:      handshake type (2=hello)    TLS alert: level (2=fatal), descr (0x28=handshake failure)
+	# byte 6+7+8:  length server hello       
+	# byte 9+10:   03, TLS version byte       (00=SSL3, 01=TLS1 02=TLS1.1 03=TLS 1.2
+	# byte 11-14:  TLS timestamp
+	# byte 15-42:  random, 28 bytes
+	# byte 43:     session id length
 	# byte 44+45+sid-len:  cipher suite!
 	# byte 46+sid-len:     compression method:  00: none, 01: deflate
 	# byte 47+48+sid-len:  extension length
@@ -2038,120 +1921,11 @@ tls_sockets() {
 }
 
 
+####### vulnerabilities follow #######
 
-###### ccs, heartbleed
+# general overview which browser supports which vulnerability:
+# http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#Web_browsers
 
-ok_ids(){
-	pr_greenln "\n ok -- something resetted our ccs packets"
-	return 0
-}
-
-
-#FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
-ccs_injection(){
-	# see https://www.openssl.org/news/secadv_20140605.txt
-	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
-	pr_bold " CCS "; out " (CVE-2014-0224), experimental        "
-
-     if [ ! -z "$STARTTLS" ] ; then
-		outln "(not yet implemented for STARTTLS)"
-		return 0
-	fi
-	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT &>$TMPFILE </dev/null
-
-	tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
-	#tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed 's/^.*Protocol//')
-	case $tls_proto_offered in
-		12)	tls_hexcode="x03, x03" ;;
-		11)	tls_hexcode="x03, x02" ;;
-		*) tls_hexcode="x03, x01" ;;
-	esac
-	ccs_message=", x14, $tls_hexcode ,x00, x01, x01"
-
-	client_hello="
-	# TLS header (5 bytes)
-	,x16,               # content type (x16 for handshake)
-	$tls_hexcode,       # TLS version
-	x00, x93,           # length
-	# Handshake header
-	x01,                # type (x01 for ClientHello)
-	x00, x00, x8f,      # length
-	$tls_hexcode,       # TLS version
-	# Random (32 byte) 
-	x53, x43, x5b, x90, x9d, x9b, x72, x0b,
-	xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
-	xcf, xbd, x39, x04, xcc, x16, x0a, x85,
-	x03, x90, x9f, x77, x04, x33, xd4, xde,
-	x00,                # session ID length
-	x00, x68,           # cipher suites length
-	# Cipher suites (51 suites)
-	xc0, x13, xc0, x12, xc0, x11, xc0, x10,
-	xc0, x0f, xc0, x0e, xc0, x0d, xc0, x0c,
-	xc0, x0b, xc0, x0a, xc0, x09, xc0, x08,
-	xc0, x07, xc0, x06, xc0, x05, xc0, x04,
-	xc0, x03, xc0, x02, xc0, x01, x00, x39,
-	x00, x38, x00, x37, x00, x36, x00, x35, x00, x34,
-	x00, x33, x00, x32, x00, x31, x00, x30,
-	x00, x2f, x00, x16, x00, x15, x00, x14,
-	x00, x13, x00, x12, x00, x11, x00, x10,
-	x00, x0f, x00, x0e, x00, x0d, x00, x0c,
-	x00, x0b, x00, x0a, x00, x09, x00, x08,
-	x00, x07, x00, x06, x00, x05, x00, x04,
-	x00, x03, x00, x02, x00, x01, x01, x00"
-
-	fd_socket 5 || return 6
-
-	[[ $DEBUG -ge 2 ]] && out "\nsending client hello, "
-	socksend "$client_hello" 1
-	sockread 16384 
-
-	[[ $DEBUG -ge 2 ]] && outln "\nreading server hello"
-	if [[ $DEBUG -ge 3 ]]; then
-		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
-		outln "[...]"
-		outln "\npayload #1 with TLS version $tls_hexcode:"
-	fi
-
-	socksend "$ccs_message" 1 || ok_ids
-	sockread 2048 $CCS_MAX_WAITSOCK
-	if [[ $DEBUG -ge 3 ]]; then
-		outln "\n1st reply: " 
-		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
-# ok:      15 | 0301 | 02 | 02 0a == ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
-		outln
-		outln "payload #2 with TLS version $tls_hexcode:"
-	fi
-
-	socksend "$ccs_message" 2 || ok_ids
-	sockread 2048 $CCS_MAX_WAITSOCK
-	retval=$?
-
-	if [[ $DEBUG -ge 3 ]]; then
-		outln "\n2nd reply: "
-		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
-# not ok:  15 | 0301 | 02 | 02 | 15 == ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
-# ok:  0a or nothing: ==> RST
-		outln
-	fi
-
-	reply_sanitized=$(echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//')
-	lines=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l)
-
-	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
-		pr_green "not vulnerable (OK)"
-		ret=0
-	else
-		pr_red "VULNERABLE (NOT ok)"
-		ret=1
-	fi
-	[ $retval -eq 3 ] && out "(timed out)"
-	outln 
-
-	close_socket
-	tmpfile_handle $FUNCNAME.txt
-	return $ret
-}
 
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 heartbleed(){
@@ -2261,8 +2035,118 @@ heartbleed(){
 	return $ret
 }
 
+# helper function
+ok_ids(){
+	pr_greenln "\n ok -- something resetted our ccs packets"
+	return 0
+}
 
-# This tests for CVE-2009-3555 / RFC5746, OSVDB: 59968-59974
+#FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
+ccs_injection(){
+	# see https://www.openssl.org/news/secadv_20140605.txt
+	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
+	pr_bold " CCS "; out " (CVE-2014-0224), experimental        "
+
+     if [ ! -z "$STARTTLS" ] ; then
+		outln "(not yet implemented for STARTTLS)"
+		return 0
+	fi
+	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT &>$TMPFILE </dev/null
+
+	tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
+	#tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed 's/^.*Protocol//')
+	case $tls_proto_offered in
+		12)	tls_hexcode="x03, x03" ;;
+		11)	tls_hexcode="x03, x02" ;;
+		*) tls_hexcode="x03, x01" ;;
+	esac
+	ccs_message=", x14, $tls_hexcode ,x00, x01, x01"
+
+	client_hello="
+	# TLS header (5 bytes)
+	,x16,               # content type (x16 for handshake)
+	$tls_hexcode,       # TLS version
+	x00, x93,           # length
+	# Handshake header
+	x01,                # type (x01 for ClientHello)
+	x00, x00, x8f,      # length
+	$tls_hexcode,       # TLS version
+	# Random (32 byte) 
+	x53, x43, x5b, x90, x9d, x9b, x72, x0b,
+	xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
+	xcf, xbd, x39, x04, xcc, x16, x0a, x85,
+	x03, x90, x9f, x77, x04, x33, xd4, xde,
+	x00,                # session ID length
+	x00, x68,           # cipher suites length
+	# Cipher suites (51 suites)
+	xc0, x13, xc0, x12, xc0, x11, xc0, x10,
+	xc0, x0f, xc0, x0e, xc0, x0d, xc0, x0c,
+	xc0, x0b, xc0, x0a, xc0, x09, xc0, x08,
+	xc0, x07, xc0, x06, xc0, x05, xc0, x04,
+	xc0, x03, xc0, x02, xc0, x01, x00, x39,
+	x00, x38, x00, x37, x00, x36, x00, x35, x00, x34,
+	x00, x33, x00, x32, x00, x31, x00, x30,
+	x00, x2f, x00, x16, x00, x15, x00, x14,
+	x00, x13, x00, x12, x00, x11, x00, x10,
+	x00, x0f, x00, x0e, x00, x0d, x00, x0c,
+	x00, x0b, x00, x0a, x00, x09, x00, x08,
+	x00, x07, x00, x06, x00, x05, x00, x04,
+	x00, x03, x00, x02, x00, x01, x01, x00"
+
+	fd_socket 5 || return 6
+
+	[[ $DEBUG -ge 2 ]] && out "\nsending client hello, "
+	socksend "$client_hello" 1
+	sockread 16384 
+
+	[[ $DEBUG -ge 2 ]] && outln "\nreading server hello"
+	if [[ $DEBUG -ge 3 ]]; then
+		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
+		outln "[...]"
+		outln "\npayload #1 with TLS version $tls_hexcode:"
+	fi
+
+	socksend "$ccs_message" 1 || ok_ids
+	sockread 2048 $CCS_MAX_WAITSOCK
+	if [[ $DEBUG -ge 3 ]]; then
+		outln "\n1st reply: " 
+		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
+# ok:      15 | 0301 | 02 | 02 0a == ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
+		outln
+		outln "payload #2 with TLS version $tls_hexcode:"
+	fi
+
+	socksend "$ccs_message" 2 || ok_ids
+	sockread 2048 $CCS_MAX_WAITSOCK
+	retval=$?
+
+	if [[ $DEBUG -ge 3 ]]; then
+		outln "\n2nd reply: "
+		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
+# not ok:  15 | 0301 | 02 | 02 | 15 == ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
+# ok:  0a or nothing: ==> RST
+		outln
+	fi
+
+	reply_sanitized=$(echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//')
+	lines=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l)
+
+	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
+		pr_green "not vulnerable (OK)"
+		ret=0
+	else
+		pr_red "VULNERABLE (NOT ok)"
+		ret=1
+	fi
+	[ $retval -eq 3 ] && out "(timed out)"
+	outln 
+
+	close_socket
+	tmpfile_handle $FUNCNAME.txt
+	return $ret
+}
+
 renego() {
 	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for Renegotiation vulnerability" && outln "\n"
 	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746, community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
@@ -2292,7 +2176,7 @@ renego() {
 		*) outln "FIXME: $reneg_ok" ;;
 	esac
 
-	pr_bold " Renegotiation "; out "(CVE 2009-3555)             "
+	pr_bold " Renegotiation "; out "(CVE 2009-3555)             " # and RFC5746, OSVDB 59968-59974
 	NEG_STR="Secure Renegotiation IS NOT"
 	echo "R" | $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 | grep -iaq "$NEG_STR"
 	secreg=$?						# 0= Secure Renegotiation IS NOT supported
@@ -2385,12 +2269,59 @@ crime() {
 	return $ret
 }
 
-# for appliance which use padding, no fallack needed
-tls_poodle() {
-	pr_bold " POODLE, SSL"; out " CVE-2014-8730), experimental "
-	#FIXME
-	echo "#FIXME"
-	return 7
+# BREACH is a HTTP-level compression & an attack which works against any cipher suite and is agnostic
+# to the version of TLS/SSL, more: http://www.breachattack.com/ . Foreign referers are the important thing here!
+breach() {
+	[[ $SERVICE != "HTTP" ]] && return 7
+
+	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for BREACH (HTTP compression) vulnerability" && outln "\n"
+	pr_bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
+
+	url="$1"
+	[ -z "$url" ] && url="/"
+	if [ $SNEAKY -eq 0 ] ; then
+		# see https://community.qualys.com/message/20360
+		if [[ "$NODE" =~ google ]]; then  
+			referer="Referer: http://yandex.ru/" # otherwise we have a false positive for google.com 
+		else
+			referer="Referer: http://google.com/"
+		fi
+		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
+	else
+		referer="Referer: TLS/SSL-Tester from $SWURL"
+		useragent="User-Agent: Mozilla/4.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox/42.0"
+	fi
+	(
+	$OPENSSL  s_client -quiet -connect $NODEIP:$PORT $SNI << EOF
+GET $url HTTP/1.1
+Host: $NODE
+$useragent
+Accept: text/*
+Accept-Language: en-US,en
+Accept-encoding: gzip,deflate,compress
+$referer
+Connection: close
+
+EOF
+) &>$HEADERFILE_BREACH &
+	pid=$!
+	if wait_kill $pid $HEADER_MAXSLEEP; then
+		result=$(grep -a '^Content-Encoding' $HEADERFILE_BREACH | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g')
+		result=$(echo $result | tr -cd '\40-\176')
+		if [ -z $result ]; then
+			pr_green "no HTTP compression (OK) " 
+			ret=0
+		else
+			pr_litered "NOT ok: uses $result compression "
+			ret=1
+		fi
+		# Catch: any URL can be vulnerable. I am testing now only the root. URL!
+		outln "(only \"$url\" tested)"
+	else
+		pr_litemagentaln "failed (HTTP header request stalled)"
+		ret=3
+	fi
+	return $ret
 }
 
 
@@ -2417,8 +2348,16 @@ ssl_poodle() {
 	return $ret	
 }
 
+# for appliance which use padding, no fallack needed
+tls_poodle() {
+	pr_bold " POODLE, SSL"; out " CVE-2014-8730), experimental "
+	#FIXME
+	echo "#FIXME"
+	return 7
+}
 
-# freak attack: don't use EXPORT RSA ciphers, see https://freakattack.com/
+
+# Factoring RSA Export Keys: don't use EXPORT RSA ciphers, see https://freakattack.com/
 freak() {
 	local ret
 	local exportrsa_ciphers
@@ -2433,12 +2372,11 @@ freak() {
 	# EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5
 	case $no_exportrsa_ciphers in
 		0) 	pr_magentaln "Local problem: your $OPENSSL doesn't have any EXPORT RSA ciphers configured" 
-			return 3
-			;;
+			return 3 ;;
 		1,2,3) 
 			addtl_warning=" (tested only with $no_exportrsa_ciphers out of 9 ciphers)" ;;
 		7,8,9,10,11)
-			addtl_warning="";;
+			addtl_warning="" ;;
 		4,5,6) 
 			addtl_warning=" (tested with $no_exportrsa_ciphers/9 ciphers)" ;;
 	esac
@@ -2457,8 +2395,7 @@ freak() {
 }
 
 
-#in a nutshell: don't use CBC Ciphers in SSLv3 TLSv1.0
-# Browser Exploit Against SSL/TLS
+# Browser Exploit Against SSL/TLS: don't use CBC Ciphers in SSLv3 TLSv1.0
 beast(){
 	local hexcode dash cbc_cipher sslvers kx auth enc mac export
 	local detected_proto
@@ -2516,12 +2453,74 @@ beast(){
 	return $ret
 }
 
+lucky13() {
+#FIXME: to do . CVE-2013-0169
+# in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
+	echo "FIXME"
+	return -1
+}
+
+
+# https://tools.ietf.org/html/rfc7465    REQUIRES that TLS clients and servers NEVER negotiate the use of RC4 cipher suites!
+# https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
+# http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
+rc4() {
+	outln
+	pr_blue "--> Checking RC4 Ciphers" ; outln
+	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
+	[ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
+	$OPENSSL s_client -cipher $($OPENSSL ciphers RC4) $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
+	if [ $? -eq 0 ]; then
+		pr_litered "\nNOT ok: borken RC4 is being offered!"
+		outln " Now testing specific ciphers...\n"
+		rc4_offered=1
+		neat_header
+		while read hexcode n ciph sslvers kx auth enc mac; do
+			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
+			ret=$?
+			if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
+				continue # no successful connect AND not verbose displaying each cipher
+			fi
+			normalize_ciphercode $hexcode
+			neat_list $HEXC $ciph $kx $enc $strength
+			if [[ "$SHOW_EACH_C" -ne 0 ]]; then
+				if [[ $ret -eq 0 ]]; then
+					pr_litered "available"
+				else
+					out "not a/v"
+				fi
+			else
+				rc4_offered=1
+				out
+			fi
+			outln
+		done < $TMPFILE
+		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
+		outln
+	else
+		outln
+		pr_litegreenln "no RC4 ciphers detected (OK)"
+		rc4_offered=0
+	fi
+
+	tmpfile_handle $FUNCNAME.txt
+	return $rc4_offered
+}
+#FIXME: this is the long version. Maybe show here a short version as for BEAST (keep in mind RC4-MD5 maybe =! RC4-MD5)
+
+
 youknowwho() {
 # CVE-2013-2566, 
 # NOT FIXME as there's no code: http://www.isg.rhul.ac.uk/tls/
 # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 return 0
 # in a nutshell: don't use RC4, really not!
+}
+
+# https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
+# https://secure-resumption.com/tlsauth.pdf
+tls_truncation() {
+#FIXME: difficult to test, is there any test available, pls let me know
 }
 
 old_fart() {
@@ -3280,6 +3279,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.231 2015/04/20 08:05:00 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.232 2015/04/22 08:33:43 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
