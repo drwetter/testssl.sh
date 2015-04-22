@@ -59,6 +59,7 @@ DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's
 								#FIXME: still to be filled with (more) sense or following to be included:
 VERBERR=${VERBERR:-1}				# 0 means to be more verbose (handshake errors to be displayed so that one can tell better
 								# whether handshake succeeded or not. While testing individual ciphers you also need to have SHOW_EACH_C=1
+LONG=${LONG:-1}					# whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
 
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}	# we wait this long before killing the process to retrieve a service banner / http header
 MAX_WAITSOCK=10					# waiting at max 10 seconds for socket reply 
@@ -98,6 +99,7 @@ OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 NODEIP=""
 VULN_COUNT=0
+VULN_THRESHLD=1		# if bigger than this no we show a separate header in blue
 IPS=""
 SERVICE=""			# is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
@@ -669,7 +671,7 @@ moreflags() {
 		http_header "$1" || return 3
 	fi
 	pr_bold " Security headers  "
-	egrep_pattern=$(echo $good_flags2test| sed -e 's/ /|\^/g' -e 's/^/\^/g')
+	egrep_pattern=$(echo $good_flags2test| sed -e 's/ /|\^/g' -e 's/^/\^/g') # space -> |^
 	egrep -ai $egrep_pattern $HEADERFILE >$TMPFILE
 	if [ $? -ne 0 ]; then
 		outln "(none at \"$url\")"
@@ -677,7 +679,7 @@ moreflags() {
 	else
 		ret=0
 		first=true
-		for f2t in $flags2test; do
+		for f2t in $good_flags2test; do
 			result_str=$(grep -i "^$f2t" $TMPFILE)
 			[ -z "$result_str" ] && continue
 			if $first; then
@@ -688,6 +690,7 @@ moreflags() {
 			fi
 		done
 	fi
+#FIXME: I am not testting for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
 
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
@@ -1950,7 +1953,7 @@ tls_sockets() {
 
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 heartbleed(){
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for heartbleed vulnerability" && outln "\n"
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for heartbleed vulnerability" && outln "\n"
 	pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
 
      if [ ! -z "$STARTTLS" ] ; then
@@ -2066,7 +2069,7 @@ ok_ids(){
 ccs_injection(){
 	# see https://www.openssl.org/news/secadv_20140605.txt
 	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
 	pr_bold " CCS "; out " (CVE-2014-0224), experimental        "
 
      if [ ! -z "$STARTTLS" ] ; then
@@ -2169,7 +2172,7 @@ ccs_injection(){
 }
 
 renego() {
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for Renegotiation vulnerability" && outln "\n"
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for Renegotiation vulnerability" && outln "\n"
 	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746, community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
 
 	ADDCMD=""
@@ -2219,7 +2222,7 @@ crime() {
 	# means anyway "game over", w/wo CRIME
 	# www.h-online.com/security/news/item/Vulnerability-in-SSL-encryption-is-barely-exploitable-1708604.html
 
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for CRIME vulnerability" && outln "\n"
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for CRIME vulnerability" && outln "\n"
 	pr_bold " CRIME, TLS " ; out "(CVE-2012-4929)                "
 
 	case "$OSSL_VER" in
@@ -2295,7 +2298,7 @@ crime() {
 breach() {
 	[[ $SERVICE != "HTTP" ]] && return 7
 
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for BREACH (HTTP compression) vulnerability" && outln "\n"
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for BREACH (HTTP compression) vulnerability" && outln "\n"
 	pr_bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
 
 	url="$1"
@@ -2351,7 +2354,7 @@ ssl_poodle() {
 	local ret
 	local cbc_ciphers
 
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption)" && outln "\n"
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption)" && outln "\n"
 	pr_bold " POODLE, SSL"; out " (CVE-2014-3566)               "
 	cbc_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/CBC/ { print $1 }' | tr '\n' ':')
 	debugme echo $cbc_ciphers
@@ -2384,7 +2387,7 @@ freak() {
 	local exportrsa_ciphers
 	local addtl_warning=""
 
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for FREAK attack" && outln "\n"
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for FREAK attack" && outln "\n"
 	pr_bold " FREAK "; out " (CVE-2015-0204), experimental      "
 	no_exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | egrep -a "^EXP.*RSA" | wc -l)
 	exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/^EXP.*RSA/ {print $1}' | tr '\n' ':')
@@ -2426,7 +2429,7 @@ beast(){
 	local spaces="                                           "
 	local cr=$'\n'
 
-	[ $VULN_COUNT -le 1 ]  && outln && pr_blue "--> Testing for BEAST vulnerability" && outln "\n"
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for BEAST vulnerability" && outln "\n"
 	pr_bold " BEAST"; out " (CVE-2011-3389)                     "
 
 	# 2) test handfull of common CBC ciphers
@@ -2465,7 +2468,7 @@ beast(){
 		fi
 	done
 	if [ $ret -eq 1 ] ; then
-		[ ! -z "$higher_proto_supported" ] && outln "${spaces}but also supports higher protocols (possible mitigation):$higher_proto_supported"
+		[ ! -z "$higher_proto_supported" ] && outln "${spaces}-- but also supports higher protocols (possible mitigation):$higher_proto_supported"
 	fi
 
 #	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
@@ -2486,35 +2489,46 @@ lucky13() {
 # https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
 # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 rc4() {
-	outln
-	pr_blue "--> Checking RC4 Ciphers" ; outln
+	local ret
+	local hexcode n ciph sslvers kx auth enc mac strength
+
+	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $LONG -eq 0 ] ; then
+		outln 
+		pr_blue "--> Checking for vulnerable RC4 Ciphers" ; outln "\n"
+	fi
+	pr_bold " RC4"; out " (CVE-2013-2566, CVE-2015-2808)        "
+
 	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
-	[ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
+	[ $LONG -eq 0 ] && [ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
 	$OPENSSL s_client -cipher $($OPENSSL ciphers RC4) $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
-		pr_litered "\nNOT ok: borken RC4 is being offered!"
-		outln " Now testing specific ciphers...\n"
+		pr_litered "VULNERABLE (NOT ok):"
+		[[ $LONG -eq 0 ]] && outln "\n"
 		rc4_offered=1
-		neat_header
+		[[ $LONG -eq 0 ]] && neat_header
 		while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
 			ret=$?
 			if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
 				continue # no successful connect AND not verbose displaying each cipher
 			fi
-			normalize_ciphercode $hexcode
-			neat_list $HEXC $ciph $kx $enc $strength
-			if [[ "$SHOW_EACH_C" -ne 0 ]]; then
-				if [[ $ret -eq 0 ]]; then
-					pr_litered "available"
+			if [ $LONG -eq 0 ]; then
+				normalize_ciphercode $hexcode
+				neat_list $HEXC $ciph $kx $enc $strength
+				if [[ "$SHOW_EACH_C" -ne 0 ]]; then
+					if [[ $ret -eq 0 ]]; then
+						pr_litered "available"
+					else
+						out "not a/v"
+					fi
 				else
-					out "not a/v"
+					rc4_offered=1
+					out
 				fi
+				outln
 			else
-				rc4_offered=1
-				out
+				pr_litered "$ciph "
 			fi
-			outln
 		done < $TMPFILE
 		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
 		outln
@@ -3177,6 +3191,7 @@ startup() {
 				shift
 				do_tls_sockets=true
 				outln "TLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" ;;
+               --long) LONG=0 ;;
 			--assuming-http|--assuming_http|--assume_http|--assume-http)
 				ASSUMING_HTTP=0 ;;
 			--sneaky)
@@ -3301,6 +3316,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.234 2015/04/22 13:22:52 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.235 2015/04/22 16:24:38 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
