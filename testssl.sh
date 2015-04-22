@@ -2521,6 +2521,7 @@ return 0
 # https://secure-resumption.com/tlsauth.pdf
 tls_truncation() {
 #FIXME: difficult to test, is there any test available, pls let me know
+:
 }
 
 old_fart() {
@@ -3279,6 +3280,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.232 2015/04/22 08:33:43 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.233 2015/04/22 09:56:12 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
