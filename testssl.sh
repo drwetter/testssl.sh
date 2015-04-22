@@ -68,7 +68,7 @@ USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet. FC has only a CA bundle per default, ==> openssl version -d
-HSTS_MIN=180						# >180 days is ok for HSTS
+HSTS_MIN=179						# >180 days is ok for HSTS
 HPKP_MIN=30						# >=30 days should be ok for HPKP_MIN, practical hints?
 CLIENT_MIN_PFS=5					# number of ciphers needed to run a test for PFS
 DAYS2WARN1=60						# days to warn before cert expires, threshold 1
@@ -168,7 +168,7 @@ SSLv2_CLIENT_HELLO="
 ,00,1b    # cipher spec length (here: 27 )
 ,00,00    # session ID length
 ,00,10    # challenge length
-,05,00,80 # 1st cipher	9 cipher specs, only classical V2 ciphers are used here, see  http://max.euston.net/d/tip_sslciphers.html
+,05,00,80 # 1st cipher	9 cipher specs, only classical V2 ciphers are used here, see  FIXME below
 ,03,00,80 # 2nd          there are v3 in v2!!! : https://tools.ietf.org/html/rfc6101#appendix-E
 ,01,00,80 # 3rd          Cipher specifications introduced in version 3.0 can be included in version 2.0 client hello messages using
 ,07,00,c0 # 4th          the syntax below. [..] # V2CipherSpec (see Version 3.0 name) = { 0x00, CipherSuite }; !!!!
@@ -178,6 +178,8 @@ SSLv2_CLIENT_HELLO="
 ,02,00,80 # 8th
 ,00,00,00 # 9th
 ,29,22,be,b3,5a,01,8b,04,fe,5f,80,03,a0,13,eb,c4" # Challenge
+# https://idea.popcount.org/2012-06-16-dissecting-ssl-handshake/ (client)
+# FIXME: http://max.euston.net/d/tip_sslciphers.html
 
 
 ###### output functions ######
@@ -294,6 +296,7 @@ red=""
 green=""
 brown=""
 blue=""
+cyan=""
 off=""
 bold=""
 underline=""
@@ -303,6 +306,7 @@ if [[ "$COLOR" -eq 2 ]]; then
 	green=$(tput setaf 2) 
 	brown=$(tput setaf 3) 
 	blue=$(tput setaf 4) 
+	yellow=$(tput setaf 3; tput bold)
 	off=$(tput sgr0)
 fi
 
@@ -555,7 +559,16 @@ hpkp() {
 emphasize_numbers_in_headers(){
 # see http://www.grymoire.com/Unix/Sed.html#uh-3
 #	outln "$1" | sed "s/[0-9]*/$brown&$off/g"
-	outln "$1" | sed "s/\([0-9]\)/$brown\1$off/g"
+	outln "$1" | sed -e "s/\([0-9]\)/$brown\1$off/g" \
+		-e "s/Debian/"$yellow"\Debian$off/g" \
+		-e "s/Ubuntu/"$yellow"Ubuntu$off/g" \
+		-e "s/ubuntu/"$yellow"ubuntu$off/g" \
+		-e "s/squeeze/"$yellow"squeeze$off/g" \
+		-e "s/lenny/"$yellow"lenny$off/g" \
+		-e "s/SUSE/"$yellow"SUSE$off/g" \
+		-e "s/Red Hat Enterprise Linux/"$yellow"Red Hat Enterprise Linux$off/g" \
+		-e "s/Red Hat/"$yellow"Red Hat$off/g" \
+		-e "s/CentOS/"$yellow"CentOS$off/g" 
 }
 
 
@@ -1577,7 +1590,7 @@ len2twobytes() {
 }
 
 socksend_sslv2_clienthello() {
-	code2network "$SSLv2_CLIENT_HELLO"
+	code2network "$1"
 	data=$(echo $NW_STR)
 	[[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
 	printf -- "$data" >&5 2>/dev/null &
@@ -1611,22 +1624,31 @@ display_sslv2_serverhello() {
 	# [certificate length] ==> certificate				
 	# [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
 
+	local ret=3
+
 	v2_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
-	[[ "$DEBUG" -ge 5 ]] && echo $v2_hello_ascii 	# one line without any blanks
+	[[ "$DEBUG" -ge 5 ]] && echo $v2_hello_ascii
 	if [[ -z $v2_hello_ascii ]] ; then
-		ret=0								# no server hello received
+		ret=0								# 1 line without any blanks: no server hello received
 		debugme echo "server hello empty"
 	else
 		# now scrape two bytes out of the reply per byte
 		v2_hello_initbyte="${v2_hello_ascii:0:1}"  # normally this belongs to the next, should be 8!
-		v2_hello_length="${v2_hello_ascii:1:3}"  # + 0x8000 see above
+		v2_hello_length="${v2_hello_ascii:1:3}"    # + 0x8000 see above
 		v2_hello_handshake="${v2_hello_ascii:4:2}"
 		v2_hello_cert_length="${v2_hello_ascii:14:4}"
 		v2_hello_cipherspec_length="${v2_hello_ascii:18:4}"
 
+		V2_HELLO_CIPHERSPEC_LENGTH=$(printf "%d\n" "0x$v2_hello_cipherspec_length" 2>/dev/null)
+		[ $? -ne 0 ] && ret=7
+
 		if [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
-			[[ $DEBUG -ge 2 ]] && echo "$v2_hello_initbyte / $v2_hello_handshake"
 			ret=1
+			if [[ $DEBUG -ge 2 ]]; then
+				echo "no correct server hello"
+				echo "SSLv2 server init byte:    0x0$v2_hello_initbyte"
+				echo "SSLv2 hello handshake :    0x$v2_hello_handshake"
+			fi
 		fi
 
 		if [[ $DEBUG -ge 3 ]]; then
@@ -1634,9 +1656,6 @@ display_sslv2_serverhello() {
 			echo "SSLv2 certificate length:  0x$v2_hello_cert_length"
 			echo "SSLv2 cipher spec length:  0x$v2_hello_cipherspec_length"
 		fi
-
-		V2_HELLO_CIPHERSPEC_LENGTH=$(printf "%d\n" "0x$v2_hello_cipherspec_length" 2>/dev/null)
-		[ $? -ne 0 ] && ret=7
 	fi
 	return $ret
 }
@@ -1660,7 +1679,7 @@ display_tls_serverhello() {
 
 	tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
 	[[ "$DEBUG" -eq 5 ]] && echo $tls_hello_ascii      # one line without any blanks
-	[[ -z $tls_hello_ascii ]] && debugme echo "server hello empty" && return 0              # no server hello received
+	[[ -z $tls_hello_ascii ]] && debugme echo "server hello empty, TCP connection closed" && return 0              # no server hello received
 
 	# now scrape two bytes out of the reply per byte
 	tls_hello_initbyte="${tls_hello_ascii:0:2}"  # normally this is x16
@@ -1715,7 +1734,7 @@ sslv2_sockets() {
 
 	fd_socket 5 || return 6
 	[[ "$DEBUG" -ge 2 ]] && outln "sending client hello... "
-	socksend_sslv2_clienthello 
+	socksend_sslv2_clienthello "$SSLv2_CLIENT_HELLO"
 
 	sockread_serverhello 32768 
 	[[ "$DEBUG" -ge 2 ]] && outln "reading server hello... "
@@ -1725,29 +1744,31 @@ sslv2_sockets() {
 	fi
 
 	display_sslv2_serverhello "$SOCK_REPLY_FILE"
-	if [ $? -eq 7 ]; then
-		# strange reply
-		pr_litemagenta "strange v2 reply "
-		outln " (rerun with DEBUG=2)"
-		[[ $DEBUG -ge 3 ]] && hexdump -C $SOCK_REPLY_FILE | head -1
-	else
-		# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
-		lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
-		[[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
-
-		if [[ "$lines" -gt 1 ]] ;then
-			ciphers_detected=$(($V2_HELLO_CIPHERSPEC_LENGTH / 3 ))
-			if [ 0 -eq $ciphers_detected ] ; then
-				pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"
-			else
-				pr_red "offered (NOT ok)"; outln " -- $ciphers_detected ciphers"
-			fi
-			ret=1
-		else
+	case $? in
+		7) # strange reply, cpundn't convert the cipher spec length to a hex number
+			pr_litemagenta "strange v2 reply "
+			outln " (rerun with DEBUG >=2)"
+			[[ $DEBUG -ge 3 ]] && hexdump -C $SOCK_REPLY_FILE | head -1
+			ret=7 ;;
+		1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
 			pr_greenln "not offered (OK)"
-			ret=0
-		fi
-	fi
+			ret=0 ;;
+		0) # reset
+			pr_greenln "not offered (OK)"
+			ret=0 ;;
+		3) # everything else
+			lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
+			[[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
+			if [[ "$lines" -gt 1 ]] ;then
+				ciphers_detected=$(($V2_HELLO_CIPHERSPEC_LENGTH / 3 ))
+				if [ 0 -eq "$ciphers_detected" ] ; then
+					pr_litered "supported but couldn't detect a cipher"; outln "(may need further attention)"
+				else
+					pr_red "offered (NOT ok)"; outln " -- $ciphers_detected ciphers"
+				fi
+				ret=1
+			fi ;;
+	esac 
 	pr_off
 	debugme outln
 
@@ -3280,6 +3301,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.233 2015/04/22 09:56:12 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.234 2015/04/22 13:22:52 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
