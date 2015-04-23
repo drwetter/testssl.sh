@@ -9,10 +9,10 @@ It is working on every Linux distribution out of the box with some limitations o
 
 On github you will find in the master branch the development version of the software -- with new features and maybe some bugs. For the stable version and a more thorough description of the software please see [testssl.sh](https://testssl.sh/ "Go to the site with the stable version and more documentation"). 
 
-New features in this release are: 
+New features in the upcoming release are: 
 
 * "only one cmd line option at a time": completely gone 
-* several tuning parameters on the cmd line (only available through enviroment variables b4): --assuming-http, --ssl-native, --sneaky, --warnings, --color, -- debug, --long
+* several tuning parameters on the cmd line (only available through environment variables b4): --assuming-http, --ssl-native, --sneaky, --warnings, --color, -- debug, --long
 * certificate information: done, 
 * more HTTP header infos (cookies+security headers): done.
 * protocol check via bash sockets, SSLv2+v3: done
@@ -20,7 +20,7 @@ New features in this release are:
 * debug file handling: done so far
 * BEAST: done, maybe needs long output as option
 * FREAK: done
-* Secure Client-Initiated Renotiation: done
+* Secure Client-Initiated Renegotiation: done
 * cosmetic code cleanups
 * bugfixing
 
