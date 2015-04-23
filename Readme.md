@@ -12,14 +12,19 @@ On github you will find in the master branch the development version of the soft
 New features in this release are: 
 
 * "only one cmd line option at a time": completely gone 
+* several tuning parameters on the cmd line (only available through enviroment variables b4): --assuming-http, --ssl-native, --sneaky, --warnings, --color, -- debug, --long
 * certificate information: done, 
-* more HTTP header infos: done.
+* more HTTP header infos (cookies+security headers): done.
 * protocol check via bash sockets, SSLv2+v3: done
 * maybe: cipher check via bash sockets: for now only with development option -q
 * debug file handling: done so far
-* BEAST: done, maybe needs some polishing for the output
+* BEAST: done, maybe needs long output as option
+* FREAK: done
+* Secure Client-Initiated Renotiation: done
+* cosmetic code cleanups
+* bugfixing
 
-Bottom line: Expect no big features now. Plan is to stabilize, bug fix and make a 2.4 release before next bigger development stage.
+Bottom line: Expect no further big features now. Plan is to stabilize, bug fix and make a 2.4 release before next bigger development stage.
 
 
 Contributions, feedback, also bug reports are welcome. For contributions please note: One patch per feature -- bug fix/improvement.
