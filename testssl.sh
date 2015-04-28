@@ -61,7 +61,7 @@ VERBERR=${VERBERR:-1}				# 0 means to be more verbose (handshake errors to be di
 								# whether handshake succeeded or not. While testing individual ciphers you also need to have SHOW_EACH_C=1
 LONG=${LONG:-1}					# whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
 
-HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-3}	# we wait this long before killing the process to retrieve a service banner / http header
+HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}	# we wait this long before killing the process to retrieve a service banner / http header
 MAX_WAITSOCK=10					# waiting at max 10 seconds for socket reply 
 CCS_MAX_WAITSOCK=5					# for the two CCS payload (each)
 HEARTBLEED_MAX_WAITSOCK=8			# for the heartbleed payload
@@ -106,7 +106,8 @@ URI=""
 STARTTLS_PROTOCOL=""
 
 TLS_TIME=""
-HTTP_TIME=""
+TLS_NOW=""
+#HTTP_TIME=""
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
 HEX_CIPHER=""
@@ -379,7 +380,7 @@ wait_kill(){
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 runs_HTTP() {
 	# SNI is nonsense for !HTTP but fortunately SMTP and friends don't care
-	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
+	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nConnection: Close\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
 	wait_kill $! $HEADER_MAXSLEEP
 	head $TMPFILE | grep -aq ^HTTP && SERVICE=HTTP
 	head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
@@ -458,8 +459,8 @@ EOF
 		redir2=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
 		outln " (got 30x to $redir2 - may be better try this URL?)\n"
 	fi
-     HTTP_DATE=$(awk -F': ' '/Date/ { print $2 }' $HEADERFILE)
-	debugme echo "$HTTP_DATE"
+     #HTTP_TIME=$(awk -F': ' '/Date/ { print $2 }' $HEADERFILE)
+	#debugme echo "$HTTP_TIME"
 	if egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
 		outln " (got 401 / WWW-Authenticate, can't look beyond it)\n"
 	fi
@@ -1663,6 +1664,45 @@ display_sslv2_serverhello() {
 	return $ret
 }
 
+show_dates() {
+	local now
+
+	tls_sockets "03" "$TLS12_CIPHER"
+	[ -z "$TLS_TIME" ] && tls_sockets "02" "$TLS_CIPHER"
+	[ -z "$TLS_TIME" ] && tls_sockets "01" "$TLS_CIPHER"
+	[ -z "$TLS_TIME" ] && tls_sockets "00" "$TLS_CIPHER"
+
+	if [ -n "$TLS_TIME" ]; then
+		difftime=$(($TLS_NOW - $TLS_TIME))
+		#echo "${#difftime}"
+		if [[ "${#difftime}" -gt 4 ]]; then
+			# openssl >= 1.0.1f doesn't have this field anymore
+			printf " TLS timestamp:    not possible to determine \n"
+		else
+			printf " TLS clock skew:   %ss  (%s)\n" "$difftime" "$TLS_TIME"
+		fi
+	fi
+
+# case $(uname -s) in
+#          *BSD|Darwin)   tls_time=$(date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r") ;;
+#          *)             tls_time=$(date --date="@$TLS_TIME" "+%Y-%m-%d %r") ;;
+#     esac
+
+	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nConnection: Close\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client -ign_eof -connect $NODE:$PORT $SNI &>$TMPFILE 
+	now=$(date "+%s")
+	#HTTP_TIME=$(awk -F': ' '/Date/ { print $2 }' $TMPFILE | sed 's/ GMT$//')
+	HTTP_TIME=$(awk -F': ' '/Date/ { print $2 }' $TMPFILE )
+
+	# Date: Mon, 27 Apr 2015 20:57:39 GMT
+	#date --date="$HTTP_TIME" "+%a, %d %b %Y %T"
+
+	HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
+	difftime=$(($now - $HTTP_TIME))
+	printf " HTTP clock skew:  %ss  (%s)\n" "$difftime" "$HTTP_TIME"
+
+	exit 0
+}
+
 
 # arg1: name of file with socket reply
 display_tls_serverhello() {
@@ -1705,10 +1745,10 @@ display_tls_serverhello() {
 	tls_hello="${tls_hello_ascii:10:2}"		# normally this is x02
 	tls_hello_protocol2="${tls_hello_ascii:18:4}"
 	tls_hello_time="${tls_hello_ascii:22:8}"
-	tls_time=$(printf "%d\n" 0x$tls_hello_time)
+	TLS_TIME=$(printf "%d\n" 0x$tls_hello_time)
 	case $(uname -s) in
-		*BSD|Darwin)	TLS_TIME=$(date -j -f %s "$tls_time" "+%Y-%m-%d %r") ;;
-		*)			TLS_TIME=$(date --date="@$tls_time" "+%Y-%m-%d %r") ;;
+		*BSD|Darwin)	tls_time=$(date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r") ;;
+		*)			tls_time=$(date --date="@$TLS_TIME" "+%Y-%m-%d %r") ;;
 	esac
 	tls_sid_len=$(printf "%d\n" 0x${tls_hello_ascii:86:2})
 	let sid_offset=88+$tls_sid_len*2
@@ -1722,7 +1762,7 @@ display_tls_serverhello() {
 			echo "tls_hello_protocol2: 0x$tls_hello_protocol2"
 			echo "tls_sid_len:         $tls_sid_len"
 		fi
-		echo "tls_hello_time:      0x$tls_hello_time ($TLS_TIME)"
+		echo "tls_hello_time:      0x$tls_hello_time ($tls_time)"
 		echo "tls_cipher_suite:    0x$tls_cipher_suite"
 		echo "tls_compression_method: 0x$tls_compression_method"
 		outln
@@ -1907,6 +1947,7 @@ tls_sockets() {
 	# if sending didn't succeed we don't bother
 	if [ $ret -eq 0 ]; then
 		sockread_serverhello 32768 
+		TLS_NOW=$(date "+%s")
 		[[ "$DEBUG" -ge 2 ]] && outln "reading server hello..."
 		if [[ "$DEBUG" -ge 3 ]]; then
 			hexdump -C $SOCK_REPLY_FILE | head -6
@@ -2533,7 +2574,6 @@ rc4() {
 		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
 		outln
 	else
-		outln
 		pr_litegreenln "no RC4 ciphers detected (OK)"
 		rc4_offered=0
 	fi
@@ -2541,7 +2581,6 @@ rc4() {
 	tmpfile_handle $FUNCNAME.txt
 	return $rc4_offered
 }
-#FIXME: this is the long version. Maybe show here a short version as for BEAST (keep in mind RC4-MD5 maybe =! RC4-MD5)
 
 
 youknowwho() {
@@ -2673,6 +2712,7 @@ tuning options:
     --assuming-http                       if protocol check fails it assumes HTTP protocol and enforces HTTP checks
     --ssl-native                          fallback to checks with OpenSSL where sockets are normally used
     --sneaky                              tries to hide that testssl.sh is scanning
+    --long                                wide output for tests like RC4 also with hexcode, kx, strength
     --warnings <batch|off|false>          "batch" doesn't wait for keypress, "off|false" skips connection warning
     --color                               0: no escape or other codes 1: b/w escape codes 2: color (default)
     --debug                               1: screen output normal but debug output in itemp files. 2-6: see line ~60
@@ -3191,6 +3231,7 @@ startup() {
 				shift
 				do_tls_sockets=true
 				outln "TLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" ;;
+			-z) maketempf ; parse_hn_port $2 ; show_dates ;;
                --long) LONG=0 ;;
 			--assuming-http|--assuming_http|--assume_http|--assume-http)
 				ASSUMING_HTTP=0 ;;
@@ -3203,6 +3244,8 @@ startup() {
 					default)   pr_magentaln "warnings can be either batch off false" ;;
 				esac
 				shift ;;
+			--show-each-cipher)
+				SHOW_EACH_C=1 ;; #FIXME: sense is vice versa
 			--debug)
 				DEBUG="$2"
 				shift ;;
@@ -3231,7 +3274,7 @@ startup() {
 	# left off here is the URI
 	URI=$1
 
-	debugme debug_globals
+	[ "$DEBUG" -ge 4 ] && debug_globals
 	# if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
 	query_globals && set_scanning_defaults
 }
