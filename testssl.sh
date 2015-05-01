@@ -2213,46 +2213,49 @@ ccs_injection(){
 }
 
 renego() {
-	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for Renegotiation vulnerability" && outln "\n"
-	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746, community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
+# no SNI here. Not needed as there won't be two different SSL stacks for one IP
+	local legacycmd=""
+	local insecure_renogo_str
+	local sec_renego sec_client_renego
 
-	ADDCMD=""
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for Renegotiation vulnerability" && outln "\n"
+
+	pr_bold " Secure Renegotiation "; out "(CVE 2009-3555)      " 	# and RFC5746, OSVDB 59968-59974
+	insecure_renogo_str="Secure Renegotiation IS NOT"
+	echo "HEAD / HTTP/1.0" | $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT 2>&1 | grep -iaq "$insecure_renogo_str"
+	sec_renego=$?											# 0= Secure Renegotiation IS NOT supported
+	case $sec_renego in
+		0) pr_redln "VULNERABLE (NOT ok)" ;;
+		1) pr_greenln "not vulnerable (OK)" ;;
+		*) outln "FIXME: $sec_renego" ;;
+	esac
+
+	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746, community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
 	case "$OSSL_VER" in
 		0.9.8*)  # we need this for Mac OSX unfortunately
 			case "$OSSL_VER_APPENDIX" in
-				[a-l])
-					pr_magenta "Your $OPENSSL $OSSL_VER cannot test the secure renegotiation vulnerability"
-					return 3 ;;
-				[m-z]) # all ok 
-					;;
+				[a-l]) pr_magenta "Your $OPENSSL $OSSL_VER cannot test the secure renegotiation vulnerability"
+					  return 3 ;;
+				[m-z]) # all ok ;;
 			esac ;;
-		1.0.1*|1.0.2*)
-			ADDCMD="-legacy_renegotiation" ;;
-		0.9.9*|1.0*) 
-			# all ok 
+		1.0.1*|1.0.2*) legacycmd="-legacy_renegotiation" ;;
+		0.9.9*|1.0*)   # all ok 
 			;;
 	esac
 
-	echo R | $OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE
-	reneg_ok=$?									# 0=client is renegotiating and does not get an error: vuln to DoS via client initiated renegotiation
-	case $reneg_ok in
+	# http://blog.ivanristic.com/2009/12/testing-for-ssl-renegotiation.html, head/get doesn't seem to be needed though
+	echo R | $OPENSSL s_client $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT &>$TMPFILE 	# msg enables us to look deeper into it while debugging
+	sec_client_renego=$?														# 0=client is renegotiating and does not get an error: vuln to DoS via client initiated renegotiation
+	case $sec_client_renego in
 		0) pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" ;;
 		1) pr_litegreenln "not vulnerable (OK)" ;;
-		*) outln "FIXME: $reneg_ok" ;;
+		*) outln "FIXME: $sec_client_renego" ;;
 	esac
 
-	pr_bold " Renegotiation "; out "(CVE 2009-3555)             " # and RFC5746, OSVDB 59968-59974
-	NEG_STR="Secure Renegotiation IS NOT"
-	echo "R" | $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 | grep -iaq "$NEG_STR"
-	secreg=$?						# 0= Secure Renegotiation IS NOT supported
-	case $secreg in
-		0) pr_redln "VULNERABLE (NOT ok)" ;;
-		1) pr_greenln "not vulnerable (OK)" ;;
-		*) outln "FIXME: $secreg" ;;
-	esac
+	#FIXME Insecure Client-Initiated Renegotiation is missing
 
 	tmpfile_handle $FUNCNAME.txt
-	return $secreg
+	return $(($sec_renego + $sec_client_renego))
 	# https://community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
 }
 
