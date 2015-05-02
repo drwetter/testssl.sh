@@ -107,6 +107,10 @@ STARTTLS_PROTOCOL=""
 
 TLS_TIME=""
 TLS_NOW=""
+GET_REQ11=""
+HEAD_REQ10=""
+UA_SNEAKY="Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
+UA_STD="Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox/42.0"
 #HTTP_TIME=""
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
@@ -371,6 +375,7 @@ wait_kill(){
 	done # needs to be killed:
 	kill $pid >&2 2>/dev/null
 	wait $pid 2>/dev/null
+#FIXME: do we need wait here???? normally it's good to report the exit status?!
 	return 3   # killed
 }
 
@@ -379,8 +384,8 @@ wait_kill(){
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 runs_HTTP() {
-	# SNI is nonsense for !HTTP but fortunately SMTP and friends don't care
-	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nConnection: Close\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
+	# SNI is nonsense for !HTTPS but fortunately other protocols don't seem to care
+	printf "$GET_REQ11" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
 	wait_kill $! $HEADER_MAXSLEEP
 	head $TMPFILE | grep -aq ^HTTP && SERVICE=HTTP
 	head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
@@ -416,15 +421,15 @@ runs_HTTP() {
 
 #problems not handled: chunked
 http_header() {
-	outln; pr_blue "--> Testing HTTP Header response"; outln "\n"
+	outln; pr_blue "--> Testing HTTP header response"; outln "\n"
 
 	[ -z "$1" ] && url="/" || url="$1"
 	if [ $SNEAKY -eq 0 ] ; then
-		referer="Referer: http://google.com/"
-		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
+		referer="http://google.com/"
+		useragent="$UA_SNEAKY"
 	else
-		referer="Referer: TLS/SSL-Tester from $SWURL"
-		useragent="User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox/42.0"
+		referer="TLS/SSL-Tester from $SWURL"
+		useragent="$UA_STD"
 	fi
 	(
 	$OPENSSL  s_client -quiet -connect $NODEIP:$PORT $SNI << EOF
@@ -432,8 +437,8 @@ GET $url HTTP/1.1
 Host: $NODE
 Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
 Accept-Language: en-us,en;q=0.7,de-de;q=0.3
-$useragent
-$referer
+User-Agent: $useragent
+Referer: $referer
 Connection: close
 
 EOF
@@ -982,7 +987,7 @@ testprotohelper() {
 runprotocols() {
 	local using_sockets=0
 
-	pr_blue "--> Testing Protocols"; 
+	pr_blue "--> Testing protocols"; 
 
 	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		using_sockets=1
@@ -1237,15 +1242,47 @@ cipher_pref_check() {
 
 server_defaults() {
 	local proto
-	local localtime
+	local now difftime
 	local extensions local sessticket_str lifetime unit keysize algo
 	local expire ocsp_uri crl savedir startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
 
 	outln
 	pr_blue "--> Testing server defaults (Server Hello)"; outln "\n"
-	localtime=$(date "+%s")
 
-	# throwing every cipher/protocol at the server and displaying its pick
+	# first TLS time:
+	tls_sockets "03" "$TLS12_CIPHER"
+	[ -z "$TLS_TIME" ] && tls_sockets "02" "$TLS_CIPHER"
+	[ -z "$TLS_TIME" ] && tls_sockets "01" "$TLS_CIPHER"
+	[ -z "$TLS_TIME" ] && tls_sockets "00" "$TLS_CIPHER"
+
+	if [ -n "$TLS_TIME" ]; then
+		difftime=$(($TLS_NOW - $TLS_TIME))
+		if [[ "${#difftime}" -gt 4 ]]; then
+			# openssl >= 1.0.1f doesn't have this field anymore
+			out " TLS timestamp:               random values, no fingerprinting possible "
+		else
+			[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
+			out " TLS clock skew:              $difftime sec from localtime";
+		fi
+		debugme out "$TLS_TIME"
+		outln
+	else
+		out " TLS timestamp:             "; pr_litemagentaln "SSLv3 through TLS 1.2 connection failed"
+	fi
+
+	# HTTP date:
+	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nConnection: Close\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client -ign_eof -connect $NODE:$PORT $SNI &>$TMPFILE 
+	now=$(date "+%s")
+	HTTP_TIME=$(awk -F': ' '/date:/ { print $2 }  /Date:/ { print $2 }' $TMPFILE )
+	HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
+	difftime=$(($now - $HTTP_TIME))
+	[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
+	out " HTTP clock skew:             $difftime sec from localtime";
+	debugme out "$HTTP_TIME"
+	outln
+
+	#TLS extensions follow now
+	# throwing 1st every cipher/protocol at the server to know what works
 	for proto in tls1_2 tls1_1 tls1; do
 		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -$proto -tlsextdebug -status </dev/null 2>/dev/null >$TMPFILE
 		ret=$?
@@ -1414,20 +1451,6 @@ server_defaults() {
 	fi
 	outln
 
-		#gmt_unix_time, removed since 1.0.1f
-		#
-		#remotetime=$(grep -w "Start Time" $TMPFILE | sed 's/[A-Za-z:() ]//g')
-		#if [ ! -z "$remotetime" ]; then
-		#	remotetime_stdformat=$(date --date="@$remotetime" "+%Y-%m-%d %r")
-		#	difftime=$(($localtime - $remotetime))
-		#	[ $difftime -gt 0 ] && difftime="+"$difftime
-		#	difftime=$difftime" s"
-		#	outln " remotetime? : $remotetime ($difftime) = $remotetime_stdformat"
-		#	outln " $remotetime"
-		#	outln " $localtime"
-		#fi
-		#http://www.moserware.com/2009/06/first-few-milliseconds-of-https.html
-
 	tmpfile_handle tlsextdebug+status.txt
 	return $ret
 }
@@ -1448,7 +1471,7 @@ pfs() {
 	# ^^^ the exclusion via ! doesn't work with libressl and openssl 0.9.8
 
 	outln
-	pr_blue "--> Testing Perfect Forward Secrecy (PFS)"; outln " -- omitting 3DES, RC4 and Null Encryption here"
+	pr_blue "--> Testing (perfect) forward secrecy, (P)FS"; outln " -- omitting 3DES, RC4 and Null Encryption here"
 
 	$OPENSSL ciphers -V "$pfs_ciphers" >$TMPFILE 2>/dev/null
 	if [ $? -ne 0 ] ; then
@@ -2111,7 +2134,7 @@ ccs_injection(){
 	# see https://www.openssl.org/news/secadv_20140605.txt
 	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
-	pr_bold " CCS "; out " (CVE-2014-0224), experimental        "
+	pr_bold " CCS "; out " (CVE-2014-0224)                      "
 
      if [ ! -z "$STARTTLS" ] ; then
 		outln "(not yet implemented for STARTTLS)"
@@ -2221,8 +2244,9 @@ renego() {
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for Renegotiation vulnerability" && outln "\n"
 
 	pr_bold " Secure Renegotiation "; out "(CVE 2009-3555)      " 	# and RFC5746, OSVDB 59968-59974
+														# community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
 	insecure_renogo_str="Secure Renegotiation IS NOT"
-	echo "HEAD / HTTP/1.0" | $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT 2>&1 | grep -iaq "$insecure_renogo_str"
+	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT 2>&1 </dev/null | grep -iaq "$insecure_renogo_str"
 	sec_renego=$?											# 0= Secure Renegotiation IS NOT supported
 	case $sec_renego in
 		0) pr_redln "VULNERABLE (NOT ok)" ;;
@@ -2230,33 +2254,42 @@ renego() {
 		*) outln "FIXME: $sec_renego" ;;
 	esac
 
-	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746, community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
+	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746
+	# see: https://community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
+	#      http://blog.ivanristic.com/2009/12/testing-for-ssl-renegotiation.html -- head/get doesn't seem to be needed though
 	case "$OSSL_VER" in
-		0.9.8*)  # we need this for Mac OSX unfortunately
+		0.9.8*)  			# we need this for Mac OSX unfortunately
 			case "$OSSL_VER_APPENDIX" in
 				[a-l]) pr_magenta "Your $OPENSSL $OSSL_VER cannot test the secure renegotiation vulnerability"
 					  return 3 ;;
-				[m-z]) # all ok ;;
+				[m-z]) ;; # all ok
 			esac ;;
 		1.0.1*|1.0.2*) legacycmd="-legacy_renegotiation" ;;
-		0.9.9*|1.0*)   # all ok 
-			;;
+		0.9.9*|1.0*) ;;   # all ok 
 	esac
 
-	# http://blog.ivanristic.com/2009/12/testing-for-ssl-renegotiation.html, head/get doesn't seem to be needed though
-	echo R | $OPENSSL s_client $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT &>$TMPFILE 	# msg enables us to look deeper into it while debugging
-	sec_client_renego=$?														# 0=client is renegotiating and does not get an error: vuln to DoS via client initiated renegotiation
-	case $sec_client_renego in
-		0) pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" ;;
-		1) pr_litegreenln "not vulnerable (OK)" ;;
-		*) outln "FIXME: $sec_client_renego" ;;
-	esac
+	# We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
+	echo R | $OPENSSL s_client $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT &>$TMPFILE & 	# msg enables us to look deeper into it while debugging
+	wait_kill $! $HEADER_MAXSLEEP
+	if [ $? -eq 3 ]; then
+		pr_litegreen "likely not vulnerable (OK)"; outln "(timed out)" 					# it hung
+		sec_client_renego=1
+	else
+		# second try in the foreground as we are sure now it won't hang
+		echo R | $OPENSSL s_client $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT &>$TMPFILE
+		sec_client_renego=$?													# 0=client is renegotiating & doesn't return an error --> vuln!
+		case $sec_client_renego in
+			0) pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" ;;
+			1) pr_litegreenln "not vulnerable (OK)" ;;
+			*) outln "FIXME: $sec_client_renego" ;;
+		esac
+	fi
 
 	#FIXME Insecure Client-Initiated Renegotiation is missing
 
 	tmpfile_handle $FUNCNAME.txt
 	return $(($sec_renego + $sec_client_renego))
-	# https://community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
+#FIXME: the return value is wrong, should be 0 if all ok. But as the caller doesn't care we don't care either ... yet ;-)
 }
 
 crime() {
@@ -2350,24 +2383,24 @@ breach() {
 	if [ $SNEAKY -eq 0 ] ; then
 		# see https://community.qualys.com/message/20360
 		if [[ "$NODE" =~ google ]]; then  
-			referer="Referer: http://yandex.ru/" # otherwise we have a false positive for google.com 
+			referer="http://yandex.ru/" # otherwise we have a false positive for google.com 
 		else
-			referer="Referer: http://google.com/"
+			referer="http://google.com/"
 		fi
-		useragent="User-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
+		useragent="$UA_SNEAKY"
 	else
-		referer="Referer: TLS/SSL-Tester from $SWURL"
-		useragent="User-Agent: Mozilla/4.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox/42.0"
+		referer="TLS/SSL-Tester from $SWURL"
+		useragent="$UA_STD"
 	fi
 	(
 	$OPENSSL  s_client -quiet -connect $NODEIP:$PORT $SNI << EOF
 GET $url HTTP/1.1
 Host: $NODE
-$useragent
+User-Agent: $useragent
 Accept: text/*
 Accept-Language: en-US,en
 Accept-encoding: gzip,deflate,compress
-$referer
+Referer: $referer
 Connection: close
 
 EOF
@@ -2670,35 +2703,36 @@ help() {
 	PRG=$(basename "$0")
 	cat << EOF
 
-$PRG <options>       
+$PRG <options> 
 
     <-h|--help>                           what you're looking at
-    <-b|--banner>                         displays banner + version
-    <-v|--version>                        same as above
+    <-b|--banner>                         displays banner + version of $PRG
+    <-v|--version>                        same as previous
     <-V|--local>                          pretty print all local ciphers
     <-V|--local> <pattern>                what local cipher with <pattern> is a/v?
 
-$PRG <options> URI
+$PRG <options> URI    ("$PRG URI" does everything except ciphers per proto)
 
-    <-e|--each-cipher>                    check each local ciphers remotely 
-    <-E|--cipher-per-proto>               check those per protocol
-    <-f|--ciphers>                        check cipher suites
-    <-p|--protocols>                      check TLS/SSL protocols only
+    <-e|--each-cipher>                    checks each local cipher remotely 
+    <-E|--cipher-per-proto>               checks those per protocol
+    <-f|--ciphers>                        checks common cipher suites
+    <-p|--protocols>                      checks TLS/SSL protocols 
     <-S|--server_defaults>                displays the servers default picks and certificate info
     <-P|--preference>                     displays the servers picks: protocol+cipher
     <-y|--spdy|--npn>                     checks for SPDY/NPN
     <-x|--single-cipher-test> <pattern>   tests matched <pattern> of cipher
-    <-B|--heartbleed>                     tests only for heartbleed vulnerability
-    <-I|--ccs|--ccs-injection>            tests only for CCS injection vulnerability
-    <-R|--renegotiation>                  tests only for renegotiation vulnerability
-    <-C|--compression|--crime>            tests only for CRIME vulnerability
-    <-T|--breach>                         tests only for BREACH vulnerability
-    <-O|--poodle>                         tests only for POODLE (SSL) vulnerability
-    <-F|--freak>                          tests only for FREAK vulnerability
-    <-A|--beast>                          tests only for BEAST vulnerability
+    <-U|--vulnerable>                     tests all vulnerabilities
+    <-B|--heartbleed>                     tests for heartbleed vulnerability
+    <-I|--ccs|--ccs-injection>            tests for CCS injection vulnerability
+    <-R|--renegotiation>                  tests renegotiation vulnerabilities
+    <-C|--compression|--crime>            tests CRIME vulnerability
+    <-T|--breach>                         tests BREACH vulnerability
+    <-O|--poodle>                         tests for POODLE (SSL) vulnerability
+    <-F|--freak>                          tests FREAK vulnerability
+    <-A|--beast>                          tests BEAST vulnerability
     <-s|--pfs|--fs|--nsa>                 checks (perfect) forward secrecy settings
     <-4|--rc4|--appelbaum>                which RC4 ciphers are being offered?
-    <-H|--header|--headers>               check for HSTS, HPKP and server/application banner string
+    <-H|--header|--headers>               checks HSTS, HPKP and server/application banner string
 
     <-t|--starttls> protocol              does a default run against a STARTTLS enabled service
     <--mx>                                tests MX records from high to low priority (STARTTLS, port 25)
@@ -2714,18 +2748,16 @@ tuning options:
 
     --assuming-http                       if protocol check fails it assumes HTTP protocol and enforces HTTP checks
     --ssl-native                          fallback to checks with OpenSSL where sockets are normally used
-    --sneaky                              tries to hide that testssl.sh is scanning
+    --sneaky                              be less verbose wrt referer headers      
     --long                                wide output for tests like RC4 also with hexcode, kx, strength
     --warnings <batch|off|false>          "batch" doesn't wait for keypress, "off|false" skips connection warning
     --color                               0: no escape or other codes 1: b/w escape codes 2: color (default)
     --debug                               1: screen output normal but debug output in itemp files. 2-6: see line ~60
     
 
-For HTML output you need to pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like 
+Need HTML output? Just pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like 
 
    "$PRG <options> <URI> | aha >output.html"
-
-
 EOF
 	exit $1
 }
@@ -2934,6 +2966,13 @@ parse_hn_port() {
 			ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
 			[ $? -ne 0 ] && exit 3
 		fi
+		if [ $SNEAKY -eq 0 ] ; then
+			GET_REQ11="GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $UA_SNEAKY\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
+			HEAD_REQ10="HEAD / HTTP/1.0\r\nUser-Agent: $UA_SNEAKY\r\nAccept: text/*\r\n\r\n"
+		else
+			GET_REQ11="GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $UA_STD\r\nAccept: text/*\r\n\r\n"
+			HEAD_REQ10="HEAD / HTTP/1.0\r\nUser-Agent: $UA_STD\r\nAccept: text/*\r\n\r\n"
+		fi
 		runs_HTTP
 	else
 		protocol=$(echo "$2" | sed 's/s$//')     # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
@@ -3075,6 +3114,7 @@ mx_allentries() {
 # This intializes boolean global do_* variables, meant primarily to keep track of what to do
 initialize_globals() {
 	do_allciphers=false
+	do_vulnerabilities=false
 	do_beast=false
 	do_breach=false
 	do_ccs_injection=false
@@ -3100,6 +3140,7 @@ initialize_globals() {
 
 # Set default scanning options
 set_scanning_defaults() {
+	do_vulnerabilities=true
 	do_beast=true
 	do_breach=true
 	do_ccs_injection=true
@@ -3123,7 +3164,7 @@ query_globals() {
 	local gbl
 	local true_nr=0
 
-	for gbl in do_allciphers do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
+	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
      		do_freak do_header do_heartbleed do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
      		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
      		do_test_just_one do_tls_sockets; do
@@ -3136,7 +3177,7 @@ query_globals() {
 debug_globals() {
 	local gbl
 
-	for gbl in do_allciphers do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
+	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
      		do_freak do_header do_heartbleed do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
      		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
      		do_test_just_one do_tls_sockets; do
@@ -3195,6 +3236,18 @@ startup() {
 				do_server_preference=true;;
 			-H|--header|--headers)
 				do_header=true;;
+			-U|--vulnerable)
+				do_vulnerabilities=true
+				do_heartbleed=true
+				do_ccs_injection=true
+				do_renego=true
+				do_crime=true
+				do_breach=true
+				do_ssl_poodle=true
+				do_freak=true
+				do_beast=true
+				do_rc4=true
+				VULN_COUNT=10 ;;
 			-B|--heartbleed)
 				do_heartbleed=true
 				let "VULN_COUNT++" ;;
@@ -3310,8 +3363,8 @@ lets_roll() {
 	fi
 
 	# vulnerabilities
-	if [ $VULN_COUNT -gt 1 ]; then
-		outln; pr_blue "--> Testing specific vulnerabilities" 
+	if [ $VULN_COUNT -gt $VULN_THRESHLD ] || ${do_vulnerabilities}; then
+		outln; pr_blue "--> Testing vulnerabilities" 
 		outln "\n"
 	fi
 	${do_heartbleed} && { heartbleed; ret=$(($? + ret)); }
@@ -3323,6 +3376,7 @@ lets_roll() {
 	${do_freak} && { freak; ret=$(($? + ret)); }
 	${do_beast} && { beast; ret=$(($? + ret)); }
 	${do_rc4} && { rc4; ret=$(($? + ret)); }
+
 	${do_pfs} && { pfs; ret=$(($? + ret)); }
 
 	return $ret
@@ -3362,6 +3416,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.235 2015/04/22 16:24:38 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.240 2015/05/02 13:01:01 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
