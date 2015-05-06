@@ -10,7 +10,7 @@
 # Devel version is availabe from https://github.com/drwetter/testssl.sh,
 # stable version from            https://testssl.sh
 
-VERSION="2.3dev"				# any char suffixes denotes non=stable
+VERSION="2.4rc1"				# any char suffixes denotes non=stable
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -564,7 +564,7 @@ hpkp() {
 	return $?
 }
 
-emphasize_numbers_in_headers(){
+emphasize_stuff_in_headers(){
 # see http://www.grymoire.com/Unix/Sed.html#uh-3
 #	outln "$1" | sed "s/[0-9]*/$brown&$off/g"
 	outln "$1" | sed -e "s/\([0-9]\)/$brown\1$off/g" \
@@ -576,7 +576,10 @@ emphasize_numbers_in_headers(){
 		-e "s/SUSE/"$yellow"SUSE$off/g" \
 		-e "s/Red Hat Enterprise Linux/"$yellow"Red Hat Enterprise Linux$off/g" \
 		-e "s/Red Hat/"$yellow"Red Hat$off/g" \
-		-e "s/CentOS/"$yellow"CentOS$off/g" 
+		-e "s/CentOS/"$yellow"CentOS$off/g" \
+		-e "s/X-Powered-By: ASP.NET/"$yellow"X-Powered-By: ASP.NET$off/g" \
+		-e "s/X-Powered-By/"$yellow"X-Powered-By$off/g" \
+		-e "s/X-AspNet-Version/"$yellow"X-AspNet-Version$off/g" 
 }
 
 
@@ -591,7 +594,7 @@ serverbanner() {
 		if [ x"$serverbanner" == "x\n" -o x"$serverbanner" == "x\n\r" -o x"$serverbanner" == "x" ]; then
 			outln "banner exists but empty string"
 		else
-			emphasize_numbers_in_headers "$serverbanner"
+			emphasize_stuff_in_headers "$serverbanner"
 		fi
 		# mozilla.github.io/server-side-tls/ssl-config-generator/
           # https://support.microsoft.com/en-us/kb/245030
@@ -615,7 +618,7 @@ applicationbanner() {
 	else
 		#cat $TMPFILE | sed 's/^.*:/:/'  | sed -e :a -e '$!N;s/\n:/ \n\             +/;ta' -e 'P;D' | sed 's/://g' 
 		#sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ' | sed "s/\([0-9]\)/$pr_red\1$off/g"
-		emphasize_numbers_in_headers "$(sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ')"
+		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ')"
 		#i=0
 		#cat $TMPFILE | sed 's/^/ /' | while read line; do
 		#	out "$line" 
@@ -696,7 +699,7 @@ moreflags() {
 			fi
 		done
 	fi
-#FIXME: I am not testting for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
+#FIXME: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
 
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
@@ -1267,13 +1270,13 @@ server_defaults() {
 		debugme out "$TLS_TIME"
 		outln
 	else
-		out " TLS timestamp:             "; pr_litemagentaln "SSLv3 through TLS 1.2 connection failed"
+		out " TLS timestamp:               "; pr_litemagentaln "SSLv3 through TLS 1.2 connection failed"
 	fi
 
 	# HTTP date:
 	printf "GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)\r\nConnection: Close\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client -ign_eof -connect $NODE:$PORT $SNI &>$TMPFILE 
 	now=$(date "+%s")
-	HTTP_TIME=$(awk -F': ' '/date:/ { print $2 }  /Date:/ { print $2 }' $TMPFILE )
+	HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $TMPFILE )
 	HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
 	difftime=$(($now - $HTTP_TIME))
 	[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
@@ -2248,6 +2251,7 @@ renego() {
 	insecure_renogo_str="Secure Renegotiation IS NOT"
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT 2>&1 </dev/null | grep -iaq "$insecure_renogo_str"
 	sec_renego=$?											# 0= Secure Renegotiation IS NOT supported
+#FIXME: didb't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
 	case $sec_renego in
 		0) pr_redln "VULNERABLE (NOT ok)" ;;
 		1) pr_greenln "not vulnerable (OK)" ;;
@@ -2376,7 +2380,7 @@ breach() {
 	[[ $SERVICE != "HTTP" ]] && return 7
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for BREACH (HTTP compression) vulnerability" && outln "\n"
-	pr_bold " BREACH"; out " (CVE-2013-3587) =HTTP Compression  "
+	pr_bold " BREACH"; out " (CVE-2013-3587)                    "
 
 	url="$1"
 	[ -z "$url" ] && url="/"
@@ -2413,7 +2417,7 @@ EOF
 			pr_green "no HTTP compression (OK) " 
 			ret=0
 		else
-			pr_litered "NOT ok: uses $result compression "
+			pr_litered "NOT ok: uses $result HTTP compression "
 			ret=1
 		fi
 		# Catch: any URL can be vulnerable. I am testing now only the root. URL!
@@ -2527,6 +2531,7 @@ beast(){
 
 		#detected_cbc_cipher=$(echo $detected_cbc_cipher | sed 's/ //g')
 		if [ -z "$detected_cbc_cipher" ]; then
+			[[ $proto == "tls1" ]] && printf "$spaces"
 			pr_litegreenln "no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
 		else
 			detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
@@ -2845,7 +2850,9 @@ CCS_MAX_WAITSOCK: $CCS_MAX_WAITSOCK
 USLEEP_SND $USLEEP_SND
 USLEEP_REC $USLEEP_REC
 
+
 EOF
+		which locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
 		$OPENSSL ciphers -V $1  &>$TEMPDIR/all_local_ciphers.txt
 	fi
 
@@ -2948,7 +2955,10 @@ parse_hn_port() {
 	URL_PATH=$(echo $URL_PATH | sed 's/\/\//\//g')    	# we rather want // -> /
 
 	# now get NODEIP
-	get_dns_entries
+	if ! get_dns_entries ; then
+		pr_magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
+		exit -1
+	fi
 
 	# check if we can connect to port 
 	if ! fd_socket; then
@@ -3011,13 +3021,13 @@ get_dns_entries() {
 		if which host &> /dev/null && [ -z "$IP4" ] ; then 
 			IP4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
 			if echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
-				pr_magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
-				exit 1
+				return 1
 			fi
 		fi
 		# MSYS2 has no host or getent, so we do this
 		if [ -z "$IP4" ] ; then
 			IP4=$(nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
+			[ -z "$IP4" ] && return 2
 		fi
 
 		# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
@@ -3041,6 +3051,7 @@ get_dns_entries() {
 
 	# FIXME: we could/should test more than one IPv4 addresses if available, same IPv6. For now we test the first IPv4:
 	NODEIP=$(echo "$IP4" | head -1)
+	[ -z "$NODEIP" ] && return 3
 
 	# we can't do this as some checks and even openssl are not yet IPv6 safe. BTW: bash sockets do IPv6 transparently!
 	#NODEIP=$(echo "$IP6" | head -1)
@@ -3051,6 +3062,7 @@ get_dns_entries() {
 		rDNS=$(nslookup -type=PTR $NODEIP 2> /dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
 	fi
 	[ -z "$rDNS" ] && rDNS="--"
+	return 0
 }
 
 
@@ -3416,6 +3428,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.240 2015/05/02 13:01:01 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.242 2015/05/06 16:48:50 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
