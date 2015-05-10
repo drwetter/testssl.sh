@@ -1288,16 +1288,21 @@ server_defaults() {
 	fi
 
 	# HTTP date:
+	out " HTTP clock skew:             "
 	printf "$GET_REQ11" | $OPENSSL s_client -ign_eof -connect $NODE:$PORT $SNI &>$TMPFILE
 	now=$(date "+%s")
 	HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $TMPFILE)
-	case $SYSTEM in
-		*BSD|Darwin)   HTTP_TIME=$(date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>/dev/null) ;; # the trailing \r confuses BSD flavors otherwise
-		*) 			HTTP_TIME=$(date --date="$HTTP_TIME" "+%s") ;;
-	esac
-	difftime=$(($now - $HTTP_TIME))
-	[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
-	out " HTTP clock skew:             $difftime sec from localtime";
+	if [ -n "$HTTP_TIME" ] ; then
+		case $SYSTEM in
+			*BSD|Darwin)   HTTP_TIME=$(date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>/dev/null) ;; # the trailing \r confuses BSD flavors otherwise
+			*) 			HTTP_TIME=$(date --date="$HTTP_TIME" "+%s") ;;
+		esac
+		difftime=$(($now - $HTTP_TIME))
+		[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
+		out "$difftime sec from localtime";
+	else
+		out "Got no HTTP time, maybe try different URL?";
+	fi
 	debugme out "$HTTP_TIME"
 	outln
 
@@ -2966,11 +2971,11 @@ parse_hn_port() {
 			[ $? -ne 0 ] && exit 3
 		fi
 		if [ $SNEAKY -eq 0 ] ; then
-			GET_REQ11="GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $UA_SNEAKY\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-			HEAD_REQ10="HEAD / HTTP/1.0\r\nUser-Agent: $UA_SNEAKY\r\nAccept: text/*\r\n\r\n"
+			GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $UA_SNEAKY\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
+			HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $UA_SNEAKY\r\nAccept: text/*\r\n\r\n"
 		else
-			GET_REQ11="GET / HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $UA_STD\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-			HEAD_REQ10="HEAD / HTTP/1.0\r\nUser-Agent: $UA_STD\r\nAccept: text/*\r\n\r\n"
+			GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $UA_STD\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
+			HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $UA_STD\r\nAccept: text/*\r\n\r\n"
 		fi
 		runs_HTTP
 	else
@@ -3417,6 +3422,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.244 2015/05/10 18:54:42 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.245 2015/05/10 21:38:05 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
