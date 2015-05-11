@@ -617,7 +617,7 @@ applicationbanner() {
 	else
 		#cat $TMPFILE | sed 's/^.*:/:/'  | sed -e :a -e '$!N;s/\n:/ \n\             +/;ta' -e 'P;D' | sed 's/://g' 
 		#sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ' | sed "s/\([0-9]\)/$pr_red\1$off/g"
-		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ')"
+		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')"
 		#i=0
 		#cat $TMPFILE | sed 's/^/ /' | while read line; do
 		#	out "$line" 
@@ -1217,15 +1217,15 @@ cipher_pref_check() {
 		$OPENSSL s_client $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
 		if [ $? -eq 0 ]; then
 			tested_cipher=""
-			proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^ \+Protocol \+://' -e 's/ //g')
-			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+			proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
+			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 			outln
 			printf "     %-10s %s " "$proto:" "$cipher"
 			tested_cipher="-"$cipher
 			while true; do
 				$OPENSSL s_client $STARTTLS -"$p" -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
 				[ $? -ne 0 ] && break
-				cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+				cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 				out "$cipher "
 				tested_cipher="$tested_cipher:-$cipher"
 			done
@@ -1238,13 +1238,13 @@ cipher_pref_check() {
 		protos=$($OPENSSL s_client -host $NODE -port $PORT -nextprotoneg  \"\" </dev/null 2>/dev/null | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')  
 		for p in $protos; do
 			$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$p" </dev/null 2>/dev/null >$TMPFILE
-			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 			printf "\n     %-10s %s " "$p:" "$cipher"
 			tested_cipher="-"$cipher
 			while true; do
 				$OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT -nextprotoneg "$p" </dev/null 2>/dev/null >$TMPFILE
 				[ $? -ne 0 ] && break
-				cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+				cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 				out "$cipher "
 				tested_cipher="$tested_cipher:-$cipher"
 			done
