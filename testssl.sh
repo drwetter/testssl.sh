@@ -2947,6 +2947,7 @@ parse_hn_port() {
 
 	URL_PATH=$(echo $1 | sed 's/.*'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')		# remove protocol and node part and port
 	URL_PATH=$(echo $URL_PATH | sed 's/\/\//\//g')    	# we rather want // -> /
+	[ -z "$URL_PATH" ] && URL_PATH="/"
 
 	# now get NODEIP
 	if ! get_dns_entries ; then
@@ -3422,6 +3423,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.245 2015/05/10 21:38:05 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.246 2015/05/11 08:47:25 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
