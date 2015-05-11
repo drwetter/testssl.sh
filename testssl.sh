@@ -447,7 +447,7 @@ EOF
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
 		if ! egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
-			pr_litemagenta "likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE))."
+			pr_litemagenta "likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
 			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
 			debugme cat $HEADERFILE
 			ret=7
@@ -639,7 +639,7 @@ cookieflags() {	# ARG1: Path, ARG2: path
 	pr_bold " Cookie(s)         "
 	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		nr_cookies=$(wc -l < $TMPFILE)
+		nr_cookies=$(wc -l < $TMPFILE | sed 's/ //g')
 		out "$nr_cookies issued: "
 		if [ $nr_cookies -gt 1 ] ; then
 			negative_word="NONE"
@@ -743,14 +743,14 @@ prettyprint_local() {
 	neat_header
 
 	if [ -z "$1" ]; then
-		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
+		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do       # -V doesn't work with openssl < 1.0
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc 
 			outln
 		done
 	else
 		for arg in $(echo $@ | sed 's/,/ /g'); do
-			$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
+			$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do	# -V doesn't work with openssl < 1.0
 				normalize_ciphercode $hexcode
 				neat_list $HEXC $ciph $kx $enc | grep -wai "$arg"
 			done
@@ -859,9 +859,9 @@ neat_header(){
 neat_list(){
 	kx=$(echo $3 | sed 's/Kx=//g')
 	enc=$(echo $4 | sed 's/Enc=//g')
-	strength=$(echo $enc | sed -e 's/.*(//' -e 's/)//')					# strength = encryption bits
-	strength=$(echo $strength | sed -e 's/ChaCha20-Poly1305/ly1305/g') 		# workaround for empty bits ChaCha20-Poly1305
-	enc=$(echo $enc | sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g') # workaround for empty bits ChaCha20-Poly1305
+	strength=$(echo $enc | sed -e 's/.*(//' -e 's/)//')						# strength = encryption bits
+	strength=$(echo $strength | sed -e 's/ChaCha20-Poly1305/ly1305/g') 			# workaround for empty bits ChaCha20-Poly1305
+	enc=$(echo $enc | sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g')	# workaround for empty bits ChaCha20-Poly1305
 	echo "$export" | grep -iq export && strength="$strength,export"
 	if [ -r "$MAP_RFC_FNAME" ]; then
 		printf -- " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
@@ -937,7 +937,7 @@ cipher_per_proto(){
 	outln " -ssl2 SSLv2\n -ssl3 SSLv3\n -tls1 TLS 1\n -tls1_1 TLS 1.1\n -tls1_2 TLS 1.2"| while read proto proto_text; do
 		locally_supported "$proto" "$proto_text" || continue
 		outln
-		$OPENSSL ciphers $proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode n ciph sslvers kx auth enc mac export; do
+		$OPENSSL ciphers $proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode n ciph sslvers kx auth enc mac export; do	# -V doesn't work with openssl < 1.0
 			$OPENSSL s_client -cipher $ciph $proto $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE  </dev/null
 			ret=$?
 			if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ]; then
@@ -1498,7 +1498,7 @@ pfs() {
 	outln
 	pr_blue "--> Testing (perfect) forward secrecy, (P)FS"; outln " -- omitting 3DES, RC4 and Null Encryption here"
 
-	$OPENSSL ciphers -V "$pfs_ciphers" >$TMPFILE 2>/dev/null
+	$OPENSSL ciphers -V "$pfs_ciphers" >$TMPFILE 2>/dev/null	# -V doesn't work with openssl < 1.0
 	if [ $? -ne 0 ] ; then
 		number_pfs=$(wc -l < $TMPFILE | sed 's/ //g')
 		if [ "$number_pfs" -le "$CLIENT_MIN_PFS" ] ; then
@@ -1539,7 +1539,7 @@ pfs() {
 				fi
 			fi
 			outln
-		done < <($OPENSSL ciphers -V "$pfs_ciphers")
+		done < <($OPENSSL ciphers -V "$pfs_ciphers")		# -V doesn't work with openssl < 1.0
 		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
 		debugme echo $none
 
@@ -1809,7 +1809,7 @@ sslv2_sockets() {
 			pr_greenln "not offered (OK)"
 			ret=0 ;;
 		3) # everything else
-			lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
+			lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l | sed 's/ //g')
 			[[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
 			if [[ "$lines" -gt 1 ]] ;then
 				ciphers_detected=$(($V2_HELLO_CIPHERSPEC_LENGTH / 3 ))
@@ -1967,7 +1967,7 @@ tls_sockets() {
 		save=$?
 
 		# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
-		lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l)
+		lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l | sed 's/ //g')
 		[[ "$DEBUG" -ge 2 ]] && out "  (returned $lines lines)  " 
 
 #	printf "Protokoll "; tput bold; printf "$tls_low_byte = $tls_str"; tput sgr0; printf ":  "
@@ -2093,7 +2093,7 @@ heartbleed(){
 		outln
 	fi
 
-	lines_returned=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l)
+	lines_returned=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l | sed 's/ //g')
 	if [ $lines_returned -gt 1 ]; then
 		pr_red "VULNERABLE (NOT ok)"
 		ret=1
@@ -2204,7 +2204,7 @@ ccs_injection(){
 	fi
 
 	reply_sanitized=$(echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//')
-	lines=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l)
+	lines=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l | sed 's/ //g')
 
 	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
 		pr_green "not vulnerable (OK)"
@@ -2453,7 +2453,7 @@ freak() {
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for FREAK attack" && outln "\n"
 	pr_bold " FREAK "; out " (CVE-2015-0204), experimental      "
-	no_exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | egrep -a "^EXP.*RSA" | wc -l)
+	no_exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | egrep -a "^EXP.*RSA" | wc -l | sed 's/ //g')
 	exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/^EXP.*RSA/ {print $1}' | tr '\n' ':')
 	debugme echo $exportrsa_ciphers
 	# with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
@@ -2502,7 +2502,7 @@ beast(){
 		if [ $? -ne 0 ]; then
 			continue	# protocol no supported, so we do not need to check each cipher with that protocol
 		fi
-#FIXME: doesn't work on FreeBSD, needs a warning and bailout
+#FIXME: doesn't work on with openssl 0.98, we won't fix though
 		while read hexcode dash cbc_cipher sslvers kx auth enc mac export ; do
 			$OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
 			#normalize_ciphercode $hexcode
@@ -2510,7 +2510,7 @@ beast(){
 			if [ $? -eq 0 ]; then
 				detected_cbc_cipher="$detected_cbc_cipher ""$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
 			fi
-		done < <($OPENSSL ciphers -V 'ALL:eNULL' | grep -a CBC)   
+		done < <($OPENSSL ciphers -V 'ALL:eNULL' | grep -a CBC)   	# -V doesn't work with openssl < 1.0
 		#    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
 
 		#detected_cbc_cipher=$(echo $detected_cbc_cipher | sed 's/ //g')
@@ -2564,7 +2564,7 @@ rc4() {
 	fi
 	pr_bold " RC4"; out " (CVE-2013-2566, CVE-2015-2808)        "
 
-	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 
+	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 	# -V doesn't work with openssl < 1.0
 	[ $LONG -eq 0 ] && [ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
 	$OPENSSL s_client -cipher $($OPENSSL ciphers RC4) $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
@@ -2574,9 +2574,9 @@ rc4() {
 		[[ $LONG -eq 0 ]] && neat_header
 		while read hexcode n ciph sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
-			ret=$?
+			ret=$? 		# here we have a fp with openssl < 1.0
 			if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
-				continue # no successful connect AND not verbose displaying each cipher
+				continue	# no successful connect AND not verbose displaying each cipher
 			fi
 			if [ $LONG -eq 0 ]; then
 				normalize_ciphercode $hexcode
@@ -2678,20 +2678,20 @@ openssl_age() {
 		0.9.8)
 			case $OSSL_VER_APPENDIX in
 				a|b|c|d|e) old_fart;; # no SNI!
-				# other than that we leave this for MacOSX but it's a pain and no guarantees!
+				# other than that we leave this for MacOSX and FREEBSD but it's a pain and likely gives false negatives/positives
 			esac
 			;;
 	esac
 	if [ $OSSL_VER_MAJOR -lt 1 ]; then ## mm: Patch for libressl
 		outln
-		outln " Your \"$OPENSSL\" is way too old (<version 1.0)"
+		pr_magentaln " Your \"$OPENSSL\" is way too old (<version 1.0)"
 		case $SYSTEM in
 			*BSD|Darwin)
 				outln " Please use openssl from ports/brew or compile from github.com/PeterMosmans/openssl" ;;
 			*)   outln " Update openssl binaries  or compile from github.com/PeterMosmans/openssl" ;;
 		esac
 		outln
-		pr_magentaln " Proceeding may result in false negatives or positives  ¡¡¡ <Enter> at your own risk !!! \n"
+		pr_magentaln " ¡¡¡ Proceeding WILL CERTAINLY result in false negatives or positives !!! Hit <ENTER> to acknowledge \n"
 		read a
 	fi
 }
@@ -3423,6 +3423,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.246 2015/05/11 08:47:25 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.247 2015/05/11 14:58:56 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
