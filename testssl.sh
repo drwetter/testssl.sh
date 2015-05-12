@@ -7,14 +7,15 @@
 # testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some 
 # vulnerablities or features
 #
-# Devel version is availabe from https://github.com/drwetter/testssl.sh,
-# stable version from            https://testssl.sh
+# Devel version is availabe from https://github.com/drwetter/testssl.sh
+# Stable version from            https://testssl.sh
+# Please file bugs at github!
 
-VERSION="2.4rc1"				# any char suffixes denotes non=stable
+VERSION="2.4rc2"
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
-# Author: Dirk Wetter, copyleft: 2007-2015, contributions so far see CREDIT.md
+# Main author: Dirk Wetter, copyleft: 2007-2015, contributions so far see CREDIT.md
 #
 # License: GPLv2, see http://www.fsf.org/licensing/licenses/info/GPLv2.html
 # and accompanying license "LICENSE.txt". Redistribution + modification under this
@@ -24,30 +25,37 @@ SWCONTACT="dirk aet testssl dot sh"
 # the recent version of this program. Don't violate the license!
 #
 # USAGE WITHOUT ANY WARRANTY, THE SOFTWARE IS PROVIDED "AS IS". USE IT AT
-# your OWN RISK
+# your OWN RISK!
 
-# HISTORY: I know reading this shell script is sometimes neither nice nor is it rocket science
-# (well ok, maybe the bash sockets are kind of cool).
-# It all started with a few openssl commands. It is a such a good swiss army knife (see e.g.
-#  wiki.openssl.org/index.php/Command_Line_Utilities) that it was difficult to resist wrapping 
-# with some shell commandos around it. This is how everything started
-# Probably you can achieve the same result with my favorite zsh (zmodload zsh/net/socket b4
-# -- checkout zsh/net/tcp too! -- but bash is way more often used, within Linux and: cross-platform!
-
-# Q: So what's the difference between https://www.ssllabs.com/ssltest or
-#    https://sslcheck.globalsign.com/?
+# HISTORY: I know this shell script is still on its way to be nice and readable. ;-) It
+# all started with a few openssl commands around 2006.  That's because openssl is a such a good
+# swiss army knife (see e.g.  wiki.openssl.org/index.php/Command_Line_Utilities) that it was
+# difficult to resist wrapping # with some shell commandos around it. This is how everything started.
+# Now it has grown up, it has bash socket support for some features which basically replacing
+# more and more functions of OpenSSL and will serve as some kind of library in the future.
+# The socket checks in bash may sound cool and unique -- they are -- but probably you
+# can achieve e.g. the same result with my favorite intgeractive shell: zsh (zmodload zsh/net/socket
+# -- checkout zsh/net/tcp too!) But bash is way more often used within Linux and it's perfect
+# for cross plattform support, see MacOS X and Windows MSYS2 extenstion.
+#
+# Q: So what's the difference to www.ssllabs.com/ssltest or sslcheck.globalsign.com/?
 # A: As of now ssllabs only check webservers on standard ports, reachable from
 #    the internet. And the examples above are 3rd parties. If those restrictions are fine
-#    with you, they might tell you more than this tool -- as of now.
-
-# Note that for "standard" openssl binaries a lot of features (ciphers, protocols, vulnerabilities)
-# are disabled as they'll impact security otherwise. For security testing though we
-# need all those features. Thus it's highly recommended to use the suppied binaries.
-# Except on-available local ciphers you'll get a warning about missing features
-
-# following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
-# 0 is true here (if a 1/- switch)
+#    with you, and you need a management compatible rating -- go ahead and use those.
+#    Also testssl.sh is meant as a tool in your hand and it's way more flexible.
 #
+# Note that for "standard" openssl binaries a lot of features (ciphers, protocols, vulnerabilities)
+# are disabled as they'll impact security otherwise. For security testing though we need
+# all b0rken features. testssl.sh will over time replace those checks with bash sockets --
+# however it's still recommended to use the supplied binaries or cook your own, see 
+# https://github.com/drwetter/testssl.sh/blob/master/openssl-bins/openssl-1.0.2-chacha.pm/Readme.md
+# Don't worry if feature X is not available you'll get a warning about this missing feature!
+
+
+
+# following variables make useA of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
+# 0 means (normally) true here. Some of the variables are also accessible with a command line switch
+
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-1} 		# will client side ciphers displayed before an individual test (makes no sense normally)
 SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: wrong value
@@ -68,8 +76,8 @@ HEARTBLEED_MAX_WAITSOCK=8			# for the heartbleed payload
 USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
-CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet. FC has only a CA bundle per default, ==> openssl version -d
-HSTS_MIN=179						# >180 days is ok for HSTS
+CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
+HSTS_MIN=179						# >179 days is ok for HSTS
 HPKP_MIN=30						# >=30 days should be ok for HPKP_MIN, practical hints?
 CLIENT_MIN_PFS=5					# number of ciphers needed to run a test for PFS
 DAYS2WARN1=60						# days to warn before cert expires, threshold 1
@@ -105,6 +113,7 @@ IPS=""
 SERVICE=""			# is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
 STARTTLS_PROTOCOL=""
+OPTIMAL_PROTO=""		# we need this for IIS6 (sigh) and OpenSSL 1.02, otherwise some handshakes will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 
 TLS_TIME=""
 TLS_NOW=""
@@ -384,9 +393,10 @@ wait_kill(){
 ###### check code starts here ######
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
+# arg1 could be the protocol determined as "working". IIS6 needs that
 runs_HTTP() {
 	# SNI is nonsense for !HTTPS but fortunately other protocols don't seem to care
-	printf "$GET_REQ11" | $OPENSSL s_client -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
+	printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet -connect $NODE:$PORT $SNI &>$TMPFILE &
 	wait_kill $! $HEADER_MAXSLEEP
 	head $TMPFILE | grep -aq ^HTTP && SERVICE=HTTP
 	head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
@@ -433,7 +443,7 @@ http_header() {
 		useragent="$UA_STD"
 	fi
 	(
-	$OPENSSL  s_client -quiet -connect $NODEIP:$PORT $SNI << EOF
+	$OPENSSL s_client $OPTIMAL_PROTO -quiet -connect $NODEIP:$PORT $SNI << EOF
 GET $url HTTP/1.1
 Host: $NODE
 Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
@@ -447,7 +457,7 @@ EOF
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
 		if ! egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
-			pr_litemagenta "likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
+			pr_litemagenta " likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
 			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
 			debugme cat $HEADERFILE
 			ret=7
@@ -458,7 +468,7 @@ EOF
 		mv $HEADERFILE.2  $HEADERFILE	 # sed'ing in place doesn't work with BSD and Linux simultaneously
 		ret=0
 	else
-		pr_litemagentaln "failed (HTTP header request stalled)"
+		pr_litemagentaln " failed (HTTP header request stalled)"
 		ret=3
 	fi
 	if egrep -aq "^HTTP.1.. 301|^HTTP.1.. 302|^Location" $HEADERFILE; then
@@ -594,6 +604,8 @@ serverbanner() {
 			outln "banner exists but empty string"
 		else
 			emphasize_stuff_in_headers "$serverbanner"
+			[[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]] && pr_litemagentaln "                   It's recommended to run another test w/ OpenSSL 1.01 !"
+			# see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 		fi
 		# mozilla.github.io/server-side-tls/ssl-config-generator/
           # https://support.microsoft.com/en-us/kb/245030
@@ -1102,9 +1114,8 @@ server_preference() {
 	out " Has server cipher order?     "
 	$OPENSSL s_client $STARTTLS -cipher $list1 -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
 	if [ $? -ne 0 ]; then
-		pr_magenta "no matching cipher in this list found: "
-		out "$list1  . "
-		pr_magentaln "Please report this"
+		pr_magenta "no matching cipher in this list found (pls report this): "
+		outln "$list1  . "
           ret=6
 	else
 		cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
@@ -1131,7 +1142,8 @@ server_preference() {
 			*TLSv1)		outln $default_proto ;;
 			*SSLv2)		pr_redln $default_proto ;;
 			*SSLv3)		pr_redln $default_proto ;;
-			*)			outln "FIXME: $default_proto" ;;
+			"")			pr_litemagentaln "default proto empty, IIS6+openssl 1.02??" ;; # maybe you can try to use openssl 1.01 here
+			*)			outln "$default_proto" ;;
 		esac
  
 		out " Negotiated cipher            "
@@ -1143,14 +1155,15 @@ server_preference() {
 			*GCM*)		pr_green "$default_cipher" ;;   # best ones
 			*CHACHA20*)	pr_green "$default_cipher" ;;   # best ones
 			ECDHE*AES*)    pr_yellow "$default_cipher" ;;   # it's CBC. --> lucky13
+			"")			pr_litemagenta "default cipher empty, IIS6+openssl 1.02?" ;; # maybe you can try to use openssl 1.01 here
 			*)			out "$default_cipher" ;;
 		esac
 		outln "$remark4default_cipher"
 
 		if [ ! -z "$remark4default_cipher" ]; then
-			outln " Negotiated cipher per proto $remark4default_cipher"
+			out " Negotiated cipher per proto $remark4default_cipher"
 			i=1
-			for p in sslv2 ssl3 tls1 tls1_1 tls1_2; do
+			for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
 			locally_supported -"$p" || continue
 				$OPENSSL s_client  $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
 				if [ $? -eq 0 ]; then
@@ -1213,12 +1226,13 @@ cipher_pref_check() {
 
 	out " Cipher order"
 
-	for p in sslv2 ssl3 tls1 tls1_1 tls1_2; do
+	for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
 		$OPENSSL s_client $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
 		if [ $? -eq 0 ]; then
 			tested_cipher=""
 			proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
 			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+			[ -z "$proto" ] && continue	# for early openssl versions sometimes needed
 			outln
 			printf "     %-10s %s " "$proto:" "$cipher"
 			tested_cipher="-"$cipher
@@ -1231,6 +1245,7 @@ cipher_pref_check() {
 			done
 		fi
 	done
+	outln
 
 	if ! spdy_pre ; then		# is NPN/SPDY supported and is this no STARTTLS?
 		:
@@ -1239,7 +1254,7 @@ cipher_pref_check() {
 		for p in $protos; do
 			$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$p" </dev/null 2>/dev/null >$TMPFILE
 			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-			printf "\n     %-10s %s " "$p:" "$cipher"
+			printf "     %-10s %s " "$p:" "$cipher"
 			tested_cipher="-"$cipher
 			while true; do
 				$OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT -nextprotoneg "$p" </dev/null 2>/dev/null >$TMPFILE
@@ -1249,8 +1264,8 @@ cipher_pref_check() {
 				tested_cipher="$tested_cipher:-$cipher"
 			done
 		done
+		outln
 	fi
-	outln
 	
 	tmpfile_handle $FUNCNAME.txt
 	return 0
@@ -1284,12 +1299,12 @@ server_defaults() {
 		debugme out "$TLS_TIME"
 		outln
 	else
-		out " TLS timestamp:               "; pr_litemagentaln "SSLv3 through TLS 1.2 connection failed"
+		out " TLS timestamp:               "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
 	fi
 
 	# HTTP date:
 	out " HTTP clock skew:             "
-	printf "$GET_REQ11" | $OPENSSL s_client -ign_eof -connect $NODE:$PORT $SNI &>$TMPFILE
+	printf "$GET_REQ11" | $OPENSSL s_client  $OPTIMAL_PROTO -ign_eof -connect $NODE:$PORT $SNI &>$TMPFILE
 	now=$(date "+%s")
 	HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $TMPFILE)
 	if [ -n "$HTTP_TIME" ] ; then
@@ -1568,7 +1583,7 @@ spdy_pre(){
 	# first, does the current openssl support it?
 	$OPENSSL s_client help 2>&1 | grep -qw nextprotoneg
 	if [ $? -ne 0 ]; then
-		pr_magentaln "Local problem: $OPENSSL doesn't support SPDY"; 
+		pr_magentaln "Local problem: $OPENSSL doesn't support SPDY/NPN"; 
 		return 7
 	fi
 	return 0
@@ -1578,25 +1593,19 @@ spdy() {
 	out " SPDY/NPN   "
 	spdy_pre || return 0
 	$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs </dev/null 2>/dev/null >$TMPFILE
-	if [ $? -eq 0 ]; then
-		# we need -a here 
-		tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
-		if [ -z "$tmpstr" -o "$tmpstr" = " " ] ; then
-			out "not offered"
-			ret=1
-		else
-			# now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
-			if echo $tmpstr | egrep -aq "spdy|http" ; then
-				pr_bold "$tmpstr" ; out " (advertised)"
-				ret=0
-			else
-				pr_litemagenta "please check manually, response from server was ambigious ..."
-				ret=10
-			fi
-		fi
+	tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
+	if [ -z "$tmpstr" -o "$tmpstr" = " " ] ; then
+		out "not offered"
+		ret=1
 	else
-		pr_litemagenta "handshake failed"
-		ret=2
+		# now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
+		if echo $tmpstr | egrep -aq "spdy|http" ; then
+			pr_bold "$tmpstr" ; out " (advertised)"
+			ret=0
+		else
+			pr_litemagenta "please check manually, server response was ambigious ..."
+			ret=10
+		fi
 	fi
 	outln
 	# btw: nmap can do that too http://nmap.org/nsedoc/scripts/tls-nextprotoneg.html
@@ -1797,7 +1806,7 @@ sslv2_sockets() {
 
 	display_sslv2_serverhello "$SOCK_REPLY_FILE"
 	case $? in
-		7) # strange reply, cpundn't convert the cipher spec length to a hex number
+		7) # strange reply, couldn't convert the cipher spec length to a hex number
 			pr_litemagenta "strange v2 reply "
 			outln " (rerun with DEBUG >=2)"
 			[[ $DEBUG -ge 3 ]] && hexdump -C $SOCK_REPLY_FILE | head -1
@@ -2234,11 +2243,11 @@ renego() {
 	insecure_renogo_str="Secure Renegotiation IS NOT"
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT 2>&1 </dev/null | grep -iaq "$insecure_renogo_str"
 	sec_renego=$?											# 0= Secure Renegotiation IS NOT supported
-#FIXME: didb't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
+#FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
 	case $sec_renego in
 		0) pr_redln "VULNERABLE (NOT ok)" ;;
 		1) pr_greenln "not vulnerable (OK)" ;;
-		*) outln "FIXME: $sec_renego" ;;
+		*) pr_magentaln "FIXME (bug): $sec_renego" ;;
 	esac
 
 	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746
@@ -2268,7 +2277,7 @@ renego() {
 		case $sec_client_renego in
 			0) pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" ;;
 			1) pr_litegreenln "not vulnerable (OK)" ;;
-			*) outln "FIXME: $sec_client_renego" ;;
+			*) "FIXME (bug): $sec_client_renego" ;;
 		esac
 	fi
 
@@ -2380,7 +2389,7 @@ breach() {
 		useragent="$UA_STD"
 	fi
 	(
-	$OPENSSL  s_client -quiet -connect $NODEIP:$PORT $SNI << EOF
+	$OPENSSL s_client $OPTIMAL_PROTO -quiet -connect $NODEIP:$PORT $SNI << EOF
 GET $url HTTP/1.1
 Host: $NODE
 User-Agent: $useragent
@@ -2624,8 +2633,8 @@ tls_truncation() {
 }
 
 old_fart() {
-	pr_magentaln "Your $OPENSSL $OSSL_VER version is an old fart..."
-	pr_magentaln "Get the precompiled bins, it doesn\'t make much sense to proceed"
+	pr_magentaln "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed."
+	outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
 	exit 3
 }
 
@@ -2661,7 +2670,7 @@ find_openssl_binary() {
 	# http://www.openssl.org/news/openssl-notes.html
 	OSSL_VER=$($OPENSSL version | awk -F' ' '{ print $2 }')
 	OSSL_VER_MAJOR=$(echo "$OSSL_VER" | sed 's/\..*$//')
-	OSSL_VER_MINOR=$(echo "$OSSL_VER" | sed -e 's/^.\.//' | sed 's/\..*.//')
+	OSSL_VER_MINOR=$(echo "$OSSL_VER" | sed -e 's/^.\.//' | tr -d i'[a-zA-Z]')
 	OSSL_VER_APPENDIX=$(echo "$OSSL_VER" | tr -d '[0-9.]')
 	OSSL_VER_PLATFORM=$($OPENSSL version -p | sed 's/^platform: //')
 	OSSL_BUILD_DATE=$($OPENSSL version -a | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
@@ -2684,14 +2693,14 @@ openssl_age() {
 	esac
 	if [ $OSSL_VER_MAJOR -lt 1 ]; then ## mm: Patch for libressl
 		outln
-		pr_magentaln " Your \"$OPENSSL\" is way too old (<version 1.0)"
+		pr_magentaln " Your \"$OPENSSL\" is way too old (<version 1.0) !"
 		case $SYSTEM in
 			*BSD|Darwin)
 				outln " Please use openssl from ports/brew or compile from github.com/PeterMosmans/openssl" ;;
-			*)   outln " Update openssl binaries  or compile from github.com/PeterMosmans/openssl" ;;
+			*)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" ;;
 		esac
-		outln
-		pr_magentaln " ¡¡¡ Proceeding WILL CERTAINLY result in false negatives or positives !!! Hit <ENTER> to acknowledge \n"
+		pr_magentaln " ¡¡¡ Proceeding WILL CERTAINLY result in false negatives or positives !!!"
+		pr_magentaln " \n                      Hit <ENTER> to acknowledge \n"
 		read a
 	fi
 }
@@ -2765,7 +2774,7 @@ mybanner() {
 	me=$(basename "$0")
 	osslver=$($OPENSSL version)
 	osslpath=$(which $OPENSSL)
-	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w)
+	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w | sed 's/ //g')
 	hn=$(hostname)
 	#poor man's ident (nowadays ident not neccessarily installed)
 	idtag=$(grep -a '\$Id' $0 | grep -aw "[E]xp" | sed -e 's/^#  //' -e 's/\$ $/\$/')
@@ -2965,8 +2974,15 @@ parse_hn_port() {
 	datebanner "Testing"
 
 	if  [[ -z "$2" ]] ; then		# for starttls we want another check
-		$OPENSSL s_client -connect "$NODE:$PORT" $SNI </dev/null &>/dev/null
-		if [ $? -ne 0 ]; then
+		# determine protocol which works (needed for IIS6). If we don't have IIS6, 1st try will succeed --> better because we use the variable 
+		# all over the place. Stupid thing that we need to do that stuff for IIS<=6
+		for OPTIMAL_PROTO in "" "-tls1_2" "-tls1" "-ssl3" "-tls1_1" "-ssl2" ""; do
+			$OPENSSL s_client $OPTIMAL_PROTO -connect "$NODE:$PORT" $SNI </dev/null &>/dev/null && all_failed=1 && break
+			all_failed=0
+		done
+		debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
+		if [ $all_failed -eq 0 ]; then
+			outln
 			pr_boldln " $NODE:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate"; 
 			ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
 			[ $? -ne 0 ] && exit 3
@@ -2978,7 +2994,7 @@ parse_hn_port() {
 			GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $UA_STD\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
 			HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $UA_STD\r\nAccept: text/*\r\n\r\n"
 		fi
-		runs_HTTP
+		runs_HTTP $OPTIMAL_PROTO
 	else
 		protocol=$(echo "$2" | sed 's/s$//')     # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
 		case "$protocol" in
@@ -3300,10 +3316,9 @@ startup() {
 			--sneaky)
 				SNEAKY=0 ;;
 			--warnings)
-				WARNINGS="$2"
-				case $WARNINGS in
-					batch|off|false) ;;
-					default)   pr_magentaln "warnings can be either batch off false" ;;
+				case "$2" in
+					batch|off|false) 	WARNINGS="$2" ;;
+					default)   		pr_magentaln "warnings can be either \"batch\", \"off\" or \"false\"" ;;
 				esac
 				shift ;;
 			--show-each-cipher)
@@ -3357,7 +3372,7 @@ lets_roll() {
 	${do_server_defaults} && { server_defaults; ret=$(($? + ret)); }
 
 	if ${do_header}; then
-		#TODO: refactor this into other functions
+		#TODO: refactor this into functions
 		if [[ $SERVICE == "HTTP" ]]; then
 			hsts "$URL_PATH"
 			hpkp "$URL_PATH"
@@ -3423,6 +3438,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.247 2015/05/11 14:58:56 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.248 2015/05/12 11:37:38 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
