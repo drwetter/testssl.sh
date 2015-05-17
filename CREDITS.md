@@ -17,18 +17,19 @@
  - Shellcheck static analysis
 
 * Peter Mosmans
- - way better cmd line parsing
+ - started way better cmd line parsing
  - cleanups
-
-* Markus Manzke: 
- - Fix for HSTS + subdomains
- - LibreSSL patch
+ - openssl sources support with the "missing" features
 
 * Дилян Палаузов
  - bug fix for 3des report
 
 * @nvsofts (NV)
  - LibreSSL patch for GOST
+
+* Markus Manzke: 
+ - Fix for HSTS + subdomains
+ - LibreSSL patch
 
 * Dmitri S
  - inspiration & help for Darwin port
@@ -40,9 +41,6 @@
 
 * OpenSSL team
   - for providing openssl ;-)
-
-* Peter Mosmans
-  - openssl binary support with the "missing" features
 
 
 
