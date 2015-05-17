@@ -9,22 +9,10 @@ It is working on every Linux distribution out of the box with some limitations o
 
 On github you will find in the master branch the development version of the software -- with new features and maybe some bugs. For the stable version and a more thorough description of the software please see [testssl.sh](https://testssl.sh/ "Go to the site with the stable version and more documentation"). 
 
-New features in the upcoming stable release 2.4 are: 
+New features in the upcoming stable release 2.6 are: 
 
-* "only one cmd line option at a time": completely gone 
-* several tuning parameters on the cmd line (only available through environment variables b4): --assuming-http, --ssl-native, --sneaky, --warnings, --color, -- debug, --long
-* certificate information: done, 
-* more HTTP header infos (cookies+security headers): done.
-* protocol check via bash sockets, SSLv2+v3: done
-* cipher check via bash sockets: for now only with development option -q
-* debug file handling: done so far
-* BEAST: done, maybe needs long output as option (-->pushed to 2.5/6)
-* FREAK: done
-* Secure Client-Initiated Renegotiation: done
-* cosmetic code cleanups: done
-* bugfixing: WIP
+* see https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A%222.6+%2F+2.5dev%22
 
-Bottom line: Expect no further big features now. Plan is to stabilize, bug fix and publish a 2.4 release before the next bigger development stage.
 
 
 Contributions, feedback, also bug reports are welcome. For contributions please note: One patch per feature -- bug fix/improvement. Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
