@@ -11,7 +11,7 @@
 # Stable version from            https://testssl.sh
 # Please file bugs at github!
 
-VERSION="2.4"
+VERSION="2.5dev"
 SWURL="https://testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -94,6 +94,11 @@ readonly SYSTEM=$(uname -s)			# OS
 
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 TEMPDIR=""
+TMPFILE=""
+HOSTCERT=""
+HEADERFILE=""
+HEADERFILE_BREACH=""
+LOGFILE=""
 TLS_PROTO_OFFERED=""
 DETECTED_TLS_VERSION=""
 SOCKREPLY=""
@@ -528,10 +533,12 @@ hsts() {
 }
 
 hpkp() {
-	local hpkp_age_sec
-	local hpkp_age_days
-	local hpkp_nr_keys
-	local hpkp_key
+	local -i hpkp_age_sec
+	local -i hpkp_age_days
+	local -i hpkp_nr_keys
+	local hpkp_key hpkp_key_hostcert
+	local spaces="                  "
+	local -i key_found=1
 	
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
@@ -543,7 +550,7 @@ hpkp() {
 		# dirty trick so that grep -c really counts occurances and not lines w/ occurances:
 		hpkp_nr_keys=$(sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -ac pin-sha)
 		if [ $hpkp_nr_keys -eq 1 ]; then
-			pr_brown "One key is not sufficent, "
+			pr_litered "One key is not sufficent, "
 		fi
 		hpkp_age_sec=$(sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE)
 		hpkp_age_days=$((hpkp_age_sec / 86400))
@@ -556,15 +563,20 @@ hpkp() {
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"
 
-		# get the key fingerprints:
+		# get the key fingerprints
 		sed -i -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE
+		[ -s "$HOSTCERT" ] || get_host_cert
 		while read hpkp_key; do
-			#FIXME: to be checked against level0.crt
-			# like openssl x509 -in level0.crt -pubkey -noout | openssl rsa -pubin -outform der | openssl dgst -sha256 -binary | openssl base64 -d
-			debugme echo "$hpkp_key="
+			hpkp_key_hostcert=$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | $OPENSSL base64 -d  | \
+				$OPENSSL dgst -sha256 -binary | $OPENSSL base64)
+			if [ "$hpkp_key_hostcert" == "$hpkp_key" ] || [ "$hpkp_key_hostcert" == "$hpkp_key=" ]; then
+				out "\n$spaces matching key: "
+				pr_litegreen "$hpkp_key"
+				key_found=0
+			fi
+			debugme echo "$hpkp_key | $hpkp_key_hostcert"
 		done < <(sed -e 's/;/\n/g' -e 's/ //g'  $TMPFILE | awk -F'=' '/pin.*=/ { print $2 }')
-		
-		out " (fingerprints not checked)"
+		[ $key_found -ne 0 ] && out "\n$spaces " && pr_litered "No matching key for pin found"
 	else
 		out "--"
 	fi
@@ -1279,6 +1291,14 @@ cipher_pref_check() {
 }
 
 
+get_host_cert() {
+		# arg1 is proto or empty
+		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI $1 2>/dev/null </dev/null | \
+			awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT
+		return $?
+}
+
+
 server_defaults() {
 	local proto 
 	local gost_status_problem=false
@@ -1343,7 +1363,7 @@ server_defaults() {
 	for proto in tls1_2 tls1_1 tls1 ssl3; do
 		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -$proto -tlsextdebug -status </dev/null 2>/dev/null >$TMPFILE	
 		ret=$?
-		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -$proto 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT
+		get_host_cert "-$proto"
 		[ $? -eq 0 ] && [ $ret -eq 0 ] && break
 		ret=7
 	done		# this loop is need for testing IIS/6
@@ -3469,6 +3489,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.250 2015/05/16 18:42:08 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.251 2015/05/18 19:51:44 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
