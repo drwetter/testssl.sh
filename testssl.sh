@@ -566,16 +566,16 @@ hpkp() {
 		# get the key fingerprints
 		sed -i -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE
 		[ -s "$HOSTCERT" ] || get_host_cert
+		hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
+			$OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
 		while read hpkp_key; do
-			hpkp_key_hostcert=$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | $OPENSSL base64 -d  | \
-				$OPENSSL dgst -sha256 -binary | $OPENSSL base64)
-			if [ "$hpkp_key_hostcert" == "$hpkp_key" ] || [ "$hpkp_key_hostcert" == "$hpkp_key=" ]; then
+			if [ "$hpkp_key_hostcert" = "$hpkp_key" ] || [ "$hpkp_key_hostcert" = "$hpkp_key=" ]; then
 				out "\n$spaces matching key: "
 				pr_litegreen "$hpkp_key"
 				key_found=0
 			fi
 			debugme echo "$hpkp_key | $hpkp_key_hostcert"
-		done < <(sed -e 's/;/\n/g' -e 's/ //g'  $TMPFILE | awk -F'=' '/pin.*=/ { print $2 }')
+		done < <(sed -e 's/;/\n/g' -e 's/ //g' -e 's/\"//g' $TMPFILE | awk -F'=' '/pin.*=/ { print $2 }')
 		[ $key_found -ne 0 ] && out "\n$spaces " && pr_litered "No matching key for pin found"
 	else
 		out "--"
@@ -593,7 +593,9 @@ emphasize_stuff_in_headers(){
 		-e "s/Debian/"$yellow"\Debian$off/g" \
 		-e "s/Ubuntu/"$yellow"Ubuntu$off/g" \
 		-e "s/ubuntu/"$yellow"ubuntu$off/g" \
+		-e "s/jessie/"$yellow"jessie$off/g" \
 		-e "s/squeeze/"$yellow"squeeze$off/g" \
+		-e "s/wheezy/"$yellow"wheezy$off/g" \
 		-e "s/lenny/"$yellow"lenny$off/g" \
 		-e "s/SUSE/"$yellow"SUSE$off/g" \
 		-e "s/Red Hat Enterprise Linux/"$yellow"Red Hat Enterprise Linux$off/g" \
@@ -617,8 +619,9 @@ serverbanner() {
 			outln "banner exists but empty string"
 		else
 			emphasize_stuff_in_headers "$serverbanner"
-			[[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]] && pr_litemagentaln "                   It's recommended to run another test w/ OpenSSL 1.01 !"
-			# see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
+			[[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]] && \
+				pr_litemagentaln "                   It's recommended to run another test w/ OpenSSL 1.01 !"
+				# see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 		fi
 		# mozilla.github.io/server-side-tls/ssl-config-generator/
           # https://support.microsoft.com/en-us/kb/245030
@@ -1366,7 +1369,7 @@ server_defaults() {
 		get_host_cert "-$proto"
 		[ $? -eq 0 ] && [ $ret -eq 0 ] && break
 		ret=7
-	done		# this loop is need for testing IIS/6
+	done		# this loop is needed for IIS/6
 	if [ $ret -eq 7 ]; then
 		# "-status" kills GOST only servers, so we do another test without it and see whether that works then:
 		if ! $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI -$proto -tlsextdebug </dev/null 2>/dev/null >$TMPFILE; then
@@ -3489,6 +3492,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.251 2015/05/18 19:51:44 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.252 2015/05/18 21:10:33 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
