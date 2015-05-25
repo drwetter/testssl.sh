@@ -11,7 +11,10 @@ On github you will find in the master branch the development version of the soft
 
 New features in the upcoming stable release 2.6 are: 
 
-* see https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A%222.6+%2F+2.5dev%22
+* display matching key (HPKP)
+* logjam, done: display dh bits on negotiated cipher. Todo: for all keys && separated logjam test
+
+more see https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A%222.6+%2F+2.5dev%22
 
 
 
