@@ -223,85 +223,85 @@ pr_off() {
 
 pr_liteblueln() { pr_liteblue "$1"; outln; }
 pr_liteblue() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[0;34m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[0;34m$1" || out "$1"
 	pr_off
 }
 
 pr_blueln() { pr_blue "$1"; outln; }
 pr_blue() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[1;34m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[1;34m$1" || out "$1"
 	pr_off
 }
 
 pr_literedln() { pr_litered "$1"; outln; }
 pr_litered() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1 " || pr_bold "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"
 	pr_off
 }
 
 pr_redln() { pr_red "$1"; outln; }
 pr_red() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1 " || pr_bold "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"
 	pr_off
 }
 
 pr_litemagentaln() { pr_litemagenta "$1"; outln; }
 pr_litemagenta() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1 " || pr_underline "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"
 	pr_off
 }
 
 pr_magentaln() { pr_magenta "$1"; outln; }
 pr_magenta() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1 " || pr_underline "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"
 	pr_off
 }
 
 pr_litecyanln() { pr_litecyan "$1"; outln; }
 pr_litecyan() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[0;36m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[0;36m$1" || out "$1"
 	pr_off
 }
 
 pr_cyanln() { pr_cyan "$1"; outln; }
 pr_cyan() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"
 	pr_off
 }
 
 pr_greyln() { pr_grey "$1"; outln; }
 pr_grey() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"
 	pr_off
 }
 
 pr_litegreyln() { pr_litegrey "$1"; outln; }
 pr_litegrey() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"
 	pr_off
 }
 
 pr_litegreenln() { pr_litegreen "$1"; outln; }
 pr_litegreen() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[0;32m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[0;32m$1" || out "$1"
 	pr_off
 }
 
 pr_greenln() { pr_green "$1"; outln; }
 pr_green() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[1;32m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[1;32m$1" || out "$1"
 	pr_off
 }
 
 pr_brownln() { pr_brown "$1"; outln; }
 pr_brown() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"
 	pr_off
 }
 
 pr_yellowln() { pr_yellow "$1"; outln; }
 pr_yellow() { 
-	[[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"
 	pr_off
 }
 
@@ -513,10 +513,12 @@ hsts() {
 	if [ $? -eq 0 ]; then
 		grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" || out "(two HSTS header, using 1st one) "
 		hsts_age_sec=$(sed -e 's/[^0-9]*//g' $TMPFILE | head -1)
+#FIXME: test for number!
 		hsts_age_days=$(( hsts_age_sec / 86400))
 		if [ $hsts_age_days -gt $HSTS_MIN ]; then
-			pr_litegreen "$hsts_age_days days \c" ; out "($hsts_age_sec s)"
+			pr_litegreen "$hsts_age_days days" ; out "=$hsts_age_sec s"
 		else
+			out "$hsts_age_sec s = "
 			pr_brown "$hsts_age_days days (<$HSTS_MIN is not good enough)"
 		fi
 		includeSubDomains "$TMPFILE"
@@ -546,17 +548,19 @@ hpkp() {
 	pr_bold " HPKP              "
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || out "(two HPKP header, using 1st one) "
+		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || out "(two HPKP headers, using 1st one) "
 		# dirty trick so that grep -c really counts occurances and not lines w/ occurances:
 		hpkp_nr_keys=$(sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -ac pin-sha)
 		if [ $hpkp_nr_keys -eq 1 ]; then
 			pr_litered "One key is not sufficent, "
 		fi
 		hpkp_age_sec=$(sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE)
-		hpkp_age_days=$((hpkp_age_sec / 86400))
+#FIXME: test for bumber!
+		hpkp_age_days=$((hpkp_age_sec / 86400)) 
 		if [ $hpkp_age_days -ge $HPKP_MIN ]; then
-			pr_litegreen "$hpkp_age_days days \c" ; out "= $hpkp_age_sec s"
+			pr_litegreen "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
 		else
+			out "$hpkp_age_sec s = "
 			pr_brown "$hpkp_age_days days (<$HPKP_MIN is not good enough)"
 		fi
 		
@@ -627,7 +631,7 @@ serverbanner() {
 		# mozilla.github.io/server-side-tls/ssl-config-generator/
           # https://support.microsoft.com/en-us/kb/245030
 	else
-		outln "no \"Server\" line in header, interesting!"
+		outln "(no \"Server\" line in header, interesting!)"
 	fi
 
 	tmpfile_handle $FUNCNAME.txt
@@ -680,13 +684,13 @@ cookieflags() {	# ARG1: Path, ARG2: path
 			0) pr_brown "$negative_word" ;;
 			[123456789]) pr_litegreen "$nr_secure/$nr_cookies";;
 		esac
- 		out "secure, "
+ 		out " secure, "
 		nr_httponly=$(grep -cai httponly $TMPFILE)
 		case $nr_httponly in
 			0) pr_brown "$negative_word" ;;
 			[123456789]) pr_litegreen "$nr_httponly/$nr_cookies";; 
 		esac
-		out "HttpOnly"
+		out " HttpOnly"
 	else
 		out "(none issued at \"$url\")"
 	fi
@@ -726,10 +730,11 @@ moreflags() {
 			fi
 			if [ $(echo "$result_str" | wc -l | sed 's/ //g') -eq 1 ]; then
 				pr_litegreenln "$result_str"
-			else # for the case we hace two times the same header:
+			else # for the case we have two times the same header:
 				# exchange the linefeeds between the two lines only:
 				pr_litecyan "double -->" ; echo "$result_str" |  tr '\n\r' '  | ' | sed 's/| $//g'
 				pr_litecyanln "<-- double"
+#FIXME: https://report-uri.io has double here
 			fi
 		done
 		# now the same with other flags
@@ -1130,22 +1135,24 @@ run_std_cipherlists() {
 }
 
 # arg1: file with input for grepping the bit length for ECDH/DHE
-pick_dhbits_from_file() {
+read_dhbits_from_file() {
 	local bits
-	local old_fart="(openssl to old to show DH bits)"
+	local old_fart=" (openssl too old to show DH bits)"
 
-	[ $OSSL_VER_MAJOR -ne 1 ] && pr_litemagentaln "$old_fart" && return 0
-	[ "$OSSL_VER_MINOR" == "0.1" ] && pr_litemagentaln "$old_fart" && return 0
+	[ $OSSL_VER_MAJOR -ne 1 ] && pr_litemagenta "$old_fart" && return 0
+	[ "$OSSL_VER_MINOR" == "0.1" ] && pr_litemagenta "$old_fart" && return 0
 
 	bits=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")
-	bits=$(echo $bits | sed -e 's/,//g' -e 's/P-256//' -e 's/  / /g')
+	bits=$(echo $bits | sed -e 's/, P-...//' -e 's/,//g' -e 's/  / /g')
+# FIXME: for seldom cases it might be better to parse the bit length, the Kx and go from there
 	[ -n "$bits" ] && out ", "
 	case $bits in
 		"DH 768"*)  						pr_red "$bits" ;;
 		"DH 1024"*)  						pr_litered "$bits" ;;
+		"DH 2048"*|"DH 4096"*)				pr_green "$bits" ;;
 		"ECDH 256"*|"ECDH 384"*|"ECDH 521"*)	pr_green "$bits" ;;
 		"") 								out " (no DH kx)" ;; #empty
-		*) 								pr_bold "FIXME:"; echo -n $bits | xxd ;;
+		*) 								pr_bold "FIXME:"; out ">$bits<" ;;
 	esac
 
 	return 0
@@ -1204,7 +1211,7 @@ server_preference() {
 			"")			pr_litemagenta "default cipher empty" ;  [[ $OSSL_VER == 1.0.2* ]] && out "(IIS6+OpenSSL 1.02?)" ;; # maybe you can try to use openssl 1.01 here
 			*)			out "$default_cipher" ;;
 		esac
-		pick_dhbits_from_file "$TMPFILE"
+		read_dhbits_from_file "$TMPFILE"
 		outln "$remark4default_cipher"
 
 		if [ ! -z "$remark4default_cipher" ]; then
@@ -1425,25 +1432,32 @@ server_defaults() {
 	fi
 
 	out " Server key size              "
-	keysize=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //')
+	keysize=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
 	if [ -z "$keysize" ]; then
 		outln "(couldn't determine)"
 	else
-		case "$keysize" in
-			1024*) pr_brownln "$keysize" ;;
-			2048*) outln "$keysize" ;;
-			4096*) pr_litegreenln "$keysize" ;;
-			*) outln "$keysize" ;;
-		esac
+		if [ "$keysize" -le 768 ]; then
+			pr_red "$keysize"
+		elif [ "$keysize" -le 1024 ]; then
+			pr_brown "$keysize"
+		elif [ "$keysize" -le 2048 ]; then
+			out "$keysize" 
+		elif [ "$keysize" -le 4096 ]; then
+			pr_litegreen "$keysize"
+		else
+			out "weird keysize: $keysize" 
+		fi
 	fi
+	outln " bit"
 #FIXME: google seems to have EC keys which displays as 256 Bit
 
 	out " Signature Algorithm          "
 	algo=$($OPENSSL x509 -in $HOSTCERT -noout -text  | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
 	case $algo in
-    		sha1WithRSAEncryption) 	pr_brownln "SHA1withRSA" ;;
-     	sha256WithRSAEncryption) pr_litegreenln "SHA256withRSA" ;;
-	     sha512WithRSAEncryption) pr_litegreenln "SHA512withRSA" ;;
+    		sha1WithRSAEncryption) 	pr_brownln "SHA1 with RSA" ;;
+     	sha256WithRSAEncryption) pr_litegreenln "SHA256 with RSA" ;;
+	     sha512WithRSAEncryption) pr_litegreenln "SHA512 with RSA" ;;
+	     ecdsa-with-SHA256) pr_litegreenln "ECDSA with SHA256" ;;
 	     md5*) 				pr_redln "MD5" ;;
 		*) 					outln "$algo" ;;
 	esac
@@ -2187,7 +2201,7 @@ heartbleed(){
 		pr_green "not vulnerable (OK)"
 		ret=0
 	fi
-	[ $retval -eq 3 ] && out "(timed out)"
+	[ $retval -eq 3 ] && out " (timed out)"
 	outln
 
 	close_socket
@@ -2299,7 +2313,7 @@ ccs_injection(){
 		pr_red "VULNERABLE (NOT ok)"
 		ret=1
 	fi
-	[ $retval -eq 3 ] && out "(timed out)"
+	[ $retval -eq 3 ] && out " (timed out)"
 	outln 
 
 	close_socket
@@ -2579,6 +2593,7 @@ beast(){
 	local spaces="                                           "
 	local cr=$'\n'
 	local first=true
+	local continued=false
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for BEAST vulnerability" && outln "\n"
 	pr_bold " BEAST"; out " (CVE-2011-3389)                     "
@@ -2587,7 +2602,13 @@ beast(){
 	for proto in ssl3 tls1; do
 		$OPENSSL s_client -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
 		if [ $? -ne 0 ]; then
-			continue			# protocol no supported, so we do not need to check each cipher with that protocol
+			if $continued; then
+				pr_litegreenln "no SSL3 or TLS1"
+				return 0
+			else
+				continued=true
+				continue			# protocol no supported, so we do not need to check each cipher with that protocol
+			fi
 		fi
 		while read hexcode dash cbc_cipher sslvers kx auth enc mac export ; do
 			$OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
@@ -2656,7 +2677,7 @@ rc4() {
 	[ $LONG -eq 0 ] && [ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
 	$OPENSSL s_client -cipher $($OPENSSL ciphers RC4) $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
-		pr_litered "VULNERABLE (NOT ok):"
+		pr_litered "VULNERABLE (NOT ok): "
 		[[ $LONG -eq 0 ]] && outln "\n"
 		rc4_offered=1
 		[[ $LONG -eq 0 ]] && neat_header
@@ -3517,6 +3538,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.253 2015/05/25 13:10:08 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.254 2015/05/25 19:14:57 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
