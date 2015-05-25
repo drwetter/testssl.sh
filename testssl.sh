@@ -73,9 +73,9 @@ VERBERR=${VERBERR:-1}				# 0 means to be more verbose (handshake errors to be di
 LONG=${LONG:-1}					# whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
 
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}	# we wait this long before killing the process to retrieve a service banner / http header
-MAX_WAITSOCK=10					# waiting at max 10 seconds for socket reply 
-CCS_MAX_WAITSOCK=5					# for the two CCS payload (each)
-HEARTBLEED_MAX_WAITSOCK=8			# for the heartbleed payload
+readonly MAX_WAITSOCK=10				# waiting at max 10 seconds for socket reply 
+readonly CCS_MAX_WAITSOCK=5			# for the two CCS payload (each)
+readonly HEARTBLEED_MAX_WAITSOCK=8		# for the heartbleed payload
 USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
@@ -265,7 +265,7 @@ pr_litecyan() {
 
 pr_cyanln() { pr_cyan "$1"; outln; }
 pr_cyan() { 
-	[[ "$COLOR" = 2 ]] && out "\033[1;36m$1 " || out "$1 "
+	[[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1 " || out "$1 "
 	pr_off
 }
 
@@ -591,6 +591,8 @@ emphasize_stuff_in_headers(){
 #	outln "$1" | sed "s/[0-9]*/$brown&$off/g"
 	outln "$1" | sed -e "s/\([0-9]\)/$brown\1$off/g" \
 		-e "s/Debian/"$yellow"\Debian$off/g" \
+		-e "s/Win32/"$yellow"\Win32$off/g" \
+		-e "s/Win64/"$yellow"\Win64$off/g" \
 		-e "s/Ubuntu/"$yellow"Ubuntu$off/g" \
 		-e "s/ubuntu/"$yellow"ubuntu$off/g" \
 		-e "s/jessie/"$yellow"jessie$off/g" \
@@ -605,7 +607,6 @@ emphasize_stuff_in_headers(){
 		-e "s/X-Powered-By/"$yellow"X-Powered-By$off/g" \
 		-e "s/X-AspNet-Version/"$yellow"X-AspNet-Version$off/g" 
 }
-
 
 serverbanner() {
 	if [ ! -s $HEADERFILE ] ; then
@@ -1052,9 +1053,9 @@ runprotocols() {
 	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		testprotohelper "-ssl2"
 		case $? in
-			0) 	ok 1 1 ;;	# pr_red 
-			1) 	ok 0 1 ;; # pr_green "not offered (ok)"
-			5) 	ok 5 5 ;;	# protocol ok, but no cipher
+			0) pr_redln   "offered (NOT ok)" ;;
+			1) pr_greenln "not offered (OK)" ;;
+			5) pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"  ;;	# protocol ok, but no cipher
 			7) ;;		# no local support
 		esac
 	else
@@ -1068,10 +1069,10 @@ runprotocols() {
 		tls_sockets "00" "$TLS_CIPHER"
 	fi
 	case $? in
-		0) ok 6 0 ;;	# pr_litered offered (NOT ok)
-		1) ok 0 1 ;;	# pr_green "not offered (ok)"
+		0) pr_literedln "offered (NOT ok)" ;;
+		1) pr_greenln "not offered (OK)"   ;;
 		2) ok 0 1 ;;   #FIXME: downgraded. still missing a testcase here
-		5) ok 5 5 ;;	# protocol ok, but no cipher
+		5) pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"  ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
 
@@ -1082,28 +1083,28 @@ runprotocols() {
 		#tls_sockets "01" "$TLS_CIPHER"
 	#fi
 	case $? in
-		0) ok 2 0 ;;   # no GCM, thus only normal print
-		1) outln "not offered" ;;  # we should change everything later here
+		0) outln "offered" ;;      # no GCM, thus only normal print
+		1) outln "not offered" ;;  # neither good or bad
 		# 2) ok 0 0 ;; downgraded 
-		5) ok 5 5 ;;	# protocol ok, but no cipher
+		5) outln "supported but couldn't detect a cipher (may need debugging)"  ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
 
 	out " TLS 1.1    ";
 	testprotohelper "-tls1_1"
 	case $? in
-		0) ok 2 0 ;;   # normal print
-		1) ok 7 0 ;;   # no GCM, penalty
-		5) ok 5 5 ;;	# protocol ok, but no cipher
+		0) outln "offered" ;;   # normal print
+		1) outln "not offered" ;;  # neither good or bad
+		5) outln "supported but couldn't detect a cipher (may need debugging)" ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
 
 	out " TLS 1.2    ";
 	testprotohelper "-tls1_2"
 	case $? in
-		0) ok 1 0 ;;
-		1) ok 7 0 ;;   # no GCM, penalty
-		5) ok 5 5 ;;	# protocol ok, but no cipher
+		0) pr_greenln "offered (OK)" ;; # GCM cipher in TLS 1.2: very good!
+		1) pr_brownln "not offered" ;;  # no GCM, penalty
+		5) outln "supported but couldn't detect a cipher (may need debugging)" ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
 
@@ -1127,6 +1128,29 @@ run_std_cipherlists() {
 	std_cipherlists "HIGH:!NULL:!aNULL"          " High grade encryption   " 0
 	return 0
 }
+
+# arg1: file with input for grepping the bit length for ECDH/DHE
+pick_dhbits_from_file() {
+	local bits
+	local old_fart="(openssl to old to show DH bits)"
+
+	[ $OSSL_VER_MAJOR -ne 1 ] && pr_litemagentaln "$old_fart" && return 0
+	[ "$OSSL_VER_MINOR" == "0.1" ] && pr_litemagentaln "$old_fart" && return 0
+
+	bits=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")
+	bits=$(echo $bits | sed -e 's/,//g' -e 's/P-256//' -e 's/  / /g')
+	[ -n "$bits" ] && out ", "
+	case $bits in
+		"DH 768"*)  						pr_red "$bits" ;;
+		"DH 1024"*)  						pr_litered "$bits" ;;
+		"ECDH 256"*|"ECDH 384"*|"ECDH 521"*)	pr_green "$bits" ;;
+		"") 								out " (no DH kx)" ;; #empty
+		*) 								pr_bold "FIXME:"; echo -n $bits | xxd ;;
+	esac
+
+	return 0
+}
+
 
 server_preference() {
 	local list1="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
@@ -1180,6 +1204,7 @@ server_preference() {
 			"")			pr_litemagenta "default cipher empty" ;  [[ $OSSL_VER == 1.0.2* ]] && out "(IIS6+OpenSSL 1.02?)" ;; # maybe you can try to use openssl 1.01 here
 			*)			out "$default_cipher" ;;
 		esac
+		pick_dhbits_from_file "$TMPFILE"
 		outln "$remark4default_cipher"
 
 		if [ ! -z "$remark4default_cipher" ]; then
@@ -2724,7 +2749,7 @@ find_openssl_binary() {
 	# http://www.openssl.org/news/openssl-notes.html
 	OSSL_VER=$($OPENSSL version | awk -F' ' '{ print $2 }')
 	OSSL_VER_MAJOR=$(echo "$OSSL_VER" | sed 's/\..*$//')
-	OSSL_VER_MINOR=$(echo "$OSSL_VER" | sed -e 's/^.\.//' | tr -d '[a-zA-Z]')
+	OSSL_VER_MINOR=$(echo "$OSSL_VER" | sed -e 's/^.\.//' | tr -d '[a-zA-Z]-')
 	OSSL_VER_APPENDIX=$(echo "$OSSL_VER" | tr -d '[0-9.]')
 	OSSL_VER_PLATFORM=$($OPENSSL version -p | sed 's/^platform: //')
 	OSSL_BUILD_DATE=$($OPENSSL version -a | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
@@ -3492,6 +3517,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.252 2015/05/18 21:10:33 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.253 2015/05/25 13:10:08 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
