@@ -941,7 +941,7 @@ test_just_one(){
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad
 allciphers(){
 	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w)
-	pr_blue "--> Testing all locally available $nr_ciphers ciphers against the server"; outln "(ordered by encryption strength)\n"
+	pr_blue "--> Testing all locally available $nr_ciphers ciphers against the server"; outln " (ordered by encryption strength)\n"
 	neat_header
 
 	$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode n ciph sslvers kx auth enc mac export; do
@@ -972,7 +972,7 @@ cipher_per_proto(){
 	local hexcode n ciph sslvers kx auth enc mac export
 	local ret
 
-	pr_blue "--> Testing all locally available ciphers per protocol against the server"; outln "(ordered by encryption strength)\n"
+	pr_blue "--> Testing all locally available ciphers per protocol against the server"; outln " (ordered by encryption strength)\n"
 	neat_header
 	outln " -ssl2 SSLv2\n -ssl3 SSLv3\n -tls1 TLS 1\n -tls1_1 TLS 1.1\n -tls1_2 TLS 1.2"| while read proto proto_text; do
 		locally_supported "$proto" "$proto_text" || continue
@@ -3538,6 +3538,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.254 2015/05/25 19:14:57 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.255 2015/05/25 19:22:20 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
