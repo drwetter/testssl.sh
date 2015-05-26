@@ -38,7 +38,7 @@ SWCONTACT="dirk aet testssl dot sh"
 # -- checkout zsh/net/tcp too!) But bash is way more often used within Linux and it's perfect
 # for cross plattform support, see MacOS X and Windows MSYS2 extenstion.
 #
-# Q: So what's the difference to www.ssllabs.com/ssltest or sslcheck.globalsign.com/?
+# Q: So what's the difference to www.ssllabs.com/ssltest or sslcheck.globalsign.com/ ?
 # A: As of now ssllabs only check webservers on standard ports, reachable from
 #    the internet. And the examples above are 3rd parties. If those restrictions are fine
 #    with you, and you need a management compatible rating -- go ahead and use those.
@@ -53,13 +53,15 @@ SWCONTACT="dirk aet testssl dot sh"
 
 
 readonly PROG_NAME=$(basename "$0")
-PROG_DIR=$(readlink "$BASH_SOURCE") 2>/dev/null
 readonly RUN_DIR=$(dirname $0)
+PROG_DIR=$(readlink "$BASH_SOURCE") 2>/dev/null
+[ -z "$PROG_DIR" ] && PROG_DIR="$(pwd -L)"
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
 
 OPENSSL=${OPENSSL:-/usr/bin/openssl}
+MAP_RFC_FNAME=""
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-1} 		# will client side ciphers displayed before an individual test (makes no sense normally)
 SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: wrong value
@@ -331,6 +333,7 @@ if [[ "$COLOR" -eq 2 ]]; then
 	green=$(tput setaf 2) 
 	brown=$(tput setaf 3) 
 	blue=$(tput setaf 4) 
+	grey=$(tput setaf 7)
 	yellow=$(tput setaf 3; tput bold)
 	off=$(tput sgr0)
 fi
@@ -777,7 +780,7 @@ normalize_ciphercode() {
 }
 
 prettyprint_local() {
-	pr_blue "--> Displaying all local ciphers"; 
+	pr_blue "--> Displaying all local ciphers "; 
 	if [ ! -z "$1" ]; then
 		pr_blue "matching word pattern "\"$1\"" (ignore case)"; 
 	fi
@@ -888,7 +891,7 @@ sockread() {
 
 show_rfc_style(){
 	[ ! -r "$MAP_RFC_FNAME" ] && return 1
-	RFCname=$(grep -iw $1 "$MAP_RFC_FNAME" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/')
+	RFCname=$(grep -iw "$1" "$MAP_RFC_FNAME" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/')
 	[[ -n "$RFCname" ]] && out "$RFCname" 
 	return 0
 }
@@ -911,26 +914,39 @@ neat_list(){
 			kx="$kx "    						# one for color code if ECDH and three digits
 			[[ "${#kx}" -eq 18 ]] && kx="$kx  "	# 18 means DH, colored < 1000. Add another space
 			[[ "${#kx}" -eq 19 ]] && kx="$kx "		# 19 means DH, colored >=1000. Add another space
-			#echo ${#kx}						# should be alwasy 20
+			#echo ${#kx}						# should be always 20
 		fi
-		printf -- " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
+		printf -- " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style 0$HEXC)"
 	else
 		printf -- " %-7s %-30s %-10s %-11s%-11s${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength"
 	fi
 }
 
 test_just_one(){
+	local hexcode n ciph sslvers kx auth enc mac export
+	local dhlen
+	local ret
+
 	pr_blue "--> Testing single cipher with word pattern "\"$1\"" (ignore case)"; outln "\n"
 	neat_header
 	for arg in $(echo $@ | sed 's/,/ /g'); do 
 		# 1st check whether openssl has cipher or not
 		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
+		# FIXME: e.g. OpenSSL < 1.0 doesn't understand "-V" --> we can't do anything about it!
 			normalize_ciphercode $hexcode 
 			neat_list $HEXC $ciph $kx $enc | grep -qwai "$arg" 
-			if [ $? -eq 0 ]; then
+			if [ $? -eq 0 ]; then    # string matches, so we can ssl to it:
 				$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 				ret=$?
-				neat_list $HEXC $ciph $kx $enc
+				if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
+					if [ $ret -eq 0 ]; then
+						dhlen=$(read_dhbits_from_file $TMPFILE quiet)
+						kx="$kx $dhlen"
+					else
+						kx="$kx $grey TBD $off "
+					fi
+				fi
+				neat_list $HEXC $ciph "$kx" $enc 
 				if [ $ret -eq 0 ]; then
 					pr_cyan "  available"
 				else
@@ -955,7 +971,7 @@ allciphers(){
 	local hexcode n ciph sslvers kx auth enc mac export
 	local dhlen
 
-	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w)
+	nr_ciphers=$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w)
 	pr_blue "--> Testing all locally available $nr_ciphers ciphers against the server"; outln ", ordered by encryption strength"
 	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL too old to show DH/ECDH bits)"
 	outln
@@ -1074,7 +1090,7 @@ testprotohelper() {
 runprotocols() {
 	local using_sockets=0
 
-	pr_blue "--> Testing protocols"; 
+	pr_blue "--> Testing protocols "; 
 
 	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		using_sockets=1
@@ -1261,10 +1277,10 @@ server_preference() {
 		case "$default_cipher" in
 			*NULL*|*EXP*)	pr_red "$default_cipher" ;;
 			*RC4*)		pr_litered "$default_cipher" ;;
-			*CBC*)		pr_brown "$default_cipher" ;; #FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
+			*CBC*)		pr_brown "$default_cipher" ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
 			*GCM*)		pr_green "$default_cipher" ;;   # best ones
 			*CHACHA20*)	pr_green "$default_cipher" ;;   # best ones
-			ECDHE*AES*)    pr_yellow "$default_cipher" ;;   # it's CBC. --> lucky13
+			ECDHE*AES*)    pr_yellow "$default_cipher" ;;  # it's CBC. --> lucky13
 			"")			pr_litemagenta "default cipher empty" ;  [[ $OSSL_VER == 1.0.2* ]] && out "(IIS6+OpenSSL 1.02?)" ;; # maybe you can try to use openssl 1.01 here
 			*)			out "$default_cipher" ;;
 		esac
@@ -1359,7 +1375,7 @@ cipher_pref_check() {
 	outln
 
 	if ! spdy_pre ; then		# is NPN/SPDY supported and is this no STARTTLS?
-		:
+		outln
 	else
 		protos=$($OPENSSL s_client -host $NODE -port $PORT -nextprotoneg  \"\" </dev/null 2>/dev/null | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')  
 		for p in $protos; do
@@ -1732,7 +1748,7 @@ pfs() {
 
 spdy_pre(){
 	if [ ! -z "$STARTTLS" ]; then
-		out "\n     (SPDY is a HTTP protocol and thus not tested here)"
+		out "(SPDY is a HTTP protocol and thus not tested here)"
 		return 1
 	fi
 	# first, does the current openssl support it?
@@ -1746,7 +1762,10 @@ spdy_pre(){
 
 spdy() {
 	out " SPDY/NPN   "
-	spdy_pre || return 0
+	if ! spdy_pre ; then
+		echo
+		return 0
+	fi
 	$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs </dev/null 2>/dev/null >$TMPFILE
 	tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
 	if [ -z "$tmpstr" -o "$tmpstr" = " " ] ; then
@@ -1773,7 +1792,7 @@ spdy() {
 fd_socket() {
 	if ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null removes an error message, but disables debugging
 		outln
-		pr_magenta "Unable to open a socket to $NODEIP:$PORT"
+		pr_magenta "Unable to open a socket to $NODEIP:$PORT. "
 		# It can last ~2 minutes but for for those rare occasions we don't do a tiemout handler here, KISS
 		return 6
        fi
@@ -3398,7 +3417,11 @@ startup() {
 			--mx587) # doesn't work with major ISPs
 				do_mx_allentries=true
 				PORT=587 ;;
-			-V|--local)
+			-V|--local)	# this is only displaying local, thus we don't put it in the loop
+				find_openssl_binary
+				mybanner
+				openssl_age
+				maketempf
 				initialize_engine 	# GOST support-
 				prettyprint_local "$2"
 				exit $? ;;
@@ -3581,11 +3604,9 @@ lets_roll() {
 ################# main #################
 
 
-[ -z "$PROG_DIR" ] && PROG_DIR="."
-
 # mapping file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
 # www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
-[ -r "$(dirname $PROG_DIR)/mapping-rfc.txt" ] && MAP_RFC_FNAME=$(dirname $PROG_DIR)"/mapping-rfc.txt"
+[ -r "$PROG_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$PROG_DIR/mapping-rfc.txt"
 
 initialize_globals
 
@@ -3610,6 +3631,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.258 2015/05/26 13:59:26 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.259 2015/05/26 17:26:20 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
