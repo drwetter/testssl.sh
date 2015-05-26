@@ -12,10 +12,9 @@ On github you will find in the master branch the development version of the soft
 New features in the upcoming stable release 2.6 are: 
 
 * display matching key (HPKP)
-* logjam, done: display dh bits on negotiated cipher. Todo: for all keys && separated logjam test
+* logjam, not named yet, but display dh/ecdh bits on negotiated and every cipher
 
 more see https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A%222.6+%2F+2.5dev%22
-
 
 
 Contributions, feedback, also bug reports are welcome. For contributions please note: One patch per feature -- bug fix/improvement. Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
