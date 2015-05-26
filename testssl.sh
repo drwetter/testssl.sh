@@ -907,11 +907,11 @@ neat_list(){
 	echo "$export" | grep -iq export && strength="$strength,export"
 	if [ -r "$MAP_RFC_FNAME" ]; then
 		# workaround for color escape codes:
-		if printf -- "$kx" | "${HEXDUMPVIEW[@]}" | grep -q 33 ; then
-			kx="$kx "    					# one for color code if ECDH and three digits
+		if printf -- "$kx" | "${HEXDUMPVIEW[@]}" | grep -q 33 ; then         # here's a color code
+			kx="$kx "    						# one for color code if ECDH and three digits
 			[[ "${#kx}" -eq 18 ]] && kx="$kx  "	# 18 means DH, colored < 1000. Add another space
-			[[ "${#kx}" -eq 19 ]] && kx="$kx "	# 19 means DH, colored >=1000. Add another space
-			#echo ${#kx}					# should be alwasy 20
+			[[ "${#kx}" -eq 19 ]] && kx="$kx "		# 19 means DH, colored >=1000. Add another space
+			#echo ${#kx}						# should be alwasy 20
 		fi
 		printf -- " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 	else
@@ -984,6 +984,7 @@ allciphers(){
 		outln
 		tmpfile_handle $FUNCNAME.txt
 	done
+	outln
 	return 0
 }
 
@@ -1167,6 +1168,7 @@ run_std_cipherlists() {
 # arg2: whether to print sparse or not (empty: no)
 read_dhbits_from_file() {
 	local bits what_dh
+	local add=""
 	local old_fart=" (openssl too old to show DH bits)"
 
 	if ! $HAS_DH_BITS; then
@@ -1181,7 +1183,7 @@ read_dhbits_from_file() {
 	bits=$(echo $bits | tr -d '[DHEC]')
 
 	debugme ">$what_dh|$bits<"
-	
+
 	[ -n "$bits" ] && [ -z "$2" ] && out ", "
 	if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]] ; then
 		[ -z "$2" ] && add="bit DH"
@@ -1196,7 +1198,7 @@ read_dhbits_from_file() {
 		fi
 	# https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography, http://www.keylength.com/en/compare/
 	elif [[ $what_dh == "ECDH" ]]; then
-		[ -z "$2" ] && add="bit DH"
+		[ -z "$2" ] && add="bit ECDH"
 		if [[ "$bits" -le 128 ]]; then 	# has that ever existed?
 			pr_red "$bits $add"
 		elif [[ "$bits" -le 163 ]]; then
@@ -3608,6 +3610,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.257 2015/05/26 10:51:09 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.258 2015/05/26 13:59:26 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
