@@ -59,6 +59,7 @@ readonly RUN_DIR=$(dirname $0)
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
 
+OPENSSL=${OPENSSL:-/usr/bin/openssl}
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-1} 		# will client side ciphers displayed before an individual test (makes no sense normally)
 SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: wrong value
@@ -113,6 +114,7 @@ OSSL_VER=""			# openssl version, will be autodetermined
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
+HAS_DH_BITS=true
 NODEIP=""
 VULN_COUNT=0
 readonly VULN_THRESHLD=1	# if bigger than this no we show a separate header in blue
@@ -897,13 +899,20 @@ neat_header(){
 }
 
 neat_list(){
-	kx=$(echo $3 | sed 's/Kx=//g')
+	kx=$(echo "$3" | sed 's/Kx=//g')
 	enc=$(echo $4 | sed 's/Enc=//g')
 	strength=$(echo $enc | sed -e 's/.*(//' -e 's/)//')						# strength = encryption bits
 	strength=$(echo $strength | sed -e 's/ChaCha20-Poly1305/ly1305/g') 			# workaround for empty bits ChaCha20-Poly1305
 	enc=$(echo $enc | sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g')	# workaround for empty bits ChaCha20-Poly1305
 	echo "$export" | grep -iq export && strength="$strength,export"
 	if [ -r "$MAP_RFC_FNAME" ]; then
+		# workaround for color escape codes:
+		if printf -- "$kx" | "${HEXDUMPVIEW[@]}" | grep -q 33 ; then
+			kx="$kx "    					# one for color code if ECDH and three digits
+			[[ "${#kx}" -eq 18 ]] && kx="$kx  "	# 18 means DH, colored < 1000. Add another space
+			[[ "${#kx}" -eq 19 ]] && kx="$kx "	# 19 means DH, colored >=1000. Add another space
+			#echo ${#kx}					# should be alwasy 20
+		fi
 		printf -- " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 	else
 		printf -- " %-7s %-30s %-10s %-11s%-11s${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength"
@@ -940,8 +949,16 @@ test_just_one(){
 
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad
 allciphers(){
+	local tmpfile
+	local nr_ciphers
+	local ret
+	local hexcode n ciph sslvers kx auth enc mac export
+	local dhlen
+
 	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w)
-	pr_blue "--> Testing all locally available $nr_ciphers ciphers against the server"; outln " (ordered by encryption strength)\n"
+	pr_blue "--> Testing all locally available $nr_ciphers ciphers against the server"; outln ", ordered by encryption strength"
+	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL too old to show DH/ECDH bits)"
+	outln
 	neat_header
 
 	$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode n ciph sslvers kx auth enc mac export; do
@@ -952,7 +969,11 @@ allciphers(){
 			continue		# no successful connect AND not verbose displaying each cipher
 		fi
 		normalize_ciphercode $hexcode
-		neat_list $HEXC $ciph $kx $enc
+		if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
+			dhlen=$(read_dhbits_from_file $TMPFILE quiet)
+			kx="$kx $dhlen"
+		fi
+		neat_list $HEXC $ciph "$kx" $enc 
 		if [ "$SHOW_EACH_C" -ne 0 ]; then
 			if [ $ret -eq 0 ]; then
 				pr_cyan "  available"
@@ -971,8 +992,11 @@ cipher_per_proto(){
 	local proto proto_text
 	local hexcode n ciph sslvers kx auth enc mac export
 	local ret
+	local dhlen
 
-	pr_blue "--> Testing all locally available ciphers per protocol against the server"; outln " (ordered by encryption strength)\n"
+	pr_blue "--> Testing all locally available ciphers per protocol against the server"; outln ", ordered by encryption strength"
+	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL too old to show DH/ECDH bits)"
+	outln
 	neat_header
 	outln " -ssl2 SSLv2\n -ssl3 SSLv3\n -tls1 TLS 1\n -tls1_1 TLS 1.1\n -tls1_2 TLS 1.2"| while read proto proto_text; do
 		locally_supported "$proto" "$proto_text" || continue
@@ -984,7 +1008,11 @@ cipher_per_proto(){
 				continue       # no successful connect AND not verbose displaying each cipher
 			fi
 			normalize_ciphercode $hexcode
-			neat_list $HEXC $ciph $kx $enc
+			if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
+				dhlen=$(read_dhbits_from_file $TMPFILE quiet)
+				kx="$kx $dhlen"
+			fi
+			neat_list $HEXC $ciph "$kx" $enc 
 			if [ "$SHOW_EACH_C" -ne 0 ]; then
 				if [ $ret -eq 0 ]; then
 					pr_cyan "  available"
@@ -1134,27 +1162,54 @@ run_std_cipherlists() {
 	return 0
 }
 
+
 # arg1: file with input for grepping the bit length for ECDH/DHE
+# arg2: whether to print sparse or not (empty: no)
 read_dhbits_from_file() {
-	local bits
+	local bits what_dh
 	local old_fart=" (openssl too old to show DH bits)"
 
-	[ $OSSL_VER_MAJOR -ne 1 ] && pr_litemagenta "$old_fart" && return 0
-	[ "$OSSL_VER_MINOR" == "0.1" ] && pr_litemagenta "$old_fart" && return 0
+	if ! $HAS_DH_BITS; then
+		if [ -z "$2" ]; then
+			pr_litemagenta "$old_fart" 
+		fi
+		return 0
+	fi
+	bits=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")					# extract line
+	bits=$(echo $bits | sed -e 's/, P-...//' -e 's/,//g' -e 's/bits//' -e 's/ //g') # now: ??DH [number]    K??
+	what_dh=$(echo $bits | tr -d '[0-9]')
+	bits=$(echo $bits | tr -d '[DHEC]')
 
-	bits=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")
-	bits=$(echo $bits | sed -e 's/, P-...//' -e 's/,//g' -e 's/  / /g')
-# FIXME: for seldom cases it might be better to parse the bit length, the Kx and go from there
-	[ -n "$bits" ] && out ", "
-	case $bits in
-		"DH 768"*)  						pr_red "$bits" ;;
-		"DH 1024"*)  						pr_litered "$bits" ;;
-		"DH 2048"*|"DH 4096"*)				pr_green "$bits" ;;
-		"ECDH 256"*|"ECDH 384"*|"ECDH 521"*)	pr_green "$bits" ;;
-		"") 								out " (no DH kx)" ;; #empty
-		*) 								pr_bold "FIXME:"; out ">$bits<" ;;
-	esac
-
+	debugme ">$what_dh|$bits<"
+	
+	[ -n "$bits" ] && [ -z "$2" ] && out ", "
+	if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]] ; then
+		[ -z "$2" ] && add="bit DH"
+		if [[ "$bits" -le 800 ]]; then
+			pr_red "$bits $add" 
+		elif [[ "$bits" -le 1280 ]]; then
+			pr_litered "$bits $add" 
+		elif [[ "$bits" -ge 2048 ]]; then
+			pr_litegreen "$bits $add"
+		else
+			out "$bits $add"
+		fi
+	# https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography, http://www.keylength.com/en/compare/
+	elif [[ $what_dh == "ECDH" ]]; then
+		[ -z "$2" ] && add="bit DH"
+		if [[ "$bits" -le 128 ]]; then 	# has that ever existed?
+			pr_red "$bits $add"
+		elif [[ "$bits" -le 163 ]]; then
+			pr_litered "$bits $add" 
+		elif [[ "$bits" -ge 224 ]]; then
+			pr_litegreen "$bits $add"
+		else
+			out "$bits $add"
+		fi
+	else
+		pr_bold "FIXME: >$what_dh|$bits<"
+	fi
+	
 	return 0
 }
 
@@ -1593,7 +1648,9 @@ server_defaults() {
 pfs() {
 	local ret
 	local none
-	local number_pfs
+	local tmpfile
+	local number_pfs 
+	local dhlen
 	local hexcode n ciph sslvers kx auth enc mac
 	# https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy -- but with RC4:
 	#local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
@@ -1602,6 +1659,7 @@ pfs() {
 
 	outln
 	pr_blue "--> Testing (perfect) forward secrecy, (P)FS"; outln " -- omitting 3DES, RC4 and Null Encryption here"
+	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL too old to show DH/ECDH bits)"
 
 	$OPENSSL ciphers -V "$pfs_ciphers" >$TMPFILE 2>/dev/null	# -V doesn't work with openssl < 1.0
 	if [ $? -ne 0 ] ; then
@@ -1628,13 +1686,18 @@ pfs() {
 		none=0
 		neat_header
 		while read hexcode n ciph sslvers kx auth enc mac; do
-			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
+			tmpfile=$TMPFILE.$hexcode
+			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$tmpfile </dev/null
 			ret2=$?
 			if [[ $ret2 -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
 				continue # no successful connect AND not verbose displaying each cipher
 			fi
 			normalize_ciphercode $hexcode
-			neat_list $HEXC $ciph $kx $enc $strength
+			if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
+				dhlen=$(read_dhbits_from_file "$tmpfile" quiet)
+				kx="$kx $dhlen"
+			fi
+			neat_list $HEXC $ciph "$kx" $enc $strength
 			let "none++"
 			if [[ "$SHOW_EACH_C" -ne 0 ]] ; then
 				if [[ $ret2 -eq 0 ]]; then
@@ -2775,7 +2838,10 @@ find_openssl_binary() {
 	OSSL_VER_PLATFORM=$($OPENSSL version -p | sed 's/^platform: //')
 	OSSL_BUILD_DATE=$($OPENSSL version -a | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
 	echo $OSSL_BUILD_DATE | grep -q "not available" && OSSL_BUILD_DATE="" 
-	export OPENSSL OSSL_VER OSSL_BUILD_DATE OSSL_VER_PLATFORM
+
+	[ $OSSL_VER_MAJOR -ne 1 ] && HAS_DH_BITS=false
+	[ "$OSSL_VER_MINOR" == "0.1" ] && HAS_DH_BITS=false
+
 	return 0
 }
 
@@ -2808,56 +2874,57 @@ help() {
 
 $PROG_NAME <options> 
 
-     <-h|--help>                           what you're looking at
-     <-b|--banner>                         displays banner + version of $PROG_NAME
-     <-v|--version>                        same as previous
-     <-V|--local>                          pretty print all local ciphers
-     <-V|--local> <pattern>                what local cipher with <pattern> is a/v?
+     <-h|--help>                       what you're looking at
+     <-b|--banner>                     displays banner + version of $PROG_NAME
+     <-v|--version>                    same as previous
+     <-V|--local>                      pretty print all local ciphers
+     <-V|--local> <pattern>            what local cipher with <pattern> is a/v?
 
 $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except ciphers per proto/each cipher)
 
-     <-e|--each-cipher>                    checks each local cipher remotely 
-     <-E|--cipher-per-proto>               checks those per protocol
-     <-f|--ciphers>                        checks common cipher suites
-     <-p|--protocols>                      checks TLS/SSL protocols 
-     <-S|--server_defaults>                displays the servers default picks and certificate info
-     <-P|--preference>                     displays the servers picks: protocol+cipher
-     <-y|--spdy|--npn>                     checks for SPDY/NPN
-     <-x|--single-cipher-test> <pattern>   tests matched <pattern> of cipher
-     <-U|--vulnerable>                     tests all vulnerabilities
-     <-B|--heartbleed>                     tests for heartbleed vulnerability
-     <-I|--ccs|--ccs-injection>            tests for CCS injection vulnerability
-     <-R|--renegotiation>                  tests renegotiation vulnerabilities
-     <-C|--compression|--crime>            tests CRIME vulnerability
-     <-T|--breach>                         tests BREACH vulnerability
-     <-O|--poodle>                         tests for POODLE (SSL) vulnerability
-     <-F|--freak>                          tests FREAK vulnerability
-     <-A|--beast>                          tests BEAST vulnerability
-     <-s|--pfs|--fs|--nsa>                 checks (perfect) forward secrecy settings
-     <-4|--rc4|--appelbaum>                which RC4 ciphers are being offered?
-     <-H|--header|--headers>               tests HSTS, HPKP, server/app banner, security headers, cookie
+     <-e|--each-cipher>                checks each local cipher remotely 
+     <-E|--cipher-per-proto>           checks those per protocol
+     <-f|--ciphers>                    checks common cipher suites
+     <-p|--protocols>                  checks TLS/SSL protocols 
+     <-S|--server_defaults>            displays the servers default picks and certificate info
+     <-P|--preference>                 displays the servers picks: protocol+cipher
+     <-y|--spdy|--npn>                 checks for SPDY/NPN
+     <-x|--single-cipher> <pattern>    tests matched <pattern> of cipher
+     <-U|--vulnerable>                 tests all vulnerabilities
+     <-B|--heartbleed>                 tests for heartbleed vulnerability
+     <-I|--ccs|--ccs-injection>        tests for CCS injection vulnerability
+     <-R|--renegotiation>              tests renegotiation vulnerabilities
+     <-C|--compression|--crime>        tests CRIME vulnerability
+     <-T|--breach>                     tests BREACH vulnerability
+     <-O|--poodle>                     tests for POODLE (SSL) vulnerability
+     <-F|--freak>                      tests FREAK vulnerability
+     <-A|--beast>                      tests BEAST vulnerability
+     <-s|--pfs|--fs|--nsa>             checks (perfect) forward secrecy settings
+     <-4|--rc4|--appelbaum>            which RC4 ciphers are being offered?
+     <-H|--header|--headers>           tests HSTS, HPKP, server/app banner, security headers, cookie
 
   special invocations:
 
-     <-t|--starttls> protocol              does a default run against a STARTTLS enabled service
-     <--mx> domain/host                    tests MX records from high to low priority (STARTTLS, port 25)
+     <-t|--starttls> protocol          does a default run against a STARTTLS enabled service
+     <--mx> domain/host                tests MX records from high to low priority (STARTTLS, port 25)
 
 
 partly mandatory parameters:
 
-     URI                   host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
-     pattern               an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
-     protocol              is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
+     URI                               host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
+     pattern                           an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
+     protocol                          is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
 
 tuning options:
 
-     --assuming-http                       if protocol check fails it assumes HTTP protocol and enforces HTTP checks
-     --ssl-native                          fallback to checks with OpenSSL where sockets are normally used
-     --sneaky                              be less verbose wrt referer headers      
-     --long                                wide output for tests like RC4 also with hexcode, kx, strength
-     --warnings <batch|off|false>          "batch" doesn't wait for keypress, "off|false" skips connection warning
-     --color                               0: no escape or other codes 1: b/w escape codes 2: color (default)
-     --debug                               1: screen output normal but debug output in itemp files. 2-6: see line ~60
+     --assuming-http                   if protocol check fails it assumes HTTP protocol and enforces HTTP checks
+     --ssl-native                      fallback to checks with OpenSSL where sockets are normally used
+     --openssl <PATH>                  use this openssl binary (default: look in \$PATH, RUN_DIR of $PROG_NAME
+     --sneaky                          be less verbose wrt referer headers      
+     --long                            wide output for tests like RC4 also with hexcode, kx, strength
+     --warnings <batch|off|false>      "batch" doesn't wait for keypress, "off|false" skips connection warning
+     --color                           0: no escape or other codes 1: b/w escape codes 2: color (default)
+     --debug                           1: screen output normal but debug output in itemp files. 2-6: see line ~60
     
 
 Need HTML output? Just pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like 
@@ -3333,7 +3400,7 @@ startup() {
 				initialize_engine 	# GOST support-
 				prettyprint_local "$2"
 				exit $? ;;
-			-x|--single-ciphers-test|--single-cipher-test|--single_cipher_test|--single_ciphers_test)
+			-x|--single-cipher|--single_cipher)
 				do_test_just_one=true
 				single_cipher=$2
 				shift;;
@@ -3435,6 +3502,9 @@ startup() {
 					help 1
 				fi
 				shift ;;
+			--openssl)
+				OPENSSL="$2"
+				shift ;;
 			--ssl_native|--ssl-native)
 				SSL_NATIVE=0 ;;
 			(--) shift
@@ -3508,8 +3578,6 @@ lets_roll() {
 
 ################# main #################
 
-find_openssl_binary
-mybanner
 
 [ -z "$PROG_DIR" ] && PROG_DIR="."
 
@@ -3520,6 +3588,8 @@ mybanner
 initialize_globals
 
 startup "$@"
+find_openssl_binary
+mybanner
 openssl_age
 maketempf
 
@@ -3538,6 +3608,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.255 2015/05/25 19:22:20 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.257 2015/05/26 10:51:09 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
