@@ -779,6 +779,7 @@ normalize_ciphercode() {
 		fi
 		HEXC="$part1$part2$part3"
 	fi
+# FIXME: we shuld just echo this and avoid the global var HEXC
 	HEXC=$(echo $HEXC | tr 'A-Z' 'a-z' |  sed 's/0x/x/') #tolower + strip leading 0
 	return 0
 }
@@ -898,6 +899,11 @@ neat_header(){
 	outln "%s-------------------------------------------------------------------------${MAP_RFC_FNAME:+----------------------------------------------}"
 }
 
+
+# arg1: hexcode
+# arg2: cipher in openssl notation
+# arg3: keyexchange
+# arg4: encryption (maybe included "export")
 neat_list(){
 	kx=$(echo "$3" | sed 's/Kx=//g')
 	enc=$(echo $4 | sed 's/Enc=//g')
@@ -1184,7 +1190,7 @@ run_std_cipherlists() {
 read_dhbits_from_file() {
 	local bits what_dh
 	local add=""
-	local old_fart=" (openssl too old to show DH bits)"
+	local old_fart=" (openssl is too old to show DH bits)"
 
 	if ! $HAS_DH_BITS; then
 		if [ -z "$2" ]; then
@@ -1225,8 +1231,6 @@ read_dhbits_from_file() {
 		else
 			out "$bits $add"
 		fi
-	else
-		pr_bold "FIXME: >$what_dh|$bits<"
 	fi
 	
 	return 0
@@ -1998,7 +2002,7 @@ sslv2_sockets() {
 			if [[ "$lines" -gt 1 ]] ;then
 				ciphers_detected=$(($V2_HELLO_CIPHERSPEC_LENGTH / 3 ))
 				if [ 0 -eq "$ciphers_detected" ] ; then
-					pr_litered "supported but couldn't detect a cipher"; outln "(may need further attention)"
+					pr_litered "supported but couldn't detect a cipher"; outln " (may need further attention)"
 				else
 					pr_red "offered (NOT ok)"; outln " -- $ciphers_detected ciphers"
 				fi
@@ -2709,51 +2713,80 @@ beast(){
 	local detected_proto
 	local detected_cbc_cipher=""
 	local higher_proto_supported=""
-	local -i ret=0
+	local openssl_ret=0
+	local vuln_beast=false
 	local spaces="                                           "
 	local cr=$'\n'
 	local first=true
 	local continued=false
+	local cbc_cipher_list="SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:DES-CBC-MD5:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5"
 
-	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for BEAST vulnerability" && outln "\n"
+	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $LONG -eq 0 ] ; then
+		 outln 
+		 pr_blue "--> Testing for BEAST vulnerability" && outln "\n"
+	fi
 	pr_bold " BEAST"; out " (CVE-2011-3389)                     "
+	[[ $LONG -eq 0 ]] && outln 
 
 	# 2) test handfull of common CBC ciphers
 	for proto in ssl3 tls1; do
 		$OPENSSL s_client -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
-		if [ $? -ne 0 ]; then
-			if $continued; then
+		if [ $? -ne 0 ]; then  	# protocol supported?
+			if $continued; then # second round: we hit TLS1:
 				pr_litegreenln "no SSL3 or TLS1"
 				return 0
-			else
+			else  			# protocol not succeeded but it';s the first time
 				continued=true
 				continue			# protocol no supported, so we do not need to check each cipher with that protocol
 			fi
+		fi # protocol succeeded
+		# protocol with cbc_cipher check follows now
+
+		if [[ $LONG -eq 0 ]] ; then
+			outln "\n $(echo $proto | tr '[a-z]' '[A-Z]'):";
+			neat_header # NOTTHATNICE: we display the header also if in the end no cbc cipher is available on the client side
 		fi
-		while read hexcode dash cbc_cipher sslvers kx auth enc mac export ; do
+		while read hexcode dash cbc_cipher sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
-			#normalize_ciphercode $hexcode
-			#neat_list $HEXC $ciph $kx $enc | grep -wai "$arg"
-			if [ $? -eq 0 ]; then
-				detected_cbc_cipher="$detected_cbc_cipher ""$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
+			openssl_ret=$?
+			[[ $openssl_ret -eq 0 ]] && vuln_beast=true
+			if [ $LONG -eq 0 ]; then
+				normalize_ciphercode $hexcode
+				if [[ "$SHOW_EACH_C" -ne 0 ]]; then
+					neat_list $HEXC $cbc_cipher $kx $enc
+					if [[ $openssl_ret -eq 0 ]]; then
+						pr_brownln "available"
+					else
+						outln "not a/v"
+					fi
+				else
+					[[ $openssl_ret -eq 0 ]] && neat_list $HEXC $cbc_cipher $kx $enc && outln
+				fi
+			else # short display:
+				if [ $openssl_ret -eq 0 ]; then
+					detected_cbc_cipher="$detected_cbc_cipher ""$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
+					vuln_beast=true
+				fi
 			fi
 		done < <($OPENSSL ciphers -V 'ALL:eNULL' | grep -a CBC)   	# -V doesn't work with openssl < 1.0
 		#    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
 
-		#detected_cbc_cipher=$(echo $detected_cbc_cipher | sed 's/ //g')
-		if [ -z "$detected_cbc_cipher" ]; then
-			[[ $proto == "tls1" ]] && ! $first && printf "$spaces"
-			pr_litegreenln "no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
-			first=false
+		if [ $LONG -ne 0 ]; then
+			if [ -n "$detected_cbc_cipher" ]; then
+				detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
+				! $first && out "$spaces"
+				out "$(echo $proto | tr '[a-z]' '[A-Z]'):"; pr_brownln "$detected_cbc_cipher"
+				detected_cbc_cipher="" # empty for next round
+				first=false
+			else
+				[[ $proto == "tls1" ]] && ! $first && printf "$spaces"
+				pr_litegreenln "no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
+				first=false
+			fi
 		else
-			detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
-			[ $ret -eq 1 ] && out "$spaces"
-			out "$(echo $proto | tr '[a-z]' '[A-Z]'):"; pr_brownln "$detected_cbc_cipher"
-			ret=1
-			detected_cbc_cipher=""
-			first=false
+			$vuln_beast || pr_litegreenln " no CBC ciphers for $(echo $proto | tr '[a-z]' '[A-Z]') (OK)"
 		fi
-	done  
+	done  # for proto in ssl3 tls1
 
 	# 2) support for TLS 1.1+1.2?
 	for proto in tls1_1 tls1_2; do
@@ -2762,14 +2795,22 @@ beast(){
 			higher_proto_supported="$higher_proto_supported ""$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol .*://' -e 's/ //g')"
 		fi
 	done
-	if [ $ret -eq 1 ] ; then
-		[ ! -z "$higher_proto_supported" ] && outln "${spaces}-- but also supports higher protocols (possible mitigation):$higher_proto_supported"
+	if $vuln_beast ; then
+		if [ ! -z "$higher_proto_supported" ] ; then
+			if [ $LONG -eq 0 ]; then
+				outln
+				pr_brown "VULNERABLE" 
+				outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
+			else
+				outln "${spaces}-- but also supports higher protocols (possible mitigation):$higher_proto_supported"
+			fi
+		fi
 	fi
 
 #	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
 
 	tmpfile_handle $FUNCNAME.txt
-	return $ret
+	return 
 }
 
 lucky13() {
@@ -2784,8 +2825,8 @@ lucky13() {
 # https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
 # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 rc4() {
-	local ret
-	local hexcode n ciph sslvers kx auth enc mac strength
+	local ret rc4_offered
+	local hexcode n ciph sslvers kx auth enc mac export
 
 	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $LONG -eq 0 ] ; then
 		outln 
@@ -2809,7 +2850,7 @@ rc4() {
 			fi
 			if [ $LONG -eq 0 ]; then
 				normalize_ciphercode $hexcode
-				neat_list $HEXC $ciph $kx $enc $strength
+				neat_list $HEXC $ciph $kx $enc 
 				if [[ "$SHOW_EACH_C" -ne 0 ]]; then
 					if [[ $ret -eq 0 ]]; then
 						pr_litered "available"
@@ -2931,57 +2972,58 @@ help() {
 
 $PROG_NAME <options> 
 
-     <-h|--help>                       what you're looking at
-     <-b|--banner>                     displays banner + version of $PROG_NAME
-     <-v|--version>                    same as previous
-     <-V|--local>                      pretty print all local ciphers
-     <-V|--local> <pattern>            what local cipher with <pattern> is a/v?
+     <-h|--help>                    what you're looking at
+     <-b|--banner>                  displays banner + version of $PROG_NAME
+     <-v|--version>                 same as previous
+     <-V|--local>                   pretty print all local ciphers
+     <-V|--local> <pattern>         what local cipher with <pattern> is a/v?
 
 $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except ciphers per proto/each cipher)
 
-     <-e|--each-cipher>                checks each local cipher remotely 
-     <-E|--cipher-per-proto>           checks those per protocol
-     <-f|--ciphers>                    checks common cipher suites
-     <-p|--protocols>                  checks TLS/SSL protocols 
-     <-S|--server_defaults>            displays the servers default picks and certificate info
-     <-P|--preference>                 displays the servers picks: protocol+cipher
-     <-y|--spdy|--npn>                 checks for SPDY/NPN
-     <-x|--single-cipher> <pattern>    tests matched <pattern> of cipher
-     <-U|--vulnerable>                 tests all vulnerabilities
-     <-B|--heartbleed>                 tests for heartbleed vulnerability
-     <-I|--ccs|--ccs-injection>        tests for CCS injection vulnerability
-     <-R|--renegotiation>              tests renegotiation vulnerabilities
-     <-C|--compression|--crime>        tests CRIME vulnerability
-     <-T|--breach>                     tests BREACH vulnerability
-     <-O|--poodle>                     tests for POODLE (SSL) vulnerability
-     <-F|--freak>                      tests FREAK vulnerability
-     <-A|--beast>                      tests BEAST vulnerability
-     <-s|--pfs|--fs|--nsa>             checks (perfect) forward secrecy settings
-     <-4|--rc4|--appelbaum>            which RC4 ciphers are being offered?
-     <-H|--header|--headers>           tests HSTS, HPKP, server/app banner, security headers, cookie
+     <-e|--each-cipher>             checks each local cipher remotely 
+     <-E|--cipher-per-proto>        checks those per protocol
+     <-f|--ciphers>                 checks common cipher suites
+     <-p|--protocols>               checks TLS/SSL protocols 
+     <-S|--server_defaults>         displays the servers default picks and certificate info
+     <-P|--preference>              displays the servers picks: protocol+cipher
+     <-y|--spdy|--npn>              checks for SPDY/NPN
+     <-x|--single-cipher> pattern   tests matched <pattern> of cipher
+     <-U|--vulnerable>              tests all vulnerabilities
+     <-B|--heartbleed>              tests for heartbleed vulnerability
+     <-I|--ccs|--ccs-injection>     tests for CCS injection vulnerability
+     <-R|--renegotiation>           tests for renegotiation vulnerabilities
+     <-C|--compression|--crime>     tests for CRIME vulnerability
+     <-T|--breach>                  tests for BREACH vulnerability
+     <-O|--poodle>                  tests for POODLE (SSL) vulnerability
+     <-F|--freak>                   tests for FREAK vulnerability
+     <-A|--beast>                   tests for BEAST vulnerability
+     <-s|--pfs|--fs|--nsa>          checks (perfect) forward secrecy settings
+     <-4|--rc4|--appelbaum>         which RC4 ciphers are being offered?
+     <-H|--header|--headers>        tests HSTS, HPKP, server/app banner, security headers, cookie
 
   special invocations:
 
-     <-t|--starttls> protocol          does a default run against a STARTTLS enabled service
-     <--mx> domain/host                tests MX records from high to low priority (STARTTLS, port 25)
+     <-t|--starttls> protocol       does a default run against a STARTTLS enabled service
+     <--mx> domain/host             tests MX records from high to low priority (STARTTLS, port 25)
 
 
 partly mandatory parameters:
 
-     URI                               host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
-     pattern                           an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
-     protocol                          is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
+     URI                            host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
+     pattern                        an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
+     protocol                       is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
 
 tuning options:
 
-     --assuming-http                   if protocol check fails it assumes HTTP protocol and enforces HTTP checks
-     --ssl-native                      fallback to checks with OpenSSL where sockets are normally used
-     --openssl <PATH>                  use this openssl binary (default: look in \$PATH, RUN_DIR of $PROG_NAME
-     --sneaky                          be less verbose wrt referer headers      
-     --long                            wide output for tests like RC4 also with hexcode, kx, strength
-     --warnings <batch|off|false>      "batch" doesn't wait for keypress, "off|false" skips connection warning
-     --color                           0: no escape or other codes 1: b/w escape codes 2: color (default)
-     --debug                           1: screen output normal but debug output in itemp files. 2-6: see line ~60
+     --assuming-http                if protocol check fails it assumes HTTP protocol and enforces HTTP checks
+     --ssl-native                   fallback to checks with OpenSSL where sockets are normally used
+     --openssl <PATH>               use this openssl binary (default: look in \$PATH, RUN_DIR of $PROG_NAME
+     --sneaky                       be less verbose wrt referer headers      
+     --wide                         wide output for tests like RC4, BEAST. also with hexcode, kx, strength
+     --show-each                    for each wide output (see --wide, -V, -x, e, -E): display all ciphers not only succeeded ones
+     --warnings <batch|off|false>   "batch" doesn't wait for keypress, "off|false" skips connection warning
+     --color                        0: no escape or other codes,  1: b/w escape codes,  2: color (default)
+     --debug                        1: screen output normal but debug output in itemp files.  2-6: see line ~60
     
 
 Need HTML output? Just pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like 
@@ -3546,7 +3588,7 @@ startup() {
 				shift
 				do_tls_sockets=true
 				outln "TLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" ;;
-               --long) LONG=0 ;;
+               --wide) LONG=0 ;;
 			--assuming-http|--assuming_http|--assume_http|--assume-http)
 				ASSUMING_HTTP=0 ;;
 			--sneaky)
@@ -3557,7 +3599,7 @@ startup() {
 					default)   		pr_magentaln "warnings can be either \"batch\", \"off\" or \"false\"" ;;
 				esac
 				shift ;;
-			--show-each-cipher)
+			--show-each|--show_each)
 				SHOW_EACH_C=1 ;; #FIXME: sense is vice versa
 			--debug)
 				DEBUG="$2"
@@ -3675,6 +3717,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.261 2015/05/27 12:28:17 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.262 2015/05/27 15:04:34 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
