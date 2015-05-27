@@ -834,24 +834,17 @@ std_cipherlists() {
 		[[ $DEBUG -ge 2 ]] && cat $TMPFILE
 		case $3 in
 			0)	# ok to offer
-				if [[ $ret -eq 0 ]]; then	# was offered
-					ok 1 0			# pr_green
-				else
-					ok 0 0			# black
-				fi ;;
+				[[ $ret -eq 0 ]] && \
+					pr_greenln "offered (OK)" || \
+					pr_boldln "not offered" ;;
 			2) 	# not really bad
-				if [[ $ret -eq 0 ]]; then
-					ok 2 0			# offered in normal
-				else
-					ok 0 1              # not offered also in normal
-				fi;;
+				[[ $ret -eq 0 ]] && \
+					outln "offered" || \
+					pr_greenln "not offered (OK)" ;;
 			*) # the ugly rest
-				if [[ $ret -eq 0 ]]; then
-					ok 1 1			# was offered! --> pr_red
-				else
-					#ok 0 0			# was not offered, that's ok
-					ok 0 1			# was not offered --> pr_green
-				fi ;;
+				[[ $ret -eq 0 ]] && \
+					pr_redln "offered (NOT ok)" || \
+					pr_greenln "not offered (OK)" ;;
 		esac
 		tmpfile_handle $FUNCNAME.txt
 	else
@@ -1127,7 +1120,7 @@ runprotocols() {
 	case $? in
 		0) pr_literedln "offered (NOT ok)" ;;
 		1) pr_greenln "not offered (OK)"   ;;
-		2) ok 0 1 ;;   #FIXME: downgraded. still missing a testcase here
+		2) pr_magentaln "#FIXME: downgraded. still missing a testcase here" ;;
 		5) pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"  ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
@@ -1141,7 +1134,7 @@ runprotocols() {
 	case $? in
 		0) outln "offered" ;;      # no GCM, thus only normal print
 		1) outln "not offered" ;;  # neither good or bad
-		# 2) ok 0 0 ;; downgraded 
+		2) pr_magentaln "downgraded. still missing a testcase here" ;;
 		5) outln "supported but couldn't detect a cipher (may need debugging)"  ;;	# protocol ok, but no cipher
 		7) ;;		# no local support
 	esac
@@ -1209,10 +1202,12 @@ read_dhbits_from_file() {
 	[ -n "$bits" ] && [ -z "$2" ] && out ", "
 	if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]] ; then
 		[ -z "$2" ] && add="bit DH"
-		if [[ "$bits" -le 800 ]]; then
+		if [[ "$bits" -le 600 ]]; then
 			pr_red "$bits $add" 
-		elif [[ "$bits" -le 1280 ]]; then
+		elif [[ "$bits" -le 800 ]]; then
 			pr_litered "$bits $add" 
+		elif [[ "$bits" -le 1280 ]]; then
+			pr_brown "$bits $add" 
 		elif [[ "$bits" -ge 2048 ]]; then
 			pr_litegreen "$bits $add"
 		else
@@ -2310,7 +2305,7 @@ ccs_injection(){
 	# see https://www.openssl.org/news/secadv_20140605.txt
 	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
-	pr_bold " CCS "; out " (CVE-2014-0224)                      "
+	pr_bold " CCS"; out " (CVE-2014-0224)                       "
 
      if [ ! -z "$STARTTLS" ] ; then
 		outln "(not yet implemented for STARTTLS)"
@@ -2642,7 +2637,7 @@ freak() {
 	local addtl_warning=""
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for FREAK attack" && outln "\n"
-	pr_bold " FREAK "; out " (CVE-2015-0204), experimental      "
+	pr_bold " FREAK"; out " (CVE-2015-0204), experimental       "
 	no_exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | egrep -a "^EXP.*RSA" | wc -l | sed 's/ //g')
 	exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/^EXP.*RSA/ {print $1}' | tr '\n' ':')
 	debugme echo $exportrsa_ciphers
@@ -2651,11 +2646,11 @@ freak() {
 	case $no_exportrsa_ciphers in
 		0) 	pr_magentaln "Local problem: your $OPENSSL doesn't have any EXPORT RSA ciphers configured" 
 			return 3 ;;
-		1,2,3) 
+		1|2|3) 
 			addtl_warning=" (tested only with $no_exportrsa_ciphers out of 9 ciphers)" ;;
-		7,8,9,10,11)
+		8|9|10|11)
 			addtl_warning="" ;;
-		4,5,6) 
+		4|5|6|7) 
 			addtl_warning=" (tested with $no_exportrsa_ciphers/9 ciphers)" ;;
 	esac
 	$OPENSSL s_client $STARTTLS -cipher $exportrsa_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
@@ -2671,6 +2666,41 @@ freak() {
 	tmpfile_handle $FUNCNAME.txt
 	return $ret	
 }
+
+
+# see https://weakdh.org/logjam.html
+logjam() {
+	local ret
+	local exportdhe_ciphers="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
+	local -i no_exportdhe_ciphers
+	local addtl_warning=""
+
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for LOGJAM vulnerability" && outln "\n"
+	pr_bold " LOGJAM"; out " (CVE-2015-4000), experimental      "
+	no_exportdhe_ciphers=$($OPENSSL ciphers "$exportdhe_ciphers" | sed 's/:/ /g' | wc -w | sed 's/ //g')
+	case $no_exportdhe_ciphers in
+		0) 	pr_magentaln "Local problem: your $OPENSSL doesn't have any DHE EXPORT ciphers configured" 
+			return 3 ;;
+		1|2|3) addtl_warning=" (tested only w/ $no_exportdhe_ciphers/4 ciphers)" ;;
+		4)	;;
+	esac
+	$OPENSSL s_client $STARTTLS -cipher $exportdhe_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
+	ret=$?
+	[ "$VERBERR" -eq 0 ] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	addtl_warning="$addtl_warning, precomputed primes not checked yet. \"$PROG_NAME -E\" spots candidates"
+	if [ $ret -eq 0 ]; then
+		pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers"
+	else
+		pr_green "not vulnerable (OK)"; out "$addtl_warning"
+	fi
+	outln
+
+	tmpfile_handle $FUNCNAME.txt
+	return $ret
+}
+# FIXME: perfect candidate for replacement by sockets
+
+
 
 
 # Browser Exploit Against SSL/TLS: don't use CBC Ciphers in SSLv3 TLSv1.0
@@ -3339,6 +3369,7 @@ initialize_globals() {
 	do_cipher_per_proto=false
 	do_crime=false
 	do_freak=false
+	do_logjam=false
 	do_header=false
 	do_heartbleed=false
 	do_mx_allentries=false
@@ -3364,6 +3395,7 @@ set_scanning_defaults() {
 	do_ccs_injection=true
 	do_crime=true
 	do_freak=true
+	do_logjam=true
 	do_header=true
 	do_heartbleed=true
 	do_pfs=true
@@ -3383,7 +3415,7 @@ query_globals() {
 	local true_nr=0
 
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
-     		do_freak do_header do_heartbleed do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
+     		do_freak do_logjam do_header do_heartbleed do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
      		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
      		do_test_just_one do_tls_sockets; do
 				[ "${!gbl}" == "true" ] && let true_nr++
@@ -3396,7 +3428,7 @@ debug_globals() {
 	local gbl
 
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
-     		do_freak do_header do_heartbleed do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
+     		do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
      		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
      		do_test_just_one do_tls_sockets; do
 		printf "%-22s = %s\n" $gbl "${!gbl}" 
@@ -3469,6 +3501,7 @@ startup() {
 				do_freak=true
 				do_beast=true
 				do_rc4=true
+				do_logjam=true
 				VULN_COUNT=10 ;;
 			-B|--heartbleed)
 				do_heartbleed=true
@@ -3491,11 +3524,15 @@ startup() {
 			-F|--freak)
 				do_freak=true
 				let "VULN_COUNT++" ;;
+			-J|--logjam)
+				do_logjam=true
+				let "VULN_COUNT++" ;;
 			-A|--beast)
 				do_beast=true
 				let "VULN_COUNT++" ;;
 			-4|--rc4|--appelbaum)
-				do_rc4=true;;
+				do_rc4=true
+				let "VULN_COUNT++" ;;
 			-s|--pfs|--fs|--nsa)
 				do_pfs=true;;
 			-q) ### this is a development feature and will disappear:
@@ -3597,6 +3634,7 @@ lets_roll() {
 	${do_breach} && { breach "$URL_PATH" ; ret=$(($? + ret)); }
 	${do_ssl_poodle} && { ssl_poodle; ret=$(($? + ret)); }
 	${do_freak} && { freak; ret=$(($? + ret)); }
+	${do_logjam} && { logjam; ret=$(($? + ret)); }
 	${do_beast} && { beast; ret=$(($? + ret)); }
 	${do_rc4} && { rc4; ret=$(($? + ret)); }
 
@@ -3637,6 +3675,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.260 2015/05/27 09:19:29 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.261 2015/05/27 12:28:17 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
