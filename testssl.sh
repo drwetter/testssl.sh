@@ -337,6 +337,8 @@ if [[ "$COLOR" -eq 2 ]]; then
 	green=$(tput setaf 2) 
 	brown=$(tput setaf 3) 
 	blue=$(tput setaf 4) 
+	magenta=$(tput setaf 5)
+	cyan=$(tput setaf 6)
 	grey=$(tput setaf 7)
 	yellow=$(tput setaf 3; tput bold)
 	off=$(tput sgr0)
@@ -2436,7 +2438,7 @@ renego() {
 	case "$OSSL_VER" in
 		0.9.8*)  			# we need this for Mac OSX unfortunately
 			case "$OSSL_VER_APPENDIX" in
-				[a-l]) pr_magenta "Your $OPENSSL $OSSL_VER cannot test the secure renegotiation vulnerability"
+				[a-l]) pr_magentaln "Local Problem: $OPENSSL cannot test this secure renegotiation vulnerability"
 					  return 3 ;;
 				[m-z]) ;; # all ok
 			esac ;;
@@ -2633,31 +2635,40 @@ tls_poodle() {
 	return 7
 }
 
+count_ciphers() {
+	echo "$1" | sed 's/:/\n/g' | wc -l | sed 's/ //g'
+}
+
+actually_supported_ciphers() {
+	$OPENSSL ciphers "$1"
+}
+	
+
 
 # Factoring RSA Export Keys: don't use EXPORT RSA ciphers, see https://freakattack.com/
 freak() {
 	local ret
-	local exportrsa_ciphers
+	local -i no_supported_ciphers=0
+	# with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
+	local exportrsa_cipher_list="EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-RC4-MD5:EXP-RC4-MD5"
 	local addtl_warning=""
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for FREAK attack" && outln "\n"
 	pr_bold " FREAK"; out " (CVE-2015-0204), experimental       "
-	no_exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | egrep -a "^EXP.*RSA" | wc -l | sed 's/ //g')
-	exportrsa_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/^EXP.*RSA/ {print $1}' | tr '\n' ':')
-	debugme echo $exportrsa_ciphers
-	# with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
-	# EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5
-	case $no_exportrsa_ciphers in
+
+	no_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportrsa_cipher_list))
+
+	case $no_supported_ciphers in
 		0) 	pr_magentaln "Local problem: your $OPENSSL doesn't have any EXPORT RSA ciphers configured" 
 			return 3 ;;
 		1|2|3) 
-			addtl_warning=" (tested only with $no_exportrsa_ciphers out of 9 ciphers)" ;;
+			addtl_warning=" ($magenta""tested only with $no_supported_ciphers out of 9 ciphers only!$off)" ;;
 		8|9|10|11)
 			addtl_warning="" ;;
 		4|5|6|7) 
-			addtl_warning=" (tested with $no_exportrsa_ciphers/9 ciphers)" ;;
+			addtl_warning=" (tested with $no_supported_ciphers/9 ciphers)" ;;
 	esac
-	$OPENSSL s_client $STARTTLS -cipher $exportrsa_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
+	$OPENSSL s_client $STARTTLS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
@@ -2667,6 +2678,9 @@ freak() {
 	fi
 	outln 
 
+	debugme echo $(actually_supported_ciphers $exportrsa_cipher_list)
+	debugme echo $no_supported_ciphers
+
 	tmpfile_handle $FUNCNAME.txt
 	return $ret	
 }
@@ -2675,20 +2689,23 @@ freak() {
 # see https://weakdh.org/logjam.html
 logjam() {
 	local ret
-	local exportdhe_ciphers="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
-	local -i no_exportdhe_ciphers
+	local exportdhe_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
+	local -i no_supported_ciphers=0
 	local addtl_warning=""
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for LOGJAM vulnerability" && outln "\n"
 	pr_bold " LOGJAM"; out " (CVE-2015-4000), experimental      "
-	no_exportdhe_ciphers=$($OPENSSL ciphers "$exportdhe_ciphers" | sed 's/:/ /g' | wc -w | sed 's/ //g')
-	case $no_exportdhe_ciphers in
+
+	no_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdhe_cipher_list))
+
+	case $no_supported_ciphers in
 		0) 	pr_magentaln "Local problem: your $OPENSSL doesn't have any DHE EXPORT ciphers configured" 
 			return 3 ;;
-		1|2|3) addtl_warning=" (tested only w/ $no_exportdhe_ciphers/4 ciphers)" ;;
+		1|2) addtl_warning=" ($magenta""tested w/ $no_supported_ciphers/4 ciphers only!$off)" ;;
+		3) addtl_warning=" (tested w/ $no_supported_ciphers/4 ciphers)" ;;
 		4)	;;
 	esac
-	$OPENSSL s_client $STARTTLS -cipher $exportdhe_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
+	$OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	addtl_warning="$addtl_warning, precomputed primes not checked yet. \"$PROG_NAME -E\" spots candidates"
@@ -2699,10 +2716,13 @@ logjam() {
 	fi
 	outln
 
+	debugme echo $(actually_supported_ciphers $exportdhe_cipher_list)
+	debugme echo $no_supported_ciphers
+
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
-# FIXME: perfect candidate for replacement by sockets
+# FIXME: perfect candidate for replacement by sockets,so is freak
 
 
 
@@ -2711,7 +2731,7 @@ logjam() {
 beast(){
 	local hexcode dash cbc_cipher sslvers kx auth enc mac export
 	local detected_proto
-	local detected_cbc_cipher=""
+	local detected_cbc_ciphers=""
 	local higher_proto_supported=""
 	local openssl_ret=0
 	local vuln_beast=false
@@ -2764,7 +2784,7 @@ beast(){
 				fi
 			else # short display:
 				if [ $openssl_ret -eq 0 ]; then
-					detected_cbc_cipher="$detected_cbc_cipher ""$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
+					detected_cbc_ciphers="$detected_cbc_ciphers ""$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
 					vuln_beast=true
 				fi
 			fi
@@ -2772,11 +2792,11 @@ beast(){
 		#    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
 
 		if [ $LONG -ne 0 ]; then
-			if [ -n "$detected_cbc_cipher" ]; then
-				detected_cbc_cipher=$(echo "$detected_cbc_cipher" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
+			if [ -n "$detected_cbc_ciphers" ]; then
+				detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
 				! $first && out "$spaces"
-				out "$(echo $proto | tr '[a-z]' '[A-Z]'):"; pr_brownln "$detected_cbc_cipher"
-				detected_cbc_cipher="" # empty for next round
+				out "$(echo $proto | tr '[a-z]' '[A-Z]'):"; pr_brownln "$detected_cbc_ciphers"
+				detected_cbc_ciphers="" # empty for next round
 				first=false
 			else
 				[[ $proto == "tls1" ]] && ! $first && printf "$spaces"
@@ -2826,7 +2846,8 @@ lucky13() {
 # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 rc4() {
 	local ret rc4_offered
-	local hexcode n ciph sslvers kx auth enc mac export
+	local hexcode dash rc4_cipher sslvers kx auth enc mac export
+	local rc4_ciphers_list="ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:DHE-DSS-RC4-SHA:AECDH-RC4-SHA:ADH-RC4-MD5:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:RC4-MD5:RSA-PSK-RC4-SHA:PSK-RC4-SHA:KRB5-RC4-SHA:KRB5-RC4-MD5:RC4-64-MD5:EXP1024-DHE-DSS-RC4-SHA:EXP1024-RC4-SHA:EXP-ADH-RC4-MD5:EXP-RC4-MD5:EXP-RC4-MD5:EXP-KRB5-RC4-SHA:EXP-KRB5-RC4-MD5"
 
 	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $LONG -eq 0 ] ; then
 		outln 
@@ -2836,21 +2857,21 @@ rc4() {
 
 	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 	# -V doesn't work with openssl < 1.0
 	[ $LONG -eq 0 ] && [ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
-	$OPENSSL s_client -cipher $($OPENSSL ciphers RC4) $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
+	$OPENSSL s_client -cipher $rc4_ciphers_list $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
 		pr_litered "VULNERABLE (NOT ok): "
 		[[ $LONG -eq 0 ]] && outln "\n"
 		rc4_offered=1
 		[[ $LONG -eq 0 ]] && neat_header
-		while read hexcode n ciph sslvers kx auth enc mac; do
-			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
+		while read hexcode dash rc4_cipher sslvers kx auth enc mac; do
+			$OPENSSL s_client -cipher $rc4_cipher $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
 			ret=$? 		# here we have a fp with openssl < 1.0
 			if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
 				continue	# no successful connect AND not verbose displaying each cipher
 			fi
 			if [ $LONG -eq 0 ]; then
 				normalize_ciphercode $hexcode
-				neat_list $HEXC $ciph $kx $enc 
+				neat_list $HEXC $rc4_cipher $kx $enc 
 				if [[ "$SHOW_EACH_C" -ne 0 ]]; then
 					if [[ $ret -eq 0 ]]; then
 						pr_litered "available"
@@ -2863,7 +2884,7 @@ rc4() {
 				fi
 				outln
 			else
-				pr_litered "$ciph "
+				pr_litered "$rc4_cipher "
 			fi
 		done < $TMPFILE
 		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
@@ -3717,6 +3738,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.262 2015/05/27 15:04:34 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.263 2015/05/27 21:31:24 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
