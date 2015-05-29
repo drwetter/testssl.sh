@@ -3,21 +3,22 @@
 
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/drwetter/testssl.sh?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-`testssl.sh` is a free command line tool which checks a server's service on any port for the support of TLS/SSL ciphers, protocols as well as some cryptographic flaws. It's designed to provide clear output for a "is this good or bad" decision.
+`testssl.sh` is a free command line tool which checks a server's service on any port for the support of TLS/SSL ciphers, protocols as well as some cryptographic flaws. It's designed to provide clear output for your "is this good or bad" decision.
 
-It is working on every Linux distribution out of the box with the limitations of disabled features from the openssl client. It also works on BSD and other Unices out of the box, supposed they have `/bin/bash` and standard tools like sed and awk installed. MacOS X and Windows (using MSYS2) work too. 
+It is working on every Linux distribution out of the box with some limitations of disabled features from the openssl client -- some workarounds are done with bash-socket-based checks. It also works on BSD and other Unices out of the box, supposed they have `/bin/bash` and standard tools like sed and awk installed. MacOS X and Windows (using MSYS2) work too. OpenSSL version >= 1 is highly recommended.
 
 On github you will find in the master branch the development version of the software -- with new features and maybe some bugs. For the stable version and a more thorough description of the software please see [testssl.sh](https://testssl.sh/ "Go to the site with the stable version and more documentation"). 
 
-New features in this release are / will be
+New features in the upcoming stable release 2.6 are: 
 
-* certificate information (done), 
-* more HTTP header infos (partly done, needs a bit f cleanup), 
-* protocol check via bash sockets (SSLv2: done, for others: function need to be called)
-* maybe cipher check via bash sockets (not done yet)
-* debug file handling (ongoing)
-* BEAST (works, need some polishing for the output)
+* display matching key (HPKP)
+* logjam, not named yet, but display dh/ecdh bits on negotiated and every cipher
 
-Contributions, feedback, also bug reports are welcome. For contributions please note: One patch per feature -- bug fix/improvement.
+more see https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A%222.6+%2F+2.5dev%22
+
+
+Contributions, feedback, also bug reports are welcome. For contributions please note: One patch per feature -- bug fix/improvement. Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
+
+Update notification here or @ [twitter](https://twitter.com/drwetter). 
 
 
