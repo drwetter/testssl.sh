@@ -59,7 +59,7 @@ SWCONTACT="dirk aet testssl dot sh"
 
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname $0)
-PROG_DIR=$(dirname $(readlink "$BASH_SOURCE")) 2>/dev/null
+readonly PROG_DIR=$(readlink "$BASH_SOURCE") 2>/dev/null
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
@@ -98,6 +98,12 @@ readonly ECHO="/usr/bin/printf --"		# works under Linux, BSD, MacOS.
 TERM_DWITH=${COLUMNS:-$(tput cols)} 	# for future costum line wrapping 
 TERM_CURRPOS=0						#   ^^^ we also need to find out the length or current pos in the line
 readonly SYSTEM=$(uname -s)			# OS
+if date --help >/dev/null 2>&1; then
+	readonly HAS_GNUDATE=true
+else
+	readonly HAS_GNUDATE=false
+fi
+
 
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 TEMPDIR=""
@@ -1458,7 +1464,7 @@ server_defaults() {
 		now=$(date "+%s")
 		HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $TMPFILE)
 		if [ -n "$HTTP_TIME" ] ; then
-			if [[ $(date --help 2>/dev/null) ]]; then
+			if $HAS_GNUDATE ; then
 				HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
 			else
 				HTTP_TIME=$(date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>/dev/null) # the trailing \r confuses BSD flavors otherwise
@@ -1617,7 +1623,7 @@ server_defaults() {
 		fi
 	fi
 
-	if [[ $(date --help 2>/dev/null) ]]; then
+	if $HAS_GNUDATE ; then
 		enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
 		startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
 	else
@@ -1950,7 +1956,7 @@ display_tls_serverhello() {
 	tls_hello_protocol2="${tls_hello_ascii:18:4}"
 	tls_hello_time="${tls_hello_ascii:22:8}"
 	TLS_TIME=$(printf "%d\n" 0x$tls_hello_time)
-	if [[ $(date --help 2> /dev/null ) ]]; then
+	if $HAS_GNUDATE ; then
 		tls_time=$(date --date="@$TLS_TIME" "+%Y-%m-%d %r")
 	else
 		tls_time=$(date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r")
@@ -3126,10 +3132,12 @@ PROG_DIR: $PROG_DIR
 RUN_DIR: $RUN_DIR
 MAP_RFC_FNAME: $MAP_RFC_FNAME
 
+
 CAPATH: $CAPATH
 ECHO: $ECHO
 COLOR: $COLOR
 TERM_DWITH: $TERM_DWITH
+HAS_GNUDATE: $HAS_GNUDATE
 
 SHOW_LOC_CIPH: $SHOW_LOC_CIPH
 SHOW_EACH_C: $SHOW_EACH_C
@@ -3735,7 +3743,8 @@ lets_roll() {
 
 # mapping file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
 # www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
-[ -r "$PROG_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$PROG_DIR/mapping-rfc.txt"
+[ -r "$RUN_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$RUN_DIR/mapping-rfc.txt"
+[ -r "$(dirname $PROG_DIR/)mapping-rfc.txt" ] && MAP_RFC_FNAME="$(dirname $PROG_DIR)/mapping-rfc.txt"
 
 initialize_globals
 
@@ -3760,6 +3769,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.264 2015/05/29 08:36:13 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.265 2015/05/29 12:12:21 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
