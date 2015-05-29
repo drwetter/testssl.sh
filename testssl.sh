@@ -1458,10 +1458,12 @@ server_defaults() {
 		now=$(date "+%s")
 		HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $TMPFILE)
 		if [ -n "$HTTP_TIME" ] ; then
-			case $SYSTEM in
-				*BSD|Darwin)   HTTP_TIME=$(date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>/dev/null) ;; # the trailing \r confuses BSD flavors otherwise
-				*) 			HTTP_TIME=$(date --date="$HTTP_TIME" "+%s") ;;
-			esac
+			if [[ $(date --help 2>/dev/null) ]]; then
+				HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
+			else
+				HTTP_TIME=$(date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>/dev/null) # the trailing \r confuses BSD flavors otherwise
+			fi
+
 			difftime=$(($now - $HTTP_TIME))
 			[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
 			out "$difftime sec from localtime";
@@ -1598,7 +1600,7 @@ server_defaults() {
 	out " Certificate Expiration       "
 	expire=$($OPENSSL x509 -in $HOSTCERT -checkend 0)
 	if ! echo $expire | grep -qw not; then
-     	pr_red "expired!"
+	pr_red "expired!"
 	else
 		SECS2WARN=$((24 * 60 * 60 * $DAYS2WARN2))  # low threshold first
 	     expire=$($OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN)
@@ -1608,27 +1610,26 @@ server_defaults() {
 			if echo "$expire" | grep -qw not; then
 				pr_litegreen ">= $DAYS2WARN1 days"
 			else
-	     		pr_brown "expires < $DAYS2WARN1 days"
+			pr_brown "expires < $DAYS2WARN1 days"
 			fi
 		else
-	     		pr_litered "expires < $DAYS2WARN2 days!"
+			pr_litered "expires < $DAYS2WARN2 days!"
 		fi
 	fi
-	case $SYSTEM in
-		*BSD|Darwin*)
-			enddate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
-			startdate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
-			;;
-		*)
-			enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
-			startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
-			;;
-	esac
+
+	if [[ $(date --help 2>/dev/null) ]]; then
+		enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
+		startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
+	else
+		enddate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate | cut -d= -f 2)" +"%F %H:%M %z")
+		startdate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate | cut -d= -f 2)" +"%F %H:%M")
+	fi
+
 	outln " ($startdate --> $enddate)"
 
 	savedir=$(pwd); cd $TEMPDIR
 	$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | \
-    		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
+		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
 	nrsaved=$(ls $TEMPDIR/level?.crt 2>/dev/null | wc -w | sed 's/^ *//')
 	outln " # of certificates provided   $nrsaved"
 	cd "$savedir"
@@ -1949,10 +1950,11 @@ display_tls_serverhello() {
 	tls_hello_protocol2="${tls_hello_ascii:18:4}"
 	tls_hello_time="${tls_hello_ascii:22:8}"
 	TLS_TIME=$(printf "%d\n" 0x$tls_hello_time)
-	case $SYSTEM in
-		*BSD|Darwin)	tls_time=$(date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r") ;;
-		*)			tls_time=$(date --date="@$TLS_TIME" "+%Y-%m-%d %r") ;;
-	esac
+	if [[ $(date --help 2> /dev/null ) ]]; then
+		tls_time=$(date --date="@$TLS_TIME" "+%Y-%m-%d %r")
+	else
+		tls_time=$(date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r")
+	fi
 	tls_sid_len=$(printf "%d\n" 0x${tls_hello_ascii:86:2})
 	let sid_offset=88+$tls_sid_len*2
 	tls_cipher_suite="${tls_hello_ascii:$sid_offset:4}"
