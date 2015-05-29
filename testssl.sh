@@ -57,11 +57,9 @@ SWCONTACT="dirk aet testssl dot sh"
 # https://github.com/drwetter/testssl.sh/blob/master/openssl-bins/openssl-1.0.2-chacha.pm/Readme.md
 # Don't worry if feature X is not available you'll get a warning about this missing feature!
 
-
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname $0)
-PROG_DIR=$(readlink "$BASH_SOURCE") 2>/dev/null
-[ -z "$PROG_DIR" ] && PROG_DIR="$(pwd -L)"
+PROG_DIR=$(dirname $(readlink "$BASH_SOURCE")) 2>/dev/null
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
@@ -79,7 +77,7 @@ DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's
 								#FIXME: still to be filled with (more) sense or following to be included:
 VERBERR=${VERBERR:-1}				# 0 means to be more verbose (handshake errors to be displayed so that one can tell better
 								# whether handshake succeeded or not. While testing individual ciphers you also need to have SHOW_EACH_C=1
-LONG=${LONG:-1}					# whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
+WIDE=${WIDE:-1}					# whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
 
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}	# we wait this long before killing the process to retrieve a service banner / http header
 readonly MAX_WAITSOCK=10				# waiting at max 10 seconds for socket reply 
@@ -910,7 +908,7 @@ neat_header(){
 # arg4: encryption (maybe included "export")
 neat_list(){
 	kx=$(echo "$3" | sed 's/Kx=//g')
-	enc=$(echo $4 | sed 's/Enc=//g')
+	enc=$(echo "$4" | sed 's/Enc=//g')
 	strength=$(echo $enc | sed -e 's/.*(//' -e 's/)//')						# strength = encryption bits
 	strength=$(echo $strength | sed -e 's/ChaCha20-Poly1305/ly1305/g') 			# workaround for empty bits ChaCha20-Poly1305
 	enc=$(echo $enc | sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g')	# workaround for empty bits ChaCha20-Poly1305
@@ -1346,7 +1344,6 @@ server_preference() {
 	fi
 
 	tmpfile_handle $FUNCNAME.txt
-
 	if [ -z "$remark4default_cipher" ]; then
 		cipher_pref_check
 	else
@@ -1634,7 +1631,7 @@ server_defaults() {
     		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
 	nrsaved=$(ls $TEMPDIR/level?.crt 2>/dev/null | wc -w | sed 's/^ *//')
 	outln " # of certificates provided   $nrsaved"
-	cd $savedir
+	cd "$savedir"
 
 	out " Certificate Revocation List  "
 	crl=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')
@@ -1673,34 +1670,30 @@ server_defaults() {
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 pfs() {
-	local ret
-	local none
+	local ret ret2
+	local -i pfs_offered=1
 	local tmpfile
-	local number_pfs 
 	local dhlen
-	local hexcode n ciph sslvers kx auth enc mac
+	local hexcode dash pfs_cipher sslvers kx auth enc mac
 	# https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy -- but with RC4:
 	#local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
-	local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EDH+aRSA EECDH !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
-	# ^^^ the exclusion via ! doesn't work with libressl and openssl 0.9.8
+	#w/o RC4:
+	#local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EDH+aRSA EECDH !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
+#
+# hardcoded: (the exclusion via ! doesn't work with libressl and openssl 0.9.8) and it's reproducible
+	local pfs_cipher_list="ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-CAMELLIA128-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA"
+	local -i no_supported_ciphers=0
 
 	outln
 	pr_blue "--> Testing (perfect) forward secrecy, (P)FS"; outln " -- omitting 3DES, RC4 and Null Encryption here"
 	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL too old to show DH/ECDH bits)"
 
-	$OPENSSL ciphers -V "$pfs_ciphers" >$TMPFILE 2>/dev/null	# -V doesn't work with openssl < 1.0
-	if [ $? -ne 0 ] ; then
-		number_pfs=$(wc -l < $TMPFILE | sed 's/ //g')
-		if [ "$number_pfs" -le "$CLIENT_MIN_PFS" ] ; then
-			# this will be called also if the ! and @ syntax can't be understood
-			outln
-			pr_magentaln " Local problem: you only have $number_pfs PFS ciphers on the client side "
-			[ $number_pfs -ne 0 ] && cat $TMPFILE 
-			return 1
-		fi
+	no_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $pfs_cipher_list))
+	if [ "$no_supported_ciphers" -le "$CLIENT_MIN_PFS" ] ; then
+		outln
+		pr_magentaln " Local problem: you only have $number_pfs PFS ciphers on the client side "
+		return 1
 	fi
-	savedciphers=$(cat $TMPFILE)
-	[ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing PFS:" && echo $(cat $TMPFILE)
 
 	$OPENSSL s_client -cipher 'ECDH:DH' $STARTTLS -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
@@ -1708,47 +1701,56 @@ pfs() {
 	if [ $ret -ne 0 ] || [ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]; then
 		pr_brownln "Not OK: No ciphers supporting Forward Secrecy offered"
 	else
-		pr_litegreen "OK: PFS is offered. "; 
-		outln "Client/browser support is important here. Offered PFS server ciphers follow... \n"
-		none=0
-		neat_header
-		while read hexcode n ciph sslvers kx auth enc mac; do
+		pfs_offered=0
+		if [ $WIDE -ne 0 ] ; then
+			pr_litegreen " PFS ciphers (OK): "
+		else
+			pr_litegreen " PFS is offered (OK) " 
+			outln "Cipher follow (Client/browser support is here escpecially important) \n" 
+			neat_header
+		fi
+		while read hexcode dash pfs_cipher sslvers kx auth enc mac; do
 			tmpfile=$TMPFILE.$hexcode
-			$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $SNI &>$tmpfile </dev/null
+			$OPENSSL s_client -cipher $pfs_cipher $STARTTLS -connect $NODEIP:$PORT $SNI &>$tmpfile </dev/null
 			ret2=$?
 			if [[ $ret2 -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
 				continue # no successful connect AND not verbose displaying each cipher
 			fi
-			normalize_ciphercode $hexcode
-			if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
-				dhlen=$(read_dhbits_from_file "$tmpfile" quiet)
-				kx="$kx $dhlen"
-			fi
-			neat_list $HEXC $ciph "$kx" $enc $strength
-			let "none++"
-			if [[ "$SHOW_EACH_C" -ne 0 ]] ; then
-				if [[ $ret2 -eq 0 ]]; then
-					pr_green "works"
-				else
-					out "not a/v"
+			if [ $WIDE -eq 0 ]; then
+				normalize_ciphercode $hexcode
+				if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
+					dhlen=$(read_dhbits_from_file "$tmpfile" quiet)
+					kx="$kx $dhlen"
 				fi
+				neat_list $HEXC $pfs_cipher "$kx" $enc $strength
+				let "pfs_offered++"
+				if [[ "$SHOW_EACH_C" -ne 0 ]] ; then
+					if [[ $ret2 -eq 0 ]]; then
+						pr_green "works"
+					else
+						out "not a/v"
+					fi
+				fi
+				outln
+			else
+				out "$pfs_cipher "
 			fi
-			outln
-		done < <($OPENSSL ciphers -V "$pfs_ciphers")		# -V doesn't work with openssl < 1.0
+		done < <($OPENSSL ciphers -V "$pfs_cipher_list")		# -V doesn't work with openssl < 1.0
 		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
-		debugme echo $none
+		debugme echo $pfs_offered
 
-		if [ "$none" -eq 0 ] ; then
+		if [ "$pfs_offered" -eq 1 ] ; then
 			 pr_brown "no PFS ciphers found"
-			 ret=1
-		else
-			 ret=0
 		fi
 	fi
 	outln
+	[ $WIDE -ne 0 ] && outln
+
+	debugme echo $(actually_supported_ciphers $pfs_cipher_list)
+	debugme echo $no_supported_ciphers
 
 	tmpfile_handle $FUNCNAME.txt
-	return $ret
+	return $pfs_offered
 }
 
 
@@ -2743,12 +2745,12 @@ beast(){
 	local continued=false
 	local cbc_cipher_list="SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:DES-CBC-MD5:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5"
 
-	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $LONG -eq 0 ] ; then
+	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $WIDE -eq 0 ] ; then
 		 outln 
 		 pr_blue "--> Testing for BEAST vulnerability" && outln "\n"
 	fi
 	pr_bold " BEAST"; out " (CVE-2011-3389)                     "
-	[[ $LONG -eq 0 ]] && outln 
+	[[ $WIDE -eq 0 ]] && outln 
 
 	# 2) test handfull of common CBC ciphers
 	for proto in ssl3 tls1; do
@@ -2764,7 +2766,7 @@ beast(){
 		fi # protocol succeeded
 		# protocol with cbc_cipher check follows now
 
-		if [[ $LONG -eq 0 ]] ; then
+		if [[ $WIDE -eq 0 ]] ; then
 			outln "\n $(echo $proto | tr '[a-z]' '[A-Z]'):";
 			neat_header # NOTTHATNICE: we display the header also if in the end no cbc cipher is available on the client side
 		fi
@@ -2772,7 +2774,7 @@ beast(){
 			$OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $SNI >$TMPFILE 2>/dev/null </dev/null
 			openssl_ret=$?
 			[[ $openssl_ret -eq 0 ]] && vuln_beast=true
-			if [ $LONG -eq 0 ]; then
+			if [ $WIDE -eq 0 ]; then
 				normalize_ciphercode $hexcode
 				if [[ "$SHOW_EACH_C" -ne 0 ]]; then
 					neat_list $HEXC $cbc_cipher $kx $enc
@@ -2793,7 +2795,7 @@ beast(){
 		done < <($OPENSSL ciphers -V 'ALL:eNULL' | grep -a CBC)   	# -V doesn't work with openssl < 1.0
 		#    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
 
-		if [ $LONG -ne 0 ]; then
+		if [ $WIDE -ne 0 ]; then
 			if [ -n "$detected_cbc_ciphers" ]; then
 				detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
 				! $first && out "$spaces"
@@ -2819,7 +2821,7 @@ beast(){
 	done
 	if $vuln_beast ; then
 		if [ ! -z "$higher_proto_supported" ] ; then
-			if [ $LONG -eq 0 ]; then
+			if [ $WIDE -eq 0 ]; then
 				outln
 				pr_brown "VULNERABLE" 
 				outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
@@ -2851,27 +2853,26 @@ rc4() {
 	local hexcode dash rc4_cipher sslvers kx auth enc mac export
 	local rc4_ciphers_list="ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:DHE-DSS-RC4-SHA:AECDH-RC4-SHA:ADH-RC4-MD5:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:RC4-MD5:RSA-PSK-RC4-SHA:PSK-RC4-SHA:KRB5-RC4-SHA:KRB5-RC4-MD5:RC4-64-MD5:EXP1024-DHE-DSS-RC4-SHA:EXP1024-RC4-SHA:EXP-ADH-RC4-MD5:EXP-RC4-MD5:EXP-RC4-MD5:EXP-KRB5-RC4-SHA:EXP-KRB5-RC4-MD5"
 
-	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $LONG -eq 0 ] ; then
+	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $WIDE -eq 0 ] ; then
 		outln 
 		pr_blue "--> Checking for vulnerable RC4 Ciphers" ; outln "\n"
 	fi
 	pr_bold " RC4"; out " (CVE-2013-2566, CVE-2015-2808)        "
 
-	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 	# -V doesn't work with openssl < 1.0
-	[ $LONG -eq 0 ] && [ $SHOW_LOC_CIPH -eq 0 ] && echo "local ciphers available for testing RC4:" && echo $(cat $TMPFILE)
+	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 	# -V doesn't work with openssl < 1.0, feeding this into the while loop below
 	$OPENSSL s_client -cipher $rc4_ciphers_list $STARTTLS -connect $NODEIP:$PORT $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
 		pr_litered "VULNERABLE (NOT ok): "
-		[[ $LONG -eq 0 ]] && outln "\n"
+		[[ $WIDE -eq 0 ]] && outln "\n"
 		rc4_offered=1
-		[[ $LONG -eq 0 ]] && neat_header
+		[[ $WIDE -eq 0 ]] && neat_header
 		while read hexcode dash rc4_cipher sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $rc4_cipher $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>/dev/null
 			ret=$? 		# here we have a fp with openssl < 1.0
 			if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
 				continue	# no successful connect AND not verbose displaying each cipher
 			fi
-			if [ $LONG -eq 0 ]; then
+			if [ $WIDE -eq 0 ]; then
 				normalize_ciphercode $hexcode
 				neat_list $HEXC $rc4_cipher $kx $enc 
 				if [[ "$SHOW_EACH_C" -ne 0 ]]; then
@@ -2895,6 +2896,7 @@ rc4() {
 		pr_litegreenln "no RC4 ciphers detected (OK)"
 		rc4_offered=0
 	fi
+	outln
 
 	tmpfile_handle $FUNCNAME.txt
 	return $rc4_offered
@@ -3089,6 +3091,7 @@ outln " Using \"$osslver\" [~$nr_ciphers ciphers] on
 
 }
 
+
 maketempf() {
 	TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit 6
 	TMPFILE=$TEMPDIR/tempfile.txt || exit 6
@@ -3099,6 +3102,8 @@ maketempf() {
 	if [ $DEBUG -ne 0 ]; then
 		cat >$TEMPDIR/environment.txt << EOF
 
+$idtag
+
 PID: $$
 bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}
 status: ${BASH_VERSINFO[4]}
@@ -3106,14 +3111,18 @@ machine: ${BASH_VERSINFO[5]}
 operating system: $SYSTEM
 shellopts: $SHELLOPTS
 
-"$osslver" [$nr_ciphers ciphers] on $hn:$osslpath
-built: "$OSSL_BUILD_DATE", platform: "$OSSL_VER_PLATFORM"
-$idtag
+"$osslver" [$nr_ciphers ciphers] 
+OSSL_VER_MAJOR: $OSSL_VER_MAJOR
+OSSL_VER_MINOR: $OSSL_VER_MINOR
+OSSL_VER_APPENDIX: $OSSL_VER_APPENDIX
+OSSL_BUILD_DATE: "$OSSL_BUILD_DATE" 
+OSSL_VER_PLATFORM: "$OSSL_VER_PLATFORM"
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
 PROG_DIR: $PROG_DIR
 RUN_DIR: $RUN_DIR
+MAP_RFC_FNAME: $MAP_RFC_FNAME
 
 CAPATH: $CAPATH
 ECHO: $ECHO
@@ -3416,11 +3425,19 @@ mx_allentries() {
 		[[ $mxport == "465" ]] && starttls_proto=""  # no starttls for Port 465
 		pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
 		for mx in $mxs; do
+			draw_dotted_line "-" $TERM_DWITH
+			outln
 			parse_hn_port "$mx:$mxport" $starttls_proto && lets_roll
 		done
+		draw_dotted_line
+		outln
 	else
 		pr_boldln " $1 has no MX records(s)"
 	fi
+}
+
+draw_dotted_line() {
+	printf -- "$1"'%.s' $(eval "echo {1.."$(($2))"}")
 }
 
 
@@ -3454,6 +3471,7 @@ initialize_globals() {
 
 # Set default scanning options
 set_scanning_defaults() {
+	do_allciphers=true
 	do_vulnerabilities=true
 	do_beast=true
 	do_breach=true
@@ -3611,7 +3629,7 @@ startup() {
 				shift
 				do_tls_sockets=true
 				outln "TLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" ;;
-               --wide) LONG=0 ;;
+               --wide) WIDE=0 ;;
 			--assuming-http|--assuming_http|--assume_http|--assume-http)
 				ASSUMING_HTTP=0 ;;
 			--sneaky)
@@ -3667,11 +3685,10 @@ lets_roll() {
 	${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; exit $?; }
 
 	${do_test_just_one} && test_just_one ${single_cipher}
-	${do_allciphers} && { allciphers; ret=$(($? + ret)); }
-	${do_cipher_per_proto} && { cipher_per_proto; ret=$(($? + ret)); }
 	${do_protocols} && { runprotocols; ret=$(($? + ret)); }
 	${do_spdy} && { spdy; ret=$(($? + ret)); }
 	${do_run_std_cipherlists} && { run_std_cipherlists; ret=$(($? + ret)); }
+	${do_pfs} && { pfs; ret=$(($? + ret)); }
 	${do_server_preference} && { server_preference; ret=$(($? + ret)); }
 	${do_server_defaults} && { server_defaults; ret=$(($? + ret)); }
 
@@ -3703,7 +3720,8 @@ lets_roll() {
 	${do_beast} && { beast; ret=$(($? + ret)); }
 	${do_rc4} && { rc4; ret=$(($? + ret)); }
 
-	${do_pfs} && { pfs; ret=$(($? + ret)); }
+	${do_allciphers} && { allciphers; ret=$(($? + ret)); }
+	${do_cipher_per_proto} && { cipher_per_proto; ret=$(($? + ret)); }
 
 	return $ret
 }
@@ -3740,6 +3758,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.263 2015/05/27 21:31:24 dirkw Exp $ 
+#  $Id: testssl.sh,v 1.264 2015/05/29 08:36:13 dirkw Exp $ 
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
