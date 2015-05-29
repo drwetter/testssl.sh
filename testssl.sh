@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 #
+[ -z "$BASH_VERSINFO" ] && echo "\n$(tput setaf 5) Please make sure you're using bash! Bye...$(tput sgr0)\n" && exit 1
+#
 # testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some 
 # vulnerablities or features
 #
