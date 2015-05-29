@@ -3,7 +3,7 @@
 [ -z "$BASH_VERSINFO" ] && echo "\n$(tput setaf 5) Please make sure you're using bash! Bye...$(tput sgr0)\n" && exit 1
 #
 # testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some
-# vulnerablities or features
+# vulnerabilities or features
 #
 # Devel version is available from    https://github.com/drwetter/testssl.sh
 # Stable version from                https://testssl.sh
@@ -35,7 +35,7 @@ SWCONTACT="dirk aet testssl dot sh"
 # The socket checks in bash may sound cool and unique -- they are -- but probably you
 # can achieve e.g. the same result with my favorite interactive shell: zsh (zmodload zsh/net/socket
 # -- checkout zsh/net/tcp too!) /bin/bash is way more often used within Linux and it's perfect
-# for cross plattform support, see MacOS X and also under Windows the MSYS2 extention.
+# for cross platform support, see MacOS X and also under Windows the MSYS2 extension.
 # Cross-platform is one of the three ideas of this script. Second: Ease of installation.
 # No compiling, install gems, go to CPAN, use pip etc. Third: Easy to use and to interpret
 # the result.
@@ -52,7 +52,7 @@ SWCONTACT="dirk aet testssl dot sh"
 #
 # Note that for "standard" openssl binaries a lot of features (ciphers, protocols, vulnerabilities)
 # are disabled as they'll impact security otherwise. For security testing though we need
-# all b0rken features. testssl.sh will over time replace those checks with bash sockets --
+# all broken features. testssl.sh will over time replace those checks with bash sockets --
 # however it's still recommended to use the supplied binaries or cook your own, see
 # https://github.com/drwetter/testssl.sh/blob/master/openssl-bins/openssl-1.0.2-chacha.pm/Readme.md
 # Don't worry if feature X is not available you'll get a warning about this missing feature!
@@ -122,7 +122,7 @@ LEN_STR=""
 SNI=""
 IP4=""
 IP6=""
-OSSL_VER=""					# openssl version, will be autodetermined
+OSSL_VER=""					# openssl version, will be auto-determined
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
@@ -158,9 +158,9 @@ readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 trap "cleanup" QUIT EXIT
 
 
-						# The various hexdump commands we need to replace xxd (BSD compatability))
+						# The various hexdump commands we need to replace xxd (BSD compatibility))
 HEXDUMPVIEW=(hexdump -C) 			# This is used in verbose mode to see what's going on
-HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"') 	# This is used to analyse the reply
+HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"') 	# This is used to analyze the reply
 HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"') 	# Replaces both xxd -p and tr -cd '[:print:]'
 
 
@@ -567,7 +567,7 @@ hpkp() {
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || out "(two HPKP headers, using 1st one) "
-		# dirty trick so that grep -c really counts occurances and not lines w/ occurances:
+		# dirty trick so that grep -c really counts occurrences and not lines w/ occurrences:
 		hpkp_nr_keys=$(sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -ac pin-sha)
 		if [ $hpkp_nr_keys -eq 1 ]; then
 			pr_litered "One key is not sufficent, "
@@ -749,7 +749,7 @@ moreflags() {
 			if [ $(echo "$result_str" | wc -l | sed 's/ //g') -eq 1 ]; then
 				pr_litegreenln "$result_str"
 			else # for the case we have two times the same header:
-				# exchange the linefeeds between the two lines only:
+				# exchange the line feeds between the two lines only:
 				pr_litecyan "double -->" ; echo "$result_str" |  tr '\n\r' '  | ' | sed 's/| $//g'
 				pr_litecyanln "<-- double"
 #FIXME: https://report-uri.io has double here
@@ -867,7 +867,7 @@ std_cipherlists() {
 
 
 # sockets inspired by http://blog.chris007.de/?p=238
-# ARG1: hexbyte with a leading comma (!!), seperated by commas
+# ARG1: hexbyte with a leading comma (!!), separated by commas
 # ARG2: sleep
 socksend() {
 	# the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
@@ -1135,9 +1135,9 @@ runprotocols() {
 	case $? in
 		0) pr_literedln "offered (NOT ok)" ;;
 		1) pr_greenln "not offered (OK)"   ;;
-		2) pr_magentaln "#FIXME: downgraded. still missing a testcase here" ;;
+		2) pr_magentaln "#FIXME: downgraded. still missing a test case here" ;;
 		5) pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"  ;;	# protocol ok, but no cipher
-		7) ;;		# no local support
+		7) ;;                                                                                   		# no local support
 	esac
 
 	out " TLS 1      ";
@@ -1459,7 +1459,7 @@ server_defaults() {
 	# HTTP date:
 	out " HTTP clock skew:             "
 	if [[ $SERVICE != "HTTP" ]] ; then
-		out "not tested as we're not tagetting HTTP"
+		out "not tested as we're not targeting HTTP"
 	else
 		printf "$GET_REQ11" | $OPENSSL s_client  $OPTIMAL_PROTO -ign_eof -connect $NODEIP:$PORT $SNI &>$TMPFILE
 		now=$(date "+%s")
@@ -1714,7 +1714,7 @@ pfs() {
 			pr_litegreen " PFS ciphers (OK): "
 		else
 			pr_litegreen " PFS is offered (OK) "
-			outln "Cipher follow (Client/browser support is here escpecially important) \n"
+			outln "Cipher follow (Client/browser support is here specially important) \n"
 			neat_header
 		fi
 		while read hexcode dash pfs_cipher sslvers kx auth enc mac; do
@@ -1812,7 +1812,7 @@ fd_socket() {
 	if ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null removes an error message, but disables debugging
 		outln
 		pr_magenta "Unable to open a socket to $NODEIP:$PORT. "
-		# It can last ~2 minutes but for for those rare occasions we don't do a tiemout handler here, KISS
+		# It can last ~2 minutes but for for those rare occasions we don't do a timeout handler here, KISS
 		return 6
        fi
        return 0
@@ -2562,7 +2562,7 @@ crime() {
 }
 
 # BREACH is a HTTP-level compression & an attack which works against any cipher suite and is agnostic
-# to the version of TLS/SSL, more: http://www.breachattack.com/ . Foreign referers are the important thing here!
+# to the version of TLS/SSL, more: http://www.breachattack.com/ . Foreign referrers are the important thing here!
 breach() {
 	[[ $SERVICE != "HTTP" ]] && return 7
 
@@ -2640,7 +2640,7 @@ ssl_poodle() {
 	return $ret
 }
 
-# for appliance which use padding, no fallack needed
+# for appliance which use padding, no fallback needed
 tls_poodle() {
 	pr_bold " POODLE, SSL"; out " CVE-2014-8730), experimental "
 	#FIXME
@@ -3337,7 +3337,7 @@ get_dns_entries() {
 		IP4=$NODE
 		SNI=""						# override Server Name Indication as we test the IP only
 	else
-		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resulution
+		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
 		IP4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
 		if which host &> /dev/null && [ -z "$IP4" ] ; then
 			IP4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
@@ -3452,7 +3452,7 @@ draw_dotted_line() {
 }
 
 
-# This intializes boolean global do_* variables, meant primarily to keep track of what to do
+# This initializes boolean global do_* variables, meant primarily to keep track of what to do
 initialize_globals() {
 	do_allciphers=false
 	do_vulnerabilities=false
