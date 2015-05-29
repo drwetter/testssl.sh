@@ -12,12 +12,16 @@ On github you will find in the master branch the development version of the soft
 New features in the upcoming stable release 2.6 are: 
 
 * display matching key (HPKP)
-* logjam, not named yet, but display dh/ecdh bits on negotiated and every cipher
+* LOGJAM: check DHE_EXPORT cipher and display DH(/ECDH) bits in wide mode on negotiated ciphers
+* Run in default mode through all ciphers
+* wide mode for several checks
 
 more see https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A%222.6+%2F+2.5dev%22
 
 
-Contributions, feedback, also bug reports are welcome. For contributions please note: One patch per feature -- bug fix/improvement. Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
+Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project.
+
+Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
 
 Update notification here or @ [twitter](https://twitter.com/drwetter). 
 
