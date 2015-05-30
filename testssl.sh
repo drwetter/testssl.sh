@@ -3076,7 +3076,7 @@ mybanner() {
 	hn=$(hostname)
 	#poor man's ident (nowadays ident not neccessarily installed)
 	idtag=$(grep -a '\$Id' $0 | grep -aw "[E]xp" | sed -e 's/^#  //' -e 's/\$ $/\$/')
-	which git &>/dev/null && idtag="$(git log --format='%h %s (%ci)' -1 2>/dev/null)"
+	which git &>/dev/null && idtag="$(git log --format='%h %ci' -1 2>/dev/null)"
 	[ "$COLOR" -ne 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=$(cat <<EOF
 
