@@ -3076,6 +3076,7 @@ mybanner() {
 	hn=$(hostname)
 	#poor man's ident (nowadays ident not neccessarily installed)
 	idtag=$(grep -a '\$Id' $0 | grep -aw "[E]xp" | sed -e 's/^#  //' -e 's/\$ $/\$/')
+	which git &>/dev/null && idtag="$(git log --format='%h %s (%ci)' -1 2>/dev/null)"
 	[ "$COLOR" -ne 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=$(cat <<EOF
 
@@ -3540,7 +3541,9 @@ startup() {
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 			-b|--banner|-v|--version)
-		  		exit 0;;
+				find_openssl_binary
+				mybanner
+			exit 0;;
 			--mx)
 				do_mx_allentries=true;;
 			--mx465)  # doesn't work with major ISPs
