@@ -10,7 +10,7 @@
 # Please file bugs at github!        https://github.com/drwetter/testssl.sh/issues
 
 VERSION="2.5dev"
-SWURL="https://testssl.sh"
+SWURL="http://dev.testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
 # Main author: Dirk Wetter, copyleft: 2007-2015, contributions so far see CREDIT.md
@@ -60,6 +60,10 @@ SWCONTACT="dirk aet testssl dot sh"
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname $0)
 readonly PROG_DIR=$(readlink "$BASH_SOURCE") 2>/dev/null
+
+which git &>/dev/null && readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
+readonly CVS_REL=$(tail -5 $0 | awk '/dirkw Exp/ { print $4" "$5" "$6}')
+readonly CVS_REL_SHORT=$(tail -5 $0 | awk '/dirkw Exp/ { print $4 }')
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
@@ -2721,7 +2725,7 @@ logjam() {
 	$OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-	addtl_warning="$addtl_warning, precomputed primes not checked yet. \"$PROG_NAME -E\" spots candidates"
+	addtl_warning="$addtl_warning, precomputable primes not checked yet. \"$PROG_NAME -E\" spots candidates"
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers"
 	else
@@ -3069,20 +3073,20 @@ EOF
 
 
 mybanner() {
-	me=$(basename "$0")
-	osslver=$($OPENSSL version)
-	osslpath=$(which $OPENSSL)
+	local nr_ciphers
+	local idtag
+	local bb
+
 	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w | sed 's/ //g')
-	hn=$(hostname)
-	#poor man's ident (nowadays ident not neccessarily installed)
-	idtag=$(grep -a '\$Id' $0 | grep -aw "[E]xp" | sed -e 's/^#  //' -e 's/\$ $/\$/')
-	which git &>/dev/null && idtag="$(git log --format='%h %ci' -1 2>/dev/null)"
+	[ -z "$GIT_REL" ] && \
+		idtag="$CVS_REL" || \
+		idtag="$GIT_REL -- $CVS_REL_SHORT"
 	[ "$COLOR" -ne 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=$(cat <<EOF
 
 #########################################################
-$me v$VERSION  ($SWURL)
-($idtag)
+  $PROG_NAME $VERSION               $SWURL
+  ($idtag)
 
    This program is free software. Redistribution +
    modification under GPLv2 is permitted.
@@ -3093,12 +3097,11 @@ $me v$VERSION  ($SWURL)
 #########################################################
 EOF
 )
-pr_bold "$bb"
-outln "\n"
-outln " Using \"$osslver\" [~$nr_ciphers ciphers] on
- $hn:$osslpath
- (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
-
+	pr_bold "$bb"
+	outln "\n"
+	outln " Using \"$($OPENSSL version)\" [~$nr_ciphers ciphers] on"
+	outln " $(hostname):$(which $OPENSSL)"
+	outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 }
 
 
@@ -3112,7 +3115,8 @@ maketempf() {
 	if [ $DEBUG -ne 0 ]; then
 		cat >$TEMPDIR/environment.txt << EOF
 
-$idtag
+CVS_REL: $CVS_REL
+GIT_REL: $GIT_REL
 
 PID: $$
 bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}
@@ -3325,7 +3329,7 @@ parse_hn_port() {
 		esac
 	fi
 
-	${do_mx_allentries} || initialize_engine
+	${do_mx_all_ips} || initialize_engine
 	outln
 
 	return 0
@@ -3340,32 +3344,34 @@ get_dns_entries() {
 	else
 		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
 		IP4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
-		if which host &> /dev/null && [ -z "$IP4" ] ; then
-			IP4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-			if echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
-				return 1
+		if [ -z "$IP4" ]; then
+			if which host &> /dev/null && [ -z "$IP4" ] ; then
+				IP4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
+				if echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
+					return 1
+				fi
+			fi
+			if [ -z "$IP4" ] ; then
+				# MSYS2 has no host or getent, so we need nslookup
+				IP4=$(nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
+				[ -z "$IP4" ] && return 2
 			fi
 		fi
-		# MSYS2 has no host or getent, so we do this
-		if [ -z "$IP4" ] ; then
-			IP4=$(nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
-			[ -z "$IP4" ] && return 2
-		fi
 
-		# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
-		#which getent 2>&1 >/dev/null && IP6=$(getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq)
+		IP6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
 		if [ -z "$IP6" ] ; then
+			# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
+			#which getent 2>&1 >/dev/null && IP6=$(getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq)
 			if host -t aaaa $NODE &>/dev/null ; then
 				IP6=$(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //')
 			else
 				IP6=""
 			fi
+			# MSYS2 has no host or getent, so we need nslookup
+			if [ -z "$IP6" ] ; then
+				IP6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
+			fi
 		fi
-		# MSYS2 has no host or getent, so we do this
-          if [ -z "$IP6" ] ; then
-               IP6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
-          fi
-
 	fi # test4iponly
 
 	IPADDRs="$IP4"
@@ -3412,10 +3418,15 @@ datebanner() {
 	outln
 }
 
+draw_dotted_line() {
+	printf -- "$1"'%.s' $(eval "echo {1.."$(($2))"}")
+}
 
-mx_allentries() {
+
+mx_all_ips() {
 	local mxs mx
 	local mxport
+	local ret=0
 
 	if which host &> /dev/null; then
 		mxs=$(host -t MX "$1" | grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
@@ -3448,10 +3459,6 @@ mx_allentries() {
 	fi
 }
 
-draw_dotted_line() {
-	printf -- "$1"'%.s' $(eval "echo {1.."$(($2))"}")
-}
-
 
 # This initializes boolean global do_* variables, meant primarily to keep track of what to do
 initialize_globals() {
@@ -3466,7 +3473,7 @@ initialize_globals() {
 	do_logjam=false
 	do_header=false
 	do_heartbleed=false
-	do_mx_allentries=false
+	do_mx_all_ips=false
 	do_pfs=false
 	do_protocols=false
 	do_rc4=false
@@ -3510,7 +3517,7 @@ query_globals() {
 	local true_nr=0
 
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
-     		do_freak do_logjam do_header do_heartbleed do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
+     		do_freak do_logjam do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
      		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
      		do_test_just_one do_tls_sockets; do
 				[ "${!gbl}" == "true" ] && let true_nr++
@@ -3523,7 +3530,7 @@ debug_globals() {
 	local gbl
 
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
-     		do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_allentries do_pfs do_protocols do_rc4 do_renego \
+     		do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
      		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
      		do_test_just_one do_tls_sockets; do
 		printf "%-22s = %s\n" $gbl "${!gbl}"
@@ -3545,13 +3552,16 @@ startup() {
 				mybanner
 			exit 0;;
 			--mx)
-				do_mx_allentries=true;;
+				do_mx_all_ips=true;;
 			--mx465)  # doesn't work with major ISPs
-				do_mx_allentries=true
+				do_mx_all_ips=true
 				PORT=465 ;;
 			--mx587) # doesn't work with major ISPs
-				do_mx_allentries=true
+				do_mx_all_ips=true
 				PORT=587 ;;
+			--ip)
+				CMDLINE_IP=$2
+				shift ;;
 			-V|--local)	# this is only displaying local, thus we don't put it in the loop
 				find_openssl_binary
 				mybanner
@@ -3758,12 +3768,12 @@ mybanner
 openssl_age
 maketempf
 
-if ${do_mx_allentries} ; then
+if ${do_mx_all_ips} ; then
      query_globals
      # if we have just one "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
 	[ $? -eq 1 ] && set_scanning_defaults
 	initialize_engine
-	mx_allentries "${URI}" $PORT
+	mx_all_ips "${URI}" $PORT
 	ret=$?
 else
      parse_hn_port "${URI}" "${STARTTLS_PROTOCOL}"
@@ -3773,6 +3783,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.265 2015/05/29 12:12:21 dirkw Exp $
+#  $Id: testssl.sh,v 1.267 2015/05/31 12:40:11 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
