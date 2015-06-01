@@ -2467,7 +2467,7 @@ renego() {
 	echo R | $OPENSSL s_client $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT &>$TMPFILE & 	# msg enables us to look deeper into it while debugging
 	wait_kill $! $HEADER_MAXSLEEP
 	if [ $? -eq 3 ]; then
-		pr_litegreen "likely not vulnerable (OK)"; outln "(timed out)" 					# it hung
+		pr_litegreen "likely not vulnerable (OK)"; outln " (timed out)" 		# it hung
 		sec_client_renego=1
 	else
 		# second try in the foreground as we are sure now it won't hang
