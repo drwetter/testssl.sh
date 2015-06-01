@@ -2940,8 +2940,8 @@ old_fart() {
 find_openssl_binary() {
 # 0. check environment variable whether it's executable
 	if [ ! -z "$OPENSSL" ] && [ ! -x "$OPENSSL" ]; then
-		pr_redln "\ncannot find (\$OPENSSL=$OPENSSL) binary."
-		outln "continuing ..."
+		pr_red "\ncannot find (\$OPENSSL=$OPENSSL) binary."
+		outln " Looking some place else ..."
 	fi
 	if [ -x "$OPENSSL" ]; then
 # 1. check environment variable
@@ -3539,6 +3539,18 @@ debug_globals() {
 }
 
 
+# arg1+2 are just the options
+parse_opt_equal_sign() {
+	if [[ "$1" == *=* ]]; then
+		echo "$1" | awk -F'=' '{ print $2 }' 
+		return 1	# = means we don't need to shift args!
+	else
+		echo $2
+		return 0  # we need to shift
+	fi
+}
+
+
 
 # Parses options
 startup() {
@@ -3547,56 +3559,73 @@ startup() {
 
 	while [[ $# -gt 0 ]]; do
 		case $1 in
+			-h|--help)
+				help 0 
+				;;
 			-b|--banner|-v|--version)
 				find_openssl_binary
 				mybanner
-			exit 0;;
+				exit 0
+				;;
 			--mx)
-				do_mx_all_ips=true;;
-			--mx465)  # doesn't work with major ISPs
 				do_mx_all_ips=true
-				PORT=465 ;;
-			--mx587) # doesn't work with major ISPs
+				;;
+			--mx465)  				# doesn't work with major ISPs
 				do_mx_all_ips=true
-				PORT=587 ;;
-			--ip)
-				CMDLINE_IP=$2
-				shift ;;
-			-V|--local)	# this is only displaying local, thus we don't put it in the loop
+				PORT=465 
+				;;
+			--mx587) 					# doesn't work with major ISPs
+				do_mx_all_ips=true
+				PORT=587 
+				;;
+			--ip|--ip=*)
+				CMDLINE_IP=$(parse_opt_equal_sign "$1" "$2")
+				[ $? -eq 0 ] && shift
+				;;
+			-V|-V=*|--local|--local=*)	# this is only displaying local ciphers, thus we don't put it in the loop
 				find_openssl_binary
 				mybanner
 				openssl_age
 				maketempf
-				initialize_engine 	# GOST support-
-				prettyprint_local "$2"
-				exit $? ;;
-			-x|--single-cipher|--single_cipher)
+				initialize_engine 		# for GOST support
+				prettyprint_local $(parse_opt_equal_sign "$1" "$2")
+				exit $? 
+				;;
+			-x|-x=*|--single[-_]cipher|--single[-_]cipher=*)
 				do_test_just_one=true
-				single_cipher=$2
-				shift;;
-			-t|--starttls)
-				STARTTLS_PROTOCOL=$2
+				single_cipher=$(parse_opt_equal_sign "$1" "$2")
+				[ $? -eq 0 ] && shift
+				;;
+			-t|-t=*|--starttls|--starttls=*)
 				do_starttls=true
-				shift;;
+				STARTTLS_PROTOCOL=$(parse_opt_equal_sign "$1" "$2")
+				[ $? -eq 0 ] && shift
+				;;
 			-e|--each-cipher)
-				do_allciphers=true;;
+				do_allciphers=true
+				;;
 			-E|--cipher-per-proto|--cipher_per_proto)
-				do_cipher_per_proto=true;;
-			-h|--help)
-				help 0 ;;
+				do_cipher_per_proto=true
+				;;
 			-p|--protocols)
 				do_protocols=true
-				do_spdy=true;;
+				do_spdy=true
+				;;
 			-y|--spdy|--npn)
-				do_spdy=true;;
+				do_spdy=true
+				;;
 			-f|--ciphers)
-				do_run_std_cipherlists=true;;
-			-S|--server_defaults|--server-defaults)
-				do_server_defaults=true;;
-			-P|--server_preference|--server-preference)
-				do_server_preference=true;;
+				do_run_std_cipherlists=true
+				;;
+			-S|--server[-_]defaults)
+				do_server_defaults=true
+				;;
+			-P|--server[_-]preference)
+				do_server_preference=true
+				;;
 			-H|--header|--headers)
-				do_header=true;;
+				do_header=true
+				;;
 			-U|--vulnerable)
 				do_vulnerabilities=true
 				do_heartbleed=true
@@ -3609,39 +3638,51 @@ startup() {
 				do_beast=true
 				do_rc4=true
 				do_logjam=true
-				VULN_COUNT=10 ;;
+				VULN_COUNT=10 
+				;;
 			-B|--heartbleed)
 				do_heartbleed=true
-				let "VULN_COUNT++" ;;
-			-I|--ccs|--ccs_injection|--ccs-injection)
+				let "VULN_COUNT++" 
+				;;
+			-I|--ccs|--ccs[-_]injection)
 				do_ccs_injection=true
-				let "VULN_COUNT++" ;;
+				let "VULN_COUNT++" 
+				;;
 			-R|--renegotiation)
 				do_renego=true
-				let "VULN_COUNT++" ;;
+				let "VULN_COUNT++"
+				;;
 			-C|--compression|--crime)
 				do_crime=true
-				let "VULN_COUNT++" ;;
+				let "VULN_COUNT++"
+				;;
 			-T|--breach)
 				do_breach=true
-				let "VULN_COUNT++" ;;
+				let "VULN_COUNT++"
+				;;
 			-O|--poodle)
 				do_ssl_poodle=true
-				let "VULN_COUNT++" ;;
+				let "VULN_COUNT++"
+				;;
 			-F|--freak)
 				do_freak=true
-				let "VULN_COUNT++" ;;
+				let "VULN_COUNT++"
+				;;
 			-J|--logjam)
 				do_logjam=true
-				let "VULN_COUNT++" ;;
+				let "VULN_COUNT++"
+				;;
 			-A|--beast)
 				do_beast=true
-				let "VULN_COUNT++" ;;
+				let "VULN_COUNT++"
+				;;
 			-4|--rc4|--appelbaum)
 				do_rc4=true
-				let "VULN_COUNT++" ;;
+				let "VULN_COUNT++"
+				;;
 			-s|--pfs|--fs|--nsa)
-				do_pfs=true;;
+				do_pfs=true
+				;;
 			-q) ### this is a development feature and will disappear:
 				# DEBUG=3  ./testssl.sh -q 03 "cc, 13, c0, 13" google.de
 				# DEBUG=3  ./testssl.sh -q 01 yandex.ru
@@ -3652,41 +3693,56 @@ startup() {
 		 		fi
 				shift
 				do_tls_sockets=true
-				outln "TLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" ;;
-               --wide) WIDE=0 ;;
-			--assuming-http|--assuming_http|--assume_http|--assume-http)
-				ASSUMING_HTTP=0 ;;
+				outln "TLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" 
+				;;
+               --wide) 
+				WIDE=0 
+				;;
+			--assuming[_-]http|--assume[-_]http)
+				ASSUMING_HTTP=0 
+				;;
 			--sneaky)
-				SNEAKY=0 ;;
-			--warnings)
-				case "$2" in
-					batch|off|false) 	WARNINGS="$2" ;;
-					default)   		pr_magentaln "warnings can be either \"batch\", \"off\" or \"false\"" ;;
+				SNEAKY=0 
+				;;
+			--warnings|--warnings=*)
+				WARNINGS=$(parse_opt_equal_sign "$1" "$2") 
+				[ $? -eq 0 ] && shift 
+				case "$WARNING" in
+					batch|off|false) ;;
+					default) pr_magentaln "warnings can be either \"batch\", \"off\" or \"false\"" ;;
 				esac
-				shift ;;
-			--show-each|--show_each)
-				SHOW_EACH_C=1 ;; #FIXME: sense is vice versa
-			--debug)
-				DEBUG="$2"
-				shift ;;
-			--color)
-				COLOR=$2
+				;;
+			--show[-_]each)
+				SHOW_EACH_C=1 		#FIXME: sense is vice versa
+				;; 
+			--debug|--debug=*)
+				DEBUG=$(parse_opt_equal_sign "$1" "$2")
+				[ $? -eq 0 ] && shift
+				;;
+			--color|--color=*)
+				COLOR=$(parse_opt_equal_sign "$1" "$2")
+				[ $? -eq 0 ] && shift
 				if [ $COLOR -ne 0 ] && [ $COLOR -ne 1 ] && [ $COLOR -ne 2 ] ; then
 					COLOR=2
 					pr_magentaln "$0: unrecognized color: $2" 1>&2
 					help 1
 				fi
-				shift ;;
-			--openssl)
-				OPENSSL="$2"
-				shift ;;
+				;;
+			--openssl|--openssl=*)
+				OPENSSL=$(parse_opt_equal_sign "$1" "$2")
+				[ $? -eq 0 ] && shift
+				;;
 			--ssl_native|--ssl-native)
-				SSL_NATIVE=0 ;;
+				SSL_NATIVE=0 
+				;;
 			(--) shift
-				break ;;
+				break 
+				;;
 			(-*) pr_magentaln "$0: unrecognized option $1" 1>&2;
-				help 1 ;;
-			(*)	break ;;
+				help 1 
+				;;
+			(*)	break 
+				;;
 		esac
 		shift
 	done
@@ -3783,6 +3839,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.267 2015/05/31 12:40:11 dirkw Exp $
+#  $Id: testssl.sh,v 1.268 2015/06/01 10:01:37 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
