@@ -57,9 +57,15 @@ SWCONTACT="dirk aet testssl dot sh"
 # https://github.com/drwetter/testssl.sh/blob/master/openssl-bins/openssl-1.0.2-chacha.pm/Readme.md
 # Don't worry if feature X is not available you'll get a warning about this missing feature!
 
+# debugging help:
+readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
+# make sure that temporary files are cleaned up after use
+trap "cleanup" QUIT EXIT
+
 readonly PROG_NAME=$(basename "$0")
+readonly PROG_DIR=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 readonly RUN_DIR=$(dirname $0)
-readonly PROG_DIR=$(readlink "$BASH_SOURCE") 2>/dev/null
 
 which git &>/dev/null && readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
 readonly CVS_REL=$(tail -5 $0 | awk '/dirkw Exp/ { print $4" "$5" "$6}')
@@ -152,15 +158,6 @@ readonly UA_STD="Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
 HEX_CIPHER=""
-
-
-# debugging help:
-#PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
-readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
-
-# make sure that temporary files are cleaned up after use
-trap "cleanup" QUIT EXIT
-
 
 						# The various hexdump commands we need to replace xxd (BSD compatibility))
 HEXDUMPVIEW=(hexdump -C) 			# This is used in verbose mode to see what's going on
@@ -3810,11 +3807,10 @@ lets_roll() {
 
 ################# main #################
 
-
 # mapping file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
 # www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
 [ -r "$RUN_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$RUN_DIR/mapping-rfc.txt"
-[ -r "$(dirname $PROG_DIR/)mapping-rfc.txt" ] && MAP_RFC_FNAME="$(dirname $PROG_DIR)/mapping-rfc.txt"
+[ -r "$PROG_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$PROG_DIR/mapping-rfc.txt"
 
 initialize_globals
 
@@ -3839,6 +3835,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.268 2015/06/01 10:01:37 dirkw Exp $
+#  $Id: testssl.sh,v 1.269 2015/06/02 13:53:45 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
