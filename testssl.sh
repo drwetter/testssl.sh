@@ -64,7 +64,7 @@ readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 trap "cleanup" QUIT EXIT
 
 readonly PROG_NAME=$(basename "$0")
-readonly PROG_DIR=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+readonly PROG_DIR=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 readonly RUN_DIR=$(dirname $0)
 
 which git &>/dev/null && readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
@@ -3835,6 +3835,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.269 2015/06/02 13:53:45 dirkw Exp $
+#  $Id: testssl.sh,v 1.270 2015/06/02 13:59:16 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
