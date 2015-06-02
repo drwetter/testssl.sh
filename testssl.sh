@@ -64,8 +64,9 @@ readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 trap "cleanup" QUIT EXIT
 
 readonly PROG_NAME=$(basename "$0")
-readonly PROG_DIR=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 readonly RUN_DIR=$(dirname $0)
+INSTALL_DIR=""
+MAP_RFC_FNAME=""
 
 which git &>/dev/null && readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
 readonly CVS_REL=$(tail -5 $0 | awk '/dirkw Exp/ { print $4" "$5" "$6}')
@@ -75,7 +76,6 @@ readonly CVS_REL_SHORT=$(tail -5 $0 | awk '/dirkw Exp/ { print $4 }')
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
 
 OPENSSL=${OPENSSL:-/usr/bin/openssl}
-MAP_RFC_FNAME=""
 COLOR=${COLOR:-2}				# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-1} 		# will client side ciphers displayed before an individual test (makes no sense normally)
 SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: wrong value
@@ -2924,7 +2924,7 @@ return 0
 # https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
 # https://secure-resumption.com/tlsauth.pdf
 tls_truncation() {
-#FIXME: difficult to test, is there any test available, pls let me know
+#FIXME: difficult to test, is there any test available: pls let me know
 :
 }
 
@@ -2932,6 +2932,35 @@ old_fart() {
 	pr_magentaln "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed."
 	outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
 	exit 3
+}
+
+# try very hard to determine th install path to get ahold of the mapping file
+# it provides "keycode/ RFC style name", see RFCs, cipher(1), www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
+get_install_dir() {
+	#INSTALL_DIR=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+	INSTALL_DIR=$(dirname ${BASH_SOURCE[0]})
+
+	[ -r "$RUN_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$RUN_DIR/mapping-rfc.txt" 
+	[ -r "$INSTALL_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$INSTALL_DIR/mapping-rfc.txt"
+
+	# we haven't found the mapping file yet...
+	if [ ! -r "$MAP_RFC_FNAME" ] && which readlink &>/dev/null ; then
+		readlink -f ls &>/dev/null && \
+			INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
+			INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
+			# not sure whether Darwin has -f
+		INSTALL_DIR=$(dirname $INSTALL_DIR)
+		[ -r "$INSTALL_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$INSTALL_DIR/mapping-rfc.txt"
+	fi
+
+	# still no mapping file:
+	if [ ! -r "$MAP_RFC_FNAME" ] && which realpath &>/dev/null ; then
+		INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
+		MAP_RFC_FNAME="$INSTALL_DIR/mapping-rfc.txt"
+	fi
+
+	[ ! -r "$MAP_RFC_FNAME" ] && pr_magentaln "No mapping file found"
+	debugme echo "$MAP_RFC_FNAME"
 }
 
 find_openssl_binary() {
@@ -3011,7 +3040,7 @@ $PROG_NAME <options>
      <-b|--banner>                  displays banner + version of $PROG_NAME
      <-v|--version>                 same as previous
      <-V|--local>                   pretty print all local ciphers
-     <-V|--local> <pattern>         what local cipher with <pattern> is a/v?
+     <-V|--local> pattern           what local cipher with <pattern> is a/v?
 
 $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except ciphers per proto/each cipher)
 
@@ -3032,6 +3061,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except ciphers per
      <-O|--poodle>                  tests for POODLE (SSL) vulnerability
      <-F|--freak>                   tests for FREAK vulnerability
      <-A|--beast>                   tests for BEAST vulnerability
+     <-J|--logjam>                  tests for LOGJAM vulnerability
      <-s|--pfs|--fs|--nsa>          checks (perfect) forward secrecy settings
      <-4|--rc4|--appelbaum>         which RC4 ciphers are being offered?
      <-H|--header|--headers>        tests HSTS, HPKP, server/app banner, security headers, cookie
@@ -3057,8 +3087,10 @@ tuning options:
      --wide                         wide output for tests like RC4, BEAST. also with hexcode, kx, strength
      --show-each                    for each wide output (see --wide, -V, -x, e, -E): display all ciphers not only succeeded ones
      --warnings <batch|off|false>   "batch" doesn't wait for keypress, "off|false" skips connection warning
-     --color                        0: no escape or other codes,  1: b/w escape codes,  2: color (default)
-     --debug                        1: screen output normal but debug output in itemp files.  2-6: see line ~60
+     --color <0|1|2>                0: no escape or other codes,  1: b/w escape codes,  2: color (default)
+     --debug [0-6]                  1: screen output normal but debug output in itemp files.  2-6: see line ~60
+
+All options requiring a value can also be called with '=' (e.g. testssl.sh -t=smtp --color=0 --openssl=/usr/bin/openssl <URI>
 
 
 Need HTML output? Just pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like
@@ -3131,7 +3163,7 @@ OSSL_VER_PLATFORM: "$OSSL_VER_PLATFORM"
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
-PROG_DIR: $PROG_DIR
+INSTALL_DIR: $INSTALL_DIR
 RUN_DIR: $RUN_DIR
 MAP_RFC_FNAME: $MAP_RFC_FNAME
 
@@ -3807,13 +3839,9 @@ lets_roll() {
 
 ################# main #################
 
-# mapping file provides a pair "keycode/ RFC style name", see the RFCs, cipher(1) and
-# www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
-[ -r "$RUN_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$RUN_DIR/mapping-rfc.txt"
-[ -r "$PROG_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$PROG_DIR/mapping-rfc.txt"
+get_install_dir
 
 initialize_globals
-
 startup "$@"
 find_openssl_binary
 mybanner
@@ -3835,6 +3863,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.270 2015/06/02 13:59:16 dirkw Exp $
+#  $Id: testssl.sh,v 1.271 2015/06/02 20:12:53 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
