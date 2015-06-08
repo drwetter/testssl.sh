@@ -9,7 +9,7 @@
 # Stable version from                https://testssl.sh
 # Please file bugs at github!        https://github.com/drwetter/testssl.sh/issues
 
-VERSION="2.5dev"
+VERSION="2.6dev"
 SWURL="http://dev.testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -2617,6 +2617,33 @@ EOF
 	return $ret
 }
 
+# Test for TLS_FALLBACK_SCSV
+tls_fallback_scsv() {
+	# This isn't a vulnerability check per se, but it is a strong countermeasure
+	# to protect against protocol downgrade attacks.
+	local TMP="/tmp"
+	if [ ! -z "$HOME" ] && [ -w "$HOME" ]; then
+		TMP="$HOME"
+	fi
+	local scsv="$TMP/.testssl_scsv.txt"
+	ret=1
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for TLS_FALLBACK_SCSV Support" && outln "\n"
+	pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
+	echo | $OPENSSL s_client -connect $NODEIP:$PORT -no_tls1_2 -fallback_scsv > "$scsv" 2>&1
+	if grep -q "CONNECTED(00" "$scsv"; then
+		if grep -q "alert inappropriate fallback" "$scsv"; then
+			pr_green "not vulnerable (OK) - supported"
+			ret=0
+		else
+			pr_litered "VULNERABLE (NOT ok)"; out " - not supported\n"
+			ret=2
+		fi
+	else
+		pr_magentaln "test failed (couldn't connect)"
+		ret=3
+	fi
+	rm -f "$scsv"
+}
 
 # Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
 ssl_poodle() {
@@ -3512,6 +3539,7 @@ initialize_globals() {
 	do_server_preference=false
 	do_spdy=false
 	do_ssl_poodle=false
+	do_tls_fallback_scsv=false
 	do_test_just_one=false
 	do_tls_sockets=false
 }
@@ -3538,6 +3566,7 @@ set_scanning_defaults() {
 	do_server_preference=true
 	do_spdy=true
 	do_ssl_poodle=true
+	do_tls_fallback_scsv=true
 	VULN_COUNT=10
 }
 
@@ -3547,7 +3576,7 @@ query_globals() {
 
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
      		do_freak do_logjam do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
-     		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
+     		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
      		do_test_just_one do_tls_sockets; do
 				[ "${!gbl}" == "true" ] && let true_nr++
 	done
@@ -3560,7 +3589,7 @@ debug_globals() {
 
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
      		do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
-     		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle \
+     		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
      		do_test_just_one do_tls_sockets; do
 		printf "%-22s = %s\n" $gbl "${!gbl}"
 	done
@@ -3663,6 +3692,7 @@ startup() {
 				do_crime=true
 				do_breach=true
 				do_ssl_poodle=true
+				do_tls_fallback_scsv=true
 				do_freak=true
 				do_beast=true
 				do_rc4=true
@@ -3691,6 +3721,7 @@ startup() {
 				;;
 			-O|--poodle)
 				do_ssl_poodle=true
+				do_tls_fallback_scsv=true
 				let "VULN_COUNT++"
 				;;
 			-F|--freak)
@@ -3824,6 +3855,7 @@ lets_roll() {
 	${do_crime} && { crime; ret=$(($? + ret)); }
 	${do_breach} && { breach "$URL_PATH" ; ret=$(($? + ret)); }
 	${do_ssl_poodle} && { ssl_poodle; ret=$(($? + ret)); }
+	${do_tls_fallback_scsv} && { tls_fallback_scsv; ret=$(($? + ret)); }
 	${do_freak} && { freak; ret=$(($? + ret)); }
 	${do_logjam} && { logjam; ret=$(($? + ret)); }
 	${do_beast} && { beast; ret=$(($? + ret)); }
