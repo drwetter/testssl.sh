@@ -9,7 +9,7 @@
 # Stable version from                https://testssl.sh
 # Please file bugs at github!        https://github.com/drwetter/testssl.sh/issues
 
-VERSION="2.6dev"
+VERSION="2.5dev"
 SWURL="http://dev.testssl.sh"
 SWCONTACT="dirk aet testssl dot sh"
 
@@ -2619,14 +2619,25 @@ EOF
 
 # Test for TLS_FALLBACK_SCSV
 tls_fallback_scsv() {
-	# This isn't a vulnerability check per se, but it is a strong countermeasure
-	# to protect against protocol downgrade attacks.
-	local TMP="/tmp"
-	if [ ! -z "$HOME" ] && [ -w "$HOME" ]; then
-		TMP="$HOME"
+	# This isn't a vulnerability check per se, but checks for the existence of
+	# the countermeasure to protect against protocol downgrade attacks.
+
+	# First check we have support for TLS_FALLBACK_SCSV in our local OpenSSL
+	$OPENSSL s_client -h 2>&1 | grep -q "\-fallback_scsv"
+	if [ $? -gt 0 ]; then
+		pr_magentaln "Local Problem: Your $OPENSSL lacks TLS_FALLBACK_SCSV support"
+		return 4
 	fi
-	local scsv="$TMP/.testssl_scsv.txt"
+
+	# Set up a local temporary file in which to store OpenSSL's output...
+	local TEMP="/tmp"
+	if [ ! -z "$HOME" ] && [ -w "$HOME" ]; then
+		TEMP="$HOME"
+	fi
+	local scsv="$TEMP/.testssl_scsv-${NODEIP}-${PORT}.txt"
 	ret=1
+
+	# ...and do the test
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for TLS_FALLBACK_SCSV Support" && outln "\n"
 	pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
 	echo | $OPENSSL s_client -connect $NODEIP:$PORT -no_tls1_2 -fallback_scsv > "$scsv" 2>&1
@@ -2642,6 +2653,8 @@ tls_fallback_scsv() {
 		pr_magentaln "test failed (couldn't connect)"
 		ret=3
 	fi
+
+	# Quick cleanup
 	rm -f "$scsv"
 }
 
