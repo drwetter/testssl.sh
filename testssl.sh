@@ -1442,7 +1442,7 @@ server_defaults() {
 		[ -z "$TLS_TIME" ] && tls_sockets "00" "$TLS_CIPHER"
 
 		if [ -n "$TLS_TIME" ]; then
-			difftime=$(($TLS_NOW - $TLS_TIME))
+			difftime=$(($TLS_TIME - $TLS_NOW))
 			if [[ "${#difftime}" -gt 5 ]]; then
 				# openssl >= 1.0.1f fills this field with random values
 				out " TLS timestamp:               random values, no fingerprinting possible "
@@ -1472,7 +1472,7 @@ server_defaults() {
 				HTTP_TIME=$(date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>/dev/null) # the trailing \r confuses BSD flavors otherwise
 			fi
 
-			difftime=$(($now - $HTTP_TIME))
+			difftime=$(($HTTP_TIME - $now))
 			[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
 			out "$difftime sec from localtime";
 		else
@@ -2509,12 +2509,12 @@ crime() {
 	#STR=$($OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null | grep Compression )
 	$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null &>$TMPFILE
 	if grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
-		pr_green "not vulnerable (OK)"
+		pr_litegreen "not vulnerable (OK)"
 		[[ $SERVICE == "HTTP" ]] || out " (not using HTTP anyway)"
 		ret=0
 	else
 		if [[ $SERVICE == "HTTP" ]]; then
-			pr_red "VULNERABLE (NOT ok)"
+			pr_litered "VULNERABLE (NOT ok)"
 		else
 			pr_brown "VULNERABLE (NOT ok), but not using HTTP: probably no exploit known"
 		fi
@@ -2617,7 +2617,47 @@ EOF
 	return $ret
 }
 
-# Test for TLS_FALLBACK_SCSV
+### two helper functions for vulnerabilities follow
+count_ciphers() {
+	echo "$1" | sed 's/:/\n/g' | wc -l | sed 's/ //g'
+}
+
+actually_supported_ciphers() {
+	$OPENSSL ciphers "$1"
+}
+
+
+# Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
+ssl_poodle() {
+	local ret
+	local cbc_ciphers
+
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption)" && outln "\n"
+	pr_bold " POODLE, SSL"; out " (CVE-2014-3566)               "
+	cbc_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/CBC/ { print $1 }' | tr '\n' ':')
+#FIXME: even with worst openssl client (FreeBSD9) we have 17 reasonable ciphers but is that enough to check??
+	debugme echo $cbc_ciphers
+	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
+	ret=$?
+	[ "$VERBERR" -eq 0 ] && egrep -q "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	if [ $ret -eq 0 ]; then
+		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
+	else
+		pr_green "not vulnerable (OK)"
+	fi
+	outln
+	tmpfile_handle $FUNCNAME.txt
+	return $ret
+}
+
+# for appliance which use padding, no fallback needed
+tls_poodle() {
+	pr_bold " POODLE, SSL"; out " CVE-2014-8730), experimental "
+	#FIXME
+	echo "#FIXME"
+	return 7
+}
+
 tls_fallback_scsv() {
 	local ret
 
@@ -2652,46 +2692,6 @@ tls_fallback_scsv() {
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
-
-# Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
-ssl_poodle() {
-	local ret
-	local cbc_ciphers
-
-	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption)" && outln "\n"
-	pr_bold " POODLE, SSL"; out " (CVE-2014-3566)               "
-	cbc_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' | awk '/CBC/ { print $1 }' | tr '\n' ':')
-#FIXME: even with worst openssl client (FreeBSD9) we have 17 reasonable ciphers but is that enough to check??
-	debugme echo $cbc_ciphers
-	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
-	ret=$?
-	[ "$VERBERR" -eq 0 ] && egrep -q "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-	if [ $ret -eq 0 ]; then
-		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (no TLS_FALLBACK_SCSV mitigation tested)"
-	else
-		pr_green "not vulnerable (OK)"
-	fi
-	outln
-	tmpfile_handle $FUNCNAME.txt
-	return $ret
-}
-
-# for appliance which use padding, no fallback needed
-tls_poodle() {
-	pr_bold " POODLE, SSL"; out " CVE-2014-8730), experimental "
-	#FIXME
-	echo "#FIXME"
-	return 7
-}
-
-count_ciphers() {
-	echo "$1" | sed 's/:/\n/g' | wc -l | sed 's/ //g'
-}
-
-actually_supported_ciphers() {
-	$OPENSSL ciphers "$1"
-}
-
 
 
 # Factoring RSA Export Keys: don't use EXPORT RSA ciphers, see https://freakattack.com/
@@ -2757,7 +2757,7 @@ logjam() {
 	$OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-	addtl_warning="$addtl_warning, precomputable primes not checked yet. \"$PROG_NAME -E\" spots candidates"
+	addtl_warning="$addtl_warning, precomputable primes not checked. \"$PROG_NAME -E\" spots candidates"
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers"
 	else
@@ -3908,6 +3908,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.273 2015/06/11 16:46:21 dirkw Exp $
+#  $Id: testssl.sh,v 1.274 2015/06/11 19:41:24 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
