@@ -34,6 +34,9 @@
 * Dmitri S
  - inspiration & help for Darwin port
 
+* Jonathan Roach
+ - TLS_FALLBACK_SCSV checks
+
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena
 
