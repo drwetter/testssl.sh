@@ -3094,6 +3094,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except ciphers per
      <-C|--compression|--crime>     tests for CRIME vulnerability
      <-T|--breach>                  tests for BREACH vulnerability
      <-O|--poodle>                  tests for POODLE (SSL) vulnerability
+     <-Z|--tls-fallback>            checks TLS_FALLBACK_SCSV mitigation
      <-F|--freak>                   tests for FREAK vulnerability
      <-A|--beast>                   tests for BEAST vulnerability
      <-J|--logjam>                  tests for LOGJAM vulnerability
@@ -3907,6 +3908,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.272 2015/06/11 16:33:05 dirkw Exp $
+#  $Id: testssl.sh,v 1.273 2015/06/11 16:46:21 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
