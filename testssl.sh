@@ -2619,6 +2619,10 @@ EOF
 
 # Test for TLS_FALLBACK_SCSV
 tls_fallback_scsv() {
+	local ret
+
+	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for TLS_FALLBACK_SCSV Protection" && outln "\n"
+	pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
 	# This isn't a vulnerability check per se, but checks for the existence of
 	# the countermeasure to protect against protocol downgrade attacks.
 
@@ -2629,33 +2633,24 @@ tls_fallback_scsv() {
 		return 4
 	fi
 
-	# Set up a local temporary file in which to store OpenSSL's output...
-	local TEMP="/tmp"
-	if [ ! -z "$HOME" ] && [ -w "$HOME" ]; then
-		TEMP="$HOME"
-	fi
-	local scsv="$TEMP/.testssl_scsv-${NODEIP}-${PORT}.txt"
-	ret=1
-
 	# ...and do the test
-	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for TLS_FALLBACK_SCSV Support" && outln "\n"
-	pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
-	echo | $OPENSSL s_client -connect $NODEIP:$PORT -no_tls1_2 -fallback_scsv > "$scsv" 2>&1
-	if grep -q "CONNECTED(00" "$scsv"; then
-		if grep -q "alert inappropriate fallback" "$scsv"; then
-			pr_green "not vulnerable (OK) - supported"
-			ret=0
+	$OPENSSL s_client -connect $NODEIP:$PORT $SNI -no_tls1_2 -fallback_scsv &>$TMPFILE </dev/null
+	if grep -q "CONNECTED(00" "$TMPFILE"; then
+		if grep -q "alert inappropriate fallback" "$TMPFILE"; then
+				pr_litegreen "Downgrade attack prevention supported (OK)"
+				ret=0
 		else
-			pr_litered "VULNERABLE (NOT ok)"; out " - not supported\n"
+			pr_brown "Downgrade attack prevention NOT supported"
 			ret=2
 		fi
 	else
-		pr_magentaln "test failed (couldn't connect)"
+		pr_magenta "test failed (couldn't connect)"
 		ret=3
 	fi
 
-	# Quick cleanup
-	rm -f "$scsv"
+	outln
+	tmpfile_handle $FUNCNAME.txt
+	return $ret
 }
 
 # Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
@@ -3737,6 +3732,10 @@ startup() {
 				do_tls_fallback_scsv=true
 				let "VULN_COUNT++"
 				;;
+			-Z|--tls[_-]fallback|tls[_-]fallback[_-]scs)
+				do_tls_fallback_scsv=true
+				let "VULN_COUNT++"
+				;;
 			-F|--freak)
 				do_freak=true
 				let "VULN_COUNT++"
@@ -3908,6 +3907,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.271 2015/06/02 20:12:53 dirkw Exp $
+#  $Id: testssl.sh,v 1.272 2015/06/11 16:33:05 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
