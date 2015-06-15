@@ -16,6 +16,7 @@ New features in the upcoming stable release 2.6 are:
 * TLS_FALLBACK_SCSV check
 * Run in default mode through all ciphers
 * wide mode for several checks
+* can test multiple IP adresses
 
 more see https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A%222.6+%2F+2.5dev%22
 
