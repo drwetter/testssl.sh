@@ -130,14 +130,15 @@ HEXC=""
 NW_STR=""
 LEN_STR=""
 SNI=""
-IP4=""
-IP6=""
 OSSL_VER=""					# openssl version, will be auto-determined
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 HAS_DH_BITS=true
+NODE=""
 NODEIP=""
+IPADDRs=""
+IP46ADDRs=""
 VULN_COUNT=0
 readonly VULN_THRESHLD=1			# if bigger than this no we show a separate header in blue
 IPS=""
@@ -3106,6 +3107,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except ciphers per
 
      <-t|--starttls> protocol       does a default run against a STARTTLS enabled service
      <--mx> domain/host             tests MX records from high to low priority (STARTTLS, port 25)
+     <--ip> ipv4                    takes ipv4 instead of resolving host in URI (supplied host name is vhost then)
 
 
 partly mandatory parameters:
@@ -3306,8 +3308,8 @@ ignore_no_or_lame() {
 	return 1
 }
 
-# Parameters: 1    URI
-#             [2]  protocol
+# arg1: URI
+# arg2: protocol
 parse_hn_port() {
 	PORT=443		# unless otherwise auto-determined, see below
 	NODE="$1"
@@ -3402,52 +3404,55 @@ parse_hn_port() {
 
 
 get_dns_entries() {
-	test4iponly=$(printf $NODE | sed -e 's/[0-9]//g' -e 's/\.//g')
-	if [ "x$test4iponly" == "x" ]; then	# only an IPv4 address was supplied
-		IP4=$NODE
-		SNI=""						# override Server Name Indication as we test the IP only
+	local ip4=""
+	local ip6=""
+
+	if [ -z "$(printf $NODE | sed -e 's/[0-9]//g' -e 's/\.//g')" ]; then
+		ip4=$NODE				# only an IPv4 address was supplied as an argument, no hostname
+		SNI=""				# override Server Name Indication as we test the IP only
 	else
 		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-		IP4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
-		if [ -z "$IP4" ]; then
-			if which host &> /dev/null && [ -z "$IP4" ] ; then
-				IP4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-				if echo "$IP4" | grep -q NXDOMAIN || echo "$IP4" | grep -q "no A record"; then
+		ip4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
+		if [ -z "$ip4" ]; then
+			if which host &> /dev/null && [ -z "$ip4" ] ; then
+				ip4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
+				if echo "$ip4" | grep -q NXDOMAIN || echo "$ip4" | grep -q "no A record"; then
 					return 1
 				fi
 			fi
-			if [ -z "$IP4" ] ; then
+			if [ -z "$ip4" ] ; then
 				# MSYS2 has no host or getent, so we need nslookup
-				IP4=$(nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
-				[ -z "$IP4" ] && return 2
+				ip4=$(nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
+				[ -z "$ip4" ] && return 2
 			fi
 		fi
 
-		IP6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
-		if [ -z "$IP6" ] ; then
+		ip6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
+		if [ -z "$ip6" ] ; then
 			# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
-			#which getent 2>&1 >/dev/null && IP6=$(getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq)
+			#which getent 2>&1 >/dev/null && ip6=$(getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq)
 			if host -t aaaa $NODE &>/dev/null ; then
-				IP6=$(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //')
+				ip6=$(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //')
 			else
-				IP6=""
+				ip6=""
 			fi
 			# MSYS2 has no host or getent, so we need nslookup
-			if [ -z "$IP6" ] ; then
-				IP6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
+			if [ -z "$ip6" ] ; then
+				ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
 			fi
 		fi
-	fi # test4iponly
+	fi 
 
-	IPADDRs="$IP4"
-	[ ! -z "$IP6" ] && IPADDRs="$IP4 $IP6"
+	IPADDRs="$ip4"
+	[ ! -z "$ip6" ] && IP46ADDRs="$ip4 $ip6" || IP46ADDRs="$IPADDRs"
 
-	# FIXME: we could/should test more than one IPv4 addresses if available, same IPv6. For now we test the first IPv4:
-	NODEIP=$(echo "$IP4" | head -1)
+	# FIXME: we could/should test more than one IPv4 addresses if available, same IPv6. For now we test the first IPv4 or CMDLINE_IP:
+	NODEIP=$(echo "$ip4" | head -1)
+	[ -n "$CMDLINE_IP" ] && NODEIP="$CMDLINE_IP"
 	[ -z "$NODEIP" ] && return 3
 
 	# we can't do this as some checks and even openssl are not yet IPv6 safe. BTW: bash sockets do IPv6 transparently!
-	#NODEIP=$(echo "$IP6" | head -1)
+	#NODEIP=$(echo "$ip6" | head -1)
 	if which host &> /dev/null; then
 		#rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep -v "is an alias for" | sed -e 's/^.*pointer //' -e 's/\.$//')
 		rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep 'pointer' | sed -e 's/^.*pointer //' -e 's/\.$//')
@@ -3460,9 +3465,11 @@ get_dns_entries() {
 
 
 display_rdns_etc() {
-     if [ $(printf "$IPADDRs" | wc -w) -gt 1 ]; then
+	local i
+
+     if [ $(printf "$IP46ADDRs" | wc -w) -gt 1 ]; then
           out " further IP addresses:  "
-          for i in $IPADDRs; do
+          for i in $IP46ADDRs; do
                [ "$i" == "$NODEIP" ] && continue
                out " $i"
           done
@@ -3486,7 +3493,6 @@ datebanner() {
 draw_dotted_line() {
 	printf -- "$1"'%.s' $(eval "echo {1.."$(($2))"}")
 }
-
 
 mx_all_ips() {
 	local mxs mx
@@ -3908,6 +3914,6 @@ fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.274 2015/06/11 19:41:24 dirkw Exp $
+#  $Id: testssl.sh,v 1.275 2015/06/15 10:13:15 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
