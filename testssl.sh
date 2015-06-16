@@ -26,15 +26,15 @@ SWCONTACT="dirk aet testssl dot sh"
 # your OWN RISK!
 
 # HISTORY: I know this shell script is still on its way to be nice and readable. ;-) It
-# all started with a few openssl commands around 2006.  That's because openssl is a such a good
-# swiss army knife (see e.g.  wiki.openssl.org/index.php/Command_Line_Utilities) that it was
-# difficult to resist wrapping some shell commands around it, which I used for my pen tests.
-# This is how everything started.
+# all started with a few openssl commands around 2006 for me as a pentester.
+# That's because openssl is a such a good swiss army knife (see e.g.  
+# wiki.openssl.org/index.php/Command_Line_Utilities) that it was difficult to resist 
+# wrapping some shell commands around it, which I used for my pen tests. This is how everything started.
 # Now it has grown up, it has bash socket support for some features which basically replacing
 # more and more functions of OpenSSL and will serve as some kind of library in the future.
 # The socket checks in bash may sound cool and unique -- they are -- but probably you
 # can achieve e.g. the same result with my favorite interactive shell: zsh (zmodload zsh/net/socket
-# -- checkout zsh/net/tcp too!) /bin/bash is way more often used within Linux and it's perfect
+# -- checkout zsh/net/tcp) too! /bin/bash though is way more often used within Linux and it's perfect
 # for cross platform support, see MacOS X and also under Windows the MSYS2 extension.
 # Cross-platform is one of the three ideas of this script. Second: Ease of installation.
 # No compiling, install gems, go to CPAN, use pip etc. Third: Easy to use and to interpret
@@ -56,6 +56,8 @@ SWCONTACT="dirk aet testssl dot sh"
 # however it's still recommended to use the supplied binaries or cook your own, see
 # https://github.com/drwetter/testssl.sh/blob/master/openssl-bins/openssl-1.0.2-chacha.pm/Readme.md
 # Don't worry if feature X is not available you'll get a warning about this missing feature!
+# The idea is if this script can't tell something for sure it speaks up so that you have
+# a better picture.
 
 # debugging help:
 readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
@@ -369,7 +371,7 @@ tmpfile_handle() {
 	if [[ "$DEBUG" -eq 0 ]] ; then
 		rm $TMPFILE
 	else
-		mv $TMPFILE "$TEMPDIR/$1"
+		mv $TMPFILE "$TEMPDIR/$NODEIP.$1"
 	fi
 }
 
@@ -790,7 +792,7 @@ normalize_ciphercode() {
 		fi
 		HEXC="$part1$part2$part3"
 	fi
-# FIXME: we shuld just echo this and avoid the global var HEXC
+#TODO: we should just echo this and avoid the global var HEXC
 	HEXC=$(echo $HEXC | tr 'A-Z' 'a-z' |  sed 's/0x/x/') #tolower + strip leading 0
 	return 0
 }
@@ -3251,8 +3253,6 @@ cleanup () {
 		[ -d "$TEMPDIR" ] && rm -rf ${TEMPDIR};
 	fi
 	outln
-	[ -n "$NODE" ] && datebanner "Done"  # only if running against server
-	outln
 }
 
 # for now only GOST engine
@@ -3339,14 +3339,82 @@ parse_hn_port() {
 	URL_PATH=$(echo $URL_PATH | sed 's/\/\//\//g')    	# we rather want // -> /
 	[ -z "$URL_PATH" ] && URL_PATH="/"
 
-	# now get NODEIP
-	if ! get_dns_entries ; then
-		pr_magenta "Can't proceed: No IP address for \"$NODE\" available"; outln "\n"
+	return 0  	# NODE, URL_PATH, PORT is set now
+}
+
+newline_to_spaces() {
+	echo "$1" | tr '\n' ' ' | sed 's/ $//'
+}
+
+
+# now get all IP addresses 
+determine_ip_addresses() {
+	local ip4=""
+	local ip6=""
+
+	if [ -z "$(printf $NODE | sed -e 's/[0-9]//g' -e 's/\.//g')" ]; then
+		ip4=$NODE				# only an IPv4 address was supplied as an argument, no hostname
+		SNI=""				# override Server Name Indication as we test the IP only
+	else
+		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
+		ip4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
+		if [[ -z "$ip4" ]]; then
+			if which host &> /dev/null && [ -z "$ip4" ] ; then
+				ip4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
+				if echo "$ip4" | grep -q NXDOMAIN || echo "$ip4" | grep -q "no A record"; then
+					return 1
+				fi
+			fi
+			if [[ -z "$ip4" ]] ; then
+				# MSYS2 has no host or getent, so we need nslookup
+				ip4=$(nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
+				[[ -z "$ip4" ]] && return 2
+			fi
+		fi
+
+		ip6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
+		if [[ -z "$ip6" ]]; then
+			# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
+			#which getent 2>&1 >/dev/null && ip6=$(getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq)
+			if host -t aaaa $NODE &>/dev/null ; then
+				ip6=$(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //')
+			else
+				ip6=""
+			fi
+			# MSYS2 has no host or getent, so we need nslookup
+			if [[ -z "$ip6" ]]; then
+				ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
+			fi
+		fi
+	fi
+	IPADDRs=$(newline_to_spaces "$ip4")
+	if [[ -z "$IPADDRs" ]] && [[ -z "$CMDLINE_IP" ]] ; then
+		pr_magenta "Can't proceed: No IP address for \"$NODE\" available"
+		outln "\n"
 		exit -1
 	fi
+	[[ ! -z "$ip6" ]] && IP46ADDRs="$ip4 $ip6" || IP46ADDRs="$IPADDRs"
+	IP46ADDRs=$(newline_to_spaces "$IP46ADDR")
 
-	# check if we can connect to port
-	if ! fd_socket; then
+	return 0  	# IPADDR and IP46ADDR is set now
+}
+
+determine_rdns() {
+	# we can't do this as some checks and even openssl is not IPv6 safe. BTW: bash sockets do IPv6 transparently!
+	#NODEIP=$(echo "$ip6" | head -1)
+	if which host &> /dev/null; then
+		rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep 'pointer' | sed -e 's/^.*pointer //' -e 's/\.$//')
+	elif which nslookup &> /dev/null; then
+		rDNS=$(nslookup -type=PTR $NODEIP 2> /dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
+	fi
+	[ -z "$rDNS" ] && rDNS="--"
+	return 0
+}
+
+
+# arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap (maybe with trailing s)
+determine_service() {
+	if ! fd_socket; then 			# check if we can connect to $NODEIP:$PORT
 		ignore_no_or_lame "Ignore? "
 		[ $? -ne 0 ] && exit 3
 	fi
@@ -3354,7 +3422,7 @@ parse_hn_port() {
 
 	datebanner "Testing"
 
-	if  [[ -z "$2" ]] ; then		# for starttls we want another check
+	if  [[ -z "$1" ]] ; then		# for starttls we want another check
 		# determine protocol which works (needed for IIS6). If we don't have IIS6, 1st try will succeed --> better because we use the variable
 		# all over the place. Stupid thing that we need to do that stuff for IIS<=6
 		for OPTIMAL_PROTO in "" "-tls1_2" "-tls1" "-ssl3" "-tls1_1" "-ssl2" ""; do
@@ -3377,10 +3445,11 @@ parse_hn_port() {
 		fi
 		runs_HTTP $OPTIMAL_PROTO
 	else
-		protocol=$(echo "$2" | sed 's/s$//')     # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
+		protocol=$(echo "$1" | sed 's/s$//')     # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
 		case "$protocol" in
 			ftp|smtp|pop3|imap|xmpp|telnet|ldap)
 				STARTTLS="-starttls $protocol"; export STARTTLS
+				SNI=""
 				$OPENSSL s_client -connect $NODEIP:$PORT $STARTTLS 2>/dev/null >$TMPFILE </dev/null
 				if [ $? -ne 0 ]; then
 					pr_magentaln " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT"
@@ -3399,75 +3468,14 @@ parse_hn_port() {
 	${do_mx_all_ips} || initialize_engine
 	outln
 
-	return 0
-}
-
-
-get_dns_entries() {
-	local ip4=""
-	local ip6=""
-
-	if [ -z "$(printf $NODE | sed -e 's/[0-9]//g' -e 's/\.//g')" ]; then
-		ip4=$NODE				# only an IPv4 address was supplied as an argument, no hostname
-		SNI=""				# override Server Name Indication as we test the IP only
-	else
-		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-		ip4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
-		if [ -z "$ip4" ]; then
-			if which host &> /dev/null && [ -z "$ip4" ] ; then
-				ip4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-				if echo "$ip4" | grep -q NXDOMAIN || echo "$ip4" | grep -q "no A record"; then
-					return 1
-				fi
-			fi
-			if [ -z "$ip4" ] ; then
-				# MSYS2 has no host or getent, so we need nslookup
-				ip4=$(nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
-				[ -z "$ip4" ] && return 2
-			fi
-		fi
-
-		ip6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
-		if [ -z "$ip6" ] ; then
-			# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
-			#which getent 2>&1 >/dev/null && ip6=$(getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq)
-			if host -t aaaa $NODE &>/dev/null ; then
-				ip6=$(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //')
-			else
-				ip6=""
-			fi
-			# MSYS2 has no host or getent, so we need nslookup
-			if [ -z "$ip6" ] ; then
-				ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
-			fi
-		fi
-	fi 
-
-	IPADDRs="$ip4"
-	[ ! -z "$ip6" ] && IP46ADDRs="$ip4 $ip6" || IP46ADDRs="$IPADDRs"
-
-	# FIXME: we could/should test more than one IPv4 addresses if available, same IPv6. For now we test the first IPv4 or CMDLINE_IP:
-	NODEIP=$(echo "$ip4" | head -1)
-	[ -n "$CMDLINE_IP" ] && NODEIP="$CMDLINE_IP"
-	[ -z "$NODEIP" ] && return 3
-
-	# we can't do this as some checks and even openssl are not yet IPv6 safe. BTW: bash sockets do IPv6 transparently!
-	#NODEIP=$(echo "$ip6" | head -1)
-	if which host &> /dev/null; then
-		#rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep -v "is an alias for" | sed -e 's/^.*pointer //' -e 's/\.$//')
-		rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep 'pointer' | sed -e 's/^.*pointer //' -e 's/\.$//')
-	elif which nslookup &> /dev/null; then
-		rDNS=$(nslookup -type=PTR $NODEIP 2> /dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
-	fi
-	[ -z "$rDNS" ] && rDNS="--"
-	return 0
+	return 0 		# OPTIMAL_PROTO, GET_REQ*/HEAD_REQ* is set now
 }
 
 
 display_rdns_etc() {
 	local i
 
-     if [ $(printf "$IP46ADDRs" | wc -w) -gt 1 ]; then
+     if [ $(printf "$IP46ADDRs" | wc -w | sed 's/ //g') -gt 1 ]; then
           out " further IP addresses:  "
           for i in $IP46ADDRs; do
                [ "$i" == "$NODEIP" ] && continue
@@ -3496,7 +3504,8 @@ draw_dotted_line() {
 
 mx_all_ips() {
 	local mxs mx
-	local mxport
+	local mxport 
+	local starttls_proto="smtp"
 	local ret=0
 
 	if which host &> /dev/null; then
@@ -3515,16 +3524,20 @@ mx_all_ips() {
 
 	mxport=${2:-25}
 	if [ -n "$mxs" ] && [ "$mxs" != ' ' ] ; then
-		starttls_proto="smtp"
-		[[ $mxport == "465" ]] && starttls_proto=""  # no starttls for Port 465
+		[[ $mxport == "465" ]] && \
+			starttls_proto=""  		# no starttls for Port 465, on all other ports we speak starttls
 		pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
 		for mx in $mxs; do
 			draw_dotted_line "-" $TERM_DWITH
 			outln
-			parse_hn_port "$mx:$mxport" $starttls_proto && lets_roll
+			parse_hn_port "$mx:$mxport" 
+			determine_ip_addresses
+			NODEIP="$IPADDRs"
+			lets_roll  "${starttls_proto}"
 		done
-		draw_dotted_line
+		draw_dotted_line "-" $TERM_DWITH
 		outln
+		pr_bold "Done testing now all MX records (on port $mxport): "; outln "$mxs"
 	else
 		pr_boldln " $1 has no MX records(s)"
 	fi
@@ -3841,6 +3854,9 @@ startup() {
 lets_roll() {
 	local ret
 
+	determine_rdns
+	determine_service "$1"		# any starttls service goes here
+
 	${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; exit $?; }
 
 	${do_test_just_one} && test_just_one ${single_cipher}
@@ -3883,6 +3899,8 @@ lets_roll() {
 	${do_allciphers} && { allciphers; ret=$(($? + ret)); }
 	${do_cipher_per_proto} && { cipher_per_proto; ret=$(($? + ret)); }
 
+	datebanner "Done" 
+
 	return $ret
 }
 
@@ -3899,21 +3917,48 @@ mybanner
 openssl_age
 maketempf
 
+# TODO: it's ugly to have those two vars here --> main()
+ret=0
+ip=""
+
+#TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
 if ${do_mx_all_ips} ; then
-     query_globals
-     # if we have just one "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
+     query_globals 				# if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
 	[ $? -eq 1 ] && set_scanning_defaults
 	initialize_engine
 	mx_all_ips "${URI}" $PORT
 	ret=$?
-else
-     parse_hn_port "${URI}" "${STARTTLS_PROTOCOL}"
-	lets_roll
-	ret=$?
+else	
+     parse_hn_port "${URI}" 											# NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
+	determine_ip_addresses
+	if [[ -n "$CMDLINE_IP" ]]; then
+		NODEIP="$CMDLINE_IP"										# specific ip address for NODE was supplied
+		lets_roll "${STARTTLS_PROTOCOL}"
+		ret=$?
+	else															# no --ip was supplied
+		if [[ $(printf "$IPADDRs" | wc -w | sed 's/ //g') -gt 1 ]]; then		# we have more that one ipv4 address to check
+			pr_bold "Testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
+			for ip in $IPADDRs; do
+				draw_dotted_line "-" $TERM_DWITH
+				outln
+				NODEIP="$ip"
+				lets_roll "${STARTTLS_PROTOCOL}"
+				ret=$(($? + ret))
+	  		done
+			draw_dotted_line "-" $TERM_DWITH
+			outln
+			pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
+		else														# we need just one ip4v to check
+			NODEIP="$IPADDRs"
+			lets_roll "${STARTTLS_PROTOCOL}"
+			ret=$?
+		fi
+	fi
 fi
 
 exit $ret
 
-#  $Id: testssl.sh,v 1.275 2015/06/15 10:13:15 dirkw Exp $
+
+#  $Id: testssl.sh,v 1.276 2015/06/16 12:04:43 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
