@@ -9,10 +9,6 @@
 # Stable version from                https://testssl.sh
 # Please file bugs at github!        https://github.com/drwetter/testssl.sh/issues
 
-VERSION="2.5dev"
-SWURL="http://dev.testssl.sh"
-SWCONTACT="dirk aet testssl dot sh"
-
 # Main author: Dirk Wetter, copyleft: 2007-2015, contributions so far see CREDIT.md
 #
 # License: GPLv2, see http://www.fsf.org/licensing/licenses/info/GPLv2.html
@@ -62,8 +58,14 @@ SWCONTACT="dirk aet testssl dot sh"
 # debugging help:
 readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
-# make sure that temporary files are cleaned up after use
+# make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
+
+readonly VERSION="2.5dev"
+readonly SWCONTACT="dirk aet testssl dot sh"
+echo $VERSION | grep -q dev && \
+	SWURL="http://dev.testssl.sh" ||
+	SWURL="   https://testssl.sh"
 
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname $0)
@@ -73,50 +75,49 @@ MAP_RFC_FNAME=""
 which git &>/dev/null && readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
 readonly CVS_REL=$(tail -5 $0 | awk '/dirkw Exp/ { print $4" "$5" "$6}')
 readonly CVS_REL_SHORT=$(tail -5 $0 | awk '/dirkw Exp/ { print $4 }')
+readonly SYSTEM=$(uname -s)			
+date --help >/dev/null 2>&1 && \
+	readonly HAS_GNUDATE=true || \
+	readonly HAS_GNUDATE=false
+readonly ECHO="/usr/bin/printf --"		# works under Linux, BSD, MacOS.
+TERM_DWITH=${COLUMNS:-$(tput cols)} 	# for future custom line wrapping
+TERM_CURRPOS=0						# ^^^ we also need to find out the length or current pos in the line
+
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
 
+# we have tab indentation with 5 virtual chars!
+
 OPENSSL=${OPENSSL:-/usr/bin/openssl}
-COLOR=${COLOR:-2}				# 2: Full color, 1: b/w+positioning, 0: no ESC at all
+COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-1} 		# will client side ciphers displayed before an individual test (makes no sense normally)
 SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: wrong value
-SNEAKY=${SNEAKY:-1}				# if zero: the referer and useragent we leave while checking the http header is just usual
+SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while checking the http header is just usual
 SSL_NATIVE=${SSL_NATIVE:-1}			# we do per default bash sockets where possible 0: switch back to native openssl
 ASSUMING_HTTP=${ASSUMING_HTTP:-1}		# in seldom cases (WAF, old servers/grumpy SSL) the service detection fails. Set to 0 for forcing HTTP
-DEBUG=${DEBUG:-0}				# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1),
-						# 3: slight hexdumps + other info, 4: send bytes via sockets, 5: received, 6: whole 9 yards
-						# FIXME: still to be filled with (more) sense or following to be included:
+DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1),
+								# 3: slight hexdumps + other info, 4: send bytes via sockets, 5: received, 6: whole 9 yards
+								# FIXME: still to be filled with (more) sense or following to be included:
 VERBERR=${VERBERR:-1}				# 0 means to be more verbose (handshake errors to be displayed so that one can tell better
-						# whether handshake succeeded or not. While testing individual ciphers you also need to have SHOW_EACH_C=1
+								# whether handshake succeeded or not. While testing individual ciphers you also need to have SHOW_EACH_C=1
 WIDE=${WIDE:-1}					# whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
 
-HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}		# we wait this long before killing the process to retrieve a service banner / http header
-readonly MAX_WAITSOCK=10			# waiting at max 10 seconds for socket reply
+HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}	# we wait this long before killing the process to retrieve a service banner / http header
+readonly MAX_WAITSOCK=10				# waiting at max 10 seconds for socket reply
 readonly CCS_MAX_WAITSOCK=5			# for the two CCS payload (each)
 readonly HEARTBLEED_MAX_WAITSOCK=8		# for the heartbleed payload
 USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
-USLEEP_REC=${USLEEP_REC:-0.2} 			# sleep time for general socket receive
+USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
-CAPATH="${CAPATH:-/etc/ssl/certs/}"		# Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
+CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 readonly HSTS_MIN=179				# >179 days is ok for HSTS
 readonly HPKP_MIN=30				# >=30 days should be ok for HPKP_MIN, practical hints?
 readonly CLIENT_MIN_PFS=5			# number of ciphers needed to run a test for PFS
 readonly DAYS2WARN1=60				# days to warn before cert expires, threshold 1
 readonly DAYS2WARN2=30				# days to warn before cert expires, threshold 2
 
-# more global vars, here just declared
-readonly ECHO="/usr/bin/printf --"		# works under Linux, BSD, MacOS.
-TERM_DWITH=${COLUMNS:-$(tput cols)} 		# for future custom line wrapping
-TERM_CURRPOS=0					# ^^^ we also need to find out the length or current pos in the line
-readonly SYSTEM=$(uname -s)			# OS
-if date --help >/dev/null 2>&1; then
-	readonly HAS_GNUDATE=true
-else
-	readonly HAS_GNUDATE=false
-fi
-
-
+# furher vars needed to follow
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 TEMPDIR=""
 TMPFILE=""
@@ -132,7 +133,7 @@ HEXC=""
 NW_STR=""
 LEN_STR=""
 SNI=""
-OSSL_VER=""					# openssl version, will be auto-determined
+OSSL_VER=""						# openssl version, will be auto-determined
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
@@ -142,13 +143,13 @@ NODEIP=""
 IPADDRs=""
 IP46ADDRs=""
 VULN_COUNT=0
-readonly VULN_THRESHLD=1			# if bigger than this no we show a separate header in blue
+readonly VULN_THRESHLD=1				# if bigger than this no we show a separate header in blue
 IPS=""
-SERVICE=""					# is the server running an HTTP server, SMTP, POP or IMAP?
+SERVICE=""						# is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
 STARTTLS_PROTOCOL=""
-OPTIMAL_PROTO=""				# we need this for IIS6 (sigh) and OpenSSL 1.02, otherwise some handshakes
-						# will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
+OPTIMAL_PROTO=""					# we need this for IIS6 (sigh) and OpenSSL 1.02, otherwise some handshakes
+								# will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 
 TLS_TIME=""
 TLS_NOW=""
@@ -162,13 +163,14 @@ readonly UA_STD="Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox
 TLS_LOW_BYTE=""
 HEX_CIPHER=""
 
-						# The various hexdump commands we need to replace xxd (BSD compatibility))
-HEXDUMPVIEW=(hexdump -C) 			# This is used in verbose mode to see what's going on
+									# The various hexdump commands we need to replace xxd (BSD compatibility))
+HEXDUMPVIEW=(hexdump -C) 				# This is used in verbose mode to see what's going on
 HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"') 	# This is used to analyze the reply
 HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"') 	# Replaces both xxd -p and tr -cd '[:print:]'
 
 
-###### some hexbytes for bash network sockets ######
+
+###### some hexbytes for bash network sockets follow ######
 
 # 133 standard cipher + 4x GOST for TLS 1.2 and SPDY/NPN
 readonly TLS12_CIPHER="
@@ -458,8 +460,9 @@ runs_HTTP() {
 	return $ret
 }
 
+
 #problems not handled: chunked
-http_header() {
+OLDhttp_header() {
 	outln; pr_blue "--> Testing HTTP header response"; outln "\n"
 
 	[ -z "$1" ] && url="/" || url="$1"
@@ -510,6 +513,40 @@ EOF
 
 	return $ret
 }
+
+http_header() {
+	outln; pr_blue "--> Testing HTTP header response"; outln "\n"
+
+#FIXME: OWA still throws a 400!
+	printf "$GET_REQ11" | $OPENSSL s_client  $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $SNI &>$HEADERFILE &
+	pid=$!
+	if wait_kill $pid $HEADER_MAXSLEEP; then
+		if ! egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
+			pr_litemagenta " likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
+			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
+			debugme cat $HEADERFILE
+			ret=7
+		fi
+		sed  -e '/^<HTML/,$d' -e '/^<html/,$d' -e '/^<XML /,$d' -e '/<?XML /,$d' \
+			-e '/^<xml /,$d' -e '/<?xml /,$d'  -e '/^<\!DOCTYPE/,$d' -e '/^<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
+#TODO  ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
+		mv $HEADERFILE.2  $HEADERFILE	 # sed'ing in place doesn't work with BSD and Linux simultaneously
+		ret=0
+	else
+		pr_litemagentaln " failed (HTTP header request stalled)"
+		ret=3
+	fi
+	if egrep -aq "^HTTP.1.. 301|^HTTP.1.. 302|^Location" $HEADERFILE; then
+		redir2=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
+		outln " (got 30x to $redir2 - may be better try this URL?)\n"
+	fi
+	if egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
+		outln " (got 401 / WWW-Authenticate, can't look beyond it)\n"
+	fi
+	[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2 2>/dev/null
+	return $ret
+}
+
 
 includeSubDomains() {
 	if grep -aiqw includeSubDomains "$1"; then
@@ -666,7 +703,7 @@ applicationbanner() {
 	fi
 	pr_bold " Application      "
 # examples: dev.testssl.sh, php.net, asp.net , www.regonline.com
-	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version' $HEADERFILE >$TMPFILE
+	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
 	if [ $? -ne 0 ]; then
 		outln " (no banner at \"$url\")"
 	else
@@ -1183,17 +1220,17 @@ run_std_cipherlists() {
 	outln
 	pr_blue "--> Testing standard cipher lists"; outln "\n"
 # see ciphers(1ssl)
-	std_cipherlists NULL:eNULL                   " Null Cipher             " 1
-	std_cipherlists aNULL                        " Anonymous NULL Cipher   " 1
-	std_cipherlists ADH                          " Anonymous DH Cipher     " 1
-	std_cipherlists EXPORT40                     " 40 Bit encryption       " 1
-	std_cipherlists EXPORT56                     " 56 Bit encryption       " 1
-	std_cipherlists EXPORT                       " Export Cipher (general) " 1
-	std_cipherlists LOW                          " Low (<=64 Bit)          " 1
-	std_cipherlists DES                          " DES Cipher              " 1
-	std_cipherlists 3DES                         " Triple DES Cipher       " 2
-	std_cipherlists "MEDIUM:!NULL:!aNULL:!SSLv2" " Medium grade encryption " 2
-	std_cipherlists "HIGH:!NULL:!aNULL"          " High grade encryption   " 0
+	std_cipherlists NULL:eNULL                   " Null Ciphers             " 1
+	std_cipherlists aNULL                        " Anonymous NULL Ciphers   " 1
+	std_cipherlists ADH                          " Anonymous DH Ciphers     " 1
+	std_cipherlists EXPORT40                     " 40 Bit encryption        " 1
+	std_cipherlists EXPORT56                     " 56 Bit encryption        " 1
+	std_cipherlists EXPORT                       " Export Ciphers (general) " 1
+	std_cipherlists LOW                          " Low (<=64 Bit)           " 1
+	std_cipherlists DES                          " DES Ciphers              " 1
+	std_cipherlists 3DES                         " Triple DES Ciphers       " 2
+	std_cipherlists "MEDIUM:!NULL:!aNULL:!SSLv2" " Medium grade encryption  " 2
+	std_cipherlists "HIGH:!NULL:!aNULL"          " High grade encryption    " 0
 	return 0
 }
 
@@ -1718,7 +1755,7 @@ pfs() {
 			pr_litegreen " PFS ciphers (OK): "
 		else
 			pr_litegreen " PFS is offered (OK) "
-			outln "Cipher follow (Client/browser support is here specially important) \n"
+			outln ", cipher follow (client/browser support is here specially important) \n"
 			neat_header
 		fi
 		while read hexcode dash pfs_cipher sslvers kx auth enc mac; do
@@ -3247,8 +3284,9 @@ EOF
 
 cleanup () {
 	if [[ "$DEBUG" -ge 1 ]] ; then
-		outln "\n"
+		outln 
 		pr_underline "DEBUG (level $DEBUG): see files in $TEMPDIR"
+		outln
 	else
 		[ -d "$TEMPDIR" ] && rm -rf ${TEMPDIR};
 	fi
@@ -3854,6 +3892,7 @@ startup() {
 lets_roll() {
 	local ret
 
+	[ -z "$NODEIP" ] && pr_magentaln "$NODE doesn't resolve to an IP address" && exit 1
 	determine_rdns
 	determine_service "$1"		# any starttls service goes here
 
@@ -3959,6 +3998,6 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.276 2015/06/16 12:04:43 dirkw Exp $
+#  $Id: testssl.sh,v 1.277 2015/06/16 17:53:38 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
