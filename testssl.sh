@@ -462,7 +462,13 @@ runs_HTTP() {
 
 
 #problems not handled: chunked
-OLDhttp_header() {
+http_header() {
+	local header
+	local -i ret
+	local referer useragent
+	local url
+	local redir2
+
 	outln; pr_blue "--> Testing HTTP header response"; outln "\n"
 
 	[ -z "$1" ] && url="/" || url="$1"
@@ -505,19 +511,26 @@ EOF
 	if egrep -aq "^HTTP.1.. 301|^HTTP.1.. 302|^Location" $HEADERFILE; then
 		redir2=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
 		outln " (got 30x to $redir2 - may be better try this URL?)\n"
-	fi
-	if egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
+	elif egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
 		outln " (got 401 / WWW-Authenticate, can't look beyond it)\n"
+	elif egrep -aq "^HTTP.1.. 400 Bad Request" $HEADERFILE; then 
+		pr_litemagentaln " (got \"400 Bad Request\": GET request was somehow wrong)\n"
 	fi
 	[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2 2>/dev/null
 
 	return $ret
 }
 
-http_header() {
+#problems not handled: chunked
+NEW_http_header() {
+	local header
+	local -i ret
+	local referer useragent
+	local url
+	local redir2
+
 	outln; pr_blue "--> Testing HTTP header response"; outln "\n"
 
-#FIXME: OWA still throws a 400!
 	printf "$GET_REQ11" | $OPENSSL s_client  $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $SNI &>$HEADERFILE &
 	pid=$!
 	if wait_kill $pid $HEADER_MAXSLEEP; then
@@ -539,9 +552,10 @@ http_header() {
 	if egrep -aq "^HTTP.1.. 301|^HTTP.1.. 302|^Location" $HEADERFILE; then
 		redir2=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
 		outln " (got 30x to $redir2 - may be better try this URL?)\n"
-	fi
-	if egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
+	elif egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
 		outln " (got 401 / WWW-Authenticate, can't look beyond it)\n"
+	elif egrep -aq "^HTTP.1.. 400 Bad Request" $HEADERFILE; then 
+		pr_litemagentaln " (got \"400 Bad Request\": GET request was somehow wrong)\n"
 	fi
 	[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2 2>/dev/null
 	return $ret
@@ -578,7 +592,7 @@ hsts() {
 			pr_litegreen "$hsts_age_days days" ; out "=$hsts_age_sec s"
 		else
 			out "$hsts_age_sec s = "
-			pr_brown "$hsts_age_days days (<$HSTS_MIN is not good enough)"
+			pr_brown "$hsts_age_days days, <$HSTS_MIN is not good enough"
 		fi
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"
@@ -666,12 +680,18 @@ emphasize_stuff_in_headers(){
 		-e "s/Red Hat Enterprise Linux/"$yellow"Red Hat Enterprise Linux$off/g" \
 		-e "s/Red Hat/"$yellow"Red Hat$off/g" \
 		-e "s/CentOS/"$yellow"CentOS$off/g" \
-		-e "s/X-Powered-By: ASP.NET/"$yellow"X-Powered-By: ASP.NET$off/g" \
+		-e "s/Via/"$yellow"Via$off/g" \
+		-e "s/X-Cache-Lookup/"$yellow"X-Cache-Lookup$off/g" \
+		-e "s/X-Cache/"$yellow"X-Cache$off/g" \
+		-e "s/X-OWA-Version/"$yellow"X-OWA-Version$off/g" \
+		-e "s/X-Version/"$yellow"X-Version$off/g" \
 		-e "s/X-Powered-By/"$yellow"X-Powered-By$off/g" \
 		-e "s/X-AspNet-Version/"$yellow"X-AspNet-Version$off/g"
 }
 
-serverbanner() {
+server_banner() {
+	local serverbanner
+
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
@@ -694,37 +714,41 @@ serverbanner() {
 	fi
 
 	tmpfile_handle $FUNCNAME.txt
-	return $?
+	return 0
 }
 
-applicationbanner() {
+rp_banner() {
+	if [ ! -s $HEADERFILE ] ; then
+		http_header "$1" || return 3
+	fi
+	pr_bold " Reverse Proxy    "
+	egrep -ai '^Via|^X-Cache' $HEADERFILE >$TMPFILE && \
+		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
+		outln " --"
+
+	tmpfile_handle $FUNCNAME.txt
+	return 0
+}
+
+application_banner() {
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
 	pr_bold " Application      "
-# examples: dev.testssl.sh, php.net, asp.net , www.regonline.com
 	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
-	if [ $? -ne 0 ]; then
-		outln " (no banner at \"$url\")"
-	else
-		#cat $TMPFILE | sed 's/^.*:/:/'  | sed -e :a -e '$!N;s/\n:/ \n\             +/;ta' -e 'P;D' | sed 's/://g'
-		#sed 's/^/ /g' $TMPFILE | tr -t '\n\r' '  ' | sed "s/\([0-9]\)/$pr_red\1$off/g"
+	[ $? -ne 0 ] && \
+		outln " (no banner at \"$url\")" || \
 		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')"
-		#i=0
-		#cat $TMPFILE | sed 's/^/ /' | while read line; do
-		#	out "$line"
-		#	if [[ $i -eq 0 ]] ; then
-		#		out "               "
-		#		i=1
-		#	fi
-		#done
-	fi
 
 	tmpfile_handle $FUNCNAME.txt
-	return $?
+	return 0
 }
 
-cookieflags() {	# ARG1: Path, ARG2: path
+cookie_flags() {	# ARG1: Path, ARG2: path
+	local -i nr_cookies
+	local nr_httponly nr_secure
+	local negative_word 
+
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
@@ -760,9 +784,9 @@ cookieflags() {	# ARG1: Path, ARG2: path
 }
 
 
-moreflags() {
+more_flags() {
 	local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP"
-	local other_flags2test="Access-Control-Allow-Origin Via Upgrade X-Served-By"
+	local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By"
 	local egrep_pattern=""
 	local f2t result_str
 	local blanks="                   "
@@ -772,7 +796,7 @@ moreflags() {
 	fi
 	pr_bold " Security headers  "
 	egrep_pattern=$(echo "$good_flags2test $other_flags2test"| sed -e 's/ /|\^/g' -e 's/^/\^/g') # space -> |^
-	egrep -ai $egrep_pattern $HEADERFILE >$TMPFILE
+	egrep -ai "$egrep_pattern" $HEADERFILE >$TMPFILE
 	if [ $? -ne 0 ]; then
 		outln "(none at \"$url\")"
 		ret=1
@@ -1502,7 +1526,7 @@ server_defaults() {
 	if [[ $SERVICE != "HTTP" ]] ; then
 		out "not tested as we're not targeting HTTP"
 	else
-		printf "$GET_REQ11" | $OPENSSL s_client  $OPTIMAL_PROTO -ign_eof -connect $NODEIP:$PORT $SNI &>$TMPFILE
+		printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -ign_eof -connect $NODEIP:$PORT $SNI &>$TMPFILE
 		now=$(date "+%s")
 		HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $TMPFILE)
 		if [ -n "$HTTP_TIME" ] ; then
@@ -3353,7 +3377,7 @@ parse_hn_port() {
 	NODE="$1"
 
 	# strip "https" and trailing urlpath supposed it was supplied additionally
-	echo $NODE | grep -q 'https://' && NODE=$(echo $NODE | sed -e 's/https\:\/\///')
+	echo $NODE | grep -q 'https://' && NODE=$(echo $NODE | sed -e 's/^https\:\/\///')
 
 	# strip trailing urlpath
 	NODE=$(echo $NODE | sed -e 's/\/.*$//')
@@ -3371,11 +3395,13 @@ parse_hn_port() {
 		# determine v4 port, supposed it was supplied additionally
 		echo $NODE | grep -q ':' && PORT=$(echo $NODE | sed 's/^.*\://') && NODE=$(echo $NODE | sed 's/\:.*$//')
 	fi
+	debugme echo $NODE:$PORT
 	SNI="-servername $NODE"
 
-	URL_PATH=$(echo $1 | sed 's/.*'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')		# remove protocol and node part and port
+	URL_PATH=$(echo $1 | sed 's/https:\/\///' | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')		# remove protocol and node part and port
 	URL_PATH=$(echo $URL_PATH | sed 's/\/\//\//g')    	# we rather want // -> /
 	[ -z "$URL_PATH" ] && URL_PATH="/"
+	debugme echo $URL_PATH
 
 	return 0  	# NODE, URL_PATH, PORT is set now
 }
@@ -3452,6 +3478,10 @@ determine_rdns() {
 
 # arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap (maybe with trailing s)
 determine_service() {
+	local all_failed
+	local ua 
+	local protocol
+
 	if ! fd_socket; then 			# check if we can connect to $NODEIP:$PORT
 		ignore_no_or_lame "Ignore? "
 		[ $? -ne 0 ] && exit 3
@@ -3474,13 +3504,13 @@ determine_service() {
 			ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
 			[ $? -ne 0 ] && exit 3
 		fi
-		if [ $SNEAKY -eq 0 ] ; then
-			GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $UA_SNEAKY\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-			HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $UA_SNEAKY\r\nAccept: text/*\r\n\r\n"
-		else
-			GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $UA_STD\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-			HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $UA_STD\r\nAccept: text/*\r\n\r\n"
-		fi
+		[[ $SNEAKY -eq 0 ]] && \
+			ua="$UA_SNEAKY" || \
+			ua="$UA_STD"
+		GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
+		HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+		GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
+		HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
 		runs_HTTP $OPTIMAL_PROTO
 	else
 		protocol=$(echo "$1" | sed 's/s$//')     # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
@@ -3911,10 +3941,11 @@ lets_roll() {
 		if [[ $SERVICE == "HTTP" ]]; then
 			hsts "$URL_PATH"
 			hpkp "$URL_PATH"
-			serverbanner "$URL_PATH"
-			applicationbanner "$URL_PATH"
-			cookieflags "$URL_PATH"
-			moreflags "$URL_PATH"
+			server_banner "$URL_PATH"
+			application_banner "$URL_PATH"
+			cookie_flags "$URL_PATH"
+			more_flags "$URL_PATH"
+			rp_banner "$URL_PATH"
 	    fi
 	fi
 
@@ -3998,6 +4029,6 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.277 2015/06/16 17:53:38 dirkw Exp $
+#  $Id: testssl.sh,v 1.278 2015/06/16 21:00:46 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
