@@ -79,6 +79,9 @@ readonly SYSTEM=$(uname -s)
 date --help >/dev/null 2>&1 && \
 	readonly HAS_GNUDATE=true || \
 	readonly HAS_GNUDATE=false
+echo A | sed -E 's/A//' >/dev/null 2>&1 && \
+	readonly HAS_SED_E=true || \
+	readonly HAS_SED_E=false 
 readonly ECHO="/usr/bin/printf --"		# works under Linux, BSD, MacOS.
 TERM_DWITH=${COLUMNS:-$(tput cols)} 	# for future custom line wrapping
 TERM_CURRPOS=0						# ^^^ we also need to find out the length or current pos in the line
@@ -592,7 +595,7 @@ hsts() {
 			pr_litegreen "$hsts_age_days days" ; out "=$hsts_age_sec s"
 		else
 			out "$hsts_age_sec s = "
-			pr_brown "$hsts_age_days days, <$HSTS_MIN is not good enough"
+			pr_brown "$hsts_age_days days, <$HSTS_MIN days is too short"
 		fi
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"
@@ -907,19 +910,26 @@ std_cipherlists() {
 		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $SNI 2>$TMPFILE >/dev/null </dev/null
 		ret=$?
 		[[ $DEBUG -ge 2 ]] && cat $TMPFILE
+		out "   "                # in order to be in the same row as server preferences
 		case $3 in
 			0)	# ok to offer
 				[[ $ret -eq 0 ]] && \
 					pr_greenln "offered (OK)" || \
-					pr_boldln "not offered" ;;
-			2) 	# not really bad
-				[[ $ret -eq 0 ]] && \
-					outln "offered" || \
-					pr_greenln "not offered (OK)" ;;
-			*) # the ugly rest
+					pr_brownln "not offered (NOT ok)" ;;
+			1) # the ugly ones
 				[[ $ret -eq 0 ]] && \
 					pr_redln "offered (NOT ok)" || \
 					pr_greenln "not offered (OK)" ;;
+			2) 	# bad but not worst
+				[[ $ret -eq 0 ]] && \
+					pr_literedln "offered (NOT ok)" || \
+					pr_litegreenln "not offered (OK)" ;;
+			3) # not totally bad 
+				[[ $ret -eq 0 ]] && \
+					pr_brownln "offered (NOT ok)" || \
+					outln "not offered (OK)" ;;
+			*) # we shouldn't reach this
+				pr_litemagenta "? (please report this)" ;;
 		esac
 		tmpfile_handle $FUNCNAME.txt
 	else
@@ -936,7 +946,11 @@ std_cipherlists() {
 # ARG2: sleep
 socksend() {
 	# the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
-	data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+	if $HAS_SED_E; then
+		data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+	else
+		data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+	fi
 	[[ $DEBUG -ge 4 ]] && echo "\"$data\""
 	printf -- "$data" >&5 2>/dev/null &
 	sleep $2
@@ -1240,21 +1254,22 @@ runprotocols() {
 	return 0
 }
 
+#TODO: work with a fixed list here
 run_std_cipherlists() {
 	outln
-	pr_blue "--> Testing standard cipher lists"; outln "\n"
+	pr_blue "--> Testing ~standard cipher lists"; outln "\n"
 # see ciphers(1ssl)
-	std_cipherlists NULL:eNULL                   " Null Ciphers             " 1
-	std_cipherlists aNULL                        " Anonymous NULL Ciphers   " 1
-	std_cipherlists ADH                          " Anonymous DH Ciphers     " 1
-	std_cipherlists EXPORT40                     " 40 Bit encryption        " 1
-	std_cipherlists EXPORT56                     " 56 Bit encryption        " 1
-	std_cipherlists EXPORT                       " Export Ciphers (general) " 1
-	std_cipherlists LOW                          " Low (<=64 Bit)           " 1
-	std_cipherlists DES                          " DES Ciphers              " 1
-	std_cipherlists 3DES                         " Triple DES Ciphers       " 2
-	std_cipherlists "MEDIUM:!NULL:!aNULL:!SSLv2" " Medium grade encryption  " 2
-	std_cipherlists "HIGH:!NULL:!aNULL"          " High grade encryption    " 0
+	std_cipherlists NULL:eNULL                         " Null Ciphers             " 1
+	std_cipherlists aNULL                              " Anonymous NULL Ciphers   " 1
+	std_cipherlists ADH                                " Anonymous DH Ciphers     " 1
+	std_cipherlists EXPORT40                           " 40 Bit encryption        " 1
+	std_cipherlists EXPORT56                           " 56 Bit encryption        " 1
+	std_cipherlists EXPORT                             " Export Ciphers (general) " 1
+	std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1
+	std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1
+	std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2'       " Medium grade encryption  " 2
+	std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3
+	std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:'    " High grade encryption    " 0
 	return 0
 }
 
@@ -1661,11 +1676,11 @@ server_defaults() {
 	else
 		issuer_c="" 		# CACert would have 'issuer= ' here otherwise
 	fi
-	if [ "$issuer_o" == "issuer=" ] || [ "$issuer" == "$CN" ] ; then
+	if [ "$issuer_o" == "issuer=" ] ||  [ "$issuer_o" == "issuer= " ] || [ "$issuer" == "$CN" ] ; then
 		pr_redln "selfsigned (not OK)"
 	else
 		[ "$issuer_c" == "" ] && \
-			outln "$underline$issuer$off ($underline$issuer_o$off" || \
+			outln "$underline$issuer$off ($underline$issuer_o$off)" || \
 			outln "$underline$issuer$off ($underline$issuer_o$off from $underline$issuer_c$off)"
 	fi
 
@@ -2283,7 +2298,11 @@ heartbleed(){
 	# determine TLS versions available:
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -tlsextdebug &>$TMPFILE </dev/null
 
-	tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
+	if $HAS_SED_E; then
+		tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
+	else
+		tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -r 's/[^[:digit:]]//g')
+	fi
 	case $tls_proto_offered in
 		12)	tls_hexcode="x03, x03" ;;
 		11)	tls_hexcode="x03, x02" ;;
@@ -2397,8 +2416,11 @@ ccs_injection(){
 	fi
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT &>$TMPFILE </dev/null
 
-	tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
-	#tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed 's/^.*Protocol//')
+	if $HAS_SED_E; then
+		tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
+	else
+		tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -r 's/[^[:digit:]]//g')
+	fi
 	case $tls_proto_offered in
 		12)	tls_hexcode="x03, x03" ;;
 		11)	tls_hexcode="x03, x02" ;;
@@ -2679,6 +2701,14 @@ EOF
 		ret=3
 	fi
 	return $ret
+}
+
+# trim spaces for BSD and old sed
+count_lines() {
+	echo "$1" | wc -l | sed 's/ //g'
+}
+count_words() {
+	echo "$1" | wc -w | sed 's/ //g'
 }
 
 ### two helper functions for vulnerabilities follow
@@ -3274,6 +3304,7 @@ ECHO: $ECHO
 COLOR: $COLOR
 TERM_DWITH: $TERM_DWITH
 HAS_GNUDATE: $HAS_GNUDATE
+HAS_SED_E: $HAS_SED_E
 
 SHOW_LOC_CIPH: $SHOW_LOC_CIPH
 SHOW_EACH_C: $SHOW_EACH_C
@@ -4029,6 +4060,6 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.278 2015/06/16 21:00:46 dirkw Exp $
+#  $Id: testssl.sh,v 1.279 2015/06/17 09:33:28 dirkw Exp $
 # vim:ts=5:sw=5
 # ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
