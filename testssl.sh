@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 #
+# vim:ts=5:sw=5
+# use vim and you will see everything beautifully indented with a 5 char tab
+
 [ -z "$BASH_VERSINFO" ] && echo "\n$(tput setaf 5) Please make sure you're using bash! Bye...$(tput sgr0)\n" && exit 1
-#
+
 # testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some
 # vulnerabilities or features
 #
@@ -463,6 +466,10 @@ runs_HTTP() {
 	return $ret
 }
 
+strip_lf() {
+	echo "$1" | tr -d '\n' | tr -d '\r'
+}
+
 
 #problems not handled: chunked
 http_header() {
@@ -470,9 +477,8 @@ http_header() {
 	local -i ret
 	local referer useragent
 	local url
-	local redir2
 
-	outln; pr_blue "--> Testing HTTP header response"; outln "\n"
+	outln; pr_blue "--> Testing HTTP header response"; outln " @ \"$URL_PATH\"\n"
 
 	[ -z "$1" ] && url="/" || url="$1"
 	if [ $SNEAKY -eq 0 ] ; then
@@ -508,61 +514,107 @@ EOF
 		mv $HEADERFILE.2  $HEADERFILE	 # sed'ing in place doesn't work with BSD and Linux simultaneously
 		ret=0
 	else
-		pr_litemagentaln " failed (HTTP header request stalled)"
-		ret=3
-	fi
-	if egrep -aq "^HTTP.1.. 301|^HTTP.1.. 302|^Location" $HEADERFILE; then
-		redir2=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
-		outln " (got 30x to $redir2 - may be better try this URL?)\n"
-	elif egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
-		outln " (got 401 / WWW-Authenticate, can't look beyond it)\n"
-	elif egrep -aq "^HTTP.1.. 400 Bad Request" $HEADERFILE; then 
-		pr_litemagentaln " (got \"400 Bad Request\": GET request was somehow wrong)\n"
-	fi
-	[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2 2>/dev/null
-
-	return $ret
-}
-
-#problems not handled: chunked
-NEW_http_header() {
-	local header
-	local -i ret
-	local referer useragent
-	local url
-	local redir2
-
-	outln; pr_blue "--> Testing HTTP header response"; outln "\n"
-
-	printf "$GET_REQ11" | $OPENSSL s_client  $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $SNI &>$HEADERFILE &
-	pid=$!
-	if wait_kill $pid $HEADER_MAXSLEEP; then
-		if ! egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
-			pr_litemagenta " likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
-			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
-			debugme cat $HEADERFILE
-			ret=7
+		#TODO: attention: if this runs into a timeout, we're dead. Try again differently:
+		printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $SNI &>$HEADERFILE 
+		if [ $? -ne 0 ]; then
+			pr_litemagentaln " failed (HTTP header request stalled)"
+			return 3
+			#ret=3
 		fi
-		sed  -e '/^<HTML/,$d' -e '/^<html/,$d' -e '/^<XML /,$d' -e '/<?XML /,$d' \
-			-e '/^<xml /,$d' -e '/<?xml /,$d'  -e '/^<\!DOCTYPE/,$d' -e '/^<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
-#TODO  ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
-		mv $HEADERFILE.2  $HEADERFILE	 # sed'ing in place doesn't work with BSD and Linux simultaneously
-		ret=0
-	else
-		pr_litemagentaln " failed (HTTP header request stalled)"
-		ret=3
 	fi
-	if egrep -aq "^HTTP.1.. 301|^HTTP.1.. 302|^Location" $HEADERFILE; then
-		redir2=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
-		outln " (got 30x to $redir2 - may be better try this URL?)\n"
-	elif egrep -aq "^HTTP.1.. 401|^WWW-Authenticate" $HEADERFILE; then
-		outln " (got 401 / WWW-Authenticate, can't look beyond it)\n"
-	elif egrep -aq "^HTTP.1.. 400 Bad Request" $HEADERFILE; then 
-		pr_litemagentaln " (got \"400 Bad Request\": GET request was somehow wrong)\n"
-	fi
-	[[ $DEBUG -eq 0 ]] && rm $HEADERFILE.2 2>/dev/null
+	status_code=$(awk '/^HTTP\// { print $2 }' $HEADERFILE)
+	msg_thereafter=$(awk -F"$status_code" '/^HTTP\// { print $2 }' $HEADERFILE) 	# dirty trick to use the status code as a
+	msg_thereafter=$(strip_lf "$msg_thereafter")								# field separator, otherwise we need a loop with awk
+	debugme echo "Status/MSG: $status_code $msg_thereafter"
+
+	pr_bold " HTTP Status Code           "
+	[ -z "$status_code" ] && pr_litemagentaln "No status code" && return 3
+
+	out "  $status_code$msg_thereafter" 
+	case $status_code in
+		301|302|307|308)	out ", redirecting to \"$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')\"" ;;
+		200) ;;
+		206) out " -- WTF?" ;;
+		400) pr_litemagenta " (better try another URL)" ;;
+		401) grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
+			;;
+		403)  ;;
+		404) out " (Maybe supply a path which doesn't give a \"$status_code$msg_thereafter\")" ;; 
+		405) ;;
+		*) pr_litemagenta ". Oh, didn't expect a $status_code$msg_thereafter";;
+	esac
+	outln
+
+	# we don't call "tmpfile_handle $FUNCNAME.txt" as we need the header file in other functions!
 	return $ret
 }
+
+
+http_date() {
+	local now difftime
+
+	if [ ! -s $HEADERFILE ] ; then
+		http_header "$1" || return 3		# this is just for the line "Testing HTTP header response"
+	fi
+	pr_bold " HTTP clock skew              "
+	if [[ $SERVICE != "HTTP" ]] ; then
+		out "not tested as we're not targeting HTTP"
+	else
+		printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -ign_eof -connect $NODEIP:$PORT $SNI &>$TMPFILE
+		now=$(date "+%s")				# we need an ACCURATE date here and cannot rely on the headerfile!
+		HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $TMPFILE)
+		if [ -n "$HTTP_TIME" ] ; then
+			if $HAS_GNUDATE ; then
+				HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
+			else
+				HTTP_TIME=$(date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>/dev/null) # the trailing \r confuses BSD flavors otherwise
+			fi
+
+			difftime=$(($HTTP_TIME - $now))
+			[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
+			out "$difftime sec from localtime";
+		else
+			out "Got no HTTP time, maybe try different URL?";
+		fi
+		debugme out "$HTTP_TIME"
+	fi
+	outln
+	detect_ipv4
+}
+
+
+# Borrowd from Glenn Jackman, see https://unix.stackexchange.com/users/4667/glenn-jackman
+detect_ipv4() {
+	local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
+	local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
+	local your_ip_msg=" (check if it's yours or e.g. a cluster IP)"
+	local first=true
+	local spaces="                              "
+	
+	if [ ! -s $HEADERFILE ] ; then
+		http_header "$1" || return 3
+	fi
+
+	if grep -iqE $ipv4address $HEADERFILE; then
+		pr_bold " IPv4 address in header       " 
+		cat $HEADERFILE | while read line; do
+			result="$(echo -n "$line" | grep -E $ipv4address )"
+			result=$(strip_lf "$result")
+			if [ -n "$result" ] ; then
+				if ! $first; then
+					out "$spaces"
+					your_ip_msg=""
+				else
+					first=false
+				fi
+				# a little bit of sanitzing, otherwise printf will hiccup @ %
+				pr_litered "$(echo $result|sed 's/%/%%/g')"
+				outln "$your_ip_msg"
+			fi
+		done
+	fi
+}	
+
 
 
 includeSubDomains() {
@@ -577,6 +629,7 @@ preload() {
 	grep -aiqw preload "$1" && pr_litegreen ", preload"
 }
 
+
 hsts() {
 	local hsts_age_sec
 	local hsts_age_days
@@ -584,7 +637,8 @@ hsts() {
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " HSTS              "
+	#pr_bold " HSTS                         "
+	pr_bold " Strict Transport Security    "
 	grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" || out "(two HSTS header, using 1st one) "
@@ -615,13 +669,14 @@ hpkp() {
 	local -i hpkp_age_days
 	local -i hpkp_nr_keys
 	local hpkp_key hpkp_key_hostcert
-	local spaces="                  "
+	local spaces="                             "
 	local -i key_found=1
 
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " HPKP              "
+	#pr_bold " HPKP                         "
+	pr_bold " Public Key Pinning           "
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || out "(two HPKP headers, using 1st one) "
@@ -686,6 +741,8 @@ emphasize_stuff_in_headers(){
 		-e "s/Via/"$yellow"Via$off/g" \
 		-e "s/X-Cache-Lookup/"$yellow"X-Cache-Lookup$off/g" \
 		-e "s/X-Cache/"$yellow"X-Cache$off/g" \
+		-e "s/X-Squid/"$yellow"X-Squid$off/g" \
+		-e "s/X-Varnish/"$yellow"X-Varnish$off/g" \
 		-e "s/X-OWA-Version/"$yellow"X-OWA-Version$off/g" \
 		-e "s/X-Version/"$yellow"X-Version$off/g" \
 		-e "s/X-Powered-By/"$yellow"X-Powered-By$off/g" \
@@ -698,7 +755,7 @@ server_banner() {
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " Server            "
+	pr_bold " Server banner                "
 	grep -ai '^Server' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
@@ -724,25 +781,38 @@ rp_banner() {
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " Reverse Proxy    "
-	egrep -ai '^Via|^X-Cache' $HEADERFILE >$TMPFILE && \
+	pr_bold " Reverse Proxy banner         "
+	egrep -ai '^Via|^X-Cache|^X-Squid|X-Varnish' $HEADERFILE >$TMPFILE && \
 		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
-		outln " --"
-
+		outln "--"
 	tmpfile_handle $FUNCNAME.txt
 	return 0
 }
 
+
 application_banner() {
+	local line
+	local first=true
+	local spaces="                              "
+
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " Application      "
+	pr_bold " Application banner           "
 	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
-	[ $? -ne 0 ] && \
-		outln " (no banner at \"$url\")" || \
-		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')"
-
+	if [ $? -ne 0 ] ; then
+		outln "--"
+	else
+		cat $TMPFILE | while read line; do
+			line=$(strip_lf "$line")
+			if ! $first; then
+				out "$spaces"
+			else
+				first=false
+			fi
+               emphasize_stuff_in_headers "$line"
+          done
+	fi
 	tmpfile_handle $FUNCNAME.txt
 	return 0
 }
@@ -755,7 +825,7 @@ cookie_flags() {	# ARG1: Path, ARG2: path
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " Cookie(s)         "
+	pr_bold " Cookie(s)                    "
 	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		nr_cookies=$(wc -l < $TMPFILE | sed 's/ //g')
@@ -778,7 +848,7 @@ cookie_flags() {	# ARG1: Path, ARG2: path
 		esac
 		out " HttpOnly"
 	else
-		out "(none issued at \"$url\")"
+		out "(none issued at \"$1\")"
 	fi
 	outln
 
@@ -788,40 +858,43 @@ cookie_flags() {	# ARG1: Path, ARG2: path
 
 
 more_flags() {
-	local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP"
+	local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
 	local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By"
 	local egrep_pattern=""
 	local f2t result_str
-	local blanks="                   "
+	local first=true
+	local spaces="                              "
 
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
 	fi
-	pr_bold " Security headers  "
-	egrep_pattern=$(echo "$good_flags2test $other_flags2test"| sed -e 's/ /|\^/g' -e 's/^/\^/g') # space -> |^
+	pr_bold " Security headers             "
+	# convert spaces to | (for egrep)
+	egrep_pattern=$(echo "$good_flags2test $other_flags2test"| sed -e 's/ /|\^/g' -e 's/^/\^/g') 
 	egrep -ai "$egrep_pattern" $HEADERFILE >$TMPFILE
 	if [ $? -ne 0 ]; then
-		outln "(none at \"$url\")"
+		outln "--"
 		ret=1
 	else
 		ret=0
-		first=true
 		for f2t in $good_flags2test; do
-			result_str=$(grep -i "^$f2t" $TMPFILE)
+		debugme "---> $f2t"
+			result_str=$(grep -wi "^$f2t" $TMPFILE | grep -vi "$f2t"-)
+			result_str=$(strip_lf "$result_str")
 			[ -z "$result_str" ] && continue
 			if ! $first; then
-				out "$blanks"	# output leading spaces if the first header
+				out "$spaces"	# output leading spaces if the first header
 			else
 				first=false
 			fi
-			if [ $(echo "$result_str" | wc -l | sed 's/ //g') -eq 1 ]; then
+			#if [ $(echo "$result_str" | wc -l | sed 's/ //g') -eq 1 ]; then
 				pr_litegreenln "$result_str"
-			else # for the case we have two times the same header:
+			#else # for the case we have two times the same header:
 				# exchange the line feeds between the two lines only:
-				pr_litecyan "double -->" ; echo "$result_str" |  tr '\n\r' '  | ' | sed 's/| $//g'
-				pr_litecyanln "<-- double"
+				#pr_litecyan "double -->" ; echo "$result_str" |  tr '\n\r' '  | ' | sed 's/| $//g'
+				#pr_litecyanln "<-- double"
 #FIXME: https://report-uri.io has double here
-			fi
+			#fi
 		done
 		# now the same with other flags
 		for f2t in $other_flags2test; do
@@ -904,13 +977,12 @@ listciphers() {
 # argv[2]: string on console
 # argv[3]: ok to offer? 0: yes, 1: no
 std_cipherlists() {
-	out "$2 ";
+	pr_bold "$2    "         # indent in order to be in the same row as server preferences
 	if listciphers $1; then  # is that locally available??
 		[ $SHOW_LOC_CIPH -eq 0 ] && out "local ciphers are: " && sed 's/:/, /g' $TMPFILE
 		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $SNI 2>$TMPFILE >/dev/null </dev/null
 		ret=$?
 		[[ $DEBUG -ge 2 ]] && cat $TMPFILE
-		out "   "                # in order to be in the same row as server preferences
 		case $3 in
 			0)	# ok to offer
 				[[ $ret -eq 0 ]] && \
@@ -1182,6 +1254,8 @@ testprotohelper() {
 
 runprotocols() {
 	local using_sockets=0
+	local supported_no_ciph1="supported but couldn't detect a cipher (may need debugging)" 
+	local supported_no_ciph2="supported but couldn't detect a cipher" 
 
 	pr_blue "--> Testing protocols ";
 
@@ -1192,20 +1266,21 @@ runprotocols() {
 		outln "(via sockets for SSLv2, SSLv3)\n"
 	fi
 
-	out " SSLv2      ";
+	pr_bold " SSLv2      ";
 	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		testprotohelper "-ssl2"
 		case $? in
 			0) pr_redln   "offered (NOT ok)" ;;
 			1) pr_greenln "not offered (OK)" ;;
-			5) pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"  ;;	# protocol ok, but no cipher
-			7) ;;		# no local support
+			5) pr_litered "$supported_no_ciph2"; 
+				outln "(may need debugging)"  ;;	# protocol ok, but no cipher
+			7) ;;							# no local support
 		esac
 	else
-		sslv2_sockets #FIXME: --> Umschreiben, Interpretation mit CASE wie native
+		sslv2_sockets 							#FIXME: --> Umschreiben, Interpretation mit CASE wie native
 	fi
 
-	out " SSLv3      ";
+	pr_bold " SSLv3      ";
 	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		testprotohelper "-ssl3"
 	else
@@ -1215,40 +1290,41 @@ runprotocols() {
 		0) pr_literedln "offered (NOT ok)" ;;
 		1) pr_greenln "not offered (OK)"   ;;
 		2) pr_magentaln "#FIXME: downgraded. still missing a test case here" ;;
-		5) pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"  ;;	# protocol ok, but no cipher
-		7) ;;                                                                                   		# no local support
+		5) pr_litered "$supported_no_ciph2"; 
+				outln "(may need debugging)"  ;;	# protocol ok, but no cipher
+		7) ;;								# no local support
 	esac
 
-	out " TLS 1      ";
+	pr_bold " TLS 1      ";
 	#if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
 		testprotohelper "-tls1"
 	#else
 		#tls_sockets "01" "$TLS_CIPHER"
 	#fi
 	case $? in
-		0) outln "offered" ;;      # no GCM, thus only normal print
-		1) outln "not offered" ;;  # neither good or bad
+		0) outln "offered" ;;      								# nothing wrong with it -- per se
+		1) outln "not offered" ;;  								# neither good or bad
 		2) pr_magentaln "downgraded. still missing a testcase here" ;;
-		5) outln "supported but couldn't detect a cipher (may need debugging)"  ;;	# protocol ok, but no cipher
-		7) ;;		# no local support
+		5) outln "$supported_no_ciph1"  ;;							# protocol ok, but no cipher
+		7) ;;												# no local support
 	esac
 
-	out " TLS 1.1    ";
+	pr_bold " TLS 1.1    ";
 	testprotohelper "-tls1_1"
 	case $? in
-		0) outln "offered" ;;   # normal print
-		1) outln "not offered" ;;  # neither good or bad
-		5) outln "supported but couldn't detect a cipher (may need debugging)" ;;	# protocol ok, but no cipher
-		7) ;;		# no local support
+		0) outln "offered" ;;   									# nothing wrong with it
+		1) outln "not offered" ;;  								# neither good or bad
+		5) outln "$supported_no_ciph1" ;;							# protocol ok, but no cipher
+		7) ;;												# no local support
 	esac
 
-	out " TLS 1.2    ";
+	pr_bold " TLS 1.2    ";
 	testprotohelper "-tls1_2"
 	case $? in
-		0) pr_greenln "offered (OK)" ;; # GCM cipher in TLS 1.2: very good!
-		1) pr_brownln "not offered" ;;  # no GCM, penalty
-		5) outln "supported but couldn't detect a cipher (may need debugging)" ;;	# protocol ok, but no cipher
-		7) ;;		# no local support
+		0) pr_greenln "offered (OK)" ;; 							# GCM cipher in TLS 1.2: very good!
+		1) pr_brownln "not offered (NOT ok)" ;;						# no GCM, penalty
+		5) outln "$supported_no_ciph1" ;;							# protocol ok, but no cipher
+		7) ;;												# no local support
 	esac
 
 	return 0
@@ -1331,7 +1407,7 @@ server_preference() {
 	outln;
 	pr_blue "--> Testing server preferences"; outln "\n"
 
-	out " Has server cipher order?     "
+	pr_bold " Has server cipher order?     "
 	$OPENSSL s_client $STARTTLS -cipher $list1 -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
 	if [ $? -ne 0 ]; then
 		pr_magenta "no matching cipher in this list found (pls report this): "
@@ -1354,7 +1430,7 @@ server_preference() {
 		outln
 
 		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null >$TMPFILE
-		out " Negotiated protocol          "
+		pr_bold " Negotiated protocol          "
 		default_proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
 		case "$default_proto" in
 			*TLSv1.2)		pr_greenln $default_proto ;;
@@ -1366,7 +1442,7 @@ server_preference() {
 			*)			outln "$default_proto" ;;
 		esac
 
-		out " Negotiated cipher            "
+		pr_bold " Negotiated cipher            "
 		default_cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 		case "$default_cipher" in
 			*NULL*|*EXP*)	pr_red "$default_cipher" ;;
@@ -1382,7 +1458,7 @@ server_preference() {
 		outln "$remark4default_cipher"
 
 		if [ ! -z "$remark4default_cipher" ]; then
-			out " Negotiated cipher per proto $remark4default_cipher"
+			pr_bold " Negotiated cipher per proto"; out " $remark4default_cipher"
 			i=1
 			for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
 			locally_supported -"$p" || continue
@@ -1444,7 +1520,7 @@ cipher_pref_check() {
 	local p proto protos
 	local tested_cipher cipher
 
-	out " Cipher order"
+	pr_bold " Cipher order"
 
 	for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
 		$OPENSSL s_client $STARTTLS -"$p" -connect $NODEIP:$PORT $SNI </dev/null 2>/dev/null  >$TMPFILE
@@ -1500,66 +1576,44 @@ get_host_cert() {
 }
 
 
+tls_time() {
+	local now difftime
+
+	if [ -n "$STARTTLS" ] ; then
+		pr_bold " TLS timestamp"; outln "                (not yet implemented for STARTTLS) "
+	else
+		tls_sockets "01" "$TLS_CIPHER"						# try first TLS 1.0
+		[[ -z "$TLS_TIME" ]] && tls_sockets "03" "$TLS12_CIPHER"	#           TLS 1.2
+		[[ -z "$TLS_TIME" ]] && tls_sockets "02" "$TLS_CIPHER"		#           TLS 1.1
+		[[ -z "$TLS_TIME" ]] && tls_sockets "00" "$TLS_CIPHER"		#           SSL 3
+		# TODO: maybe too much tests -- timing !
+
+		if [[ -n "$TLS_TIME" ]]; then						# nothing returned a time!
+			difftime=$(($TLS_TIME - $TLS_NOW))
+			if [[ "${#difftime}" -gt 5 ]]; then
+				# openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
+				pr_bold " TLS timestamp" ; outln "                random values, no fingerprinting possible "
+			else
+				[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
+				pr_bold " TLS clock skew" ; outln "               $difftime sec from localtime";
+			fi
+			debugme out "$TLS_TIME"
+			outln
+		else
+			pr_bold " TLS timestamp" ; outln "                "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
+		fi
+	fi
+}
+
 server_defaults() {
 	local proto
 	local gost_status_problem=false
-	local now difftime
 	local extensions
 	local sessticket_str lifetime unit keysize algo
 	local expire ocsp_uri crl savedir startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
 
 	outln
 	pr_blue "--> Testing server defaults (Server Hello)"; outln "\n"
-
-	# first TLS time:
-	if [ -n "$STARTTLS" ] ; then
-		outln " TLS timestamp:               (not yet implemented for STARTTLS) "
-	else
-		tls_sockets "03" "$TLS12_CIPHER"
-		[ -z "$TLS_TIME" ] && tls_sockets "02" "$TLS_CIPHER"
-		[ -z "$TLS_TIME" ] && tls_sockets "01" "$TLS_CIPHER"
-		[ -z "$TLS_TIME" ] && tls_sockets "00" "$TLS_CIPHER"
-
-		if [ -n "$TLS_TIME" ]; then
-			difftime=$(($TLS_TIME - $TLS_NOW))
-			if [[ "${#difftime}" -gt 5 ]]; then
-				# openssl >= 1.0.1f fills this field with random values
-				out " TLS timestamp:               random values, no fingerprinting possible "
-			else
-				[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
-				out " TLS clock skew:              $difftime sec from localtime";
-			fi
-			debugme out "$TLS_TIME"
-			outln
-		else
-			out " TLS timestamp:               "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
-		fi
-	fi
-
-	# HTTP date:
-	out " HTTP clock skew:             "
-	if [[ $SERVICE != "HTTP" ]] ; then
-		out "not tested as we're not targeting HTTP"
-	else
-		printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -ign_eof -connect $NODEIP:$PORT $SNI &>$TMPFILE
-		now=$(date "+%s")
-		HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $TMPFILE)
-		if [ -n "$HTTP_TIME" ] ; then
-			if $HAS_GNUDATE ; then
-				HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
-			else
-				HTTP_TIME=$(date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>/dev/null) # the trailing \r confuses BSD flavors otherwise
-			fi
-
-			difftime=$(($HTTP_TIME - $now))
-			[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
-			out "$difftime sec from localtime";
-		else
-			out "Got no HTTP time, maybe try different URL?";
-		fi
-		debugme out "$HTTP_TIME"
-	fi
-	outln
 
 	#TLS extensions follow now
 	# throwing 1st every cipher/protocol at the server to know what works
@@ -1581,7 +1635,7 @@ server_defaults() {
 		fi
 	fi
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT -$proto 2>/dev/null </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
-	out " TLS server extensions        "
+	pr_bold " TLS server extensions        "
 	extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
 	if [ -z "$extensions" ]; then
 		outln "(none)"
@@ -1589,7 +1643,7 @@ server_defaults() {
 		echo $extensions | sed 's/,$//'	# remove last comma
 	fi
 
-	out " Session Tickets RFC 5077     "
+	pr_bold " Session Tickets RFC 5077     "
 	sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
 	if [ -z "$sessticket_str" ]; then
 		outln "(none)"
@@ -1599,7 +1653,7 @@ server_defaults() {
 		outln "$lifetime $unit"
 	fi
 
-	out " Server key size              "
+	pr_bold " Server key size              "
 	keysize=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
 	if [ -z "$keysize" ]; then
 		outln "(couldn't determine)"
@@ -1619,7 +1673,7 @@ server_defaults() {
 	outln " bit"
 #FIXME: google seems to have EC keys which displays as 256 Bit
 
-	out " Signature Algorithm          "
+	pr_bold " Signature Algorithm          "
 	algo=$($OPENSSL x509 -in $HOSTCERT -noout -text  | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
 	case $algo in
     		sha1WithRSAEncryption) 	pr_brownln "SHA1 with RSA" ;;
@@ -1631,11 +1685,11 @@ server_defaults() {
 	esac
 	# old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
-	out " Fingerprint / Serial         "
+	pr_bold " Fingerprint / Serial         "
 	outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial | sed 's/serial=//')"
 	outln "                              $($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 | sed 's/Fingerprint=//' | sed 's/://g' )"
 
-	out " Common Name (CN)             "
+	pr_bold " Common Name (CN)             "
 	cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
 	pr_underline "$cn"
 
@@ -1657,8 +1711,9 @@ server_defaults() {
 
 	sans=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
 		sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g' -e 's/othername:<unsupported>//g')
-#                                                          ^^^ CACert
-		out " subjectAltName (SAN)         "
+#                                                        ^^^ CACert
+
+	pr_bold " subjectAltName (SAN)         "
 	if [ -n "$sans" ]; then
 		sans=$(echo "$sans" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g') # replace line feed by " "
 		for san in $sans; do
@@ -1668,7 +1723,7 @@ server_defaults() {
 		out "-- "
 	fi
 	outln
-	out " Issuer                       "
+	pr_bold " Issuer                       "
 	issuer=$($OPENSSL x509 -in $HOSTCERT -noout -issuer | sed -e 's/^.*CN=//g' -e 's/\/.*$//g')
 	issuer_o=$($OPENSSL x509 -in $HOSTCERT -noout -issuer | sed 's/^.*O=//g' | sed 's/\/.*$//g')
 	if $OPENSSL x509 -in $HOSTCERT -noout -issuer | grep -q 'C=' ; then
@@ -1684,7 +1739,7 @@ server_defaults() {
 			outln "$underline$issuer$off ($underline$issuer_o$off from $underline$issuer_c$off)"
 	fi
 
-	out " Certificate Expiration       "
+	pr_bold " Certificate Expiration       "
 	expire=$($OPENSSL x509 -in $HOSTCERT -checkend 0)
 	if ! echo $expire | grep -qw not; then
 	pr_red "expired!"
@@ -1718,23 +1773,23 @@ server_defaults() {
 	$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $SNI 2>/dev/null </dev/null | \
 		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
 	nrsaved=$(ls $TEMPDIR/level?.crt 2>/dev/null | wc -w | sed 's/^ *//')
-	outln " # of certificates provided   $nrsaved"
+	pr_bold " # of certificates provided"; outln "   $nrsaved"
 	cd "$savedir"
 
-	out " Certificate Revocation List  "
+	pr_bold " Certificate Revocation List  "
 	crl=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')
 	[ x"$crl" == "x" ] && pr_literedln "--" || echo "$crl"
 
-	out " OCSP URI                     "
+	pr_bold " OCSP URI                     "
 	ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri)
 	[ x"$ocsp_uri" == "x" ] && pr_literedln "--" || echo "$ocsp_uri"
 
-	out " OCSP stapling               "
+	pr_bold " OCSP stapling               "
 	if grep "OCSP response" $TMPFILE | grep -q "no response sent" ; then
 		out " not offered"
 	else
 		if grep "OCSP Response Status" $TMPFILE | grep -q successful; then
-			pr_litegreen " OCSP stapling offered"
+			pr_litegreen " offered"
 		else
 			if [ $gost_status_problem = "true" ]; then
 				outln " (GOST servers make problems here, sorry)"
@@ -1748,7 +1803,12 @@ server_defaults() {
 	fi
 	outln
 
+	# if we call tls_time before tmpfile_handle it throws an error because the function tls_sockets removed $TMPFILE 
+	# already -- and that was a different one -- means that would get overwritten anyway
 	tmpfile_handle tlsextdebug+status.txt
+
+	tls_time	
+
 	return $ret
 }
 # FIXME: revoked, see checkcert.sh
@@ -1860,7 +1920,7 @@ spdy_pre(){
 }
 
 spdy() {
-	out " SPDY/NPN   "
+	pr_bold " SPDY/NPN   "
 	if ! spdy_pre ; then
 		echo
 		return 0
@@ -1873,7 +1933,7 @@ spdy() {
 	else
 		# now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
 		if echo $tmpstr | egrep -aq "spdy|http" ; then
-			pr_bold "$tmpstr" ; out " (advertised)"
+			out "$tmpstr" ; out " (advertised)"
 			ret=0
 		else
 			pr_litemagenta "please check manually, server response was ambigious ..."
@@ -2651,6 +2711,11 @@ crime() {
 # BREACH is a HTTP-level compression & an attack which works against any cipher suite and is agnostic
 # to the version of TLS/SSL, more: http://www.breachattack.com/ . Foreign referrers are the important thing here!
 breach() {
+	local header
+	local -i ret
+	local referer useragent
+	local url
+
 	[[ $SERVICE != "HTTP" ]] && return 7
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for BREACH (HTTP compression) vulnerability" && outln "\n"
@@ -2851,7 +2916,7 @@ logjam() {
 	$OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $SNI &>$TMPFILE </dev/null
 	ret=$?
 	[ "$VERBERR" -eq 0 ] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-	addtl_warning="$addtl_warning, precomputable primes not checked. \"$PROG_NAME -E\" spots candidates"
+	addtl_warning="$addtl_warning, common primes not checked. \"$PROG_NAME -E\" spots candidates"
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers"
 	else
@@ -3200,7 +3265,8 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except ciphers per
 
      <-t|--starttls> protocol       does a default run against a STARTTLS enabled service
      <--mx> domain/host             tests MX records from high to low priority (STARTTLS, port 25)
-     <--ip> ipv4                    takes ipv4 instead of resolving host in URI (supplied host name is vhost then)
+     <--ip> ipv4                    tests the one supplied ipv4 instead of resolving host(s) in URI 
+                                    "one" means: just test the first DNS returns (useful for multiple IPs)
 
 
 partly mandatory parameters:
@@ -3489,7 +3555,7 @@ determine_ip_addresses() {
 		exit -1
 	fi
 	[[ ! -z "$ip6" ]] && IP46ADDRs="$ip4 $ip6" || IP46ADDRs="$IPADDRs"
-	IP46ADDRs=$(newline_to_spaces "$IP46ADDR")
+	IP46ADDRs=$(newline_to_spaces "$IP46ADDRs")
 
 	return 0  	# IPADDR and IP46ADDR is set now
 }
@@ -3970,6 +4036,8 @@ lets_roll() {
 	if ${do_header}; then
 		#TODO: refactor this into functions
 		if [[ $SERVICE == "HTTP" ]]; then
+			http_header "$URL_PATH"
+			http_date "$URL_PATH"
 			hsts "$URL_PATH"
 			hpkp "$URL_PATH"
 			server_banner "$URL_PATH"
@@ -4032,8 +4100,10 @@ if ${do_mx_all_ips} ; then
 else	
      parse_hn_port "${URI}" 											# NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
 	determine_ip_addresses
-	if [[ -n "$CMDLINE_IP" ]]; then
-		NODEIP="$CMDLINE_IP"										# specific ip address for NODE was supplied
+	if [[ -n "$CMDLINE_IP" ]]; then									
+		[[ "$CMDLINE_IP" == "one" ]] && \
+			CMDLINE_IP=$(echo -n "$IPADDRs" | awk '{ print $1 }') || \
+			NODEIP="$CMDLINE_IP"									# specific ip address for NODE was supplied
 		lets_roll "${STARTTLS_PROTOCOL}"
 		ret=$?
 	else															# no --ip was supplied
@@ -4060,6 +4130,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.279 2015/06/17 09:33:28 dirkw Exp $
-# vim:ts=5:sw=5
-# ^^^ FYI: use vim and you will see everything beautifully indented with a 5 char tab
+#  $Id: testssl.sh,v 1.285 2015/06/19 18:34:00 dirkw Exp $
