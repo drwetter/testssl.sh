@@ -2835,11 +2835,15 @@ tls_fallback_scsv() {
 	# ...and do the test
 	$OPENSSL s_client -connect $NODEIP:$PORT $SNI -no_tls1_2 -fallback_scsv &>$TMPFILE </dev/null
 	if grep -q "CONNECTED(00" "$TMPFILE"; then
-		if grep -q "alert inappropriate fallback" "$TMPFILE"; then
-				pr_litegreen "Downgrade attack prevention supported (OK)"
-				ret=0
-		else
+		if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
 			pr_brown "Downgrade attack prevention NOT supported"
+			ret=1
+		elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
+			pr_litegreen "Downgrade attack prevention supported (OK)"
+			ret=0
+		elif grep -qa "alert handshake failure" "$TMPFILE"; then
+			# see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
+			pr_brown "\"handshake failure\" instead of \"inappropriate fallback\" (NOT ok)"
 			ret=2
 		fi
 	else
@@ -4130,4 +4134,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.285 2015/06/19 18:34:00 dirkw Exp $
+#  $Id: testssl.sh,v 1.286 2015/06/20 17:36:10 dirkw Exp $
