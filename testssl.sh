@@ -2075,19 +2075,19 @@ display_sslv2_serverhello() {
 
 
 # arg1: name of file with socket reply
-display_tls_serverhello() {
+tls_serverhello() {
 	local tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
-	local tls_hello_initbyte tls_hello_protocol tls_len_all
+	local tls_content_type tls_protocol tls_len_all
 #TODO: all vars here
 
 	# server hello, handshake details see http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#TLS_record
-	# byte 0:      type:                     	0x14=CCS,    0x15=TLS alert  x16=Handshake,  0x17 Aplication, 0x18=HB
-	# byte 1+2:    TLS version word, see below. 1st byte is always 03
+	# byte 0:      content type:                	0x14=CCS,    0x15=TLS alert  x16=Handshake,  0x17 Aplication, 0x18=HB
+	# byte 1+2:    TLS version word, major is 03, minor 00=SSL3, 01=TLS1 02=TLS1.1 03=TLS 1.2
 	# byte 3+4:    length all
 	# byte 5:      handshake type (2=hello)		TLS alert: level (2=fatal), descr (0x28=handshake failure)
 	# byte 6+7+8:  length server hello
-	# byte 9+10:   03, TLS version byte		00=SSL3, 01=TLS1 02=TLS1.1 03=TLS 1.2
-	# byte 11-14:  TLS timestamp
+	# byte 9+10:   03, TLS version word		see byte 1+2
+	# byte 11-14:  TLS timestamp				for OpenSSL <1.01f
 	# byte 15-42:  random, 28 bytes
 	# byte 43:     session id length
 	# byte 44+45+sid-len:  cipher suite!
@@ -2098,62 +2098,67 @@ display_tls_serverhello() {
 	[[ -z $tls_hello_ascii ]] && debugme echo "server hello empty, TCP connection closed" && return 0              # no server hello received
 
 	# now scrape two bytes out of the reply per byte
-	tls_hello_initbyte="${tls_hello_ascii:0:2}"  	# normally this is x16
-	tls_hello_protocol="${tls_hello_ascii:2:4}"
+	tls_content_type="${tls_hello_ascii:0:2}"  	# normally this is x16
+	tls_protocol="${tls_hello_ascii:2:4}"
+	DETECTED_TLS_VERSION=$tls_protocol
+
 	tls_len_all=${tls_hello_ascii:6:4}
 
-	if [[ $tls_hello_initbyte == "15" ]] ; then		# TLS ALERT
+	sid_len_offset=86
+	tls_hello="${tls_hello_ascii:10:2}"			# normally this is x02
+	tls_protocol2="${tls_hello_ascii:18:4}"
+	tls_hello_time="${tls_hello_ascii:22:8}"
+
+	if [[ $tls_content_type == "15" ]] ; then		# TLS ALERT
 		tls_err_level=${tls_hello_ascii:10:2} 		# 1: warning, 2: fatal
 		tls_err_descr=${tls_hello_ascii:12:2}		# 112/0x70: Unrecognized name, 111/0x6F: certificate_unobtainable, 
 											# 113/0x71: bad_certificate_status_response, #114/0x72: bad_certificate_hash_value
 		if [[ $DEBUG -ge 2 ]]; then
-			echo "tls_hello_initbyte:     0x$tls_hello_initbyte"
-			echo "tls_hello_protocol:     0x$tls_hello_protocol"
+			echo "tls_content_type:       0x$tls_content_type"
+			echo "tls_protocol:           0x$tls_protocol"
 			echo "tls_len_all:            $tls_len_all"
-			echo "tls_err_level:          ${tls_err_level}"	
-			echo "tls_err_descr:          0x${tls_err_descr} / $(hex2dec ${tls_err_descr})"
+			echo "tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
+			echo "tls_err_level:          ${tls_err_level} (warning:1, fatal:2)"	
 		fi
-		# now, here comes a strange thing....
-		# IF the apache 2.2 server e.g. has a default servername configured but we send SNI <myhostname>
-		# we get a TLS ALERT saying "unrecognized_name" , see RFC https://tools.ietf.org/html/rfc6066#page-17
+		# now, here comes a strange thing... -- on the forst glance
+		# IF an apache 2.2/2.4 server e.g. has a default servername configured but we send SNI <myhostname>
+		# we get a TLS ALERT saying "unrecognized_name" (0x70) and a warning (0x1), see RFC https://tools.ietf.org/html/rfc6066#page-17
+		# note that RFC recommended to fail instead: https://tools.ietf.org/html/rfc6066#section-3
 		# we need to handle this properly -- otherwise we always return that the protocol or cipher is not available!
 		if [[ "$tls_err_descr" == 70 ]] && [[ "${tls_err_level}" == "01" ]] ; then
-			:								# ignore Unrecognized name *warning*
-#FIXME: the SID_OFFSET is not the correct one then!
+											# ignore Unrecognized name *warning*
+			sid_len_offset=100                      # we are 2x7 bytes off (formerly: 86 instead of 100)
+			tls_hello="${tls_hello_ascii:24:2}"	# here, too       (normally this is (02)
+			tls_protocol2="${tls_hello_ascii:32:4}"
+			tls_hello_time="${tls_hello_ascii:36:8}"
 		else
 			return 1
 		fi
 	fi
 
-	DETECTED_TLS_VERSION=$tls_hello_protocol
-
-	tls_hello="${tls_hello_ascii:10:2}"		# normally this is x02
-	tls_hello_protocol2="${tls_hello_ascii:18:4}"
-	tls_hello_time="${tls_hello_ascii:22:8}"
-	TLS_TIME=$(printf "%d\n" 0x$tls_hello_time)
-	if $HAS_GNUDATE ; then
-		tls_time=$(date --date="@$TLS_TIME" "+%Y-%m-%d %r")
-	else
-		tls_time=$(date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r")
-	fi
-	tls_sid_len=$(printf "%d\n" 0x${tls_hello_ascii:86:2})
-	let sid_offset=88+$tls_sid_len*2
+	TLS_TIME=$(hex2dec $tls_hello_time)
+	tls_sid_len=$(hex2dec ${tls_hello_ascii:$sid_len_offset:2})
+	let sid_offset=$sid_len_offset+2+$tls_sid_len*2
 	tls_cipher_suite="${tls_hello_ascii:$sid_offset:4}"
-	let sid_offset=92+$tls_sid_len*2
+	let sid_offset=$sid_len_offset+6++$tls_sid_len*2
 	tls_compression_method="${tls_hello_ascii:$sid_offset:2}"
 
 	if [[ $DEBUG -ge 2 ]]; then
 		echo "tls_hello:              0x$tls_hello"
 		if [[ $DEBUG -ge 4 ]]; then
-			echo "tls_hello_protocol2:    0x$tls_hello_protocol2"
-			echo "tls_sid_len:            $tls_sid_len"
+			echo "tls_protocol2:          0x$tls_protocol2"
+			echo "tls_sid_len:            0x$(dec2hex $tls_sid_len) / = $tls_sid_len"
 		fi
-		echo "tls_hello_time:         0x$tls_hello_time ($tls_time)"
+		echo -n "tls_hello_time:         0x$tls_hello_time "
+		if $HAS_GNUDATE ; then
+			echo $(date --date="@$TLS_TIME" "+%Y-%m-%d %r")
+		else
+			echo $(date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r")
+		fi
 		echo "tls_cipher_suite:       0x$tls_cipher_suite"
 		echo "tls_compression_method: 0x$tls_compression_method"
 		outln
 	fi
-
 	return 0
 }
 
@@ -2364,14 +2369,12 @@ tls_sockets() {
 			echo
 		fi
 
-		display_tls_serverhello "$SOCK_REPLY_FILE"
+		tls_serverhello "$SOCK_REPLY_FILE"
 		save=$?
 
 		# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
 		lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l | sed 's/ //g')
 		[[ "$DEBUG" -ge 2 ]] && out "  (returned $lines lines)  "
-
-#	printf "protocol "; tput bold; printf "$tls_low_byte = $tls_str"; tput sgr0; printf ":  "
 
 		# determine the return value for higher level, so that they can tell what the result is
 		if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]] ; then
@@ -2380,7 +2383,7 @@ tls_sockets() {
 			if [[ 03$tls_low_byte -eq $DETECTED_TLS_VERSION ]]; then
 				ret=0	# protocol available, TLS version returned equal to the one send
 			else
-				[[ $DEBUG -ge 2 ]] && echo -n "send: 0x03$tls_low_byte, returned: 0x$DETECTED_TLS_VERSION"
+				[[ $DEBUG -ge 2 ]] && echo -n "protocol send: 0x03$tls_low_byte, returned: 0x$DETECTED_TLS_VERSION"
 				ret=2	# protocol NOT available, server downgraded to $DETECTED_TLS_VERSION
 			fi
 		fi
@@ -4191,4 +4194,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.287 2015/06/22 16:30:26 dirkw Exp $
+#  $Id: testssl.sh,v 1.288 2015/06/22 21:19:07 dirkw Exp $
