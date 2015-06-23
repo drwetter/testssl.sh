@@ -1988,11 +1988,13 @@ code2network() {
 }
 
 hex2dec() {
-	printf "%d" "0x$1"
+	/usr/bin/printf -- "%d" 0x"$1"
+	#echo $((16#$1))
 }
 
 dec2hex() {
-	printf "%x" "$1"
+	/usr/bin/printf -- "%x" "$1"
+	#echo $((0x$1))
 }
 
 len2twobytes() {
@@ -2023,7 +2025,7 @@ sockread_serverhello() {
 }
 
 # arg1: name of file with socket reply
-display_sslv2_serverhello() {
+parse_sslv2_serverhello() {
 	# server hello:									in hex representation, see below
 	# byte 1+2: length of server hello						0123
 	# 3:        04=Handshake message, server hello			45
@@ -2075,10 +2077,13 @@ display_sslv2_serverhello() {
 
 
 # arg1: name of file with socket reply
-tls_serverhello() {
+parse_tls_serverhello() {
 	local tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
 	local tls_content_type tls_protocol tls_len_all
 #TODO: all vars here
+
+	TLS_TIME=""
+	DETECTED_TLS_VERSION=""
 
 	# server hello, handshake details see http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#TLS_record
 	# byte 0:      content type:                	0x14=CCS,    0x15=TLS alert  x16=Handshake,  0x17 Aplication, 0x18=HB
@@ -2095,10 +2100,13 @@ tls_serverhello() {
 	# byte 47+48+sid-len:  extension length
 
 	[[ "$DEBUG" -eq 5 ]] && echo $tls_hello_ascii      # one line without any blanks
-	[[ -z $tls_hello_ascii ]] && debugme echo "server hello empty, TCP connection closed" && return 0              # no server hello received
+	if [[ -z $tls_hello_ascii ]] ; then
+		debugme echo "server hello empty, TCP connection closed" 
+		return 1              # no server hello received
+	fi
 
 	# now scrape two bytes out of the reply per byte
-	tls_content_type="${tls_hello_ascii:0:2}"  	# normally this is x16
+	tls_content_type="${tls_hello_ascii:0:2}"  		# normally this is x16 (Handshake) here
 	tls_protocol="${tls_hello_ascii:2:4}"
 	DETECTED_TLS_VERSION=$tls_protocol
 
@@ -2120,17 +2128,16 @@ tls_serverhello() {
 			echo "tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
 			echo "tls_err_level:          ${tls_err_level} (warning:1, fatal:2)"	
 		fi
-		# now, here comes a strange thing... -- on the forst glance
+		# now, here comes a strange thing... -- on the first glance
 		# IF an apache 2.2/2.4 server e.g. has a default servername configured but we send SNI <myhostname>
 		# we get a TLS ALERT saying "unrecognized_name" (0x70) and a warning (0x1), see RFC https://tools.ietf.org/html/rfc6066#page-17
 		# note that RFC recommended to fail instead: https://tools.ietf.org/html/rfc6066#section-3
 		# we need to handle this properly -- otherwise we always return that the protocol or cipher is not available!
 		if [[ "$tls_err_descr" == 70 ]] && [[ "${tls_err_level}" == "01" ]] ; then
-											# ignore Unrecognized name *warning*
 			sid_len_offset=100                      # we are 2x7 bytes off (formerly: 86 instead of 100)
 			tls_hello="${tls_hello_ascii:24:2}"	# here, too       (normally this is (02)
-			tls_protocol2="${tls_hello_ascii:32:4}"
-			tls_hello_time="${tls_hello_ascii:36:8}"
+			tls_protocol2="${tls_hello_ascii:32:4}" # here, too
+			tls_hello_time="${tls_hello_ascii:36:8}"	# and here, too
 		else
 			return 1
 		fi
@@ -2177,7 +2184,7 @@ sslv2_sockets() {
 		outln
 	fi
 
-	display_sslv2_serverhello "$SOCK_REPLY_FILE"
+	parse_sslv2_serverhello "$SOCK_REPLY_FILE"
 	case $? in
 		7) # strange reply, couldn't convert the cipher spec length to a hex number
 			pr_litemagenta "strange v2 reply "
@@ -2369,7 +2376,7 @@ tls_sockets() {
 			echo
 		fi
 
-		tls_serverhello "$SOCK_REPLY_FILE"
+		parse_tls_serverhello "$SOCK_REPLY_FILE"
 		save=$?
 
 		# see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
@@ -3294,11 +3301,11 @@ help() {
 
 $PROG_NAME <options>
 
-     -h|--help                     what you're looking at
-     -b|--banner                   displays banner + version of $PROG_NAME
-     -v|--version                  same as previous
-     -V|--local                    pretty print all local ciphers
-     -V|--local <pattern>          what local cipher with <pattern> is a/v?
+     -h, --help                    what you're looking at
+     -b, --banner                  displays banner + version of $PROG_NAME
+     -v, --version                 same as previous
+     -V, --local                   pretty print all local ciphers
+     -V, --local <pattern>         what local cipher with <pattern> is available?
 
 $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
 
@@ -3312,7 +3319,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -x, --single-cipher <pattern> tests matched <pattern> of cipher
      -U, --vulnerable              tests all vulnerabilities
      -B, --heartbleed              tests for heartbleed vulnerability
-     -I, --ccs, --ccs-injectio     tests for CCS injection vulnerability
+     -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -R, --renegotiation           tests for renegotiation vulnerabilities
      -C, --compression, --crime    tests for CRIME vulnerability
      -T, --breach                  tests for BREACH vulnerability
@@ -3323,11 +3330,11 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -J, --logjam                  tests for LOGJAM vulnerability
      -s, --pfs, --fs,--nsa         checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
-     -H, --header, --headers       tests HSTS, HPKP, server/app banner, security headers, cookie
+     -H, --header, --headers       tests HSTS, HPKP, server/app banner, security headers, cookie, reverse proxy, IPv4 address
 
   special invocations:
 
-     -t, --starttls <protocol>     does a default run against a STARTTLS enabled service
+     -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol>
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
      --ip <ipv4>                   a) tests the supplied <ipv4> instead of resolving host(s) in URI 
                                    b) "one" means: just test the first DNS returns (useful for multiple IPs)
@@ -3346,7 +3353,7 @@ tuning options:
      --sneaky                       be less verbose wrt referer headers
      --wide                         wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                    for wide outputs: display all ciphers tested -- not only succeeded ones
-     --warnings <batch|off|false>   "batch" doesn't wait for keypress, "off|false" skips connection warning
+     --warnings <batch|off|false>   "batch" doesn't wait for keypress, "off" or "false" skips connection warning
      --color <0|1|2>                0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --debug <0-6>                  1: screen output normal but debug output in itemp files.  2-6: see line ~60
 
@@ -4014,7 +4021,7 @@ startup() {
 		 		fi
 				shift
 				do_tls_sockets=true
-				outln "TLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" 
+				outln "\nTLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" 
 				;;
                --wide) 
 				WIDE=0 
@@ -4087,7 +4094,7 @@ lets_roll() {
 	determine_rdns
 	determine_service "$1"		# any starttls service goes here
 
-	${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; exit $?; }
+	${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
 
 	${do_test_just_one} && test_just_one ${single_cipher}
 	${do_protocols} && { runprotocols; ret=$(($? + ret)); }
@@ -4166,7 +4173,7 @@ else
 	determine_ip_addresses
 	if [[ -n "$CMDLINE_IP" ]]; then									
 		[[ "$CMDLINE_IP" == "one" ]] && \
-			CMDLINE_IP=$(echo -n "$IPADDRs" | awk '{ print $1 }') || \
+			CMDLINE_IP=$(echo -n "$IPADDRs" | awk '{ print $1 }') 
 			NODEIP="$CMDLINE_IP"									# specific ip address for NODE was supplied
 		lets_roll "${STARTTLS_PROTOCOL}"
 		ret=$?
@@ -4194,4 +4201,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.289 2015/06/23 05:56:54 dirkw Exp $
+#  $Id: testssl.sh,v 1.290 2015/06/23 10:58:39 dirkw Exp $
