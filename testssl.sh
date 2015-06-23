@@ -3300,7 +3300,7 @@ $PROG_NAME <options>
      -V|--local                    pretty print all local ciphers
      -V|--local <pattern>          what local cipher with <pattern> is a/v?
 
-$PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except ciphers per proto/each cipher)
+$PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
 
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
@@ -4194,4 +4194,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.288 2015/06/22 21:19:07 dirkw Exp $
+#  $Id: testssl.sh,v 1.289 2015/06/23 05:56:54 dirkw Exp $
