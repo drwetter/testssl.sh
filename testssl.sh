@@ -375,6 +375,28 @@ debugme() {
 	[[ $DEBUG -ge 2 ]] && "$@"
 }
 
+hex2dec() {
+	/usr/bin/printf -- "%d" 0x"$1"
+	#echo $((16#$1))
+}
+
+dec2hex() {
+	/usr/bin/printf -- "%x" "$1"
+	#echo $((0x$1))
+}
+
+# trim spaces for BSD and old sed
+count_lines() {
+	echo "$1" | wc -l | sed 's/ //g'
+}
+count_words() {
+	echo "$1" | wc -w | sed 's/ //g'
+}
+
+newline_to_spaces() {
+	echo "$1" | tr '\n' ' ' | sed 's/ $//'
+}
+
 tmpfile_handle() {
 	if [[ "$DEBUG" -eq 0 ]] ; then
 		rm $TMPFILE
@@ -382,30 +404,6 @@ tmpfile_handle() {
 		mv $TMPFILE "$TEMPDIR/$NODEIP.$1"
 	fi
 }
-
-
-# whether it is ok to offer/not to offer enc/cipher/version
-ok(){
-	if [ "$2" -eq 1 ] ; then
-		case $1 in
-			1) pr_redln "offered (NOT ok)" ;;   # 1 1
-			0) pr_greenln "not offered (OK)" ;; # 0 1
-		esac
-	else
-		case $1 in
-			7) pr_brownln "not offered" ;;   	# 7 0
-			6) pr_literedln "offered (NOT ok)" ;; # 6 0
-			5) pr_litered "supported but couldn't detect a cipher"; outln "(may need debugging)"  ;;		# 5 5
-			4) pr_litegreenln "offered (OK)" ;;  	# 4 0
-			3) pr_brownln "offered" ;;  		# 3 0
-			2) outln "offered" ;;  			# 2 0
-			1) pr_greenln "offered (OK)" ;;  	# 1 0
-			0) pr_boldln "not offered" ;;    	# 0 0
-		esac
-	fi
-	return $2
-}
-
 
 # ARG1= pid which is in the backgnd and we wait for ($2 seconds)
 wait_kill(){
@@ -686,7 +684,7 @@ hpkp() {
 			pr_litered "One key is not sufficent, "
 		fi
 		hpkp_age_sec=$(sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE)
-#FIXME: test for bumber!
+#FIXME: test for number!
 		hpkp_age_days=$((hpkp_age_sec / 86400))
 		if [ $hpkp_age_days -ge $HPKP_MIN ]; then
 			pr_litegreen "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
@@ -893,7 +891,6 @@ more_flags() {
 				# exchange the line feeds between the two lines only:
 				#pr_litecyan "double -->" ; echo "$result_str" |  tr '\n\r' '  | ' | sed 's/| $//g'
 				#pr_litecyanln "<-- double"
-#FIXME: https://report-uri.io has double here
 			#fi
 		done
 		# now the same with other flags
@@ -908,7 +905,7 @@ more_flags() {
 			fi
 		done
 	fi
-#FIXME: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
+#TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
 
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
@@ -1223,25 +1220,25 @@ locally_supported() {
 	return $ret
 }
 
-testversion() {
+test_proto() {
 	local sni=$SNI
-	[ "x$1" = "x-ssl2" ] && sni=""  # newer openssl throw an error if SNI with SSLv2
+	local ret
 
+	[[ "$1" =~ "x-ssl3" ]] && sni=""   # newer openssl throw an error if SNI is supplied with SSLv2,
+								# SSLv3 doesn't have SNI, openssl doesn't complain yet though
 	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
 	ret=$?
-# FIXME: here FreeBSD9 returns always 0 --> need to read the error
+# TODO (maybe): here FreeBSD9 returns always 0 --> need to read the error
 	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	grep -aq "no cipher list" $TMPFILE && ret=5
 
-	if grep -aq "no cipher list" $TMPFILE ; then
-		ret=5
-	fi
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
 
-testprotohelper() {
+test_proto_helper() {
 	if locally_supported "$1" "$2" ; then
-		testversion "$1" "$2"
+		test_proto "$1" "$2"
 		return $?
 		# 0: offered
 		# 1: not offered
@@ -1252,39 +1249,39 @@ testprotohelper() {
 }
 
 
-runprotocols() {
-	local using_sockets=0
+run_protocols() {
+	local using_sockets=true
 	local supported_no_ciph1="supported but couldn't detect a cipher (may need debugging)" 
 	local supported_no_ciph2="supported but couldn't detect a cipher" 
 
 	pr_blue "--> Testing protocols ";
 
 	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
-		using_sockets=1
+		using_sockets=false
 		outln "(via native openssl)\n"
 	else
-		outln "(via sockets for SSLv2, SSLv3)\n"
+		outln "(via sockets except SPDY/NPN)\n"
 	fi
 
 	pr_bold " SSLv2      ";
-	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
-		testprotohelper "-ssl2"
+	if $using_sockets; then
+		sslv2_sockets 							#FIXME: --> Umschreiben, Interpretation mit CASE wie native
+	else
+		test_proto_helper "-ssl2"
 		case $? in
 			0) pr_redln   "offered (NOT ok)" ;;
 			1) pr_greenln "not offered (OK)" ;;
 			5) pr_litered "$supported_no_ciph2"; 
-				outln "(may need debugging)"  ;;	# protocol ok, but no cipher
+				outln " (may need further attention)"  ;;	# protocol ok, but no cipher
 			7) ;;							# no local support
 		esac
-	else
-		sslv2_sockets 							#FIXME: --> Umschreiben, Interpretation mit CASE wie native
 	fi
 
 	pr_bold " SSLv3      ";
-	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
-		testprotohelper "-ssl3"
-	else
+	if $using_sockets; then
 		tls_sockets "00" "$TLS_CIPHER"
+	else
+		test_proto_helper "-ssl3"
 	fi
 	case $? in
 		0) pr_literedln "offered (NOT ok)" ;;
@@ -1296,44 +1293,49 @@ runprotocols() {
 	esac
 
 	pr_bold " TLS 1      ";
-	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ] || [ "$EXPERIMENTAL" != "yes" ] ; then
-		testprotohelper "-tls1"
-	else
-		echo -n "(socket:) "
+	if $using_sockets; then
 		tls_sockets "01" "$TLS_CIPHER"
+	else
+		test_proto_helper "-tls1"
 	fi
 	case $? in
 		0) outln "offered" ;;      								# nothing wrong with it -- per se
 		1) outln "not offered" ;;  								# neither good or bad
-		2) pr_magentaln "downgraded. still missing a testcase here" ;;
+		2) pr_brown "not offered (NOT ok)"
+			[ $DEBUG -eq 1 ] && out " -- downgraded"
+			outln ;;
 		5) outln "$supported_no_ciph1"  ;;							# protocol ok, but no cipher
 		7) ;;												# no local support
 	esac
 
 	pr_bold " TLS 1.1    ";
-	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ] || [ "$EXPERIMENTAL" != "yes" ] ; then
-		testprotohelper "-tls1_1"
-	else
-		echo -n "(socket:) "
+	if $using_sockets; then
 		tls_sockets "02" "$TLS_CIPHER"
+	else
+		test_proto_helper "-tls1_1"
 	fi	
 	case $? in
 		0) outln "offered" ;;   									# nothing wrong with it
 		1) outln "not offered" ;;  								# neither good or bad
+		2) out "not offered" 
+			[ $DEBUG -eq 1 ] && out " -- downgraded" 
+			outln ;;
 		5) outln "$supported_no_ciph1" ;;							# protocol ok, but no cipher
 		7) ;;												# no local support
 	esac
 
 	pr_bold " TLS 1.2    ";
-	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ] || [ "$EXPERIMENTAL" != "yes" ] ; then
-		testprotohelper "-tls1_2"
-	else
-		echo -n "(socket:) "
+	if $using_sockets; then
 		tls_sockets "03" "$TLS12_CIPHER"
+	else
+		test_proto_helper "-tls1_2"
 	fi	
 	case $? in
 		0) pr_greenln "offered (OK)" ;; 							# GCM cipher in TLS 1.2: very good!
 		1) pr_brownln "not offered (NOT ok)" ;;						# no GCM, penalty
+		2) pr_brown "not offered (NOT ok)"
+			[ $DEBUG -eq 1 ] && out " -- downgraded"
+			outln ;;
 		5) outln "$supported_no_ciph1" ;;							# protocol ok, but no cipher
 		7) ;;												# no local support
 	esac
@@ -1985,16 +1987,6 @@ close_socket(){
 code2network() {
 	# arg1: formatted string here in the code
 	NW_STR=$(echo "$1" | sed -e 's/,/\\\x/g' | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
-}
-
-hex2dec() {
-	/usr/bin/printf -- "%d" 0x"$1"
-	#echo $((16#$1))
-}
-
-dec2hex() {
-	/usr/bin/printf -- "%x" "$1"
-	#echo $((0x$1))
 }
 
 len2twobytes() {
@@ -2835,14 +2827,6 @@ EOF
 	return $ret
 }
 
-# trim spaces for BSD and old sed
-count_lines() {
-	echo "$1" | wc -l | sed 's/ //g'
-}
-count_words() {
-	echo "$1" | wc -w | sed 's/ //g'
-}
-
 ### two helper functions for vulnerabilities follow
 count_ciphers() {
 	echo "$1" | sed 's/:/\n/g' | wc -l | sed 's/ //g'
@@ -2851,7 +2835,6 @@ count_ciphers() {
 actually_supported_ciphers() {
 	$OPENSSL ciphers "$1"
 }
-
 
 # Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
 ssl_poodle() {
@@ -3573,11 +3556,6 @@ parse_hn_port() {
 	return 0  	# NODE, URL_PATH, PORT is set now
 }
 
-newline_to_spaces() {
-	echo "$1" | tr '\n' ' ' | sed 's/ $//'
-}
-
-
 # now get all IP addresses 
 determine_ip_addresses() {
 	local ip4=""
@@ -4097,7 +4075,7 @@ lets_roll() {
 	${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
 
 	${do_test_just_one} && test_just_one ${single_cipher}
-	${do_protocols} && { runprotocols; ret=$(($? + ret)); }
+	${do_protocols} && { run_protocols; ret=$(($? + ret)); }
 	${do_spdy} && { spdy; ret=$(($? + ret)); }
 	${do_run_std_cipherlists} && { run_std_cipherlists; ret=$(($? + ret)); }
 	${do_pfs} && { pfs; ret=$(($? + ret)); }
@@ -4201,4 +4179,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.290 2015/06/23 10:58:39 dirkw Exp $
+#  $Id: testssl.sh,v 1.291 2015/06/23 19:54:46 dirkw Exp $
