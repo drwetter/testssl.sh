@@ -40,6 +40,9 @@
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena
 
+* Proxy support:
+ - John Newbigin
+
 ##### Last but not least:
 
 * OpenSSL team
