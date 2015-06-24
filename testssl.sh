@@ -1325,7 +1325,7 @@ run_protocols() {
 	esac
 
 	pr_bold " TLS 1.2    ";
-	if $using_sockets; then
+	if $using_sockets && [[ $EXPERIMENTAL == "yes" ]]; then			# IIS servers do have a problem here with our handshake
 		tls_sockets "03" "$TLS12_CIPHER"
 	else
 		test_proto_helper "-tls1_2"
@@ -2216,8 +2216,10 @@ sslv2_sockets() {
 # ARG2: CIPHER_SUITES string
 socksend_tls_clienthello() {
 	local tls_low_byte="$1"
+	local tls_low_byte1="01"		# the first TLS version number is always 0301 -- except: SSLv3
 	local servername_hexstr len_servername len_servername_hex
 	local hexdump_format_str
+	local all_extensions
 	local len_sni_listlen len_sni_ext len_extension_hex
 	local cipher_suites len_ciph_suites len_ciph_suites_word
 	local len_client_hello_word len_all_word
@@ -2226,8 +2228,8 @@ socksend_tls_clienthello() {
 	hexdump_format_str="$len_servername/1 \"%02x,\""
 	servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
 
-	code2network "$2"        # CIPHER_SUITES
-	cipher_suites="$NW_STR"	# we don't have the leading \x here so string length is two byte less, see next
+	code2network "$2"        	# convert CIPHER_SUITES
+	cipher_suites="$NW_STR"		# we don't have the leading \x here so string length is two byte less, see next
 
 #formatted example for SNI
 #00 00 	# extension server_name
@@ -2241,7 +2243,7 @@ socksend_tls_clienthello() {
 	len_servername_hex=$(printf "%02x\n" $len_servername)
 	len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
 	len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
-	len_extension_hex=$(printf "%02x\n" $((len_servername+9)))
+	len_extension_hex=$(printf "%02x\n" $((len_servername+9)))	#FIXME: for TLS 1.2 and IIS servers we need extension_signature_algorithms!!
 
 	len_ciph_suites_byte=$(echo ${#cipher_suites})
 	let "len_ciph_suites_byte += 2"
@@ -2269,9 +2271,12 @@ socksend_tls_clienthello() {
 	len_all_word="$LEN_STR"
 	#[[ $DEBUG -ge 3 ]] && echo $len_all_word
 
+	# if we have SSLv3, the first occurence of TLS protocol is SSLv3, otherwise TLS 1.0
+	[[ $tls_low_byte == "00" ]] && tls_low_byte1="00"
+
 	TLS_CLIENT_HELLO="
 	# TLS header ( 5 bytes)
-	,16, 03, $tls_low_byte   # TLS Version #TODO: in wireshark this is always 00! (TLS 1.0-1.2)
+	,16, 03, $tls_low_byte1  # TLS Version: in wireshark this is always 00 for TLS 1.0-1.2
 	,$len_all_word           # Length  <---
 	# Handshake header:
 	,01                      # Type (x01 for ClientHello)
@@ -2304,18 +2309,20 @@ socksend_tls_clienthello() {
 
 # Extension: Session Ticket        00 23
 
-# Extension: Signature Algorithms  00 0d
-# len  e.g.                        00 20  (32 bytes)
-# bytes...    1-32                  16 words
+	extension_signature_algorithms="
+     00, 0d,                    # Type: signature_algorithms , see RFC 5246
+     00, 20,                    # len
+     00,1e, 06,01, 06,02, 06,03, 05,01, 05,02, 05,03, 
+     04,01, 04,02, 04,03, 03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
 
 # Extension: Haertbeat             00 0f 
 # len                              00 01
 # peer allowed to send requests       01
 
 	if [ "$tls_low_byte" == "00" ]; then
-		EXTENSION_CONTAINING_SNI=""  # RFC 3546 doesn't specify SSLv3 to have SNI, openssl just ignores the switch if supplied
-	else
-		EXTENSION_CONTAINING_SNI="
+		all_extensions=""
+	else						#FIXME: we (probably) need extension_signature_algorithms here. TLS 1.2 fails on IIS otherwise
+		all_extensions="
 		,00, $len_extension_hex  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
 		,00, 00                  # extension server_name
 		,00, $len_sni_ext        # length SNI EXT
@@ -2324,9 +2331,10 @@ socksend_tls_clienthello() {
 		,00, $len_servername_hex # server_name length
 		,$servername_hexstr"     # server_name target
 	fi
+
 	fd_socket 5 || return 6
 
-	code2network "$TLS_CLIENT_HELLO$EXTENSION_CONTAINING_SNI"
+	code2network "$TLS_CLIENT_HELLO$all_extensions"
 	data=$(echo $NW_STR)
 	[[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
 	printf -- "$data" >&5 2>/dev/null &
@@ -2344,7 +2352,7 @@ tls_sockets() {
 	local cipher_list_2send
 
 	tls_low_byte="$1"
-	if [ -n "$2" ]; then			# use supplied arg2 if there
+	if [ -n "$2" ]; then			# use supplied string in arg2 if there is one
 		cipher_list_2send="$2"
 	else 						# otherwise use std ciphers then
 		if [ "$tls_low_byte" = "03" ]; then
@@ -2356,7 +2364,7 @@ tls_sockets() {
 
 	[[ "$DEBUG" -ge 2 ]] && echo "sending client hello..."
 	socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send"
-	ret=$?	# 6 means opening socket didn't succeed, e.g. timeout
+	ret=$?						# 6 means opening socket didn't succeed, e.g. timeout
 
 	# if sending didn't succeed we don't bother
 	if [ $ret -eq 0 ]; then
@@ -4179,4 +4187,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.291 2015/06/23 19:54:46 dirkw Exp $
+#  $Id: testssl.sh,v 1.292 2015/06/24 09:06:35 dirkw Exp $
