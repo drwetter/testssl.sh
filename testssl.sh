@@ -1961,6 +1961,13 @@ fd_socket() {
 		echo "CONNECT $NODEIP:$PORT" >&5
 		while true ; do
 			read x <&5
+			if [ "${x%/*}" = "HTTP" ] ; then
+				x=${x#* }
+				if [ "${x%% *}" != "200" ] ; then
+					pr_magenta "Unable to CONNECT via proxy"
+					return 6
+				fi
+			fi
 			if [ "$x" = $'\r' ] ; then
 				break
 			fi
