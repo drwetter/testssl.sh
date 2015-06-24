@@ -3320,7 +3320,7 @@ tuning options:
      --assuming-http                if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                   fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>               use this openssl binary (default: look in \$PATH, RUN_DIR of $PROG_NAME
-     --proxy <host>:<port>          connect via a web proxy
+     --proxy <host>:<port>          connect via the specified HTTP proxy
      --sneaky                       be less verbose wrt referer headers
      --wide                         wide output for tests like RC4, BEAST. also with hexcode, kx, strength
      --show-each                    for each wide output (see --wide, -V, -x, e, -E): display all ciphers not only succeeded ones
