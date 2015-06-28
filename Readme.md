@@ -14,11 +14,13 @@ New features in the upcoming stable release 2.6 are:
 * display matching key (HPKP)
 * LOGJAM: check DHE_EXPORT cipher and display DH(/ECDH) bits in wide mode on negotiated ciphers
 * TLS_FALLBACK_SCSV check
+* using a HTTP proxy: in progress
 * Run in default mode through all ciphers
 * wide mode for several checks
 * can test multiple IP adresses
+* TLS 1.0-1.1 as socket per default in productioon
 
-more see https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A%222.6+%2F+2.5dev%22
+more see https://github.com/drwetter/testssl.sh/milestones/2.5dev%20%282.6%29
 
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project.
