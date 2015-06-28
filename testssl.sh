@@ -341,32 +341,37 @@ pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off;
 ### colorswitcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 
-# empty vars if we have no color:
-red=""
-green=""
-brown=""
-blue=""
-cyan=""
-off=""
-bold=""
-underline=""
+set_color_functions() {
+	# empty vars if we have no color:
+	red=""
+	green=""
+	brown=""
+	blue=""
+	magenta=""
+	cyan=""
+	grey=""
+	yellow=""
+	off=""
+	bold=""
+	underline=""
 
-if [[ "$COLOR" -eq 2 ]]; then
-	red=$(tput setaf 1)
-	green=$(tput setaf 2)
-	brown=$(tput setaf 3)
-	blue=$(tput setaf 4)
-	magenta=$(tput setaf 5)
-	cyan=$(tput setaf 6)
-	grey=$(tput setaf 7)
-	yellow=$(tput setaf 3; tput bold)
-	off=$(tput sgr0)
-fi
+	if [[ "$COLOR" -eq 2 ]]; then
+		red=$(tput setaf 1)
+		green=$(tput setaf 2)
+		brown=$(tput setaf 3)
+		blue=$(tput setaf 4)
+		magenta=$(tput setaf 5)
+		cyan=$(tput setaf 6)
+		grey=$(tput setaf 7)
+		yellow=$(tput setaf 3; tput bold)
+	fi
 
-if [[ "$COLOR" -ge 1 ]]; then
-	bold=$(tput bold)
-	underline=$(tput sgr 0 1)
-fi
+	if [[ "$COLOR" -ge 1 ]]; then
+		bold=$(tput bold)
+		underline=$(tput sgr 0 1)
+		off=$(tput sgr0)
+	fi
+}
 
 
 ###### helper function definitions ######
@@ -1220,32 +1225,30 @@ locally_supported() {
 	return $ret
 }
 
-test_proto() {
+
+run_prototest_openssl() {
 	local sni=$SNI
 	local ret
 
-	[[ "$1" =~ "x-ssl3" ]] && sni=""   # newer openssl throw an error if SNI is supplied with SSLv2,
-								# SSLv3 doesn't have SNI, openssl doesn't complain yet though
-	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
-	ret=$?
-# TODO (maybe): here FreeBSD9 returns always 0 --> need to read the error
-	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-	grep -aq "no cipher list" $TMPFILE && ret=5
-
-	tmpfile_handle $FUNCNAME.txt
-	return $ret
-}
-
-test_proto_helper() {
-	if locally_supported "$1" "$2" ; then
-		test_proto "$1" "$2"
-		return $?
-		# 0: offered
-		# 1: not offered
-		# 5: protocol ok, but no cipher
-	else
+	if ! locally_supported "$1" "$2" ; then
 		return 7
+	else								# we remove SNI for SSLv2 and v3:
+		[[ "$1" =~ "ssl" ]] && sni=""		# newer openssl throw an error if SNI is supplied with SSLv2,
+									# SSLv3 doesn't have SNI (openssl doesn't complain though -- yet)
+		$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
+		ret=$?  						#TODO (maybe): here FreeBSD9 returns always 0 --> need to read the error
+		[ "$VERBERR" -eq 0 ] && \
+			egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+		grep -aq "no cipher list" $TMPFILE && ret=5
 	fi
+
+	tmpfile_handle $FUNCNAME$1.txt
+	return $ret
+
+	# 0: offered
+	# 1: not offered
+	# 5: protocol ok, but no cipher
+	# 7: no local support
 }
 
 
@@ -1260,20 +1263,20 @@ run_protocols() {
 		using_sockets=false
 		outln "(via native openssl)\n"
 	else
-		outln "(via sockets except SPDY/NPN)\n"
+		outln "(via sockets except TLS 1.2 and SPDY/NPN)\n"
 	fi
 
 	pr_bold " SSLv2      ";
 	if $using_sockets; then
-		sslv2_sockets 							#FIXME: --> Umschreiben, Interpretation mit CASE wie native
+		sslv2_sockets 											#FIXME: messages need to be moved to this higher level
 	else
-		test_proto_helper "-ssl2"
+		run_prototest_openssl "-ssl2"
 		case $? in
 			0) pr_redln   "offered (NOT ok)" ;;
 			1) pr_greenln "not offered (OK)" ;;
 			5) pr_litered "$supported_no_ciph2"; 
-				outln " (may need further attention)"  ;;	# protocol ok, but no cipher
-			7) ;;							# no local support
+				outln " (may need further attention)"  ;;			# protocol ok, but no cipher
+			7) ;;											# no local support
 		esac
 	fi
 
@@ -1281,22 +1284,22 @@ run_protocols() {
 	if $using_sockets; then
 		tls_sockets "00" "$TLS_CIPHER"
 	else
-		test_proto_helper "-ssl3"
+		run_prototest_openssl "-ssl3"
 	fi
 	case $? in
 		0) pr_literedln "offered (NOT ok)" ;;
 		1) pr_greenln "not offered (OK)"   ;;
 		2) pr_magentaln "#FIXME: downgraded. still missing a test case here" ;;
 		5) pr_litered "$supported_no_ciph2"; 
-				outln "(may need debugging)"  ;;	# protocol ok, but no cipher
-		7) ;;								# no local support
+				outln "(may need debugging)"  ;;					# protocol ok, but no cipher
+		7) ;;												# no local support
 	esac
 
 	pr_bold " TLS 1      ";
 	if $using_sockets; then
 		tls_sockets "01" "$TLS_CIPHER"
 	else
-		test_proto_helper "-tls1"
+		run_prototest_openssl "-tls1"
 	fi
 	case $? in
 		0) outln "offered" ;;      								# nothing wrong with it -- per se
@@ -1312,7 +1315,7 @@ run_protocols() {
 	if $using_sockets; then
 		tls_sockets "02" "$TLS_CIPHER"
 	else
-		test_proto_helper "-tls1_1"
+		run_prototest_openssl "-tls1_1"
 	fi	
 	case $? in
 		0) outln "offered" ;;   									# nothing wrong with it
@@ -1325,10 +1328,10 @@ run_protocols() {
 	esac
 
 	pr_bold " TLS 1.2    ";
-	if $using_sockets && [[ $EXPERIMENTAL == "yes" ]]; then			# IIS servers do have a problem here with our handshake
+	if $using_sockets && [[ $EXPERIMENTAL == "yes" ]]; then			#TODO: IIS servers do have a problem here with our handshake
 		tls_sockets "03" "$TLS12_CIPHER"
 	else
-		test_proto_helper "-tls1_2"
+		run_prototest_openssl "-tls1_2"
 	fi	
 	case $? in
 		0) pr_greenln "offered (OK)" ;; 							# GCM cipher in TLS 1.2: very good!
@@ -1595,14 +1598,13 @@ tls_time() {
 	if [ -n "$STARTTLS" ] ; then
 		pr_bold " TLS timestamp"; outln "                (not yet implemented for STARTTLS) "
 	else
-		tls_sockets "01" "$TLS_CIPHER"						# try first TLS 1.0
+		tls_sockets "01" "$TLS_CIPHER"						# try first TLS 1.0 (mostfrequently used protocol)
 		[[ -z "$TLS_TIME" ]] && tls_sockets "03" "$TLS12_CIPHER"	#           TLS 1.2
 		[[ -z "$TLS_TIME" ]] && tls_sockets "02" "$TLS_CIPHER"		#           TLS 1.1
 		[[ -z "$TLS_TIME" ]] && tls_sockets "00" "$TLS_CIPHER"		#           SSL 3
-		# TODO: maybe too much tests -- timing !
 
-		if [[ -n "$TLS_TIME" ]]; then						# nothing returned a time!
-			difftime=$(($TLS_TIME - $TLS_NOW))
+		if [[ -n "$TLS_TIME" ]]; then							# nothing returned a time!
+			difftime=$(($TLS_TIME - $TLS_NOW))					# TLS_NOW is being set in tls_sockets()
 			if [[ "${#difftime}" -gt 5 ]]; then
 				# openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
 				pr_bold " TLS timestamp" ; outln "                random values, no fingerprinting possible "
@@ -1684,7 +1686,6 @@ server_defaults() {
 		fi
 	fi
 	outln " bit"
-#FIXME: google seems to have EC keys which displays as 256 Bit
 
 	pr_bold " Signature Algorithm          "
 	algo=$($OPENSSL x509 -in $HOSTCERT -noout -text  | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
@@ -2215,6 +2216,7 @@ sslv2_sockets() {
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # ARG2: CIPHER_SUITES string
 socksend_tls_clienthello() {
+#FIXME: redo this with all extensions!
 	local tls_low_byte="$1"
 	local tls_low_byte1="01"		# the first TLS version number is always 0301 -- except: SSLv3
 	local servername_hexstr len_servername len_servername_hex
@@ -2992,8 +2994,7 @@ logjam() {
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
-# FIXME: perfect candidate for replacement by sockets,so is freak
-
+# TODO: perfect candidate for replacement by sockets, so is freak
 
 
 
@@ -3858,9 +3859,7 @@ parse_opt_equal_sign() {
 }
 
 
-
-# Parses options
-startup() {
+parse_cmd_line() {
 	# Set defaults if only an URI was specified, maybe ToDo: use "="-option, then: ${i#*=} i.e. substring removal
 	[[ "$#" -eq 1 ]] && set_scanning_defaults
 
@@ -4137,7 +4136,8 @@ lets_roll() {
 get_install_dir
 
 initialize_globals
-startup "$@"
+parse_cmd_line "$@"
+set_color_functions
 find_openssl_binary
 mybanner
 openssl_age
@@ -4160,7 +4160,7 @@ else
 	if [[ -n "$CMDLINE_IP" ]]; then									
 		[[ "$CMDLINE_IP" == "one" ]] && \
 			CMDLINE_IP=$(echo -n "$IPADDRs" | awk '{ print $1 }') 
-			NODEIP="$CMDLINE_IP"									# specific ip address for NODE was supplied
+		NODEIP="$CMDLINE_IP"										# specific ip address for NODE was supplied
 		lets_roll "${STARTTLS_PROTOCOL}"
 		ret=$?
 	else															# no --ip was supplied
@@ -4187,4 +4187,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.292 2015/06/24 09:06:35 dirkw Exp $
+#  $Id: testssl.sh,v 1.295 2015/06/28 11:52:41 dirkw Exp $
