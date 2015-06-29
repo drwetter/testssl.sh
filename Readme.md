@@ -14,7 +14,7 @@ New features in the upcoming stable release 2.6 are:
 * display matching key (HPKP)
 * LOGJAM: check DHE_EXPORT cipher and display DH(/ECDH) bits in wide mode on negotiated ciphers
 * TLS_FALLBACK_SCSV check
-* using a HTTP proxy: in progress
+* HTTP proxy support
 * Run in default mode through all ciphers
 * wide mode for several checks
 * can test multiple IP adresses
