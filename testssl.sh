@@ -707,7 +707,7 @@ hpkp() {
 		hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
 			$OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
 		while read hpkp_key; do
-			if [ "$hpkp_key_hostcert" = "$hpkp_key" ] || [ "$hpkp_key_hostcert" = "$hpkp_key=" ]; then
+			if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
 				out "\n$spaces matching key: "
 				pr_litegreen "$hpkp_key"
 				key_found=0
@@ -1031,9 +1031,9 @@ socksend() {
 }
 
 
-#FIXME: This is only for HB and CCS, others use sockread_serverhello()
+#FIXME: This is only for HB and CCS, others use still sockread_serverhello()
 sockread() {
-	[ "x$2" = "x" ] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
+	[[ "x$2" == "x" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
 	ret=0
 
 	ddreply=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
@@ -1805,7 +1805,7 @@ server_defaults() {
 		if grep "OCSP Response Status" $TMPFILE | grep -q successful; then
 			pr_litegreen " offered"
 		else
-			if [ $gost_status_problem = "true" ]; then
+			if $gost_status_problem; then
 				outln " (GOST servers make problems here, sorry)"
 				ret=0
 			else
@@ -1941,7 +1941,7 @@ spdy() {
 	fi
 	$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs </dev/null 2>/dev/null >$TMPFILE
 	tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
-	if [ -z "$tmpstr" -o "$tmpstr" = " " ] ; then
+	if [ -z "$tmpstr" -o "$tmpstr" == " " ] ; then
 		out "not offered"
 		ret=1
 	else
@@ -2357,7 +2357,7 @@ tls_sockets() {
 	if [ -n "$2" ]; then			# use supplied string in arg2 if there is one
 		cipher_list_2send="$2"
 	else 						# otherwise use std ciphers then
-		if [ "$tls_low_byte" = "03" ]; then
+		if [[ "$tls_low_byte" == "03" ]]; then
 			cipher_list_2send="$TLS12_CIPHER"
 		else
 			cipher_list_2send="$TLS_CIPHER"
@@ -3518,8 +3518,8 @@ EOF
 
 
 ignore_no_or_lame() {
-	[ "$WARNINGS" = "off" -o "$WARNINGS" = "false" ] && return 0
-	[ "$WARNINGS" = "batch" ] && return 1
+	[[ "$WARNINGS" = "off" -o "$WARNINGS" == "false" ]] && return 0
+	[[ "$WARNINGS" == "batch" ]] && return 1
 	pr_magenta "$1 "
 	read a
 	case $a in
@@ -3714,7 +3714,7 @@ datebanner() {
 	tojour=$(date +%F)" "$(date +%R)
 	outln
 	pr_reverse "$1 now ($tojour) ---> $NODEIP:$PORT ($NODE) <---"; outln "\n"
-	if [ "$1" = "Testing" ] ; then
+	if [[ "$1" == "Testing" ]] ; then
 		display_rdns_etc
 	fi
 	outln
@@ -4187,4 +4187,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.295 2015/06/28 11:52:41 dirkw Exp $
+#  $Id: testssl.sh,v 1.296 2015/06/29 08:41:55 dirkw Exp $
