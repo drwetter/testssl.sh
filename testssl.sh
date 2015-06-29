@@ -1499,8 +1499,10 @@ server_preference() {
 				i=$(($i + 1))
 			done
 
-			if spdy_pre ; then		# is NPN/SPDY supported and is this no STARTTLS?
-				$OPENSSL s_client -host $NODE -port $PORT $PROXY -nextprotoneg "$NPN_PROTOs" </dev/null 2>/dev/null  >$TMPFILE
+			[ -n "$PROXY" ] && arg="  SPDY/NPN is"
+			[ -n "$STARTTLS" ] && arg=" "
+			if spdy_pre " $arg"; then		# is NPN/SPDY supported and is this no STARTTLS? / no PROXY
+				$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$NPN_PROTOs" </dev/null 2>/dev/null  >$TMPFILE
 				if [ $? -eq 0 ]; then
 					proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
 					if [ -z "${proto[i]}" ]; then
@@ -1567,10 +1569,10 @@ cipher_pref_check() {
 	done
 	outln
 
-	if ! spdy_pre ; then		# is NPN/SPDY supported and is this no STARTTLS?
+	if ! spdy_pre "     SPDY/NPN: " ; then		# is NPN/SPDY supported and is this no STARTTLS?
 		outln
 	else
-		protos=$($OPENSSL s_client -host $NODE -port $PORT -nextprotoneg  \"\" $PROXY </dev/null 2>/dev/null | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
+		protos=$($OPENSSL s_client -host $NODE -port $PORT -nextprotoneg  \"\" </dev/null 2>/dev/null | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
 		for p in $protos; do
 			$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$p" $PROXY </dev/null 2>/dev/null >$TMPFILE
 			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
@@ -1927,9 +1929,16 @@ pfs() {
 # good source for configuration and bugs: https://wiki.mozilla.org/Security/Server_Side_TLS
 # good start to read: http://en.wikipedia.org/wiki/Transport_Layer_Security#Attacks_against_TLS.2FSSL
 
+
 spdy_pre(){
 	if [ ! -z "$STARTTLS" ]; then
+		[ -n "$1" ] && out "$1"
 		out "(SPDY is a HTTP protocol and thus not tested here)"
+		return 1
+	fi
+	if [ ! -z "$PROXY" ]; then
+		[ -n "$1" ] && pr_litemagenta "$1 "
+		pr_litemagenta "not being tested as proxies do not support it"
 		return 1
 	fi
 	# first, does the current openssl support it?
@@ -1941,13 +1950,13 @@ spdy_pre(){
 	return 0
 }
 
-spdy() {
+run_spdy() {
 	pr_bold " SPDY/NPN   "
 	if ! spdy_pre ; then
 		echo
 		return 0
 	fi
-	$OPENSSL s_client -host $NODE -port $PORT $PROXY -nextprotoneg $NPN_PROTOs </dev/null 2>/dev/null >$TMPFILE
+	$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs </dev/null 2>/dev/null >$TMPFILE
 	tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
 	if [ -z "$tmpstr" -o "$tmpstr" == " " ] ; then
 		out "not offered"
@@ -1971,33 +1980,32 @@ spdy() {
 
 # arg for a fd doesn't work here
 fd_socket() {
-	if [ "$PROXY" ] ; then
+	if [[ -n "$PROXY" ]]; then
 		if ! exec 5<> /dev/tcp/${PROXYIP}/${PROXYPORT}; then
 			outln
-			pr_magenta "$(basename "$0"): unable to open a socket to proxy $PROXYIP:$PROXYPORT"
+			pr_magenta "$PROG_NAME: unable to open a socket to proxy $PROXYIP:$PROXYPORT"
 			return 6
 		fi
 		echo "CONNECT $NODEIP:$PORT" >&5
 		while true ; do
 			read x <&5
-			if [ "${x%/*}" = "HTTP" ] ; then
+			if [[ "${x%/*}" == "HTTP" ]]; then
 				x=${x#* }
-				if [ "${x%% *}" != "200" ] ; then
-					pr_magenta "Unable to CONNECT via proxy"
+				if [[ "${x%% *}" != "200" ]] ; then
+					[[ "$PORT" != 443 ]] && outln "Check whether your proxy supports port $PORT and the underlying protocol."
+					pr_magenta "Unable to CONNECT via proxy. "
 					return 6
 				fi
 			fi
-			if [ "$x" = $'\r' ] ; then
+			if [[ "$x" == $'\r' ]] ; then
 				break
 			fi
 		done
-	else
-	if ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null removes an error message, but disables debugging
+	elif ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null removes an error message, but disables debugging
 		outln
 		pr_magenta "Unable to open a socket to $NODEIP:$PORT. "
 		# It can last ~2 minutes but for for those rare occasions we don't do a timeout handler here, KISS
 		return 6
-       fi
 	fi
      return 0
 }
@@ -3317,12 +3325,16 @@ openssl_age() {
 	fi
 }
 
-# We need to get the IP address of the proxy so we can use it in fs_socket
-check_proxy()
-{
-	if [ "$PROXY" ] ; then
+# We need to get the IP address of the proxy so we can use it in fd_socket
+check_proxy(){
+	if [ -n "$PROXY" ] ; then
+		if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
+			pr_magentaln "Local problem: Your $OPENSSL is too old to support the \"--proxy\" option"
+			exit 1
+		fi
 		PROXYNODE=${PROXY%:*}
 		PROXYPORT=${PROXY#*:}
+#FIXME: dig. nslookup ==> central function
 		PROXYIP=$(host -t a $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
 		PROXY="-proxy $PROXYIP:$PROXYPORT"
 	fi
@@ -4130,7 +4142,7 @@ lets_roll() {
 
 	${do_test_just_one} && test_just_one ${single_cipher}
 	${do_protocols} && { run_protocols; ret=$(($? + ret)); }
-	${do_spdy} && { spdy; ret=$(($? + ret)); }
+	${do_spdy} && { run_spdy; ret=$(($? + ret)); }
 	${do_run_std_cipherlists} && { run_std_cipherlists; ret=$(($? + ret)); }
 	${do_pfs} && { pfs; ret=$(($? + ret)); }
 	${do_server_preference} && { server_preference; ret=$(($? + ret)); }
@@ -4186,8 +4198,8 @@ initialize_globals
 parse_cmd_line "$@"
 set_color_functions
 find_openssl_binary
-check_proxy
 mybanner
+check_proxy
 openssl_age
 maketempf
 
@@ -4235,4 +4247,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.296 2015/06/29 08:41:55 dirkw Exp $
+#  $Id: testssl.sh,v 1.298 2015/06/29 21:28:36 dirkw Exp $
