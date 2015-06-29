@@ -12,14 +12,20 @@
  - initial MX stuff
  - fixes
 
-* Mark Felder
- - lots of cleanups
- - Shellcheck static analysis
-
 * Peter Mosmans
  - started way better cmd line parsing
  - cleanups
  - openssl sources support with the "missing" features
+
+* Mark Felder
+ - lots of cleanups
+ - Shellcheck static analysis
+
+* Jonathan Roach
+ - TLS_FALLBACK_SCSV checks
+
+* Proxy support:
+ - John Newbigin
 
 * Дилян Палаузов
  - bug fix for 3des report
@@ -33,9 +39,6 @@
 
 * Dmitri S
  - inspiration & help for Darwin port
-
-* Jonathan Roach
- - TLS_FALLBACK_SCSV checks
 
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena
