@@ -9,6 +9,7 @@
 ###### DON'T DO EVIL! USAGE AT YOUR OWN RISK. DON'T VIOLATE LAWS! #######
 
 readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+trap "cleanup" QUIT EXIT
 
 [ -z "$1" ] && exit 1
 
@@ -99,10 +100,10 @@ wait_kill(){
           sleep 1
           maxsleep=$((maxsleep - 1))
           test $maxsleep -eq 0 && break
-     done # needs to be killed:
+     done                # needs to be killed
      kill $pid >&2 2>/dev/null
      wait $pid 2>/dev/null
-     return 3   # killed
+     return 3            # killed
 }
 
 
@@ -134,7 +135,25 @@ starttls_line0() {
      echo "$1" >&5
      cat <&5 &
      wait_kill $! $SLEEP
-     #sleep $SLEEP
+     #[ $? -eq 3 ] && fixme "STARTTLS timed out" && exit 1
+}
+
+starttls_line2() {
+     reply=$(mktemp /tmp/reply.XXXXXX) || return 7
+     echo "$1" >&5
+     dd bs=1024 of=$reply count=1 <&5 2>/dev/null &
+     wait_kill $! $SLEEP
+     cat $reply
+     return 0
+     if [ -n "$2" ]; then
+          if grep -q "$2" $reply; then
+               return 0 
+          else
+               fixme "STARTTLS handshake problem"
+               #FIXME: handshake antworten kommen irgendwie 1x verzeogert
+               exit 1
+          fi
+     fi
 }
 
 starttls_line1() {
@@ -160,7 +179,7 @@ fd_socket(){
      case "$1" in # port
           21)  # https://tools.ietf.org/html/rfc4217
                starttls_line0 "FEAT"
-               starttls_line0 "AUTH TLS"
+               starttls_line0 "AUTH TLS" "successful"
                ;;
           25)  #https://tools.ietf.org/html/rfc4217
                starttls_line0 "EHLO testssl.sh" "250"
@@ -201,6 +220,10 @@ close_socket(){
      return 0
 }
 
+cleanup() {
+     close_socket
+}
+
 
 #### main
 
@@ -238,9 +261,7 @@ else
 fi
 echo
 
-close_socket
-
 exit $ret
 
 #  vim:tw=100:ts=5:sw=5:expandtab
-#  $Id: heartbleed.bash,v 1.11 2015/07/01 10:56:57 dirkw Exp $ 
+#  $Id: heartbleed.bash,v 1.12 2015/07/01 11:26:10 dirkw Exp $ 
