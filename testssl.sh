@@ -1482,7 +1482,7 @@ server_preference() {
 		outln "$remark4default_cipher"
 
 		if [ ! -z "$remark4default_cipher" ]; then
-			pr_bold " Negotiated cipher per proto"; out " $remark4default_cipher"
+			pr_bold " Negotiated cipher per proto"; outln " $remark4default_cipher"
 			i=1
 			for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
 			locally_supported -"$p" || continue
@@ -1490,7 +1490,7 @@ server_preference() {
 				if [ $? -eq 0 ]; then
 					proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
 					cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-					[[ ${cipher[i]} == "0000" ]] && cipher[i]=""  # Hack!
+					[[ ${cipher[i]} == "0000" ]] && cipher[i]=""  				# Hack!
 					[[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
 				else
 					 proto[i]=""
@@ -1501,7 +1501,7 @@ server_preference() {
 
 			[ -n "$PROXY" ] && arg="  SPDY/NPN is"
 			[ -n "$STARTTLS" ] && arg=" "
-			if spdy_pre " $arg"; then		# is NPN/SPDY supported and is this no STARTTLS? / no PROXY
+			if spdy_pre " $arg"; then										# is NPN/SPDY supported and is this no STARTTLS? / no PROXY
 				$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$NPN_PROTOs" </dev/null 2>/dev/null  >$TMPFILE
 				if [ $? -eq 0 ]; then
 					proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
@@ -1517,7 +1517,7 @@ server_preference() {
 			for i in 1 2 3 4 5 6; do
 				if [[ -n "${cipher[i]}" ]]; then                              		# cipher not empty
 					 if [[ -z "${cipher[i-1]}" ]]; then                      		# previous one empty
-						outln
+						#outln
 						printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"	# print out both
 					 else                                                    		# previous NOT empty
 						if [[ "${cipher[i-1]}" == "${cipher[i]}" ]]; then   		# and previous protocol same cipher
@@ -2877,11 +2877,11 @@ EOF
 
 ### two helper functions for vulnerabilities follow
 count_ciphers() {
-	echo "$1" | sed 's/:/\n/g' | wc -l | sed 's/ //g'
+	printf "$1" | sed 's/:/ /g' | wc -w | sed 's/ //g'
 }
 
 actually_supported_ciphers() {
-	$OPENSSL ciphers "$1"
+	$OPENSSL ciphers "$1" 2>/dev/null || echo ""
 }
 
 # Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
@@ -2967,6 +2967,7 @@ freak() {
 	pr_bold " FREAK"; out " (CVE-2015-0204), experimental       "
 
 	no_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportrsa_cipher_list))
+	#echo "========= ${PIPESTATUS[*]}
 
 	case $no_supported_ciphers in
 		0) 	pr_magentaln "Local problem: your $OPENSSL doesn't have any EXPORT RSA ciphers configured"
@@ -3532,6 +3533,10 @@ cleanup () {
 
 # for now only GOST engine
 initialize_engine(){
+	if $OPENSSL version | grep -qi LibreSSL; then
+		outln
+		pr_litemagenta "Please note: LibreSSL is not a good choice for testing insecure features!"
+	fi
 	if ! $OPENSSL engine gost -vvvv -t -c >/dev/null 2>&1; then
 		outln
 		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln
@@ -3542,8 +3547,10 @@ initialize_engine(){
 		return 1
 	elif echo $osslver | grep -q LibreSSL; then
 		return 1
+	elif grep -q '^# testssl config file' "$OPENSSL_CONF"; then
+		return 0
 	else
-		if [ ! -z "$OPENSSL_CONF" ]; then
+		if [ -n "$OPENSSL_CONF" ]; then
 			pr_litemagenta "For now I am providing the config file in to have GOST support"; outln
 		else
 			[ -z "$TEMPDIR" ] && maketempf
@@ -3551,6 +3558,8 @@ initialize_engine(){
 			# see https://www.mail-archive.com/openssl-users@openssl.org/msg65395.html
 			cat >$OPENSSL_CONF << EOF
 openssl_conf            = openssl_def
+
+# testssl config file
 
 [ openssl_def ]
 engines                 = engine_section
@@ -4247,4 +4256,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.298 2015/06/29 21:28:36 dirkw Exp $
+#  $Id: testssl.sh,v 1.299 2015/07/02 14:39:40 dirkw Exp $
