@@ -102,6 +102,7 @@ SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just 
 SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while checking the http header is just usual
 SSL_NATIVE=${SSL_NATIVE:-1}			# we do per default bash sockets where possible 0: switch back to native openssl
 ASSUMING_HTTP=${ASSUMING_HTTP:-1}		# in seldom cases (WAF, old servers/grumpy SSL) the service detection fails. Set to 0 for forcing HTTP
+ASSUMING_NOT_HTTP=${ASSUMING_NOT_HTTP:-1}		# if you don't need HTTP checks, set to 0 for turning off it
 DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1),
 								# 3: slight hexdumps + other info, 4: send bytes via sockets, 5: received, 6: whole 9 yards
 								# FIXME: still to be filled with (more) sense or following to be included:
@@ -450,8 +451,15 @@ runs_HTTP() {
 	out " Service detected:      "
 	case $SERVICE in
 		HTTP)
-			out " $SERVICE"
-			ret=0 ;;
+			if [[ $ASSUMING_NOT_HTTP -eq 0 ]]; then
+				out " $SERVICE, but skipping HTTP checks"
+				SERVICE=NOT_HTTP
+				ret=1
+			else
+				out " $SERCICE"
+				ret=0
+			fi
+			;;
 		IMAP|POP|SMTP)
 			out " $SERVICE, thus skipping HTTP specific checks"
 			ret=0 ;;
@@ -3394,6 +3402,7 @@ partly mandatory parameters:
 tuning options:
 
      --assuming-http                if protocol check fails it assumes HTTP protocol and enforces HTTP checks
+     --assuming-not-http            if you don't need HTTP checks, set to 0 for turning off it
      --ssl-native                   fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>               use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
      --proxy <host>:<port>          connect via the specified HTTP proxy
@@ -3493,6 +3502,7 @@ SHOW_LOC_CIPH: $SHOW_LOC_CIPH
 SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
 ASSUMING_HTTP $ASSUMING_HTTP
+ASSUMING_NOT_HTTP $ASSUMING_NOT_HTTP
 SNEAKY: $SNEAKY
 
 VERBERR: $VERBERR
@@ -4078,6 +4088,9 @@ parse_cmd_line() {
 			--assuming[_-]http|--assume[-_]http)
 				ASSUMING_HTTP=0 
 				;;
+			--assuming[_-]not[_-]http|--assume[-_]not[_-]http)
+				ASSUMING_NOT_HTTP=0 
+				;;
 			--sneaky)
 				SNEAKY=0 
 				;;
@@ -4130,6 +4143,12 @@ parse_cmd_line() {
 
 	# Show usage if no options were specified
 	[ -z $1 ] && help 0
+
+	# Check protocol assuming options
+	if [ $ASSUMING_HTTP -eq 0 ] && [ $ASSUMING_NOT_HTTP -eq 0 ] ; then
+		pr_magentaln "--assuming-http and --assuming-not-http can't turn on the same time!"
+		exit 1
+	fi
 
 	# left off here is the URI
 	URI=$1
