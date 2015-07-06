@@ -1,4 +1,4 @@
-openssl64-1.0.2pm-static.chacha+poly ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
+openssl64-1.0.2pm-static ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
 177
 
           0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305 TLSv1.2 Kx=ECDH     Au=ECDSA Enc=ChaCha20(256) Mac=AEAD
