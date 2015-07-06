@@ -41,11 +41,12 @@
 #
 # Did I mention it's open source?
 #
-# Q: So what's the difference to www.ssllabs.com/ssltest or sslcheck.globalsign.com/ ?
-# A: As of now ssllabs only check webservers on standard ports, reachable from
-#    the internet. And the examples above are 3rd parties. If those restrictions are fine
-#    with you, and you need a management compatible rating -- go ahead and use those.
-#    Also testssl.sh is meant as a tool in your hand and it's way more flexible.
+# Q: So what's the difference to www.ssllabs.com/ssltesti/ or sslcheck.globalsign.com/ ?
+# A: As of now ssllabs only check 1) webservers 2) on standard ports, 3) reachable from the
+#    internet. And the examples above 4) are 3rd parties. If those four restrictions are fine
+#    with you and you need a management compatible rating -- go ahead and use those.
+#    But also if your fine with those restrictions: testssl.sh is meant as a tool in your hand 
+#	and it's way more flexible.	
 #
 # Oh, and did I mention testssl.sh is open source?
 #
@@ -97,17 +98,17 @@ TERM_CURRPOS=0						# ^^^ we also need to find out the length or current pos in 
 
 OPENSSL=${OPENSSL:-/usr/bin/openssl}
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
-SHOW_LOC_CIPH=${SHOW_LOC_CIPH:-1} 		# will client side ciphers displayed before an individual test (makes no sense normally)
-SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: wrong value
-SNEAKY=${SNEAKY:-1}					# if zero: the referer and useragent we leave while checking the http header is just usual
-SSL_NATIVE=${SSL_NATIVE:-1}			# we do per default bash sockets where possible 0: switch back to native openssl
-ASSUMING_HTTP=${ASSUMING_HTTP:-1}		# in seldom cases (WAF, old servers/grumpy SSL) the service detection fails. Set to 0 for forcing HTTP
+SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: upside down value
+SNEAKY=${SNEAKY:-false}				# is the referer and useragent we leave behind just usual? 
+SSL_NATIVE=${SSL_NATIVE:-false}		# we do per default bash sockets where possible "true": switch back to "openssl native"
+ASSUMING_HTTP=${ASSUMING_HTTP:-false}	# in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1),
 								# 3: slight hexdumps + other info, 4: send bytes via sockets, 5: received, 6: whole 9 yards
 								# FIXME: still to be filled with (more) sense or following to be included:
-VERBERR=${VERBERR:-1}				# 0 means to be more verbose (handshake errors to be displayed so that one can tell better
+VERBERR=${VERBERR:-false}			# true means to be more verbose (handshake errors to be displayed so that one can tell better
 								# whether handshake succeeded or not. While testing individual ciphers you also need to have SHOW_EACH_C=1
-WIDE=${WIDE:-1}					# whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
+								#FIXME: only a few functions support this
+WIDE=${WIDE:-false}					# whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
 
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}	# we wait this long before killing the process to retrieve a service banner / http header
 readonly MAX_WAITSOCK=10				# waiting at max 10 seconds for socket reply
@@ -456,12 +457,12 @@ runs_HTTP() {
 			out " $SERVICE, thus skipping HTTP specific checks"
 			ret=0 ;;
 		*)   out " Couldn't determine what's running on port $PORT"
-			if [[ $ASSUMING_HTTP -eq 0 ]]; then
+			if $ASSUMING_HTTP; then
 				SERVICE=HTTP
 				out " -- ASSUMING_HTTP set though"
 				ret=0
 			else
-				out ", assuming not HTTP, skipping HTTP checks"
+				out ", assuming no HTTP service, skipping HTTP checks"
 				ret=1
 			fi
 			;;
@@ -487,7 +488,7 @@ http_header() {
 	outln; pr_blue "--> Testing HTTP header response"; outln " @ \"$URL_PATH\"\n"
 
 	[ -z "$1" ] && url="/" || url="$1"
-	if [ $SNEAKY -eq 0 ] ; then
+	if $SNEAKY; then
 		referer="http://google.com/"
 		useragent="$UA_SNEAKY"
 	else
@@ -984,7 +985,6 @@ listciphers() {
 std_cipherlists() {
 	pr_bold "$2    "         # indent in order to be in the same row as server preferences
 	if listciphers $1; then  # is that locally available??
-		[ $SHOW_LOC_CIPH -eq 0 ] && out "local ciphers are: " && sed 's/:/, /g' $TMPFILE
 		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>$TMPFILE >/dev/null </dev/null
 		ret=$?
 		[[ $DEBUG -ge 2 ]] && cat $TMPFILE
@@ -1236,7 +1236,7 @@ run_prototest_openssl() {
 	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $PROXY $sni &>$TMPFILE </dev/null
 	ret=$?
 # FIXME: here FreeBSD9 returns always 0 --> need to read the error
-	[ "$VERBERR" -eq 0 ] && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	$VERBERR && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 
 	if ! locally_supported "$1" "$2" ; then
 		return 7
@@ -1245,7 +1245,7 @@ run_prototest_openssl() {
 									# SSLv3 doesn't have SNI (openssl doesn't complain though -- yet)
 		$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
 		ret=$?  						#TODO (maybe): here FreeBSD9 returns always 0 --> need to read the error
-		[ "$VERBERR" -eq 0 ] && \
+		$VERBERR && \
 			egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 		grep -aq "no cipher list" $TMPFILE && ret=5
 	fi
@@ -1267,7 +1267,7 @@ run_protocols() {
 
 	pr_blue "--> Testing protocols ";
 
-	if [ $SSL_NATIVE -eq 0 ] || [ -n "$STARTTLS" ]; then
+	if $SSL_NATIVE || [ -n "$STARTTLS" ]; then
 		using_sockets=false
 		outln "(via native openssl)\n"
 	else
@@ -1874,12 +1874,12 @@ pfs() {
 		pr_brownln "Not OK: No ciphers supporting Forward Secrecy offered"
 	else
 		pfs_offered=0
-		if [ $WIDE -ne 0 ] ; then
+		if $WIDE; then
 			pr_litegreen " PFS ciphers (OK): "
-		else
-			pr_litegreen " PFS is offered (OK) "
 			outln ", cipher follow (client/browser support is here specially important) \n"
 			neat_header
+		else
+			pr_litegreen " PFS is offered (OK) "
 		fi
 		while read hexcode dash pfs_cipher sslvers kx auth enc mac; do
 			tmpfile=$TMPFILE.$hexcode
@@ -1888,7 +1888,7 @@ pfs() {
 			if [[ $ret2 -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
 				continue # no successful connect AND not verbose displaying each cipher
 			fi
-			if [ $WIDE -eq 0 ]; then
+			if $WIDE; then
 				normalize_ciphercode $hexcode
 				if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
 					dhlen=$(read_dhbits_from_file "$tmpfile" quiet)
@@ -1916,7 +1916,7 @@ pfs() {
 		fi
 	fi
 	outln
-	[ $WIDE -ne 0 ] && outln
+	$WIDE && outln
 
 	debugme echo $(actually_supported_ciphers $pfs_cipher_list)
 	debugme echo $no_supported_ciphers
@@ -2809,7 +2809,7 @@ crime() {
 #			fi
 #		fi
 #	fi
-	[ $VERBERR -eq 0 ] && outln "$STR"
+	$VERBERR && outln "$STR"
 	#echo
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
@@ -2830,7 +2830,7 @@ breach() {
 
 	url="$1"
 	[ -z "$url" ] && url="/"
-	if [ $SNEAKY -eq 0 ] ; then
+	if $SNEAKY; then
 		# see https://community.qualys.com/message/20360
 		if [[ "$NODE" =~ google ]]; then
 			referer="http://yandex.ru/" # otherwise we have a false positive for google.com
@@ -2896,7 +2896,7 @@ ssl_poodle() {
 	debugme echo $cbc_ciphers
 	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && egrep -q "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	$VERBERR && egrep -q "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
 	else
@@ -2981,7 +2981,7 @@ freak() {
 	esac
 	$OPENSSL s_client $STARTTLS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	$VERBERR && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
 	else
@@ -3018,7 +3018,7 @@ logjam() {
 	esac
 	$OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
 	ret=$?
-	[ "$VERBERR" -eq 0 ] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	$VERBERR && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	addtl_warning="$addtl_warning, common primes not checked. \"$PROG_NAME -E\" spots candidates"
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers"
@@ -3051,12 +3051,12 @@ beast(){
 	local continued=false
 	local cbc_cipher_list="SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:DES-CBC-MD5:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5"
 
-	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $WIDE -eq 0 ] ; then
+	if [ $VULN_COUNT -le $VULN_THRESHLD ] || $WIDE; then
 		 outln
 		 pr_blue "--> Testing for BEAST vulnerability" && outln "\n"
 	fi
 	pr_bold " BEAST"; out " (CVE-2011-3389)                     "
-	[[ $WIDE -eq 0 ]] && outln
+	$WIDE && outln
 
 	# 2) test handfull of common CBC ciphers
 	for proto in ssl3 tls1; do
@@ -3072,7 +3072,7 @@ beast(){
 		fi # protocol succeeded
 		# protocol with cbc_cipher check follows now
 
-		if [[ $WIDE -eq 0 ]] ; then
+		if $WIDE; then
 			outln "\n $(echo $proto | tr '[a-z]' '[A-Z]'):";
 			neat_header # NOTTHATNICE: we display the header also if in the end no cbc cipher is available on the client side
 		fi
@@ -3080,7 +3080,7 @@ beast(){
 			$OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>/dev/null </dev/null
 			openssl_ret=$?
 			[[ $openssl_ret -eq 0 ]] && vuln_beast=true
-			if [ $WIDE -eq 0 ]; then
+			if $WIDE; then
 				normalize_ciphercode $hexcode
 				if [[ "$SHOW_EACH_C" -ne 0 ]]; then
 					neat_list $HEXC $cbc_cipher $kx $enc
@@ -3101,7 +3101,7 @@ beast(){
 		done < <($OPENSSL ciphers -V 'ALL:eNULL' | grep -a CBC)   	# -V doesn't work with openssl < 1.0
 		#    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
 
-		if [ $WIDE -ne 0 ]; then
+		if ! $WIDE; then
 			if [ -n "$detected_cbc_ciphers" ]; then
 				detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
 				! $first && out "$spaces"
@@ -3127,7 +3127,7 @@ beast(){
 	done
 	if $vuln_beast ; then
 		if [ ! -z "$higher_proto_supported" ] ; then
-			if [ $WIDE -eq 0 ]; then
+			if $WIDE; then
 				outln
 				pr_brown "VULNERABLE"
 				outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
@@ -3159,7 +3159,7 @@ rc4() {
 	local hexcode dash rc4_cipher sslvers kx auth enc mac export
 	local rc4_ciphers_list="ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:DHE-DSS-RC4-SHA:AECDH-RC4-SHA:ADH-RC4-MD5:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:RC4-MD5:RSA-PSK-RC4-SHA:PSK-RC4-SHA:KRB5-RC4-SHA:KRB5-RC4-MD5:RC4-64-MD5:EXP1024-DHE-DSS-RC4-SHA:EXP1024-RC4-SHA:EXP-ADH-RC4-MD5:EXP-RC4-MD5:EXP-RC4-MD5:EXP-KRB5-RC4-SHA:EXP-KRB5-RC4-MD5"
 
-	if [ $VULN_COUNT -le $VULN_THRESHLD ] || [ $WIDE -eq 0 ] ; then
+	if [ $VULN_COUNT -le $VULN_THRESHLD ] || $WIDE; then
 		outln
 		pr_blue "--> Checking for vulnerable RC4 Ciphers" ; outln "\n"
 	fi
@@ -3168,17 +3168,18 @@ rc4() {
 	$OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 	# -V doesn't work with openssl < 1.0, feeding this into the while loop below
 	$OPENSSL s_client -cipher $rc4_ciphers_list $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>/dev/null </dev/null
 	if [ $? -eq 0 ]; then
+		# FF >=39 won't connect to them unless it's in this white list: http://mxr.mozilla.org/mozilla-central/source/security/manager/ssl/IntolerantFallbackList.inc
 		pr_litered "VULNERABLE (NOT ok): "
-		[[ $WIDE -eq 0 ]] && outln "\n"
+		$WIDE && outln "\n"
 		rc4_offered=1
-		[[ $WIDE -eq 0 ]] && neat_header
+		$WIDE && neat_header
 		while read hexcode dash rc4_cipher sslvers kx auth enc mac; do
 			$OPENSSL s_client -cipher $rc4_cipher $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null &>/dev/null
 			ret=$? 		# here we have a fp with openssl < 1.0
 			if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]] ; then
 				continue	# no successful connect AND not verbose displaying each cipher
 			fi
-			if [ $WIDE -eq 0 ]; then
+			if $WIDE; then
 				normalize_ciphercode $hexcode
 				neat_list $HEXC $rc4_cipher $kx $enc
 				if [[ "$SHOW_EACH_C" -ne 0 ]]; then
@@ -3393,16 +3394,16 @@ partly mandatory parameters:
 
 tuning options:
 
-     --assuming-http                if protocol check fails it assumes HTTP protocol and enforces HTTP checks
-     --ssl-native                   fallback to checks with OpenSSL where sockets are normally used
+     --assuming-http <true|false>   if protocol check fails it assumes HTTP protocol and enforces HTTP checks
+     --ssl-native <true|false>      fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>               use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
      --proxy <host>:<port>          connect via the specified HTTP proxy
-     --sneaky                       be less verbose wrt referer headers
-     --wide                         wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
-     --show-each                    for wide outputs: display all ciphers tested -- not only succeeded ones
+     --sneaky <true|false>          be less verbose wrt referer headers
+     --wide <true|false>            wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
+     --show-each <0|1>              for wide outputs: display all ciphers tested -- not only succeeded ones
      --warnings <batch|off|false>   "batch" doesn't wait for keypress, "off" or "false" skips connection warning
      --color <0|1|2>                0: no escape or other codes,  1: b/w escape codes,  2: color (default)
-     --debug <0-6>                  1: screen output normal but debug output in itemp files.  2-6: see line ~60
+     --debug <0-6>                  1: screen output normal but debug output in temp files.  2-6: see line ~105
 
 All options requiring a value can also be called with '=' (e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>
 
@@ -3489,7 +3490,6 @@ TERM_DWITH: $TERM_DWITH
 HAS_GNUDATE: $HAS_GNUDATE
 HAS_SED_E: $HAS_SED_E
 
-SHOW_LOC_CIPH: $SHOW_LOC_CIPH
 SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
 ASSUMING_HTTP $ASSUMING_HTTP
@@ -3722,7 +3722,7 @@ determine_service() {
 			ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
 			[ $? -ne 0 ] && exit 3
 		fi
-		[[ $SNEAKY -eq 0 ]] && \
+		$SNEAKY && \
 			ua="$UA_SNEAKY" || \
 			ua="$UA_STD"
 		GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
@@ -4073,13 +4073,13 @@ parse_cmd_line() {
 				outln "\nTLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}" 
 				;;
                --wide) 
-				WIDE=0 
+				WIDE=true
 				;;
 			--assuming[_-]http|--assume[-_]http)
-				ASSUMING_HTTP=0 
+				ASSUMING_HTTP=true
 				;;
 			--sneaky)
-				SNEAKY=0 
+				SNEAKY=true
 				;;
 			--warnings|--warnings=*)
 				WARNINGS=$(parse_opt_equal_sign "$1" "$2") 
@@ -4114,7 +4114,7 @@ parse_cmd_line() {
 				[ $? -eq 0 ] && shift
 				;;
 			--ssl_native|--ssl-native)
-				SSL_NATIVE=0 
+				SSL_NATIVE=true
 				;;
 			(--) shift
 				break 
@@ -4256,4 +4256,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.299 2015/07/02 14:39:40 dirkw Exp $
+#  $Id: testssl.sh,v 1.300 2015/07/06 08:10:45 dirkw Exp $
