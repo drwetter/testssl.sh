@@ -8,6 +8,8 @@
 # mainly adapted from the C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
 # thx Ramon de C Valle
 #
+# handshakes from RFCs. Good source too:  https://github.com/ioerror/sslscan/blob/master/sslscan.c
+#
 ###### DON'T DO EVIL! USAGE AT YOUR OWN RISK. DON'T VIOLATE LAWS! #######
 
 readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
@@ -17,6 +19,7 @@ trap "cleanup" QUIT EXIT
 
 NODE="$1"
 PORT="443"
+JABBERNODE=${JABBERNODE}
 SLEEP=2
 MAXSLEEP=10
 OCKREPLY=""
@@ -115,6 +118,11 @@ parse_hn_port() {
      echo -e "\n===> connecting to $NODE:$PORT\n"
 }
 
+debugme() {
+     [[ $DEBUG -ge 2 ]] && "$@"
+}
+
+
 wait_kill(){
      pid=$1
      maxsleep=$2
@@ -129,6 +137,13 @@ wait_kill(){
      kill $pid >&2 2>/dev/null
      wait $pid 2>/dev/null
      return 3   # killed
+}
+
+
+starttls_just_read(){
+     echo "=== just read banner ==="
+     cat <&5 &
+     wait_kill $! $SLEEP
 }
 
 
@@ -154,12 +169,41 @@ sockread() {
 }
 
 # arg1: string to send
-# arg2: success string, yet to be parsed
+# arg2: possible success strings a egrep pattern, needed!
 starttls_line0() {
-     echo "$1" >&5
-     cat <&5 &
+     reply=$(mktemp /tmp/reply.XXXXXX) || return 7
+
+     debugme echo -e "\n=== sending \"$1\" ..."
+     echo -e "$1" >&5
+     dd bs=1024 of=$reply count=32 <&5 2>/dev/null &
      wait_kill $! $SLEEP
-     #[ $? -eq 3 ] && fixme "STARTTLS timed out" && exit 1
+     debugme echo "... received result: "
+     cat $reply
+     if [ -n "$2" ]; then
+          if egrep -q "$2" $reply; then
+               debugme echo "---> reply matched \"$2\""
+               [ $DEBUG -eq 0 ] && rm $reply
+               return 0
+          else
+               debugme echo "---> reply didn't match \"$2\", see $reply"
+               fixme "STARTTLS handshake problem"
+               exit 1
+          fi
+     fi
+}
+
+
+starttls_line1() {
+     echo "$1" >&5
+     while true; do
+          read line <&5
+          echo $line
+          break
+     done
+}
+
+fixme(){
+     tput bold; tput setaf 5; echo -e "\n$1\n"; tput sgr0
 }
 
 
@@ -171,6 +215,8 @@ ok_ids() {
 }
 
 fd_socket(){
+     local jabber=""
+
      if ! exec 5<> /dev/tcp/$NODE/$PORT; then
           echo "`basename $0`: unable to connect to $NODE:$PORT"
           exit 2
@@ -178,41 +224,65 @@ fd_socket(){
 
      case "$1" in # port
           21)  # https://tools.ietf.org/html/rfc4217
-               starttls_line0 "FEAT"
-               starttls_line0 "AUTH TLS"
+               starttls_just_read
+               starttls_line0 "FEAT" "211"
+               #starttls_line0 HELP "214"
+               starttls_line0 "AUTH TLS" "successful|234"
                ;;
-          25)  #https://tools.ietf.org/html/rfc4217
-               starttls_line0 "EHLO testssl.sh" "250"
+          25)  # SMTP, see https://tools.ietf.org/html/rfc4217
+               starttls_just_read
+               starttls_line0 "EHLO testssl.sh" "220|250"
                starttls_line0 "STARTTLS" "220"
                ;;
-          110) # https://tools.ietf.org/html/rfc2595
+          110) # POP, see https://tools.ietf.org/html/rfc2595
+               starttls_just_read 
                starttls_line0 "STLS" "OK"
                ;;
-          119|433) # https://tools.ietf.org/html/rfc4642
-               starttls_line0 "CAPABILITIES" "101"
+          119|433) # NNTP, see https://tools.ietf.org/html/rfc4642
+               starttls_just_read 
+               starttls_line0 "CAPABILITIES" "101|200"
                starttls_line0 "STARTTLS" "382"
                ;;
-          143) # https://tools.ietf.org/html/rfc2595 
+          143) # IMAP, https://tools.ietf.org/html/rfc2595 
+               starttls_just_read 
                starttls_line0 "a001 CAPABILITY" "OK"
                starttls_line0 "a002 STARTTLS" "OK"
                ;;
-          389) # https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
+          389) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
                fixme "LDAP: FIXME not yet implemented"
                exit 1
                ;;
-          674) # https://tools.ietf.org/html/rfc2595
+          674) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
                fixme "ACAP: FIXME not yet implemented"
                exit 1
                ;;
-          5222)
+          5222) # XMPP, see https://tools.ietf.org/html/rfc6120
+               starttls_just_read
+               # following would be without hostname, jabber.org doesn't need it, others do!
+               #starttls_line0 "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' version='1.0'>\r\n"
+               [ -z $JABBERNODE ] && JABBERNODE="$NODE"
+               # as ioerror says: $NODE is not always the correct one, some jabber implementations need a special hostname!
+               # supply $JABBERNODE in ENV and you're set, like:     DEBUG=2 JABBERNODE=google.com ./heartbleed.bash talk.google.com:5222
+               jabber=$(cat <<EOF
+<?xml version='1.0' ?>
+<stream:stream 
+xmlns:stream='http://etherx.jabber.org/streams' 
+xmlns='jabber:client' 
+to='$JABBERNODE'
+xml:lang='en'
+version='1.0'>
+EOF
+)
+               starttls_line0 "$jabber"
                starttls_line0 "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" "proceed"
-               fixme "XMPP: FIXME not yet implemented"
+               # BTW: https://xmpp.net !
                ;;
-          443|995|993|465|*)  # we don't need a special command here
+          443|995|993|465|*)  # we don't need a special pre-command here
                ;;
-     esac
+     esac      
      echo
-}
+}    
+
 
 close_socket(){
      exec 5<&-
@@ -282,4 +352,4 @@ echo
 exit $ret
 
 #  vim:tw=100:ts=5:sw=5:expandtab
-#  $Id: ccs-injection.bash,v 1.7 2015/07/01 17:48:00 dirkw Exp $ 
+#  $Id: ccs-injection.bash,v 1.9 2015/07/06 20:01:49 dirkw Exp $ 
