@@ -149,6 +149,7 @@ NODE=""
 NODEIP=""
 IPADDRs=""
 IP46ADDRs=""
+XMPP_HOST=""
 PROXY=""
 PROXYIP=""
 PROXYPORT=""
@@ -3382,6 +3383,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
   special invocations:
 
      -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol>
+     --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
      --ip <ipv4>                   a) tests the supplied <ipv4> instead of resolving host(s) in URI 
                                    b) "one" means: just test the first DNS returns (useful for multiple IPs)
@@ -3547,7 +3549,7 @@ initialize_engine(){
 		return 1
 	elif echo $osslver | grep -q LibreSSL; then
 		return 1
-	elif grep -q '^# testssl config file' "$OPENSSL_CONF"; then
+	elif grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null; then
 		return 0
 	else
 		if [ -n "$OPENSSL_CONF" ]; then
@@ -3733,9 +3735,21 @@ determine_service() {
 	else
 		protocol=$(echo "$1" | sed 's/s$//')     # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
 		case "$protocol" in
+			xmpp) # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
+				 NODEIP="$NODE" 
+				 ;&
 			ftp|smtp|pop3|imap|xmpp|telnet|ldap)
-				STARTTLS="-starttls $protocol"; export STARTTLS
+				STARTTLS="-starttls $protocol"
 				SNI=""
+				if [[ -n "$XMPP_HOST" ]] && [[ $protocol == "xmpp" ]] ; then
+					if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
+						outln
+						pr_magentaln " Local problem: Your $OPENSSL does not support the \"-xmpphost\" option"
+						exit 1
+					fi
+					STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"		# it's a hack -- instead of changing calls all over the place
+					# see http://xmpp.org/rfcs/rfc3920.html
+				fi
 				$OPENSSL s_client -connect $NODEIP:$PORT $PROXY $STARTTLS 2>/dev/null >$TMPFILE </dev/null
 				if [ $? -ne 0 ]; then
 					pr_magentaln " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT"
@@ -3743,7 +3757,9 @@ determine_service() {
 					exit 3
 				fi
 				out " Service set:            STARTTLS via "
-				echo $protocol | tr '[a-z]' '[A-Z]'
+				printf $protocol | tr '[a-z]' '[A-Z]'
+				[[ -n "$XMPP_HOST" ]] && printf " (with to=\'$XMPP_HOST\')"
+				outln
 				;;
 			*)	pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet, ldap allowed" >&2
 				exit 1
@@ -3964,12 +3980,16 @@ parse_cmd_line() {
 			-x|-x=*|--single[-_]cipher|--single[-_]cipher=*)
 				do_test_just_one=true
 				single_cipher=$(parse_opt_equal_sign "$1" "$2")
-				[ $? -eq 0 ] && shift
+				[[ $? -eq 0 ]] && shift
 				;;
 			-t|-t=*|--starttls|--starttls=*)
 				do_starttls=true
 				STARTTLS_PROTOCOL=$(parse_opt_equal_sign "$1" "$2")
-				[ $? -eq 0 ] && shift
+				[[ $? -eq 0 ]] && shift
+				;;
+			--xmpphost|--xmpphost=*)
+				XMPP_HOST=$(parse_opt_equal_sign "$1" "$2")
+				[[ $? -eq 0 ]] && shift
 				;;
 			-e|--each-cipher)
 				do_allciphers=true
@@ -4083,7 +4103,7 @@ parse_cmd_line() {
 				;;
 			--warnings|--warnings=*)
 				WARNINGS=$(parse_opt_equal_sign "$1" "$2") 
-				[ $? -eq 0 ] && shift 
+				[[ $? -eq 0 ]] && shift
 				case "$WARNING" in
 					batch|off|false) ;;
 					default) pr_magentaln "warnings can be either \"batch\", \"off\" or \"false\"" ;;
@@ -4094,11 +4114,11 @@ parse_cmd_line() {
 				;; 
 			--debug|--debug=*)
 				DEBUG=$(parse_opt_equal_sign "$1" "$2")
-				[ $? -eq 0 ] && shift
+				[[ $? -eq 0 ]] && shift
 				;;
 			--color|--color=*)
 				COLOR=$(parse_opt_equal_sign "$1" "$2")
-				[ $? -eq 0 ] && shift
+				[[ $? -eq 0 ]] && shift
 				if [ $COLOR -ne 0 ] && [ $COLOR -ne 1 ] && [ $COLOR -ne 2 ] ; then
 					COLOR=2
 					pr_magentaln "$0: unrecognized color: $2" 1>&2
@@ -4107,11 +4127,11 @@ parse_cmd_line() {
 				;;
 			--openssl|--openssl=*)
 				OPENSSL=$(parse_opt_equal_sign "$1" "$2")
-				[ $? -eq 0 ] && shift
+				[[ $? -eq 0 ]] && shift
 				;;
 			--proxy|--proxy=*)
 				PROXY=$(parse_opt_equal_sign "$1" "$2")
-				[ $? -eq 0 ] && shift
+				[[ $? -eq 0 ]] && shift
 				;;
 			--ssl_native|--ssl-native)
 				SSL_NATIVE=true
@@ -4256,4 +4276,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.300 2015/07/06 08:10:45 dirkw Exp $
+#  $Id: testssl.sh,v 1.301 2015/07/06 18:42:42 dirkw Exp $
