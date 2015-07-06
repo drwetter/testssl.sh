@@ -4,12 +4,15 @@ echo
 echo "have you patched yet?"
 read a
 
-STDOPTIONS="--prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 \
+STDOPTIONS="--prefix=/usr/ --openssldir=/etc/ssl -DOPENSSL_USE_BUILD_DATE enable-zlib enable-ssl2 enable-rc5 enable-rc2 \
 enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
 enable-seed enable-camellia enable-idea enable-rfc3779 experimental-jpake"
 
 clean() {
-	make clean
+	case $NOCLEAN in 
+		yes|Y|YES) ;;
+		*) make clean ;;
+	esac
 	#[ $? -ne 0 ] && error "no openssl directory"
 	return 0
 }
@@ -36,8 +39,8 @@ copyfiles() {
 	return $?
 }
 
-case `uname -m` in
-	"i686") clean ;
+case $(uname -m) in
+	"i686") clean 
 		if [[ "$1" = krb ]]; then
 			name2add=krb
 			./config $STDOPTIONS no-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT
@@ -53,7 +56,7 @@ case `uname -m` in
 		echo "------------ all ok ------------"
 		echo 
 		;;
-	"x86_64") clean;
+	"x86_64") clean
 		if [[ "$1" = krb ]]; then
 			name2add=krb
 			./config $STDOPTIONS enable-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT
@@ -75,5 +78,5 @@ case `uname -m` in
 esac
 
 #  vim:tw=90:ts=5:sw=5
-#  $Id: make-openssl.sh,v 1.6 2015/04/02 07:39:27 dirkw Exp $ 
+#  $Id: make-openssl.sh,v 1.7 2015/07/06 18:21:41 dirkw Exp $ 
 
