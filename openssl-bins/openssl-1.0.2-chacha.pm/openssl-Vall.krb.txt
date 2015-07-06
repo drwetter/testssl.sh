@@ -1,4 +1,4 @@
-openssl64-1.0.2pm-krb5.chacha+poly ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
+openssl64-1.0.2pm-krb5 ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
 191
 
 
