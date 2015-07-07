@@ -114,6 +114,7 @@ HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}	# we wait this long before killing the pro
 readonly MAX_WAITSOCK=10				# waiting at max 10 seconds for socket reply
 readonly CCS_MAX_WAITSOCK=5			# for the two CCS payload (each)
 readonly HEARTBLEED_MAX_WAITSOCK=8		# for the heartbleed payload
+readonly STARTTLS_SLEEP=1			# max time to wait on a socket replay for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
@@ -415,22 +416,22 @@ tmpfile_handle() {
 	fi
 }
 
-# ARG1= pid which is in the backgnd and we wait for ($2 seconds)
 wait_kill(){
-	pid=$1
-	maxsleep=$2
+	local pid=$1			# pid we wait for or kill
+	local maxsleep=$2		# how long we wait before killing
+
 	while true; do
+		[[ "$DEBUG" -ge 6 ]] && ps $pid
 		if ! ps $pid >/dev/null ; then
-			return 0 	# didn't reach maxsleep yet
+			return 0 		# process terminated before didn't reach $maxsleep
 		fi
 		sleep 1
 		maxsleep=$((maxsleep - 1))
-		test $maxsleep -eq 0 && break
-	done # needs to be killed:
+		test $maxsleep -le 0 && break
+	done 				# needs to be killed:
 	kill $pid >&2 2>/dev/null
-	wait $pid 2>/dev/null
-#FIXME: do we need wait here???? normally it's good to report the exit status?!
-	return 3   # killed
+	wait $pid 2>/dev/null	# make sure pid terminated, see wait(1p)
+	return 3   			# means killed
 }
 
 
@@ -508,8 +509,7 @@ Connection: close
 
 EOF
 ) &>$HEADERFILE &
-	pid=$!
-	if wait_kill $pid $HEADER_MAXSLEEP; then
+	if wait_kill $! $HEADER_MAXSLEEP; then
 		if ! egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
 			pr_litemagenta " likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
 			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
@@ -1042,9 +1042,7 @@ sockread() {
 
 	ddreply=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
 	dd bs=$1 of=$ddreply count=1 <&5 2>/dev/null &
-	pid=$!
-
-	wait_kill $pid $maxsleep
+	wait_kill $! $maxsleep
 	ret=$?
 	SOCKREPLY=$(cat $ddreply)
 	rm $ddreply
@@ -1268,7 +1266,7 @@ run_protocols() {
 
 	pr_blue "--> Testing protocols ";
 
-	if $SSL_NATIVE || [ -n "$STARTTLS" ]; then
+	if $SSL_NATIVE || [ -n "$STARTTLS" ] && [[ $EXPERIMENTAL != "yes" ]]; then
 		using_sockets=false
 		outln "(via native openssl)\n"
 	else
@@ -1939,7 +1937,7 @@ spdy_pre(){
 	fi
 	if [ ! -z "$PROXY" ]; then
 		[ -n "$1" ] && pr_litemagenta "$1 "
-		pr_litemagenta "not being tested as proxies do not support it"
+		pr_litemagenta "not tested as proxies do not support proxying it"
 		return 1
 	fi
 	# first, does the current openssl support it?
@@ -1979,8 +1977,52 @@ run_spdy() {
 	return $ret
 }
 
+
+# arg1: string to send
+# arg2: possible success strings a egrep pattern, needed!
+starttls_line() {
+     debugme echo -e "\n=== sending \"$1\" ..."
+     echo -e "$1" >&5
+
+	# we don't know how much to read and it's blocking! So we just put a cat into the 
+	# background and read until $STARTTLS_SLEEP and: cross our fingers
+	cat <&5 >$TMPFILE &
+     wait_kill $! $STARTTLS_SLEEP
+     debugme echo "... received result: "
+     debugme cat $TMPFILE
+     if [ -n "$2" ]; then
+          if egrep -q "$2" $TMPFILE; then
+               debugme echo "---> reply matched \"$2\""
+          else
+               debugme echo "---> reply didn't match \"$2\", see $TMPFILE"
+               pr_magenta "STARTTLS handshake problem."
+			outln "Please recheck your cmdline and/or debug what happened ($PROG_NAME --debug=2 <cmdline>)."
+               exit 1
+          fi
+     fi
+
+	return 0
+}
+
+starttls_just_read(){
+     debugme echo "=== just read banner ==="
+	if [[ "$DEBUG" -ge 2 ]] ; then
+		cat <&5 &
+     	wait_kill $! $STARTTLS_SLEEP
+	else
+		dd of=/dev/null count=8 <&5 2>/dev/null &
+		wait_kill $! $STARTTLS_SLEEP
+	fi
+
+	return 0
+}
+
+
 # arg for a fd doesn't work here
 fd_socket() {
+	local jabber=""
+	local proyxline=""
+
 	if [[ -n "$PROXY" ]]; then
 		if ! exec 5<> /dev/tcp/${PROXYIP}/${PROXYPORT}; then
 			outln
@@ -1989,25 +2031,80 @@ fd_socket() {
 		fi
 		echo "CONNECT $NODEIP:$PORT" >&5
 		while true ; do
-			read x <&5
-			if [[ "${x%/*}" == "HTTP" ]]; then
-				x=${x#* }
-				if [[ "${x%% *}" != "200" ]] ; then
+			read proyxline <&5
+			if [[ "${proyxline%/*}" == "HTTP" ]]; then
+				proyxline=${proyxline#* }
+				if [[ "${proyxline%% *}" != "200" ]] ; then
 					[[ "$PORT" != 443 ]] && outln "Check whether your proxy supports port $PORT and the underlying protocol."
 					pr_magenta "Unable to CONNECT via proxy. "
 					return 6
 				fi
 			fi
-			if [[ "$x" == $'\r' ]] ; then
+			if [[ "$proyxline" == $'\r' ]] ; then
 				break
 			fi
 		done
-	elif ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null removes an error message, but disables debugging
+	elif ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null would remove an error message, but disables debugging
 		outln
-		pr_magenta "Unable to open a socket to $NODEIP:$PORT. "
+		pr_magentaln "Unable to open a socket to $NODEIP:$PORT. "
 		# It can last ~2 minutes but for for those rare occasions we don't do a timeout handler here, KISS
 		return 6
 	fi
+
+	if [[ -n "$STARTTLS" ]]; then
+		case "$PORT" in # port
+			21)  # https://tools.ietf.org/html/rfc4217
+				starttls_just_read
+				starttls_line "FEAT" "211"
+				starttls_line "AUTH TLS" "successful|234"
+				;;
+			25)  # SMTP, see https://tools.ietf.org/html/rfc4217
+				starttls_just_read
+				starttls_line "EHLO testssl.sh" "220|250"
+				starttls_line "STARTTLS" "220"
+				;;
+			110) # POP, see https://tools.ietf.org/html/rfc2595
+				starttls_just_read
+				starttls_line "STLS" "OK"
+				;;
+			119|433) # NNTP, see https://tools.ietf.org/html/rfc4642
+				starttls_just_read
+				starttls_line "CAPABILITIES" "101|200"
+				starttls_line "STARTTLS" "382"
+				;;
+			143) # IMAP, https://tools.ietf.org/html/rfc2595
+				starttls_just_read
+				starttls_line "a001 CAPABILITY" "OK"
+				starttls_line "a002 STARTTLS" "OK"
+				;;
+			389) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
+				pr_magentaln "FIXME: LDAP/STARTTLS not yet supported"
+				exit 1
+				;;
+			674) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
+				pr_magentaln "ACAP Easteregg: not implemented -- probably never will"
+				exit 1
+				;;
+			5222) # XMPP, see https://tools.ietf.org/html/rfc6120
+				starttls_just_read
+				[[ -z $XMPP_HOST ]] && XMPP_HOST="$NODE"
+				jabber=$(cat <<EOF
+<?xml version='1.0' ?>
+<stream:stream 
+xmlns:stream='http://etherx.jabber.org/streams' 
+xmlns='jabber:client' 
+to='$XMPP_HOST'
+xml:lang='en'
+version='1.0'>
+EOF
+)
+				starttls_line "$jabber"
+				starttls_line "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" "proceed"
+				# BTW: https://xmpp.net !
+				;;
+		esac
+	fi
+
      return 0
 }
 
@@ -2017,13 +2114,9 @@ close_socket(){
 	exec 5>&-
 	return 0
 }
-## old network code ^^^^^^
 
-
-###### new funcs for network follow
 
 # first: helper function for protocol checks
-
 code2network() {
 	# arg1: formatted string here in the code
 	NW_STR=$(echo "$1" | sed -e 's/,/\\\x/g' | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
@@ -2050,9 +2143,8 @@ sockread_serverhello() {
 
      SOCK_REPLY_FILE=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
      dd bs=$1 of=$SOCK_REPLY_FILE count=1 <&5 2>/dev/null &
-     pid=$!
+	wait_kill $! $maxsleep
 
-	wait_kill $pid $maxsleep
 	return $?
 }
 
@@ -2458,7 +2550,7 @@ heartbleed(){
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for heartbleed vulnerability" && outln "\n"
 	pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
 
-     if [ ! -z "$STARTTLS" ] ; then
+     if [[ -n "$STARTTLS" ]] && [[ $EXPERIMENTAL != "yes" ]] ; then
 		outln "(not yet implemented for STARTTLS)"
 		return 0
 	fi
@@ -2578,7 +2670,7 @@ ccs_injection(){
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
 	pr_bold " CCS"; out " (CVE-2014-0224)                       "
 
-     if [ ! -z "$STARTTLS" ] ; then
+     if [[ -n "$STARTTLS" ]] && [[ $EXPERIMENTAL != "yes" ]] ; then
 		outln "(not yet implemented for STARTTLS)"
 		return 0
 	fi
@@ -2629,23 +2721,27 @@ ccs_injection(){
 
 	fd_socket 5 || return 6
 
-	[[ $DEBUG -ge 2 ]] && out "\nsending client hello, "
+# we now make a standard handshake ...
+	debugme out "\nsending client hello, "
 	socksend "$client_hello" 1
 	sockread 16384
 
-	[[ $DEBUG -ge 2 ]] && outln "\nreading server hello"
+	debugme outln "\nreading server hello"
 	if [[ $DEBUG -ge 3 ]]; then
 		echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
 		outln "[...]"
 		outln "\npayload #1 with TLS version $tls_hexcode:"
 	fi
 
+# ... and then send the a change cipher spec message
 	socksend "$ccs_message" 1 || ok_ids
 	sockread 2048 $CCS_MAX_WAITSOCK
 	if [[ $DEBUG -ge 3 ]]; then
 		outln "\n1st reply: "
 		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
-# ok:      15 | 0301 | 02 | 02 0a == ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
+# ok:      15 | 0301    |  02 | 02 | 0a 
+#       ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
+#    or just timed out
 		outln
 		outln "payload #2 with TLS version $tls_hexcode:"
 	fi
@@ -2656,16 +2752,18 @@ ccs_injection(){
 
 	if [[ $DEBUG -ge 3 ]]; then
 		outln "\n2nd reply: "
-		out "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
-# not ok:  15 | 0301 | 02 | 02 | 15 == ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
+		printf -- "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
+# not ok:  15 | 0301    | 02 | 02  | 15 
+#       ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
 # ok:  0a or nothing: ==> RST
 		outln
 	fi
 
-	reply_sanitized=$(echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//')
-	lines=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l | sed 's/ //g')
+	byte6=$(echo "$SOCKREPLY" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//')
+	lines=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | count_lines )
+	debugme echo "lines: $lines, byte6: $byte6"
 
-	if [ "$reply_sanitized" == "0a" ] || [ "$lines" -gt 1 ] ; then
+	if [ "$byte6" == "0a" ] || [ "$lines" -gt 1 ] ; then
 		pr_green "not vulnerable (OK)"
 		ret=0
 	else
@@ -2856,8 +2954,7 @@ Connection: close
 
 EOF
 ) &>$HEADERFILE_BREACH &
-	pid=$!
-	if wait_kill $pid $HEADER_MAXSLEEP; then
+	if wait_kill $! $HEADER_MAXSLEEP; then
 		result=$(grep -a '^Content-Encoding' $HEADERFILE_BREACH | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g')
 		result=$(echo $result | tr -cd '\40-\176')
 		if [ -z $result ]; then
@@ -4276,4 +4373,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.301 2015/07/06 18:42:42 dirkw Exp $
+#  $Id: testssl.sh,v 1.304 2015/07/07 20:59:30 dirkw Exp $
