@@ -543,11 +543,11 @@ EOF
 		301|302|307|308)	out ", redirecting to \"$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')\"" ;;
 		200) ;;
 		206) out " -- WTF?" ;;
-		400) pr_litemagenta " (better try another URL)" ;;
+		400) pr_litemagenta " (Hint: better try another URL)" ;;
 		401) grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
 			;;
 		403)  ;;
-		404) out " (Maybe supply a path which doesn't give a \"$status_code$msg_thereafter\")" ;; 
+		404) out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")" ;; 
 		405) ;;
 		*) pr_litemagenta ". Oh, didn't expect a $status_code$msg_thereafter";;
 	esac
@@ -772,7 +772,7 @@ server_banner() {
 		else
 			emphasize_stuff_in_headers "$serverbanner"
 			[[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]] && \
-				pr_litemagentaln "                   It's recommended to run another test w/ OpenSSL 1.01 !"
+				pr_litemagentaln "                              It's recommended to run another test w/ OpenSSL 1.01 !"
 				# see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 		fi
 		# mozilla.github.io/server-side-tls/ssl-config-generator/
@@ -907,12 +907,12 @@ more_flags() {
 		for f2t in $other_flags2test; do
 			result_str=$(grep -i "^$f2t" $TMPFILE)
 			[ -z "$result_str" ] && continue
-			if $first; then
-				outln "$result_str"
-				first=false
+			if ! $first; then
+				out "$spaces"  # output leading spaces if the first header
 			else
-				out "$blanks"; outln "$result_str"
+				first=false
 			fi
+			outln "$result_str"
 		done
 	fi
 #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
@@ -1461,7 +1461,7 @@ server_preference() {
 			*TLSv1)		outln $default_proto ;;
 			*SSLv2)		pr_redln $default_proto ;;
 			*SSLv3)		pr_redln $default_proto ;;
-			"")			pr_litemagenta "default proto empty";  [[ $OSSL_VER == 1.0.2* ]] && outln "(IIS6+OpenSSL 1.02?)" ;; # maybe you can try to use openssl 1.01 here
+			"")			pr_litemagenta "default proto empty";  [[ $OSSL_VER == 1.0.2* ]] && outln " (Hint: if IIS6 give OpenSSL 1.01 a try)" ;; 
 			*)			outln "$default_proto" ;;
 		esac
 
@@ -1474,7 +1474,7 @@ server_preference() {
 			*GCM*)		pr_green "$default_cipher" ;;   # best ones
 			*CHACHA20*)	pr_green "$default_cipher" ;;   # best ones
 			ECDHE*AES*)    pr_yellow "$default_cipher" ;;  # it's CBC. --> lucky13
-			"")			pr_litemagenta "default cipher empty" ;  [[ $OSSL_VER == 1.0.2* ]] && out "(IIS6+OpenSSL 1.02?)" ;; # maybe you can try to use openssl 1.01 here
+			"")			pr_litemagenta "default cipher empty" ;  [[ $OSSL_VER == 1.0.2* ]] && out " (Hint: if IIS6 give OpenSSL 1.01 a try)" ;;
 			*)			out "$default_cipher" ;;
 		esac
 		read_dhbits_from_file "$TMPFILE"
@@ -4373,4 +4373,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.304 2015/07/07 20:59:30 dirkw Exp $
+#  $Id: testssl.sh,v 1.305 2015/07/08 09:26:59 dirkw Exp $
