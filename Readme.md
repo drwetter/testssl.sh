@@ -14,12 +14,13 @@ New features in the upcoming stable release 2.6 are:
 * display matching key (HPKP)
 * LOGJAM 1: check DHE_EXPORT cipher 
 * LOGJAM 2: displays DH(/ECDH) bits in wide mode on negotiated ciphers
-* "wide mode" option for several checks (RC4, BEAST. PFS).  Displays hexcode, kx, strength, DH bits, RFC name
+* "wide mode" option for checks like RC4, BEAST. PFS. Displays hexcode, kx, strength, DH bits, RFC name
 * TLS_FALLBACK_SCSV check
 * (HTTP) proxy support
 * Run in default mode through all ciphers at the end of a default run
 * can test multiple IP adresses in one shot
-* can scan STARTTLS+XMPP by also supplying the xmpp-domain (to-option in XML streams)
+* can scan STARTTLS+XMPP by also supplying the XMPP domain (to-option in XML streams)
+* support of sockets for STARTTLS protocols
 * TLS 1.0-1.1 as socket per default in production
 
 more see https://github.com/drwetter/testssl.sh/milestones/2.5dev%20%282.6%29
