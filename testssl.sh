@@ -115,6 +115,7 @@ readonly MAX_WAITSOCK=10				# waiting at max 10 seconds for socket reply
 readonly CCS_MAX_WAITSOCK=5			# for the two CCS payload (each)
 readonly HEARTBLEED_MAX_WAITSOCK=8		# for the heartbleed payload
 readonly STARTTLS_SLEEP=1			# max time to wait on a socket replay for STARTTLS
+FAST_STARTTLS=${FAST_STARTTLS:-true}	#at the cost of reliabilty decrese the handshakes for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
@@ -1268,7 +1269,7 @@ run_protocols() {
 
 	if $SSL_NATIVE || [ -n "$STARTTLS" ] && [[ $EXPERIMENTAL != "yes" ]]; then
 		using_sockets=false
-		outln "(via native openssl)\n"
+		outln "(via openssl)\n"
 	else
 		outln "(via sockets except TLS 1.2 and SPDY/NPN)\n"
 	fi
@@ -2004,6 +2005,11 @@ starttls_line() {
 	return 0
 }
 
+starttls_just_send(){
+	debugme echo -e "\n=== sending \"$1\" ..."
+	echo -e "$1" >&5
+}
+
 starttls_just_read(){
      debugme echo "=== just read banner ==="
 	if [[ "$DEBUG" -ge 2 ]] ; then
@@ -2054,27 +2060,27 @@ fd_socket() {
 	if [[ -n "$STARTTLS" ]]; then
 		case "$PORT" in # port
 			21)  # https://tools.ietf.org/html/rfc4217
-				starttls_just_read
-				starttls_line "FEAT" "211"
+				$FAST_STARTTLS || starttls_just_read
+				$FAST_STARTTLS || starttls_line "FEAT" "211" && starttls_just_send "FEAT"
 				starttls_line "AUTH TLS" "successful|234"
 				;;
 			25)  # SMTP, see https://tools.ietf.org/html/rfc4217
-				starttls_just_read
-				starttls_line "EHLO testssl.sh" "220|250"
+				$FAST_STARTTLS || starttls_just_read
+				$FAST_STARTTLS || starttls_line "EHLO testssl.sh" "220|250" && starttls_just_send "EHLO testssl.sh" 
 				starttls_line "STARTTLS" "220"
 				;;
 			110) # POP, see https://tools.ietf.org/html/rfc2595
-				starttls_just_read
+				$FAST_STARTTLS || starttls_just_read
 				starttls_line "STLS" "OK"
 				;;
 			119|433) # NNTP, see https://tools.ietf.org/html/rfc4642
-				starttls_just_read
-				starttls_line "CAPABILITIES" "101|200"
+				$FAST_STARTTLS || starttls_just_read
+				$FAST_STARTTLS || starttls_line "CAPABILITIES" "101|200" && starttls_just_send "CAPABILITIES"
 				starttls_line "STARTTLS" "382"
 				;;
 			143) # IMAP, https://tools.ietf.org/html/rfc2595
-				starttls_just_read
-				starttls_line "a001 CAPABILITY" "OK"
+				$FAST_STARTTLS || starttls_just_read
+				$FAST_STARTTLS || starttls_line "a001 CAPABILITY" "OK" && starttls_just_send "a001 CAPABILITY"
 				starttls_line "a002 STARTTLS" "OK"
 				;;
 			389) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
@@ -2550,10 +2556,10 @@ heartbleed(){
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for heartbleed vulnerability" && outln "\n"
 	pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
 
-     if [[ -n "$STARTTLS" ]] && [[ $EXPERIMENTAL != "yes" ]] ; then
-		outln "(not yet implemented for STARTTLS)"
-		return 0
-	fi
+     #if [[ -n "$STARTTLS" ]] && [[ $EXPERIMENTAL != "yes" ]] ; then
+	#	outln "(not yet implemented for STARTTLS)"
+	#	return 0
+	#fi
 
 	# determine TLS versions available:
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY -tlsextdebug &>$TMPFILE </dev/null
@@ -2670,10 +2676,10 @@ ccs_injection(){
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
 	pr_bold " CCS"; out " (CVE-2014-0224)                       "
 
-     if [[ -n "$STARTTLS" ]] && [[ $EXPERIMENTAL != "yes" ]] ; then
-		outln "(not yet implemented for STARTTLS)"
-		return 0
-	fi
+     #if [[ -n "$STARTTLS" ]] && [[ $EXPERIMENTAL != "yes" ]] ; then
+	#	outln "(not yet implemented for STARTTLS)"
+	#	return 0
+	#fi
 	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY &>$TMPFILE </dev/null
 
 	if $HAS_SED_E; then
@@ -3528,7 +3534,7 @@ mybanner() {
 	bb=$(cat <<EOF
 
 #########################################################
-  $PROG_NAME $VERSION               $SWURL
+  $PROG_NAME  ($VERSION)            $SWURL
   ($idtag)
 
    This program is free software. Redistribution +
@@ -3855,7 +3861,7 @@ determine_service() {
 				fi
 				out " Service set:            STARTTLS via "
 				printf $protocol | tr '[a-z]' '[A-Z]'
-				[[ -n "$XMPP_HOST" ]] && printf " (with to=\'$XMPP_HOST\')"
+				[[ -n "$XMPP_HOST" ]] && printf " (XMPP domain=\'$XMPP_HOST\')"
 				outln
 				;;
 			*)	pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet, ldap allowed" >&2
@@ -4373,4 +4379,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.305 2015/07/08 09:26:59 dirkw Exp $
+#  $Id: testssl.sh,v 1.306 2015/07/08 19:30:08 dirkw Exp $
