@@ -68,8 +68,8 @@ trap "cleanup" QUIT EXIT
 readonly VERSION="2.5dev"
 readonly SWCONTACT="dirk aet testssl dot sh"
 echo $VERSION | grep -q dev && \
-	SWURL="http://dev.testssl.sh" ||
-	SWURL="   https://testssl.sh"
+	SWURL="https://testssl.sh/dev/" ||
+	SWURL="https://testssl.sh     "
 
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname $0)
@@ -1680,11 +1680,17 @@ server_defaults() {
 
 	pr_bold " Server key size              "
 	keysize=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
+	algo=$($OPENSSL x509 -in $HOSTCERT -noout -text  | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
+
 	if [ -z "$keysize" ]; then
 		outln "(couldn't determine)"
 	else
 		if [ "$keysize" -le 768 ]; then
-			pr_red "$keysize"
+			if [[ $algo =~ "ecdsa" ]]; then
+				pr_litegreen "EC $keysize"
+			else
+				pr_red "$keysize"
+			fi
 		elif [ "$keysize" -le 1024 ]; then
 			pr_brown "$keysize"
 		elif [ "$keysize" -le 2048 ]; then
@@ -1698,12 +1704,11 @@ server_defaults() {
 	outln " bit"
 
 	pr_bold " Signature Algorithm          "
-	algo=$($OPENSSL x509 -in $HOSTCERT -noout -text  | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
 	case $algo in
     		sha1WithRSAEncryption) 	pr_brownln "SHA1 with RSA" ;;
      	sha256WithRSAEncryption) pr_litegreenln "SHA256 with RSA" ;;
 	     sha512WithRSAEncryption) pr_litegreenln "SHA512 with RSA" ;;
-	     ecdsa-with-SHA256) pr_litegreenln "ECDSA with SHA256" ;;
+	     ecdsa-with-SHA256) 		pr_litegreenln "ECDSA with SHA256" ;;
 	     md5*) 				pr_redln "MD5" ;;
 		*) 					outln "$algo" ;;
 	esac
@@ -1717,19 +1722,25 @@ server_defaults() {
 	cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
 	pr_underline "$cn"
 
-	cn_nosni=$($OPENSSL x509 -in $HOSTCERT.nosni -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
+	cn_nosni=""
+	[[ -s $HOSTCERT.nosni ]] && \
+		cn_nosni=$($OPENSSL x509 -in $HOSTCERT.nosni -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
 	[[ $DEBUG -ge 2 ]] && out "\'$NODE\' | \'$cn\' | \'$cn_nosni\'"
 	if [[ $NODE == $cn_nosni ]]; then
-		if [[ $SERVICE != "HTTP" ]] ; then
+		if [[ $SERVICE != "HTTP" ]]; then
 			outln " (matches certificate directly)"
 		else
 			outln " (works w/o SNI)"
 		fi
 	else
-		if [[ $SERVICE != "HTTP" ]] ; then
+		if [[ $SERVICE != "HTTP" ]]; then
 			pr_brownln " (CN doesn't match but for non-HTTP services it might be ok)"
+		elif [[ -z "$cn_nosni" ]]; then
+			out " (request w/o SNI didn't succeed";
+			[[ $algo =~ ecdsa ]] && out ", usual for EC certificates"
+			outln ")"
 		else
-			out " (CN response to request w/o SNI: "; pr_underline "$cn_nosni"; outln ")"
+			out " (CN in response to request w/o SNI: "; pr_underline "$cn_nosni"; outln ")"
 		fi
 	fi
 
@@ -3533,17 +3544,17 @@ mybanner() {
 	[ "$COLOR" -ne 0 ] && idtag="\033[1;30m$idtag\033[m\033[1m"
 	bb=$(cat <<EOF
 
-#########################################################
-  $PROG_NAME  ($VERSION)            $SWURL
-  ($idtag)
+###########################################################
+    $PROG_NAME       $VERSION from $SWURL
+    ($idtag)
 
-   This program is free software. Redistribution +
-   modification under GPLv2 is permitted.
-   USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
+      This program is free software. Distribution and 
+             modification under GPLv2 permitted. 
+      USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
- Note: you can only check the server with what is
- available (ciphers/protocols) locally on your machine!
-#########################################################
+       Please file bugs @ https://testssl.sh/bugs/
+
+###########################################################
 EOF
 )
 	pr_bold "$bb"
@@ -3638,10 +3649,13 @@ cleanup () {
 
 # for now only GOST engine
 initialize_engine(){
+	grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null && return 0		# have been here already
+
 	if $OPENSSL version | grep -qi LibreSSL; then
 		outln
 		pr_litemagenta "Please note: LibreSSL is not a good choice for testing insecure features!"
 	fi
+			
 	if ! $OPENSSL engine gost -vvvv -t -c >/dev/null 2>&1; then
 		outln
 		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln
@@ -3650,10 +3664,6 @@ initialize_engine(){
 		outln
 		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln
 		return 1
-	elif echo $osslver | grep -q LibreSSL; then
-		return 1
-	elif grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null; then
-		return 0
 	else
 		if [ -n "$OPENSSL_CONF" ]; then
 			pr_litemagenta "For now I am providing the config file in to have GOST support"; outln
@@ -3681,6 +3691,7 @@ EOF
 			export OPENSSL_CONF
 		fi
 	fi
+
 	return 0
 }
 
@@ -4053,6 +4064,7 @@ parse_cmd_line() {
 				;;
 			-b|--banner|-v|--version)
 				find_openssl_binary
+				initialize_engine
 				mybanner
 				exit 0
 				;;
@@ -4073,10 +4085,10 @@ parse_cmd_line() {
 				;;
 			-V|-V=*|--local|--local=*)	# this is only displaying local ciphers, thus we don't put it in the loop
 				find_openssl_binary
+				initialize_engine 		# for GOST support
 				mybanner
 				openssl_age
 				maketempf
-				initialize_engine 		# for GOST support
 				prettyprint_local $(parse_opt_equal_sign "$1" "$2")
 				exit $? 
 				;;
@@ -4330,6 +4342,7 @@ initialize_globals
 parse_cmd_line "$@"
 set_color_functions
 find_openssl_binary
+initialize_engine
 mybanner
 check_proxy
 openssl_age
@@ -4343,7 +4356,6 @@ ip=""
 if ${do_mx_all_ips} ; then
      query_globals 				# if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
 	[ $? -eq 1 ] && set_scanning_defaults
-	initialize_engine
 	mx_all_ips "${URI}" $PORT
 	ret=$?
 else	
@@ -4379,4 +4391,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.306 2015/07/08 19:30:08 dirkw Exp $
+#  $Id: testssl.sh,v 1.307 2015/07/10 08:23:09 dirkw Exp $
