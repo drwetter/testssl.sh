@@ -96,7 +96,7 @@ TERM_CURRPOS=0						# ^^^ we also need to find out the length or current pos in 
 
 # we have tab indentation with 5 virtual chars!
 
-OPENSSL=${OPENSSL:-/usr/bin/openssl}
+declare -x OPENSSL
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: upside down value
 SNEAKY=${SNEAKY:-false}				# is the referer and useragent we leave behind just usual? 
@@ -748,6 +748,7 @@ emphasize_stuff_in_headers(){
 		-e "s/Red Hat/"$yellow"Red Hat$off/g" \
 		-e "s/CentOS/"$yellow"CentOS$off/g" \
 		-e "s/Via/"$yellow"Via$off/g" \
+		-e "s/Liferay-Portal/"$yellow"Liferay-Portal$off/g" \
 		-e "s/X-Cache-Lookup/"$yellow"X-Cache-Lookup$off/g" \
 		-e "s/X-Cache/"$yellow"X-Cache$off/g" \
 		-e "s/X-Squid/"$yellow"X-Squid$off/g" \
@@ -3375,26 +3376,50 @@ get_install_dir() {
 	debugme echo "$MAP_RFC_FNAME"
 }
 
-find_openssl_binary() {
-# 0. check environment variable whether it's executable
-	if [ ! -z "$OPENSSL" ] && [ ! -x "$OPENSSL" ]; then
-		pr_red "\ncannot find (\$OPENSSL=$OPENSSL) binary."
-		outln " Looking some place else ..."
+
+test_openssl_suffix() {
+	local myarch_suffix=""
+	local uname_arch=$(uname -m)
+
+	[[ $uname_arch =~ "64" ]] && myarch_suffix=64 || myarch_suffix=32
+
+	if [[ -n "$1/openssl" ]] && [[ -x "$1/openssl" ]]; then
+		OPENSSL="$1/openssl"
+		return 0
+	elif [[ -n "$1/openssl.$uname_arch" ]] && [[ -x "$1/openssl.$uname_arch" ]]; then
+		OPENSSL="$1/openssl.$uname_arch"
+		return 0
+	elif [[ -n "$1/openssl"$myarch_suffix ]] && [[ -x "$1/openssl"$myarch_suffix ]]; then
+		OPENSSL="$1/openssl"$myarch_suffix		# intel
+		return 0
 	fi
-	if [ -x "$OPENSSL" ]; then
-# 1. check environment variable
-		:
-	else
-# 2. otherwise try openssl in path of testssl.sh
-		OPENSSL=$RUN_DIR/openssl
-		if [ ! -x "$OPENSSL" ] ; then
-# 3. with arch suffix
-			OPENSSL=$RUN_DIR/openssl.$(uname -m)
-			if [ ! -x "$OPENSSL" ] ; then
-#4. finally: didn't find anything, so we take the one from the system:
-				OPENSSL=$(which openssl 2>/dev/null)
-			fi
-		fi
+	return 1
+}
+	
+
+
+find_openssl_binary() {
+	local myarch_suffix=""
+	local uname_arch=$(uname -m)
+
+	[[ $uname_arch =~ "64" ]] && myarch_suffix=64 || myarch_suffix=32
+	# 0. check environment variable whether it's executable
+	if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
+		pr_red "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
+		outln " Looking some place else ..."
+	elif [[ -x "$OPENSSL" ]]; then
+		:	# 1. all ok supplied $OPENSSL is excutable
+	elif test_openssl_suffix $RUN_DIR; then
+		:	# 2. otherwise try openssl in path of testssl.sh
+	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static" ]]; then
+			# 3. for folks running it directly from git pull dir (not sure whether folks have krb5 libs
+			#    so the default is here trying the statically linked ones
+			OPENSSL="$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static"
+	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl.$uname_arch-1.0.2pm-static" ]]; then
+			# 4 in the future for other platforms we want to have another naming scheme
+			OPENSSL="$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl.$uname_arch-1.0.2pm-static"
+	elif	test_openssl_suffix $(dirname $(which openssl)); then
+		: # 5. we tried hard, but now we fail back to system
 	fi
 
 	"$OPENSSL" version -a 2>&1 >/dev/null
@@ -4391,4 +4416,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.307 2015/07/10 08:23:09 dirkw Exp $
+#  $Id: testssl.sh,v 1.308 2015/07/12 16:46:26 dirkw Exp $
