@@ -1430,19 +1430,20 @@ read_dhbits_from_file() {
 
 server_preference() {
 	local list1="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
+	local list_forward=$(echo $list1 | tr ':' '\n' | sort | tr '\n' ':' | sed -e 's/:$//')
 	outln;
 	pr_blue "--> Testing server preferences"; outln "\n"
 
 	pr_bold " Has server cipher order?     "
-	$OPENSSL s_client $STARTTLS -cipher $list1 -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null >$TMPFILE
+	$OPENSSL s_client $STARTTLS -cipher $list_forward -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null >$TMPFILE
 	if [ $? -ne 0 ]; then
 		pr_magenta "no matching cipher in this list found (pls report this): "
 		outln "$list1  . "
           ret=6
 	else
 		cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
-		list2=$(echo $list1 | tr ':' '\n' | sort -r | tr '\n' ':')	# pr_reverse the list
-		$OPENSSL s_client $STARTTLS -cipher $list2 -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null >$TMPFILE
+		list_backward=$(echo $list1 | tr ':' '\n' | sort -r | tr '\n' ':' | sed -e 's/:$//')
+		$OPENSSL s_client $STARTTLS -cipher $list_backward -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null >$TMPFILE
 		cipher2=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 
 		if [[ "$cipher1" != "$cipher2" ]]; then
