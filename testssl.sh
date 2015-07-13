@@ -1441,7 +1441,7 @@ server_preference() {
           ret=6
 	else
 		cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
-		list2=$(echo $list1 | tr ':' '\n' | sort -r | tr '\n' ':')	# pr_reverse the list
+		list2=$(echo -n $list1':' | tac -s':' | sed -e 's/:$//') # reverse the list
 		$OPENSSL s_client $STARTTLS -cipher $list2 -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null >$TMPFILE
 		cipher2=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 
