@@ -147,6 +147,7 @@ OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 HAS_DH_BITS=true
+PORT=443							# unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
 IPADDRs=""
@@ -3469,7 +3470,7 @@ openssl_age() {
 
 # We need to get the IP address of the proxy so we can use it in fd_socket
 check_proxy(){
-	if [ -n "$PROXY" ] ; then
+	if [[ -n "$PROXY" ]]; then
 		if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
 			pr_magentaln "Local problem: Your $OPENSSL is too old to support the \"--proxy\" option"
 			exit 1
@@ -3610,7 +3611,6 @@ machine: ${BASH_VERSINFO[5]}
 operating system: $SYSTEM
 shellopts: $SHELLOPTS
 
-"$osslver" [$nr_ciphers ciphers]
 OSSL_VER_MAJOR: $OSSL_VER_MAJOR
 OSSL_VER_MINOR: $OSSL_VER_MINOR
 OSSL_VER_APPENDIX: $OSSL_VER_APPENDIX
@@ -3676,6 +3676,8 @@ cleanup () {
 initialize_engine(){
 	grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null && return 0		# have been here already
 
+	[[ -z "$TEMPDIR" ]] && maketempf
+
 	if $OPENSSL version | grep -qi LibreSSL; then
 		outln
 		pr_litemagenta "Please note: LibreSSL is not a good choice for testing insecure features!"
@@ -3689,17 +3691,16 @@ initialize_engine(){
 		outln
 		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln
 		return 1
-	else
-		if [ -n "$OPENSSL_CONF" ]; then
-			pr_litemagenta "For now I am providing the config file in to have GOST support"; outln
+	else # we have engine support
+		if [[ -n "$OPENSSL_CONF" ]]; then
+			pr_litemagentaln "For now I am providing the config file in to have GOST support"
 		else
-			[ -z "$TEMPDIR" ] && maketempf
 			OPENSSL_CONF=$TEMPDIR/gost.conf || exit 6
 			# see https://www.mail-archive.com/openssl-users@openssl.org/msg65395.html
 			cat >$OPENSSL_CONF << EOF
-openssl_conf            = openssl_def
+# testssl config file for openssl
 
-# testssl config file
+openssl_conf            = openssl_def
 
 [ openssl_def ]
 engines                 = engine_section
@@ -3737,63 +3738,78 @@ ignore_no_or_lame() {
 # arg1: URI
 # arg2: protocol
 parse_hn_port() {
-	PORT=443		# unless otherwise auto-determined, see below
 	NODE="$1"
 
 	# strip "https" and trailing urlpath supposed it was supplied additionally
-	echo $NODE | grep -q 'https://' && NODE=$(echo $NODE | sed -e 's/^https\:\/\///')
+	echo "$NODE" | grep -q 'https://' && NODE=$(echo "$NODE" | sed -e 's/^https\:\/\///')
 
 	# strip trailing urlpath
-	NODE=$(echo $NODE | sed -e 's/\/.*$//')
+	NODE=$(echo "$NODE" | sed -e 's/\/.*$//')
 
 	# was the address supplied like [AA:BB:CC::]:port ?
-	if echo $NODE | grep -q ']' ; then
-		tmp_port=$(printf $NODE | sed 's/\[.*\]//' | sed 's/://')
+	if echo "$NODE" | grep -q ']' ; then
+		tmp_port=$(printf "$NODE" | sed 's/\[.*\]//' | sed 's/://')
 		# determine v6 port, supposed it was supplied additionally
-		if [ ! -z "$tmp_port" ] ; then
+		if [[ -n "$tmp_port" ]]; then
 			PORT=$tmp_port
-			NODE=$(printf $NODE | sed "s/:$PORT//")
+			NODE=$(printf "$NODE" | sed "s/:$PORT//")
 		fi
-		NODE=$(printf $NODE | sed -e 's/\[//' -e 's/\]//')
+		NODE=$(printf "$NODE" | sed -e 's/\[//' -e 's/\]//')
 	else
 		# determine v4 port, supposed it was supplied additionally
-		echo $NODE | grep -q ':' && PORT=$(echo $NODE | sed 's/^.*\://') && NODE=$(echo $NODE | sed 's/\:.*$//')
+		echo "$NODE" | grep -q ':' && \
+			PORT=$(echo "$NODE" | sed 's/^.*\://') && NODE=$(echo "$NODE" | sed 's/\:.*$//')
 	fi
 	debugme echo $NODE:$PORT
 	SNI="-servername $NODE"
 
 	URL_PATH=$(echo $1 | sed 's/https:\/\///' | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')		# remove protocol and node part and port
 	URL_PATH=$(echo $URL_PATH | sed 's/\/\//\//g')    	# we rather want // -> /
-	[ -z "$URL_PATH" ] && URL_PATH="/"
+	[[ -z "$URL_PATH" ]] && URL_PATH="/"
 	debugme echo $URL_PATH
 
 	return 0  	# NODE, URL_PATH, PORT is set now
+}
+
+is_ipv4addr() {
+	local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
+	local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
+
+	[[ -z "$1" ]] && return 1
+
+	echo -n "$1" | grep -Eq $ipv4address && \
+		return 0 || \
+		return 1
 }
 
 # now get all IP addresses 
 determine_ip_addresses() {
 	local ip4=""
 	local ip6=""
+	local saved_openssl_conf="$OPENSSL_CONF"
 
-	if [ -z "$(printf $NODE | sed -e 's/[0-9]//g' -e 's/\.//g')" ]; then
-		ip4=$NODE				# only an IPv4 address was supplied as an argument, no hostname
+	if [[ $(is_ipv4addr "$NODE") ]]; then
+		ip4="$NODE"			# only an IPv4 address was supplied as an argument, no hostname
 		SNI=""				# override Server Name Indication as we test the IP only
 	else
 		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
 		ip4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
-		if [[ -z "$ip4" ]]; then
-			if which host &> /dev/null && [ -z "$ip4" ] ; then
-				ip4=$(host -t a $NODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-				if echo "$ip4" | grep -q NXDOMAIN || echo "$ip4" | grep -q "no A record"; then
-					return 1
-				fi
-			fi
-			if [[ -z "$ip4" ]] ; then
-				# MSYS2 has no host or getent, so we need nslookup
-				ip4=$(nslookup $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
-				[[ -z "$ip4" ]] && return 2
-			fi
+	
+		unset OPENSSL_CONF		# see https://github.com/drwetter/testssl.sh/issues/134
+
+		if ! is_ipv4addr "$ip4"; then
+			which dig &> /dev/null && \
+				ip4=$(dig +short -t a "$NODE" 2>/dev/null)
 		fi
+		if ! is_ipv4addr "$ip4"; then
+			which host &> /dev/null && \
+				ip4=$(host -t a "$NODE" 2>/dev/null | grep -v alias | sed 's/^.*address //')
+		fi
+		if ! is_ipv4addr "$ip4"; then
+			which nslookup &> /dev/null && \
+				ip4=$(nslookup -query=a "$NODE" 2>/dev/null | egrep -v "Server|#53|answer|Name" | sed -e 's/^Address.*://' -e 's/ //g' -e '/^$/d')
+		fi
+		is_ipv4addr "$ip4" || return 2
 
 		ip6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
 		if [[ -z "$ip6" ]]; then
@@ -3819,7 +3835,9 @@ determine_ip_addresses() {
 	[[ ! -z "$ip6" ]] && IP46ADDRs="$ip4 $ip6" || IP46ADDRs="$IPADDRs"
 	IP46ADDRs=$(newline_to_spaces "$IP46ADDRs")
 
-	return 0  	# IPADDR and IP46ADDR is set now
+	OPENSSL_CONF="$saved_openssl_conf"		# see https://github.com/drwetter/testssl.sh/issues/134
+
+	return 0  						# IPADDR and IP46ADDR is set now
 }
 
 determine_rdns() {
@@ -3933,7 +3951,7 @@ datebanner() {
 	tojour=$(date +%F)" "$(date +%R)
 	outln
 	pr_reverse "$1 now ($tojour) ---> $NODEIP:$PORT ($NODE) <---"; outln "\n"
-	if [[ "$1" == "Testing" ]] ; then
+	if [[ "$1" == "Testing" ]]; then
 		display_rdns_etc
 	fi
 	outln
@@ -3948,17 +3966,22 @@ mx_all_ips() {
 	local mxport 
 	local starttls_proto="smtp"
 	local ret=0
+	local saved_openssl_conf="$OPENSSL_CONF"
+
+	unset OPENSSL_CONF		# see https://github.com/drwetter/testssl.sh/issues/134
 
 	if which host &> /dev/null; then
-		mxs=$(host -t MX "$1" | grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
+		mxs=$(host -t MX "$1" 2>/dev/null| grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
 	elif which dig &> /dev/null; then
-		mxs=$(dig +short -t MX "$1")
+		mxs=$(dig +short -t MX "$1" 2>/dev/null)
 	elif which nslookup &> /dev/null; then
-		mxs=$(nslookup -type=MX "$1" 2> /dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
+		mxs=$(nslookup -type=MX "$1" 2>/dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
 	else
 		pr_magentaln 'No dig, host or nslookup'
 		exit 3
 	fi
+
+	OPENSSL_CONF="$saved_openssl_conf"
 
 	# test first higher priority servers
 	mxs=$(echo "$mxs" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
@@ -4113,7 +4136,6 @@ parse_cmd_line() {
 				initialize_engine 		# for GOST support
 				mybanner
 				openssl_age
-				maketempf
 				prettyprint_local $(parse_opt_equal_sign "$1" "$2")
 				exit $? 
 				;;
@@ -4371,7 +4393,6 @@ initialize_engine
 mybanner
 check_proxy
 openssl_age
-maketempf
 
 # TODO: it's ugly to have those two vars here --> main()
 ret=0
@@ -4416,4 +4437,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.308 2015/07/12 16:46:26 dirkw Exp $
+#  $Id: testssl.sh,v 1.309 2015/07/13 21:24:22 dirkw Exp $
