@@ -1429,20 +1429,21 @@ read_dhbits_from_file() {
 
 
 server_preference() {
-	local list1="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
+	local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
+	local list_reverse="AES256-SHA256:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"	# offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393
+
 	outln;
 	pr_blue "--> Testing server preferences"; outln "\n"
 
 	pr_bold " Has server cipher order?     "
-	$OPENSSL s_client $STARTTLS -cipher $list1 -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null >$TMPFILE
+	$OPENSSL s_client $STARTTLS -cipher $list_fwd -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null >$TMPFILE
 	if [ $? -ne 0 ]; then
 		pr_magenta "no matching cipher in this list found (pls report this): "
-		outln "$list1  . "
+		outln "$list_fwd  . "
           ret=6
 	else
 		cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
-		list2=$(echo $list1 | tr ':' '\n' | sort -r | tr '\n' ':')	# pr_reverse the list
-		$OPENSSL s_client $STARTTLS -cipher $list2 -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null >$TMPFILE
+		$OPENSSL s_client $STARTTLS -cipher $list_reverse -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null >$TMPFILE
 		cipher2=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 
 		if [[ "$cipher1" != "$cipher2" ]]; then
@@ -4437,4 +4438,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.309 2015/07/13 21:24:22 dirkw Exp $
+#  $Id: testssl.sh,v 1.310 2015/07/13 21:41:48 dirkw Exp $
