@@ -60,7 +60,7 @@
 # a better picture.
 
 # debugging help:
-readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
@@ -946,13 +946,13 @@ normalize_ciphercode() {
 
 prettyprint_local() {
 	pr_blue "--> Displaying all local ciphers ";
-	if [ ! -z "$1" ]; then
+	if [[ -n "$1" ]]; then
 		pr_blue "matching word pattern "\"$1\"" (ignore case)";
 	fi
 	outln "\n"
 	neat_header
 
-	if [ -z "$1" ]; then
+	if [[ -z "$1" ]]; then
 		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do       # -V doesn't work with openssl < 1.0
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc
@@ -1085,7 +1085,7 @@ neat_list(){
 		[[ "${#kx}" -eq 19 ]] && kx="$kx "		# 19 means DH, colored >=1000. Add another space
 		#echo ${#kx}						# should be always 20
 	fi
-	if [ -r "$MAP_RFC_FNAME" ]; then
+	if [[ -r "$MAP_RFC_FNAME" ]]; then
 		printf -- " %-7s %-30s %-10s %-11s%-11s${MAP_RFC_FNAME:+ %-48s}${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 	else
 		printf -- " %-7s %-30s %-10s %-11s%-11s${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength"
@@ -1107,10 +1107,10 @@ test_just_one(){
 		# FIXME: e.g. OpenSSL < 1.0 doesn't understand "-V" --> we can't do anything about it!
 			normalize_ciphercode $hexcode
 			neat_list $HEXC $ciph $kx $enc | grep -qwai "$arg"
-			if [ $? -eq 0 ]; then    # string matches, so we can ssl to it:
+			if [[ $? -eq 0 ]]; then    # string matches, so we can ssl to it:
 				$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
 				ret=$?
-				if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
+				if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
 					if [ $ret -eq 0 ]; then
 						dhlen=$(read_dhbits_from_file $TMPFILE quiet)
 						kx="$kx $dhlen"
@@ -1119,7 +1119,7 @@ test_just_one(){
 					fi
 				fi
 				neat_list $HEXC $ciph "$kx" $enc
-				if [ $ret -eq 0 ]; then
+				if [[ $ret -eq 0 ]]; then
 					pr_cyan "  available"
 				else
 					out "  not a/v"
@@ -1153,17 +1153,17 @@ allciphers(){
 	# FIXME: e.g. OpenSSL < 1.0 doesn't understand "-V" --> we can't do anything about it!
 		$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE  </dev/null
 		ret=$?
-		if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ]; then
+		if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
 			continue		# no successful connect AND not verbose displaying each cipher
 		fi
 		normalize_ciphercode $hexcode
-		if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
+		if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
 			dhlen=$(read_dhbits_from_file $TMPFILE quiet)
 			kx="$kx $dhlen"
 		fi
 		neat_list $HEXC $ciph "$kx" $enc
 		if [ "$SHOW_EACH_C" -ne 0 ]; then
-			if [ $ret -eq 0 ]; then
+			if [[ $ret -eq 0 ]]; then
 				pr_cyan "  available"
 			else
 				out "  not a/v"
@@ -1193,17 +1193,17 @@ cipher_per_proto(){
 		$OPENSSL ciphers $proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode n ciph sslvers kx auth enc mac export; do	# -V doesn't work with openssl < 1.0
 			$OPENSSL s_client -cipher $ciph $proto $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE  </dev/null
 			ret=$?
-			if [ $ret -ne 0 ] && [ "$SHOW_EACH_C" -eq 0 ]; then
+			if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
 				continue       # no successful connect AND not verbose displaying each cipher
 			fi
 			normalize_ciphercode $hexcode
-			if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
+			if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
 				dhlen=$(read_dhbits_from_file $TMPFILE quiet)
 				kx="$kx $dhlen"
 			fi
 			neat_list $HEXC $ciph "$kx" $enc
-			if [ "$SHOW_EACH_C" -ne 0 ]; then
-				if [ $ret -eq 0 ]; then
+			if [[ "$SHOW_EACH_C" -ne 0 ]]; then
+				if [[ $ret -eq 0 ]]; then
 					pr_cyan "  available"
 				else
 					out "  not a/v"
@@ -1221,7 +1221,7 @@ locally_supported() {
 
 	[ -n "$2" ] && out "$2 "
 	$OPENSSL s_client "$1" 2>&1 | grep -aq "unknown option"
-	if [ $? -eq 0 ]; then
+	if [[ $? -eq 0 ]]; then
 		pr_magentaln "Local problem: $OPENSSL doesn't support \"s_client $1\""
 		ret=7
 	else
@@ -1384,7 +1384,7 @@ read_dhbits_from_file() {
 	local old_fart=" (openssl is too old to show DH bits)"
 
 	if ! $HAS_DH_BITS; then
-		if [ -z "$2" ]; then
+		if [[ -z "$2" ]]; then
 			pr_litemagenta "$old_fart"
 		fi
 		return 0
@@ -1394,11 +1394,11 @@ read_dhbits_from_file() {
 	what_dh=$(echo $bits | tr -d '[0-9]')
 	bits=$(echo $bits | tr -d '[DHEC]')
 
-	debugme ">$what_dh|$bits<"
+	debugme echo ">$what_dh|$bits<"
 
-	[ -n "$bits" ] && [ -z "$2" ] && out ", "
+	[[ -n "$bits" ]] && [[ -z "$2" ]] && out ", "
 	if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]] ; then
-		[ -z "$2" ] && add="bit DH"
+		[[ -z "$2" ]] && add="bit DH"
 		if [[ "$bits" -le 600 ]]; then
 			pr_red "$bits $add"
 		elif [[ "$bits" -le 800 ]]; then
@@ -1412,7 +1412,7 @@ read_dhbits_from_file() {
 		fi
 	# https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography, http://www.keylength.com/en/compare/
 	elif [[ $what_dh == "ECDH" ]]; then
-		[ -z "$2" ] && add="bit ECDH"
+		[[ -z "$2" ]] && add="bit ECDH"
 		if [[ "$bits" -le 128 ]]; then 	# has that ever existed?
 			pr_red "$bits $add"
 		elif [[ "$bits" -le 163 ]]; then
@@ -1429,8 +1429,8 @@ read_dhbits_from_file() {
 
 
 server_preference() {
-	local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
-	local list_reverse="AES256-SHA256:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES128-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"	# offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393
+	local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
+	local list_reverse="AES256-SHA256:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"	# offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393
 
 	outln;
 	pr_blue "--> Testing server preferences"; outln "\n"
@@ -1490,7 +1490,7 @@ server_preference() {
 			for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
 			locally_supported -"$p" || continue
 				$OPENSSL s_client  $STARTTLS -"$p" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null  >$TMPFILE
-				if [ $? -eq 0 ]; then
+				if [[ $? -eq 0 ]]; then
 					proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
 					cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 					[[ ${cipher[i]} == "0000" ]] && cipher[i]=""  				# Hack!
@@ -1506,9 +1506,9 @@ server_preference() {
 			[ -n "$STARTTLS" ] && arg=" "
 			if spdy_pre " $arg"; then										# is NPN/SPDY supported and is this no STARTTLS? / no PROXY
 				$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$NPN_PROTOs" </dev/null 2>/dev/null  >$TMPFILE
-				if [ $? -eq 0 ]; then
+				if [[ $? -eq 0 ]]; then
 					proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
-					if [ -z "${proto[i]}" ]; then
+					if [[ -z "${proto[i]}" ]]; then
 						cipher[i]=""
 					else
 						cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
@@ -1553,7 +1553,7 @@ cipher_pref_check() {
 
 	for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
 		$OPENSSL s_client $STARTTLS -"$p" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null  >$TMPFILE
-		if [ $? -eq 0 ]; then
+		if [[ $? -eq 0 ]]; then
 			tested_cipher=""
 			proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
 			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
@@ -1563,7 +1563,7 @@ cipher_pref_check() {
 			tested_cipher="-"$cipher
 			while true; do
 				$OPENSSL s_client $STARTTLS -"$p" -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null  >$TMPFILE
-				[ $? -ne 0 ] && break
+				[[ $? -ne 0 ]] && break
 				cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 				out "$cipher "
 				tested_cipher="$tested_cipher:-$cipher"
@@ -1583,7 +1583,7 @@ cipher_pref_check() {
 			tested_cipher="-"$cipher
 			while true; do
 				$OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT -nextprotoneg "$p" $PROXY </dev/null 2>/dev/null >$TMPFILE
-				[ $? -ne 0 ] && break
+				[[ $? -ne 0 ]] && break
 				cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 				out "$cipher "
 				tested_cipher="$tested_cipher:-$cipher"
@@ -1904,7 +1904,7 @@ pfs() {
 			fi
 			if $WIDE; then
 				normalize_ciphercode $hexcode
-				if [ $kx == "Kx=ECDH" ] || [ $kx == "Kx=DH" ] || [ $kx == "Kx=EDH" ]; then
+				if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
 					dhlen=$(read_dhbits_from_file "$tmpfile" quiet)
 					kx="$kx $dhlen"
 				fi
@@ -1925,7 +1925,7 @@ pfs() {
 		#    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
 		debugme echo $pfs_offered
 
-		if [ "$pfs_offered" -eq 1 ] ; then
+		if [ "$pfs_offered" -eq 1 ]; then
 			 pr_brown "no PFS ciphers found"
 		fi
 	fi
@@ -3179,7 +3179,7 @@ beast(){
 	# 2) test handfull of common CBC ciphers
 	for proto in ssl3 tls1; do
 		$OPENSSL s_client -"$proto" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>/dev/null </dev/null
-		if [ $? -ne 0 ]; then  	# protocol supported?
+		if [[ $? -ne 0 ]]; then  	# protocol supported?
 			if $continued; then # second round: we hit TLS1:
 				pr_litegreenln "no SSL3 or TLS1"
 				return 0
@@ -3211,7 +3211,7 @@ beast(){
 					[[ $openssl_ret -eq 0 ]] && neat_list $HEXC $cbc_cipher $kx $enc && outln
 				fi
 			else # short display:
-				if [ $openssl_ret -eq 0 ]; then
+				if [[ $openssl_ret -eq 0 ]]; then
 					detected_cbc_ciphers="$detected_cbc_ciphers ""$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
 					vuln_beast=true
 				fi
@@ -3220,7 +3220,7 @@ beast(){
 		#    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
 
 		if ! $WIDE; then
-			if [ -n "$detected_cbc_ciphers" ]; then
+			if [[ -n "$detected_cbc_ciphers" ]]; then
 				detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
 				! $first && out "$spaces"
 				out "$(echo $proto | tr '[a-z]' '[A-Z]'):"; pr_brownln "$detected_cbc_ciphers"
@@ -3239,12 +3239,12 @@ beast(){
 	# 2) support for TLS 1.1+1.2?
 	for proto in tls1_1 tls1_2; do
 		$OPENSSL s_client -state -"$proto" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>/dev/null >$TMPFILE </dev/null
-		if [ $? -eq 0 ]; then
+		if [[ $? -eq 0 ]]; then
 			higher_proto_supported="$higher_proto_supported ""$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol .*://' -e 's/ //g')"
 		fi
 	done
 	if $vuln_beast ; then
-		if [ ! -z "$higher_proto_supported" ] ; then
+		if [[ ! -z "$higher_proto_supported" ]]; then
 			if $WIDE; then
 				outln
 				pr_brown "VULNERABLE"
@@ -3789,7 +3789,7 @@ determine_ip_addresses() {
 	local ip6=""
 	local saved_openssl_conf="$OPENSSL_CONF"
 
-	if [[ $(is_ipv4addr "$NODE") ]]; then
+	if is_ipv4addr "$NODE"; then
 		ip4="$NODE"			# only an IPv4 address was supplied as an argument, no hostname
 		SNI=""				# override Server Name Indication as we test the IP only
 	else
@@ -3876,7 +3876,7 @@ determine_service() {
 			all_failed=0
 		done
 		debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
-		if [ $all_failed -eq 0 ]; then
+		if [[ $all_failed -eq 0 ]]; then
 			outln
 			pr_boldln " $NODEIP:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate";
 			ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
@@ -3935,7 +3935,7 @@ determine_service() {
 display_rdns_etc() {
 	local i
 
-     if [ $(printf "$IP46ADDRs" | wc -w | sed 's/ //g') -gt 1 ]; then
+     if [[ $(printf "$IP46ADDRs" | wc -w | sed 's/ //g') -gt 1 ]]; then
           out " further IP addresses:  "
           for i in $IP46ADDRs; do
                [ "$i" == "$NODEIP" ] && continue
@@ -4439,4 +4439,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.311 2015/07/14 10:35:25 dirkw Exp $
+#  $Id: testssl.sh,v 1.312 2015/07/14 15:13:57 dirkw Exp $
