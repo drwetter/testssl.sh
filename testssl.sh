@@ -1383,18 +1383,20 @@ read_dhbits_from_file() {
 	local add=""
 	local old_fart=" (openssl is too old to show DH bits)"
 
-	if ! $HAS_DH_BITS; then
-		if [[ -z "$2" ]]; then
-			pr_litemagenta "$old_fart"
-		fi
-		return 0
-	fi
 	bits=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")					# extract line
 	bits=$(echo $bits | sed -e 's/, P-...//' -e 's/,//g' -e 's/bits//' -e 's/ //g') # now: ??DH [number]    K??
 	what_dh=$(echo $bits | tr -d '[0-9]')
 	bits=$(echo $bits | tr -d '[DHEC]')
 
 	debugme echo ">$what_dh|$bits<"
+
+	if ! $HAS_DH_BITS && [[ -z "what_dh" ]]; then
+		if [[ -z "$2" ]]; then
+			pr_litemagenta "$old_fart"
+		fi
+		return 0
+	fi
+
 
 	[[ -n "$bits" ]] && [[ -z "$2" ]] && out ", "
 	if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]] ; then
@@ -4439,4 +4441,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.312 2015/07/14 15:13:57 dirkw Exp $
+#  $Id: testssl.sh,v 1.313 2015/07/14 17:58:03 dirkw Exp $
