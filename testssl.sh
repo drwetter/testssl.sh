@@ -753,10 +753,12 @@ emphasize_stuff_in_headers(){
 		-e "s/X-Cache-Lookup/"$yellow"X-Cache-Lookup$off/g" \
 		-e "s/X-Cache/"$yellow"X-Cache$off/g" \
 		-e "s/X-Squid/"$yellow"X-Squid$off/g" \
+		-e "s/X-Server/"$yellow"X-Server$off/g" \
 		-e "s/X-Varnish/"$yellow"X-Varnish$off/g" \
 		-e "s/X-OWA-Version/"$yellow"X-OWA-Version$off/g" \
 		-e "s/X-Version/"$yellow"X-Version$off/g" \
 		-e "s/X-Powered-By/"$yellow"X-Powered-By$off/g" \
+		-e "s/X-UA-Compatible/"$yellow"X-UA-Compatible$off/g" \
 		-e "s/X-AspNet-Version/"$yellow"X-AspNet-Version$off/g"
 }
 
@@ -793,7 +795,7 @@ rp_banner() {
 		http_header "$1" || return 3
 	fi
 	pr_bold " Reverse Proxy banner         "
-	egrep -ai '^Via|^X-Cache|^X-Squid|X-Varnish' $HEADERFILE >$TMPFILE && \
+	egrep -ai '^Via|^X-Cache|^X-Squid|X-Varnish|X-Server-Name|X-Server-Port' $HEADERFILE >$TMPFILE && \
 		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
 		outln "--"
 	tmpfile_handle $FUNCNAME.txt
@@ -810,7 +812,7 @@ application_banner() {
 		http_header "$1" || return 3
 	fi
 	pr_bold " Application banner           "
-	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
+	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-UA-Compatible|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
 	if [ $? -ne 0 ] ; then
 		outln "--"
 	else
@@ -4441,4 +4443,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.313 2015/07/14 17:58:03 dirkw Exp $
+#  $Id: testssl.sh,v 1.314 2015/07/14 18:44:03 dirkw Exp $
