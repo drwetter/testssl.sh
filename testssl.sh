@@ -4119,6 +4119,7 @@ parse_cmd_line() {
 				;;
 			--mx)
 				do_mx_all_ips=true
+				PORT=25
 				;;
 			--mx465)  				# doesn't work with major ISPs
 				do_mx_all_ips=true
@@ -4438,4 +4439,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.310 2015/07/13 21:41:48 dirkw Exp $
+#  $Id: testssl.sh,v 1.311 2015/07/14 10:35:25 dirkw Exp $
