@@ -3408,7 +3408,7 @@ get_install_dir() {
 
 
 test_openssl_suffix() {
-	local myarch_suffix=""
+	local naming_ext="$(uname).$(uname -m)"
 	local uname_arch=$(uname -m)
 
 	[[ $uname_arch =~ "64" ]] && myarch_suffix=64 || myarch_suffix=32
@@ -3416,11 +3416,11 @@ test_openssl_suffix() {
 	if [[ -n "$1/openssl" ]] && [[ -x "$1/openssl" ]]; then
 		OPENSSL="$1/openssl"
 		return 0
+	elif [[ -n "$1/openssl.$naming_ext" ]] && [[ -x "$1/openssl.$naming_ext" ]]; then
+		OPENSSL="$1/openssl.$naming_ext"
+		return 0
 	elif [[ -n "$1/openssl.$uname_arch" ]] && [[ -x "$1/openssl.$uname_arch" ]]; then
 		OPENSSL="$1/openssl.$uname_arch"
-		return 0
-	elif [[ -n "$1/openssl"$myarch_suffix ]] && [[ -x "$1/openssl"$myarch_suffix ]]; then
-		OPENSSL="$1/openssl"$myarch_suffix		# intel
 		return 0
 	fi
 	return 1
@@ -3440,22 +3440,16 @@ find_openssl_binary() {
 		:	# 1. all ok supplied $OPENSSL is excutable
 	elif test_openssl_suffix $RUN_DIR; then
 		:	# 2. otherwise try openssl in path of testssl.sh
-	elif [[ -x "$RUN_DIR/bin/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static" ]]; then
-			# 3. for folks running it directly from git pull dir (not sure whether folks have krb5 libs
-			#    so the default is here trying the statically linked ones
-			OPENSSL="$RUN_DIR/bin/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static"
-	elif [[ -x "$RUN_DIR/bin/openssl-1.0.2-chacha.pm/openssl.$uname_arch-1.0.2pm-static" ]]; then
-			# 4 in the future for other platforms we want to have another naming scheme
-			OPENSSL="$RUN_DIR/bin/openssl-1.0.2-chacha.pm/openssl.$uname_arch-1.0.2pm-static"
+	elif test_openssl_suffix $RUN_DIR/bin; then
+		: 	# 3. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
+	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-krb5" ]]; then
+		OPENSSL="$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-krb5"
+			# 4. legacy dirs follow, first kerberos binaries from pm (if executable)
 	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static" ]]; then
-			# 3. for folks running it directly from git pull dir (not sure whether folks have krb5 libs
-			#    so the default is here trying the statically linked ones
+			# 5. otherwise default is trying the statically linked ones
 			OPENSSL="$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static"
-	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl.$uname_arch-1.0.2pm-static" ]]; then
-			# 4 in the future for other platforms we want to have another naming scheme
-			OPENSSL="$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl.$uname_arch-1.0.2pm-static"
 	elif	test_openssl_suffix $(dirname $(which openssl)); then
-		: # 5. we tried hard, but now we fail back to system
+		: 	# 5. we tried hard and failed, so now we use the system binaries
 	fi
 
 	"$OPENSSL" version -a 2>&1 >/dev/null
@@ -3480,7 +3474,9 @@ find_openssl_binary() {
 		[ $OSSL_VER_MAJOR -ne 1 ] && HAS_DH_BITS=false
 		[ "$OSSL_VER_MINOR" == "0.1" ] && HAS_DH_BITS=false
 	fi
-	$OPENSSL s_client -ssl2 2>&1 | grep -aq "unknown option" || HAS_SSL2=true && HAS_SSL2=false
+	$OPENSSL s_client -ssl2 2>&1 | grep -aq "unknown option" || \
+		HAS_SSL2=true && \
+		HAS_SSL2=false
 
 	return 0
 }
@@ -3627,6 +3623,8 @@ EOF
 	outln "\n"
 	outln " Using \"$($OPENSSL version)\" [~$nr_ciphers ciphers] on"
 	outln " $(hostname):$(which $OPENSSL)"
+	#TODO: above is kind of ugly, below the substraction doesn't work
+	#echo  $(which $OPENSSL | sed 's/'"$(echo "$PWD" | sed 's/\//\\\//g')"'/\$PWD/g')
 	outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 }
 
