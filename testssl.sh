@@ -147,6 +147,7 @@ OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 HAS_DH_BITS=true
+HAS_SSL2=true						#TODO: in the future we'll do the fastest possible test (openssl s_client -ssl2 is currently faster than sockets)
 PORT=443							# unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -1100,7 +1101,7 @@ test_just_one(){
 	local ret
 
 	pr_blue "--> Testing single cipher with word pattern "\"$1\"" (ignore case)"; outln
-	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL is too old to show DH/ECDH bits)"
+	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
 	outln
 	neat_header
 	for arg in $(echo $@ | sed 's/,/ /g'); do
@@ -1147,7 +1148,7 @@ allciphers(){
 
 	nr_ciphers=$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w)
 	pr_blue "--> Testing all locally available $nr_ciphers ciphers against the server"; outln ", ordered by encryption strength"
-	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL is too old to show DH/ECDH bits)"
+	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
 	outln
 	neat_header
 
@@ -1186,7 +1187,7 @@ cipher_per_proto(){
 	local dhlen
 
 	pr_blue "--> Testing all locally available ciphers per protocol against the server"; outln ", ordered by encryption strength"
-	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL is too old to show DH/ECDH bits)"
+	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
 	outln
 	neat_header
 	outln " -ssl2 SSLv2\n -ssl3 SSLv3\n -tls1 TLS 1\n -tls1_1 TLS 1.1\n -tls1_2 TLS 1.2"| while read proto proto_text; do
@@ -1273,24 +1274,21 @@ run_protocols() {
 
 	if $SSL_NATIVE || [ -n "$STARTTLS" ] && [[ $EXPERIMENTAL != "yes" ]]; then
 		using_sockets=false
-		outln "(via openssl)\n"
+		outln "(via openssl, except SSLv2)\n"
 	else
 		outln "(via sockets except TLS 1.2 and SPDY/NPN)\n"
 	fi
 
 	pr_bold " SSLv2      ";
-	if $using_sockets; then
-		sslv2_sockets 											#FIXME: messages need to be moved to this higher level
-	else
-		run_prototest_openssl "-ssl2"
-		case $? in
-			0) pr_redln   "offered (NOT ok)" ;;
-			1) pr_greenln "not offered (OK)" ;;
-			5) pr_litered "$supported_no_ciph2"; 
-				outln " (may need further attention)"  ;;			# protocol ok, but no cipher
-			7) ;;											# no local support
-		esac
-	fi
+	#run_prototest_openssl "-ssl2"
+	sslv2_sockets 											#FIXME: messages need to be moved to this higher level
+	#case $? in
+	#	0) pr_redln   "offered (NOT ok)" ;;
+	#	1) pr_greenln "not offered (OK)" ;;
+	#	5) pr_litered "$supported_no_ciph2"; 
+	#		outln " (may need further attention)"  ;;			# protocol ok, but no cipher
+	#	7) ;;											# no local support
+	#esac
 
 	pr_bold " SSLv3      ";
 	if $using_sockets; then
@@ -1383,7 +1381,7 @@ run_std_cipherlists() {
 read_dhbits_from_file() {
 	local bits what_dh
 	local add=""
-	local old_fart=" (openssl is too old to show DH bits)"
+	local old_fart=" (openssl cannot show DH bits)"
 
 	bits=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")					# extract line
 	bits=$(echo $bits | sed -e 's/, P-...//' -e 's/,//g' -e 's/bits//' -e 's/ //g') # now: ??DH [number]    K??
@@ -1492,6 +1490,7 @@ server_preference() {
 			pr_bold " Negotiated cipher per proto"; outln " $remark4default_cipher"
 			i=1
 			for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
+			#locally_supported -"$p" "    " || continue
 			locally_supported -"$p" || continue
 				$OPENSSL s_client  $STARTTLS -"$p" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>/dev/null  >$TMPFILE
 				if [[ $? -eq 0 ]]; then
@@ -1506,8 +1505,8 @@ server_preference() {
 				i=$(($i + 1))
 			done
 
-			[ -n "$PROXY" ] && arg="  SPDY/NPN is"
-			[ -n "$STARTTLS" ] && arg=" "
+			[[ -n "$PROXY" ]] && arg="   SPDY/NPN is"
+			[[ -n "$STARTTLS" ]] && arg="    "
 			if spdy_pre " $arg"; then										# is NPN/SPDY supported and is this no STARTTLS? / no PROXY
 				$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$NPN_PROTOs" </dev/null 2>/dev/null  >$TMPFILE
 				if [[ $? -eq 0 ]]; then
@@ -1519,6 +1518,8 @@ server_preference() {
 						[[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
 					fi
 				fi
+			else
+				outln	# we miss for STARTTLS 1x LF otherwise
 			fi
 
 			for i in 1 2 3 4 5 6; do
@@ -1612,28 +1613,24 @@ get_host_cert() {
 tls_time() {
 	local now difftime
 
-	if [ -n "$STARTTLS" ] ; then
-		pr_bold " TLS timestamp"; outln "                (not yet implemented for STARTTLS) "
-	else
-		tls_sockets "01" "$TLS_CIPHER"						# try first TLS 1.0 (mostfrequently used protocol)
-		[[ -z "$TLS_TIME" ]] && tls_sockets "03" "$TLS12_CIPHER"	#           TLS 1.2
-		[[ -z "$TLS_TIME" ]] && tls_sockets "02" "$TLS_CIPHER"		#           TLS 1.1
-		[[ -z "$TLS_TIME" ]] && tls_sockets "00" "$TLS_CIPHER"		#           SSL 3
+	tls_sockets "01" "$TLS_CIPHER"						# try first TLS 1.0 (mostfrequently used protocol)
+	[[ -z "$TLS_TIME" ]] && tls_sockets "03" "$TLS12_CIPHER"	#           TLS 1.2
+	[[ -z "$TLS_TIME" ]] && tls_sockets "02" "$TLS_CIPHER"		#           TLS 1.1
+	[[ -z "$TLS_TIME" ]] && tls_sockets "00" "$TLS_CIPHER"		#           SSL 3
 
-		if [[ -n "$TLS_TIME" ]]; then							# nothing returned a time!
-			difftime=$(($TLS_TIME - $TLS_NOW))					# TLS_NOW is being set in tls_sockets()
-			if [[ "${#difftime}" -gt 5 ]]; then
-				# openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
-				pr_bold " TLS timestamp" ; outln "                random values, no fingerprinting possible "
-			else
-				[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
-				pr_bold " TLS clock skew" ; outln "               $difftime sec from localtime";
-			fi
-			debugme out "$TLS_TIME"
-			outln
+	if [[ -n "$TLS_TIME" ]]; then							# nothing returned a time!
+		difftime=$(($TLS_TIME - $TLS_NOW))					# TLS_NOW is being set in tls_sockets()
+		if [[ "${#difftime}" -gt 5 ]]; then
+			# openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
+			pr_bold " TLS timestamp" ; outln "                random values, no fingerprinting possible "
 		else
-			pr_bold " TLS timestamp" ; outln "                "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
+			[[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
+			pr_bold " TLS clock skew" ; outln "               $difftime sec from localtime";
 		fi
+		debugme out "$TLS_TIME"
+		outln
+	else
+		pr_bold " TLS timestamp" ; outln "                "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
 	fi
 }
 
@@ -1643,6 +1640,7 @@ server_defaults() {
 	local extensions
 	local sessticket_str lifetime unit keysize algo
 	local expire ocsp_uri crl savedir startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
+	local policy_oid
 
 	outln
 	pr_blue "--> Testing server defaults (Server Hello)"; outln "\n"
@@ -1781,6 +1779,26 @@ server_defaults() {
 			outln "$underline$issuer$off ($underline$issuer_o$off from $underline$issuer_c$off)"
 	fi
 
+	# http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
+	pr_bold " EV cert"; out " (experimental)       "
+	policy_oid=$($OPENSSL x509 -in $HOSTCERT -text | awk '/ .Policy: / { print $2 }')
+	if echo $issuer | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
+		[[ "2.16.840.1.114028.10.1.2" == "$policy_oid" ]] || \
+		[[ "1.3.6.1.4.1.17326.10.14.2.1.2" == "$policy_oid" ]] || \
+		[[ "1.3.6.1.4.1.17326.10.8.12.1.2" == "$policy_oid" ]] || \
+		[[ "1.3.6.1.4.1.13177.10.1.3.10" == "$policy_oid" ]]  || \
+		[[ "2.16.578.1.26.1.3.3" == "$policy_oid" ]]; then 	# entrust and Camerfirma (2x), Firmaprofesional bupass need an exception though:
+		out "yes "
+	else
+		out "no "
+	fi
+	[[ $DEBUG == 1 ]] && out "($policy_oid)"
+	outln
+#TODO: use browser OIDs: 
+#		https://mxr.mozilla.org/mozilla-central/source/security/certverifier/ExtendedValidation.cpp
+#		http://src.chromium.org/chrome/trunk/src/net/cert/ev_root_ca_metadata.cc
+#		https://certs.opera.com/03/ev-oids.xml
+
 	pr_bold " Certificate Expiration       "
 	expire=$($OPENSSL x509 -in $HOSTCERT -checkend 0)
 	if ! echo $expire | grep -qw not; then
@@ -1876,7 +1894,7 @@ pfs() {
 
 	outln
 	pr_blue "--> Testing (perfect) forward secrecy, (P)FS"; outln " -- omitting 3DES, RC4 and Null Encryption here"
-	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL too old to show DH/ECDH bits)"
+	! $HAS_DH_BITS && $WIDE && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
 
 	no_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $pfs_cipher_list))
 	if [ "$no_supported_ciphers" -le "$CLIENT_MIN_PFS" ] ; then
@@ -3053,7 +3071,7 @@ tls_fallback_scsv() {
 	fi
 
 	# ...and do the test
-	$OPENSSL s_client -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2 -fallback_scsv &>$TMPFILE </dev/null
+	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2 -fallback_scsv &>$TMPFILE </dev/null
 	if grep -q "CONNECTED(00" "$TMPFILE"; then
 		if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
 			pr_brown "Downgrade attack prevention NOT supported"
@@ -3063,8 +3081,14 @@ tls_fallback_scsv() {
 			ret=0
 		elif grep -qa "alert handshake failure" "$TMPFILE"; then
 			# see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
-			pr_brown "\"handshake failure\" instead of \"inappropriate fallback\" (NOT ok)"
+			pr_brown "\"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
 			ret=2
+		elif grep -qa "ssl handshake failure" "$TMPFILE"; then
+			pr_brown "some enexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
+			ret=3
+		else
+			pr_magenta "test failed, unexpected result "
+			out ", run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
 		fi
 	else
 		pr_magenta "test failed (couldn't connect)"
@@ -3403,7 +3427,6 @@ test_openssl_suffix() {
 }
 	
 
-
 find_openssl_binary() {
 	local myarch_suffix=""
 	local uname_arch=$(uname -m)
@@ -3417,6 +3440,13 @@ find_openssl_binary() {
 		:	# 1. all ok supplied $OPENSSL is excutable
 	elif test_openssl_suffix $RUN_DIR; then
 		:	# 2. otherwise try openssl in path of testssl.sh
+	elif [[ -x "$RUN_DIR/bin/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static" ]]; then
+			# 3. for folks running it directly from git pull dir (not sure whether folks have krb5 libs
+			#    so the default is here trying the statically linked ones
+			OPENSSL="$RUN_DIR/bin/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static"
+	elif [[ -x "$RUN_DIR/bin/openssl-1.0.2-chacha.pm/openssl.$uname_arch-1.0.2pm-static" ]]; then
+			# 4 in the future for other platforms we want to have another naming scheme
+			OPENSSL="$RUN_DIR/bin/openssl-1.0.2-chacha.pm/openssl.$uname_arch-1.0.2pm-static"
 	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static" ]]; then
 			# 3. for folks running it directly from git pull dir (not sure whether folks have krb5 libs
 			#    so the default is here trying the statically linked ones
@@ -3444,8 +3474,13 @@ find_openssl_binary() {
 	OSSL_BUILD_DATE=$($OPENSSL version -a | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
 	echo $OSSL_BUILD_DATE | grep -q "not available" && OSSL_BUILD_DATE=""
 
-	[ $OSSL_VER_MAJOR -ne 1 ] && HAS_DH_BITS=false
-	[ "$OSSL_VER_MINOR" == "0.1" ] && HAS_DH_BITS=false
+	if $OPENSSL version | grep -qi LibreSSL; then
+		HAS_DH_BITS=false		# as of version 2.2.1
+	else
+		[ $OSSL_VER_MAJOR -ne 1 ] && HAS_DH_BITS=false
+		[ "$OSSL_VER_MINOR" == "0.1" ] && HAS_DH_BITS=false
+	fi
+	$OPENSSL s_client -ssl2 2>&1 | grep -aq "unknown option" || HAS_SSL2=true && HAS_SSL2=false
 
 	return 0
 }
@@ -4443,4 +4478,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.314 2015/07/14 18:44:03 dirkw Exp $
+#  $Id: testssl.sh,v 1.317 2015/07/16 15:56:12 dirkw Exp $
