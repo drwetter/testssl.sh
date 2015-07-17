@@ -24,7 +24,8 @@ New features in the upcoming stable release 2.6 are:
 * support of sockets for STARTTLS protocols (with exception of SSLv2 you need to supply EXPERIMENTAL=yes) 
 * TLS time for STARTTLS protocols
 * TLS 1.0-1.1 as socket per default in production
-* binary directory provides out of the box better binaries (Linux 32+64 Bit, Darin 64 bit)
+* binary directory provides out of the box better binaries (Linux 32+64 Bit, Darwin 64 bit)
+* LibreSSL fixes, still not recommended to use though (see https://testssl.sh/)
 
 more see https://github.com/drwetter/testssl.sh/milestones/2.5dev%20%282.6%29
 
