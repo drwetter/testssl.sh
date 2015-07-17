@@ -11,10 +11,7 @@ The binaries in this directory are all compiled from an OpenSSL 1.0.2 fork
 from Peter Mosmans. He has patched the master git branch
 to support CHACHA20 + POLY1305 and other ciphers like CAMELIA 256 Bit.
 
-The binary ```openssl-1.0.2pm.darwin.64`` was borrowed with permission from Julien
-Vehent's cipherscan (which is based on Peter Mosmans 1.0.2b-dev).
-
-I put 
+The binary ```openssl-1.0.2pm.darwin.64``, based on Peter Mosmans 1.0.2b-dev, was borrowed with permission from Julien Vehent's cipherscan.
 
 
 
