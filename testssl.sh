@@ -948,9 +948,15 @@ normalize_ciphercode() {
 }
 
 prettyprint_local() {
+	local arg
+	local hexcode dash ciph sslvers kx auth enc mac export
+	local re='^[0-9A-Fa-f]+$'
+
 	pr_blue "--> Displaying all local ciphers ";
 	if [[ -n "$1" ]]; then
-		pr_blue "matching word pattern "\"$1\"" (ignore case)";
+		[[ $1 =~ $re ]] && \
+			pr_blue "matching number pattern \"$1\" " || \
+			pr_blue "matching word pattern "\"$1\"" (ignore case)"
 	fi
 	outln "\n"
 	neat_header
@@ -965,7 +971,10 @@ prettyprint_local() {
 		for arg in $(echo $@ | sed 's/,/ /g'); do
 			$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do	# -V doesn't work with openssl < 1.0
 				normalize_ciphercode $hexcode
-				neat_list $HEXC $ciph $kx $enc | grep -wai "$arg"
+				# for numbers we don't do word matching:
+				[[ $arg =~ $re ]] && \
+					neat_list $HEXC $ciph $kx $enc | grep -ai "$arg" || \
+					neat_list $HEXC $ciph $kx $enc | grep -wai "$arg"
 			done
      	done
 	fi
@@ -1099,8 +1108,13 @@ test_just_one(){
 	local hexcode n ciph sslvers kx auth enc mac export
 	local dhlen
 	local ret
+	local re='^[0-9A-Fa-f]+$'
 
-	pr_blue "--> Testing single cipher with word pattern "\"$1\"" (ignore case)"; outln
+	pr_blue "--> Testing single cipher with "
+	[[ $1 =~ $re ]] && \
+		pr_blue "matching number pattern \"$1\" " || \
+		pr_blue "word pattern "\"$1\"" (ignore case)"
+	outln
 	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
 	outln
 	neat_header
@@ -1109,7 +1123,12 @@ test_just_one(){
 		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | while read hexcode dash ciph sslvers kx auth enc mac export ; do
 		# FIXME: e.g. OpenSSL < 1.0 doesn't understand "-V" --> we can't do anything about it!
 			normalize_ciphercode $hexcode
-			neat_list $HEXC $ciph $kx $enc | grep -qwai "$arg"
+			# is argument a number?
+			if [[ $arg =~ $re ]]; then
+				neat_list $HEXC $ciph $kx $enc | grep -qai "$arg" 
+			else
+				neat_list $HEXC $ciph $kx $enc | grep -qwai "$arg"
+			fi
 			if [[ $? -eq 0 ]]; then    # string matches, so we can ssl to it:
 				$OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
 				ret=$?
@@ -3542,7 +3561,8 @@ $PROG_NAME <options>
      -b, --banner                  displays banner + version of $PROG_NAME
      -v, --version                 same as previous
      -V, --local                   pretty print all local ciphers
-     -V, --local <pattern>         what local cipher with <pattern> is available?
+     -V, --local <pattern>         which local ciphers with <pattern> are available?
+                                   (if pattern not a number: word match)
 
 $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
 
@@ -3553,7 +3573,8 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -S, --server_defaults         displays the servers default picks and certificate info
      -P, --preference              displays the servers picks: protocol+cipher
      -y, --spdy, --npn             checks for SPDY/NPN
-     -x, --single-cipher <pattern> tests matched <pattern> of cipher
+     -x, --single-cipher <pattern> tests matched <pattern> of ciphers
+                                   (if <pattern> not a number: word match)
      -U, --vulnerable              tests all vulnerabilities
      -B, --heartbleed              tests for heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
@@ -4496,4 +4517,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.321 2015/07/17 12:58:11 dirkw Exp $
+#  $Id: testssl.sh,v 1.322 2015/07/17 13:58:06 dirkw Exp $
