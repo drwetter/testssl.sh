@@ -114,7 +114,7 @@ HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}	# we wait this long before killing the pro
 readonly MAX_WAITSOCK=10				# waiting at max 10 seconds for socket reply
 readonly CCS_MAX_WAITSOCK=5			# for the two CCS payload (each)
 readonly HEARTBLEED_MAX_WAITSOCK=8		# for the heartbleed payload
-readonly STARTTLS_SLEEP=1			# max time to wait on a socket replay for STARTTLS
+readonly STARTTLS_SLEEP=${STARTTLS_SLEEP:-1}			# max time to wait on a socket replay for STARTTLS
 FAST_STARTTLS=${FAST_STARTTLS:-true}	#at the cost of reliabilty decrese the handshakes for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
@@ -1272,23 +1272,32 @@ run_protocols() {
 
 	pr_blue "--> Testing protocols ";
 
-	if $SSL_NATIVE || [ -n "$STARTTLS" ] && [[ $EXPERIMENTAL != "yes" ]]; then
+	if $SSL_NATIVE; then
 		using_sockets=false
-		outln "(via openssl, except SSLv2)\n"
+		outln "(via native openssl)\n"
 	else
-		outln "(via sockets except TLS 1.2 and SPDY/NPN)\n"
+		if [[ -n "$STARTTLS" ]]; then
+			outln "(via openssl, except SSLv2)\n"
+			using_sockets=false
+		else
+			using_sockets=true
+			outln "(via sockets except TLS 1.2 and SPDY/NPN)\n"
+		fi
 	fi
 
 	pr_bold " SSLv2      ";
-	#run_prototest_openssl "-ssl2"
-	sslv2_sockets 											#FIXME: messages need to be moved to this higher level
-	#case $? in
-	#	0) pr_redln   "offered (NOT ok)" ;;
-	#	1) pr_greenln "not offered (OK)" ;;
-	#	5) pr_litered "$supported_no_ciph2"; 
-	#		outln " (may need further attention)"  ;;			# protocol ok, but no cipher
-	#	7) ;;											# no local support
-	#esac
+	if ! $SSL_NATIVE; then
+		sslv2_sockets 											#FIXME: messages need to be moved to this higher level
+	else
+		run_prototest_openssl "-ssl2"
+		case $? in
+			0) pr_redln   "offered (NOT ok)" ;;
+			1) pr_greenln "not offered (OK)" ;;
+			5) pr_litered "$supported_no_ciph2"; 
+				outln " (may need further attention)"  ;;			# protocol ok, but no cipher
+			7) ;;											# no local support
+		esac
+	fi
 
 	pr_bold " SSLv3      ";
 	if $using_sockets; then
@@ -2032,8 +2041,10 @@ starttls_line() {
                debugme echo "---> reply matched \"$2\""
           else
                debugme echo "---> reply didn't match \"$2\", see $TMPFILE"
-               pr_magenta "STARTTLS handshake problem."
-			outln "Please recheck your cmdline and/or debug what happened ($PROG_NAME --debug=2 <cmdline>)."
+               pr_magenta "STARTTLS handshake problem. "
+			outln "Either switch to native openssl (--ssl-native), "
+			outln "   give the server more time to reply (STARTTLS_SLEEP=<seconds> ./testssh.sh ..) -- "
+			outln "   or debug what happened (add --debug=2)"
                exit 1
           fi
      fi
@@ -3028,6 +3039,8 @@ actually_supported_ciphers() {
 ssl_poodle() {
 	local ret
 	local cbc_ciphers
+	local cbc_ciphers="SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:EXP1024-RC2-CBC-MD5:DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5"
+	local cbc_ciphers_krb="KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5"
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption)" && outln "\n"
 	pr_bold " POODLE, SSL"; out " (CVE-2014-3566)               "
@@ -3583,8 +3596,8 @@ tuning options:
      --color <0|1|2>                0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --debug <0-6>                  1: screen output normal but debug output in temp files.  2-6: see line ~105
 
-All options requiring a value can also be called with '=' (e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>
-
+All options requiring a value can also be called with '=' (e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
+<URI> is always the last parameter.
 
 Need HTML output? Just pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like
 
@@ -3601,7 +3614,7 @@ mybanner() {
 	local openssl_location=$(which $OPENSSL)
 	local cwd=""
 
-	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w | sed 's/ //g')
+	nr_ciphers=$(count_ciphers $($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH'))
 	[ -z "$GIT_REL" ] && \
 		idtag="$CVS_REL" || \
 		idtag="$GIT_REL -- $CVS_REL_SHORT"
@@ -4484,4 +4497,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.318 2015/07/17 11:25:38 dirkw Exp $
+#  $Id: testssl.sh,v 1.320 2015/07/17 12:30:49 dirkw Exp $
