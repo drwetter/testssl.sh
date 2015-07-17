@@ -3642,10 +3642,9 @@ EOF
 	[ -n "$GIT_REL" ] && \
 		cwd=$(/bin/pwd) || \
 		cwd=$RUN_DIR
-	echo "\$INSTALL_DIR${openssl_location//$cwd}"
-	#echo "\$INSTALL_DIRx${openssl_location/$cwd}"
-	#TODO: above is kind of ugly, below the substraction doesn't work
-	#echo  $(which $OPENSSL | sed 's/'"$(echo "$PWD" | sed 's/\//\\\//g')"'/\$PWD/g')
+	[[ "$openssl_location" =~ "$cwd" ]] &&
+		echo "\$INSTALL_DIR${openssl_location//$cwd}" || \
+		echo "$openssl_location"
 	outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 }
 
@@ -4497,4 +4496,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.320 2015/07/17 12:30:49 dirkw Exp $
+#  $Id: testssl.sh,v 1.321 2015/07/17 12:58:11 dirkw Exp $
