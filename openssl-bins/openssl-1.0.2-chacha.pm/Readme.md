@@ -89,7 +89,7 @@ If you have another Kerberos flavor you would need to figure out by yourself.
 
 as opposed to 111/109 from Ubuntu or Opensuse. 
 
-**Never use these binaries for anything else then for testing**
+**Never use these binaries for anything other than testing**
 
 Enjoy, Dirk
 
