@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# License GPLv2, see ../LICENSE
+
 echo
 echo "have you patched yet?"
 read a
@@ -78,5 +80,5 @@ case $(uname -m) in
 esac
 
 #  vim:tw=90:ts=5:sw=5
-#  $Id: make-openssl.sh,v 1.7 2015/07/06 18:21:41 dirkw Exp $ 
+#  $Id: make-openssl.sh,v 1.8 2015/07/06 19:04:57 dirkw Exp $ 
 
