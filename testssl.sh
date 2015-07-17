@@ -4453,7 +4453,7 @@ else
 		lets_roll "${STARTTLS_PROTOCOL}"
 		ret=$?
 	else															# no --ip was supplied
-		if [[ $(printf "$IPADDRs" | wc -w | sed 's/ //g') -gt 1 ]]; then		# we have more that one ipv4 address to check
+		if [[ $(printf "$IPADDRs" | wc -w | sed 's/ //g') -gt 1 ]]; then		# we have more than one ipv4 address to check
 			pr_bold "Testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
 			for ip in $IPADDRs; do
 				draw_dotted_line "-" $TERM_DWITH
