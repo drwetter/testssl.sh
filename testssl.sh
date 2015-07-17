@@ -3598,6 +3598,8 @@ mybanner() {
 	local nr_ciphers
 	local idtag
 	local bb
+	local openssl_location=$(which $OPENSSL)
+	local cwd=""
 
 	nr_ciphers=$($OPENSSL ciphers  'ALL:COMPLEMENTOFALL:@STRENGTH' | sed 's/:/ /g' | wc -w | sed 's/ //g')
 	[ -z "$GIT_REL" ] && \
@@ -3622,7 +3624,13 @@ EOF
 	pr_bold "$bb"
 	outln "\n"
 	outln " Using \"$($OPENSSL version)\" [~$nr_ciphers ciphers] on"
-	outln " $(hostname):$(which $OPENSSL)"
+	out " $(hostname):"
+
+	[ -n "$GIT_REL" ] && \
+		cwd=$(/bin/pwd) || \
+		cwd=$RUN_DIR
+	echo "\$INSTALL_DIR${openssl_location//$cwd}"
+	#echo "\$INSTALL_DIRx${openssl_location/$cwd}"
 	#TODO: above is kind of ugly, below the substraction doesn't work
 	#echo  $(which $OPENSSL | sed 's/'"$(echo "$PWD" | sed 's/\//\\\//g')"'/\$PWD/g')
 	outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
@@ -4476,4 +4484,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.317 2015/07/16 15:56:12 dirkw Exp $
+#  $Id: testssl.sh,v 1.318 2015/07/17 11:25:38 dirkw Exp $
