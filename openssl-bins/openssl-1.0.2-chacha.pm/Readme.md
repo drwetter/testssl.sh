@@ -42,39 +42,39 @@ If you want to compile OpenSSL yourself, here are the instructions:
      git clone https://github.com/PeterMosmans/openssl
      cd openssl
 
-2.) configure the damned thing. Options I used:
+2.) configure the damned thing. Options I used (see https://github.com/drwetter/testssl.sh/blob/master/openssl-bins/make-openssl.sh)
 
 **for 64Bit including Kerberos ciphers:**
 
     ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 \
     enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
     enable-seed enable-camellia enable-idea enable-rfc3779 enable-ec_nistp_64_gcc_128 \
-    --with-krb5-flavor=MIT experimental-jpake -DOPENSSL_USE_BUILD_DATE
+    --with-krb5-flavor=MIT experimental-jpake -DOPENSSL_USE_BUILD_DATE -DTEMP_GOST_TLS
     
 **for 64Bit, static binaries:**    
 
     ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 \
     enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
     enable-seed enable-camellia enable-idea enable-rfc3779 enable-ec_nistp_64_gcc_128 \
-    -static experimental-jpake -DOPENSSL_USE_BUILD_DATE
+    -static experimental-jpake -DOPENSSL_USE_BUILD_DATE -DTEMP_GOST_TLS
 
 **for 32 Bit including Kerberos ciphers:**
 
     ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 \
     enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
     enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 \
-    --with-krb5-flavor=MIT experimental-jpake -DOPENSSL_USE_BUILD_DATE
+    --with-krb5-flavor=MIT experimental-jpake -DOPENSSL_USE_BUILD_DATE -DTEMP_GOST_TLS
     
  **for 32 Bit, static binaries:**
 
     ./config --prefix=/usr/ --openssldir=/etc/ssl enable-zlib enable-ssl2 enable-rc5 enable-rc2 \
     enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
     enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 \
-    -static experimental-jpake -DOPENSSL_USE_BUILD_DATE
+    -static experimental-jpake -DOPENSSL_USE_BUILD_DATE -DTEMP_GOST_TLS
 
-Don't use -DTEMP_GOST_TLS, it currently breaks things and it is not needed for general GOST [1] support.
+Two GOST [1] ciphers (``GOST-GOST94``, ``GOST-MD5``) come with ``-DTEMP_GOST_TLS``, four additional come via openssl engine. ``-DTEMP_GOST_TLS`` on earlier versions of openssl broke things.
 
-So the difference ypu maybe spotted: If you don't have / don't want Kerberos libraries and devel rpms/debs, omit "--with-krb5-flavor=MIT" (see examples). 
+So the difference you maybe spotted: If you don't have / don't want Kerberos libraries and devel rpms/debs, omit "--with-krb5-flavor=MIT" (see examples). 
 If you have another Kerberos flavor you would need to figure out by yourself.
 
 3.) make depend
@@ -84,8 +84,8 @@ If you have another Kerberos flavor you would need to figure out by yourself.
 5.) make report (check whether it runs ok!)
 
 6.) "./apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l" lists now for me 
-* 191(+4 GOST) ciphers -- including kerberos
-* 177(+4 GOST) ciphers without kerberos
+* 193(+4 GOST) ciphers -- including kerberos
+* 179(+4 GOST) ciphers without kerberos
 
 as opposed to 111/109 from Ubuntu or Opensuse. 
 
