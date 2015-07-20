@@ -1,22 +1,31 @@
-<html>
+<html lang="en">
 <head>
-<title>Mapping OpenSSL cipher suite names to RFC names</title>
+	<title>Mapping OpenSSL cipher suite names to RFC names</title>
+	<meta charset="UTF-8">
 </head>
 <style type="text/css">
-.mytable { background-color:#eee;border-collapse:collapse; text-align:left; table-layout: fixed; width:1000px; }
-.mytable th { padding:3px; border:1px solid #000; background-color:#888 ;color:white ;width:50%; font-family:Helvetica; overflow: hidden;  }
-.mytable td { padding:3px; border:1px solid #888; empty-cells:hide; font-family:Helvetica; font-size:80%; overflow: hidden; }
+table { border-collapse:collapse; text-align:left; font-family:Helvetica; table-layout: fixed; width:1000px; overflow: hidden; }
+table th { padding:3px; border:1px solid #000; background-color:#888 ;color:white ;width:50%; }
+tr { padding:3px; border:1px solid #888; background-color:#FFF; empty-cells:hide; font-size:80%; }
+tr:nth-child(odd) { background-color: #CCF; color: #000; } 
+table tr:hover { background-color: #dfac20; color: #fff; }
+td { border:1px solid #999; }
 </style>
+
 <body>
 <br>
-<table class="mytable">
+
+<table>
 <col width="8%" />
 <col width="26%" />
 <col width="10%" />
-<col width="9%" />
+<col width="11%" />
 <col width="8%" />
-<col width="39%" />
-<tr><th>Cipher Suite</th><th> Name (OpenSSL)</th><th>   KeyExch. </th><th> Encryption </th><th> Bits         </th><th>Cipher Suite Name (RFC)</th></tr>
+<col width="37%" />
+<thead>
+	<tr><th>Cipher Suite</th><th> Name (OpenSSL)</th><th>   KeyExch. </th><th> Encryption </th><th> Bits         </th><th>Cipher Suite Name (RFC)</th></tr>
+</thead>
+<tbody>
 <tr><td> [0x00]</td><td>     NULL-MD5                     </td><td> RSA(512) </td><td>   None    </td><td>  None, export  </td><td> TLS_NULL_WITH_NULL_NULL                 </td></tr>
 <tr><td> [0x01]</td><td>     NULL-MD5                     </td><td> RSA      </td><td>   None    </td><td>  None         </td><td> TLS_RSA_WITH_NULL_MD5                   </td></tr>
 <tr><td> [0x02]</td><td>     NULL-SHA                     </td><td> RSA      </td><td>   None    </td><td>  None         </td><td> TLS_RSA_WITH_NULL_SHA                   </td></tr>
@@ -100,8 +109,10 @@
 <tr><td> [0x6b]</td><td>     DHE-RSA-AES256-SHA256        </td><td> DH       </td><td>   AES     </td><td>  256          </td><td> TLS_DHE_RSA_WITH_AES_256_CBC_SHA256     </td></tr>
 <tr><td> [0x6c]</td><td>     ADH-AES128-SHA256            </td><td> DH       </td><td>   AES     </td><td>  128          </td><td> TLS_DH_anon_WITH_AES_128_CBC_SHA256     </td></tr>
 <tr><td> [0x6d]</td><td>     ADH-AES256-SHA256            </td><td> DH       </td><td>   AES     </td><td>  256          </td><td> TLS_DH_anon_WITH_AES_256_CBC_SHA256     </td></tr>
-<tr><td> [0x80]</td><td>     GOST94-GOST89-GOST89         </td><td> unknown  </td><td>   unknown </td><td>  unknown      </td><td> TLS_GOSTR341094_WITH_28147_CNT_IMIT </td></tr>
-<tr><td> [0x81]</td><td>     GOST2001-GOST89-GOST89       </td><td> unknown  </td><td>   unknown </td><td>  unknown      </td><td> TLS_GOSTR341001_WITH_28147_CNT_IMIT</td></tr>
+<tr><td> [0x80]</td><td>     GOST94-GOST89-GOST89         </td><td> GOST     </td><td>   GOST89  </td><td>  256          </td><td> TLS_GOSTR341094_WITH_28147_CNT_IMIT </td></tr>
+<tr><td> [0x81]</td><td>     GOST2001-GOST89-GOST89       </td><td> GOST     </td><td>   GOST89  </td><td>  256          </td><td> TLS_GOSTR341001_WITH_28147_CNT_IMIT</td></tr>
+<tr><td> [0x82]</td><td>     GOST94-NULL-GOST94           </td><td> GOST     </td><td>   unknown </td><td>  unknown      </td><td> TLS_GOSTR341001_WITH_NULL_GOSTR3411</td></tr>
+<tr><td> [0x83]</td><td>     GOST2001-GOST89-GOST89       </td><td> GOST     </td><td>   unknown </td><td>  unknown      </td><td> TLS_GOSTR341094_WITH_NULL_GOSTR3411</td></tr>
 <tr><td> [0x84]</td><td>     CAMELLIA256-SHA              </td><td> RSA      </td><td>   Camellia</td><td>  256          </td><td> TLS_RSA_WITH_CAMELLIA_256_CBC_SHA       </td></tr>
 <tr><td> [0x85]</td><td>     DH-DSS-CAMELLIA256-SHA       </td><td> DH/DSS   </td><td>   Camellia</td><td>  256          </td><td> TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA    </td></tr>
 <tr><td> [0x86]</td><td>     DH-RSA-CAMELLIA256-SHA       </td><td> DH/RSA   </td><td>   Camellia</td><td>  256          </td><td> TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA    </td></tr>
@@ -113,14 +124,14 @@
 <tr><td> [0x8c]</td><td>     PSK-AES128-CBC-SHA           </td><td> PSK      </td><td>   AES     </td><td>  128          </td><td> TLS_PSK_WITH_AES_128_CBC_SHA            </td></tr>
 <tr><td> [0x8d]</td><td>     PSK-AES256-CBC-SHA           </td><td> PSK      </td><td>   AES     </td><td>  256          </td><td> TLS_PSK_WITH_AES_256_CBC_SHA            </td></tr>
 
-<tr><td> [0x8e]</td><td>                                  </td><td>          </td><td>   RC4     </td><td>  128          </td><td> TLS_DHE_PSK_WITH_RC4_128_SHA            </td></tr>
-<tr><td> [0x8f]</td><td>                                  </td><td>          </td><td>   3DES    </td><td>  168          </td><td> TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA       </td></tr>
-<tr><td> [0x90]</td><td>                                  </td><td>          </td><td>   AES     </td><td>  128          </td><td> TLS_DHE_PSK_WITH_AES_128_CBC_SHA        </td></tr>
-<tr><td> [0x91]</td><td>                                  </td><td>          </td><td>   AES     </td><td>  256          </td><td> TLS_DHE_PSK_WITH_AES_256_CBC_SHA        </td></tr>
-<tr><td> [0x92]</td><td>                                  </td><td>          </td><td>   RC4     </td><td>  128          </td><td> TLS_RSA_PSK_WITH_RC4_128_SHA            </td></tr>
-<tr><td> [0x93]</td><td>                                  </td><td>          </td><td>   3DES    </td><td>  168          </td><td> TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA       </td></tr>
-<tr><td> [0x94]</td><td>                                  </td><td>          </td><td>   AES     </td><td>  128          </td><td> TLS_RSA_PSK_WITH_AES_128_CBC_SHA        </td></tr>
-<tr><td> [0x95]</td><td>                                  </td><td>          </td><td>   AES     </td><td>  256          </td><td> TLS_RSA_PSK_WITH_AES_256_CBC_SHA        </td></tr>
+<tr><td> [0x8e]</td><td>                                  </td><td> PSK/DHE  </td><td>   RC4     </td><td>  128          </td><td> TLS_DHE_PSK_WITH_RC4_128_SHA            </td></tr>
+<tr><td> [0x8f]</td><td>                                  </td><td> PSK/DHE  </td><td>   3DES    </td><td>  168          </td><td> TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA       </td></tr>
+<tr><td> [0x90]</td><td>                                  </td><td> PSK/DHE  </td><td>   AES     </td><td>  128          </td><td> TLS_DHE_PSK_WITH_AES_128_CBC_SHA        </td></tr>
+<tr><td> [0x91]</td><td>                                  </td><td> PSK/DHE  </td><td>   AES     </td><td>  256          </td><td> TLS_DHE_PSK_WITH_AES_256_CBC_SHA        </td></tr>
+<tr><td> [0x92]</td><td>                                  </td><td> PSK/RSA  </td><td>   RC4     </td><td>  128          </td><td> TLS_RSA_PSK_WITH_RC4_128_SHA            </td></tr>
+<tr><td> [0x93]</td><td>                                  </td><td> PSK/RSA  </td><td>   3DES    </td><td>  168          </td><td> TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA       </td></tr>
+<tr><td> [0x94]</td><td>                                  </td><td> PSK/RSA  </td><td>   AES     </td><td>  128          </td><td> TLS_RSA_PSK_WITH_AES_128_CBC_SHA        </td></tr>
+<tr><td> [0x95]</td><td>                                  </td><td> PSK/RSA  </td><td>   AES     </td><td>  256          </td><td> TLS_RSA_PSK_WITH_AES_256_CBC_SHA        </td></tr>
 
 <tr><td> [0x96]</td><td>     SEED-SHA                     </td><td> RSA      </td><td>   SEED    </td><td>  128          </td><td> TLS_RSA_WITH_SEED_CBC_SHA               </td></tr>
 <tr><td> [0x97]</td><td>     DH-DSS-SEED-SHA              </td><td> DH/DSS   </td><td>   SEED    </td><td>  128          </td><td> TLS_DH_DSS_WITH_SEED_CBC_SHA            </td></tr>
@@ -196,8 +207,10 @@
 <tr><td> [0xcc13]</td><td>   ECDHE-RSA-CHACHA20-POLY1305  </td><td> ECDH     </td><td>   ChaCha20-Poly1305</td><td>    </td><td> TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</td></tr>
 <tr><td> [0xcc14]</td><td>   ECDHE-ECDSA-CHACHA20-POLY1305</td><td> ECDH     </td><td>   ChaCha20-Poly1305</td><td>     </td><td> TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</td></tr>
 <tr><td> [0xcc15]</td><td>   DHE-RSA-CHACHA20-POLY1305    </td><td> DH       </td><td>   ChaCha20-Poly1305</td><td>     </td><td> TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256</td></tr>
-<tr><td> [0xff00]</td><td>   GOST-MD5                     </td><td> RSA      </td><td>   unknown </td><td>  unknown</td></tr>
-<tr><td> [0xff01]</td><td>   GOST-GOST94                  </td><td> RSA      </td><td>   unknown </td><td>  unknown</td></tr>
+<tr><td> [0xff00]</td><td>   GOST-MD5                     </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td></tr>
+<tr><td> [0xff01]</td><td>   GOST-GOST94                  </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td></tr>
+<tr><td> [0xff02]</td><td>   GOST-GOST89MAC               </td><td> RSA      </td><td>   unknown </td><td>  256    </td></tr>
+<tr><td> [0xff03]</td><td>   GOST-GOST89STREAM            </td><td> RSA      </td><td>   unknown </td><td>  256    </td></tr>
 <tr><td> [0x010080]</td><td> RC4-MD5                      </td><td> RSA      </td><td>   RC4     </td><td>  128          </td><td> SSL_CK_RC4_128_WITH_MD5              </td></tr>
 <tr><td> [0x020080]</td><td> EXP-RC4-MD5                  </td><td> RSA(512) </td><td>   RC4     </td><td>  40, export    </td><td> SSL_CK_RC4_128_EXPORT40_WITH_MD5     </td></tr>
 <tr><td> [0x030080]</td><td> RC2-CBC-MD5                  </td><td> RSA      </td><td>   RC2     </td><td>  128          </td><td> SSL_CK_RC2_128_CBC_WITH_MD5        </td></tr>
@@ -206,5 +219,6 @@
 <tr><td> [0x060040]</td><td> DES-CBC-MD5                  </td><td> RSA      </td><td>   DES     </td><td>  56           </td><td> SSL_CK_DES_64_CBC_WITH_MD5           </td></tr>
 <tr><td> [0x0700c0]</td><td> DES-CBC3-MD5                 </td><td> RSA      </td><td>   3DES    </td><td>  168          </td><td> SSL_CK_DES_192_EDE3_CBC_WITH_MD5  </td></tr>
 <tr><td> [0x080080]</td><td> RC4-64-MD5                   </td><td> RSA      </td><td>   RC4     </td><td>  64           </td><td> SSL_CK_RC4_64_WITH_MD5               </td></tr>
+</tbody>
 </table>
 </body>
