@@ -12,8 +12,8 @@ sleep 3
 
 STDOPTIONS="--prefix=/usr/ --openssldir=/etc/ssl -DOPENSSL_USE_BUILD_DATE enable-zlib \
 enable-ssl2 enable-ssl3 enable-ssl-trace enable-rc5 enable-rc2 \
-enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
-enable-seed enable-camellia enable-idea enable-rfc3779 experimental-jpake"
+enable-gost enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
+enable-seed enable-camellia enable-idea enable-rfc3779 experimental-jpake -DTEMP_GOST_TLS"
 
 clean() {
 	case $NOCLEAN in 
@@ -26,22 +26,23 @@ clean() {
 
 error() {
 	tput bold
-	echo "ERROR $1"
+	echo "### ERROR $1 ###"
 	tput sgr0
 	exit 2
 }
 
 makeall() {
-	make depend && make && make report
-	if [ $? -ne 0 ]; then
-		error "making"
-	fi
+	make depend || error "depend"
+	make || error "making"
+	make report || error "testing/make report"
+	#FIXME: we need another error handler, as of now a failure doesn't mean a return status of 1
+	# see https://github.com/openssl/openssl/pull/336
 	return 0
 }
 
 copyfiles() {
 	echo; apps/openssl version -a; echo
-	cp -p apps/openssl ../openssl$1
+	cp -p apps/openssl ../openssl.$(uname).$(uname -m).$1
 	echo
 	return $?
 }
@@ -56,7 +57,7 @@ case $(uname -m) in
 			./config $STDOPTIONS no-ec_nistp_64_gcc_128 -static
 		fi
 		[ $? -ne 0 ] && error "configuring"
-		makeall && copyfiles "32-$name2add"
+		makeall && copyfiles "$name2add"
 		[ $? -ne 0 ] && error "copying files"
 		apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
 		echo
@@ -72,18 +73,18 @@ case $(uname -m) in
 			./config $STDOPTIONS enable-ec_nistp_64_gcc_128 -static
 		fi
 		[ $? -ne 0 ] && error "configuring"
-		makeall && copyfiles "64-$name2add"
+		makeall && copyfiles "$name2add"
 		[ $? -ne 0 ] && error "copying files"
 		apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
 		echo
 		echo "------------ all ok ------------"
 		echo 
 		;;
-	*)	echo " Sorry don't know this architecture $(uname -m)" 
+	*)	echo " Sorry, don't know this architecture $(uname -m)" 
 		exit 1
 		;;
 esac
 
 #  vim:tw=90:ts=5:sw=5
-#  $Id: make-openssl.sh,v 1.11 2015/07/20 10:46:49 dirkw Exp $ 
+#  $Id: make-openssl.sh,v 1.14 2015/07/20 19:40:54 dirkw Exp $ 
 
