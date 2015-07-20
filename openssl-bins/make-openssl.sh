@@ -2,11 +2,16 @@
 
 # License GPLv2, see ../LICENSE
 
-echo
-echo "have you patched yet?"
-read a
+echo 
+echo "###################################################################"
+echo "#######      Build script for Peter Mosmans openssl         #######"
+echo "####### which contains all broken and all advanced features #######"
+echo "###################################################################"
+echo 
+sleep 3
 
-STDOPTIONS="--prefix=/usr/ --openssldir=/etc/ssl -DOPENSSL_USE_BUILD_DATE enable-zlib enable-ssl2 enable-rc5 enable-rc2 \
+STDOPTIONS="--prefix=/usr/ --openssldir=/etc/ssl -DOPENSSL_USE_BUILD_DATE enable-zlib \
+enable-ssl2 enable-ssl3 enable-ssl-trace enable-rc5 enable-rc2 \
 enable-GOST enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
 enable-seed enable-camellia enable-idea enable-rfc3779 experimental-jpake"
 
@@ -74,11 +79,11 @@ case $(uname -m) in
 		echo "------------ all ok ------------"
 		echo 
 		;;
-	*)	echo "architecture ???" 
+	*)	echo " Sorry don't know this architecture $(uname -m)" 
 		exit 1
 		;;
 esac
 
 #  vim:tw=90:ts=5:sw=5
-#  $Id: make-openssl.sh,v 1.8 2015/07/06 19:04:57 dirkw Exp $ 
+#  $Id: make-openssl.sh,v 1.11 2015/07/20 10:46:49 dirkw Exp $ 
 
