@@ -111,8 +111,8 @@ td { border:1px solid #999; }
 <tr><td> [0x6d]</td><td>     ADH-AES256-SHA256            </td><td> DH       </td><td>   AES     </td><td>  256          </td><td> TLS_DH_anon_WITH_AES_256_CBC_SHA256     </td></tr>
 <tr><td> [0x80]</td><td>     GOST94-GOST89-GOST89         </td><td> GOST     </td><td>   GOST89  </td><td>  256          </td><td> TLS_GOSTR341094_WITH_28147_CNT_IMIT </td></tr>
 <tr><td> [0x81]</td><td>     GOST2001-GOST89-GOST89       </td><td> GOST     </td><td>   GOST89  </td><td>  256          </td><td> TLS_GOSTR341001_WITH_28147_CNT_IMIT</td></tr>
-<tr><td> [0x82]</td><td>     GOST94-NULL-GOST94           </td><td> GOST     </td><td>   unknown </td><td>  unknown      </td><td> TLS_GOSTR341001_WITH_NULL_GOSTR3411</td></tr>
-<tr><td> [0x83]</td><td>     GOST2001-GOST89-GOST89       </td><td> GOST     </td><td>   unknown </td><td>  unknown      </td><td> TLS_GOSTR341094_WITH_NULL_GOSTR3411</td></tr>
+<tr><td> [0x82]</td><td>     GOST94-NULL-GOST94           </td><td> GOST     </td><td>   eNULL   </td><td>  unknown      </td><td> TLS_GOSTR341001_WITH_NULL_GOSTR3411</td></tr>
+<tr><td> [0x83]</td><td>     GOST2001-GOST89-GOST89       </td><td> GOST     </td><td>   eNULL   </td><td>  unknown      </td><td> TLS_GOSTR341094_WITH_NULL_GOSTR3411</td></tr>
 <tr><td> [0x84]</td><td>     CAMELLIA256-SHA              </td><td> RSA      </td><td>   Camellia</td><td>  256          </td><td> TLS_RSA_WITH_CAMELLIA_256_CBC_SHA       </td></tr>
 <tr><td> [0x85]</td><td>     DH-DSS-CAMELLIA256-SHA       </td><td> DH/DSS   </td><td>   Camellia</td><td>  256          </td><td> TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA    </td></tr>
 <tr><td> [0x86]</td><td>     DH-RSA-CAMELLIA256-SHA       </td><td> DH/RSA   </td><td>   Camellia</td><td>  256          </td><td> TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA    </td></tr>
@@ -207,10 +207,10 @@ td { border:1px solid #999; }
 <tr><td> [0xcc13]</td><td>   ECDHE-RSA-CHACHA20-POLY1305  </td><td> ECDH     </td><td>   ChaCha20-Poly1305</td><td>    </td><td> TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</td></tr>
 <tr><td> [0xcc14]</td><td>   ECDHE-ECDSA-CHACHA20-POLY1305</td><td> ECDH     </td><td>   ChaCha20-Poly1305</td><td>     </td><td> TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</td></tr>
 <tr><td> [0xcc15]</td><td>   DHE-RSA-CHACHA20-POLY1305    </td><td> DH       </td><td>   ChaCha20-Poly1305</td><td>     </td><td> TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256</td></tr>
-<tr><td> [0xff00]</td><td>   GOST-MD5                     </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td></tr>
-<tr><td> [0xff01]</td><td>   GOST-GOST94                  </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td></tr>
-<tr><td> [0xff02]</td><td>   GOST-GOST89MAC               </td><td> RSA      </td><td>   unknown </td><td>  256    </td></tr>
-<tr><td> [0xff03]</td><td>   GOST-GOST89STREAM            </td><td> RSA      </td><td>   unknown </td><td>  256    </td></tr>
+<tr><td> [0xff00]</td><td>   GOST-MD5                     </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td>TLS_GOSTR341094_RSA_WITH_28147_CNT_MD5</tr>
+<tr><td> [0xff01]</td><td>   GOST-GOST94                  </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td>TLS_RSA_WITH_28147_CNT_GOST94</tr>
+<tr><td> [0xff02]</td><td>   GOST-GOST89MAC               </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td></tr>
+<tr><td> [0xff03]</td><td>   GOST-GOST89STREAM            </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td></tr>
 <tr><td> [0x010080]</td><td> RC4-MD5                      </td><td> RSA      </td><td>   RC4     </td><td>  128          </td><td> SSL_CK_RC4_128_WITH_MD5              </td></tr>
 <tr><td> [0x020080]</td><td> EXP-RC4-MD5                  </td><td> RSA(512) </td><td>   RC4     </td><td>  40, export    </td><td> SSL_CK_RC4_128_EXPORT40_WITH_MD5     </td></tr>
 <tr><td> [0x030080]</td><td> RC2-CBC-MD5                  </td><td> RSA      </td><td>   RC2     </td><td>  128          </td><td> SSL_CK_RC2_128_CBC_WITH_MD5        </td></tr>
