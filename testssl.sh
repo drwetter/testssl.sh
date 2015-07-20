@@ -3484,7 +3484,7 @@ find_openssl_binary() {
 		: 	# 5. we tried hard and failed, so now we use the system binaries
 	fi
 
-	"$OPENSSL" version -a 2>&1 >/dev/null
+	$OPENSSL version -a 2>/dev/null >/dev/null
 	if [ $? -ne 0 ] || [ ! -x "$OPENSSL" ]; then
 		outln
 		pr_magentaln "FATAL: cannot exec or find any openssl binary "
@@ -3492,20 +3492,26 @@ find_openssl_binary() {
 	fi
 
 	# http://www.openssl.org/news/openssl-notes.html
-	OSSL_VER=$($OPENSSL version | awk -F' ' '{ print $2 }')
+	OSSL_VER=$($OPENSSL version 2>/dev/null| awk -F' ' '{ print $2 }')
 	OSSL_VER_MAJOR=$(echo "$OSSL_VER" | sed 's/\..*$//')
 	OSSL_VER_MINOR=$(echo "$OSSL_VER" | sed -e 's/^.\.//' | tr -d '[a-zA-Z]-')
 	OSSL_VER_APPENDIX=$(echo "$OSSL_VER" | tr -d '[0-9.]')
-	OSSL_VER_PLATFORM=$($OPENSSL version -p | sed 's/^platform: //')
-	OSSL_BUILD_DATE=$($OPENSSL version -a | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
+	OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
+	OSSL_BUILD_DATE=$($OPENSSL version -a  2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
 	echo $OSSL_BUILD_DATE | grep -q "not available" && OSSL_BUILD_DATE=""
 
-	if $OPENSSL version | grep -qi LibreSSL; then
+	if $OPENSSL version 2>/dev/null | grep -qi LibreSSL; then
 		HAS_DH_BITS=false		# as of version 2.2.1
 	else
 		[ $OSSL_VER_MAJOR -ne 1 ] && HAS_DH_BITS=false
 		[ "$OSSL_VER_MINOR" == "0.1" ] && HAS_DH_BITS=false
 	fi
+
+	if $OPENSSL version 2>/dev/null | grep -qi LibreSSL; then
+		outln
+		pr_litemagenta "Please note: LibreSSL is not a good choice for testing insecure features!"
+	fi
+
 	$OPENSSL s_client -ssl2 2>&1 | grep -aq "unknown option" || \
 		HAS_SSL2=true && \
 		HAS_SSL2=false
@@ -3606,13 +3612,13 @@ partly mandatory parameters:
 
 tuning options:
 
-     --assuming-http <true|false>   if protocol check fails it assumes HTTP protocol and enforces HTTP checks
+     --assuming-http                if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native <true|false>      fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>               use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
      --proxy <host>:<port>          connect via the specified HTTP proxy
-     --sneaky <true|false>          be less verbose wrt referer headers
-     --wide <true|false>            wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
-     --show-each <0|1>              for wide outputs: display all ciphers tested -- not only succeeded ones
+     --sneaky                       be less verbose wrt referer headers
+     --wide                         wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
+     --show-each                    for wide outputs: display all ciphers tested -- not only succeeded ones
      --warnings <batch|off|false>   "batch" doesn't wait for keypress, "off" or "false" skips connection warning
      --color <0|1|2>                0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --debug <0-6>                  1: screen output normal but debug output in temp files.  2-6: see line ~105
@@ -3657,7 +3663,7 @@ EOF
 )
 	pr_bold "$bb"
 	outln "\n"
-	outln " Using \"$($OPENSSL version)\" [~$nr_ciphers ciphers] on"
+	outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$nr_ciphers ciphers] on"
 	out " $(hostname):"
 
 	[ -n "$GIT_REL" ] && \
@@ -3677,6 +3683,7 @@ maketempf() {
 	HEADERFILE=$TEMPDIR/http_header.txt
 	HEADERFILE_BREACH=$TEMPDIR/http_header_breach.txt
 	LOGFILE=$TEMPDIR/logfile.txt
+	initialize_engine
 	if [ $DEBUG -ne 0 ]; then
 		cat >$TEMPDIR/environment.txt << EOF
 
@@ -3690,11 +3697,15 @@ machine: ${BASH_VERSINFO[5]}
 operating system: $SYSTEM
 shellopts: $SHELLOPTS
 
+$OPENSSL version -a:
+$($OPENSSL version -a)
 OSSL_VER_MAJOR: $OSSL_VER_MAJOR
 OSSL_VER_MINOR: $OSSL_VER_MINOR
 OSSL_VER_APPENDIX: $OSSL_VER_APPENDIX
 OSSL_BUILD_DATE: "$OSSL_BUILD_DATE"
 OSSL_VER_PLATFORM: "$OSSL_VER_PLATFORM"
+
+OPENSSL_CONF: $OPENSSL_CONF
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -3734,7 +3745,7 @@ USLEEP_REC $USLEEP_REC
 
 EOF
 		which locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
-		$OPENSSL ciphers -V $1  &>$TEMPDIR/all_local_ciphers.txt
+		$OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
 	fi
 
 
@@ -3755,13 +3766,6 @@ cleanup () {
 initialize_engine(){
 	grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null && return 0		# have been here already
 
-	[[ -z "$TEMPDIR" ]] && maketempf
-
-	if $OPENSSL version | grep -qi LibreSSL; then
-		outln
-		pr_litemagenta "Please note: LibreSSL is not a good choice for testing insecure features!"
-	fi
-			
 	if ! $OPENSSL engine gost -vvvv -t -c >/dev/null 2>&1; then
 		outln
 		pr_litemagenta "No engine or GOST support via engine with your $OPENSSL"; outln
@@ -3874,7 +3878,7 @@ determine_ip_addresses() {
 		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
 		ip4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
 	
-		unset OPENSSL_CONF		# see https://github.com/drwetter/testssl.sh/issues/134
+		OPENSSL_CONF=""		# see https://github.com/drwetter/testssl.sh/issues/134
 
 		if ! is_ipv4addr "$ip4"; then
 			which dig &> /dev/null && \
@@ -4003,7 +4007,8 @@ determine_service() {
 		esac
 	fi
 
-	${do_mx_all_ips} || initialize_engine
+#TODO: rather hackish --> some place else
+	${do_mx_all_ips} 
 	outln
 
 	return 0 		# OPTIMAL_PROTO, GET_REQ*/HEAD_REQ* is set now
@@ -4191,7 +4196,7 @@ parse_cmd_line() {
 				;;
 			-b|--banner|-v|--version)
 				find_openssl_binary
-				initialize_engine
+				maketempf
 				mybanner
 				exit 0
 				;;
@@ -4213,7 +4218,7 @@ parse_cmd_line() {
 				;;
 			-V|-V=*|--local|--local=*)	# this is only displaying local ciphers, thus we don't put it in the loop
 				find_openssl_binary
-				initialize_engine 		# for GOST support
+				maketempf		 		# for GOST support
 				mybanner
 				openssl_age
 				prettyprint_local $(parse_opt_equal_sign "$1" "$2")
@@ -4469,7 +4474,7 @@ initialize_globals
 parse_cmd_line "$@"
 set_color_functions
 find_openssl_binary
-initialize_engine
+maketempf
 mybanner
 check_proxy
 openssl_age
@@ -4517,4 +4522,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.322 2015/07/17 13:58:06 dirkw Exp $
+#  $Id: testssl.sh,v 1.323 2015/07/20 12:05:34 dirkw Exp $
