@@ -72,7 +72,7 @@ If you want to compile OpenSSL yourself, here are the instructions:
     enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 \
     -static experimental-jpake -DOPENSSL_USE_BUILD_DATE -DTEMP_GOST_TLS
 
-Two GOST [1] ciphers (``GOST-GOST94``, ``GOST-MD5``) come with ``-DTEMP_GOST_TLS``, four additional come via openssl engine. ``-DTEMP_GOST_TLS`` on earlier versions of openssl broke things.
+Two GOST [1][2] ciphers (``GOST-GOST94``, ``GOST-MD5``) come with ``-DTEMP_GOST_TLS``, four additional come via openssl engine. ``-DTEMP_GOST_TLS`` on earlier versions of openssl broke things.
 
 So the difference you maybe spotted: If you don't have / don't want Kerberos libraries and devel rpms/debs, omit "--with-krb5-flavor=MIT" (see examples). 
 If you have another Kerberos flavor you would need to figure out by yourself.
@@ -94,3 +94,4 @@ as opposed to 111/109 from Ubuntu or Opensuse.
 Enjoy, Dirk
 
 [1] https://en.wikipedia.org/wiki/GOST_%29block_cipher%29
+[2] http://fossies.org/linux/openssl/engines/ccgost/README.gost
