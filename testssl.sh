@@ -411,6 +411,10 @@ newline_to_spaces() {
 	echo "$1" | tr '\n' ' ' | sed 's/ $//'
 }
 
+trim_lf() {
+	echo "$1" | tr -d '\n'
+}
+
 tmpfile_handle() {
 	if [[ "$DEBUG" -eq 0 ]] ; then
 		rm $TMPFILE
@@ -675,13 +679,14 @@ hsts() {
 	return $?
 }
 
+
 hpkp() {
-	local -i hpkp_age_sec
-	local -i hpkp_age_days
-	local -i hpkp_nr_keys
+	local hpkp_age_sec
+	local hpkp_age_days
+	local hpkp_nr_keys
 	local hpkp_key hpkp_key_hostcert
 	local spaces="                             "
-	local -i key_found=1
+	local key_found=false
 
 	if [ ! -s $HEADERFILE ] ; then
 		http_header "$1" || return 3
@@ -691,13 +696,10 @@ hpkp() {
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || out "(two HPKP headers, using 1st one) "
-		# dirty trick so that grep -c really counts occurrences and not lines w/ occurrences:
-		hpkp_nr_keys=$(sed 's/pin-sha/pin-sha\n/g' < $TMPFILE | grep -ac pin-sha)
-		if [ $hpkp_nr_keys -eq 1 ]; then
-			pr_litered "One key is not sufficent, "
-		fi
-		hpkp_age_sec=$(sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE)
-#FIXME: test for number!
+		sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE >$TMPFILE.2
+		mv $TMPFILE.2 $TMPFILE
+		hpkp_age_sec=$(sed -e 's/^.*max-age=//' $TMPFILE | sed -E 's/[^[:digit:]]//g')
+
 		hpkp_age_days=$((hpkp_age_sec / 86400))
 		if [ $hpkp_age_days -ge $HPKP_MIN ]; then
 			pr_litegreen "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
@@ -706,11 +708,16 @@ hpkp() {
 			pr_brown "$hpkp_age_days days (<$HPKP_MIN is not good enough)"
 		fi
 
+		# dirty trick so that grep -c really counts occurrences and not lines w/ occurrences:
+		hpkp_nr_keys=$(tr ' ' '\n'  < $TMPFILE | grep -ac pin-sha)
+		if [ $hpkp_nr_keys -eq 1 ]; then
+			pr_litered "One key is not sufficent, "
+		fi
+
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"
 
 		# get the key fingerprints
-		sed -i -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE
 		[ -s "$HOSTCERT" ] || get_host_cert
 		hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
 			$OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
@@ -718,11 +725,11 @@ hpkp() {
 			if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
 				out "\n$spaces matching key: "
 				pr_litegreen "$hpkp_key"
-				key_found=0
+				key_found=true
 			fi
-			debugme echo "$hpkp_key | $hpkp_key_hostcert"
-		done < <(sed -e 's/;/\n/g' -e 's/ //g' -e 's/\"//g' $TMPFILE | awk -F'=' '/pin.*=/ { print $2 }')
-		[ $key_found -ne 0 ] && out "\n$spaces " && pr_litered "No matching key for pin found"
+			debugme echo "  $hpkp_key | $hpkp_key_hostcert"
+		done < <(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
+		$key_found || pr_litered "No matching key for pin found"
 	else
 		out "--"
 	fi
@@ -3889,9 +3896,14 @@ determine_ip_addresses() {
 				ip4=$(host -t a "$NODE" 2>/dev/null | grep -v alias | sed 's/^.*address //')
 		fi
 		if ! is_ipv4addr "$ip4"; then
-			which nslookup &> /dev/null && \
-				ip4=$(nslookup -querytype=a $NODE 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name | sed -r 's/[^[:digit:].]//g' | sed -e '/^$/d')
+			if which nslookup &>/dev/null; then
 				# filtering from Name to EOF, remove iline with 'Name', the filter out non-numbers and ".'", and empty lines
+				if $HAS_SED_E; then
+					ip4=$(nslookup -querytype=a $NODE 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name | sed -E 's/[^[:digit:].]//g' | sed -e '/^$/d')
+				else
+					ip4=$(nslookup -querytype=a $NODE 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name | sed -r 's/[^[:digit:].]//g' | sed -e '/^$/d')
+				fi
+			fi
 		fi
 		is_ipv4addr "$ip4" || return 2
 
@@ -3906,8 +3918,12 @@ determine_ip_addresses() {
 			fi
 			# MSYS2 has no host or getent, so we need nslookup
 			if [[ -z "$ip6" ]]; then
-				ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed -r 's/[^[:digit:]:]//g' | sed -e '/^$/d')
 				# same as above. Only we're using grep -A instead of awk
+				if $HAS_SED_E; then
+					ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed -E 's/[^[:digit:]:]//g' | sed -e '/^$/d')
+				else
+					ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed -r 's/[^[:digit:]:]//g' | sed -e '/^$/d')
+				fi
 			fi
 		fi
 	fi
@@ -4527,4 +4543,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.324 2015/07/21 12:20:13 dirkw Exp $
+#  $Id: testssl.sh,v 1.325 2015/07/21 18:35:48 dirkw Exp $
