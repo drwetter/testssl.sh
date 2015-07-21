@@ -2,33 +2,39 @@
 
 ##### Credits also to
 
-* Maciej Grela 
- * colorless handling
-
-* Olivier Paroz
- * conversion xxd --> hexdump stuff 
-
-* Rechi
- - initial MX stuff
- - fixes
-
 * Peter Mosmans
  - started way better cmd line parsing
  - cleanups
  - openssl sources support with the "missing" features
 
+* Proxy support:
+ - John Newbigin
+
+* Jonathan Roach
+ - TLS_FALLBACK_SCSV checks
+ 
 * Mark Felder
  - lots of cleanups
  - Shellcheck static analysis
 
-* Jonathan Roach
- - TLS_FALLBACK_SCSV checks
+* Maciej Grela 
+  - colorless handling
 
-* Proxy support:
- - John Newbigin
+* Olivier Paroz
+  - conversion xxd --> hexdump stuff 
+
+* @f-s
+ - ARM binary support  
+
+* Rechi
+ - initial MX stuff
+ - fixes
 
 * Дилян Палаузов
  - bug fix for 3des report
+
+* Jonathon Rossi
+  - fix for bash3 (Darwin_
 
 * @nvsofts (NV)
  - LibreSSL patch for GOST
@@ -45,9 +51,5 @@
 
 ##### Last but not least:
 
-* OpenSSL team
-  - for providing openssl ;-)
-
-
-
+OpenSSL team for providing openssl.
 
