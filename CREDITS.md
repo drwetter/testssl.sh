@@ -26,6 +26,9 @@
 * @f-s
  - ARM binary support  
 
+* Julien Vehent
+ - support for Darwin binary
+
 * Rechi
  - initial MX stuff
  - fixes
