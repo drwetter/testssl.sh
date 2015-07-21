@@ -688,7 +688,7 @@ hpkp() {
 	fi
 	#pr_bold " HPKP                         "
 	pr_bold " Public Key Pinning           "
-	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
+	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | tr -d '\r' >$TMPFILE
 	if [ $? -eq 0 ]; then
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || out "(two HPKP headers, using 1st one) "
 		# dirty trick so that grep -c really counts occurrences and not lines w/ occurrences:
@@ -696,7 +696,7 @@ hpkp() {
 		if [ $hpkp_nr_keys -eq 1 ]; then
 			pr_litered "One key is not sufficent, "
 		fi
-		hpkp_age_sec=$(sed -e 's/\r//g' -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE)
+		hpkp_age_sec=$(sed -e 's/^.*max-age=//' -e 's/;.*//' $TMPFILE)
 #FIXME: test for number!
 		hpkp_age_days=$((hpkp_age_sec / 86400))
 		if [ $hpkp_age_days -ge $HPKP_MIN ]; then
@@ -710,7 +710,7 @@ hpkp() {
 		preload "$TMPFILE"
 
 		# get the key fingerprints
-		sed -i -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE
+		sed -i '' -e 's/Public-Key-Pins://' -e 's/Public-Key-Pins-Report-Only://' $TMPFILE
 		[ -s "$HOSTCERT" ] || get_host_cert
 		hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
 			$OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
