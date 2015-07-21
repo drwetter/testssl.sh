@@ -7,8 +7,8 @@
  - cleanups
  - openssl sources support with the "missing" features
 
-* Proxy support:
- - John Newbigin
+* John Newbigin
+ - Proxy support
 
 * Jonathan Roach
  - TLS_FALLBACK_SCSV checks
