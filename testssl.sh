@@ -796,7 +796,7 @@ rp_banner() {
 		http_header "$1" || return 3
 	fi
 	pr_bold " Reverse Proxy banner         "
-	egrep -ai '^Via|^X-Cache|^X-Squid|X-Varnish|X-Server-Name|X-Server-Port' $HEADERFILE >$TMPFILE && \
+	egrep -ai '^Via:|^X-Cache:|^X-Squid:|X-Varnish:|X-Server-Name:|X-Server-Port:' $HEADERFILE >$TMPFILE && \
 		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
 		outln "--"
 	tmpfile_handle $FUNCNAME.txt
@@ -3890,7 +3890,8 @@ determine_ip_addresses() {
 		fi
 		if ! is_ipv4addr "$ip4"; then
 			which nslookup &> /dev/null && \
-				ip4=$(nslookup -query=a "$NODE" 2>/dev/null | egrep -v "Server|#53|answer|Name" | sed -e 's/^Address.*://' -e 's/ //g' -e '/^$/d')
+				ip4=$(nslookup -querytype=a $NODE 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name | sed -r 's/[^[:digit:].]//g' | sed -e '/^$/d')
+				# filtering from Name to EOF, remove iline with 'Name', the filter out non-numbers and ".'", and empty lines
 		fi
 		is_ipv4addr "$ip4" || return 2
 
@@ -3905,7 +3906,8 @@ determine_ip_addresses() {
 			fi
 			# MSYS2 has no host or getent, so we need nslookup
 			if [[ -z "$ip6" ]]; then
-				ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed 's/^Address.*: .//')
+				ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed -r 's/[^[:digit:]:]//g' | sed -e '/^$/d')
+				# same as above. Only we're using grep -A instead of awk
 			fi
 		fi
 	fi
@@ -4525,4 +4527,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.323 2015/07/20 12:05:34 dirkw Exp $
+#  $Id: testssl.sh,v 1.324 2015/07/21 12:20:13 dirkw Exp $
