@@ -710,7 +710,7 @@ hpkp() {
 		preload "$TMPFILE"
 
 		# get the key fingerprints
-		sed -i -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE
+		sed -i '' -e 's/Public-Key-Pins://' -e 's/Public-Key-Pins-Report-Only://' $TMPFILE
 		[ -s "$HOSTCERT" ] || get_host_cert
 		hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
 			$OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
