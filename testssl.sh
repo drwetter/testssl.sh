@@ -3975,20 +3975,22 @@ determine_service() {
 	else
 		protocol=$(echo "$1" | sed 's/s$//')     # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
 		case "$protocol" in
-			xmpp) # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
-				 NODEIP="$NODE" 
-				 ;&
 			ftp|smtp|pop3|imap|xmpp|telnet|ldap)
 				STARTTLS="-starttls $protocol"
 				SNI=""
-				if [[ -n "$XMPP_HOST" ]] && [[ $protocol == "xmpp" ]] ; then
-					if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
-						outln
-						pr_magentaln " Local problem: Your $OPENSSL does not support the \"-xmpphost\" option"
-						exit 1
+				if [[ $protocol == "xmpp" ]] ; then
+					# for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
+					NODEIP="$NODE"
+
+					if [[ -n "$XMPP_HOST" ]] ; then
+						if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
+							outln
+							pr_magentaln " Local problem: Your $OPENSSL does not support the \"-xmpphost\" option"
+							exit 1
+						fi
+						STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"		# it's a hack -- instead of changing calls all over the place
+						# see http://xmpp.org/rfcs/rfc3920.html
 					fi
-					STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"		# it's a hack -- instead of changing calls all over the place
-					# see http://xmpp.org/rfcs/rfc3920.html
 				fi
 				$OPENSSL s_client -connect $NODEIP:$PORT $PROXY $STARTTLS 2>/dev/null >$TMPFILE </dev/null
 				if [ $? -ne 0 ]; then
@@ -4001,7 +4003,8 @@ determine_service() {
 				[[ -n "$XMPP_HOST" ]] && printf " (XMPP domain=\'$XMPP_HOST\')"
 				outln
 				;;
-			*)	pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp and telnet, ldap allowed" >&2
+			*)
+				pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp, telnet and ldap allowed" >&2
 				exit 1
 				;;
 		esac
