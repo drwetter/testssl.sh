@@ -4,8 +4,7 @@ Compiling and Usage Instructions
 
 The precompiled binaries provided here have extended support for everything
 which is normally not configured to be compiled (40+56 Bit, export/ANON ciphers, weak DH ciphers, 
-SSLv2 etc.). The binaries also come with extended support for new cipher suites 
-and/or features which are not (yet?) in the official branch.
+SSLv2 etc.) -- all the dirty features needed for testing. OTOH the binaries also come with extended support for new / advanced cipher suites and/or features which are not (yet?) in the official branch.
 
 The binaries in this directory are all compiled from an OpenSSL 1.0.2 fork
 from Peter Mosmans. He has patched the master git branch
