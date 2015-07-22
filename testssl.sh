@@ -3,7 +3,7 @@
 # vim:ts=5:sw=5
 # use vim and you will see everything beautifully indented with a 5 char tab
 
-[ -z "$BASH_VERSINFO" ] && echo "\n$(tput setaf 5) Please make sure you're using bash! Bye...$(tput sgr0)\n" && exit 1
+[ -z "$BASH_VERSINFO" ] && echo "\n$(tput setaf 5) Please make sure you're using bash! Bye...$(tput sgr0)\n" && exit -10
 
 # testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some
 # vulnerabilities or features
@@ -488,7 +488,7 @@ strip_lf() {
 
 
 #problems not handled: chunked
-http_header() {
+run_http_header() {
 	local header
 	local -i ret
 	local referer useragent
@@ -519,7 +519,7 @@ EOF
 	if wait_kill $! $HEADER_MAXSLEEP; then
 		if ! egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
 			pr_litemagenta " likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
-			outln "Rerun with DEBUG=1 and inspect \"http_header.txt\"\n"
+			outln "Rerun with DEBUG=1 and inspect \"run_http_header.txt\"\n"
 			debugme cat $HEADERFILE
 			ret=7
 		fi
@@ -565,11 +565,11 @@ EOF
 }
 
 
-http_date() {
+run_http_date() {
 	local now difftime
 
 	if [ ! -s $HEADERFILE ] ; then
-		http_header "$1" || return 3		# this is just for the line "Testing HTTP header response"
+		run_http_header "$1" || return 3		# this is just for the line "Testing HTTP header response"
 	fi
 	pr_bold " HTTP clock skew              "
 	if [[ $SERVICE != "HTTP" ]] ; then
@@ -645,7 +645,7 @@ preload() {
 }
 
 
-hsts() {
+run_hsts() {
 	local hsts_age_sec
 	local hsts_age_days
 
@@ -680,7 +680,7 @@ hsts() {
 }
 
 
-hpkp() {
+run_hpkp() {
 	local hpkp_age_sec
 	local hpkp_age_days
 	local hpkp_nr_keys
@@ -770,11 +770,11 @@ emphasize_stuff_in_headers(){
 		-e "s/X-AspNet-Version/"$yellow"X-AspNet-Version$off/g"
 }
 
-server_banner() {
+run_server_banner() {
 	local serverbanner
 
 	if [ ! -s $HEADERFILE ] ; then
-		http_header "$1" || return 3
+		run_http_header "$1" || return 3
 	fi
 	pr_bold " Server banner                "
 	grep -ai '^Server' $HEADERFILE >$TMPFILE
@@ -798,9 +798,9 @@ server_banner() {
 	return 0
 }
 
-rp_banner() {
+run_rp_banner() {
 	if [ ! -s $HEADERFILE ] ; then
-		http_header "$1" || return 3
+		run_http_header "$1" || return 3
 	fi
 	pr_bold " Reverse Proxy banner         "
 	egrep -ai '^Via:|^X-Cache:|^X-Squid:|X-Varnish:|X-Server-Name:|X-Server-Port:' $HEADERFILE >$TMPFILE && \
@@ -811,13 +811,13 @@ rp_banner() {
 }
 
 
-application_banner() {
+run_application_banner() {
 	local line
 	local first=true
 	local spaces="                              "
 
 	if [ ! -s $HEADERFILE ] ; then
-		http_header "$1" || return 3
+		run_http_header "$1" || return 3
 	fi
 	pr_bold " Application banner           "
 	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-UA-Compatible|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
@@ -838,13 +838,13 @@ application_banner() {
 	return 0
 }
 
-cookie_flags() {	# ARG1: Path, ARG2: path
+run_cookie_flags() {	# ARG1: Path, ARG2: path
 	local -i nr_cookies
 	local nr_httponly nr_secure
 	local negative_word 
 
 	if [ ! -s $HEADERFILE ] ; then
-		http_header "$1" || return 3
+		run_http_header "$1" || return 3
 	fi
 	pr_bold " Cookie(s)                    "
 	grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
@@ -878,7 +878,7 @@ cookie_flags() {	# ARG1: Path, ARG2: path
 }
 
 
-more_flags() {
+run_more_flags() {
 	local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
 	local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By"
 	local egrep_pattern=""
@@ -887,7 +887,7 @@ more_flags() {
 	local spaces="                              "
 
 	if [ ! -s $HEADERFILE ] ; then
-		http_header "$1" || return 3
+		run_http_header "$1" || return 3
 	fi
 	pr_bold " Security headers             "
 	# convert spaces to | (for egrep)
@@ -1160,15 +1160,15 @@ test_just_one(){
 	outln
 
 	tmpfile_handle $FUNCNAME.txt
-	return 0
+	return 0		# this is a single test for a cipher
 }
 
 
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad
-allciphers(){
+run_allciphers(){
 	local tmpfile
 	local nr_ciphers
-	local ret
+	local -i ret=0
 	local hexcode n ciph sslvers kx auth enc mac export
 	local dhlen
 
@@ -1206,10 +1206,10 @@ allciphers(){
 }
 
 # test for all ciphers per protocol locally configured (w/o distinguishing whether they are good or bad
-cipher_per_proto(){
+run_cipher_per_proto(){
 	local proto proto_text
 	local hexcode n ciph sslvers kx auth enc mac export
-	local ret
+	local -i ret=0
 	local dhlen
 
 	pr_blue "--> Testing all locally available ciphers per protocol against the server"; outln ", ordered by encryption strength"
@@ -1465,7 +1465,7 @@ read_dhbits_from_file() {
 }
 
 
-server_preference() {
+run_server_preference() {
 	local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
 	local list_reverse="AES256-SHA256:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"	# offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393
 
@@ -1669,7 +1669,7 @@ tls_time() {
 	fi
 }
 
-server_defaults() {
+run_server_defaults() {
 	local proto
 	local gost_status_problem=false
 	local extensions
@@ -1912,7 +1912,7 @@ server_defaults() {
 
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
-pfs() {
+run_pfs() {
 	local ret ret2
 	local -i pfs_offered=1
 	local tmpfile
@@ -2071,7 +2071,7 @@ starttls_line() {
 			outln "Either switch to native openssl (--ssl-native), "
 			outln "   give the server more time to reply (STARTTLS_SLEEP=<seconds> ./testssh.sh ..) -- "
 			outln "   or debug what happened (add --debug=2)"
-               exit 1
+               exit -3
           fi
      fi
 
@@ -2158,11 +2158,11 @@ fd_socket() {
 				;;
 			389) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
 				pr_magentaln "FIXME: LDAP/STARTTLS not yet supported"
-				exit 1
+				exit -4
 				;;
 			674) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
 				pr_magentaln "ACAP Easteregg: not implemented -- probably never will"
-				exit 1
+				exit -4
 				;;
 			5222) # XMPP, see https://tools.ietf.org/html/rfc6120
 				starttls_just_read
@@ -2558,7 +2558,8 @@ socksend_tls_clienthello() {
 # arg1: TLS version low byte 
 #       (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 tls_sockets() {
-	local ret save
+	local -i ret=0
+	local -i save=0
 	local lines
 	local tls_low_byte
 	local cipher_list_2send
@@ -2625,7 +2626,7 @@ tls_sockets() {
 
 
 # mainly adapted from https://gist.github.com/takeshixx/10107280
-heartbleed(){
+run_heartbleed(){
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for heartbleed vulnerability" && outln "\n"
 	pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
 
@@ -2743,7 +2744,7 @@ ok_ids(){
 }
 
 #FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
-ccs_injection(){
+run_ccs_injection(){
 	# see https://www.openssl.org/news/secadv_20140605.txt
 	# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
@@ -2857,7 +2858,7 @@ ccs_injection(){
 	return $ret
 }
 
-renego() {
+run_renego() {
 # no SNI here. Not needed as there won't be two different SSL stacks for one IP
 	local legacycmd=""
 	local insecure_renogo_str
@@ -2915,7 +2916,9 @@ renego() {
 #FIXME: the return value is wrong, should be 0 if all ok. But as the caller doesn't care we don't care either ... yet ;-)
 }
 
-crime() {
+run_crime() {
+	local -i ret=0
+	local addcmd=""
 	# in a nutshell: don't offer TLS/SPDY compression on the server side
 	# This tests for CRIME Vulnerability (www.ekoparty.org/2012/juliano-rizzo.php) on HTTPS, not SPDY (yet)
      # Please note that it is an attack where you need client side control, so in regular situations this
@@ -2925,11 +2928,6 @@ crime() {
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for CRIME vulnerability" && outln "\n"
 	pr_bold " CRIME, TLS " ; out "(CVE-2012-4929)                "
 
-	case "$OSSL_VER" in
-		0.9.8*)      ADDCMD="-no_ssl2" ;;
-		0.9.9*|1.0*) ADDCMD="" ;;
-	esac
-
 	# first we need to test whether OpenSSL binary has zlib support
 	$OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib
 	if [ $? -eq 0 ]; then
@@ -2937,8 +2935,8 @@ crime() {
 		return 7
 	fi
 
-	#STR=$($OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $SNI 2>&1 </dev/null | grep Compression )
-	$OPENSSL s_client $ADDCMD $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null &>$TMPFILE
+	[[ "$OSSL_VER" =~ "0.9.8" ]] && addcmd="-no_ssl2" 
+	$OPENSSL s_client $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null &>$TMPFILE
 	if grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
 		pr_litegreen "not vulnerable (OK)"
 		[[ $SERVICE == "HTTP" ]] || out " (not using HTTP anyway)"
@@ -2995,9 +2993,9 @@ crime() {
 
 # BREACH is a HTTP-level compression & an attack which works against any cipher suite and is agnostic
 # to the version of TLS/SSL, more: http://www.breachattack.com/ . Foreign referrers are the important thing here!
-breach() {
+run_breach() {
 	local header
-	local -i ret
+	local -i ret=0
 	local referer useragent
 	local url
 
@@ -3062,8 +3060,8 @@ actually_supported_ciphers() {
 }
 
 # Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
-ssl_poodle() {
-	local ret
+run_ssl_poodle() {
+	local -i ret=0
 	local cbc_ciphers
 	local cbc_ciphers="SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:EXP1024-RC2-CBC-MD5:DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5"
 	local cbc_ciphers_krb="KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5"
@@ -3087,15 +3085,15 @@ ssl_poodle() {
 }
 
 # for appliance which use padding, no fallback needed
-tls_poodle() {
+run_tls_poodle() {
 	pr_bold " POODLE, SSL"; out " CVE-2014-8730), experimental "
 	#FIXME
 	echo "#FIXME"
 	return 7
 }
 
-tls_fallback_scsv() {
-	local ret
+run_tls_fallback_scsv() {
+	local -i ret=0
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for TLS_FALLBACK_SCSV Protection" && outln "\n"
 	pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
@@ -3141,8 +3139,8 @@ tls_fallback_scsv() {
 
 
 # Factoring RSA Export Keys: don't use EXPORT RSA ciphers, see https://freakattack.com/
-freak() {
-	local ret
+run_freak() {
+	local -i ret=0
 	local -i no_supported_ciphers=0
 	# with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
 	local exportrsa_cipher_list="EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-RC4-MD5:EXP-RC4-MD5"
@@ -3156,7 +3154,7 @@ freak() {
 
 	case $no_supported_ciphers in
 		0) 	pr_magentaln "Local problem: your $OPENSSL doesn't have any EXPORT RSA ciphers configured"
-			return 3 ;;
+			return 7 ;;
 		1|2|3)
 			addtl_warning=" ($magenta""tested only with $no_supported_ciphers out of 9 ciphers only!$off)" ;;
 		8|9|10|11)
@@ -3183,8 +3181,8 @@ freak() {
 
 
 # see https://weakdh.org/logjam.html
-logjam() {
-	local ret
+run_logjam() {
+	local -i ret=0
 	local exportdhe_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
 	local -i no_supported_ciphers=0
 	local addtl_warning=""
@@ -3223,9 +3221,10 @@ logjam() {
 
 
 # Browser Exploit Against SSL/TLS: don't use CBC Ciphers in SSLv3 TLSv1.0
-beast(){
+run_beast(){
 	local hexcode dash cbc_cipher sslvers kx auth enc mac export
 	local detected_proto
+	local -i ret=0
 	local detected_cbc_ciphers=""
 	local higher_proto_supported=""
 	local openssl_ret=0
@@ -3315,20 +3314,20 @@ beast(){
 			if $WIDE; then
 				outln
 				pr_brown "VULNERABLE"
+				ret=1
 				outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
 			else
 				outln "${spaces}-- but also supports higher protocols (possible mitigation):$higher_proto_supported"
 			fi
 		fi
 	fi
-
 #	printf "For a full individual test of each CBC cipher suites support by your $OPENSSL run \"$0 -x CBC $NODE\"\n"
 
 	tmpfile_handle $FUNCNAME.txt
 	return
 }
 
-lucky13() {
+run_lucky13() {
 #FIXME: to do . CVE-2013-0169
 # in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
 	echo "FIXME"
@@ -3339,8 +3338,8 @@ lucky13() {
 # https://tools.ietf.org/html/rfc7465    REQUIRES that TLS clients and servers NEVER negotiate the use of RC4 cipher suites!
 # https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
 # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
-rc4() {
-	local ret rc4_offered
+run_rc4() {
+	local -i rc4_offered=0
 	local hexcode dash rc4_cipher sslvers kx auth enc mac export
 	local rc4_ciphers_list="ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:DHE-DSS-RC4-SHA:AECDH-RC4-SHA:ADH-RC4-MD5:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:RC4-MD5:RSA-PSK-RC4-SHA:PSK-RC4-SHA:KRB5-RC4-SHA:KRB5-RC4-MD5:RC4-64-MD5:EXP1024-DHE-DSS-RC4-SHA:EXP1024-RC4-SHA:EXP-ADH-RC4-MD5:EXP-RC4-MD5:EXP-RC4-MD5:EXP-KRB5-RC4-SHA:EXP-KRB5-RC4-MD5"
 
@@ -3395,7 +3394,7 @@ rc4() {
 }
 
 
-youknowwho() {
+run_youknowwho() {
 # CVE-2013-2566,
 # NOT FIXME as there's no code: http://www.isg.rhul.ac.uk/tls/
 # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
@@ -3405,7 +3404,7 @@ return 0
 
 # https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
 # https://secure-resumption.com/tlsauth.pdf
-tls_truncation() {
+run_tls_truncation() {
 #FIXME: difficult to test, is there any test available: pls let me know
 :
 }
@@ -3413,7 +3412,7 @@ tls_truncation() {
 old_fart() {
 	pr_magentaln "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed."
 	outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
-	exit 3
+	exit -2
 }
 
 # try very hard to determine th install path to get ahold of the mapping file
@@ -3554,7 +3553,7 @@ check_proxy(){
 	if [[ -n "$PROXY" ]]; then
 		if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
 			pr_magentaln "Local problem: Your $OPENSSL is too old to support the \"--proxy\" option"
-			exit 1
+			exit -1
 		fi
 		PROXYNODE=${PROXY%:*}
 		PROXYPORT=${PROXY#*:}
@@ -3684,8 +3683,8 @@ EOF
 
 
 maketempf() {
-	TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit 6
-	TMPFILE=$TEMPDIR/tempfile.txt || exit 6
+	TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
+	TMPFILE=$TEMPDIR/tempfile.txt || exit -6
 	HOSTCERT=$TEMPDIR/host_certificate.txt
 	HEADERFILE=$TEMPDIR/http_header.txt
 	HEADERFILE_BREACH=$TEMPDIR/http_header_breach.txt
@@ -3785,7 +3784,7 @@ initialize_engine(){
 		if [[ -n "$OPENSSL_CONF" ]]; then
 			pr_litemagentaln "For now I am providing the config file in to have GOST support"
 		else
-			OPENSSL_CONF=$TEMPDIR/gost.conf || exit 6
+			OPENSSL_CONF=$TEMPDIR/gost.conf || exit -6
 			# see https://www.mail-archive.com/openssl-users@openssl.org/msg65395.html
 			cat >$OPENSSL_CONF << EOF
 # testssl config file for openssl
@@ -3871,6 +3870,34 @@ is_ipv4addr() {
 		return 0 || \
 		return 1
 }
+#FIXME: is_ipv6addr missing
+
+# args: string containing ip addresses
+filter_ip6_adresses() {
+	local a
+
+	for a in $@; do
+		if $HAS_SED_E; then
+			echo "$@" | sed -E 's/[^[:digit:]:]//g' | sed -e '/^$/d'
+		else
+			echo "$@" | sed -r 's/[^[:digit:]:]//g' | sed -e '/^$/d'
+		fi
+	done
+}
+filter_ip4_adresses() {
+	local a
+
+	for a in $@; do
+		if ! is_ipv4addr "$a"; then
+			continue
+		fi
+		if $HAS_SED_E; then
+			echo "$a" | sed -E 's/[^[:digit:].]//g' | sed -e '/^$/d'
+		else
+			echo "$a" | sed -r 's/[^[:digit:].]//g' | sed -e '/^$/d'
+		fi
+	done
+}
 
 # now get all IP addresses 
 determine_ip_addresses() {
@@ -3883,50 +3910,43 @@ determine_ip_addresses() {
 		SNI=""				# override Server Name Indication as we test the IP only
 	else
 		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-		ip4=$(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
+		ip4=$(is_ipv4addr $(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }'))
 	
 		OPENSSL_CONF=""		# see https://github.com/drwetter/testssl.sh/issues/134
 
-		if ! is_ipv4addr "$ip4"; then
+		if [[ -z "$ip4" ]]; then
 			which dig &> /dev/null && \
-				ip4=$(dig +short -t a "$NODE" 2>/dev/null)
+				ip4=$(filter_ip4_adresses $(dig +short -t a "$NODE" 2>/dev/null))
 		fi
-		if ! is_ipv4addr "$ip4"; then
+		if [[ -z "$ip4" ]]; then
 			which host &> /dev/null && \
-				ip4=$(host -t a "$NODE" 2>/dev/null | grep -v alias | sed 's/^.*address //')
+				ip4=$(filter_ip4_adresses $(host -t a "$NODE" 2>/dev/null | grep -v alias | sed 's/^.*address //'))
 		fi
-		if ! is_ipv4addr "$ip4"; then
+		if [[ -z "$ip4" ]]; then
 			if which nslookup &>/dev/null; then
 				# filtering from Name to EOF, remove iline with 'Name', the filter out non-numbers and ".'", and empty lines
-				if $HAS_SED_E; then
-					ip4=$(nslookup -querytype=a $NODE 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name | sed -E 's/[^[:digit:].]//g' | sed -e '/^$/d')
-				else
-					ip4=$(nslookup -querytype=a $NODE 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name | sed -r 's/[^[:digit:].]//g' | sed -e '/^$/d')
-				fi
+				ip4=$(filter_ip4_adresses $(nslookup -querytype=a $NODE 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name))
 			fi
 		fi
-		is_ipv4addr "$ip4" || return 2
+		[[ -z "$ip4" ]] && return 2
 
 		ip6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
 		if [[ -z "$ip6" ]]; then
-			# for IPv6 we often get this :ffff:IPV4 address which isn't of any use
-			#which getent 2>&1 >/dev/null && ip6=$(getent ahostsv6 $NODE | grep $NODE | awk '{ print $1}' | grep -v '::ffff' | uniq)
-			if host -t aaaa $NODE &>/dev/null ; then
-				ip6=$(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //')
-			else
-				ip6=""
-			fi
-			# MSYS2 has no host or getent, so we need nslookup
-			if [[ -z "$ip6" ]]; then
+			which dig &> /dev/null && \
+				ip6=$(filter_ip6_adresses $(dig +short -t aaaa "$NODE" 2>/dev/null))
+		fi
+		if [[ -z "$ip6" ]]; then
+			which host &> /dev/null && \
+				ip6=$(filter_ip6_adresses $(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
+		fi
+		if [[ -z "$ip6" ]]; then
+			if which nslookup &>/dev/null; then
 				# same as above. Only we're using grep -A instead of awk
-				if $HAS_SED_E; then
-					ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed -E 's/[^[:digit:]:]//g' | sed -e '/^$/d')
-				else
-					ip6=$(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name | sed -r 's/[^[:digit:]:]//g' | sed -e '/^$/d')
-				fi
+				ip6=$(filter_ip6_adresses $(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name))
 			fi
 		fi
 	fi
+
 	IPADDRs=$(newline_to_spaces "$ip4")
 	if [[ -z "$IPADDRs" ]] && [[ -z "$CMDLINE_IP" ]] ; then
 		pr_magenta "Can't proceed: No IP address for \"$NODE\" available"
@@ -3961,8 +3981,9 @@ determine_service() {
 	local protocol
 
 	if ! fd_socket; then 			# check if we can connect to $NODEIP:$PORT
-		ignore_no_or_lame "Ignore? "
-		[ $? -ne 0 ] && exit 3
+		pr_magentaln "Fatal error: can't connect to $NODEIP:$PORT"
+		outln "\nMake sure a firewall is not between you and your scanning target"
+		exit -2
 	fi
 	close_socket
 
@@ -3980,7 +4001,7 @@ determine_service() {
 			outln
 			pr_boldln " $NODEIP:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate";
 			ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
-			[ $? -ne 0 ] && exit 3
+			[ $? -ne 0 ] && exit -2
 		fi
 		$SNEAKY && \
 			ua="$UA_SNEAKY" || \
@@ -4004,7 +4025,7 @@ determine_service() {
 						if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
 							outln
 							pr_magentaln " Local problem: Your $OPENSSL does not support the \"-xmpphost\" option"
-							exit 1
+							exit -3
 						fi
 						STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"		# it's a hack -- instead of changing calls all over the place
 						# see http://xmpp.org/rfcs/rfc3920.html
@@ -4014,7 +4035,7 @@ determine_service() {
 				if [ $? -ne 0 ]; then
 					pr_magentaln " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT"
 					debugme cat $TMPFILE
-					exit 3
+					exit -2
 				fi
 				out " Service set:            STARTTLS via "
 				printf $protocol | tr '[a-z]' '[A-Z]'
@@ -4023,7 +4044,7 @@ determine_service() {
 				;;
 			*)
 				pr_litemagentaln "momentarily only ftp, smtp, pop3, imap, xmpp, telnet and ldap allowed" >&2
-				exit 1
+				exit -1
 				;;
 		esac
 	fi
@@ -4069,11 +4090,12 @@ draw_dotted_line() {
 mx_all_ips() {
 	local mxs mx
 	local mxport 
+	local ret=0
 	local starttls_proto="smtp"
 	local ret=0
 	local saved_openssl_conf="$OPENSSL_CONF"
 
-	unset OPENSSL_CONF		# see https://github.com/drwetter/testssl.sh/issues/134
+	OPENSSL_CONF=""		# see https://github.com/drwetter/testssl.sh/issues/134
 
 	if which host &> /dev/null; then
 		mxs=$(host -t MX "$1" 2>/dev/null| grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
@@ -4083,7 +4105,7 @@ mx_all_ips() {
 		mxs=$(nslookup -type=MX "$1" 2>/dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
 	else
 		pr_magentaln 'No dig, host or nslookup'
-		exit 3
+		exit -3
 	fi
 
 	OPENSSL_CONF="$saved_openssl_conf"
@@ -4100,9 +4122,10 @@ mx_all_ips() {
 			draw_dotted_line "-" $TERM_DWITH
 			outln
 			parse_hn_port "$mx:$mxport" 
-			determine_ip_addresses
+			determine_ip_addresses || continue
 			NODEIP="$IPADDRs"
 			lets_roll  "${starttls_proto}"
+			ret=$(($? + ret))
 		done
 		draw_dotted_line "-" $TERM_DWITH
 		outln
@@ -4110,10 +4133,12 @@ mx_all_ips() {
 	else
 		pr_boldln " $1 has no MX records(s)"
 	fi
+
+	return $ret
 }
 
 
-# This initializes boolean global do_* variables, meant primarily to keep track of what to do
+# This initializes boolean global do_* variables. They keep track of what to do!
 initialize_globals() {
 	do_allciphers=false
 	do_vulnerabilities=false
@@ -4131,7 +4156,7 @@ initialize_globals() {
 	do_protocols=false
 	do_rc4=false
 	do_renego=false
-	do_run_std_cipherlists=false
+	do_std_cipherlists=false
 	do_server_defaults=false
 	do_server_preference=false
 	do_spdy=false
@@ -4158,7 +4183,7 @@ set_scanning_defaults() {
 	do_protocols=true
 	do_rc4=true
 	do_renego=true
-	do_run_std_cipherlists=true
+	do_std_cipherlists=true
 	do_server_defaults=true
 	do_server_preference=true
 	do_spdy=true
@@ -4173,7 +4198,7 @@ query_globals() {
 
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
      		do_freak do_logjam do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
-     		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
+     		do_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
      		do_test_just_one do_tls_sockets; do
 				[ "${!gbl}" == "true" ] && let true_nr++
 	done
@@ -4186,7 +4211,7 @@ debug_globals() {
 
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
      		do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
-     		do_run_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
+     		do_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
      		do_test_just_one do_tls_sockets; do
 		printf "%-22s = %s\n" $gbl "${!gbl}"
 	done
@@ -4273,7 +4298,7 @@ parse_cmd_line() {
 				do_spdy=true
 				;;
 			-f|--ciphers)
-				do_run_std_cipherlists=true
+				do_std_cipherlists=true
 				;;
 			-S|--server[-_]defaults)
 				do_server_defaults=true
@@ -4294,9 +4319,9 @@ parse_cmd_line() {
 				do_ssl_poodle=true
 				do_tls_fallback_scsv=true
 				do_freak=true
+				do_logjam=true
 				do_beast=true
 				do_rc4=true
-				do_logjam=true
 				VULN_COUNT=10 
 				;;
 			-B|--heartbleed)
@@ -4431,32 +4456,34 @@ parse_cmd_line() {
 lets_roll() {
 	local ret
 
-	[ -z "$NODEIP" ] && pr_magentaln "$NODE doesn't resolve to an IP address" && exit 1
+	[ -z "$NODEIP" ] && pr_magentaln "$NODE doesn't resolve to an IP address" && exit -1
 	determine_rdns
 	determine_service "$1"		# any starttls service goes here
 
 	${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
 
 	${do_test_just_one} && test_just_one ${single_cipher}
+
+	# all top level functions  now following have the prefix "run_"
 	${do_protocols} && { run_protocols; ret=$(($? + ret)); }
 	${do_spdy} && { run_spdy; ret=$(($? + ret)); }
-	${do_run_std_cipherlists} && { run_std_cipherlists; ret=$(($? + ret)); }
-	${do_pfs} && { pfs; ret=$(($? + ret)); }
-	${do_server_preference} && { server_preference; ret=$(($? + ret)); }
-	${do_server_defaults} && { server_defaults; ret=$(($? + ret)); }
+	${do_std_cipherlists} && { run_std_cipherlists; ret=$(($? + ret)); }
+	${do_pfs} && { run_pfs; ret=$(($? + ret)); }
+	${do_server_preference} && { run_server_preference; ret=$(($? + ret)); }
+	${do_server_defaults} && { run_server_defaults; ret=$(($? + ret)); }
 
 	if ${do_header}; then
 		#TODO: refactor this into functions
 		if [[ $SERVICE == "HTTP" ]]; then
-			http_header "$URL_PATH"
-			http_date "$URL_PATH"
-			hsts "$URL_PATH"
-			hpkp "$URL_PATH"
-			server_banner "$URL_PATH"
-			application_banner "$URL_PATH"
-			cookie_flags "$URL_PATH"
-			more_flags "$URL_PATH"
-			rp_banner "$URL_PATH"
+			run_http_header "$URL_PATH"
+			run_http_date "$URL_PATH"
+			run_hsts "$URL_PATH"
+			run_hpkp "$URL_PATH"
+			run_server_banner "$URL_PATH"
+			run_application_banner "$URL_PATH"
+			run_cookie_flags "$URL_PATH"
+			run_more_flags "$URL_PATH"
+			run_rp_banner "$URL_PATH"
 	    fi
 	fi
 
@@ -4465,20 +4492,20 @@ lets_roll() {
 		outln; pr_blue "--> Testing vulnerabilities"
 		outln "\n"
 	fi
-	${do_heartbleed} && { heartbleed; ret=$(($? + ret)); }
-	${do_ccs_injection} && { ccs_injection; ret=$(($? + ret)); }
-	${do_renego} && { renego; ret=$(($? + ret)); }
-	${do_crime} && { crime; ret=$(($? + ret)); }
-	${do_breach} && { breach "$URL_PATH" ; ret=$(($? + ret)); }
-	${do_ssl_poodle} && { ssl_poodle; ret=$(($? + ret)); }
-	${do_tls_fallback_scsv} && { tls_fallback_scsv; ret=$(($? + ret)); }
-	${do_freak} && { freak; ret=$(($? + ret)); }
-	${do_logjam} && { logjam; ret=$(($? + ret)); }
-	${do_beast} && { beast; ret=$(($? + ret)); }
-	${do_rc4} && { rc4; ret=$(($? + ret)); }
+	${do_heartbleed} && { run_heartbleed; ret=$(($? + ret)); }
+	${do_ccs_injection} && { run_ccs_injection; ret=$(($? + ret)); }
+	${do_renego} && { run_renego; ret=$(($? + ret)); }
+	${do_crime} && { run_crime; ret=$(($? + ret)); }
+	${do_breach} && { run_breach "$URL_PATH" ; ret=$(($? + ret)); }
+	${do_ssl_poodle} && { run_ssl_poodle; ret=$(($? + ret)); }
+	${do_tls_fallback_scsv} && { run_tls_fallback_scsv; ret=$(($? + ret)); }
+	${do_freak} && { run_freak; ret=$(($? + ret)); }
+	${do_logjam} && { run_logjam; ret=$(($? + ret)); }
+	${do_beast} && { run_beast; ret=$(($? + ret)); }
+	${do_rc4} && { run_rc4; ret=$(($? + ret)); }
 
-	${do_allciphers} && { allciphers; ret=$(($? + ret)); }
-	${do_cipher_per_proto} && { cipher_per_proto; ret=$(($? + ret)); }
+	${do_allciphers} && { run_allciphers; ret=$(($? + ret)); }
+	${do_cipher_per_proto} && { run_cipher_per_proto; ret=$(($? + ret)); }
 
 	datebanner "Done" 
 
@@ -4512,7 +4539,9 @@ if ${do_mx_all_ips} ; then
 	ret=$?
 else	
      parse_hn_port "${URI}" 											# NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
-	determine_ip_addresses
+	if ! determine_ip_addresses && [[ -z $CMDLINE_IP ]]; then
+		pr_magentaln "fatal error: No IP address could be determined"
+	fi
 	if [[ -n "$CMDLINE_IP" ]]; then									
 		[[ "$CMDLINE_IP" == "one" ]] && \
 			CMDLINE_IP=$(echo -n "$IPADDRs" | awk '{ print $1 }') 
@@ -4543,4 +4572,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.325 2015/07/21 18:35:48 dirkw Exp $
+#  $Id: testssl.sh,v 1.326 2015/07/22 11:11:19 dirkw Exp $
