@@ -810,7 +810,6 @@ run_rp_banner() {
 	return 0
 }
 
-
 run_application_banner() {
 	local line
 	local first=true
@@ -1303,7 +1302,7 @@ run_protocols() {
 		outln "(via native openssl)\n"
 	else
 		if [[ -n "$STARTTLS" ]]; then
-			outln "(via openssl, except SSLv2)\n"
+			outln "(via openssl, SSLv2 via sockets)\n"
 			using_sockets=false
 		else
 			using_sockets=true
@@ -1431,7 +1430,6 @@ read_dhbits_from_file() {
 		fi
 		return 0
 	fi
-
 
 	[[ -n "$bits" ]] && [[ -z "$2" ]] && out ", "
 	if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]] ; then
@@ -3430,7 +3428,7 @@ get_install_dir() {
 			INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
 			INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
 			# not sure whether Darwin has -f
-		INSTALL_DIR=$(dirname $INSTALL_DIR)
+		INSTALL_DIR=$(dirname $INSTALL_DIR 2>/dev/null)
 		[ -r "$INSTALL_DIR/mapping-rfc.txt" ] && MAP_RFC_FNAME="$INSTALL_DIR/mapping-rfc.txt"
 	fi
 
@@ -3545,21 +3543,6 @@ openssl_age() {
 			*)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" ;;
 		esac
 		ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
-	fi
-}
-
-# We need to get the IP address of the proxy so we can use it in fd_socket
-check_proxy(){
-	if [[ -n "$PROXY" ]]; then
-		if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
-			pr_magentaln "Local problem: Your $OPENSSL is too old to support the \"--proxy\" option"
-			exit -1
-		fi
-		PROXYNODE=${PROXY%:*}
-		PROXYPORT=${PROXY#*:}
-#FIXME: dig. nslookup ==> central function
-		PROXYIP=$(host -t a $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-		PROXY="-proxy $PROXYIP:$PROXYPORT"
 	fi
 }
 
@@ -3878,12 +3861,13 @@ filter_ip6_adresses() {
 
 	for a in $@; do
 		if $HAS_SED_E; then
-			echo "$@" | sed -E 's/[^[:digit:]:]//g' | sed -e '/^$/d'
+			echo "$a" | sed -E 's/[^[:digit:]:]//g' | sed -e '/^$/d'
 		else
-			echo "$@" | sed -r 's/[^[:digit:]:]//g' | sed -e '/^$/d'
+			echo "$a" | sed -r 's/[^[:digit:]:]//g' | sed -e '/^$/d'
 		fi
 	done
 }
+
 filter_ip4_adresses() {
 	local a
 
@@ -3899,54 +3883,71 @@ filter_ip4_adresses() {
 	done
 }
 
+# arg1: a host name. Returned will be 0-n IPv4 addresses
+get_a_record() {
+	local ip4=""
+	local saved_openssl_conf="$OPENSSL_CONF"
+
+	# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
+	ip4=$(is_ipv4addr $(grep -w "$1" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$1" | awk '{ print $1 }'))
+
+	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
+	if [[ -z "$ip4" ]]; then
+		which dig &> /dev/null && \
+			ip4=$(filter_ip4_adresses $(dig +short -t a "$1" 2>/dev/null))
+	fi
+	if [[ -z "$ip4" ]]; then
+		which host &> /dev/null && \
+			ip4=$(filter_ip4_adresses $(host -t a "$1" 2>/dev/null | grep -v alias | sed 's/^.*address //'))
+	fi
+	if [[ -z "$ip4" ]]; then
+		if which nslookup &>/dev/null; then
+			# filtering from Name to EOF, remove iline with 'Name', the filter out non-numbers and ".'", and empty lines
+			ip4=$(filter_ip4_adresses $(nslookup -querytype=a $1 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name))
+		fi
+	fi
+	OPENSSL_CONF="$saved_openssl_conf"		# see https://github.com/drwetter/testssl.sh/issues/134
+	echo "$ip4"
+}
+
+# arg1: a host name. Returned will be 0-n IPv6 addresses
+get_aaaa_record() {
+	local ip6=""
+	local saved_openssl_conf="$OPENSSL_CONF"
+
+	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
+	ip6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
+	if [[ -z "$ip6" ]]; then
+		which dig &> /dev/null && \
+			ip6=$(filter_ip6_adresses $(dig +short -t aaaa "$NODE" 2>/dev/null))
+	fi
+	if [[ -z "$ip6" ]]; then
+		which host &> /dev/null && \
+			ip6=$(filter_ip6_adresses $(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
+	fi
+	if [[ -z "$ip6" ]]; then
+		if which nslookup &>/dev/null; then
+			# same as above. Only we're using grep -A instead of awk
+			ip6=$(filter_ip6_adresses $(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name))
+		fi
+	fi
+	OPENSSL_CONF="$saved_openssl_conf"		# see https://github.com/drwetter/testssl.sh/issues/134
+	echo "$ip6"
+}
+
+
 # now get all IP addresses 
 determine_ip_addresses() {
 	local ip4=""
 	local ip6=""
-	local saved_openssl_conf="$OPENSSL_CONF"
 
 	if is_ipv4addr "$NODE"; then
 		ip4="$NODE"			# only an IPv4 address was supplied as an argument, no hostname
 		SNI=""				# override Server Name Indication as we test the IP only
 	else
-		# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-		ip4=$(is_ipv4addr $(grep -w "$NODE" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }'))
-	
-		OPENSSL_CONF=""		# see https://github.com/drwetter/testssl.sh/issues/134
-
-		if [[ -z "$ip4" ]]; then
-			which dig &> /dev/null && \
-				ip4=$(filter_ip4_adresses $(dig +short -t a "$NODE" 2>/dev/null))
-		fi
-		if [[ -z "$ip4" ]]; then
-			which host &> /dev/null && \
-				ip4=$(filter_ip4_adresses $(host -t a "$NODE" 2>/dev/null | grep -v alias | sed 's/^.*address //'))
-		fi
-		if [[ -z "$ip4" ]]; then
-			if which nslookup &>/dev/null; then
-				# filtering from Name to EOF, remove iline with 'Name', the filter out non-numbers and ".'", and empty lines
-				ip4=$(filter_ip4_adresses $(nslookup -querytype=a $NODE 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name))
-			fi
-		fi
-		[[ -z "$ip4" ]] && return 2
-
-		ip6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
-		if [[ -z "$ip6" ]]; then
-			which dig &> /dev/null && \
-				ip6=$(filter_ip6_adresses $(dig +short -t aaaa "$NODE" 2>/dev/null))
-		fi
-		if [[ -z "$ip6" ]]; then
-			which host &> /dev/null && \
-				ip6=$(filter_ip6_adresses $(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
-		fi
-		if [[ -z "$ip6" ]]; then
-			if which nslookup &>/dev/null; then
-				# same as above. Only we're using grep -A instead of awk
-				ip6=$(filter_ip6_adresses $(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name))
-			fi
-		fi
+		ip4=$(get_a_record $NODE)
+		ip6=$(get_aaaa_record $NODE)
 	fi
-
 	IPADDRs=$(newline_to_spaces "$ip4")
 	if [[ -z "$IPADDRs" ]] && [[ -z "$CMDLINE_IP" ]] ; then
 		pr_magenta "Can't proceed: No IP address for \"$NODE\" available"
@@ -3955,22 +3956,64 @@ determine_ip_addresses() {
 	fi
 	[[ ! -z "$ip6" ]] && IP46ADDRs="$ip4 $ip6" || IP46ADDRs="$IPADDRs"
 	IP46ADDRs=$(newline_to_spaces "$IP46ADDRs")
-
-	OPENSSL_CONF="$saved_openssl_conf"		# see https://github.com/drwetter/testssl.sh/issues/134
-
 	return 0  						# IPADDR and IP46ADDR is set now
 }
 
 determine_rdns() {
-	# we can't do this as some checks and even openssl is not IPv6 safe. BTW: bash sockets do IPv6 transparently!
-	#NODEIP=$(echo "$ip6" | head -1)
-	if which host &> /dev/null; then
+	local saved_openssl_conf="$OPENSSL_CONF"
+	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
+
+	if which dig &> /dev/null; then
+		rDNS=$(dig -x $NODEIP +short 2>/dev/null)
+	elif which host &> /dev/null; then
 		rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep 'pointer' | sed -e 's/^.*pointer //' -e 's/\.$//')
 	elif which nslookup &> /dev/null; then
 		rDNS=$(nslookup -type=PTR $NODEIP 2> /dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
 	fi
+	OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
+	rDNS=$(echo $rDNS)
 	[ -z "$rDNS" ] && rDNS="--"
 	return 0
+}
+
+get_mx_record() {
+	local mx=""
+	local saved_openssl_conf="$OPENSSL_CONF"
+
+	OPENSSL_CONF=""		# see https://github.com/drwetter/testssl.sh/issues/134
+	if which host &> /dev/null; then
+		mxs=$(host -t MX "$1" 2>/dev/null| grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
+	elif which dig &> /dev/null; then
+		mxs=$(dig +short -t MX "$1" 2>/dev/null)
+	elif which nslookup &> /dev/null; then
+		mxs=$(nslookup -type=MX "$1" 2>/dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
+	else
+		pr_magentaln 'No dig, host or nslookup'
+		exit -3
+	fi
+	OPENSSL_CONF="$saved_openssl_conf"
+	echo "$mxs"
+}
+
+
+# We need to get the IP address of the proxy so we can use it in fd_socket
+check_proxy(){
+	if [[ -n "$PROXY" ]]; then
+		if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
+			pr_magentaln "Local problem: Your $OPENSSL is too old to support the \"--proxy\" option"
+			exit -1
+		fi
+		PROXYNODE=${PROXY%:*}
+		PROXYPORT=${PROXY#*:}
+		PROXYIP=$(get_a_record $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
+		# no RFC 1918:
+		#if ! is_ipv4addr $PROXYIP ; then
+		if [[ -z "$PROXYIP" ]]; then
+			pr_magentaln "Fatal error: Proxy IP cannot be determined from \"$PROXYNODE\""
+			exit -3
+		fi
+		PROXY="-proxy $PROXYIP:$PROXYPORT"
+	fi
 }
 
 
@@ -4048,11 +4091,7 @@ determine_service() {
 				;;
 		esac
 	fi
-
-#TODO: rather hackish --> some place else
-	${do_mx_all_ips} 
 	outln
-
 	return 0 		# OPTIMAL_PROTO, GET_REQ*/HEAD_REQ* is set now
 }
 
@@ -4087,32 +4126,16 @@ draw_dotted_line() {
 	printf -- "$1"'%.s' $(eval "echo {1.."$(($2))"}")
 }
 
+
 mx_all_ips() {
 	local mxs mx
 	local mxport 
 	local ret=0
 	local starttls_proto="smtp"
 	local ret=0
-	local saved_openssl_conf="$OPENSSL_CONF"
-
-	OPENSSL_CONF=""		# see https://github.com/drwetter/testssl.sh/issues/134
-
-	if which host &> /dev/null; then
-		mxs=$(host -t MX "$1" 2>/dev/null| grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
-	elif which dig &> /dev/null; then
-		mxs=$(dig +short -t MX "$1" 2>/dev/null)
-	elif which nslookup &> /dev/null; then
-		mxs=$(nslookup -type=MX "$1" 2>/dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
-	else
-		pr_magentaln 'No dig, host or nslookup'
-		exit -3
-	fi
-
-	OPENSSL_CONF="$saved_openssl_conf"
 
 	# test first higher priority servers
-	mxs=$(echo "$mxs" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
-
+	mxs=$(get_mx_record "$1" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
 	mxport=${2:-25}
 	if [ -n "$mxs" ] && [ "$mxs" != ' ' ] ; then
 		[[ $mxport == "465" ]] && \
@@ -4133,7 +4156,6 @@ mx_all_ips() {
 	else
 		pr_boldln " $1 has no MX records(s)"
 	fi
-
 	return $ret
 }
 
@@ -4550,7 +4572,7 @@ else
 		ret=$?
 	else															# no --ip was supplied
 		if [[ $(printf "$IPADDRs" | wc -w | sed 's/ //g') -gt 1 ]]; then		# we have more than one ipv4 address to check
-			pr_bold "Testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
+			pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
 			for ip in $IPADDRs; do
 				draw_dotted_line "-" $TERM_DWITH
 				outln
@@ -4572,4 +4594,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.326 2015/07/22 11:11:19 dirkw Exp $
+#  $Id: testssl.sh,v 1.327 2015/07/23 15:11:32 dirkw Exp $
