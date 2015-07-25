@@ -100,6 +100,7 @@ declare -x OPENSSL
 COLOR=${COLOR:-2}					# 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_EACH_C=${SHOW_EACH_C:-0}			# where individual ciphers are tested show just the positively ones tested #FIXME: upside down value
 SNEAKY=${SNEAKY:-false}				# is the referer and useragent we leave behind just usual? 
+QUIET=${QUIET:-false}				# don't output the banner. By doing this yiu acknowledge usage term appearing in the banner
 SSL_NATIVE=${SSL_NATIVE:-false}		# we do per default bash sockets where possible "true": switch back to "openssl native"
 ASSUMING_HTTP=${ASSUMING_HTTP:-false}	# in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1),
@@ -3606,6 +3607,7 @@ tuning options:
      --openssl <PATH>               use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
      --proxy <host>:<port>          connect via the specified HTTP proxy
      --sneaky                       be less verbose wrt referer headers
+	-q. --quiet                    don't out put the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                         wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                    for wide outputs: display all ciphers tested -- not only succeeded ones
      --warnings <batch|off|false>   "batch" doesn't wait for keypress, "off" or "false" skips connection warning
@@ -3630,6 +3632,7 @@ mybanner() {
 	local openssl_location=$(which $OPENSSL)
 	local cwd=""
 
+	$QUIET && return
 	nr_ciphers=$(count_ciphers $($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH'))
 	[ -z "$GIT_REL" ] && \
 		idtag="$CVS_REL" || \
@@ -4394,7 +4397,7 @@ parse_cmd_line() {
 			-s|--pfs|--fs|--nsa)
 				do_pfs=true
 				;;
-			-q) ### this is a development feature and will disappear
+			--devel) ### this development feature will soon disappear
 				HEX_CIPHER=""
 				# DEBUG=3  ./testssl.sh -q 03 "cc, 13, c0, 13" google.de
 				# DEBUG=3  ./testssl.sh -q 01 yandex.ru
@@ -4415,6 +4418,9 @@ parse_cmd_line() {
 				;;
 			--sneaky)
 				SNEAKY=true
+				;;
+			-q|--quiet)
+				QUIET=true
 				;;
 			--warnings|--warnings=*)
 				WARNINGS=$(parse_opt_equal_sign "$1" "$2") 
@@ -4594,4 +4600,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.327 2015/07/23 15:11:32 dirkw Exp $
+#  $Id: testssl.sh,v 1.328 2015/07/25 12:33:06 dirkw Exp $
