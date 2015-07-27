@@ -30,7 +30,7 @@ New features in the upcoming stable release 2.6 are:
 more see https://github.com/drwetter/testssl.sh/milestones/2.5dev%20%282.6%29
 
 
-Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. This is imprtant to me
+Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. This is important to me.
 
 Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
 
