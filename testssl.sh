@@ -531,15 +531,15 @@ EOF
 		ret=0
 	else
 		#TODO: attention: if this runs into a timeout, we're dead. Try again differently:
-		printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI &>$HEADERFILE 
+		printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI 1>$HEADERFILE 2>/dev/null
 		if [ $? -ne 0 ]; then
 			pr_litemagentaln " failed (HTTP header request stalled)"
 			return 3
 			#ret=3
 		fi
 	fi
-	status_code=$(awk '/^HTTP\// { print $2 }' $HEADERFILE)
-	msg_thereafter=$(awk -F"$status_code" '/^HTTP\// { print $2 }' $HEADERFILE) 	# dirty trick to use the status code as a
+	status_code=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>/dev/null)
+	msg_thereafter=$(awk -F"$status_code" '/^HTTP\// { print $2 }' $HEADERFILE 2>/dev/null) 	# dirty trick to use the status code as a
 	msg_thereafter=$(strip_lf "$msg_thereafter")								# field separator, otherwise we need a loop with awk
 	debugme echo "Status/MSG: $status_code $msg_thereafter"
 
