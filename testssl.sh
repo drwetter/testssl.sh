@@ -538,8 +538,8 @@ EOF
 			#ret=3
 		fi
 	fi
-	status_code=$(awk '/^HTTP\// { print $2 }' $HEADERFILE)
-	msg_thereafter=$(awk -F"$status_code" '/^HTTP\// { print $2 }' $HEADERFILE) 	# dirty trick to use the status code as a
+	status_code=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>/dev/null)
+	msg_thereafter=$(awk -F"$status_code" '/^HTTP\// { print $2 }' $HEADERFILE 2>/dev/null) 	# dirty trick to use the status code as a
 	msg_thereafter=$(strip_lf "$msg_thereafter")								# field separator, otherwise we need a loop with awk
 	debugme echo "Status/MSG: $status_code $msg_thereafter"
 
@@ -3672,7 +3672,7 @@ maketempf() {
 	TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
 	TMPFILE=$TEMPDIR/tempfile.txt || exit -6
 	HOSTCERT=$TEMPDIR/host_certificate.txt
-	HEADERFILE=$TEMPDIR/http_header.txt
+	HEADERFILE=$TEMPDIR/http_header
 	HEADERFILE_BREACH=$TEMPDIR/http_header_breach.txt
 	LOGFILE=$TEMPDIR/logfile.txt
 	initialize_engine
