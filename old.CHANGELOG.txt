@@ -1,11 +1,21 @@
 
-2.4
+2.4 New:
+  * "only one cmd line option at a time" is completely gone
+  * several tuning parameters on the cmd line (only available through environment variables b4): ``--assuming-http``, ``--ssl-native``, ``--sneaky``, ``--warnings``, ``--color``, ``-- debug``, ``--long``
+  * certificate information
+  * more HTTP header infos (cookies+security headers)
+  * protocol check via bash sockets for SSLv2+v3
+  * debug handling significantly improved (verbosity/each function leaves files in $TEMPDIR)
+  * BEAST check
+  * FREAK check
+  * check for Secure Client-Initiated Renegotiation
+  * lots of cosmetic and maintainability code cleanups
+  * bugfixing
 
-full changelog: https://github.com/drwetter/testssl.sh/commits/2.4/testssl.sh
+Full changelog: https://github.com/drwetter/testssl.sh/commits/2.4/testssl.sh
 
 
-2.2. includes a lot of fixes / new features as:
-
+2.2. new features as:
   * works fully under BSD (openssl >=1.0)
   * single cipher check (-x) with pattern of hexcode/cipher
   * check for POODLE SSL
@@ -17,14 +27,12 @@ full changelog: https://github.com/drwetter/testssl.sh/commits/2.4/testssl.sh
   * protocol check better
   * job control removes stalling
   * RFC <---> OpenSSL name space mapping of ciphers everywhere
+  * includes a lot of fixes  
 
-See full changelog @ github 
-        https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
+Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
 
 
-2.0 includes:
-
-* major release, new features:
+2.0 major release, new features:
   * SNI
   * STARTTLS fully supported
   * RC4 check
