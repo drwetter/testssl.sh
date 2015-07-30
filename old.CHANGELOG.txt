@@ -1,4 +1,27 @@
 
+2.4
+
+full changelog: https://github.com/drwetter/testssl.sh/commits/2.4/testssl.sh
+
+
+2.2. includes a lot of fixes / new features as:
+
+  * works fully under BSD (openssl >=1.0)
+  * single cipher check (-x) with pattern of hexcode/cipher
+  * check for POODLE SSL
+  * HPKP check
+  * OCSP stapling
+  * GOST and CHACHA20 POLY1305 cipher support
+  * service detection (HTTP, IMAP, POP, SMTP)
+  * runs now with all colors, b/w screen, no escape codes at all
+  * protocol check better
+  * job control removes stalling
+  * RFC <---> OpenSSL name space mapping of ciphers everywhere
+
+See full changelog @ github 
+        https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
+
+
 2.0 includes:
 
 * major release, new features:
