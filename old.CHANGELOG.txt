@@ -1,7 +1,7 @@
 
 2.4 New:
   * "only one cmd line option at a time" is completely gone
-  * several tuning parameters on the cmd line (only available through environment variables b4): ``--assuming-http``, ``--ssl-native``, ``--sneaky``, ``--warnings``, ``--color``, ``-- debug``, ``--long``
+  * several tuning parameters on the cmd line (only available through environment variables b4): --assuming-http, --ssl-native, --sneaky, --warnings, --color, -- debug, --long
   * certificate information
   * more HTTP header infos (cookies+security headers)
   * protocol check via bash sockets for SSLv2+v3
