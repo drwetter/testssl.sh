@@ -3546,7 +3546,9 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
      --ip <ipv4>                   a) tests the supplied <ipv4> instead of resolving host(s) in URI 
-                                   b) "one" means: just test the first DNS returns (useful for multiple IPs)
+                                   b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
+     --file <file name>            mass testing option: Just put multiple $PROG_NAME command lines in <file name>,
+                                   one line per instance. Comments via # allowed, EOF signals end of <file name>.
 
 partly mandatory parameters:
 
@@ -4597,4 +4599,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.330 2015/08/01 21:58:58 dirkw Exp $
+#  $Id: testssl.sh,v 1.331 2015/08/01 22:26:33 dirkw Exp $
