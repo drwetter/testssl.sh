@@ -121,6 +121,8 @@ USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
+FNAME=${FNAME:=""}					# file name to read commands from
+IKNOW_FNAME=false
 readonly HSTS_MIN=179				# >179 days is ok for HSTS
 readonly HPKP_MIN=30				# >=30 days should be ok for HPKP_MIN, practical hints?
 readonly CLIENT_MIN_PFS=5			# number of ciphers needed to run a test for PFS
@@ -423,6 +425,12 @@ tmpfile_handle() {
 		mv $TMPFILE "$TEMPDIR/$NODEIP.$1"
 	fi
 }
+
+# arg1: line with comment sign, tabs and so on
+filter_input() {
+	echo "$1" | sed -e 's/#.*$//' -e '/^$/d' | tr -d '\n' | tr -d '\t'
+}
+
 
 wait_kill(){
 	local pid=$1			# pid we wait for or kill
@@ -1672,7 +1680,7 @@ run_server_defaults() {
 	local proto
 	local gost_status_problem=false
 	local extensions
-	local sessticket_str lifetime unit keysize algo
+	local sessticket_str lifetime unit keysize sig_algo key_algo
 	local expire ocsp_uri crl savedir startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
 	local policy_oid
 
@@ -1719,13 +1727,14 @@ run_server_defaults() {
 
 	pr_bold " Server key size              "
 	keysize=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
-	algo=$($OPENSSL x509 -in $HOSTCERT -noout -text  | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
+	sig_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text  | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
+	key_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text  | awk -F':' '/Public Key Algorithm:/ { print $2 }' | sort -u )
 
 	if [ -z "$keysize" ]; then
 		outln "(couldn't determine)"
 	else
 		if [ "$keysize" -le 768 ]; then
-			if [[ $algo =~ "ecdsa" ]]; then
+			if [[ $sig_algo =~ "ecdsa" ]] || [[ $key_algo =~ "ecPublicKey"  ]]; then
 				pr_litegreen "EC $keysize"
 			else
 				pr_red "$keysize"
@@ -1743,7 +1752,7 @@ run_server_defaults() {
 	outln " bit"
 
 	pr_bold " Signature Algorithm          "
-	case $algo in
+	case $sig_algo in
     		sha1WithRSAEncryption) 	pr_brownln "SHA1 with RSA" ;;
      	sha256WithRSAEncryption) pr_litegreenln "SHA256 with RSA" ;;
 	     sha512WithRSAEncryption) pr_litegreenln "SHA512 with RSA" ;;
@@ -2198,6 +2207,7 @@ close_socket(){
 code2network() {
 	# arg1: formatted string here in the code
 	NW_STR=$(echo "$1" | sed -e 's/,/\\\x/g' | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
+	#TODO: just echo, no additional global var
 }
 
 len2twobytes() {
@@ -3661,9 +3671,13 @@ EOF
 	[ -n "$GIT_REL" ] && \
 		cwd=$(/bin/pwd) || \
 		cwd=$RUN_DIR
-	[[ "$openssl_location" =~ "$cwd" ]] &&
-		echo "\$INSTALL_DIR${openssl_location//$cwd}" || \
+	if [[ "$openssl_location" =~ "$(/bin/pwd)/bin" ]]; then
+		echo "\$PWD/bin/$(basename $openssl_location)" 
+	elif [[ "$openssl_location" =~ "$cwd" ]] && [[ "$cwd" != "." ]]; then
+		echo "\$INSTALL_DIR""${openssl_location%%$cwd}" 
+	else
 		echo "$openssl_location"
+	fi
 	outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 }
 
@@ -3856,22 +3870,38 @@ is_ipv4addr() {
 		return 0 || \
 		return 1
 }
-#FIXME: is_ipv6addr missing
+
+# a bit easier
+is_ipv6addr() {
+
+	[[ -z "$1" ]] && return 1
+	# less than 2x ":"
+	[[ $(count_lines "$(echo -n "$1" | tr ':' '\n')") -le 1 ]] && \
+		return 1
+	#check on char we allow:
+	[[ -n "$(echo -n | tr -d '0-9:a-fA-F ' | sed -e '/^$/d')" ]] && \
+		return 1
+	return 0 
+}
+
 
 # args: string containing ip addresses
-filter_ip6_adresses() {
+filter_ip6_address() {
 	local a
 
 	for a in $@; do
+		if ! is_ipv6addr "$a"; then
+			continue
+		fi
 		if $HAS_SED_E; then
-			echo "$a" | sed -E 's/[^[:digit:]:]//g' | sed -e '/^$/d'
+			echo "$a" | sed -E 's/^abcdeABCDEFf0123456789:]//g' | sed -e '/^$/d' -e '/^;;/d'
 		else
-			echo "$a" | sed -r 's/[^[:digit:]:]//g' | sed -e '/^$/d'
+			echo "$a" | sed -r 's/[^abcdefABCDEF0123456789:]//g' | sed -e '/^$/d' -e '/^;;/d'
 		fi
 	done
 }
 
-filter_ip4_adresses() {
+filter_ip4_address() {
 	local a
 
 	for a in $@; do
@@ -3897,16 +3927,16 @@ get_a_record() {
 	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
 	if [[ -z "$ip4" ]]; then
 		which dig &> /dev/null && \
-			ip4=$(filter_ip4_adresses $(dig +short -t a "$1" 2>/dev/null))
+			ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | sed '/^;;/d'))
 	fi
 	if [[ -z "$ip4" ]]; then
 		which host &> /dev/null && \
-			ip4=$(filter_ip4_adresses $(host -t a "$1" 2>/dev/null | grep -v alias | sed 's/^.*address //'))
+			ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | grep -v alias | sed 's/^.*address //'))
 	fi
 	if [[ -z "$ip4" ]]; then
 		if which nslookup &>/dev/null; then
 			# filtering from Name to EOF, remove iline with 'Name', the filter out non-numbers and ".'", and empty lines
-			ip4=$(filter_ip4_adresses $(nslookup -querytype=a $1 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name))
+			ip4=$(filter_ip4_address $(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name))
 		fi
 	fi
 	OPENSSL_CONF="$saved_openssl_conf"		# see https://github.com/drwetter/testssl.sh/issues/134
@@ -3921,17 +3951,13 @@ get_aaaa_record() {
 	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
 	ip6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
 	if [[ -z "$ip6" ]]; then
-		which dig &> /dev/null && \
-			ip6=$(filter_ip6_adresses $(dig +short -t aaaa "$NODE" 2>/dev/null))
-	fi
-	if [[ -z "$ip6" ]]; then
-		which host &> /dev/null && \
-			ip6=$(filter_ip6_adresses $(host -t aaaa $NODE | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
-	fi
-	if [[ -z "$ip6" ]]; then
-		if which nslookup &>/dev/null; then
+		if which host &> /dev/null ; then
+			ip6=$(filter_ip6_address $(host -t aaaa "$NODE" | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
+		elif which dig &> /dev/null; then
+			ip6=$(filter_ip6_address $(dig +short -t aaaa "$NODE" 2>/dev/null))
+		elif which nslookup &>/dev/null; then
 			# same as above. Only we're using grep -A instead of awk
-			ip6=$(filter_ip6_adresses $(nslookup -type=aaaa $NODE 2>/dev/null | grep -A10 Name | grep -v Name))
+			ip6=$(filter_ip6_address $(nslookup -type=aaaa "$NODE" 2>/dev/null | grep -A10 Name | grep -v Name))
 		fi
 	fi
 	OPENSSL_CONF="$saved_openssl_conf"		# see https://github.com/drwetter/testssl.sh/issues/134
@@ -3945,8 +3971,8 @@ determine_ip_addresses() {
 	local ip6=""
 
 	if is_ipv4addr "$NODE"; then
-		ip4="$NODE"			# only an IPv4 address was supplied as an argument, no hostname
-		SNI=""				# override Server Name Indication as we test the IP only
+		ip4="$NODE"					# only an IPv4 address was supplied as an argument, no hostname
+		SNI=""						# override Server Name Indication as we test the IP only
 	else
 		ip4=$(get_a_record $NODE)
 		ip6=$(get_aaaa_record $NODE)
@@ -3957,7 +3983,7 @@ determine_ip_addresses() {
 		outln "\n"
 		exit -1
 	fi
-	[[ ! -z "$ip6" ]] && IP46ADDRs="$ip4 $ip6" || IP46ADDRs="$IPADDRs"
+	[[ -z "$ip6" ]] && IP46ADDRs="$IPADDRs" || IP46ADDRs="$ip4 $ip6"
 	IP46ADDRs=$(newline_to_spaces "$IP46ADDRs")
 	return 0  						# IPADDR and IP46ADDR is set now
 }
@@ -3983,7 +4009,7 @@ get_mx_record() {
 	local mx=""
 	local saved_openssl_conf="$OPENSSL_CONF"
 
-	OPENSSL_CONF=""		# see https://github.com/drwetter/testssl.sh/issues/134
+	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
 	if which host &> /dev/null; then
 		mxs=$(host -t MX "$1" 2>/dev/null| grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
 	elif which dig &> /dev/null; then
@@ -4102,7 +4128,7 @@ determine_service() {
 display_rdns_etc() {
 	local i
 
-     if [[ $(printf "$IP46ADDRs" | wc -w | sed 's/ //g') -gt 1 ]]; then
+     if [[ $(count_words "$(printf "$IP46ADDRs")") -gt 1 ]]; then
           out " further IP addresses:  "
           for i in $IP46ADDRs; do
                [ "$i" == "$NODEIP" ] && continue
@@ -4177,6 +4203,7 @@ initialize_globals() {
 	do_header=false
 	do_heartbleed=false
 	do_mx_all_ips=false
+	do_read_from_file=false
 	do_pfs=false
 	do_protocols=false
 	do_rc4=false
@@ -4224,7 +4251,7 @@ query_globals() {
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
      		do_freak do_logjam do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
      		do_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
-     		do_test_just_one do_tls_sockets; do
+     		do_test_just_one do_tls_sockets do_read_from_file; do
 				[ "${!gbl}" == "true" ] && let true_nr++
 	done
 	return $true_nr
@@ -4237,7 +4264,7 @@ debug_globals() {
 	for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
      		do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
      		do_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
-     		do_test_just_one do_tls_sockets; do
+     		do_test_just_one do_tls_sockets do_read_from_file; do
 		printf "%-22s = %s\n" $gbl "${!gbl}"
 	done
      printf "%-22s : %s\n" URI: "$URI"
@@ -4422,6 +4449,12 @@ parse_cmd_line() {
 			-q|--quiet)
 				QUIET=true
 				;;
+			--file|--file=*)
+				# no shift here as otherwise URI is empty and it bails out
+				FNAME=$(parse_opt_equal_sign "$1" "$2")
+				IKNOW_FNAME=true
+				do_read_from_file=true
+				;;
 			--warnings|--warnings=*)
 				WARNINGS=$(parse_opt_equal_sign "$1" "$2") 
 				[[ $? -eq 0 ]] && shift
@@ -4489,7 +4522,6 @@ lets_roll() {
 	determine_service "$1"		# any starttls service goes here
 
 	${do_tls_sockets} && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
-
 	${do_test_just_one} && test_just_one ${single_cipher}
 
 	# all top level functions  now following have the prefix "run_"
@@ -4559,8 +4591,28 @@ openssl_age
 ret=0
 ip=""
 
+if $do_read_from_file; then
+	if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
+		pr_magentaln "Fatal error: Can't read \"$FNAME\""
+		exit -1
+	fi
+	pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
+	cat "$FNAME" | while read cmdline; do
+		cmdline=$(filter_input "$cmdline")
+		[[ -z "$cmdline" ]] && continue
+		[[ "$cmdline" == "EOF" ]] && break
+		echo "$0 -q $cmdline"
+		draw_dotted_line "=" $TERM_DWITH
+		read a
+		#FNAME=""
+		#do_read_from_file=false
+		$0 -q $cmdline
+	done
+	exit $?
+fi
+
 #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
-if ${do_mx_all_ips} ; then
+if $do_mx_all_ips; then
      query_globals 				# if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
 	[ $? -eq 1 ] && set_scanning_defaults
 	mx_all_ips "${URI}" $PORT
@@ -4600,4 +4652,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.328 2015/07/25 12:33:06 dirkw Exp $
+#  $Id: testssl.sh,v 1.329 2015/08/01 21:11:25 dirkw Exp $
