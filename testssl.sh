@@ -4097,6 +4097,7 @@ datebanner() {
 	outln
 }
 
+# one line with $1 over whole screen width
 draw_dotted_line() {
 	printf -- "$1"'%.s' $(eval "echo {1.."$(($2))"}")
 }
@@ -4117,15 +4118,23 @@ mx_all_ips() {
 			starttls_proto=""  		# no starttls for Port 465, on all other ports we speak starttls
 		pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
 		for mx in $mxs; do
-			draw_dotted_line "-" $TERM_DWITH
+			draw_dotted_line "-" $(($TERM_DWITH * 2 / 3))
 			outln
 			parse_hn_port "$mx:$mxport" 
 			determine_ip_addresses || continue
-			NODEIP="$IPADDRs"
-			lets_roll  "${starttls_proto}"
+			if [[ $(printf "$IPADDRs" | wc -w | sed 's/ //g') -gt 1 ]]; then
+				pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
+				for ip in $IPADDRs; do
+					NODEIP="$ip"
+					lets_roll "${starttls_proto}"
+				done
+			else
+				NODEIP="$IPADDRs"
+				lets_roll "${starttls_proto}"
+			fi
 			ret=$(($? + ret))
 		done
-		draw_dotted_line "-" $TERM_DWITH
+		draw_dotted_line "-" $(($TERM_DWITH * 2 / 3))
 		outln
 		pr_bold "Done testing now all MX records (on port $mxport): "; outln "$mxs"
 	else
@@ -4549,10 +4558,7 @@ if $do_read_from_file; then
 		[[ -z "$cmdline" ]] && continue
 		[[ "$cmdline" == "EOF" ]] && break
 		echo "$0 -q $cmdline"
-		draw_dotted_line "=" $TERM_DWITH
-		read a
-		#FNAME=""
-		#do_read_from_file=false
+		draw_dotted_line "=" $(($TERM_DWITH / 2))
 		$0 -q $cmdline
 	done
 	exit $?
@@ -4579,13 +4585,13 @@ else
 		if [[ $(printf "$IPADDRs" | wc -w | sed 's/ //g') -gt 1 ]]; then		# we have more than one ipv4 address to check
 			pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
 			for ip in $IPADDRs; do
-				draw_dotted_line "-" $TERM_DWITH
+				draw_dotted_line "-" $(($TERM_DWITH / 2))
 				outln
 				NODEIP="$ip"
 				lets_roll "${STARTTLS_PROTOCOL}"
 				ret=$(($? + ret))
 	  		done
-			draw_dotted_line "-" $TERM_DWITH
+			draw_dotted_line "-" $(($TERM_DWITH / 2))
 			outln
 			pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
 		else														# we need just one ip4v to check
@@ -4599,4 +4605,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.331 2015/08/01 22:26:33 dirkw Exp $
+#  $Id: testssl.sh,v 1.332 2015/08/01 23:16:26 dirkw Exp $
