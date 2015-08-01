@@ -36,8 +36,11 @@
 * Дилян Палаузов
  - bug fix for 3des report
 
+* Viktor Szépe
+ - color function maker
+
 * Jonathon Rossi
-  - fix for bash3 (Darwin_
+  - fix for bash3 (Darwin)
 
 * @nvsofts (NV)
  - LibreSSL patch for GOST
