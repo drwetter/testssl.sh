@@ -21,16 +21,17 @@ New features in the upcoming stable release 2.6 are:
 * Run in default mode through all ciphers at the end of a default run
 * will test multiple IP adresses in one shot, --ip=<adress|"one"> restricts it accordingly
 * can scan STARTTLS+XMPP by also supplying the XMPP domain (to-option in XML streams).
-* support of sockets for STARTTLS protocols (with exception of SSLv2 you need to supply EXPERIMENTAL=yes) 
+* support of sockets for STARTTLS protocols (with exception of SSLv2 you need to supply EXPERIMENTAL=yes)
+* mass testing file option ``--file``, see https://twitter.com/drwetter/status/627619848344989696
 * TLS time for STARTTLS protocols
 * TLS 1.0-1.1 as socket per default in production
-* binary directory provides out of the box better binaries (Linux 32+64 Bit, Darwin 64 bit)
+* binary directory provides out of the box better binaries (Linux 32+64 Bit, Darwin 64 bit, FreeBSD 64 bit)
 * LibreSSL fixes, still not recommended to use though (see https://testssl.sh/)
 
 more see https://github.com/drwetter/testssl.sh/milestones/2.5dev%20%282.6%29
 
 
-Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. This is important to me.
+Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
 
 Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
 
