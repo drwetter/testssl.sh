@@ -28,7 +28,7 @@ New features in the upcoming stable release 2.6 are:
 * binary directory provides out of the box better binaries (Linux 32+64 Bit, Darwin 64 bit, FreeBSD 64 bit)
 * LibreSSL fixes, still not recommended to use though (see https://testssl.sh/)
 
-more see https://github.com/drwetter/testssl.sh/milestones/2.5dev%20%282.6%29
+Currently we're running 2.6rc1. means it's feature freeze and latest bugs are being squashed.
 
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
