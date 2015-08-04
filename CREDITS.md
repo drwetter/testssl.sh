@@ -26,8 +26,11 @@
 * @f-s
  - ARM binary support  
 
+* Jeroen Wiert Pluimers
+  - supplied new Darwin binaries
+
 * Julien Vehent
- - support for Darwin binary
+ - supplied Darwin binary
 
 * Rechi
  - initial MX stuff
