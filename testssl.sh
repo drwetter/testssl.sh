@@ -246,25 +246,55 @@ readonly SSLv2_CLIENT_HELLO="
 
 ###### output functions ######
 
-out() {
-	$ECHO "$1"
-}
-outln() {
-	[[ -z "$1" ]] || $ECHO "$1"
-	$ECHO "\n"
-}
+out()   { $ECHO "$1"; }
+outln() { [[ -z "$1" ]] || $ECHO "$1"; $ECHO "\n"; }
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
 
+pr_liteblue()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;34m$1" || out "$1"; pr_off; }
+pr_liteblueln() { pr_liteblue "$1"; outln; }
+pr_blue()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;34m$1" || out "$1"; pr_off; }
+pr_blueln()     { pr_blue "$1"; outln; }
+
+pr_litered()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"; pr_off; }
+pr_literedln() { pr_litered "$1"; outln; }
+pr_red()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }
+pr_redln()     { pr_red "$1"; outln; }
+
+pr_litemagenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }
+pr_litemagentaln() { pr_litemagenta "$1"; outln; }
+pr_magenta()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }
+pr_magentaln()     { pr_magenta "$1"; outln; }
+
+pr_litecyan()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;36m$1" || out "$1"; pr_off; }
+pr_litecyanln() { pr_litecyan "$1"; outln; }
+pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"; pr_off; }
+pr_cyanln()     { pr_cyan "$1"; outln; }
+
+pr_litegreyln() { pr_litegrey "$1"; outln; }
+pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off; }
+pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"; pr_off; }
+pr_greyln()     { pr_grey "$1"; outln; }
+
+pr_litegreen()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;32m$1" || out "$1"; pr_off; }
+pr_litegreenln() { pr_litegreen "$1"; outln; }
+pr_green()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;32m$1" || out "$1"; pr_off; }
+pr_greenln()     { pr_green "$1"; outln; }
+
+pr_yellow()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }
+pr_yellowln() { pr_yellow "$1"; outln; }
+pr_brown()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }
+pr_brownln()  { pr_brown "$1"; outln; }
+
+
 # color=1 functions
-pr_off() {
-	[[ "$COLOR" -ne 0 ]] && out "\033[m\c"
-}
-pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1" ; pr_off; }
+pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m\c"; }
+pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off; }
 pr_boldln()       { pr_bold "$1" ; outln; }
-pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "\033[4m$1" || out "$1" ; pr_off; }
+pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "\033[4m$1" || out "$1"; pr_off; }
 pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off; }
 
+### from here to the end of color_maker this is dead code, see 
 declare -A COLORS=( [pr_green]='0\033[1;32m'		[pr_litegreen]='0\033[0;32m'
 				[pr_yellow]='0\033[1;33m'	[pr_brown]='0\033[0;33m'
 				[pr_blue]='0\033[1;34m'		[pr_liteblue]='0\033[0;34m'
@@ -276,7 +306,6 @@ declare -A COLORS=( [pr_green]='0\033[1;32m'		[pr_litegreen]='0\033[0;32m'
 #				[pr_bold]='0\033[1m'
 #				[pr_underline]='0\033[4m'
 #				[pr_reverse]='0\033[7m')
-
 color_maker() {
 	local color_name
 	local color_code
@@ -294,9 +323,9 @@ color_maker() {
 	done
 }
 
+
 ### colorswitcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
-
 set_color_functions() {
 	# empty vars if we have no color:
 	red=""
@@ -4535,7 +4564,7 @@ get_install_dir
 
 initialize_globals
 parse_cmd_line "$@"
-color_maker
+#color_maker
 set_color_functions
 find_openssl_binary
 maketempf
@@ -4605,4 +4634,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.333 2015/08/01 23:25:38 dirkw Exp $
+#  $Id: testssl.sh,v 1.334 2015/08/05 09:31:53 dirkw Exp $
