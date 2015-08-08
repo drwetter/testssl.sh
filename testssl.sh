@@ -592,7 +592,9 @@ detect_ipv4() {
 		http_header "$1" || return 3
 	fi
 
-	if grep -iqE $ipv4address $HEADERFILE; then
+	# remove pagespeed header first as it is mistakenly identified as ipv4 address
+	# https://github.com/drwetter/testssl.sh/issues/158
+	if egrep -vi "pagespeed|page-speed" $HEADERFILE | grep -iqE $ipv4address; then
 		pr_bold " IPv4 address in header       " 
 		cat $HEADERFILE | while read line; do
 			result="$(echo -n "$line" | grep -E $ipv4address )"
@@ -785,7 +787,7 @@ run_rp_banner() {
 		run_http_header "$1" || return 3
 	fi
 	pr_bold " Reverse Proxy banner         "
-	egrep -ai '^Via:|^X-Cache:|^X-Squid:|X-Varnish:|X-Server-Name:|X-Server-Port:' $HEADERFILE >$TMPFILE && \
+	egrep -ai '^Via:|^X-Cache:|^X-Squid:|^X-Varnish:|^X-Server-Name:|^X-Server-Port:' $HEADERFILE >$TMPFILE && \
 		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
 		outln "--"
 	tmpfile_handle $FUNCNAME.txt
@@ -4634,4 +4636,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.334 2015/08/05 09:31:53 dirkw Exp $
+#  $Id: testssl.sh,v 1.335 2015/08/08 08:20:12 dirkw Exp $
