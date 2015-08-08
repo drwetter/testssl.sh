@@ -786,7 +786,7 @@ run_rp_banner() {
 	if [ ! -s $HEADERFILE ] ; then
 		run_http_header "$1" || return 3
 	fi
-	pr_bold " Reverse Proxy banner         "
+	pr_bold " Reverse Proxy banner        "
 	egrep -ai '^Via:|^X-Cache:|^X-Squid:|^X-Varnish:|^X-Server-Name:|^X-Server-Port:' $HEADERFILE >$TMPFILE && \
 		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
 		outln "--"
@@ -4636,4 +4636,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.335 2015/08/08 08:20:12 dirkw Exp $
+#  $Id: testssl.sh,v 1.336 2015/08/08 11:37:04 dirkw Exp $
