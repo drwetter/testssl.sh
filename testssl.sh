@@ -741,6 +741,7 @@ emphasize_stuff_in_headers(){
 		-e "s/Red Hat/"$yellow"Red Hat$off/g" \
 		-e "s/CentOS/"$yellow"CentOS$off/g" \
 		-e "s/Via/"$yellow"Via$off/g" \
+		-e "s/X-Forwarded/"$yellow"X-Forwarded$off/g" \
 		-e "s/Liferay-Portal/"$yellow"Liferay-Portal$off/g" \
 		-e "s/X-Cache-Lookup/"$yellow"X-Cache-Lookup$off/g" \
 		-e "s/X-Cache/"$yellow"X-Cache$off/g" \
@@ -787,7 +788,7 @@ run_rp_banner() {
 		run_http_header "$1" || return 3
 	fi
 	pr_bold " Reverse Proxy banner        "
-	egrep -ai '^Via:|^X-Cache:|^X-Squid:|^X-Varnish:|^X-Server-Name:|^X-Server-Port:' $HEADERFILE >$TMPFILE && \
+	egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded' $HEADERFILE >$TMPFILE && \
 		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
 		outln "--"
 	tmpfile_handle $FUNCNAME.txt
@@ -4636,4 +4637,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.336 2015/08/08 11:37:04 dirkw Exp $
+#  $Id: testssl.sh,v 1.337 2015/08/08 11:42:29 dirkw Exp $
