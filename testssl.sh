@@ -156,6 +156,8 @@ NODE=""
 NODEIP=""
 IPADDRs=""
 IP46ADDRs=""
+LOCAL_A=false						# does the $NODEIP ceom from /etc/hosts?
+LOCAL_AAAA=false					# does the IPv6 IP come from /etc/hosts?
 XMPP_HOST=""
 PROXY=""
 PROXYIP=""
@@ -514,7 +516,7 @@ EOF
 		#TODO: attention: if this runs into a timeout, we're dead. Try again differently:
 		printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI 1>$HEADERFILE 2>/dev/null
 		if [ $? -ne 0 ]; then
-			pr_litemagentaln " failed (HTTP header request stalled)"
+			pr_litemagentaln " failed (1st request stalled, 2nd erroneous)"
 			return 3
 			#ret=3
 		fi
@@ -977,11 +979,14 @@ prettyprint_local() {
 # list ciphers (and makes sure you have them locally configured)
 # arg[1]: cipher list (or anything else)
 listciphers() {
-	$OPENSSL ciphers $1 &>$TMPFILE
+	local ret
+	local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< $1)"
+
+	$OPENSSL ciphers "$1" &>$TMPFILE
 	ret=$?
 	debugme cat $TMPFILE
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle $FUNCNAME.$debugname.txt
 	return $ret
 }
 
@@ -990,11 +995,15 @@ listciphers() {
 # argv[2]: string on console
 # argv[3]: ok to offer? 0: yes, 1: no
 std_cipherlists() {
+	local ret
+	local singlespaces
+	local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< $1)"
+
 	pr_bold "$2    "         # indent in order to be in the same row as server preferences
-	if listciphers $1; then  # is that locally available??
-		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>$TMPFILE >/dev/null </dev/null
+	if listciphers "$1"; then  # is that locally available??
+		$OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>$TMPFILE.2 >$TMPFILE </dev/null
 		ret=$?
-		[[ $DEBUG -ge 2 ]] && cat $TMPFILE
+		debugme cat $TMPFILE.2
 		case $3 in
 			0)	# ok to offer
 				[[ $ret -eq 0 ]] && \
@@ -1015,7 +1024,8 @@ std_cipherlists() {
 			*) # we shouldn't reach this
 				pr_litemagenta "? (please report this)" ;;
 		esac
-		tmpfile_handle $FUNCNAME.txt
+		debugme cat $TMPFILE.2 >>$TMPFILE
+		tmpfile_handle $FUNCNAME.$debugname.txt
 	else
 		singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
 		pr_magentaln "Local problem: No $singlespaces configured in $OPENSSL"
@@ -1245,7 +1255,7 @@ locally_supported() {
 
 
 run_prototest_openssl() {
-	local sni=$SNI
+	local sni="$SNI"
 	local ret
 
 	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $PROXY $sni &>$TMPFILE </dev/null
@@ -1380,17 +1390,17 @@ run_std_cipherlists() {
 	outln
 	pr_blue "--> Testing ~standard cipher lists"; outln "\n"
 # see ciphers(1ssl)
-	std_cipherlists NULL:eNULL                         " Null Ciphers             " 1
-	std_cipherlists aNULL                              " Anonymous NULL Ciphers   " 1
-	std_cipherlists ADH                                " Anonymous DH Ciphers     " 1
-	std_cipherlists EXPORT40                           " 40 Bit encryption        " 1
-	std_cipherlists EXPORT56                           " 56 Bit encryption        " 1
-	std_cipherlists EXPORT                             " Export Ciphers (general) " 1
+	std_cipherlists 'NULL:eNULL'                       " Null Ciphers             " 1
+	std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   " 1
+	std_cipherlists 'ADH'                              " Anonymous DH Ciphers     " 1
+	std_cipherlists 'EXPORT40'                         " 40 Bit encryption        " 1
+	std_cipherlists 'EXPORT56'                         " 56 Bit encryption        " 1
+	std_cipherlists 'EXPORT'                           " Export Ciphers (general) " 1
 	std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1
 	std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1
 	std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2'       " Medium grade encryption  " 2
 	std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3
-	std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:'    " High grade encryption    " 0
+	std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    " 0
 	return 0
 }
 
@@ -3898,9 +3908,12 @@ filter_ip4_address() {
 get_a_record() {
 	local ip4=""
 	local saved_openssl_conf="$OPENSSL_CONF"
+	local etchosts="/etc/hosts"
 
 	# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-	ip4=$(is_ipv4addr $(grep -w "$1" /etc/hosts | egrep -v ':|^#' |  egrep  "[[:space:]]$1" | awk '{ print $1 }'))
+	ip4=$(is_ipv4addr $(grep -w "$1" "$etchosts" | egrep -v ':|^#' |  egrep  "[[:space:]]$1" | awk '{ print $1 }'))
+
+	[[ -n $"ip4" ]] && LOCAL_A=true
 
 	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
 	if [[ -z "$ip4" ]]; then
@@ -3925,9 +3938,13 @@ get_a_record() {
 get_aaaa_record() {
 	local ip6=""
 	local saved_openssl_conf="$OPENSSL_CONF"
+	local etchosts="/etc/hosts"
+
+	ip6=$(grep -w "$NODE" "$etchosts" | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
+
+	[[ -n $"ip6" ]] && LOCAL_AAAA=true
 
 	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
-	ip6=$(grep -w "$NODE" /etc/hosts | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
 	if [[ -z "$ip6" ]]; then
 		if which host &> /dev/null ; then
 			ip6=$(filter_ip6_address $(host -t aaaa "$NODE" | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
@@ -3971,9 +3988,9 @@ determine_rdns() {
 	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
 
 	if which dig &> /dev/null; then
-		rDNS=$(dig -x $NODEIP +short 2>/dev/null)
+		rDNS=$(dig -x $NODEIP +noall +answer | awk  '/PTR/ { print $NF }')	# +short returns also CNAME, e.g. openssl.org
 	elif which host &> /dev/null; then
-		rDNS=$(host -t PTR $NODEIP 2>/dev/null | grep 'pointer' | sed -e 's/^.*pointer //' -e 's/\.$//')
+		rDNS=$(host -t PTR $NODEIP 2>/dev/null | awk '/pointer/ { print $NF }')
 	elif which nslookup &> /dev/null; then
 		rDNS=$(nslookup -type=PTR $NODEIP 2> /dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
 	fi
@@ -4005,6 +4022,8 @@ get_mx_record() {
 
 # We need to get the IP address of the proxy so we can use it in fd_socket
 check_proxy(){
+	local save_LOCAL_A="$LOCAL_A"
+
 	if [[ -n "$PROXY" ]]; then
 		if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
 			pr_magentaln "Local problem: Your $OPENSSL is too old to support the \"--proxy\" option"
@@ -4012,7 +4031,9 @@ check_proxy(){
 		fi
 		PROXYNODE=${PROXY%:*}
 		PROXYPORT=${PROXY#*:}
+
 		PROXYIP=$(get_a_record $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
+		LOCAL_A="$save_LOCAL_A"
 		# no RFC 1918:
 		#if ! is_ipv4addr $PROXYIP ; then
 		if [[ -z "$PROXYIP" ]]; then
@@ -4637,4 +4658,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.337 2015/08/08 11:42:29 dirkw Exp $
+#  $Id: testssl.sh,v 1.338 2015/08/10 12:47:10 dirkw Exp $
