@@ -684,8 +684,17 @@ run_hpkp() {
 		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || out "(two HPKP headers, using 1st one) "
 		sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE >$TMPFILE.2
 		mv $TMPFILE.2 $TMPFILE
-		hpkp_age_sec=$(sed -e 's/^.*max-age=//' $TMPFILE | sed -E 's/[^[:digit:]]//g')
 
+		# dirty trick so that grep -c really counts occurrences and not lines w/ occurrences:
+		hpkp_nr_keys=$(tr ' ' '\n'  < $TMPFILE | grep -ac pin-sha)
+		out "# of keys: "
+		if [ $hpkp_nr_keys -eq 1 ]; then
+			pr_litered "1 (NOT ok), "
+		else
+			out "$hpkp_nr_keys, "
+		fi
+
+		hpkp_age_sec=$(sed -e 's/^.*max-age=//' $TMPFILE | sed -E 's/[^[:digit:]]//g')
 		hpkp_age_days=$((hpkp_age_sec / 86400))
 		if [ $hpkp_age_days -ge $HPKP_MIN ]; then
 			pr_litegreen "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
@@ -694,11 +703,6 @@ run_hpkp() {
 			pr_brown "$hpkp_age_days days (<$HPKP_MIN is not good enough)"
 		fi
 
-		# dirty trick so that grep -c really counts occurrences and not lines w/ occurrences:
-		hpkp_nr_keys=$(tr ' ' '\n'  < $TMPFILE | grep -ac pin-sha)
-		if [ $hpkp_nr_keys -eq 1 ]; then
-			pr_litered "One key is not sufficent, "
-		fi
 
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"
@@ -709,13 +713,16 @@ run_hpkp() {
 			$OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
 		while read hpkp_key; do
 			if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
-				out "\n$spaces matching key: "
+				out "\n$spaces matching host key: "
 				pr_litegreen "$hpkp_key"
 				key_found=true
 			fi
 			debugme echo "  $hpkp_key | $hpkp_key_hostcert"
 		done < <(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
-		$key_found || pr_litered "No matching key for pin found"
+		if ! $key_found ; then
+			pr_litered "No matching key for pin found "
+			out "(CA pinned?)"
+		fi
 	else
 		out "--"
 	fi
@@ -4670,4 +4677,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.339 2015/08/10 13:17:41 dirkw Exp $
+#  $Id: testssl.sh,v 1.340 2015/08/10 13:58:55 dirkw Exp $
