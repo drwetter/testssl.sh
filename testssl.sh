@@ -1753,13 +1753,23 @@ run_server_defaults() {
 	outln "                              $($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 | sed 's/Fingerprint=//' | sed 's/://g' )"
 
 	pr_bold " Common Name (CN)             "
-	cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
-	pr_underline "$cn"
+	if $OPENSSL x509 -in $HOSTCERT -noout -subject | grep -wq CN; then
+		cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
+		pr_underline "$cn"
+	else
+		cn="(no CN field in subject)"
+		out "$cn"
+	fi
 
 	cn_nosni=""
-	[[ -s $HOSTCERT.nosni ]] && \
-		cn_nosni=$($OPENSSL x509 -in $HOSTCERT.nosni -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
-	[[ $DEBUG -ge 2 ]] && out "\'$NODE\' | \'$cn\' | \'$cn_nosni\'"
+	if [[ -s $HOSTCERT.nosni ]] ; then
+		if $OPENSSL x509 -in $HOSTCERT.nosni -noout -subject | grep -wq CN; then
+			cn_nosni=$($OPENSSL x509 -in $HOSTCERT.nosni -noout -subject | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
+		else
+			cn_nosni="no CN field in subject"
+		fi
+	fi
+	debugme out "\'$NODE\' | \'$cn\' | \'$cn_nosni\'"
 	if [[ $NODE == $cn_nosni ]]; then
 		if [[ $SERVICE != "HTTP" ]]; then
 			outln " (matches certificate directly)"
@@ -1773,6 +1783,8 @@ run_server_defaults() {
 			out " (request w/o SNI didn't succeed";
 			[[ $algo =~ ecdsa ]] && out ", usual for EC certificates"
 			outln ")"
+		elif [[ "$cn_nosni" =~ "no CN field" ]]; then
+			outln ", (request w/o SNI: $cn_nosni)"
 		else
 			out " (CN in response to request w/o SNI: "; pr_underline "$cn_nosni"; outln ")"
 		fi
@@ -4658,4 +4670,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.338 2015/08/10 12:47:10 dirkw Exp $
+#  $Id: testssl.sh,v 1.339 2015/08/10 13:17:41 dirkw Exp $
