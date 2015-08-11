@@ -121,7 +121,7 @@ USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
-FNAME=${FNAME:=""}					# file name to read commands from
+FNAME=${FNAME:-""}					# file name to read commands from
 IKNOW_FNAME=false
 readonly HSTS_MIN=179				# >179 days is ok for HSTS
 readonly HPKP_MIN=30				# >=30 days should be ok for HPKP_MIN, practical hints?
@@ -575,7 +575,7 @@ run_http_date() {
 		else
 			out "Got no HTTP time, maybe try different URL?";
 		fi
-		debugme out "$HTTP_TIME"
+		debugme out " epoch: $HTTP_TIME"
 	fi
 	outln
 	detect_ipv4
@@ -3923,16 +3923,36 @@ filter_ip4_address() {
 	done
 }
 
+get_local_aaaa() {
+	local ip6=""
+	local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
+	
+	# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
+	ip6=$(grep -wh "$NODE" $etchosts 2>/dev/null | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
+	if is_ipv6addr "$ip6"; then
+		echo "$ip6"
+	else
+		echo ""
+	fi
+}
+
+get_local_a() {
+	local ip4=""
+	local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
+	
+	# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
+	ip4=$(grep -wh "$1" $etchosts 2>/dev/null | egrep -v ':|^#' |  egrep  "[[:space:]]$1" | awk '{ print $1 }')
+	if is_ipv4addr "$ip4"; then
+		echo "$ip4"
+	else
+		echo ""
+	fi
+}
+
 # arg1: a host name. Returned will be 0-n IPv4 addresses
 get_a_record() {
 	local ip4=""
 	local saved_openssl_conf="$OPENSSL_CONF"
-	local etchosts="/etc/hosts"
-
-	# for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-	ip4=$(is_ipv4addr $(grep -w "$1" "$etchosts" | egrep -v ':|^#' |  egrep  "[[:space:]]$1" | awk '{ print $1 }'))
-
-	[[ -n $"ip4" ]] && LOCAL_A=true
 
 	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
 	if [[ -z "$ip4" ]]; then
@@ -3957,11 +3977,6 @@ get_a_record() {
 get_aaaa_record() {
 	local ip6=""
 	local saved_openssl_conf="$OPENSSL_CONF"
-	local etchosts="/etc/hosts"
-
-	ip6=$(grep -w "$NODE" "$etchosts" | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
-
-	[[ -n $"ip6" ]] && LOCAL_AAAA=true
 
 	OPENSSL_CONF=""					# see https://github.com/drwetter/testssl.sh/issues/134
 	if [[ -z "$ip6" ]]; then
@@ -3988,12 +4003,24 @@ determine_ip_addresses() {
 		ip4="$NODE"					# only an IPv4 address was supplied as an argument, no hostname
 		SNI=""						# override Server Name Indication as we test the IP only
 	else
-		ip4=$(get_a_record $NODE)
-		ip6=$(get_aaaa_record $NODE)
+		ip4=$(get_local_a $NODE)			# is there a local host entry?
+		if [ -z $ip4 ]; then			# empty: no (LOCAL_A is predefined as false)
+			ip4=$(get_a_record $NODE)
+		else
+			LOCAL_A=true				# we have the ip4 from local host entry and need to set this
+		fi
+		# same now for ipv6 (though not supported) <-- can't do this yet as it shows up under "further IP addresses"
+		# and we didn't bother to show the fact that it is local there
+		ip6=$(get_local_aaaa $NODE)
+		#if [ -z $ip6 ]; then
+			ip6=$(get_aaaa_record $NODE)
+		#else
+		#	LOCAL_AAAA=true			# we have the ip4 from local host entry and need to set this
+		#fi
 	fi
 	IPADDRs=$(newline_to_spaces "$ip4")
 	if [[ -z "$IPADDRs" ]] && [[ -z "$CMDLINE_IP" ]] ; then
-		pr_magenta "Can't proceed: No IP address for \"$NODE\" available"
+		pr_magenta "Can't proceed: No IPv4 address for \"$NODE\" available"
 		outln "\n"
 		exit -1
 	fi
@@ -4041,7 +4068,8 @@ get_mx_record() {
 
 # We need to get the IP address of the proxy so we can use it in fd_socket
 check_proxy(){
-	local save_LOCAL_A="$LOCAL_A"
+	local save_LOCAL_A=$LOCAL_A
+	local save_LOCAL_AAAA=$LOCAL_AAAA
 
 	if [[ -n "$PROXY" ]]; then
 		if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
@@ -4052,7 +4080,8 @@ check_proxy(){
 		PROXYPORT=${PROXY#*:}
 
 		PROXYIP=$(get_a_record $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-		LOCAL_A="$save_LOCAL_A"
+		LOCAL_A=$save_LOCAL_A
+		LOCAL_AAAA=$save_LOCAL_AAAA
 		# no RFC 1918:
 		#if ! is_ipv4addr $PROXYIP ; then
 		if [[ -z "$PROXYIP" ]]; then
@@ -4079,7 +4108,7 @@ determine_service() {
 
 	datebanner "Testing"
 
-	if  [[ -z "$1" ]] ; then		# for starttls we want another check
+	if [[ -z "$1" ]]; then		# for starttls we want another check
 		# determine protocol which works (needed for IIS6). If we don't have IIS6, 1st try will succeed --> better because we use the variable
 		# all over the place. Stupid thing that we need to do that stuff for IIS<=6
 		for OPTIMAL_PROTO in "" "-tls1_2" "-tls1" "-ssl3" "-tls1_1" "-ssl2" ""; do
@@ -4154,8 +4183,9 @@ display_rdns_etc() {
           done
 		outln
 	fi
-	if  [ -n "$rDNS" ] ; then
-		printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS"
+	[[ -n "$rDNS" ]] && printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS"
+	if "$LOCAL_A"; then
+		out " (A record via /etc/hosts) "
 	fi
 }
 
@@ -4188,6 +4218,7 @@ mx_all_ips() {
 	if [ -n "$mxs" ] && [ "$mxs" != ' ' ] ; then
 		[[ $mxport == "465" ]] && \
 			starttls_proto=""  		# no starttls for Port 465, on all other ports we speak starttls
+		outln
 		pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
 		for mx in $mxs; do
 			draw_dotted_line "-" $(($TERM_DWITH * 2 / 3))
@@ -4677,4 +4708,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.340 2015/08/10 13:58:55 dirkw Exp $
+#  $Id: testssl.sh,v 1.342 2015/08/11 22:17:27 dirkw Exp $
