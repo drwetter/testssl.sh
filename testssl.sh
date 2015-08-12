@@ -1855,7 +1855,7 @@ run_server_defaults() {
 		SECS2WARN=$((24 * 60 * 60 * $DAYS2WARN2))  # low threshold first
 	     expire=$($OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN)
 		if echo "$expire" | grep -qw not; then
-			SECS2WARN=$((24 * 60 * 60 * $DAYS2WARN2))
+			SECS2WARN=$((24 * 60 * 60 * $DAYS2WARN1))
 			expire=$($OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN)
 			if echo "$expire" | grep -qw not; then
 				pr_litegreen ">= $DAYS2WARN1 days"
