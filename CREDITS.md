@@ -38,6 +38,7 @@
 
 * Дилян Палаузов
  - bug fix for 3des report
+ - reported a tricky STARTTLS bug
 
 * Viktor Szépe
  - color function maker
