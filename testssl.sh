@@ -389,9 +389,14 @@ newline_to_spaces() {
 	echo "$1" | tr '\n' ' ' | sed 's/ $//'
 }
 
-trim_lf() {
-	echo "$1" | tr -d '\n'
+strip_lf() {
+	echo "$1" | tr -d '\n' | tr -d '\r'
 }
+
+toupper() {
+	printf "$1" | tr '[a-z]' '[A-Z]'
+}
+
 
 tmpfile_handle() {
 	if [[ "$DEBUG" -eq 0 ]] ; then
@@ -465,11 +470,6 @@ runs_HTTP() {
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
-
-strip_lf() {
-	echo "$1" | tr -d '\n' | tr -d '\r'
-}
-
 
 #problems not handled: chunked
 run_http_header() {
@@ -2144,40 +2144,40 @@ fd_socket() {
 	fi
 
 	if [[ -n "$STARTTLS" ]]; then
-		case "$PORT" in # port
-			21)  # https://tools.ietf.org/html/rfc4217
+		case "$STARTTLS_PROTOCOL" in # port
+			ftp)  # https://tools.ietf.org/html/rfc4217
 				$FAST_STARTTLS || starttls_just_read
 				$FAST_STARTTLS || starttls_line "FEAT" "211" && starttls_just_send "FEAT"
 				starttls_line "AUTH TLS" "successful|234"
 				;;
-			25)  # SMTP, see https://tools.ietf.org/html/rfc4217
+			smtp)  # SMTP, see https://tools.ietf.org/html/rfc4217
 				$FAST_STARTTLS || starttls_just_read
 				$FAST_STARTTLS || starttls_line "EHLO testssl.sh" "220|250" && starttls_just_send "EHLO testssl.sh" 
 				starttls_line "STARTTLS" "220"
 				;;
-			110) # POP, see https://tools.ietf.org/html/rfc2595
+			pop3) # POP, see https://tools.ietf.org/html/rfc2595
 				$FAST_STARTTLS || starttls_just_read
 				starttls_line "STLS" "OK"
 				;;
-			119|433) # NNTP, see https://tools.ietf.org/html/rfc4642
+			nntp) # NNTP, see https://tools.ietf.org/html/rfc4642
 				$FAST_STARTTLS || starttls_just_read
 				$FAST_STARTTLS || starttls_line "CAPABILITIES" "101|200" && starttls_just_send "CAPABILITIES"
 				starttls_line "STARTTLS" "382"
 				;;
-			143) # IMAP, https://tools.ietf.org/html/rfc2595
+			imap) # IMAP, https://tools.ietf.org/html/rfc2595
 				$FAST_STARTTLS || starttls_just_read
 				$FAST_STARTTLS || starttls_line "a001 CAPABILITY" "OK" && starttls_just_send "a001 CAPABILITY"
 				starttls_line "a002 STARTTLS" "OK"
 				;;
-			389) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
+			ldap) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
 				pr_magentaln "FIXME: LDAP/STARTTLS not yet supported"
 				exit -4
 				;;
-			674) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
+			acap) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
 				pr_magentaln "ACAP Easteregg: not implemented -- probably never will"
 				exit -4
 				;;
-			5222) # XMPP, see https://tools.ietf.org/html/rfc6120
+			xmpp) # XMPP, see https://tools.ietf.org/html/rfc6120
 				starttls_just_read
 				[[ -z $XMPP_HOST ]] && XMPP_HOST="$NODE"
 				jabber=$(cat <<EOF
@@ -2194,6 +2194,9 @@ EOF
 				starttls_line "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" "proceed"
 				# BTW: https://xmpp.net !
 				;;
+			*) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
+				pr_magentaln "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported"
+				exit -4
 		esac
 	fi
 
@@ -4157,7 +4160,7 @@ determine_service() {
 					exit -2
 				fi
 				out " Service set:            STARTTLS via "
-				printf $protocol | tr '[a-z]' '[A-Z]'
+				toupper "$protocol"
 				[[ -n "$XMPP_HOST" ]] && printf " (XMPP domain=\'$XMPP_HOST\')"
 				outln
 				;;
@@ -4218,7 +4221,6 @@ mx_all_ips() {
 	if [ -n "$mxs" ] && [ "$mxs" != ' ' ] ; then
 		[[ $mxport == "465" ]] && \
 			starttls_proto=""  		# no starttls for Port 465, on all other ports we speak starttls
-		outln
 		pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
 		for mx in $mxs; do
 			draw_dotted_line "-" $(($TERM_DWITH * 2 / 3))
@@ -4661,7 +4663,7 @@ if $do_read_from_file; then
 		[[ -z "$cmdline" ]] && continue
 		[[ "$cmdline" == "EOF" ]] && break
 		echo "$0 -q $cmdline"
-		draw_dotted_line "=" $(($TERM_DWITH / 2))
+		draw_dotted_line "=" $(($TERM_DWITH / 2)); outln;
 		$0 -q $cmdline
 	done
 	exit $?
@@ -4708,4 +4710,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.342 2015/08/11 22:17:27 dirkw Exp $
+#  $Id: testssl.sh,v 1.343 2015/08/12 11:58:44 dirkw Exp $
