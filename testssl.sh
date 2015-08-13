@@ -115,19 +115,19 @@ HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}	# we wait this long before killing the pro
 readonly MAX_WAITSOCK=10				# waiting at max 10 seconds for socket reply
 readonly CCS_MAX_WAITSOCK=5			# for the two CCS payload (each)
 readonly HEARTBLEED_MAX_WAITSOCK=8		# for the heartbleed payload
-readonly STARTTLS_SLEEP=${STARTTLS_SLEEP:-1}			# max time to wait on a socket replay for STARTTLS
-FAST_STARTTLS=${FAST_STARTTLS:-true}	#at the cost of reliabilty decrese the handshakes for STARTTLS
+STARTTLS_SLEEP=${STARTTLS_SLEEP:-1}	# max time to wait on a socket replay for STARTTLS
+FAST_STARTTLS=${FAST_STARTTLS:-true}	#at the cost of reliabilty decrease the handshakes for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}			# sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2} 		# sleep time for general socket receive
 
 CAPATH="${CAPATH:-/etc/ssl/certs/}"	# Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 FNAME=${FNAME:-""}					# file name to read commands from
 IKNOW_FNAME=false
-readonly HSTS_MIN=179				# >179 days is ok for HSTS
-readonly HPKP_MIN=30				# >=30 days should be ok for HPKP_MIN, practical hints?
+HSTS_MIN=${HSTS_MIN:-179}               # >179 days is ok for HSTS
+HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, practical hints?
 readonly CLIENT_MIN_PFS=5			# number of ciphers needed to run a test for PFS
-readonly DAYS2WARN1=60				# days to warn before cert expires, threshold 1
-readonly DAYS2WARN2=30				# days to warn before cert expires, threshold 2
+DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
+DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 
 # furher vars needed to follow
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
@@ -1674,7 +1674,7 @@ run_server_defaults() {
 	local gost_status_problem=false
 	local extensions
 	local sessticket_str lifetime unit keysize sig_algo key_algo
-	local expire ocsp_uri crl savedir startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
+	local expire secs2warn ocsp_uri crl savedir startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
 	local policy_oid
 
 	outln
@@ -1852,11 +1852,11 @@ run_server_defaults() {
 	if ! echo $expire | grep -qw not; then
 	pr_red "expired!"
 	else
-		SECS2WARN=$((24 * 60 * 60 * $DAYS2WARN2))  # low threshold first
-	     expire=$($OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN)
+		secs2warn=$((24 * 60 * 60 * $DAYS2WARN2))  # low threshold first
+	     expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn)
 		if echo "$expire" | grep -qw not; then
-			SECS2WARN=$((24 * 60 * 60 * $DAYS2WARN1))
-			expire=$($OPENSSL x509 -in $HOSTCERT -checkend $SECS2WARN)
+			secs2warn=$((24 * 60 * 60 * $DAYS2WARN1))
+			expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn)
 			if echo "$expire" | grep -qw not; then
 				pr_litegreen ">= $DAYS2WARN1 days"
 			else
@@ -4710,4 +4710,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.343 2015/08/12 11:58:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.344 2015/08/13 14:56:11 dirkw Exp $
