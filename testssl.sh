@@ -65,7 +65,7 @@ readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
 
-readonly VERSION="2.6rc1"
+readonly VERSION="2.6rc2"
 readonly SWCONTACT="dirk aet testssl dot sh"
 echo $VERSION | egrep -q "dev|rc" && \
 	SWURL="https://testssl.sh/dev/" ||
@@ -295,35 +295,6 @@ pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off;
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "\033[4m$1" || out "$1"; pr_off; }
 pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off; }
-
-### from here to the end of color_maker this is dead code, see 
-declare -A COLORS=( [pr_green]='0\033[1;32m'		[pr_litegreen]='0\033[0;32m'
-				[pr_yellow]='0\033[1;33m'	[pr_brown]='0\033[0;33m'
-				[pr_blue]='0\033[1;34m'		[pr_liteblue]='0\033[0;34m'
-				[pr_red]='0\033[1;31m'		[pr_litered]='0\033[0;31m'
-				[pr_magenta]='0\033[1;35m'	[pr_litemagenta]='0\033[0;35m'
-				[pr_cyan]='0\033[1;36m'		[pr_litecyan]='0\033[0;36m'
-				[pr_grey]='0\033[1;30m'		[pr_litegrey]='0\033[0;37m' )
-#				[pr_off]='0\033[m'
-#				[pr_bold]='0\033[1m'
-#				[pr_underline]='0\033[4m'
-#				[pr_reverse]='0\033[7m')
-color_maker() {
-	local color_name
-	local color_code
-
-	for color_name in ${!COLORS[*]}; do
-		color_code="${COLORS[$color_name]:1}"
-		# generate pr_* names from array
-		if [[ "$COLOR" -eq 2 ]]; then
-			eval "${color_name}() { out \"${color_code}\$1\"; pr_off; }"
-		else
-			eval "${color_name}() { out \"\$1\"; }"
-		fi
-		# generate *ln functions
-	eval "${color_name}ln() { ${color_name} \"\$1\"; outln; }"
-	done
-}
 
 
 ### colorswitcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
@@ -4640,7 +4611,6 @@ get_install_dir
 
 initialize_globals
 parse_cmd_line "$@"
-#color_maker
 set_color_functions
 find_openssl_binary
 maketempf
@@ -4710,4 +4680,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.344 2015/08/13 14:56:11 dirkw Exp $
+#  $Id: testssl.sh,v 1.345 2015/08/15 16:48:44 dirkw Exp $
