@@ -764,15 +764,32 @@ run_server_banner() {
 }
 
 run_rp_banner() {
+	local line
+	local first=true
+	local spaces="                              "
+
 	if [ ! -s $HEADERFILE ] ; then
 		run_http_header "$1" || return 3
 	fi
-	pr_bold " Reverse Proxy banner        "
-	egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded' $HEADERFILE >$TMPFILE && \
-		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
+	pr_bold " Reverse Proxy banner         "
+	egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded' $HEADERFILE >$TMPFILE 
+	if [ $? -ne 0 ] ; then
 		outln "--"
+	else
+		cat $TMPFILE | while read line; do
+			line=$(strip_lf "$line")
+			if ! $first; then
+				out "$spaces"
+			else
+				first=false
+			fi
+               emphasize_stuff_in_headers "$line"
+          done
+	fi
 	tmpfile_handle $FUNCNAME.txt
 	return 0
+
+#		emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
 }
 
 run_application_banner() {
@@ -4683,4 +4700,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.346 2015/08/15 19:33:15 dirkw Exp $
+#  $Id: testssl.sh,v 1.347 2015/08/17 18:13:46 dirkw Exp $
