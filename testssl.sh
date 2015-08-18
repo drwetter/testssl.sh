@@ -41,7 +41,7 @@
 #
 # Did I mention it's open source?
 #
-# Q: So what's the difference to www.ssllabs.com/ssltesti/ or sslcheck.globalsign.com/ ?
+# Q: So what's the difference to www.ssllabs.com/ssltest/ or sslcheck.globalsign.com/ ?
 # A: As of now ssllabs only check 1) webservers 2) on standard ports, 3) reachable from the
 #    internet. And the examples above 4) are 3rd parties. If those four restrictions are fine
 #    with you and you need a management compatible rating -- go ahead and use those.
