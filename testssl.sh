@@ -1786,12 +1786,11 @@ run_server_defaults() {
 	fi
 
 	sans=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
-		sed -e 's/DNS://g' -e 's/ //g' -e 's/,/\n/g' -e 's/othername:<unsupported>//g')
-#                                                        ^^^ CACert
+		sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+#                                                       ^^^ CACert
 
 	pr_bold " subjectAltName (SAN)         "
 	if [ -n "$sans" ]; then
-		sans=$(echo "$sans" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g') # replace line feed by " "
 		for san in $sans; do
 			out "$underline$san$off "
 		done
