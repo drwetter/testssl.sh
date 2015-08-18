@@ -45,6 +45,7 @@
 
 * Jonathon Rossi
   - fix for bash3 (Darwin)
+  - and other Darwin fixes
 
 * @nvsofts (NV)
  - LibreSSL patch for GOST
@@ -57,7 +58,7 @@
  - inspiration & help for Darwin port
 
 * Bug reports:
-  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena
+  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi
 
 ##### Last but not least:
 
