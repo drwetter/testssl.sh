@@ -653,9 +653,9 @@ run_hsts() {
 
 
 run_hpkp() {
-	local hpkp_age_sec
-	local hpkp_age_days
-	local hpkp_nr_keys
+	local -i hpkp_age_sec
+	local -i hpkp_age_days
+	local -i hpkp_nr_keys
 	local hpkp_key hpkp_key_hostcert
 	local spaces="                             "
 	local key_found=false
@@ -667,12 +667,15 @@ run_hpkp() {
 	pr_bold " Public Key Pinning           "
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [ $? -eq 0 ]; then
-		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || out "(two HPKP headers, using 1st one) "
-		sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE >$TMPFILE.2
-		mv $TMPFILE.2 $TMPFILE
+		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || pr_brown "(two HPKP headers, using 1st one) "
+		# remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces
+		sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE | \
+			sed -e 's/;//g' -e 's/\"//g' -e 's/^ //' > $TMPFILE.2
+		# BSD lacks -i, otherwise we would have done it inline
+		# now separate key value and other stuff per line:
+		tr ' ' '\n' < $TMPFILE.2 >$TMPFILE
 
-		# dirty trick so that grep -c really counts occurrences and not lines w/ occurrences:
-		hpkp_nr_keys=$(tr ' ' '\n'  < $TMPFILE | grep -ac pin-sha)
+		hpkp_nr_keys=$(grep -ac pin-sha $TMPFILE)
 		out "# of keys: "
 		if [ $hpkp_nr_keys -eq 1 ]; then
 			pr_litered "1 (NOT ok), "
@@ -680,21 +683,21 @@ run_hpkp() {
 			out "$hpkp_nr_keys, "
 		fi
 
-		hpkp_age_sec=$(sed -e 's/^.*max-age=//' $TMPFILE | sed -E 's/[^[:digit:]]//g')
+		# print key=value pair with awk, then strip non-numbers, to be improved with proper parsing of key-value with awk
+		hpkp_age_sec=$(awk -F= '/max-age/{max_age=$2; print max_age}' $TMPFILE | sed -E 's/[^[:digit:]]//g')
 		hpkp_age_days=$((hpkp_age_sec / 86400))
 		if [ $hpkp_age_days -ge $HPKP_MIN ]; then
 			pr_litegreen "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
 		else
 			out "$hpkp_age_sec s = "
-			pr_brown "$hpkp_age_days days (<$HPKP_MIN is not good enough)"
+			pr_brown "$hpkp_age_days days (<$HPKP_MIN days is not good enough)"
 		fi
-
 
 		includeSubDomains "$TMPFILE"
 		preload "$TMPFILE"
 
-		# get the key fingerprints
 		[ -s "$HOSTCERT" ] || get_host_cert
+		# get the key fingerprints
 		hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
 			$OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
 		while read hpkp_key; do
@@ -703,11 +706,12 @@ run_hpkp() {
 				pr_litegreen "$hpkp_key"
 				key_found=true
 			fi
-			debugme echo "  $hpkp_key | $hpkp_key_hostcert"
+			debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
 		done < <(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
 		if ! $key_found ; then
-			pr_litered "No matching key for pin found "
-			out "(CA pinned?)"
+			out "\n$spaces"
+			pr_litered " No matching key for pins found "
+			out "(CAs pinned? -- not yet checked)"
 		fi
 	else
 		out "--"
@@ -816,7 +820,7 @@ run_application_banner() {
 		run_http_header "$1" || return 3
 	fi
 	pr_bold " Application banner           "
-	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-UA-Compatible|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
+	egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
 	if [ $? -ne 0 ] ; then
 		outln "--"
 	else
@@ -876,7 +880,7 @@ run_cookie_flags() {	# ARG1: Path, ARG2: path
 
 run_more_flags() {
 	local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
-	local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By"
+	local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible"
 	local egrep_pattern=""
 	local f2t result_str
 	local first=true
@@ -895,7 +899,7 @@ run_more_flags() {
 	else
 		ret=0
 		for f2t in $good_flags2test; do
-		debugme "---> $f2t"
+			debugme echo "---> $f2t"
 			result_str=$(grep -wi "^$f2t" $TMPFILE | grep -vi "$f2t"-)
 			result_str=$(strip_lf "$result_str")
 			[ -z "$result_str" ] && continue
@@ -4718,4 +4722,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.348 2015/08/21 08:47:28 dirkw Exp $
+#  $Id: testssl.sh,v 1.349 2015/08/21 10:43:09 dirkw Exp $
