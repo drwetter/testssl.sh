@@ -368,6 +368,20 @@ toupper() {
 	printf "$1" | tr '[a-z]' '[A-Z]'
 }
 
+# prints out multiple lines in $1, left aligned by spaces in $2
+out_row_aligned() {
+	local first=true
+
+	echo "$1" | while read line; do
+		if $first; then
+			first=false
+		else
+			out "$2"
+		fi
+		outln "$line"
+	done
+}
+
 
 tmpfile_handle() {
 	if [[ "$DEBUG" -eq 0 ]] ; then
@@ -553,11 +567,12 @@ run_http_date() {
 }
 
 
-# Borrowd from Glenn Jackman, see https://unix.stackexchange.com/users/4667/glenn-jackman
+# Borrowed from Glenn Jackman, see https://unix.stackexchange.com/users/4667/glenn-jackman
 detect_ipv4() {
 	local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
 	local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
 	local your_ip_msg=" (check if it's yours or e.g. a cluster IP)"
+	local result
 	local first=true
 	local spaces="                              "
 	
@@ -570,7 +585,7 @@ detect_ipv4() {
 	if egrep -vi "pagespeed|page-speed" $HEADERFILE | grep -iqE $ipv4address; then
 		pr_bold " IPv4 address in header       " 
 		cat $HEADERFILE | while read line; do
-			result="$(echo -n "$line" | grep -E $ipv4address )"
+			result="$(echo -n "$line" | grep -E $ipv4address)"
 			result=$(strip_lf "$result")
 			if [ -n "$result" ] ; then
 				if ! $first; then
@@ -1664,6 +1679,7 @@ run_server_defaults() {
 	local sessticket_str lifetime unit keysize sig_algo key_algo
 	local expire secs2warn ocsp_uri crl savedir startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
 	local policy_oid
+	local spaces="                              "
 
 	outln
 	pr_blue "--> Testing server defaults (Server Hello)"; outln "\n"
@@ -1745,7 +1761,7 @@ run_server_defaults() {
 
 	pr_bold " Fingerprint / Serial         "
 	outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial | sed 's/serial=//')"
-	outln "                              $($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 | sed 's/Fingerprint=//' | sed 's/://g' )"
+	outln "$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 | sed 's/Fingerprint=//' | sed 's/://g' )"
 
 	pr_bold " Common Name (CN)             "
 	if $OPENSSL x509 -in $HOSTCERT -noout -subject | grep -wq CN; then
@@ -1872,8 +1888,12 @@ run_server_defaults() {
 	cd "$savedir"
 
 	pr_bold " Certificate Revocation List  "
-	crl=$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')
-	[ x"$crl" == "x" ] && pr_literedln "--" || echo "$crl"
+	crl="$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
+	case $(count_lines "$crl") in
+		0)	pr_literedln "--" ;;
+		1)	outln "$crl" ;;
+		*)   out_row_aligned "$crl" "$spaces" ;;
+	esac
 
 	pr_bold " OCSP URI                     "
 	ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri)
@@ -1908,7 +1928,6 @@ run_server_defaults() {
 }
 # FIXME: revoked, see checkcert.sh
 # FIXME: Trust (only CN)
-
 
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
@@ -4699,4 +4718,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.347 2015/08/17 18:13:46 dirkw Exp $
+#  $Id: testssl.sh,v 1.348 2015/08/21 08:47:28 dirkw Exp $
