@@ -86,7 +86,6 @@ date --help >/dev/null 2>&1 && \
 echo A | sed -E 's/A//' >/dev/null 2>&1 && \
 	readonly HAS_SED_E=true || \
 	readonly HAS_SED_E=false 
-readonly ECHO="/usr/bin/printf --"		# works under Linux, BSD, MacOS.
 TERM_DWITH=${COLUMNS:-$(tput cols)} 	# for future custom line wrapping
 TERM_CURRPOS=0						# ^^^ we also need to find out the length or current pos in the line
 
@@ -247,12 +246,12 @@ readonly SSLv2_CLIENT_HELLO="
 
 
 ###### output functions ######
-
-out()   { $ECHO "$1"; }
-outln() { [[ -z "$1" ]] || $ECHO "$1"; $ECHO "\n"; }
+# a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest. 
+out()   { /usr/bin/printf -- "${1//%/%%}"; }
+outln() { out "$1\n"; }
+#TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
-
 pr_liteblue()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;34m$1" || out "$1"; pr_off; }
 pr_liteblueln() { pr_liteblue "$1"; outln; }
 pr_blue()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;34m$1" || out "$1"; pr_off; }
@@ -580,9 +579,9 @@ detect_ipv4() {
 		http_header "$1" || return 3
 	fi
 
-	# remove pagespeed header first as it is mistakenly identified as ipv4 address
-	# https://github.com/drwetter/testssl.sh/issues/158
-	if egrep -vi "pagespeed|page-speed" $HEADERFILE | grep -iqE $ipv4address; then
+	# remove pagespeed header as it is mistakenly identified as ipv4 address https://github.com/drwetter/testssl.sh/issues/158
+	# also facebook has a CSP rule for 127.0.0.1
+	if egrep -vi "pagespeed|page-speed|Content-Security-Policy" $HEADERFILE | grep -iqE $ipv4address; then
 		pr_bold " IPv4 address in header       " 
 		cat $HEADERFILE | while read line; do
 			result="$(echo -n "$line" | grep -E $ipv4address)"
@@ -594,8 +593,7 @@ detect_ipv4() {
 				else
 					first=false
 				fi
-				# a little bit of sanitzing, otherwise printf will hiccup @ %
-				pr_litered "$(echo $result|sed 's/%/%%/g')"
+				pr_litered "$result"
 				outln "$your_ip_msg"
 			fi
 		done
@@ -897,6 +895,7 @@ run_more_flags() {
 		outln "--"
 		ret=1
 	else
+		#set -x
 		ret=0
 		for f2t in $good_flags2test; do
 			debugme echo "---> $f2t"
@@ -908,13 +907,12 @@ run_more_flags() {
 			else
 				first=false
 			fi
-			#if [ $(echo "$result_str" | wc -l | sed 's/ //g') -eq 1 ]; then
-				pr_litegreenln "$result_str"
-			#else # for the case we have two times the same header:
-				# exchange the line feeds between the two lines only:
-				#pr_litecyan "double -->" ; echo "$result_str" |  tr '\n\r' '  | ' | sed 's/| $//g'
-				#pr_litecyanln "<-- double"
-			#fi
+			# extract and print key(=flag) in green:
+			pr_litegreen "${result_str%%:*}:"
+			#pr_litegreen "$(sed 's/:.*$/:/' <<< "$result_str")"
+			# print value in plain text:
+			outln "${result_str#*:}"
+
 		done
 		# now the same with other flags
 		for f2t in $other_flags2test; do
@@ -925,7 +923,10 @@ run_more_flags() {
 			else
 				first=false
 			fi
-			outln "$result_str"
+			# extract and print key(=flag) underlined
+			pr_underline "${result_str%%:*}:"
+			# print value in plain text:
+			outln "${result_str#*:}"
 		done
 	fi
 #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
@@ -4722,4 +4723,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.349 2015/08/21 10:43:09 dirkw Exp $
+#  $Id: testssl.sh,v 1.352 2015/08/21 16:10:44 dirkw Exp $
