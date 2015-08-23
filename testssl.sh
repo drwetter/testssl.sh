@@ -1697,13 +1697,13 @@ run_server_defaults() {
 		get_host_cert "-$proto"
 		[ $? -eq 0 ] && [ $ret -eq 0 ] && break
 		ret=7
-	done		# this loop is needed for IIS/6
+	done				# this loop is needed for IIS/6
 	if [ $ret -eq 7 ]; then
 		# "-status" kills GOST only servers, so we do another test without it and see whether that works then:
 		if ! $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>/dev/null >$TMPFILE; then
 			pr_magentaln "$OPENSSL returned an error around line $LINENO".
 			tmpfile_handle tlsextdebug+status.txt
-			return 7   # this is ugly, I know
+			return 7	# this is ugly, I know
 		else
 			gost_status_problem=true
 		fi
@@ -1885,12 +1885,15 @@ run_server_defaults() {
 
 	outln " ($startdate --> $enddate)"
 
+	$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>/dev/null </dev/null >$TEMPDIR/allcerts.txt
 	savedir=$(pwd); cd $TEMPDIR
-	$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>/dev/null </dev/null | \
-		awk -v c=-1 '/-----BEGIN CERTIFICATE-----/{inc=1;c++} inc {print > ("level" c ".crt")} /---END CERTIFICATE-----/{inc=0}'
-	nrsaved=$(ls $TEMPDIR/level?.crt 2>/dev/null | wc -w | sed 's/^ *//')
-	pr_bold " # of certificates provided"; outln "   $nrsaved"
+	# http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
+	awk -v n=-1 '/-----BEGIN CERTIFICATE-----/{ inc=1; n++ } 
+             inc { print > ("level" n ".crt") }
+             /---END CERTIFICATE-----/{ inc=0 }' $TEMPDIR/allcerts.txt
+	nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
 	cd "$savedir"
+	pr_bold " # of certificates provided"; outln "   $nrsaved"
 
 	pr_bold " Certificate Revocation List  "
 	crl="$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
@@ -3471,7 +3474,7 @@ get_install_dir() {
 		MAP_RFC_FNAME="$INSTALL_DIR/mapping-rfc.txt"
 	fi
 
-	[ ! -r "$MAP_RFC_FNAME" ] && pr_magentaln "No mapping file found"
+	[ ! -r "$MAP_RFC_FNAME" ] && pr_litemagentaln "\nNo mapping file found"
 	debugme echo "$MAP_RFC_FNAME"
 }
 
@@ -3572,11 +3575,12 @@ openssl_age() {
 		pr_magentaln " Your \"$OPENSSL\" is way too old (<version 1.0) !"
 		case $SYSTEM in
 			*BSD|Darwin)
-				outln " Please use openssl from ports/brew or compile from github.com/PeterMosmans/openssl" ;;
+				outln " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl" ;;
 			*)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" ;;
 		esac
 		ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
 	fi
+	outln
 }
 
 
@@ -4723,4 +4727,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.352 2015/08/21 16:10:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.353 2015/08/23 19:16:33 dirkw Exp $
