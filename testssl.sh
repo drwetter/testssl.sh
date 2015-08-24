@@ -299,6 +299,8 @@ pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off;
 ### colorswitcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 set_color_functions() {
+	local linux_tput=true
+
 	# empty vars if we have no color:
 	red=""
 	green=""
@@ -312,21 +314,40 @@ set_color_functions() {
 	bold=""
 	underline=""
 
+	tput sgr0 || linux_tput=false
 	if [[ "$COLOR" -eq 2 ]]; then
-		red=$(tput setaf 1)
-		green=$(tput setaf 2)
-		brown=$(tput setaf 3)
-		blue=$(tput setaf 4)
-		magenta=$(tput setaf 5)
-		cyan=$(tput setaf 6)
-		grey=$(tput setaf 7)
-		yellow=$(tput setaf 3; tput bold)
+		if $linux_tput; then
+			red=$(tput setaf 1)
+			green=$(tput setaf 2)
+			brown=$(tput setaf 3)
+			blue=$(tput setaf 4)
+			magenta=$(tput setaf 5)
+			cyan=$(tput setaf 6)
+			grey=$(tput setaf 7)
+			yellow=$(tput setaf 3; tput bold)
+		else 	# this is a try for old BSD, see terminfo(5)
+			red=$(tput AF 1)
+			green=$(tput AF 2)
+			brown=$(tput AF 3)
+			blue=$(tput AF 4)
+			magenta=$(tput AF 5)
+			cyan=$(tput AF 6)
+			grey=$(tput AF 7)
+			yellow=$(tput AF 3; tput md)
+		fi
 	fi
 
 	if [[ "$COLOR" -ge 1 ]]; then
-		bold=$(tput bold)
-		underline=$(tput sgr 0 1)
-		off=$(tput sgr0)
+		if $linux_tput; then
+			bold=$(tput bold)
+			underline=$(tput sgr 0 1)
+			off=$(tput sgr0)
+		else 	# this is a try for old BSD, see terminfo(5)
+			bold=$(tput md)
+			underline=$(tput us)
+			reverse=$(tput mr)
+			off=$(tput me)
+		fi
 	fi
 }
 
@@ -570,7 +591,7 @@ run_http_date() {
 detect_ipv4() {
 	local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
 	local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
-	local your_ip_msg=" (check if it's yours or e.g. a cluster IP)"
+	local your_ip_msg="(check if it's your IP address or e.g. a cluster IP)"
 	local result
 	local first=true
 	local spaces="                              "
@@ -594,7 +615,7 @@ detect_ipv4() {
 					first=false
 				fi
 				pr_litered "$result"
-				outln "$your_ip_msg"
+				outln "\n$spaces$your_ip_msg"
 			fi
 		done
 	fi
@@ -1652,6 +1673,25 @@ get_host_cert() {
 		return $?
 }
 
+get_all_certs() {
+	local savedir
+	local nrsaved
+	local ret
+
+	$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>/dev/null </dev/null >$TEMPDIR/allcerts.txt
+	ret=$?
+	savedir=$(pwd); cd $TEMPDIR
+	# http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
+	awk -v n=-1 '/-----BEGIN CERTIFICATE-----/{ inc=1; n++ } 
+             inc { print > ("level" n ".crt") }
+             /---END CERTIFICATE-----/{ inc=0 }' $TEMPDIR/allcerts.txt
+	nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
+	cd "$savedir"
+
+	echo $nrsaved
+	return $ret
+}
+
 
 tls_time() {
 	local now difftime
@@ -1682,7 +1722,7 @@ run_server_defaults() {
 	local gost_status_problem=false
 	local extensions
 	local sessticket_str lifetime unit keysize sig_algo key_algo
-	local expire secs2warn ocsp_uri crl savedir startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
+	local expire secs2warn ocsp_uri crl startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
 	local policy_oid
 	local spaces="                              "
 
@@ -1785,7 +1825,7 @@ run_server_defaults() {
 			cn_nosni="no CN field in subject"
 		fi
 	fi
-	debugme out "\'$NODE\' | \'$cn\' | \'$cn_nosni\'"
+	debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
 	if [[ $NODE == $cn_nosni ]]; then
 		if [[ $SERVICE != "HTTP" ]]; then
 			outln " (matches certificate directly)"
@@ -1885,15 +1925,8 @@ run_server_defaults() {
 
 	outln " ($startdate --> $enddate)"
 
-	$OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>/dev/null </dev/null >$TEMPDIR/allcerts.txt
-	savedir=$(pwd); cd $TEMPDIR
-	# http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
-	awk -v n=-1 '/-----BEGIN CERTIFICATE-----/{ inc=1; n++ } 
-             inc { print > ("level" n ".crt") }
-             /---END CERTIFICATE-----/{ inc=0 }' $TEMPDIR/allcerts.txt
-	nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
-	cd "$savedir"
-	pr_bold " # of certificates provided"; outln "   $nrsaved"
+
+	pr_bold " # of certificates provided"; outln "   $(get_all_certs)"
 
 	pr_bold " Certificate Revocation List  "
 	crl="$($OPENSSL x509 -in $HOSTCERT -noout -text | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
@@ -2152,7 +2185,7 @@ fd_socket() {
 		done
 	elif ! exec 5<>/dev/tcp/$NODEIP/$PORT; then	#  2>/dev/null would remove an error message, but disables debugging
 		outln
-		pr_magentaln "Unable to open a socket to $NODEIP:$PORT. "
+		pr_magenta "Unable to open a socket to $NODEIP:$PORT. "
 		# It can last ~2 minutes but for for those rare occasions we don't do a timeout handler here, KISS
 		return 6
 	fi
@@ -2184,7 +2217,7 @@ fd_socket() {
 				starttls_line "a002 STARTTLS" "OK"
 				;;
 			ldap) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
-				pr_magentaln "FIXME: LDAP/STARTTLS not yet supported"
+				pr_magentaln "FIXME: LDAP+STARTTLS over sockets not yet supported (try \"--ssl-native\")"
 				exit -4
 				;;
 			acap) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
@@ -3444,9 +3477,8 @@ run_tls_truncation() {
 }
 
 old_fart() {
-	pr_magentaln "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed."
 	outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
-	exit -2
+	fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -2
 }
 
 # try very hard to determine th install path to get ahold of the mapping file
@@ -3484,14 +3516,13 @@ test_openssl_suffix() {
 	local uname_arch=$(uname -m)
 
 	[[ $uname_arch =~ "64" ]] && myarch_suffix=64 || myarch_suffix=32
-
-	if [[ -n "$1/openssl" ]] && [[ -x "$1/openssl" ]]; then
+	if [[ -f "$1/openssl" ]] && [[ -x "$1/openssl" ]]; then
 		OPENSSL="$1/openssl"
 		return 0
-	elif [[ -n "$1/openssl.$naming_ext" ]] && [[ -x "$1/openssl.$naming_ext" ]]; then
+	elif [[ -f "$1/openssl.$naming_ext" ]] && [[ -x "$1/openssl.$naming_ext" ]]; then
 		OPENSSL="$1/openssl.$naming_ext"
 		return 0
-	elif [[ -n "$1/openssl.$uname_arch" ]] && [[ -x "$1/openssl.$uname_arch" ]]; then
+	elif [[ -f "$1/openssl.$uname_arch" ]] && [[ -x "$1/openssl.$uname_arch" ]]; then
 		OPENSSL="$1/openssl.$uname_arch"
 		return 0
 	fi
@@ -3506,7 +3537,7 @@ find_openssl_binary() {
 	[[ $uname_arch =~ "64" ]] && myarch_suffix=64 || myarch_suffix=32
 	# 0. check environment variable whether it's executable
 	if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
-		pr_red "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
+		pr_litemagentaln "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
 		outln " Looking some place else ..."
 	elif [[ -x "$OPENSSL" ]]; then
 		:	# 1. all ok supplied $OPENSSL is excutable
@@ -3516,9 +3547,9 @@ find_openssl_binary() {
 		: 	# 3. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
 	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-krb5" ]]; then
 		OPENSSL="$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-krb5"
-			# 4. legacy dirs follow, first kerberos binaries from pm (if executable)
+			# 4. legacy dirs follow, first kerberos binaries from pm (if executable) ^^^^ deprecated!
 	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static" ]]; then
-			# 5. otherwise default is trying the statically linked ones
+			# 5. otherwise default is trying the statically linked ones             ^^^^ deprecated!
 			OPENSSL="$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl"$myarch_suffix"-1.0.2pm-static"
 	elif	test_openssl_suffix $(dirname $(which openssl)); then
 		: 	# 5. we tried hard and failed, so now we use the system binaries
@@ -3526,9 +3557,7 @@ find_openssl_binary() {
 
 	$OPENSSL version -a 2>/dev/null >/dev/null
 	if [ $? -ne 0 ] || [ ! -x "$OPENSSL" ]; then
-		outln
-		pr_magentaln "FATAL: cannot exec or find any openssl binary "
-		exit -1
+		fatal "cannot exec or find any openssl binary" -1
 	fi
 
 	# http://www.openssl.org/news/openssl-notes.html
@@ -3634,23 +3663,23 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
 
 partly mandatory parameters:
 
-     URI                            host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
-     pattern                        an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
-     protocol                       is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
+     URI                           host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
+     pattern                       an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
+     protocol                      is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
 
 tuning options:
 
-     --assuming-http                if protocol check fails it assumes HTTP protocol and enforces HTTP checks
-     --ssl-native <true|false>      fallback to checks with OpenSSL where sockets are normally used
-     --openssl <PATH>               use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
-     --proxy <host>:<port>          connect via the specified HTTP proxy
-     --sneaky                       be less verbose wrt referer headers
-	-q. --quiet                    don't out put the banner. By doing this you acknowledge usage terms normally appearing in the banner
-     --wide                         wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
-     --show-each                    for wide outputs: display all ciphers tested -- not only succeeded ones
-     --warnings <batch|off|false>   "batch" doesn't wait for keypress, "off" or "false" skips connection warning
-     --color <0|1|2>                0: no escape or other codes,  1: b/w escape codes,  2: color (default)
-     --debug <0-6>                  1: screen output normal but debug output in temp files.  2-6: see line ~105
+     --assuming-http               if protocol check fails it assumes HTTP protocol and enforces HTTP checks
+     --ssl-native <true|false>     fallback to checks with OpenSSL where sockets are normally used
+     --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
+     --proxy <host>:<port>         connect via the specified HTTP proxy
+     --sneaky                      be less verbose wrt referer headers
+     --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
+     --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
+     --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
+     --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
+     --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
+     --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~105
 
 All options requiring a value can also be called with '=' (e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 <URI> is always the last parameter.
@@ -3893,6 +3922,8 @@ is_ipv4addr() {
 	local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
 
 	[[ -z "$1" ]] && return 1
+	# more than numbers, important for hosts like AAA.BBB.CCC.DDD.in-addr.arpa.DOMAIN.TLS
+	[[ -n $(tr -d '[0-9\.]' <<< "$1") ]] && return 1
 
 	echo -n "$1" | grep -Eq $ipv4address && \
 		return 0 || \
@@ -3901,7 +3932,6 @@ is_ipv4addr() {
 
 # a bit easier
 is_ipv6addr() {
-
 	[[ -z "$1" ]] && return 1
 	# less than 2x ":"
 	[[ $(count_lines "$(echo -n "$1" | tr ':' '\n')") -le 1 ]] && \
@@ -4025,7 +4055,7 @@ determine_ip_addresses() {
 		SNI=""						# override Server Name Indication as we test the IP only
 	else
 		ip4=$(get_local_a $NODE)			# is there a local host entry?
-		if [ -z $ip4 ]; then			# empty: no (LOCAL_A is predefined as false)
+		if [[ -z $ip4 ]]; then			# empty: no (LOCAL_A is predefined as false)
 			ip4=$(get_a_record $NODE)
 		else
 			LOCAL_A=true				# we have the ip4 from local host entry and need to set this
@@ -4041,9 +4071,7 @@ determine_ip_addresses() {
 	fi
 	IPADDRs=$(newline_to_spaces "$ip4")
 	if [[ -z "$IPADDRs" ]] && [[ -z "$CMDLINE_IP" ]] ; then
-		pr_magenta "Can't proceed: No IPv4 address for \"$NODE\" available"
-		outln "\n"
-		exit -1
+		fatal "No IPv4 address for \"$NODE\" available" -1
 	fi
 	[[ -z "$ip6" ]] && IP46ADDRs="$IPADDRs" || IP46ADDRs="$ip4 $ip6"
 	IP46ADDRs=$(newline_to_spaces "$IP46ADDRs")
@@ -4086,6 +4114,11 @@ get_mx_record() {
 	echo "$mxs"
 }
 
+fatal() {
+	pr_magentaln "Fatal error: $1"
+	exit $2
+}
+
 
 # We need to get the IP address of the proxy so we can use it in fd_socket
 check_proxy(){
@@ -4094,8 +4127,7 @@ check_proxy(){
 
 	if [[ -n "$PROXY" ]]; then
 		if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
-			pr_magentaln "Local problem: Your $OPENSSL is too old to support the \"--proxy\" option"
-			exit -1
+			fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -1
 		fi
 		PROXYNODE=${PROXY%:*}
 		PROXYPORT=${PROXY#*:}
@@ -4105,10 +4137,7 @@ check_proxy(){
 		LOCAL_AAAA=$save_LOCAL_AAAA
 		# no RFC 1918:
 		#if ! is_ipv4addr $PROXYIP ; then
-		if [[ -z "$PROXYIP" ]]; then
-			pr_magentaln "Fatal error: Proxy IP cannot be determined from \"$PROXYNODE\""
-			exit -3
-		fi
+		[[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "-3"
 		PROXY="-proxy $PROXYIP:$PROXYPORT"
 	fi
 }
@@ -4121,9 +4150,7 @@ determine_service() {
 	local protocol
 
 	if ! fd_socket; then 			# check if we can connect to $NODEIP:$PORT
-		pr_magentaln "Fatal error: can't connect to $NODEIP:$PORT"
-		outln "\nMake sure a firewall is not between you and your scanning target"
-		exit -2
+		fatal "can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" -2
 	fi
 	close_socket
 
@@ -4163,9 +4190,7 @@ determine_service() {
 
 					if [[ -n "$XMPP_HOST" ]] ; then
 						if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
-							outln
-							pr_magentaln " Local problem: Your $OPENSSL does not support the \"-xmpphost\" option"
-							exit -3
+							fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -3
 						fi
 						STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"		# it's a hack -- instead of changing calls all over the place
 						# see http://xmpp.org/rfcs/rfc3920.html
@@ -4409,6 +4434,12 @@ parse_cmd_line() {
 				do_starttls=true
 				STARTTLS_PROTOCOL=$(parse_opt_equal_sign "$1" "$2")
 				[[ $? -eq 0 ]] && shift
+				case $STARTTLS_PROTOCOL in
+					ftp|smtp|pop3|imap|xmpp|telnet|ldap) ;;
+					ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps) ;;
+					*)	pr_magentaln "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
+						help 1 ;;
+				esac
 				;;
 			--xmpphost|--xmpphost=*)
 				XMPP_HOST=$(parse_opt_equal_sign "$1" "$2")
@@ -4538,7 +4569,8 @@ parse_cmd_line() {
 				[[ $? -eq 0 ]] && shift
 				case "$WARNING" in
 					batch|off|false) ;;
-					default) pr_magentaln "warnings can be either \"batch\", \"off\" or \"false\"" ;;
+					*)	pr_magentaln "\nwarnings can be either \"batch\", \"off\" or \"false\"" 
+						help 1;;
 				esac
 				;;
 			--show[-_]each)
@@ -4547,15 +4579,21 @@ parse_cmd_line() {
 			--debug|--debug=*)
 				DEBUG=$(parse_opt_equal_sign "$1" "$2")
 				[[ $? -eq 0 ]] && shift
+				case $DEBUG in
+					[0-6]) ;;
+					*)	pr_magentaln "\nunrecognized debug value \"$1\", must be between 0..6" 1>&2
+						help 1 ;;
+				esac
 				;;
 			--color|--color=*)
 				COLOR=$(parse_opt_equal_sign "$1" "$2")
 				[[ $? -eq 0 ]] && shift
-				if [ $COLOR -ne 0 ] && [ $COLOR -ne 1 ] && [ $COLOR -ne 2 ] ; then
-					COLOR=2
-					pr_magentaln "$0: unrecognized color: $2" 1>&2
-					help 1
-				fi
+				case $COLOR in
+					[0-2]) ;;
+					*)	COLOR=2
+						pr_magentaln "\nunrecognized color: \"$1\", must be between 0..2" 1>&2
+						help 1 ;;
+				esac
 				;;
 			--openssl|--openssl=*)
 				OPENSSL=$(parse_opt_equal_sign "$1" "$2")
@@ -4571,7 +4609,7 @@ parse_cmd_line() {
 			(--) shift
 				break 
 				;;
-			(-*) pr_magentaln "$0: unrecognized option $1" 1>&2;
+			(-*) pr_magentaln "\n$0: unrecognized option \"$1\"" 1>&2;
 				help 1 
 				;;
 			(*)	break 
@@ -4581,10 +4619,10 @@ parse_cmd_line() {
 	done
 
 	# Show usage if no options were specified
-	[ -z $1 ] && help 0
+	[[ -z "$1" ]] && help 0
 
 	# left off here is the URI
-	URI=$1
+	URI="$1"
 
 	[ "$DEBUG" -ge 4 ] && debug_globals
 	# if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
@@ -4595,7 +4633,7 @@ parse_cmd_line() {
 lets_roll() {
 	local ret
 
-	[ -z "$NODEIP" ] && pr_magentaln "$NODE doesn't resolve to an IP address" && exit -1
+	[ -z "$NODEIP" ] && fatal "$NODE doesn't resolve to an IP address" -1
 	determine_rdns
 	determine_service "$1"		# any starttls service goes here
 
@@ -4671,8 +4709,7 @@ ip=""
 
 if $do_read_from_file; then
 	if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
-		pr_magentaln "Fatal error: Can't read \"$FNAME\""
-		exit -1
+		fatal "Can't read file \"$FNAME\"" "-1"
 	fi
 	pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
 	cat "$FNAME" | while read cmdline; do
@@ -4694,8 +4731,8 @@ if $do_mx_all_ips; then
 	ret=$?
 else	
      parse_hn_port "${URI}" 											# NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
-	if ! determine_ip_addresses && [[ -z $CMDLINE_IP ]]; then
-		pr_magentaln "fatal error: No IP address could be determined"
+	if ! determine_ip_addresses && [[ -z "$CMDLINE_IP" ]]; then
+		fatal "No IP address could be determined"
 	fi
 	if [[ -n "$CMDLINE_IP" ]]; then									
 		[[ "$CMDLINE_IP" == "one" ]] && \
@@ -4727,4 +4764,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.353 2015/08/23 19:16:33 dirkw Exp $
+#  $Id: testssl.sh,v 1.357 2015/08/24 12:09:44 dirkw Exp $
