@@ -452,13 +452,14 @@ wait_kill(){
 # arg1 could be the protocol determined as "working". IIS6 needs that
 runs_HTTP() {
 	# SNI is nonsense for !HTTPS but fortunately other protocols don't seem to care
-	printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE &
+	printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE &
 	wait_kill $! $HEADER_MAXSLEEP
 	head $TMPFILE | grep -aq ^HTTP && SERVICE=HTTP
 	head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
 	head $TMPFILE | grep -aq POP && SERVICE=POP
 	head $TMPFILE | grep -aq IMAP && SERVICE=IMAP
-	debugme head $TMPFILE
+	head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
+	debugme head -50 $TMPFILE
 # $TMPFILE contains also a banner which we could use if there's a need for it
 
 	out " Service detected:      "
@@ -466,7 +467,7 @@ runs_HTTP() {
 		HTTP)
 			out " $SERVICE"
 			ret=0 ;;
-		IMAP|POP|SMTP)
+		IMAP|POP|SMTP|NNTP)
 			out " $SERVICE, thus skipping HTTP specific checks"
 			ret=0 ;;
 		*)   out " Couldn't determine what's running on port $PORT"
@@ -4227,9 +4228,8 @@ determine_service() {
 				fi
 				$OPENSSL s_client -connect $NODEIP:$PORT $PROXY $STARTTLS 2>$ERRFILE >$TMPFILE </dev/null
 				if [ $? -ne 0 ]; then
-					pr_magentaln " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT"
 					debugme cat $TMPFILE
-					exit -2
+					fatal " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT" -2
 				fi
 				out " Service set:            STARTTLS via "
 				toupper "$protocol"
@@ -4794,4 +4794,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.358 2015/08/24 21:50:01 dirkw Exp $
+#  $Id: testssl.sh,v 1.359 2015/08/26 18:06:52 dirkw Exp $
