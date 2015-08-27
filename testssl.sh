@@ -65,7 +65,7 @@ readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
 
-readonly VERSION="2.6rc2"
+readonly VERSION="2.6rc3"
 readonly SWCONTACT="dirk aet testssl dot sh"
 echo $VERSION | egrep -q "dev|rc" && \
 	SWURL="https://testssl.sh/dev/" ||
@@ -149,6 +149,7 @@ OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 HAS_DH_BITS=true
 HAS_SSL2=true						#TODO: in the future we'll do the fastest possible test (openssl s_client -ssl2 is currently faster than sockets)
+HAS_SSL3=true
 PORT=443							# unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -166,6 +167,7 @@ IPS=""
 SERVICE=""						# is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
 STARTTLS_PROTOCOL=""
+ALLPROTOS=""
 OPTIMAL_PROTO=""					# we need this for IIS6 (sigh) and OpenSSL 1.02, otherwise some handshakes
 								# will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 
@@ -515,7 +517,7 @@ Referer: $referer
 Connection: close
 
 EOF
-) &>$HEADERFILE &
+) >$HEADERFILE 2>$ERRFILE &
 	if wait_kill $! $HEADER_MAXSLEEP; then
 		if ! egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
 			pr_litemagenta " likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
@@ -1343,7 +1345,9 @@ run_protocols() {
 	local supported_no_ciph1="supported but couldn't detect a cipher (may need debugging)" 
 	local supported_no_ciph2="supported but couldn't detect a cipher" 
 
-	pr_blue "--> Testing protocols ";
+	outln; pr_blue "--> Testing protocols ";
+
+	#FIXME: use ALLPROTOS here
 
 	if $SSL_NATIVE; then
 		using_sockets=false
@@ -3127,7 +3131,7 @@ Referer: $referer
 Connection: close
 
 EOF
-) &>$HEADERFILE_BREACH &
+) >$HEADERFILE_BREACH 2>$ERRFILE &
 	if wait_kill $! $HEADER_MAXSLEEP; then
 		result=$(grep -a '^Content-Encoding' $HEADERFILE_BREACH | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g')
 		result=$(echo $result | tr -cd '\40-\176')
@@ -3184,7 +3188,7 @@ run_tls_fallback_scsv() {
 	local -i ret=0
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for TLS_FALLBACK_SCSV Protection" && outln "\n"
-	pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
+	pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507), experim.    "
 	# This isn't a vulnerability check per se, but checks for the existence of
 	# the countermeasure to protect against protocol downgrade attacks.
 
@@ -3194,30 +3198,40 @@ run_tls_fallback_scsv() {
 		local_problem "$OPENSSL lacks TLS_FALLBACK_SCSV support"
 		return 4
 	fi
+	#TODO: this need some tuning: a) if one protocol is supported only it has practcally no value (theoretical it's interesting though)
+     # b) for IIS6 + openssl 1.0.2 this won't work
+	# c) best to make sure that we hit a specific protocol, see https://alpacapowered.wordpress.com/2014/10/20/ssl-poodle-attack-what-is-this-scsv-thingy/
+	# d) minor: we should do "-stae" here
 
-	# ...and do the test
-	$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2 -fallback_scsv &>$TMPFILE </dev/null
-	if grep -q "CONNECTED(00" "$TMPFILE"; then
-		if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
-			pr_brown "Downgrade attack prevention NOT supported"
-			ret=1
-		elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
-			pr_litegreen "Downgrade attack prevention supported (OK)"
-			ret=0
-		elif grep -qa "alert handshake failure" "$TMPFILE"; then
-			# see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
-			pr_brown "\"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
-			ret=2
-		elif grep -qa "ssl handshake failure" "$TMPFILE"; then
-			pr_brown "some enexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
-			ret=3
-		else
-			pr_magenta "test failed, unexpected result "
-			out ", run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
-		fi
+	# first: make sure we have tls1_2:
+	if ! $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2  &>/dev/null </dev/null; then
+		pr_litemagenta "Check failed: seems like TLS 1.2 is the only protocol "
+		ret=7
 	else
-		pr_magenta "test failed (couldn't connect)"
-		ret=3
+		# ...and do the test
+		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2 -fallback_scsv &>$TMPFILE </dev/null
+		if grep -q "CONNECTED(00" "$TMPFILE"; then
+			if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
+				pr_brown "Downgrade attack prevention NOT supported"
+				ret=1
+			elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
+				pr_litegreen "Downgrade attack prevention supported (OK)"
+				ret=0
+			elif grep -qa "alert handshake failure" "$TMPFILE"; then
+				# see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
+				pr_brown "\"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
+				ret=2
+			elif grep -qa "ssl handshake failure" "$TMPFILE"; then
+				pr_brown "some enexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
+				ret=3
+			else
+				pr_litemagenta "Check failed, unexpected result "
+				out ", run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
+			fi
+		else
+			pr_magenta "test failed (couldn't connect)"
+			ret=7
+		fi
 	fi
 
 	outln
@@ -3235,7 +3249,7 @@ run_freak() {
 	local addtl_warning=""
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for FREAK attack" && outln "\n"
-	pr_bold " FREAK"; out " (CVE-2015-0204), experimental       "
+	pr_bold " FREAK"; out " (CVE-2015-0204)                     "
 
 	no_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportrsa_cipher_list))
 	#echo "========= ${PIPESTATUS[*]}
@@ -3290,7 +3304,15 @@ run_logjam() {
 	$OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
 	ret=$?
 	$VERBERR && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-	addtl_warning="$addtl_warning, common primes not checked. \"$PROG_NAME -E\" spots candidates"
+	addtl_warning="$addtl_warning, common primes not checked."
+	if $HAS_DH_BITS; then
+		if ! $do_allciphers && ! $do_cipher_per_proto && $HAS_DH_BITS; then
+			addtl_warning="$addtl_warning \"$PROG_NAME -E/-e\" spots candidates"
+		else
+			addtl_warning="$addtl_warning See below for DH bit size"
+		fi
+	fi
+		
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers"
 	else
@@ -3607,6 +3629,9 @@ find_openssl_binary() {
 	$OPENSSL s_client -ssl2 2>&1 | grep -aq "unknown option" || \
 		HAS_SSL2=true && \
 		HAS_SSL2=false
+	$OPENSSL s_client -ssl3 2>&1 | grep -aq "unknown option" || \
+		HAS_SSL3=true && \
+		HAS_SSL3=false
 
 	return 0
 }
@@ -4185,6 +4210,7 @@ determine_service() {
 	close_socket
 
 	datebanner "Testing"
+	outln
 
 	if [[ -z "$1" ]]; then		# for starttls we want another check
 		# determine protocol which works (needed for IIS6). If we don't have IIS6, 1st try will succeed --> better because we use the variable
@@ -4267,12 +4293,8 @@ display_rdns_etc() {
 datebanner() {
 	local tojour="$(date +%F) $(date +%R)"
 
-	outln
 	pr_reverse "$1 now ($tojour) ---> $NODEIP:$PORT ($NODE) <---"; outln "\n"
-	if [[ "$1" == "Testing" ]]; then
-		display_rdns_etc
-	fi
-	outln
+	[[ "$1" == "Testing" ]] && display_rdns_etc
 }
 
 # one line with $1 over whole screen width
@@ -4713,6 +4735,7 @@ lets_roll() {
 	${do_allciphers} && { run_allciphers; ret=$(($? + ret)); }
 	${do_cipher_per_proto} && { run_cipher_per_proto; ret=$(($? + ret)); }
 
+	outln
 	datebanner "Done" 
 
 	return $ret
@@ -4794,4 +4817,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.359 2015/08/26 18:06:52 dirkw Exp $
+#  $Id: testssl.sh,v 1.360 2015/08/27 09:25:11 dirkw Exp $
