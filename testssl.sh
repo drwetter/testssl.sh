@@ -315,7 +315,7 @@ set_color_functions() {
 	bold=""
 	underline=""
 
-	tput sgr0 || linux_tput=false
+	tput sgr0 &>/dev/null || linux_tput=false
 	if [[ "$COLOR" -eq 2 ]]; then
 		if $linux_tput; then
 			red=$(tput setaf 1)
@@ -4817,4 +4817,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.360 2015/08/27 09:25:11 dirkw Exp $
+#  $Id: testssl.sh,v 1.361 2015/08/27 18:39:18 dirkw Exp $
