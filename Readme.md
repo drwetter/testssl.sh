@@ -18,23 +18,23 @@ New features in the soon upcoming stable release 2.6 are:
 * binary directory provides out of the box better binaries (Linux 32+64 Bit, Darwin 64 bit, FreeBSD 64 bit)
 * OS X binaries (@jvehent, new builds: @jpluimers)
 * ARM binaries (@f-s))
+* FreeBSD binary
 * TLS_FALLBACK_SCSV check -- Thx @JonnyHightower
 * (HTTP) proxy support! -- Thx @jnewbigin
 * Extended validation certificate detection
 * Run in default mode through all ciphers at the end of a default run
 * will test multiple IP adresses in one shot, --ip=<adress|"one"> restricts it accordingly
-* provide a --file option where testssl.sh commands are being read from -- for mass testing
-* can scan STARTTLS+XMPP by also supplying the XMPP domain (to-option in XML streams).
-* mass testing file option ``--file``, see https://twitter.com/drwetter/status/627619848344989696
+* new mass testing file option ``--file`` option where testssl.sh commands are being read from, see https://twitter.com/drwetter/status/627619848344989696 
 * TLS time and HTTP time stamps
 * TLS time displayed also for STARTTLS protocols
 * support of sockets for STARTTLS protocols (with exception of SSLv2 you need to supply EXPERIMENTAL=yes)
 * TLS 1.0-1.1 as socket checks per default in production
 * further detection of security relevant headers (reverse proxy, IPv4 addresses), proprietary banners (OWA, Liferay etc.)
-* LibreSSL fixes, still not recommended to use though (see https://testssl.sh/) 
-* lots of fixes, code improvements
+* can scan STARTTLS+XMPP by also supplying the XMPP domain (to-option in XML streams).
+* some LibreSSL fixes, still not recommended to use though (see https://testssl.sh/) 
+* lots of fixes, code improvements, even more robust
 
-Currently we're running 2.6rc1. means it's feature freeze and latest bugs are being squashed.
+Currently we're running 2.6rc3. Latest bugs are being squashed, expect a soon release.
 
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
