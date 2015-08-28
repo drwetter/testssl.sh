@@ -1321,8 +1321,7 @@ run_prototest_openssl() {
 									# SSLv3 doesn't have SNI (openssl doesn't complain though -- yet)
 		$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
 		ret=$?  						#TODO (maybe): here FreeBSD9 returns always 0 --> need to read the error
-		$VERBERR && \
-			egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+		[[ $DEBUG -eq 2 ]] && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 		grep -aq "no cipher list" $TMPFILE && ret=5
 	fi
 
@@ -4814,4 +4813,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.363 2015/08/28 12:59:03 dirkw Exp $
+#  $Id: testssl.sh,v 1.364 2015/08/28 14:46:27 dirkw Exp $
