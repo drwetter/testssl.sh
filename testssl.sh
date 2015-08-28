@@ -100,14 +100,11 @@ SNEAKY=${SNEAKY:-false}				# is the referer and useragent we leave behind just u
 QUIET=${QUIET:-false}				# don't output the banner. By doing this yiu acknowledge usage term appearing in the banner
 SSL_NATIVE=${SSL_NATIVE:-false}		# we do per default bash sockets where possible "true": switch back to "openssl native"
 ASSUMING_HTTP=${ASSUMING_HTTP:-false}	# in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
-DEBUG=${DEBUG:-0}					# if 1 the temp files won't be erased. 2: list more what's going on (formerly: eq VERBOSE=1),
-								# 3: slight hexdumps + other info, 4: send bytes via sockets, 5: received, 6: whole 9 yards
-								# FIXME: still to be filled with (more) sense or following to be included:
-VERBERR=${VERBERR:-false}			# true means to be more verbose (handshake errors to be displayed so that one can tell better
-								# whether handshake succeeded or not. While testing individual ciphers you also need to have SHOW_EACH_C=1
-								#FIXME: only a few functions support this
+DEBUG=${DEBUG:-0}					# 1.: the temp files won't be erased. 
+								# 2: list more what's going on (formerly: eq VERBOSE=1, VERBERR=true), lists some errors of connections
+								# 3: slight hexdumps + other info, 
+								# 4: display bytes sent via sockets, 5: display bytes received via sockets, 6: whole 9 yards
 WIDE=${WIDE:-false}					# whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
-
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}	# we wait this long before killing the process to retrieve a service banner / http header
 readonly MAX_WAITSOCK=10				# waiting at max 10 seconds for socket reply
 readonly CCS_MAX_WAITSOCK=5			# for the two CCS payload (each)
@@ -359,8 +356,8 @@ debugme() {
 }
 
 hex2dec() {
-	/usr/bin/printf -- "%d" 0x"$1"
-	#echo $((16#$1))
+	#/usr/bin/printf -- "%d" 0x"$1"
+	echo $((16#$1))
 }
 
 dec2hex() {
@@ -1313,8 +1310,9 @@ run_prototest_openssl() {
 
 	$OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $PROXY $sni &>$TMPFILE </dev/null
 	ret=$?
-# FIXME: here FreeBSD9 returns always 0 --> need to read the error
-	$VERBERR && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+# FIXME: here FreeBSD9/openssl 0.9.8 returns always 0 --> need to read the error but for now we DO NOT SUPPORT this platform.
+# that's where the binaries are for!
+	[[ $DEBUG -eq 2 ]] && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 
 	if ! locally_supported "$1" "$2" ; then
 		ret=7
@@ -1764,9 +1762,9 @@ run_server_defaults() {
 		ret=7
 	done				# this loop is needed for IIS/6
 	if [ $ret -eq 7 ]; then
-		# "-status" kills GOST only servers, so we do another test without it and see whether that works then:
+		# "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
 		if ! $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE; then
-			pr_magentaln "$OPENSSL returned an error around line $LINENO".
+			pr_magentaln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
 			tmpfile_handle tlsextdebug+status.txt
 			return 7	# this is ugly, I know
 		else
@@ -3087,8 +3085,7 @@ run_crime() {
 #			fi
 #		fi
 #	fi
-	$VERBERR && outln "$STR"
-	#echo
+#	[[ $DEBUG -eq 2 ]] outln "$STR"
 	tmpfile_handle $FUNCNAME.txt
 	return $ret
 }
@@ -3166,7 +3163,7 @@ run_ssl_poodle() {
 	debugme echo $cbc_ciphers
 	$OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
 	ret=$?
-	$VERBERR && egrep -q "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	[[ $DEBUG -eq 2 ]] && egrep -q "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
 	else
@@ -3267,7 +3264,7 @@ run_freak() {
 	esac
 	$OPENSSL s_client $STARTTLS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
 	ret=$?
-	$VERBERR && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	[[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	if [ $ret -eq 0 ]; then
 		pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
 	else
@@ -3304,7 +3301,7 @@ run_logjam() {
 	esac
 	$OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
 	ret=$?
-	$VERBERR && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+	[[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
 	addtl_warning="$addtl_warning, common primes not checked."
 	if $HAS_DH_BITS; then
 		if ! $do_allciphers && ! $do_cipher_per_proto && $HAS_DH_BITS; then
@@ -3844,7 +3841,6 @@ SSL_NATIVE: $SSL_NATIVE
 ASSUMING_HTTP $ASSUMING_HTTP
 SNEAKY: $SNEAKY
 
-VERBERR: $VERBERR
 DEBUG: $DEBUG
 
 HSTS_MIN: $HSTS_MIN
@@ -4818,4 +4814,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.362 2015/08/27 22:15:50 dirkw Exp $
+#  $Id: testssl.sh,v 1.363 2015/08/28 12:59:03 dirkw Exp $
