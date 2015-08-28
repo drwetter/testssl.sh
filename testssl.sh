@@ -4302,16 +4302,16 @@ draw_dotted_line() {
 mx_all_ips() {
 	local mxs mx
 	local mxport 
-	local ret=0
-	local starttls_proto="smtp"
-	local ret=0
+	local -i ret=0
+
+	STARTTLS_PROTOCOL="smtp"
 
 	# test first higher priority servers
 	mxs=$(get_mx_record "$1" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
 	mxport=${2:-25}
 	if [ -n "$mxs" ] && [ "$mxs" != ' ' ] ; then
 		[[ $mxport == "465" ]] && \
-			starttls_proto=""  		# no starttls for Port 465, on all other ports we speak starttls
+			STARTTLS_PROTOCOL=""  		# no starttls for Port 465, on all other ports we speak starttls
 		pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
 		for mx in $mxs; do
 			draw_dotted_line "-" $((TERM_DWITH * 2 / 3))
@@ -4322,11 +4322,11 @@ mx_all_ips() {
 				pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
 				for ip in $IPADDRs; do
 					NODEIP="$ip"
-					lets_roll "${starttls_proto}"
+					lets_roll "${STARTTLS_PROTOCOL}"
 				done
 			else
 				NODEIP="$IPADDRs"
-				lets_roll "${starttls_proto}"
+				lets_roll "${STARTTLS_PROTOCOL}"
 			fi
 			ret=$(($? + ret))
 		done
@@ -4813,4 +4813,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.364 2015/08/28 14:46:27 dirkw Exp $
+#  $Id: testssl.sh,v 1.365 2015/08/28 15:06:06 dirkw Exp $
