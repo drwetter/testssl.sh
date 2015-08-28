@@ -1219,6 +1219,7 @@ run_allciphers(){
 	local dhlen
 
 	nr_ciphers=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)")
+	outln
 	pr_blue "--> Testing all locally available $nr_ciphers ciphers against the server"; outln ", ordered by encryption strength"
 	! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
 	outln
@@ -3306,12 +3307,12 @@ run_logjam() {
 		if ! $do_allciphers && ! $do_cipher_per_proto && $HAS_DH_BITS; then
 			addtl_warning="$addtl_warning \"$PROG_NAME -E/-e\" spots candidates"
 		else
-			addtl_warning="$addtl_warning See below for DH bit size"
+			addtl_warning="$addtl_warning See below for any DH ciphers + bit size"
 		fi
 	fi
 		
 	if [ $ret -eq 0 ]; then
-		pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers"
+		pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers, common primes not checked."
 	else
 		pr_green "not vulnerable (OK)"; out "$addtl_warning"
 	fi
@@ -4813,4 +4814,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.365 2015/08/28 15:06:06 dirkw Exp $
+#  $Id: testssl.sh,v 1.366 2015/08/28 15:43:37 dirkw Exp $
