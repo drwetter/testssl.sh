@@ -3,7 +3,8 @@
 # vim:ts=5:sw=5
 # use vim and you will see everything beautifully indented with a 5 char tab
 
-[ -z "$BASH_VERSINFO" ] && printf "\n\033[1;35m Please make sure you're using \"bash\"! Bye...\033[m\n\n" && exit -10
+[ -z "$BASH_VERSINFO" ] && printf "\n\033[1;35m Please make sure you're using \"bash\"! Bye...\033[m\n\n" >&2 && exit 245 
+[ $(kill -l | grep -c SIG) -eq 0 ] && printf "\n\033[1;35m Please make sure you're calling me without leading \"sh\"! Bye...\033[m\n\n"  >&2 && exit 245
 
 # testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some
 # vulnerabilities or features
@@ -4814,4 +4815,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.366 2015/08/28 15:43:37 dirkw Exp $
+#  $Id: testssl.sh,v 1.367 2015/09/02 10:55:22 dirkw Exp $
