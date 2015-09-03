@@ -1,4 +1,30 @@
 
+2.6 New:
+  * display matching host key (HPKP)
+  * LOGJAM 1: check DHE_EXPORT cipher
+  * LOGJAM 2: displays DH(/ECDH) bits in wide mode on negotiated ciphers
+  * "wide mode" option for checks like RC4, BEAST. PFS. Displays hexcode, kx, strength, DH bits, RFC name
+  * binary directory provides out of the box better binaries (Linux 32+64 Bit, Darwin 64 bit, FreeBSD 64 bit)
+  * OS X binaries (@jvehent, new builds: @jpluimers)
+  * ARM binary (@f-s)
+  * FreeBSD binary
+  * TLS_FALLBACK_SCSV check -- thx @JonnyHightower
+  * (HTTP) proxy support! Also with sockets -- thx @jnewbigin
+  * Extended validation certificate detection
+  * Run in default mode through all ciphers at the end of a default run
+  * will test multiple IP adresses of one supplied server name in one shot, --ip= restricts it accordingly
+  * new mass testing file option --file option where testssl.sh commands are being read from, see https://twitter.com/drwetter/status/627619848344989696
+  * TLS time and HTTP time stamps
+  * TLS time displayed also for STARTTLS protocols
+  * support of sockets for STARTTLS protocols
+  * TLS 1.0-1.1 as socket checks per default in production
+  * further detection of security relevant headers (reverse proxy, IPv4 addresses), proprietary banners (OWA, Liferay etc.)
+  * can scan STARTTLS+XMPP by also supplying the XMPP domain (to-option in XML streams).
+  * quite some LibreSSL fixes, still not recommended to use though (see https://testssl.sh/)
+  * lots of fixes, code improvements, even more robust
+
+Full log @ https://github.com/drwetter/testssl.sh/commits/2.6/testssl.sh
+
 2.4 New:
   * "only one cmd line option at a time" is completely gone
   * several tuning parameters on the cmd line (only available through environment variables b4): --assuming-http, --ssl-native, --sneaky, --warnings, --color, -- debug, --long
