@@ -58,7 +58,7 @@
  - inspiration & help for Darwin port
 
 * Bug reports:
-  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi
+  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl
 
 ##### Last but not least:
 
