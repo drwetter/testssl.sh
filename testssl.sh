@@ -4624,7 +4624,7 @@ parse_cmd_line() {
 			--warnings|--warnings=*)
 				WARNINGS=$(parse_opt_equal_sign "$1" "$2") 
 				[[ $? -eq 0 ]] && shift
-				case "$WARNING" in
+				case "$WARNINGS" in
 					batch|off|false) ;;
 					*)	pr_magentaln "\nwarnings can be either \"batch\", \"off\" or \"false\"" 
 						help 1;;
@@ -4822,4 +4822,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.368 2015/09/03 10:06:30 dirkw Exp $
+#  $Id: testssl.sh,v 1.369 2015/09/03 10:17:30 dirkw Exp $
