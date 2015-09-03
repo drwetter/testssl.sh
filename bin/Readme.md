@@ -4,25 +4,26 @@ Binaries
 
 The binaries here have the naming scheme ``openssl.$(uname).$(uname -m)``
 and will be picked up from testssl.sh if you run testssl.sh directly
-off the git directory.
-
-If you expect Kerberos ciphers: The Linux binaries with the trailing -krb5 
-need to be renamed accordingly or you need to supply the path either
-as an argument (``--openssl=<here>``) or as an environment variable
+off the git directory. Otherwise you need ``testssl.sh`` to point to it 
+via the argument (``--openssl=<here>``) or as an environment variable
 (``OPENSSL=<here> testssl.sh <yourargs>``).
 
-The precompiled binaries provided here have extended support for
+The Linux binaries with the trailing ``-krb5`` come with Kerberos 5 support, 
+they won't be automatically picked up as you need to make sure first they
+run (see libraries below).
+
+All the precompiled binaries provided here have extended support for
 everything which is normally not in OpenSSL or LibreSSL -- 40+56 Bit,
 export/ANON ciphers, weak DH ciphers, SSLv2 etc. -- all the dirty
-features needed for testing. OTOH the binaries also come with extended
-support for new / advanced cipher suites and/or features which are not
-in the official branch like CHACHA20+POLY1305 and other ciphers like 
-CAMELIA 256 Bit.
+features needed for testing. OTOH they also come with extended support
+for new / advanced cipher suites and/or features which are not in the 
+official branch like CHACHA20+POLY1305 and CAMELIA 256 bit ciphers.
 
-The binaries in this directory are all compiled from an OpenSSL 1.0.2 fork
-from Peter Mosmans. Thx a bunch, Peter!
+The binariesi tn this directory are all compiled from an OpenSSL 1.0.2 fork
+from Peter Mosmans (https://github.com/PeterMosmans/openssl). Thx a bunch, 
+Peter!
 
-Linux binaries so far come from Dirk, other contributors see ../CREDITS.md .
+Compiled Linux binaries so far come from Dirk, other contributors see ../CREDITS.md .
 
 
 Compiling and Usage Instructions
@@ -98,7 +99,7 @@ If you don't have / don't want Kerberos libraries and devel rpms/debs, just omit
 
 5.) make report (check whether it runs ok!)
 
-6.) "./apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l" lists now for me
+6.) ``./apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l`` lists for me
 * 191(+4 GOST) ciphers -- including kerberos 
 * 177(+4 GOST) ciphers without kerberos
 
