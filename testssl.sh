@@ -2964,7 +2964,7 @@ run_renego() {
 
 	[ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for Renegotiation vulnerability" && outln "\n"
 
-	pr_bold " Secure Renegotiation "; out "(CVE 2009-3555)      " 	# and RFC5746, OSVDB 59968-59974
+	pr_bold " Secure Renegotiation "; out "(CVE-2009-3555)      " 	# and RFC5746, OSVDB 59968-59974
 														# community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
 	if $OPENSSL s_client $OPTIMAL_PROTO $STARTTLS -connect $NODEIP:$PORT $SNI $PROXY 2>&1 </dev/null &>$TMPFILE; then
 		grep -iaq "$insecure_renogo_str" $TMPFILE
