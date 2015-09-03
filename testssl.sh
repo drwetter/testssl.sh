@@ -60,7 +60,7 @@
 # testing though we need  all broken features. testssl.sh will
 # over time replace those checks with bash sockets -- however it's
 # still recommended to use the supplied binaries or cook your own, see 
-# https://github.com/drwetter/testssl.sh/blob/master/openssl-bins/openssl-1.0.2-chacha.pm/Readme.md
+# https://github.com/drwetter/testssl.sh/blob/master/bin/Readme.md .
 # Don't worry if feature X is not available you'll get a warning about
 # this missing feature!  The idea is if this script can't tell something
 # for sure it speaks up so that you have clear picture.
@@ -3594,12 +3594,6 @@ find_openssl_binary() {
 		:	# 2. otherwise try openssl in path of testssl.sh
 	elif test_openssl_suffix $RUN_DIR/bin; then
 		: 	# 3. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
-	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl$myarch_suffix"-1.0.2pm-krb5 ]]; then
-		OPENSSL="$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl$myarch_suffix"-1.0.2pm-krb5
-			# 4. legacy dirs follow, first kerberos binaries from pm (if executable) ^^^^ deprecated!
-	elif [[ -x "$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl$myarch_suffix"-1.0.2pm-static ]]; then
-			# 5. otherwise default is trying the statically linked ones             ^^^^ deprecated!
-			OPENSSL="$RUN_DIR/openssl-bins/openssl-1.0.2-chacha.pm/openssl$myarch_suffix"-1.0.2pm-static
 	elif	test_openssl_suffix "$(dirname "$(which openssl)")"; then
 		: 	# 5. we tried hard and failed, so now we use the system binaries
 	fi
@@ -4822,4 +4816,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.369 2015/09/03 10:17:30 dirkw Exp $
+#  $Id: testssl.sh,v 1.370 2015/09/03 11:26:01 dirkw Exp $
