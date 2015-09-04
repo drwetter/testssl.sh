@@ -3563,6 +3563,7 @@ get_install_dir() {
 test_openssl_suffix() {
 	local naming_ext="$(uname).$(uname -m)"
 	local uname_arch="$(uname -m)"
+	local myarch_suffix=""
 
 	[[ $uname_arch =~ 64 ]] && myarch_suffix=64 || myarch_suffix=32
 	if [[ -f "$1/openssl" ]] && [[ -x "$1/openssl" ]]; then
@@ -3574,22 +3575,21 @@ test_openssl_suffix() {
 	elif [[ -f "$1/openssl.$uname_arch" ]] && [[ -x "$1/openssl.$uname_arch" ]]; then
 		OPENSSL="$1/openssl.$uname_arch"
 		return 0
+	elif [[ -f "$1/openssl$myarch_suffix" ]] && [[ -x "$1/openssl$myarch_suffix" ]]; then
+		OPENSSL="$1/openssl$myarch_suffix"
+		return 0
 	fi
 	return 1
 }
 	
 
 find_openssl_binary() {
-	local myarch_suffix=""
-	local uname_arch=$(uname -m)
-
-	[[ $uname_arch =~ 64 ]] && myarch_suffix=64 || myarch_suffix=32
 	# 0. check environment variable whether it's executable
 	if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
 		pr_litemagentaln "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
 		outln " Looking some place else ..."
 	elif [[ -x "$OPENSSL" ]]; then
-		:	# 1. all ok supplied $OPENSSL is excutable
+		:	# 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
 	elif test_openssl_suffix $RUN_DIR; then
 		:	# 2. otherwise try openssl in path of testssl.sh
 	elif test_openssl_suffix $RUN_DIR/bin; then
@@ -3598,10 +3598,10 @@ find_openssl_binary() {
 		: 	# 5. we tried hard and failed, so now we use the system binaries
 	fi
 
-	# no ERRFILE initialized yet
+	# no ERRFILE initialized yet, thus we use /dev/null for stderr directly
 	$OPENSSL version -a 2>/dev/null >/dev/null
 	if [[ $? -ne 0 ]] || [[ ! -x "$OPENSSL" ]]; then
-		fatal "cannot exec or find any openssl binary" -1
+		fatal "\ncannot exec or find any openssl binary" -1
 	fi
 
 	# http://www.openssl.org/news/openssl-notes.html
@@ -3622,7 +3622,7 @@ find_openssl_binary() {
 
 	if $OPENSSL version 2>/dev/null | grep -qi LibreSSL; then
 		outln
-		pr_litemagenta "Please note: LibreSSL is not a good choice for testing insecure features!"
+		pr_litemagenta "Please note: LibreSSL is not a good choice for testing INSECURE features!"
 	fi
 
 	$OPENSSL s_client -ssl2 2>&1 | grep -aq "unknown option" || \
@@ -4816,4 +4816,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.370 2015/09/03 11:26:01 dirkw Exp $
+#  $Id: testssl.sh,v 1.371 2015/09/04 08:04:55 dirkw Exp $
