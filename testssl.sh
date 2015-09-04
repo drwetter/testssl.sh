@@ -690,6 +690,7 @@ run_hpkp() {
 	local hpkp_key hpkp_key_hostcert
 	local spaces="                             "
 	local key_found=false
+	local i
 
 	if [[ ! -s $HEADERFILE ]]; then
 		http_header "$1" || return 3
@@ -698,10 +699,21 @@ run_hpkp() {
 	pr_bold " Public Key Pinning           "
 	egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
 	if [[ $? -eq 0 ]]; then
-		egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" || pr_brown "(two HPKP headers, using 1st one) "
-		# remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces
+		if egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" ; then
+			:
+		else
+			pr_brown "two HPKP headers: "
+			for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
+				pr_underline $i
+				out " "
+			done
+			out "\n$spaces using first "
+			pr_underline "$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1), "
+		fi
+
+		# remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
 		sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE | \
-			sed -e 's/;//g' -e 's/\"//g' -e 's/^ //' > $TMPFILE.2
+			sed -e 's/;//g' -e 's/\"//g' -e 's/^ //' | head -1 > $TMPFILE.2
 		# BSD lacks -i, otherwise we would have done it inline
 		# now separate key value and other stuff per line:
 		tr ' ' '\n' < $TMPFILE.2 >$TMPFILE
@@ -4816,4 +4828,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.371 2015/09/04 08:04:55 dirkw Exp $
+#  $Id: testssl.sh,v 1.372 2015/09/04 12:19:05 dirkw Exp $
