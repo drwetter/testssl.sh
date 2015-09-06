@@ -1767,6 +1767,7 @@ run_server_defaults() {
 	local expire secs2warn ocsp_uri crl startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
 	local policy_oid
 	local spaces="                              "
+	local wildcard=false
 
 	outln
 	pr_blue "--> Testing server defaults (Server Hello)"; outln "\n"
@@ -1854,6 +1855,16 @@ run_server_defaults() {
 	if $OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | grep -wq CN; then
 		cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
 		pr_underline "$cn"
+		if echo -n "$cn" | grep -q '^*.' ; then
+			out " (wildcard certificate"
+			if [[ "$cn" == "*.$(echo -n "$cn" | sed 's/^\*.//')" ]]; then
+				out " match)"
+				wildcard=true
+			else
+				:
+				#FIXME: we need to test also the SANs as they can contain a wild card (google.de .e.g) ==> 2.7dev
+			fi
+		fi
 	else
 		cn="(no CN field in subject)"
 		out "$cn"
@@ -1867,16 +1878,20 @@ run_server_defaults() {
 			cn_nosni="no CN field in subject"
 		fi
 	fi
+
 	debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
 	if [[ $NODE == "$cn_nosni" ]]; then
-		if [[ $SERVICE != "HTTP" ]]; then
-			outln " (matches certificate directly)"
-		else
+		if [[ $SERVICE == "HTTP" ]]; then
 			outln " (works w/o SNI)"
+		else
+			outln " (matches certificate directly)"
+			# for services != HTTP it depends on the protocol, server and client but it is not named "SNI"
 		fi
 	else
 		if [[ $SERVICE != "HTTP" ]]; then
-			pr_brownln " (CN doesn't match but for non-HTTP services it might be ok)"
+			outln
+			#pr_brownln " (non-SNI clients don't match CN but for non-HTTP services it might be ok)"
+			#FIXME: this is irritating and needs to be redone. Then also the wildcard match needs to be tested against  "$cn_nosni"
 		elif [[ -z "$cn_nosni" ]]; then
 			out " (request w/o SNI didn't succeed";
 			[[ $algo =~ ecdsa ]] && out ", usual for EC certificates"
@@ -4828,4 +4843,4 @@ fi
 exit $ret
 
 
-#  $Id: testssl.sh,v 1.372 2015/09/04 12:19:05 dirkw Exp $
+#  $Id: testssl.sh,v 1.373 2015/09/06 16:21:07 dirkw Exp $
