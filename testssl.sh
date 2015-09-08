@@ -4615,6 +4615,7 @@ parse_cmd_line() {
 				HEX_CIPHER=""
 				# DEBUG=3  ./testssl.sh -q 03 "cc, 13, c0, 13" google.de
 				# DEBUG=3  ./testssl.sh -q 01 yandex.ru
+				# DEBUG=3  ./testssl.sh -q 00 <host which still supports SSLv2>
 				TLS_LOW_BYTE="$2"; 
 				if [[ $# -eq 4 ]]; then  # protocol AND ciphers specified
 					HEX_CIPHER="$3"
@@ -4715,7 +4716,9 @@ lets_roll() {
 	determine_rdns
 	determine_service "$1"		# any starttls service goes here
 
-	$do_tls_sockets && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
+	$do_tls_sockets && { [[ $TLS_LOW_BYTE -eq 0 ]] && \
+		sslv2_sockets || \
+		tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
 	$do_test_just_one && test_just_one ${single_cipher}
 
 	# all top level functions  now following have the prefix "run_"
@@ -4840,7 +4843,7 @@ else
 	fi
 fi
 
-exit $ret
+exit $?
 
 
-#  $Id: testssl.sh,v 1.373 2015/09/06 16:21:07 dirkw Exp $
+#  $Id: testssl.sh,v 1.374 2015/09/08 17:23:23 dirkw Exp $
