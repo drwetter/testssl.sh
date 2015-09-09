@@ -1688,7 +1688,7 @@ cipher_pref_check() {
 	else
 		protos=$($OPENSSL s_client -host $NODE -port $PORT -nextprotoneg  \"\" </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
 		for p in $protos; do
-			$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$p" $PROXY </dev/null 2>>$$ERRFILE >$TMPFILE
+			$OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
 			cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
 			printf "     %-10s %s " "$p:" "$cipher"
 			tested_cipher="-"$cipher
@@ -4846,4 +4846,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.374 2015/09/08 17:23:23 dirkw Exp $
+#  $Id: testssl.sh,v 1.375 2015/09/09 14:41:31 dirkw Exp $
