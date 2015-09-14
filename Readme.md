@@ -11,16 +11,15 @@ On github you will find in the master branch the development version of the soft
 
 New features in the imminent stable release 2.6 are: 
 
-* display matching key (HPKP)
+* display matching host key (HPKP)
 * LOGJAM 1: check DHE_EXPORT cipher 
 * LOGJAM 2: displays DH(/ECDH) bits in wide mode on negotiated ciphers
 * "wide mode" option for checks like RC4, BEAST. PFS. Displays hexcode, kx, strength, DH bits, RFC name
 * binary directory provides out of the box better binaries (Linux 32+64 Bit, Darwin 64 bit, FreeBSD 64 bit)
 * OS X binaries (@jvehent, new builds: @jpluimers)
 * ARM binary (@f-s)
-* FreeBSD binary
+* (HTTP) proxy support, via openssl and sockets! -- Thx @jnewbigin
 * TLS_FALLBACK_SCSV check -- Thx @JonnyHightower
-* (HTTP) proxy support! -- Thx @jnewbigin
 * Extended validation certificate detection
 * Run in default mode through all ciphers at the end of a default run
 * will test multiple IP adresses in one shot, --ip=<adress|"one"> restricts it accordingly
@@ -34,7 +33,7 @@ New features in the imminent stable release 2.6 are:
 * quite some LibreSSL fixes, still not recommended to use though (see https://testssl.sh/) 
 * lots of fixes, code improvements, even more robust
 
-Currently we're running 2.6rc3. Latest bugs are being squashed, expect a soon release.
+Currently we're running 2.6rc4. One bug is pending to be squashed, expect a soon release.
 
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
