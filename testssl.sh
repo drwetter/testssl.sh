@@ -266,9 +266,9 @@ pr_literedln() { pr_litered "$1"; outln; }
 pr_red()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }			# oh, this is really bad
 pr_redln()     { pr_red "$1"; outln; }
 
-pr_litemagenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }	# local problem: one test acconot be done
+pr_litemagenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }	# local problem: one test cannot be done
 pr_litemagentaln() { pr_litemagenta "$1"; outln; }
-pr_magenta()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }	# Fatal error: quitting because of this
+pr_magenta()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }	# Fatal error: quitting because of this!
 pr_magentaln()     { pr_magenta "$1"; outln; }
 
 pr_litecyan()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;36m$1" || out "$1"; pr_off; }				# not yet used
@@ -1400,7 +1400,7 @@ run_protocols() {
 	case $? in
 		0) pr_literedln "offered (NOT ok)" ;;
 		1) pr_greenln "not offered (OK)"   ;;
-		2) pr_magentaln "#FIXME: downgraded. still missing a test case here" ;;
+		2) pr_litemagentaln "#FIXME: downgraded. still missing a test case here" ;;
 		5) pr_litered "$supported_no_ciph2"; 
 				outln "(may need debugging)"  ;;					# protocol ok, but no cipher
 		7) ;;												# no local support
@@ -1796,7 +1796,7 @@ run_server_defaults() {
 	if [[ $ret -eq 7 ]]; then
 		# "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
 		if ! $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE; then
-			pr_magentaln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+			pr_litemagentaln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
 			tmpfile_handle tlsextdebug+status.txt
 			return 7	# this is ugly, I know
 		else
@@ -2289,12 +2289,10 @@ fd_socket() {
 				starttls_line "a002 STARTTLS" "OK"
 				;;
 			ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
-				pr_magentaln "FIXME: LDAP+STARTTLS over sockets not yet supported (try \"--ssl-native\")"
-				exit -4
+				fatal "FIXME: LDAP+STARTTLS over sockets not yet supported (try \"--ssl-native\")" -4
 				;;
 			acap|acaps) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
-				pr_magentaln "ACAP Easteregg: not implemented -- probably never will"
-				exit -4
+				fatal "ACAP Easteregg: not implemented -- probably never will" -4
 				;;
 			xmpp|xmpps) # XMPP, see https://tools.ietf.org/html/rfc6120
 				starttls_just_read
@@ -2314,8 +2312,7 @@ EOF
 				# BTW: https://xmpp.net !
 				;;
 			*) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
-				pr_magentaln "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported"
-				exit -4
+				fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" -4
 		esac
 	fi
 
@@ -3018,10 +3015,10 @@ run_renego() {
 		case $sec_renego in
 			0) pr_redln "VULNERABLE (NOT ok)" ;;
 			1) pr_greenln "not vulnerable (OK)" ;;
-			*) pr_magentaln "FIXME (bug): $sec_renego" ;;
+			*) pr_litemagentaln "FIXME (bug): $sec_renego" ;;
 		esac
 	else
-		pr_magentaln "handshake didn't succeed" 
+		pr_litemagentaln "handshake didn't succeed" 
 	fi
 
 	pr_bold " Secure Client-Initiated Renegotiation     "	# RFC 5746
@@ -3273,7 +3270,7 @@ run_tls_fallback_scsv() {
 				out ", run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
 			fi
 		else
-			pr_magenta "test failed (couldn't connect)"
+			pr_litemagenta "test failed (couldn't connect)"
 			ret=7
 		fi
 	fi
@@ -4880,4 +4877,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.376 2015/09/14 09:03:09 dirkw Exp $
+#  $Id: testssl.sh,v 1.377 2015/09/14 09:12:36 dirkw Exp $
