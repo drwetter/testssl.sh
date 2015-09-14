@@ -1547,11 +1547,16 @@ run_server_preference() {
 
 	pr_bold " Has server cipher order?     "
 	$OPENSSL s_client $STARTTLS -cipher $list_fwd -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
-	if [[ $? -ne 0 ]]; then
+	if [[ $? -ne 0 ]] && [[ -z "$STARTTLS_PROTOCOL" ]]; then
+		pr_litemagenta "no matching cipher in this list found (pls report this): "
+		outln "$list_fwd  . "
+          has_cipher_order=false
+          ret=6
+	elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
 		# now it still could be that we hit this bug: https://github.com/drwetter/testssl.sh/issues/188
 		# workaround is to connect with a protocol
 		debugme out "(workaround #188) "
-		determine_optimal_proto $STARTTLS_PROTOCOL
+		determine_optimal_proto $STARTTLS_PROTOCOL			
 		$OPENSSL s_client $STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
 		if [[ $? -ne 0 ]]; then
 			pr_litemagenta "no matching cipher in this list found (pls report this): "
@@ -1564,6 +1569,7 @@ run_server_preference() {
 	if $has_cipher_order; then
 		cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 		$OPENSSL s_client $STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_reverse -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+		# that worked above so no error handling here
 		cipher2=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 
 		if [[ "$cipher1" != "$cipher2" ]]; then
@@ -1576,9 +1582,13 @@ run_server_preference() {
 		[[ $DEBUG -ge 2 ]] && out "  $cipher1 | $cipher2"
 		outln
 
-
-		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
 		pr_bold " Negotiated protocol          "
+		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+		if [[ $? -ne 0 ]]; then
+			# 2 second try with $OPTIMAL_PROTO especially for intolerant IIS6 servers:
+			$OPENSSL s_client $STARTTLS $OPTIMAL_PROTO -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+			[[ $? -ne 0 ]] && pr_litemagenta "Handshake error!"
+		fi
 		default_proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
 		case "$default_proto" in
 			*TLSv1.2)		pr_greenln $default_proto ;;
@@ -1587,7 +1597,7 @@ run_server_preference() {
 			*SSLv2)		pr_redln $default_proto ;;
 			*SSLv3)		pr_redln $default_proto ;;
 			"")			pr_litemagenta "default proto empty";  [[ $OSSL_VER == 1.0.2* ]] && outln " (Hint: if IIS6 give OpenSSL 1.01 a try)" ;; 
-			*)			outln "$default_proto" ;;
+			*)			pr_litemagenta "FIXME line $LINENO: $default_proto" ;;
 		esac
 
 		pr_bold " Negotiated cipher            "
@@ -1663,7 +1673,7 @@ run_server_preference() {
 	if [[ -z "$remark4default_cipher" ]]; then
 		cipher_pref_check
 	else
-		outln "\n No further cipher order check as order is determined by the client"
+		outln "\n No further cipher order check has been done as order is determined by the client"
 	fi
 	return 0
 }
@@ -4877,4 +4887,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.377 2015/09/14 09:12:36 dirkw Exp $
+#  $Id: testssl.sh,v 1.378 2015/09/14 10:54:53 dirkw Exp $
