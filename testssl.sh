@@ -72,7 +72,7 @@ readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
 
-readonly VERSION="2.6rc3"
+readonly VERSION="2.6rc4"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
 	SWURL="https://testssl.sh/dev/" ||
@@ -173,7 +173,7 @@ URI=""
 STARTTLS_PROTOCOL=""
 OPTIMAL_PROTO=""					# we need this for IIS6 (sigh) and OpenSSL 1.02, otherwise some handshakes
 								# will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
-
+STARTTLS_OPTIMAL_PROTO=""			# same for STARTTLS, see https://github.com/drwetter/testssl.sh/issues/188
 TLS_TIME=""
 TLS_NOW=""
 HTTP_TIME=""
@@ -1531,27 +1531,39 @@ read_dhbits_from_file() {
 
 
 run_server_preference() {
-	local -i ret=0
 	local cipher1 cipher2
-	local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
-	local list_reverse="AES256-SHA256:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"	# offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393
-	local remark4default_cipher 
 	local default_cipher default_proto
+	local remark4default_cipher 
 	local -a cipher proto
 	local p i
-
+	local -i ret=0
+	local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
+	# now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
+	local list_reverse="AES256-SHA256:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
+	local has_cipher_order=true
+	
 	outln;
 	pr_blue "--> Testing server preferences"; outln "\n"
 
 	pr_bold " Has server cipher order?     "
 	$OPENSSL s_client $STARTTLS -cipher $list_fwd -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
 	if [[ $? -ne 0 ]]; then
-		pr_magenta "no matching cipher in this list found (pls report this): "
-		outln "$list_fwd  . "
-          ret=6
-	else
+		# now it still could be that we hit this bug: https://github.com/drwetter/testssl.sh/issues/188
+		# workaround is to connect with a protocol
+		debugme out "(workaround #188) "
+		determine_optimal_proto $STARTTLS_PROTOCOL
+		$OPENSSL s_client $STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
+		if [[ $? -ne 0 ]]; then
+			pr_litemagenta "no matching cipher in this list found (pls report this): "
+			outln "$list_fwd  . "
+			has_cipher_order=false
+          	ret=6
+		fi
+	fi
+
+	if $has_cipher_order; then
 		cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
-		$OPENSSL s_client $STARTTLS -cipher $list_reverse -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+		$OPENSSL s_client $STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_reverse -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
 		cipher2=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 
 		if [[ "$cipher1" != "$cipher2" ]]; then
@@ -1563,6 +1575,7 @@ run_server_preference() {
 		fi
 		[[ $DEBUG -ge 2 ]] && out "  $cipher1 | $cipher2"
 		outln
+
 
 		$OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
 		pr_bold " Negotiated protocol          "
@@ -1652,7 +1665,6 @@ run_server_preference() {
 	else
 		outln "\n No further cipher order check as order is determined by the client"
 	fi
-
 	return 0
 }
 
@@ -4223,34 +4235,56 @@ check_proxy(){
 }
 
 
+# this function determines OPTIMAL_PROTO. It is a workaround function as under certain circumstances 
+# openssl 1.0.2 (as opposed to 1.0.1) needs a protocol otherwise s_client -connect will fail!
+# Circumstances so far: 1.) IIS 6  2.) starttls + dovecot imap
+# The first try in the loop is empty as we prefer not to specify always a protocol f it works w/o.
+#
+determine_optimal_proto() {
+	local all_failed
+	local addcmd=""
+
+	#TODO: maybe qeury known openssl version before this workaround
+
+	if [[ -n "$1" ]]; then
+		# starttls workaround needed see https://github.com/drwetter/testssl.sh/issues/188
+		# kind of odd
+		for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
+			$OPENSSL s_client $STARTTLS_OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY -starttls $1 </dev/null &>/dev/null && all_failed=1 && break
+			all_failed=0
+		done
+		debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
+	else
+		for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2 ''; do
+			$OPENSSL s_client $OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY $SNI </dev/null &>/dev/null && all_failed=1 && break
+			all_failed=0
+		done
+		debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
+	fi
+
+	if [[ $all_failed -eq 0 ]]; then
+		outln
+		pr_boldln " $NODEIP:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate";
+		ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
+		[[ $? -ne 0 ]] && exit -2
+	fi
+}
+
+
 # arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap (maybe with trailing s)
 determine_service() {
-	local all_failed
 	local ua 
 	local protocol
 
-	if ! fd_socket; then 			# check if we can connect to $NODEIP:$PORT
+	if ! fd_socket; then 					# check if we can connect to $NODEIP:$PORT
 		fatal "can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" -2
 	fi
 	close_socket
 
 	datebanner "Testing"
 	outln
-
-	if [[ -z "$1" ]]; then		# for starttls we want another check
-		# determine protocol which works (needed for IIS6). If we don't have IIS6, 1st try will succeed --> better because we use the variable
-		# all over the place. Stupid thing that we need to do that stuff for IIS<=6
-		for OPTIMAL_PROTO in "" "-tls1_2" "-tls1" "-ssl3" "-tls1_1" "-ssl2" ""; do
-			$OPENSSL s_client $OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY $SNI </dev/null &>/dev/null && all_failed=1 && break
-			all_failed=0
-		done
-		debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
-		if [[ $all_failed -eq 0 ]]; then
-			outln
-			pr_boldln " $NODEIP:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate";
-			ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
-			[[ $? -ne 0 ]] && exit -2
-		fi
+	if [[ -z "$1" ]]; then					# no STARTTLS. For STARTTLS we do this where it fails ("Has server cipher order")
+		determine_optimal_proto "$1"			# in order to avoid unneccessary connects
 		$SNEAKY && \
 			ua="$UA_SNEAKY" || \
 			ua="$UA_STD"
@@ -4259,8 +4293,8 @@ determine_service() {
 		GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
 		HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
 		runs_HTTP $OPTIMAL_PROTO
-	else
-		protocol=$(echo "$1" | sed 's/s$//')     # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
+	else									# STARTTLS
+		protocol=$(echo "$1" | sed 's/s$//')	# strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
 		case "$protocol" in
 			ftp|smtp|pop3|imap|xmpp|telnet|ldap)
 				STARTTLS="-starttls $protocol"
@@ -4846,4 +4880,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.375 2015/09/09 14:41:31 dirkw Exp $
+#  $Id: testssl.sh,v 1.376 2015/09/14 09:03:09 dirkw Exp $
