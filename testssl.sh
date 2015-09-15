@@ -72,11 +72,11 @@ readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
 
-readonly VERSION="2.6rc4"
+readonly VERSION="2.6"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
 	SWURL="https://testssl.sh/dev/" ||
-	SWURL="https://testssl.sh     "
+	SWURL="https://testssl.sh/    "
 
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname "$0")
@@ -4887,4 +4887,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.378 2015/09/14 10:54:53 dirkw Exp $
+#  $Id: testssl.sh,v 1.379 2015/09/15 06:48:58 dirkw Exp $
