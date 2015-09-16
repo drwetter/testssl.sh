@@ -9,7 +9,7 @@ It is working on every Linux distribution out of the box with some limitations o
 
 On github you will find in the master branch the development version of the software -- with new features and maybe some bugs. For the stable version and a more thorough description of the software please see [testssl.sh](https://testssl.sh/ "Go to the site with the stable version and more documentation"). 
 
-New features in the imminent stable release 2.6 are: 
+New features in the stable release 2.6 are: 
 
 * display matching host key (HPKP)
 * LOGJAM 1: check DHE_EXPORT cipher 
@@ -32,8 +32,6 @@ New features in the imminent stable release 2.6 are:
 * can scan STARTTLS+XMPP by also supplying the XMPP domain (to-option in XML streams).
 * quite some LibreSSL fixes, still not recommended to use though (see https://testssl.sh/) 
 * lots of fixes, code improvements, even more robust
-
-Currently we're running 2.6rc4. One bug is pending to be squashed, expect a soon release.
 
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
