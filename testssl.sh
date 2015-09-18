@@ -4022,6 +4022,12 @@ parse_hn_port() {
      return 0       # NODE, URL_PATH, PORT is set now
 }
 
+is_number() {
+     [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
+          return 0 || \
+          return 1
+}
+
 
 is_ipv4addr() {
      local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
@@ -4221,22 +4227,22 @@ get_mx_record() {
 
 # We need to get the IP address of the proxy so we can use it in fd_socket
 check_proxy(){
-     local save_LOCAL_A=$LOCAL_A
-     local save_LOCAL_AAAA=$LOCAL_AAAA
-
      if [[ -n "$PROXY" ]]; then
           if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
                fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -1
           fi
           PROXYNODE=${PROXY%:*}
           PROXYPORT=${PROXY#*:}
+          is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" "-3"
 
-          PROXYIP=$(get_a_record $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-          LOCAL_A=$save_LOCAL_A
-          LOCAL_AAAA=$save_LOCAL_AAAA
-          # no RFC 1918:
-          #if ! is_ipv4addr $PROXYIP ; then
-          [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "-3"
+          #if is_ipv4addr "$PROXYNODE" || is_ipv6addr "$PROXYNODE" ; then
+          # IPv6 via openssl -proxy: that doesn't work. Sockets does
+          if is_ipv4addr "$PROXYNODE"; then
+               PROXYIP="$PROXYNODE"
+          else
+               PROXYIP=$(get_a_record $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
+               [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "-3"
+          fi
           PROXY="-proxy $PROXYIP:$PROXYPORT"
      fi
 }
@@ -4342,6 +4348,10 @@ determine_service() {
 display_rdns_etc() {
      local i
 
+     if [[ -n "$PROXY" ]]; then
+          out " Via Proxy:              "
+          outln "$PROXYIP:$PROXYPORT "
+     fi
      if [[ $(count_words "$(echo -n "$IP46ADDRs")") -gt 1 ]]; then
           out " further IP addresses:  "
           for i in $IP46ADDRs; do
@@ -4887,4 +4897,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.380 2015/09/17 13:29:06 dirkw Exp $
+#  $Id: testssl.sh,v 1.381 2015/09/18 13:12:00 dirkw Exp $
