@@ -2256,8 +2256,8 @@ fd_socket() {
                if [[ "${proyxline%/*}" == "HTTP" ]]; then
                     proyxline=${proyxline#* }
                     if [[ "${proyxline%% *}" != "200" ]]; then
-                         [[ "$PORT" != 443 ]] && outln "Check whether your proxy supports port $PORT and the underlying protocol."
                          pr_magenta "Unable to CONNECT via proxy. "
+                         [[ "$PORT" != 443 ]] && pr_magentaln "Check whether your proxy supports port $PORT and the underlying protocol."
                          return 6
                     fi
                fi
@@ -4290,7 +4290,9 @@ determine_service() {
      local protocol
 
      if ! fd_socket; then                         # check if we can connect to $NODEIP:$PORT
-          fatal "can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" -2
+          [[ -n "$PROXY" ]] && \
+               fatal "You're sure $PROXYNODE:$PROXYPORT allows tunneling here? Can't connect to \"$NODEIP:$PORT\"" -2 || \
+               fatal "Can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" -2
      fi
      close_socket
 
@@ -4360,10 +4362,10 @@ display_rdns_etc() {
           done
           outln
      fi
-     [[ -n "$rDNS" ]] && printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS"
      if "$LOCAL_A"; then
-          out " (A record via /etc/hosts) "
+          outln " A record via            /etc/hosts "
      fi
+     [[ -n "$rDNS" ]] && printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS"
 }
 
 datebanner() {
@@ -4897,4 +4899,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.381 2015/09/18 13:12:00 dirkw Exp $
+#  $Id: testssl.sh,v 1.382 2015/09/19 13:03:39 dirkw Exp $
