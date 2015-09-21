@@ -1537,9 +1537,9 @@ run_server_preference() {
      local -a cipher proto
      local p i
      local -i ret=0
-     local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:AES256-SHA256"
+     local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256"
      # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
-     local list_reverse="AES256-SHA256:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
+     local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
      local has_cipher_order=true
      
      outln;
@@ -2041,14 +2041,11 @@ run_server_defaults() {
      # if we call tls_time before tmpfile_handle it throws an error because the function tls_sockets removed $TMPFILE 
      # already -- and that was a different one -- means that would get overwritten anyway
      tmpfile_handle tlsextdebug+status.txt
-
      tls_time
-
      return $ret
 }
 # FIXME: revoked, see checkcert.sh
 # FIXME: Trust (only CN)
-
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 run_pfs() {
@@ -2064,16 +2061,16 @@ run_pfs() {
 #
 # hardcoded: (the exclusion via ! doesn't work with libressl and openssl 0.9.8) and it's reproducible
      local pfs_cipher_list="ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-CAMELLIA128-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA"
-     local -i no_supported_ciphers=0
+     local -i nr_supported_ciphers=0
 
      outln
      pr_blue "--> Testing (perfect) forward secrecy, (P)FS"; outln " -- omitting 3DES, RC4 and Null Encryption here"
      ! $HAS_DH_BITS && $WIDE && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
 
-     no_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $pfs_cipher_list))
-     if [[ "$no_supported_ciphers" -le "$CLIENT_MIN_PFS" ]]; then
+     nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $pfs_cipher_list))
+     if [[ "$nr_supported_ciphers" -le "$CLIENT_MIN_PFS" ]]; then
           outln
-          local_problem "You only have $number_pfs PFS ciphers on the client side "
+          local_problem "You only have $nr_supported_ciphers PFS ciphers on the client side "
           return 1
      fi
 
@@ -2129,9 +2126,10 @@ run_pfs() {
      $WIDE && outln
 
      debugme echo $(actually_supported_ciphers $pfs_cipher_list)
-     debugme echo $no_supported_ciphers
+     debugme echo $nr_supported_ciphers
 
      tmpfile_handle $FUNCNAME.txt
+#     sub1_curves
      return $pfs_offered
 }
 
@@ -3294,7 +3292,7 @@ run_tls_fallback_scsv() {
 # Factoring RSA Export Keys: don't use EXPORT RSA ciphers, see https://freakattack.com/
 run_freak() {
      local -i ret=0
-     local -i no_supported_ciphers=0
+     local -i nr_supported_ciphers=0
      # with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
      local exportrsa_cipher_list="EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-RC4-MD5:EXP-RC4-MD5"
      local addtl_warning=""
@@ -3302,18 +3300,18 @@ run_freak() {
      [ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for FREAK attack" && outln "\n"
      pr_bold " FREAK"; out " (CVE-2015-0204)                     "
 
-     no_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportrsa_cipher_list))
+     nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportrsa_cipher_list))
      #echo "========= ${PIPESTATUS[*]}
 
-     case $no_supported_ciphers in
+     case $nr_supported_ciphers in
           0)   local_problem "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
                return 7 ;;
           1|2|3)
-               addtl_warning=" ($magenta""tested only with $no_supported_ciphers out of 9 ciphers only!$off)" ;;
+               addtl_warning=" ($magenta""tested only with $nr_supported_ciphers out of 9 ciphers only!$off)" ;;
           8|9|10|11)
                addtl_warning="" ;;
           4|5|6|7)
-               addtl_warning=" (tested with $no_supported_ciphers/9 ciphers)" ;;
+               addtl_warning=" (tested with $nr_supported_ciphers/9 ciphers)" ;;
      esac
      $OPENSSL s_client $STARTTLS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
      ret=$?
@@ -3326,7 +3324,7 @@ run_freak() {
      outln
 
      debugme echo $(actually_supported_ciphers $exportrsa_cipher_list)
-     debugme echo $no_supported_ciphers
+     debugme echo $nr_supported_ciphers
 
      tmpfile_handle $FUNCNAME.txt
      return $ret
@@ -3337,19 +3335,19 @@ run_freak() {
 run_logjam() {
      local -i ret=0
      local exportdhe_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
-     local -i no_supported_ciphers=0
+     local -i nr_supported_ciphers=0
      local addtl_warning=""
 
      [ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for LOGJAM vulnerability" && outln "\n"
      pr_bold " LOGJAM"; out " (CVE-2015-4000), experimental      "
 
-     no_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdhe_cipher_list))
+     nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdhe_cipher_list))
 
-     case $no_supported_ciphers in
+     case $nr_supported_ciphers in
           0)   local_problem "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
                return 3 ;;
-          1|2) addtl_warning=" ($magenta""tested w/ $no_supported_ciphers/4 ciphers only!$off)" ;;
-          3) addtl_warning=" (tested w/ $no_supported_ciphers/4 ciphers)" ;;
+          1|2) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
+          3) addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers)" ;;
           4)   ;;
      esac
      $OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
@@ -3372,7 +3370,7 @@ run_logjam() {
      outln
 
      debugme echo $(actually_supported_ciphers $exportdhe_cipher_list)
-     debugme echo $no_supported_ciphers
+     debugme echo $nr_supported_ciphers
 
      tmpfile_handle $FUNCNAME.txt
      return $ret
@@ -4899,4 +4897,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.382 2015/09/19 13:03:39 dirkw Exp $
+#  $Id: testssl.sh,v 1.385 2015/09/21 12:03:47 dirkw Exp $
