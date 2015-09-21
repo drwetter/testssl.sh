@@ -2139,13 +2139,13 @@ run_pfs() {
 
 
 spdy_pre(){
-     if [[ ! -z "$STARTTLS" ]]; then
+     if [[ -n "$STARTTLS" ]]; then
           [[ -n "$1" ]] && out "$1"
           out "(SPDY is a HTTP protocol and thus not tested here)"
           return 1
      fi
-     if [[ ! -z "$PROXY" ]]; then
-          [[ -n "$1" ]] && pr_litemagenta "$1 "
+     if [[ -n "$PROXY" ]]; then
+          [[ -n "$1" ]] && pr_litemagenta " $1 "
           pr_litemagenta "not tested as proxies do not support proxying it"
           return 1
      fi
@@ -4110,6 +4110,13 @@ get_local_a() {
      fi
 }
 
+check_resolver_bins() {
+     if ! which dig &> /dev/null && ! which host &> /dev/null && ! which nslookup &>/dev/null; then
+          fatal "Neither \"dig\", \"host\" or \"nslookup\" is present" "-3"
+     fi
+     return 0
+}
+
 # arg1: a host name. Returned will be 0-n IPv4 addresses
 get_a_record() {
      local ip4=""
@@ -4166,6 +4173,7 @@ determine_ip_addresses() {
      else
           ip4=$(get_local_a $NODE)           # is there a local host entry?
           if [[ -z $ip4 ]]; then             # empty: no (LOCAL_A is predefined as false)
+               check_resolver_bins
                ip4=$(get_a_record $NODE)
           else
                LOCAL_A=true                  # we have the ip4 from local host entry and need to set this
@@ -4210,6 +4218,7 @@ get_mx_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
 
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
+     check_resolver_bins
      if which host &> /dev/null; then
           mxs=$(host -t MX "$1" 2>/dev/null | grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
      elif which dig &> /dev/null; then
@@ -4238,6 +4247,7 @@ check_proxy(){
           if is_ipv4addr "$PROXYNODE"; then
                PROXYIP="$PROXYNODE"
           else
+               check_resolver_bins
                PROXYIP=$(get_a_record $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
                [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "-3"
           fi
@@ -4897,4 +4907,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.385 2015/09/21 12:03:47 dirkw Exp $
+#  $Id: testssl.sh,v 1.386 2015/09/21 14:43:46 dirkw Exp $
