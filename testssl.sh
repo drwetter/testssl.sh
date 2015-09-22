@@ -374,10 +374,10 @@ dec2hex() {
 
 # trim spaces for BSD and old sed
 count_lines() {
-     echo "$1" | wc -l | sed 's/ //g'
+     wc -l <<<"$1" | sed 's/ //g'
 }
 count_words() {
-     echo "$1" | wc -w | sed 's/ //g'
+     wc -w <<<"$1" | sed 's/ //g'
 }
 
 count_ciphers() {
@@ -389,11 +389,15 @@ actually_supported_ciphers() {
 }
 
 newline_to_spaces() {
-     echo "$1" | tr '\n' ' ' | sed 's/ $//'
+     tr '\n' ' ' <<< "$1" | sed 's/ $//'
 }
 
 strip_lf() {
      echo "$1" | tr -d '\n' | tr -d '\r'
+}
+
+strip_spaces() {
+     echo "${1// /}"
 }
 
 toupper() {
@@ -1757,6 +1761,98 @@ get_all_certs() {
 }
 
 
+verify_retcode_helper() {
+     local ret=0
+
+	case "$1" in
+		# codes from ./doc/apps/verify.pod | verify(1ssl)
+		*"24 "*      ) out " (certificate unreadable)" ;; 	# X509_V_ERR_INVALID_CA
+		*23*revoked* ) out " (certificate revoked)" ;; 		# X509_V_ERR_CERT_REVOKED
+		*21*unable*  ) out " (chain incomplete, only 1 cert provided)" ;; 	# X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
+		*20*unable*  ) out " (chain incomplete)" ;;			# X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+		*19*self*    ) out " (self signed CA in chain)" ;;	# X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
+		*18*self*    ) out " (self signed)" ;;				# X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
+		*10*expired* ) out " (expired)" ;;				     # X509_V_ERR_CERT_HAS_EXPIRED
+		*"9 "*       ) out " (not yet valid)" ;;		     # X509_V_ERR_CERT_NOT_YET_VALID
+		*) ret=1 ; pr_litemagenta " (unknown, pls report) $1" ;;
+	esac
+     return $ret
+}
+
+determine_trust() {
+	local i=1
+	local bundle_fname
+	local -a certificate_file verify_retcode trust 
+	local ok_was=""
+	local notok_was=""
+     local code
+     local ca_bundles="$INSTALL_DIR/etc/*pem"
+     local spaces="                              "
+
+     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]]; then
+          pr_litemagentaln "Your $OPENSSL is too old, needed is version >=1.0.2"
+          return 7
+     fi
+     debugme outln
+	for bundle_fname in $ca_bundles; do
+		certificate_file[i]=$(basename $bundle_fname | sed 's/\.pem//')
+          if [[ ! -r $bundle_fname ]] ; then
+               pr_litemagentaln "\"$bundle_fname\" cannot be found / not readable" 
+               return 7
+          fi
+		debugme printf -- " %-12s" "${certificate_file[i]}"
+		$OPENSSL s_client -purpose sslserver -CAfile $bundle_fname $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null  >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+		verify_retcode[i]=$(awk -F':' '/Verify return code: / { print $2 }' $TEMPDIR//${certificate_file[i]}.1)
+		if egrep -wq "ok|0" <<< ${verify_retcode[i]}; then
+			trust[i]=true
+			debugme pr_litegreen "Ok   "
+			debugme outln "${verify_retcode[i]}"
+		else
+			trust[i]=false
+			debugme pr_litered "not trusted"
+			debugme outln "${verify_retcode[i]}"
+		fi
+		i=$(($i + 1))
+	done
+     debugme out " "
+	# all stores ok
+	if ${trust[1]} && ${trust[2]} && ${trust[3]} && ${trust[4]}; then
+		pr_litegreen "Ok   "			
+	# at least one failed
+	else
+		pr_litered "NOT ok"	
+		# all failed (we assume with the same issue)
+		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]} && ! ${trust[4]}; then
+			verify_retcode_helper "${verify_retcode[2]}"
+		else
+			# is one ok and the others not?
+			if ${trust[1]} || ${trust[2]} || ${trust[3]} || ${trust[4]}; then
+				pr_litered ":"
+				for i in 1 2 3 4; do
+					if ${trust[i]}; then
+						ok_was="${certificate_file[i]} $ok_was"
+					else
+                              #code="$(verify_retcode_helper ${verify_retcode[i]})"
+                              #notok_was="${certificate_file[i]} $notok_was"
+                              pr_litered "  ${certificate_file[i]}:"
+                              verify_retcode_helper "${verify_retcode[i]}"
+					fi
+				done
+				#pr_litered "$notok_was "
+                    #outln "$code"
+                    outln
+				#lf + green ones
+                    [[ $DEBUG -eq 0 ]] && out "$spaces"
+				pr_litegreen "OK: $ok_was"
+               fi
+		fi
+	fi
+	outln
+}
+# not handled: Root CA supplied (contains anchor)
+# attention: 1.0.1 fails on mozilla
+
+
 tls_time() {
      local now difftime
 
@@ -1947,7 +2043,7 @@ run_server_defaults() {
           issuer_c=""         # CACert would have 'issuer= ' here otherwise
      fi
      if [[ "$issuer_o" == "issuer=" ]] || [[ "$issuer_o" == "issuer= " ]] || [[ "$issuer" == "$CN" ]]; then
-          pr_redln "selfsigned (not OK)"
+          pr_redln "selfsigned (NOT ok)"
      else
           [[ "$issuer_c" == "" ]] && \
                outln "$underline$issuer$off ($underline$issuer_o$off)" || \
@@ -2007,6 +2103,9 @@ run_server_defaults() {
 
      pr_bold " # of certificates provided"; outln "   $(get_all_certs)"
 
+     pr_bold " Chain of trust"; out " (experim.)    "
+     determine_trust
+
      pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
      case $(count_lines "$crl") in
@@ -2058,8 +2157,6 @@ run_pfs() {
      #local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
      #w/o RC4:
      #local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EDH+aRSA EECDH !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
-#
-# hardcoded: (the exclusion via ! doesn't work with libressl and openssl 0.9.8) and it's reproducible
      local pfs_cipher_list="ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-CAMELLIA128-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA"
      local -i nr_supported_ciphers=0
 
@@ -4907,4 +5004,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.386 2015/09/21 14:43:46 dirkw Exp $
+#  $Id: testssl.sh,v 1.387 2015/09/22 13:04:48 dirkw Exp $
