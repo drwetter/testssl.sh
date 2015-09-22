@@ -624,7 +624,7 @@ run_http_date() {
                if $HAS_GNUDATE ; then
                     HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
                else
-                    HTTP_TIME=$(date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>>$ERRFILE) # the trailing \r confuses BSD flavors otherwise
+                    HTTP_TIME=$(LC_ALL=C date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>>$ERRFILE) # the trailing \r confuses BSD flavors otherwise
                fi
 
                difftime=$((HTTP_TIME - $now))
@@ -2094,8 +2094,8 @@ run_server_defaults() {
           enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
           startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
      else
-          enddate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
-          startdate=$(date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
+          enddate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
+          startdate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
      fi
 
      outln " ($startdate --> $enddate)"
@@ -2603,7 +2603,7 @@ parse_tls_serverhello() {
           if $HAS_GNUDATE ; then
                date --date="@$TLS_TIME" "+%Y-%m-%d %r"
           else
-               date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r"
+               LC_ALL=C date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r"
           fi
           echo "tls_cipher_suite:       0x$tls_cipher_suite"
           echo "tls_compression_method: 0x$tls_compression_method"
@@ -2823,7 +2823,7 @@ tls_sockets() {
      # if sending didn't succeed we don't bother
      if [[ $ret -eq 0 ]]; then
           sockread_serverhello 32768
-          TLS_NOW=$(date "+%s")
+          TLS_NOW=$(LC_ALL=C date "+%s")
           [[ "$DEBUG" -ge 2 ]] && outln "reading server hello..."
           if [[ "$DEBUG" -ge 3 ]]; then
                hexdump -C $SOCK_REPLY_FILE | head -6
@@ -5004,4 +5004,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.387 2015/09/22 13:04:48 dirkw Exp $
+#  $Id: testssl.sh,v 1.388 2015/09/22 15:14:35 dirkw Exp $
