@@ -15,7 +15,7 @@ https://github.com/drwetter/testssl.sh/milestones/2.7dev%20%282.8%29
 
 Done so far:
 
-* Trust chain check against certificate stores java, linux (system), microsoft, mozilla from (works for openssl 1.0.2)
+* Trust chain check against certificate stores from java, linux (system), microsoft, mozilla (works for openssl >=1.0.2)
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
 
