@@ -151,7 +151,7 @@ OSSL_VER=""                             # openssl version, will be auto-determin
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
-HAS_DH_BITS=true
+HAS_DH_BITS=${HAS_DH_BITS:-false}
 HAS_SSL2=true                           #TODO: in the future we'll do the fastest possible test (openssl s_client -ssl2 is currently faster than sockets)
 HAS_SSL3=true
 PORT=443                                # unless otherwise auto-determined, see below
@@ -403,6 +403,39 @@ strip_spaces() {
 toupper() {
      echo -n "$1" | tr 'a-z' 'A-Z'
 }
+
+is_number() {
+     [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
+          return 0 || \
+          return 1
+}
+
+is_ipv4addr() {
+     local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
+     local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
+
+     [[ -z "$1" ]] && return 1
+     # more than numbers, important for hosts like AAA.BBB.CCC.DDD.in-addr.arpa.DOMAIN.TLS
+     [[ -n $(tr -d '0-9\.' <<< "$1") ]] && return 1
+
+     echo -n "$1" | grep -Eq "$ipv4address" && \
+          return 0 || \
+          return 1
+}
+
+# a bit easier
+is_ipv6addr() {
+     [[ -z "$1" ]] && return 1
+     # less than 2x ":"
+     [[ $(count_lines "$(echo -n "$1" | tr ':' '\n')") -le 1 ]] && \
+          return 1
+     #check on chars allowed:
+     [[ -n "$(tr -d '0-9:a-fA-F ' <<< "$1" | sed -e '/^$/d')" ]] && \
+          return 1
+     return 0 
+}
+
+
 
 # prints out multiple lines in $1, left aligned by spaces in $2
 out_row_aligned() {
@@ -1482,20 +1515,23 @@ run_std_cipherlists() {
 
 
 # arg1: file with input for grepping the bit length for ECDH/DHE
-# arg2: whether to print sparse or not (empty: no)
+# arg2: whether to print warning "old fart" or not (empty: no)
 read_dhbits_from_file() {
-     local bits what_dh
+     local bits what_dh temp
      local add=""
      local old_fart=" (openssl cannot show DH bits)"
 
-     bits=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")                       # extract line
-     bits=$(echo "$bits" | sed -e 's/, P-...//' -e 's/,//g' -e 's/bits//' -e 's/ //g') # now: ??DH [number]    K??
-     what_dh=$(echo "$bits" | tr -d '0-9')
-     bits=$(echo $bits | tr -d 'DHEC')
+     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")        # extract line
+     what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
+     bits=$(awk -F',' '{ print $3 }' <<< $temp)
+     # RH's backport has the DH bits in second arg after comma
+     grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
+     bits=$(tr -d ' bits' <<< $bits)
 
-     debugme echo ">$what_dh|$bits<"
+     debugme echo ">$HAS_DH_BITS|$what_dh|$bits<"
 
-     if ! $HAS_DH_BITS && [[ -z "what_dh" ]]; then
+     [[ -n "what_dh" ]] && HAS_DH_BITS=true                            # FIX 190
+     if [[ -z "what_dh" ]]; then
           if [[ -z "$2" ]]; then
                pr_litemagenta "$old_fart"
           fi
@@ -2220,7 +2256,6 @@ run_pfs() {
           fi
      fi
      outln
-     $WIDE && outln
 
      debugme echo $(actually_supported_ciphers $pfs_cipher_list)
      debugme echo $nr_supported_ciphers
@@ -3455,7 +3490,7 @@ run_logjam() {
           if ! $do_allciphers && ! $do_cipher_per_proto && $HAS_DH_BITS; then
                addtl_warning="$addtl_warning \"$PROG_NAME -E/-e\" spots candidates"
           else
-               addtl_warning="$addtl_warning See below for any DH ciphers + bit size"
+               $HAS_DH_BITS && addtl_warning="$addtl_warning See below for any DH ciphers + bit size"
           fi
      fi
           
@@ -3754,12 +3789,11 @@ find_openssl_binary() {
      OSSL_BUILD_DATE=$($OPENSSL version -a  2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
      echo $OSSL_BUILD_DATE | grep -q "not available" && OSSL_BUILD_DATE=""
 
-     if $OPENSSL version 2>/dev/null | grep -qi LibreSSL; then
-          HAS_DH_BITS=false        # as of version 2.2.1
-     else
-          [[ $OSSL_VER_MAJOR -ne 1 ]] && HAS_DH_BITS=false
-          [[ "$OSSL_VER_MINOR" == "0.1" ]] && HAS_DH_BITS=false
-     fi
+     # see #190, reverting logic: unless otherwise proved openssl has no dh bits
+     case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
+          1.0.2|1.1.0) HAS_DH_BITS=true ;;
+     esac
+     # libressl does not have "Server Temp Key" (SSL_get_server_tmp_key)
 
      if $OPENSSL version 2>/dev/null | grep -qi LibreSSL; then
           outln
@@ -3880,53 +3914,6 @@ EOF
 }
 
 
-mybanner() {
-     local nr_ciphers
-     local idtag
-     local bb
-     local openssl_location="$(which $OPENSSL)"
-     local cwd=""
-
-     $QUIET && return
-     nr_ciphers=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
-     [[ -z "$GIT_REL" ]] && \
-          idtag="$CVS_REL" || \
-          idtag="$GIT_REL -- $CVS_REL_SHORT"
-     [[ "$COLOR" -ne 0 ]] && idtag="\033[1;30m$idtag\033[m\033[1m"
-     bb=$(cat <<EOF
-
-###########################################################
-    $PROG_NAME       $VERSION from $SWURL
-    ($idtag)
-
-      This program is free software. Distribution and 
-             modification under GPLv2 permitted. 
-      USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
-
-       Please file bugs @ https://testssl.sh/bugs/
-
-###########################################################
-EOF
-)
-     pr_bold "$bb"
-     outln "\n"
-     outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$nr_ciphers ciphers] on"
-     out " $(hostname):"
-
-     [[ -n "$GIT_REL" ]] && \
-          cwd=$(/bin/pwd) || \
-          cwd=$RUN_DIR
-     if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
-          echo "\$PWD/bin/$(basename "$openssl_location")" 
-     elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
-          echo "${openssl_location%%$cwd}" 
-     else
-          echo "$openssl_location"
-     fi
-     outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
-}
-
-
 maketempf() {
      TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
      TMPFILE=$TEMPDIR/tempfile.txt || exit -6
@@ -4003,9 +3990,55 @@ EOF
           which locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
-
-
 }
+
+
+mybanner() {
+     local nr_ciphers
+     local idtag
+     local bb
+     local openssl_location="$(which $OPENSSL)"
+     local cwd=""
+
+     $QUIET && return
+     nr_ciphers=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
+     [[ -z "$GIT_REL" ]] && \
+          idtag="$CVS_REL" || \
+          idtag="$GIT_REL -- $CVS_REL_SHORT"
+     [[ "$COLOR" -ne 0 ]] && idtag="\033[1;30m$idtag\033[m\033[1m"
+     bb=$(cat <<EOF
+
+###########################################################
+    $PROG_NAME       $VERSION from $SWURL
+    ($idtag)
+
+      This program is free software. Distribution and 
+             modification under GPLv2 permitted. 
+      USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
+
+       Please file bugs @ https://testssl.sh/bugs/
+
+###########################################################
+EOF
+)
+     pr_bold "$bb"
+     outln "\n"
+     outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$nr_ciphers ciphers] on"
+     out " $(hostname):"
+
+     [[ -n "$GIT_REL" ]] && \
+          cwd=$(/bin/pwd) || \
+          cwd=$RUN_DIR
+     if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
+          echo "\$PWD/bin/$(basename "$openssl_location")" 
+     elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
+          echo "${openssl_location%%$cwd}" 
+     else
+          echo "$openssl_location"
+     fi
+     outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
+}
+
 
 cleanup () {
      if [[ "$DEBUG" -ge 1 ]]; then
@@ -4115,38 +4148,6 @@ parse_hn_port() {
      [[ -z "$URL_PATH" ]] && URL_PATH="/"
      debugme echo $URL_PATH
      return 0       # NODE, URL_PATH, PORT is set now
-}
-
-is_number() {
-     [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
-          return 0 || \
-          return 1
-}
-
-
-is_ipv4addr() {
-     local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
-     local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
-
-     [[ -z "$1" ]] && return 1
-     # more than numbers, important for hosts like AAA.BBB.CCC.DDD.in-addr.arpa.DOMAIN.TLS
-     [[ -n $(tr -d '0-9\.' <<< "$1") ]] && return 1
-
-     echo -n "$1" | grep -Eq "$ipv4address" && \
-          return 0 || \
-          return 1
-}
-
-# a bit easier
-is_ipv6addr() {
-     [[ -z "$1" ]] && return 1
-     # less than 2x ":"
-     [[ $(count_lines "$(echo -n "$1" | tr ':' '\n')") -le 1 ]] && \
-          return 1
-     #check on chars allowed:
-     [[ -n "$(tr -d '0-9:a-fA-F ' <<< "$1" | sed -e '/^$/d')" ]] && \
-          return 1
-     return 0 
 }
 
 
@@ -4368,17 +4369,18 @@ determine_optimal_proto() {
           # starttls workaround needed see https://github.com/drwetter/testssl.sh/issues/188
           # kind of odd
           for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
-               $OPENSSL s_client $STARTTLS_OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY -starttls $1 </dev/null &>/dev/null && all_failed=1 && break
+               $OPENSSL s_client $STARTTLS_OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY -starttls $1 </dev/null &>$TMPFILE && all_failed=1 && break
                all_failed=0
           done
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
           for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2 ''; do
-               $OPENSSL s_client $OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY $SNI </dev/null &>/dev/null && all_failed=1 && break
+               $OPENSSL s_client $OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY $SNI </dev/null &>$TMPFILE && all_failed=1 && break
                all_failed=0
           done
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
      fi
+     grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
 
      if [[ $all_failed -eq 0 ]]; then
           outln
@@ -4437,6 +4439,7 @@ determine_service() {
                          outln
                          fatal " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT" -2
                     fi
+                    grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
                     out " Service set:            STARTTLS via "
                     toupper "$protocol"
                     [[ -n "$XMPP_HOST" ]] && echo -n " (XMPP domain=\'$XMPP_HOST\')"
@@ -4811,7 +4814,7 @@ parse_cmd_line() {
                     esac
                     ;;
                --show[-_]each)
-                    SHOW_EACH_C=1       #FIXME: sense is vice versa
+                    SHOW_EACH_C=1            #FIXME: sense is vice versa
                     ;; 
                --debug|--debug=*)
                     DEBUG=$(parse_opt_equal_sign "$1" "$2")
@@ -4839,6 +4842,9 @@ parse_cmd_line() {
                --proxy|--proxy=*)
                     PROXY=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
+                    ;;
+               --has[-_]dhbits|--has[_-]dh[-_]bits)      # For CentOS, RHEL and FC with openssl server temp key backport on version 1.0.1, see #190. But should work automagically
+                    HAS_DH_BITS=true
                     ;;
                --ssl_native|--ssl-native)
                     SSL_NATIVE=true
@@ -5004,4 +5010,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.388 2015/09/22 15:14:35 dirkw Exp $
+#  $Id: testssl.sh,v 1.389 2015/09/22 18:09:25 dirkw Exp $
