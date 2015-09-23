@@ -1837,7 +1837,7 @@ determine_trust() {
                return 7
           fi
 		debugme printf -- " %-12s" "${certificate_file[i]}"
-		$OPENSSL s_client -purpose sslserver -CAfile $bundle_fname $STARTTLS -connect $NODEIP:$PORT $SNI </dev/null  >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+		$OPENSSL s_client -purpose sslserver -CAfile $bundle_fname $STARTTLS $PROXY -connect $NODEIP:$PORT $SNI </dev/null  >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
 		verify_retcode[i]=$(awk -F':' '/Verify return code: / { print $2 }' $TEMPDIR//${certificate_file[i]}.1)
 		if egrep -wq "ok|0" <<< ${verify_retcode[i]}; then
 			trust[i]=true
@@ -5010,4 +5010,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.389 2015/09/22 18:09:25 dirkw Exp $
+#  $Id: testssl.sh,v 1.390 2015/09/23 07:03:44 dirkw Exp $
