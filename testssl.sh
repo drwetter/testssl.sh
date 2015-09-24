@@ -1810,6 +1810,7 @@ verify_retcode_helper() {
 		*18*self*    ) out " (self signed)" ;;				# X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
 		*10*expired* ) out " (expired)" ;;				     # X509_V_ERR_CERT_HAS_EXPIRED
 		*"9 "*       ) out " (not yet valid)" ;;		     # X509_V_ERR_CERT_NOT_YET_VALID
+		*"2 "*       ) out " (issuer cert missing)" ;;         # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
 		*) ret=1 ; pr_litemagenta " (unknown, pls report) $1" ;;
 	esac
      return $ret
@@ -5010,4 +5011,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.390 2015/09/23 07:03:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.391 2015/09/24 07:10:42 dirkw Exp $
