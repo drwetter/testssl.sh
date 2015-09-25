@@ -1959,10 +1959,12 @@ run_server_defaults() {
 	policy_oid=$($OPENSSL x509 -in $HOSTCERT -text 2>>$ERRFILE | awk '/ .Policy: / { print $2 }')
 	if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
 		[[ "2.16.840.1.114028.10.1.2" == "$policy_oid" ]] || \
-		[[ "1.3.6.1.4.1.17326.10.14.2.1.2" == "$policy_oid" ]] || \
-		[[ "1.3.6.1.4.1.17326.10.8.12.1.2" == "$policy_oid" ]] || \
-		[[ "1.3.6.1.4.1.13177.10.1.3.10" == "$policy_oid" ]]  || \
-		[[ "2.16.578.1.26.1.3.3" == "$policy_oid" ]]; then 	# entrust and Camerfirma (2x), Firmaprofesional bupass need an exception though:
+		[[ 2.16.840.1.114412.1.3.0.2 == "$policy_oid" ]] || \
+		[[ 2.16.840.1.114412.2.1 == "$policy_oid" ]] || \
+		[[ 2.16.578.1.26.1.3.3 == "$policy_oid" ]] || \
+		[[ 1.3.6.1.4.1.17326.10.14.2.1.2 == "$policy_oid" ]] || \
+		[[ 1.3.6.1.4.1.17326.10.8.12.1.2 == "$policy_oid" ]] || \
+		[[ 1.3.6.1.4.1.13177.10.1.3.10 == "$policy_oid" ]] ; then
 		out "yes "
 	else
 		out "no "
@@ -4887,4 +4889,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.379A 2015/09/21 12:03:47 dirkw Exp $
+#  $Id: testssl.sh,v 1.379B 2015/09/25 12:35:41 dirkw Exp $
