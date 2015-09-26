@@ -154,6 +154,7 @@ OSSL_VER_APPENDIX="none"
 HAS_DH_BITS=${HAS_DH_BITS:-false}
 HAS_SSL2=true                           #TODO: in the future we'll do the fastest possible test (openssl s_client -ssl2 is currently faster than sockets)
 HAS_SSL3=true
+HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -1579,7 +1580,7 @@ run_server_preference() {
      local -i ret=0
      local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256"
      # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
-     local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
+     local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
      local has_cipher_order=true
      
      outln;
@@ -2376,14 +2377,15 @@ starttls_just_read(){
 fd_socket() {
      local jabber=""
      local proyxline=""
-
+     local nodeip="$(tr -d '[]' <<< $NODEIP)"          # sockets do not need the square brackets we have of IPv6 addresses
+                                                       # we just need do it here, that's all!
      if [[ -n "$PROXY" ]]; then
           if ! exec 5<> /dev/tcp/${PROXYIP}/${PROXYPORT}; then
                outln
                pr_magenta "$PROG_NAME: unable to open a socket to proxy $PROXYIP:$PROXYPORT"
                return 6
           fi
-          echo "CONNECT $NODEIP:$PORT" >&5
+          echo "CONNECT $nodeip:$PORT" >&5
           while true ; do
                read proyxline <&5
                if [[ "${proyxline%/*}" == "HTTP" ]]; then
@@ -2398,7 +2400,7 @@ fd_socket() {
                     break
                fi
           done
-     elif ! exec 5<>/dev/tcp/$NODEIP/$PORT; then  #  2>/dev/null would remove an error message, but disables debugging
+     elif ! exec 5<>/dev/tcp/$nodeip/$PORT; then  #  2>/dev/null would remove an error message, but disables debugging
           outln
           pr_magenta "Unable to open a socket to $NODEIP:$PORT. "
           # It can last ~2 minutes but for for those rare occasions we don't do a timeout handler here, KISS
@@ -4277,23 +4279,34 @@ determine_ip_addresses() {
                check_resolver_bins
                ip4=$(get_a_record $NODE)
           else
-               LOCAL_A=true                  # we have the ip4 from local host entry and need to set this
+               LOCAL_A=true                  # we have the ip4 from local host entry and need to signal this to testssl
           fi
-          # same now for ipv6 (though not supported) <-- can't do this yet as it shows up under "further IP addresses"
-          # and we didn't bother to show the fact that it is local there
+          # same now for ipv6 
           ip6=$(get_local_aaaa $NODE)
-          #if [[ -z $ip6 ]]; then
+          if [[ -z $ip6 ]]; then
+               check_resolver_bins
                ip6=$(get_aaaa_record $NODE)
-          #else
-          #    LOCAL_AAAA=true               # we have the ip4 from local host entry and need to set this
-          #fi
+          else
+               LOCAL_AAAA=true               # we have a local ipv6 entry and need to signal this to testssl
+          fi
      fi
-     IPADDRs=$(newline_to_spaces "$ip4")
+     if [[ -z "$ip4" ]]; then                # IPv6  only address
+          if $HAS_IPv6; then
+               IPADDRs=$(newline_to_spaces "$ip6")
+               IP46ADDRs="$IPADDRs"          # IP46ADDRs are the ones to display, IPADDRs the ones to test
+          fi
+     else
+          if $HAS_IPv6 && [[ -n "$ip6" ]]; then
+               IPADDRs=$(newline_to_spaces "$ip4 $ip6")
+               IP46ADDRs="$IPADDRs"
+          else
+               IPADDRs=$(newline_to_spaces "$ip4")
+               IP46ADDRs=$(newline_to_spaces "$ip4 $ip6")
+          fi
+     fi
      if [[ -z "$IPADDRs" ]] && [[ -z "$CMDLINE_IP" ]]; then
           fatal "No IPv4 address for \"$NODE\" available" -1
      fi
-     [[ -z "$ip6" ]] && IP46ADDRs="$IPADDRs" || IP46ADDRs="$ip4 $ip6"
-     IP46ADDRs=$(newline_to_spaces "$IP46ADDRs")
      return 0                                # IPADDR and IP46ADDR is set now
 }
 
@@ -4345,6 +4358,7 @@ check_proxy(){
 
           #if is_ipv4addr "$PROXYNODE" || is_ipv6addr "$PROXYNODE" ; then
           # IPv6 via openssl -proxy: that doesn't work. Sockets does
+#FIXME: try whether it works with the IPv6 patch
           if is_ipv4addr "$PROXYNODE"; then
                PROXYIP="$PROXYNODE"
           else
@@ -4876,10 +4890,17 @@ parse_cmd_line() {
 }
 
 
+# connect call from openssl needs ipv6 in square brackets
+nodeip_to_proper_ip6() {
+     is_ipv6addr $NODEIP && NODEIP="[$NODEIP]"
+}
+
+
 lets_roll() {
      local ret
 
      [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" -1
+     nodeip_to_proper_ip6
      determine_rdns
      determine_service "$1"        # any starttls service goes here
 
@@ -5013,4 +5034,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.392 2015/09/25 12:35:41 dirkw Exp $
+#  $Id: testssl.sh,v 1.393 2015/09/26 20:44:32 dirkw Exp $
