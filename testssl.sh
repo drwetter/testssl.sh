@@ -120,6 +120,7 @@ STARTTLS_SLEEP=${STARTTLS_SLEEP:-1}     # max time to wait on a socket replay fo
 FAST_STARTTLS=${FAST_STARTTLS:-true}    #at the cost of reliabilty decrease the handshakes for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
+HAD_SLEPT=0
 
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 FNAME=${FNAME:-""}                      # file name to read commands from
@@ -177,6 +178,7 @@ OPTIMAL_PROTO=""                        # we need this for IIS6 (sigh) and OpenS
 STARTTLS_OPTIMAL_PROTO=""               # same for STARTTLS, see https://github.com/drwetter/testssl.sh/issues/188
 TLS_TIME=""
 TLS_NOW=""
+NOW_TIME=""
 HTTP_TIME=""
 GET_REQ11=""
 HEAD_REQ10=""
@@ -473,13 +475,15 @@ wait_kill(){
      local pid=$1             # pid we wait for or kill
      local maxsleep=$2        # how long we wait before killing
 
+     HAD_SLEPT=0
      while true; do
-          [[ "$DEBUG" -ge 6 ]] && ps $pid
           if ! ps $pid >/dev/null ; then
                return 0       # process terminated before didn't reach $maxsleep
           fi
+          [[ "$DEBUG" -ge 6 ]] && ps $pid
           sleep 1
           maxsleep=$((maxsleep - 1))
+          HAD_SLEPT=$((HAD_SLEPT + 1))
           test $maxsleep -le 0 && break
      done                     # needs to be killed:
      kill $pid >&2 2>/dev/null
@@ -539,46 +543,37 @@ run_http_header() {
      outln; pr_blue "--> Testing HTTP header response"; outln " @ \"$URL_PATH\"\n"
 
      [[ -z "$1" ]] && url="/" || url="$1"
-     if $SNEAKY; then
-          referer="http://google.com/"
-          useragent="$UA_SNEAKY"
+     printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI 1>$HEADERFILE 2>$ERRFILE &
+     wait_kill $! $HEADER_MAXSLEEP
+     if [[ $? -eq 0 ]]; then
+          # we do the get command again as it terminated within $HEADER_MAXSLEEP. Thus it didn't hang, we do it
+          # again in the foreground ito get an ccurate header time!
+          printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI 1>$HEADERFILE 2>$ERRFILE 
+          NOW_TIME=$(date "+%s")
+          HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
+          HAD_SLEPT=0
      else
-          referer="TLS/SSL-Tester from $SWURL"
-          useragent="$UA_STD"
-     fi
-     (
-     $OPENSSL s_client $OPTIMAL_PROTO -quiet -connect $NODEIP:$PORT $PROXY $SNI << EOF
-GET $url HTTP/1.1
-Host: $NODE
-Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
-Accept-Language: en-us,en;q=0.7,de-de;q=0.3
-User-Agent: $useragent
-Referer: $referer
-Connection: close
-
-EOF
-) >$HEADERFILE 2>$ERRFILE &
-     if wait_kill $! $HEADER_MAXSLEEP; then
-          if ! egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
+          # GET request needed to be killed before, try, whether it succeeded:
+          if egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
+               NOW_TIME=$(($(date "+%s") - HAD_SLEPT))         # correct by seconds we slept
+               HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
+          else
                pr_litemagenta " likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
                outln "Rerun with DEBUG=1 and inspect \"run_http_header.txt\"\n"
                debugme cat $HEADERFILE
-               ret=7
-          fi
-          sed  -e '/^<HTML/,$d' -e '/^<html/,$d' -e '/^<XML /,$d' -e '/<?XML /,$d' \
-               -e '/^<xml /,$d' -e '/<?xml /,$d'  -e '/^<\!DOCTYPE/,$d' -e '/^<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
-#### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
-          mv $HEADERFILE.2  $HEADERFILE  # sed'ing in place doesn't work with BSD and Linux simultaneously
-          ret=0
-     else
-          #TODO: attention: if this runs into a timeout, we're dead. Try again differently:
-          printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI 1>$HEADERFILE 2>$ERRFILE
-          if [[ $? -ne 0 ]]; then
-               pr_litemagentaln " failed (1st request stalled, 2nd erroneous)"
-               return 3
-               #ret=3
+               return 7
           fi
      fi
+     # populate vars for HTTP time
+
+     debugme echo "$NOW_TIME: $HTTP_TIME"
+
+     sed  -e '/^<HTML/,$d' -e '/^<html/,$d' -e '/^<XML /,$d' -e '/<?XML /,$d' \
+          -e '/^<xml /,$d' -e '/<?xml /,$d'  -e '/^<\!DOCTYPE/,$d' -e '/^<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
+#### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
+     mv $HEADERFILE.2  $HEADERFILE  # sed'ing in place doesn't work with BSD and Linux simultaneously
+     ret=0
+
      status_code=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
      msg_thereafter=$(awk -F"$status_code" '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)   # dirty trick to use the status code as a
      msg_thereafter=$(strip_lf "$msg_thereafter")                                    # field separator, otherwise we need a loop with awk
@@ -641,6 +636,7 @@ detect_ipv4() {
 }    
 
 
+
 run_http_date() {
      local now difftime
 
@@ -651,9 +647,6 @@ run_http_date() {
      if [[ $SERVICE != "HTTP" ]]; then
           out "not tested as we're not targeting HTTP"
      else
-          printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -ign_eof -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE
-          now=$(date "+%s")                  # we need an ACCURATE date here and cannot rely on the headerfile!
-          HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $TMPFILE)
           if [[ -n "$HTTP_TIME" ]]; then
                if $HAS_GNUDATE ; then
                     HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
@@ -661,13 +654,15 @@ run_http_date() {
                     HTTP_TIME=$(LC_ALL=C date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>>$ERRFILE) # the trailing \r confuses BSD flavors otherwise
                fi
 
-               difftime=$((HTTP_TIME - $now))
+               difftime=$((HTTP_TIME - $NOW_TIME))
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
+               # process was killed, so we need to add an error:
+               [[ $HAD_SLEPT -ne 0 ]] && difftime="$difftime (± 1.5)"
                out "$difftime sec from localtime";
           else
                out "Got no HTTP time, maybe try different URL?";
           fi
-          debugme out " epoch: $HTTP_TIME"
+          debugme out ", epoch: $HTTP_TIME"
      fi
      outln
      detect_ipv4
@@ -1824,7 +1819,7 @@ determine_trust() {
 	local ok_was=""
 	local notok_was=""
      local code
-     local ca_bundles="$INSTALL_DIR/etc/*pem"
+     local ca_bundles="$INSTALL_DIR/etc/*.pem"
      local spaces="                              "
 
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]]; then
@@ -1834,7 +1829,7 @@ determine_trust() {
      debugme outln
 	for bundle_fname in $ca_bundles; do
 		certificate_file[i]=$(basename $bundle_fname | sed 's/\.pem//')
-          if [[ ! -r $bundle_fname ]] ; then
+          if [[ ! -r $bundle_fname ]]; then
                pr_litemagentaln "\"$bundle_fname\" cannot be found / not readable" 
                return 7
           fi
@@ -1886,7 +1881,9 @@ determine_trust() {
 		fi
 	fi
 	outln
+     return 0
 }
+
 # not handled: Root CA supplied (contains anchor)
 # attention: 1.0.1 fails on mozilla
 
@@ -2148,11 +2145,17 @@ run_server_defaults() {
 
      pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
-     case $(count_lines "$crl") in
-          0)   pr_literedln "--" ;;
-          1)   outln "$crl" ;;
-          *)   out_row_aligned "$crl" "$spaces" ;;
-     esac
+     if [[ -z "$crl" ]]; then
+          pr_literedln "--"
+     elif grep -q http <<< "$crl"; then
+          if [[ $(count_lines "$crl") -eq 1 ]]; then
+               outln "$crl"
+          else # more than one CRL
+               out_row_aligned "$crl" "$spaces" 
+          fi
+     else
+          pr_litemagentaln "no parsable output \"$url\", pls report"
+     fi
 
      pr_bold " OCSP URI                     "
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
@@ -3283,6 +3286,7 @@ run_crime() {
 run_breach() {
      local header
      local -i ret=0
+     local -i was_killed=0
      local referer useragent
      local url
 
@@ -3318,22 +3322,27 @@ Connection: close
 
 EOF
 ) >$HEADERFILE_BREACH 2>$ERRFILE &
-     if wait_kill $! $HEADER_MAXSLEEP; then
-          result=$(grep -a '^Content-Encoding' $HEADERFILE_BREACH | sed -e 's/^Content-Encoding//' -e 's/://' -e 's/ //g')
-          result=$(echo $result | tr -cd '\40-\176')
-          if [[ -z $result ]]; then
-               pr_green "no HTTP compression (OK) "
-               ret=0
-          else
-               pr_litered "NOT ok: uses $result HTTP compression "
-               ret=1
-          fi
-          # Catch: any URL can be vulnerable. I am testing now only the root. URL!
-          outln "(only \"$url\" tested)"
-     else
-          pr_litemagentaln "failed (HTTP header request stalled)"
+     wait_kill $! $HEADER_MAXSLEEP
+     was_killed=$?                        # !=0 was killed
+     result=$(awk '/^Content-Encoding/ { print $2 }' $HEADERFILE_BREACH)
+     result=$(strip_lf "$result")
+     debugme grep '^Content-Encodingi' $HEADERFILE_BREACH
+     if [[ ! -s $HEADERFILE_BREACH ]]; then
+          pr_litemagenta "failed (HTTP header request stalled"
+          [[ $was_killed -ne 0 ]] && pr_litemagenta " and needed to be terminated"
+          pr_litemagentaln ")"
           ret=3
+     elif [[ -z $result ]]; then
+           pr_green "no HTTP compression (OK) "
+           ret=0
+     else
+           pr_litered "NOT ok: uses $result HTTP compression "
+           ret=1
      fi
+     # Any URL can be vulnerable. I am testing now only the given URL!
+     outln "(only supplied \"$url\" tested)"
+
+     tmpfile_handle $FUNCNAME.txt
      return $ret
 }
 
@@ -3885,9 +3894,8 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
      --ip <ipv4>                   a) tests the supplied <ipv4> instead of resolving host(s) in URI 
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
-     --file <file name>            mass testing option: Just put multiple $PROG_NAME command lines in <file name>,
-                                   one line per instance. Comments via # allowed, EOF signals end of <file name>.
-
+     --file <fname>                mass testing option: Reads command lines from <fname>, one line per instance.
+                                   Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch"
 partly mandatory parameters:
 
      URI                           host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
@@ -4546,6 +4554,25 @@ mx_all_ips() {
      return $ret
 }
 
+run_mass_testing() {
+     local cmdline=""
+
+     if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
+          fatal "Can't read file \"$FNAME\"" "-1"
+     fi
+     pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
+     while read cmdline; do
+          cmdline=$(filter_input "$cmdline")
+          [[ -z "$cmdline" ]] && continue
+          [[ "$cmdline" == "EOF" ]] && break
+          echo "$0 -q $cmdline"
+          draw_dotted_line "=" $((TERM_DWITH / 2)); outln;
+          $0 -q $cmdline
+     done < "$FNAME"
+     exit $?
+}
+
+
 
 # This initializes boolean global do_* variables. They keep track of what to do 
 # -- as the name insinuates
@@ -4562,7 +4589,7 @@ initialize_globals() {
      do_header=false
      do_heartbleed=false
      do_mx_all_ips=false
-     do_read_from_file=false
+     do_mass_testing=false
      do_pfs=false
      do_protocols=false
      do_rc4=false
@@ -4610,7 +4637,7 @@ query_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
-               do_test_just_one do_tls_sockets do_read_from_file; do
+               do_test_just_one do_tls_sockets do_mass_testing; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
      done
      return $true_nr
@@ -4623,7 +4650,7 @@ debug_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
-               do_test_just_one do_tls_sockets do_read_from_file; do
+               do_test_just_one do_tls_sockets do_mass_testing; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
      printf "%-22s : %s\n" URI: "$URI"
@@ -4818,8 +4845,10 @@ parse_cmd_line() {
                --file|--file=*)
                     # no shift here as otherwise URI is empty and it bails out
                     FNAME=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
                     IKNOW_FNAME=true
-                    do_read_from_file=true
+                    WARNINGS=batch           # set this implicitly!
+                    do_mass_testing=true
                     ;;
                --warnings|--warnings=*)
                     WARNINGS=$(parse_opt_equal_sign "$1" "$2") 
@@ -4879,10 +4908,12 @@ parse_cmd_line() {
      done
 
      # Show usage if no options were specified
-     [[ -z "$1" ]] && help 0
-
+     if [[ -z "$1" ]] && [[ -z "$FNAME" ]] ; then
+          help 0
+     else
      # left off here is the URI
-     URI="$1"
+          URI="$1"
+     fi
 
      [[ "$DEBUG" -ge 4 ]] && debug_globals
      # if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
@@ -4977,21 +5008,7 @@ openssl_age
 ret=0
 ip=""
 
-if $do_read_from_file; then
-     if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
-          fatal "Can't read file \"$FNAME\"" "-1"
-     fi
-     pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
-     while read cmdline; do
-          cmdline=$(filter_input "$cmdline")
-          [[ -z "$cmdline" ]] && continue
-          [[ "$cmdline" == "EOF" ]] && break
-          echo "$0 -q $cmdline"
-          draw_dotted_line "=" $((TERM_DWITH / 2)); outln;
-          $0 -q $cmdline
-     done < "$FNAME"
-     exit $?
-fi
+$do_mass_testing && run_mass_testing
 
 #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
 if $do_mx_all_ips; then
@@ -5034,4 +5051,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.393 2015/09/26 20:44:32 dirkw Exp $
+#  $Id: testssl.sh,v 1.394 2015/09/28 20:53:59 dirkw Exp $
