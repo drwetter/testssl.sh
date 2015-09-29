@@ -13,7 +13,7 @@ sleep 3
 STDOPTIONS="--prefix=/usr/ --openssldir=/etc/ssl -DOPENSSL_USE_BUILD_DATE enable-zlib \
 enable-ssl2 enable-ssl3 enable-ssl-trace enable-rc5 enable-rc2 \
 enable-gost enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
-enable-seed enable-camellia enable-idea enable-rfc3779 experimental-jpake -DTEMP_GOST_TLS"
+enable-seed enable-camellia enable-idea enable-rfc3779 experimental-jpake"
 
 clean() {
 	case $NOCLEAN in 

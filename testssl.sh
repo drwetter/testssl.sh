@@ -578,7 +578,7 @@ detect_ipv4() {
 	local spaces="                              "
 	
 	if [[ ! -s $HEADERFILE ]]; then
-		http_header "$1" || return 3
+		run_http_header "$1" || return 3
 	fi
 
 	# remove pagespeed header as it is mistakenly identified as ipv4 address https://github.com/drwetter/testssl.sh/issues/158
@@ -653,7 +653,7 @@ run_hsts() {
 	local hsts_age_days
 
 	if [[ ! -s $HEADERFILE ]]; then
-		http_header "$1" || return 3
+		run_http_header "$1" || return 3
 	fi
 	#pr_bold " HSTS                         "
 	pr_bold " Strict Transport Security    "
@@ -693,7 +693,7 @@ run_hpkp() {
 	local i
 
 	if [[ ! -s $HEADERFILE ]]; then
-		http_header "$1" || return 3
+		run_http_header "$1" || return 3
 	fi
 	#pr_bold " HPKP                         "
 	pr_bold " Public Key Pinning           "
@@ -4889,4 +4889,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.379B 2015/09/25 12:35:41 dirkw Exp $
+#  $Id: testssl.sh,v 1.379c 2015/09/29 16:47:47 dirkw Exp $
