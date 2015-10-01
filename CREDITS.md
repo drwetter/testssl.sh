@@ -23,6 +23,9 @@
 * Olivier Paroz
   - conversion xxd --> hexdump stuff 
 
+* @typingArtist
+  - improved BEAST detection
+
 * @f-s
  - ARM binary support  
 
