@@ -1531,8 +1531,8 @@ read_dhbits_from_file() {
 
      debugme echo ">$HAS_DH_BITS|$what_dh|$bits<"
 
-     [[ -n "what_dh" ]] && HAS_DH_BITS=true                            # FIX 190
-     if [[ -z "what_dh" ]]; then
+     [[ -n "$what_dh" ]] && HAS_DH_BITS=true                            # FIX 190
+     if [[ -z "$what_dh" ]]; then
           if [[ -z "$2" ]]; then
                pr_litemagenta "$old_fart"
           fi
@@ -5076,4 +5076,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.397 2015/10/01 11:27:13 dirkw Exp $
+#  $Id: testssl.sh,v 1.398 2015/10/02 22:14:51 dirkw Exp $
