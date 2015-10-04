@@ -3646,11 +3646,11 @@ run_beast(){
           else
                if $WIDE; then
                     outln
-                    pr_brown "VULNERABLE (NOT ok) -- no higher protocols (possible mitigation) supported!"
                else
                     out "${spaces}"
-                    pr_brown "-- no higher protocols (possible mitigation) supported!"
                fi
+               pr_brown "VULNERABLE (NOT ok)"
+               outln " -- and no higher protocols as mitigation supported"
           fi
      fi
 
@@ -5076,4 +5076,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.398 2015/10/02 22:14:51 dirkw Exp $
+#  $Id: testssl.sh,v 1.399 2015/10/04 10:32:29 dirkw Exp $
