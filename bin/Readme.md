@@ -19,7 +19,7 @@ features needed for testing. OTOH they also come with extended support
 for new / advanced cipher suites and/or features which are not in the 
 official branch like CHACHA20+POLY1305 and CAMELIA 256 bit ciphers.
 
-The binariesi tn this directory are all compiled from an OpenSSL 1.0.2 fork
+The binaries in this directory are all compiled from an OpenSSL 1.0.2 fork
 from Peter Mosmans (https://github.com/PeterMosmans/openssl). Thx a bunch, 
 Peter!
 
@@ -86,9 +86,9 @@ If you want to compile OpenSSL yourself, here are the instructions:
     enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 \
     -static experimental-jpake -DOPENSSL_USE_BUILD_DATE 
 
+(IPv6 would need additionally ``-DOPENSSL_USE_IPV6`` and the tree https://github.com/PeterMosmans/openssl/tree/ipv6.)
 Four GOST [1][2] ciphers come via engine support automagically with this setup. Two additional GOST 
-ciphers can be compiled in (``GOST-GOST94``, ``GOST-MD5``) with ``-DTEMP_GOST_TLS``. The binaries 
-seem to work so far -- it has not been thouroughly tested though and ``make report`` bails out.
+ciphers can be compiled in (``GOST-GOST94``, ``GOST-MD5``) with ``-DTEMP_GOST_TLS`` but as of now they make problems under rare circumstances, so unless you desperately need those ciphers I would stay away from ``-DTEMP_GOST_TLS``.
 
 If you don't have / don't want Kerberos libraries and devel rpms/debs, just omit "--with-krb5-flavor=MIT"
 (see examples).  If you have another Kerberos flavor you would need to figure out by yourself.
