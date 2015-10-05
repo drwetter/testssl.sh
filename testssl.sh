@@ -159,6 +159,7 @@ HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support 
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
+CORRECT_SPACES=""                       # used for IPv6 and proper output formatting
 IPADDRs=""
 IP46ADDRs=""
 LOCAL_A=false                           # does the $NODEIP ceom from /etc/hosts?
@@ -501,6 +502,8 @@ wait_kill(){
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 # arg1 could be the protocol determined as "working". IIS6 needs that
 runs_HTTP() {
+     local -i ret=0
+
      # SNI is nonsense for !HTTPS but fortunately other protocols don't seem to care
      printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
@@ -512,7 +515,7 @@ runs_HTTP() {
      debugme head -50 $TMPFILE
 # $TMPFILE contains also a banner which we could use if there's a need for it
 
-     out " Service detected:      "
+     out " Service detected:      $CORRECT_SPACES"
      case $SERVICE in
           HTTP)
                out " $SERVICE"
@@ -3933,6 +3936,7 @@ tuning options:
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
      --proxy <host>:<port>         connect via the specified HTTP proxy
+     -6                            use also IPv6 checks, works only with supporting OpenSSL version and IPv6 connectivity
      --sneaky                      be less verbose wrt referer headers
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
@@ -4355,8 +4359,8 @@ determine_rdns() {
           rDNS=$(nslookup -type=PTR $NODEIP 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     rDNS=$(echo $rDNS)
-     [[ -z "$rDNS" ]] && rDNS="--"
+     #rDNS="$(echo $rDNS)"
+     [[ -z "$rDNS" ]] && rDNS=" --"
      return 0
 }
 
@@ -4434,7 +4438,12 @@ determine_optimal_proto() {
 
      if [[ $all_failed -eq 0 ]]; then
           outln
-          pr_boldln " $NODEIP:$PORT doesn't seem a TLS/SSL enabled server or it requires a certificate";
+          if $HAS_IPv6; then
+               pr_bold " Your $OPENSSL is not IPv6 aware, or $NODEIP:$PORT "
+          else
+               pr_bold " $NODEIP:$PORT "
+          fi
+          pr_boldln "doesn't seem a TLS/SSL enabled server or it requires a certificate";
           ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
           [[ $? -ne 0 ]] && exit -2
      fi
@@ -4490,7 +4499,7 @@ determine_service() {
                          fatal " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT" -2
                     fi
                     grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
-                    out " Service set:            STARTTLS via "
+                    out " Service set:$CORRECT_SPACES            STARTTLS via "
                     toupper "$protocol"
                     [[ -n "$XMPP_HOST" ]] && echo -n " (XMPP domain=\'$XMPP_HOST\')"
                     outln
@@ -4506,24 +4515,31 @@ determine_service() {
 
 
 display_rdns_etc() {
-     local i
+     local ip
 
      if [[ -n "$PROXY" ]]; then
-          out " Via Proxy:              "
+          out " Via Proxy:              $CORRECT_SPACES"
           outln "$PROXYIP:$PROXYPORT "
      fi
-     if [[ $(count_words "$(echo -n "$IP46ADDRs")") -gt 1 ]]; then
-          out " further IP addresses:  "
-          for i in $IP46ADDRs; do
-               [[ "$i" == "$NODEIP" ]] && continue
-               out " $i"
+     if [[ $(count_words "$IP46ADDRs") -gt 1 ]]; then
+          out " further IP addresses:  $CORRECT_SPACES"
+          for ip in $IP46ADDRs; do
+               if [[ "$ip" == "$NODEIP" ]] || [[ "[$ip]" == "$NODEIP" ]]; then
+                    continue
+               else
+                    out " $ip"
+               fi
           done
           outln
      fi
      if "$LOCAL_A"; then
           outln " A record via            /etc/hosts "
      fi
-     [[ -n "$rDNS" ]] && printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS"
+     if [[ -n "$rDNS" ]]; then
+          $HAS_IPv6 || \
+               printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS" && \
+               printf " %-23s %s" "rDNS $NODEIP:" "$rDNS"
+     fi
 }
 
 datebanner() {
@@ -4534,7 +4550,7 @@ datebanner() {
 }
 
 # one line with char $1 over screen width $2
-draw_dotted_line() {
+draw_line() {
      printf -- "$1"'%.s' $(eval "echo {1.."$(($2))"}")
 }
 
@@ -4554,7 +4570,7 @@ mx_all_ips() {
                STARTTLS_PROTOCOL=""          # no starttls for Port 465, on all other ports we speak starttls
           pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
           for mx in $mxs; do
-               draw_dotted_line "-" $((TERM_DWITH * 2 / 3))
+               draw_line "-" $((TERM_DWITH * 2 / 3))
                outln
                parse_hn_port "$mx:$mxport" 
                determine_ip_addresses || continue
@@ -4570,7 +4586,7 @@ mx_all_ips() {
                fi
                ret=$(($? + ret))
           done
-          draw_dotted_line "-" $((TERM_DWITH * 2 / 3))
+          draw_line "-" $((TERM_DWITH * 2 / 3))
           outln
           pr_bold "Done testing now all MX records (on port $mxport): "; outln "$mxs"
      else
@@ -4591,7 +4607,7 @@ run_mass_testing() {
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
           echo "$0 -q $cmdline"
-          draw_dotted_line "=" $((TERM_DWITH / 2)); outln;
+          draw_line "=" $((TERM_DWITH / 2)); outln;
           $0 -q $cmdline
      done < "$FNAME"
      exit $?
@@ -4914,6 +4930,9 @@ parse_cmd_line() {
                     PROXY=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     ;;
+               -6)  # doesn't work automagically. My versions have -DOPENSSL_USE_IPV6, CentOS/RHEL/FC do not
+                    HAS_IPv6=true
+                    ;;
                --has[-_]dhbits|--has[_-]dh[-_]bits)      # For CentOS, RHEL and FC with openssl server temp key backport on version 1.0.1, see #190. But should work automagically
                     HAS_DH_BITS=true
                     ;;
@@ -4948,7 +4967,14 @@ parse_cmd_line() {
 
 # connect call from openssl needs ipv6 in square brackets
 nodeip_to_proper_ip6() {
-     is_ipv6addr $NODEIP && NODEIP="[$NODEIP]"
+     local len_nodeip=0
+
+     if is_ipv6addr $NODEIP; then
+          NODEIP="[$NODEIP]"
+          len_nodeip=${#NODEIP}
+          CORRECT_SPACES="$(draw_line " " "$((len_nodeip - 16))" )"
+          # IPv6 addresses are longer, this varaible takes care that "further IP" and "Service" is properly aligned
+     fi
 }
 
 
@@ -5056,13 +5082,13 @@ else
           if [[ $(count_words "$(echo -n "$IPADDRs")") -gt 1 ]]; then           # we have more than one ipv4 address to check
                pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
                for ip in $IPADDRs; do
-                    draw_dotted_line "-" $((TERM_DWITH / 2))
+                    draw_line "-" $((TERM_DWITH / 2))
                     outln
                     NODEIP="$ip"
                     lets_roll "${STARTTLS_PROTOCOL}"
                     ret=$(($? + ret))
                done
-               draw_dotted_line "-" $((TERM_DWITH / 2))
+               draw_line "-" $((TERM_DWITH / 2))
                outln
                pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
           else                                                                  # we need just one ip4v to check
@@ -5076,4 +5102,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.399 2015/10/04 10:32:29 dirkw Exp $
+#  $Id: testssl.sh,v 1.400 2015/10/05 07:56:20 dirkw Exp $
