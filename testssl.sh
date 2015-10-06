@@ -4359,7 +4359,7 @@ determine_rdns() {
           rDNS=$(nslookup -type=PTR $NODEIP 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     #rDNS="$(echo $rDNS)"
+     rDNS="$(echo $rDNS)"
      [[ -z "$rDNS" ]] && rDNS=" --"
      return 0
 }
@@ -4536,9 +4536,11 @@ display_rdns_etc() {
           outln " A record via            /etc/hosts "
      fi
      if [[ -n "$rDNS" ]]; then
-          $HAS_IPv6 || \
-               printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS" && \
+          if $HAS_IPv6; then
                printf " %-23s %s" "rDNS $NODEIP:" "$rDNS"
+          else
+               printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS"
+          fi
      fi
 }
 
@@ -5102,4 +5104,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.400 2015/10/05 07:56:20 dirkw Exp $
+#  $Id: testssl.sh,v 1.401 2015/10/06 10:30:27 dirkw Exp $
