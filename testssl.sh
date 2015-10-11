@@ -4531,12 +4531,6 @@ determine_optimal_proto() {
           [[ $? -ne 0 ]] && exit -2
      fi
 
-     if $CLIENT_AUTH; then
-          outln
-          tmpfile_handle $FUNCNAME.txt
-          fatal "$NODEIP:$PORT seems to require a certificate. It's not yet supported" -3
-     fi
-
      tmpfile_handle $FUNCNAME.txt
      return 0
 }
@@ -5205,4 +5199,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.404 2015/10/11 21:04:14 dirkw Exp $
+#  $Id: testssl.sh,v 1.405 2015/10/11 21:23:34 dirkw Exp $
