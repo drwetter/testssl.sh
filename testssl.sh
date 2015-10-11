@@ -101,6 +101,7 @@ TERM_CURRPOS=0                          # ^^^ we also need to find out the lengt
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
 
 declare -x OPENSSL
+EXPERIMENTAL=${EXPERIMENTAL:-false}
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_EACH_C=${SHOW_EACH_C:-0}           # where individual ciphers are tested show just the positively ones tested #FIXME: upside down value
 SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave behind just usual? 
@@ -136,11 +137,14 @@ readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
+CLIENT_AUTH=false
+CLIENT_AUTH_MSG=" cannot determine -- certificate based authentication"
 HOSTCERT=""
 HEADERFILE=""
-HEADERFILE_BREACH=""
 LOGFILE=""
 PROTOS_OFFERED=""
+TLS_EXTENSIONS=""
+GOST_STATUS_PROBLEM=false
 DETECTED_TLS_VERSION=""
 SOCKREPLY=""
 SOCK_REPLY_FILE=""
@@ -155,6 +159,7 @@ OSSL_VER_APPENDIX="none"
 HAS_DH_BITS=${HAS_DH_BITS:-false}
 HAS_SSL2=true                           #TODO: in the future we'll do the fastest possible test (openssl s_client -ssl2 is currently faster than sockets)
 HAS_SSL3=true
+HAS_ALPN=false
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
@@ -183,8 +188,8 @@ NOW_TIME=""
 HTTP_TIME=""
 GET_REQ11=""
 HEAD_REQ10=""
-readonly UA_SNEAKY="Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.0)"
-readonly UA_STD="Mozilla/5.0 (X11; Linux x86_64; rv:42.0) Gecko/19700101 Firefox/42.0"
+readonly UA_STD="TLS tester from $SWURL"
+readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
 
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
@@ -461,13 +466,9 @@ out_row_aligned() {
 
 
 tmpfile_handle() {
-     if [[ "$DEBUG" -eq 0 ]]; then
-          rm $TMPFILE 2>/dev/null
-          [[ $ERRFILE =~ dev.null ]] || rm $ERRFILE
-     else
-          mv $TMPFILE "$TEMPDIR/$NODEIP.$1" 2>/dev/null
+     mv $TMPFILE "$TEMPDIR/$NODEIP.$1" 2>/dev/null
+     [[ $ERRFILE =~ dev.null ]] && return 0 || \
           mv $ERRFILE "$TEMPDIR/$NODEIP.$(sed 's/\.txt//g' <<<"$1").errorlog" 2>/dev/null
-     fi
 }
 
 # arg1: line with comment sign, tabs and so on
@@ -503,17 +504,20 @@ wait_kill(){
 # arg1 could be the protocol determined as "working". IIS6 needs that
 runs_HTTP() {
      local -i ret=0
+     local -i was_killed
 
-     # SNI is nonsense for !HTTPS but fortunately other protocols don't seem to care
-     printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE &
-     wait_kill $! $HEADER_MAXSLEEP
-     head $TMPFILE | grep -aq ^HTTP && SERVICE=HTTP
-     head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
-     head $TMPFILE | grep -aq POP && SERVICE=POP
-     head $TMPFILE | grep -aq IMAP && SERVICE=IMAP
-     head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
-     debugme head -50 $TMPFILE
-# $TMPFILE contains also a banner which we could use if there's a need for it
+     if ! $CLIENT_AUTH; then
+          # SNI is nonsense for !HTTPS but fortunately for other protocols s_client doesn't seem to care
+          printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE &
+          wait_kill $! $HEADER_MAXSLEEP
+          was_killed=$?
+          head $TMPFILE | grep -aq ^HTTP && SERVICE=HTTP
+          head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
+          head $TMPFILE | grep -aq POP && SERVICE=POP
+          head $TMPFILE | grep -aq IMAP && SERVICE=IMAP
+          head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
+          debugme head -50 $TMPFILE
+     fi
 
      out " Service detected:      $CORRECT_SPACES"
      case $SERVICE in
@@ -523,14 +527,19 @@ runs_HTTP() {
           IMAP|POP|SMTP|NNTP)
                out " $SERVICE, thus skipping HTTP specific checks"
                ret=0 ;;
-          *)   out " Couldn't determine what's running on port $PORT"
-               if $ASSUMING_HTTP; then
-                    SERVICE=HTTP
-                    out " -- ASSUMING_HTTP set though"
-                    ret=0
+          *)   if $CLIENT_AUTH; then
+                    out "certificate based authentication => skipping all HTTP checks"
+                    echo "certificate based authentication => skipping all HTTP checks" >$TMPFILE
                else
-                    out ", assuming no HTTP service => skipping HTTP checks"
-                    ret=1
+                    out " Couldn't determine what's running on port $PORT"
+                    if $ASSUMING_HTTP; then
+                         SERVICE=HTTP
+                         out " -- ASSUMING_HTTP set though"
+                         ret=0
+                    else
+                         out ", assuming no HTTP service => skipping all HTTP checks"
+                         ret=1
+                    fi
                fi
                ;;
      esac
@@ -539,6 +548,7 @@ runs_HTTP() {
      tmpfile_handle $FUNCNAME.txt
      return $ret
 }
+
 
 #problems not handled: chunked
 run_http_header() {
@@ -550,12 +560,12 @@ run_http_header() {
      outln; pr_blue "--> Testing HTTP header response"; outln " @ \"$URL_PATH\"\n"
 
      [[ -z "$1" ]] && url="/" || url="$1"
-     printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI 1>$HEADERFILE 2>$ERRFILE &
+     printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI >$HEADERFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      if [[ $? -eq 0 ]]; then
           # we do the get command again as it terminated within $HEADER_MAXSLEEP. Thus it didn't hang, we do it
           # again in the foreground ito get an ccurate header time!
-          printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI 1>$HEADERFILE 2>$ERRFILE 
+          printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI >$HEADERFILE 2>$ERRFILE 
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           HAD_SLEPT=0
@@ -641,7 +651,6 @@ detect_ipv4() {
           done < $HEADERFILE
      fi
 }    
-
 
 
 run_http_date() {
@@ -981,7 +990,6 @@ run_more_flags() {
           outln "--"
           ret=1
      else
-          #set -x
           ret=0
           for f2t in $good_flags2test; do
                debugme echo "---> $f2t"
@@ -1099,30 +1107,31 @@ listciphers() {
 # argv[2]: string on console
 # argv[3]: ok to offer? 0: yes, 1: no
 std_cipherlists() {
-     local -i ret
+     local -i sclient_success
      local singlespaces
      local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
 
      pr_bold "$2    "         # indent in order to be in the same row as server preferences
      if listciphers "$1"; then  # is that locally available??
           $OPENSSL s_client -cipher "$1" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>$ERRFILE >$TMPFILE </dev/null
-          ret=$?
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
           debugme cat $ERRFILE
           case $3 in
                0)   # ok to offer
-                    [[ $ret -eq 0 ]] && \
+                    [[ $sclient_success -eq 0 ]] && \
                          pr_greenln "offered (OK)" || \
                          pr_brownln "not offered (NOT ok)" ;;
                1) # the ugly ones
-                    [[ $ret -eq 0 ]] && \
+                    [[ $sclient_success -eq 0 ]] && \
                          pr_redln "offered (NOT ok)" || \
                          pr_greenln "not offered (OK)" ;;
                2)   # bad but not worst
-                    [[ $ret -eq 0 ]] && \
+                    [[ $sclient_success -eq 0 ]] && \
                          pr_literedln "offered (NOT ok)" || \
                          pr_litegreenln "not offered (OK)" ;;
                3) # not totally bad 
-                    [[ $ret -eq 0 ]] && \
+                    [[ $sclient_success -eq 0 ]] && \
                          pr_brownln "offered (NOT ok)" || \
                          outln "not offered (OK)" ;;
                *) # we shouldn't reach this
@@ -1133,8 +1142,8 @@ std_cipherlists() {
           singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
           local_problem "No $singlespaces configured in $OPENSSL"
      fi
-     # we need lf in those cases:
-     [[ $DEBUG -ge 2 ]] && echo
+     # we need 1xlf in those cases:
+     debugme echo
 }
 
 
@@ -1219,7 +1228,7 @@ neat_list(){
 test_just_one(){
      local hexcode n ciph sslvers kx auth enc mac export
      local dhlen
-     local ret
+     local sclient_success
      local re='^[0-9A-Fa-f]+$'
 
      pr_blue "--> Testing single cipher with "
@@ -1243,18 +1252,19 @@ test_just_one(){
                     neat_list $HEXC $ciph $kx $enc | grep -qwai "$arg"
                fi
                if [[ $? -eq 0 ]]; then    # string matches, so we can ssl to it:
-                    $OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
-                    ret=$?
+                    $OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>$ERRFILE >$TMPFILE </dev/null
+                    sclient_connect_successful $? $TMPFILE
+                    sclient_success=$?
                     if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
-                         if [[ $ret -eq 0 ]]; then
+                         if [[ $sclient_success -eq 0 ]]; then
                               dhlen=$(read_dhbits_from_file $TMPFILE quiet)
                               kx="$kx $dhlen"
                          else
-                              kx="$kx$grey TBD  $off "
+                              kx="$kx$grey TBD $off "
                          fi
                     fi
                     neat_list $HEXC $ciph "$kx" $enc
-                    if [[ $ret -eq 0 ]]; then
+                    if [[ $sclient_success -eq 0 ]]; then
                          pr_cyan "  available"
                     else
                          out "  not a/v"
@@ -1274,7 +1284,7 @@ test_just_one(){
 run_allciphers(){
      local tmpfile
      local nr_ciphers
-     local -i ret=0
+     local -i sclient_success=0
      local hexcode n ciph sslvers kx auth enc mac export
      local dhlen
 
@@ -1287,9 +1297,10 @@ run_allciphers(){
 
      $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE | while read hexcode n ciph sslvers kx auth enc mac export; do
      # FIXME: e.g. OpenSSL < 1.0 doesn't understand "-V" --> we can't do anything about it!
-          $OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE  </dev/null
-          ret=$?
-          if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
+          $OPENSSL s_client -cipher $ciph $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
+          if [[ $sclient_success -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
                continue       # no successful connect AND not verbose displaying each cipher
           fi
           normalize_ciphercode $hexcode
@@ -1299,7 +1310,7 @@ run_allciphers(){
           fi
           neat_list $HEXC $ciph "$kx" $enc
           if [[ "$SHOW_EACH_C" -ne 0 ]]; then
-               if [[ $ret -eq 0 ]]; then
+               if [[ $sclient_success -eq 0 ]]; then
                     pr_cyan "  available"
                else
                     out "  not a/v"
@@ -1316,7 +1327,7 @@ run_allciphers(){
 run_cipher_per_proto(){
      local proto proto_text
      local hexcode n ciph sslvers kx auth enc mac export
-     local -i ret=0
+     local -i sclient_success=0
      local dhlen
 
      pr_blue "--> Testing all locally available ciphers per protocol against the server"; outln ", ordered by encryption strength"
@@ -1327,9 +1338,10 @@ run_cipher_per_proto(){
           locally_supported "$proto" "$proto_text" || continue
           outln
           $OPENSSL ciphers $proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | while read hexcode n ciph sslvers kx auth enc mac export; do   # -V doesn't work with openssl < 1.0
-               $OPENSSL s_client -cipher $ciph $proto $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE  </dev/null
-               ret=$?
-               if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
+               $OPENSSL s_client -cipher $ciph $proto $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE  </dev/null
+               sclient_connect_successful $? $TMPFILE
+               sclient_success=$?
+               if [[ $sclient_success -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
                     continue       # no successful connect AND not verbose displaying each cipher
                fi
                normalize_ciphercode $hexcode
@@ -1339,7 +1351,7 @@ run_cipher_per_proto(){
                fi
                neat_list $HEXC $ciph "$kx" $enc
                if [[ "$SHOW_EACH_C" -ne 0 ]]; then
-                    if [[ $ret -eq 0 ]]; then
+                    if [[ $sclient_success -eq 0 ]]; then
                          pr_cyan "  available"
                     else
                          out "  not a/v"
@@ -1352,40 +1364,44 @@ run_cipher_per_proto(){
      return 0
 }
 
+# generic function whether $1 is supported by s_client ($2: string to display)
 locally_supported() {
-     local -i ret=0
-
      [[ -n "$2" ]] && out "$2 "
-     $OPENSSL s_client "$1" 2>&1 | grep -aq "unknown option"
-     if [[ $? -eq 0 ]]; then
+     if $OPENSSL s_client "$1" 2>&1 | grep -aq "unknown option"; then
           local_problem "$OPENSSL doesn't support \"s_client $1\""
-          ret=7
+          return 7
      fi
-     return $ret
+     return 0
 }
 
 
+# the protocol check needs to be revamped. It sucks. 
+# 1) we need to have a variable where the resulta are being stored so that every other test doesn't have to do this again.
+# 2) the code is too old and one can do that way better
+# 3) HAS_SSL3/2 does already exist
+# we should do what's availabe and faster (opensssl vs. sockets) . Keep in mind tat the socket reply for SSLv2 returns the number # of ciphers!
+#
+# arg1: -ssl2|-ssl3|-tls1
+# arg2: doesn't seem to be used in calling, seems to be a textstring with the protocol though
 run_prototest_openssl() {
      local sni="$SNI"
      local -i ret=0
 
-     $OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $PROXY $sni &>$TMPFILE </dev/null
+     $OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>$ERRFILE </dev/null
+     sclient_connect_successful $? $TMPFILE
      ret=$?
-# FIXME: here FreeBSD9/openssl 0.9.8 returns always 0 --> need to read the error but for now we DO NOT SUPPORT this platform.
-# that's where the binaries are for!
-     [[ $DEBUG -eq 2 ]] && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-
+     [[ $DEBUG -eq 2 ]] && egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if ! locally_supported "$1" "$2" ; then
           ret=7
      else                                    # we remove SNI for SSLv2 and v3:
           [[ "$1" =~ ssl ]] && sni=""        # newer openssl throw an error if SNI is supplied with SSLv2,
                                              # SSLv3 doesn't have SNI (openssl doesn't complain though -- yet)
-          $OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni &>$TMPFILE </dev/null
-          ret=$?                             #TODO (maybe): here FreeBSD9 returns always 0 --> need to read the error
-          [[ $DEBUG -eq 2 ]] && egrep "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-          grep -aq "no cipher list" $TMPFILE && ret=5
+          $OPENSSL s_client -state $1 $STARTTLS -connect $NODEIP:$PORT $sni >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          ret=$? 
+          [[ $DEBUG -eq 2 ]] && egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
      fi
-
      tmpfile_handle $FUNCNAME$1.txt
      return $ret
 
@@ -1396,6 +1412,7 @@ run_prototest_openssl() {
 }
 
 
+# the protocol check needs to be revamped. It sucks, see above
 run_protocols() {
      local using_sockets=true
      local supported_no_ciph1="supported but couldn't detect a cipher (may need debugging)" 
@@ -1480,7 +1497,7 @@ run_protocols() {
      esac
 
      pr_bold " TLS 1.2    ";
-     if $using_sockets && [[ $EXPERIMENTAL == "yes" ]]; then               #TODO: IIS servers do have a problem here with our handshake
+     if $using_sockets && $EXPERIMENTAL; then               #TODO: IIS servers do have a problem here with our handshake
           tls_sockets "03" "$TLS12_CIPHER"
      else
           run_prototest_openssl "-tls1_2"
@@ -1535,7 +1552,7 @@ read_dhbits_from_file() {
      debugme echo ">$HAS_DH_BITS|$what_dh|$bits<"
 
      [[ -n "$what_dh" ]] && HAS_DH_BITS=true                            # FIX 190
-     if [[ -z "$what_dh" ]]; then
+     if [[ -z "$what_dh" ]] && ! $HAS_DH_BITS; then
           if [[ -z "$2" ]]; then
                pr_litemagenta "$old_fart"
           fi
@@ -1591,7 +1608,7 @@ run_server_preference() {
 
      pr_bold " Has server cipher order?     "
      $OPENSSL s_client $STARTTLS -cipher $list_fwd -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
-     if [[ $? -ne 0 ]] && [[ -z "$STARTTLS_PROTOCOL" ]]; then
+     if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
           pr_litemagenta "no matching cipher in this list found (pls report this): "
           outln "$list_fwd  . "
           has_cipher_order=false
@@ -1602,7 +1619,7 @@ run_server_preference() {
           debugme out "(workaround #188) "
           determine_optimal_proto $STARTTLS_PROTOCOL             
           $OPENSSL s_client $STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
-          if [[ $? -ne 0 ]]; then
+          if ! sclient_connect_successful $? $TMPFILE; then
                pr_litemagenta "no matching cipher in this list found (pls report this): "
                outln "$list_fwd  . "
                has_cipher_order=false
@@ -1628,10 +1645,10 @@ run_server_preference() {
 
           pr_bold " Negotiated protocol          "
           $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-          if [[ $? -ne 0 ]]; then
+          if ! sclient_connect_successful $? $TMPFILE; then
                # 2 second try with $OPTIMAL_PROTO especially for intolerant IIS6 servers:
                $OPENSSL s_client $STARTTLS $OPTIMAL_PROTO -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-               [[ $? -ne 0 ]] && pr_litemagenta "Handshake error!"
+               sclient_connect_successful $? $TMPFILE || pr_litemagenta "Handshake error!"
           fi
           default_proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
           case "$default_proto" in
@@ -1665,8 +1682,8 @@ run_server_preference() {
                for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
                #locally_supported -"$p" "    " || continue
                locally_supported -"$p" || continue
-                    $OPENSSL s_client  $STARTTLS -"$p" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    if [[ $? -eq 0 ]]; then
+                    $OPENSSL s_client $STARTTLS -"$p" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+                    if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                          cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                          [[ ${cipher[i]} == "0000" ]] && cipher[i]=""                     # Hack!
@@ -1682,7 +1699,7 @@ run_server_preference() {
                [[ -n "$STARTTLS" ]] && arg="    "
                if spdy_pre " $arg"; then                                                  # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
                     $OPENSSL s_client -host $NODE -port $PORT -nextprotoneg "$NPN_PROTOs" </dev/null 2>>$ERRFILE >$TMPFILE
-                    if [[ $? -eq 0 ]]; then
+                    if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
                          if [[ -z "${proto[i]}" ]]; then
                               cipher[i]=""
@@ -1730,17 +1747,17 @@ cipher_pref_check() {
 
      for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
           $OPENSSL s_client $STARTTLS -"$p" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
-          if [[ $? -eq 0 ]]; then
+          if sclient_connect_successful $? $TMPFILE; then
                tested_cipher=""
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-               [[ -z "$proto" ]] && continue # for early openssl versions sometimes needed
+               [[ -z "$proto" ]] && continue      # for early openssl versions sometimes needed
                outln
                printf "     %-10s %s " "$proto:" "$cipher"
                tested_cipher="-"$cipher
                while true; do
                     $OPENSSL s_client $STARTTLS -"$p" -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    [[ $? -ne 0 ]] && break
+                    sclient_connect_successful $? $TMPFILE || break
                     cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                     out "$cipher "
                     tested_cipher="$tested_cipher:-$cipher"
@@ -1749,7 +1766,7 @@ cipher_pref_check() {
      done
      outln
 
-     if ! spdy_pre "     SPDY/NPN: " ; then       # is NPN/SPDY supported and is this no STARTTLS?
+     if ! spdy_pre "     SPDY/NPN: "; then       # is NPN/SPDY supported and is this no STARTTLS?
           outln
      else
           protos=$($OPENSSL s_client -host $NODE -port $PORT -nextprotoneg  \"\" </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
@@ -1760,7 +1777,7 @@ cipher_pref_check() {
                tested_cipher="-"$cipher
                while true; do
                     $OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
-                    [[ $? -ne 0 ]] && break
+                    sclient_connect_successful $? $TMPFILE || break
                     cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                     out "$cipher "
                     tested_cipher="$tested_cipher:-$cipher"
@@ -1774,20 +1791,26 @@ cipher_pref_check() {
 }
 
 
+# arg1 is proto or empty
 get_host_cert() {
-          # arg1 is proto or empty
-          $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $1 2>/dev/null </dev/null | \
-               awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT
-          return $((${PIPESTATUS[0]} + ${PIPESTATUS[1]}))
+     local tmpvar=$TEMPDIR/$FUNCNAME.txt     # change later to $TMPFILE
+
+     $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $1 2>/dev/null </dev/null >$TEMPDIR/$FUNCNAME.txt
+     if sclient_connect_successful $? $tmpvar; then
+          awk '/-----BEGIN/,/-----END/ { print $0 }' $tmpvar >$HOSTCERT
+     else
+          return 1
+     fi
+    #      return $((${PIPESTATUS[0]} + ${PIPESTATUS[1]}))
 }
 
 get_all_certs() {
      local savedir
      local nrsaved
-     local -i ret
 
      $OPENSSL s_client -showcerts $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>$ERRFILE </dev/null >$TEMPDIR/allcerts.txt
-     ret=$?
+     sclient_connect_successful $? $TMPFILE || \
+          pr_litemagenta "problem getting all certs"
      savedir=$(pwd); cd $TEMPDIR
      # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
      awk -v n=-1 '/-----BEGIN CERTIFICATE-----/{ inc=1; n++ } 
@@ -1795,9 +1818,7 @@ get_all_certs() {
              /---END CERTIFICATE-----/{ inc=0 }' $TEMPDIR/allcerts.txt
      nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
      cd "$savedir"
-
      echo $nrsaved
-     return $ret
 }
 
 
@@ -1916,14 +1937,58 @@ tls_time() {
           debugme out "$TLS_TIME"
           outln
      else
-          pr_bold " TLS timestamp" ; outln "                "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
+          pr_bold " TLS timestamp" ; out "                "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
      fi
+     return 0
 }
+
+# function which 
+sclient_connect_successful() {
+     [[ $1 -eq 0 ]] && return 0
+     [[ -z $(awk '/Master-Key: / { print $2 }' "$2") ]] && return 1
+     [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]] && return 1
+     # what's left now is: master key not empty and Session-ID not empty ==> probably client based auth with x509 certificate
+     CLIENT_AUTH=true
+     return 0
+}
+
+
+determine_tls_extensions() {
+     local proto
+     local success
+     local alpn=""
+
+     $HAS_ALPN && alpn="h2-14,h2-15,h2"
+
+     # throwing 1st every cipher/protocol at the server to know what works
+     success=7
+     for proto in tls1_2 tls1_1 tls1 ssl3; do
+# alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
+          $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
+          sclient_connect_successful $? $TMPFILE && success=0 && break
+     done                          # this loop is needed for IIS/6
+     if [[ $success -eq 7 ]]; then
+          # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
+          $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE
+          if ! sclient_connect_successful $? $TMPFILE; then
+               pr_litemagentaln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+               tmpfile_handle $FUNCNAME.txt
+               return 7  # this is ugly, I know
+          else
+               GOST_STATUS_PROBLEM=true
+          fi
+     fi
+     TLS_EXTENSIONS=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
+     get_host_cert "-$proto"
+     success=$?
+
+     tmpfile_handle $FUNCNAME.txt
+     return $success
+}
+
 
 run_server_defaults() {
      local proto
-     local gost_status_problem=false
-     local extensions
      local sessticket_str lifetime unit keysize sig_algo key_algo
      local expire secs2warn ocsp_uri crl startdate enddate issuer_c issuer_o issuer sans san cn cn_nosni
      local policy_oid
@@ -1933,33 +1998,19 @@ run_server_defaults() {
      outln
      pr_blue "--> Testing server defaults (Server Hello)"; outln "\n"
 
-     #TLS extensions follow now
-     # throwing 1st every cipher/protocol at the server to know what works
-     for proto in tls1_2 tls1_1 tls1 ssl3; do
-          $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
-          ret=$?
-          get_host_cert "-$proto"
-          [[ $? -eq 0 ]] && [[ $ret -eq 0 ]] && break
-          ret=7
-     done                # this loop is needed for IIS/6
-     if [[ $ret -eq 7 ]]; then
-          # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
-          if ! $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE; then
-               pr_litemagentaln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
-               tmpfile_handle tlsextdebug+status.txt
-               return 7  # this is ugly, I know
-          else
-               gost_status_problem=true
-          fi
-     fi
-     $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY -$proto 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
-     pr_bold " TLS server extensions        "
-     extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
-     if [[ -z "$extensions" ]]; then
+     pr_bold " TLS server extensions (std)  "
+     [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
+
+     #extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
+     if [[ -z "$TLS_EXTENSIONS" ]]; then
           outln "(none)"
      else
-          echo $extensions | sed 's/,$//'    # remove last comma
+          #echo $extensions | sed 's/ /,/g' 
+          outln "$TLS_EXTENSIONS"
      fi
+
+     cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+     >$ERRFILE
 
      pr_bold " Session Tickets RFC 5077     "
      sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
@@ -2031,6 +2082,7 @@ run_server_defaults() {
           out "$cn"
      fi
 
+     $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
      cn_nosni=""
      if [[ -s $HOSTCERT.nosni ]]; then
           if $OPENSSL x509 -in $HOSTCERT.nosni -noout -subject 2>>$ERRFILE | grep -wq CN; then
@@ -2039,10 +2091,11 @@ run_server_defaults() {
                cn_nosni="no CN field in subject"
           fi
      fi
+#FIXME: check for SSLv3/v2 and look wheher it goes to a different CN
 
      debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
      if [[ $NODE == "$cn_nosni" ]]; then
-          if [[ $SERVICE == "HTTP" ]]; then
+          if [[ $SERVICE == "HTTP" ]] || $CLIENT_AUTH; then
                outln " (works w/o SNI)"
           else
                outln " (matches certificate directly)"
@@ -2169,19 +2222,20 @@ run_server_defaults() {
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      [[ x"$ocsp_uri" == "x" ]] && pr_literedln "--" || echo "$ocsp_uri"
 
+#set -x
      pr_bold " OCSP stapling               "
-     if grep "OCSP response" $TMPFILE | grep -q "no response sent" ; then
+     if grep -a "OCSP response" $TMPFILE | grep -q "no response sent" ; then
           out " not offered"
      else
-          if grep "OCSP Response Status" $TMPFILE | grep -q successful; then
+          if grep -a "OCSP Response Status" $TMPFILE | grep -q successful; then
                pr_litegreen " offered"
           else
-               if $gost_status_problem; then
-                    outln " (GOST servers make problems here, sorry)"
+               if $GOST_STATUS_PROBLEM; then
+                    out " (GOST servers make problems here, sorry)"
                     ret=0
                else
                     outln " not sure what's going on here, debug:"
-                    grep -A 20 "OCSP response"  $TMPFILE
+                    grep -aA 20 "OCSP response"  $TMPFILE
                     ret=2
                fi
           fi
@@ -2190,7 +2244,8 @@ run_server_defaults() {
 
      # if we call tls_time before tmpfile_handle it throws an error because the function tls_sockets removed $TMPFILE 
      # already -- and that was a different one -- means that would get overwritten anyway
-     tmpfile_handle tlsextdebug+status.txt
+     tmpfile_handle $FUNCNAME.txt
+
      tls_time
      return $ret
 }
@@ -2199,7 +2254,7 @@ run_server_defaults() {
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 run_pfs() {
-     local ret ret2
+     local -i sclient_success
      local -i pfs_offered=1
      local tmpfile
      local dhlen
@@ -2222,10 +2277,11 @@ run_pfs() {
           return 1
      fi
 
-     $OPENSSL s_client -cipher 'ECDH:DH' $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
-     ret=$?
+     $OPENSSL s_client -cipher 'ECDH:DH' $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+     sclient_connect_successful $? $TMPFILE
+     sclient_success=$?
      outln
-     if [[ $ret -ne 0 ]] || [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]]; then
+     if [[ $sclient_success -ne 0 ]] || [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]]; then
           pr_brownln "Not OK: No ciphers supporting Forward Secrecy offered"
      else
           pfs_offered=0
@@ -2239,8 +2295,9 @@ run_pfs() {
           while read hexcode dash pfs_cipher sslvers kx auth enc mac; do
                tmpfile=$TMPFILE.$hexcode
                $OPENSSL s_client -cipher $pfs_cipher $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>$tmpfile </dev/null
-               ret2=$?
-               if [[ $ret2 -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
+               sclient_connect_successful $? $tmpfile
+               sclient_success=$?
+               if [[ $sclient_success -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
                     continue # no successful connect AND not verbose displaying each cipher
                fi
                if $WIDE; then
@@ -2252,7 +2309,7 @@ run_pfs() {
                     neat_list $HEXC $pfs_cipher "$kx" $enc $strength
                     let "pfs_offered++"
                     if [[ "$SHOW_EACH_C" -ne 0 ]]; then
-                         if [[ $ret2 -eq 0 ]]; then
+                         if [[ $sclient_success -eq 0 ]]; then
                               pr_green "works"
                          else
                               out "not a/v"
@@ -2296,9 +2353,7 @@ spdy_pre(){
           pr_litemagenta "not tested as proxies do not support proxying it"
           return 1
      fi
-     # first, does the current openssl support it?
-     $OPENSSL s_client help 2>&1 | grep -qw nextprotoneg
-     if [[ $? -ne 0 ]]; then
+     if ! $HAS_SPDY; then
           local_problem "$OPENSSL doesn't support SPDY/NPN";
           return 7
      fi
@@ -2616,8 +2671,8 @@ parse_tls_serverhello() {
           tls_err_descr=${tls_hello_ascii:12:2}        # 112/0x70: Unrecognized name, 111/0x6F: certificate_unobtainable, 
                                                        # 113/0x71: bad_certificate_status_response, #114/0x72: bad_certificate_hash_value
           if [[ $DEBUG -ge 2 ]]; then
+               echo "tls_protocol (reclyr):  0x$tls_protocol"
                echo "tls_content_type:       0x$tls_content_type"
-               echo "tls_protocol:           0x$tls_protocol"
                echo "tls_len_all:            $tls_len_all"
                echo "tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
                echo "tls_err_level:          ${tls_err_level} (warning:1, fatal:2)"  
@@ -2645,9 +2700,10 @@ parse_tls_serverhello() {
      tls_compression_method="${tls_hello_ascii:$sid_offset:2}"
 
      if [[ $DEBUG -ge 2 ]]; then
+          echo "tls_protocol (reclyr):  0x$tls_protocol"
           echo "tls_hello:              0x$tls_hello"
           if [[ $DEBUG -ge 4 ]]; then
-               echo "tls_protocol2:          0x$tls_protocol2"
+               echo "tls_protocol:           0x$tls_protocol2"
                echo "tls_sid_len:            0x$(dec2hex $tls_sid_len) / = $tls_sid_len"
           fi
           echo -n "tls_hello_time:         0x$tls_hello_time "
@@ -2719,7 +2775,7 @@ sslv2_sockets() {
 socksend_tls_clienthello() {
 #FIXME: redo this with all extensions!
      local tls_low_byte="$1"
-     local tls_low_byte1="01"      # the first TLS version number is always 0301 -- except: SSLv3
+     local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301 -- except: SSLv3
      local servername_hexstr len_servername len_servername_hex
      local hexdump_format_str
      local all_extensions
@@ -2775,17 +2831,17 @@ socksend_tls_clienthello() {
      len_all_word="$LEN_STR"
      #[[ $DEBUG -ge 3 ]] && echo $len_all_word
 
-     # if we have SSLv3, the first occurence of TLS protocol is SSLv3, otherwise TLS 1.0
-     [[ $tls_low_byte == "00" ]] && tls_low_byte1="00"
+     # if we have SSLv3, the first occurence of TLS protocol -- record layer -- is SSLv3, otherwise TLS 1.0
+     [[ $tls_low_byte == "00" ]] && tls_word_reclayer="03, 00"
 
      TLS_CLIENT_HELLO="
      # TLS header ( 5 bytes)
-     ,16, 03, $tls_low_byte1  # TLS Version: in wireshark this is always 00 for TLS 1.0-1.2
+     ,16, $tls_word_reclayer  # TLS Version: in wireshark this is always 01 for TLS 1.0-1.2
      ,$len_all_word           # Length  <---
      # Handshake header:
      ,01                      # Type (x01 for ClientHello)
      ,00, $len_client_hello_word   # Length ClientHello
-     ,03, $tls_low_byte       # TLS Version (again)
+     ,03, $tls_low_byte       # TLS version ClientHello
      ,54, 51, 1e, 7a          # Unix time since  see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
      ,de, ad, be, ef          # Random 28 bytes
      ,31, 33, 07, 00, 00, 00, 00, 00
@@ -2922,19 +2978,22 @@ run_heartbleed(){
      [ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for heartbleed vulnerability" && outln "\n"
      pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
 
-     #if [[ -n "$STARTTLS" ]] && [[ $EXPERIMENTAL != "yes" ]]; then
-     #    outln "(not yet implemented for STARTTLS)"
-     #    return 0
-     #fi
+     [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
+     if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
+          pr_green "not vulnerable (OK)"
+          outln " (no heartbeat extension)"
+          return 0
+     fi
 
-     # determine TLS versions available:
-     $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY -tlsextdebug &>$TMPFILE </dev/null
+     # determine TLS versions offered <-- needs to come from another place
+     $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY -tlsextdebug >$TMPFILE 2>$ERRFILE </dev/null
 
      if $HAS_SED_E; then
           tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
      else
           tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -r 's/[^[:digit:]]//g')
      fi
+#FIXME: for SSLv3 only we need to set tls_hexcode and the record layer TLS version correctly
      case $tls_proto_offered in
           12)  tls_hexcode="x03, x03" ;;
           11)  tls_hexcode="x03, x02" ;;
@@ -2945,7 +3004,7 @@ run_heartbleed(){
      client_hello="
      # TLS header ( 5 bytes)
      ,x16,                      # content type (x16 for handshake)
-     $tls_hexcode,              # TLS version
+     x03, x01,                  # TLS record layer version
      x00, xdc,                  # length
      # Handshake header
      x01,                       # type (x01 for ClientHello)
@@ -3042,11 +3101,8 @@ run_ccs_injection(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_blue "--> Testing for CCS injection vulnerability" && outln "\n"
      pr_bold " CCS"; out " (CVE-2014-0224)                       "
 
-     #if [[ -n "$STARTTLS" ]] && [[ $EXPERIMENTAL != "yes" ]]; then
-     #    outln "(not yet implemented for STARTTLS)"
-     #    return 0
-     #fi
-     $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY &>$TMPFILE </dev/null
+     # determine TLS versions offered <-- needs to come from another place
+     $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
 
      if $HAS_SED_E; then
           tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
@@ -3057,18 +3113,19 @@ run_ccs_injection(){
           12)  tls_hexcode="x03, x03" ;;
           11)  tls_hexcode="x03, x02" ;;
           *) tls_hexcode="x03, x01" ;;
+#FIXME: for SSLv3 only we need to set tls_hexcode and the record layer TLS version correctly
      esac
      ccs_message=", x14, $tls_hexcode ,x00, x01, x01"
 
      client_hello="
      # TLS header (5 bytes)
-     ,x16,               # content type (x16 for handshake)
-     $tls_hexcode,       # TLS version
-     x00, x93,           # length
+     ,x16,                         # content type (x16 for handshake)
+     x03, x01,                     # TLS version in record layer is always TLS 1.0 (except SSLv3)
+     x00, x93,                     # length
      # Handshake header
-     x01,                # type (x01 for ClientHello)
-     x00, x00, x8f,      # length
-     $tls_hexcode,       # TLS version
+     x01,                          # type (x01 for ClientHello)
+     x00, x00, x8f,                # length
+     $tls_hexcode,                 # TLS version
      # Random (32 byte)
      x53, x43, x5b, x90, x9d, x9b, x72, x0b,
      xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
@@ -3164,7 +3221,8 @@ run_renego() {
 
      pr_bold " Secure Renegotiation "; out "(CVE-2009-3555)      "    # and RFC5746, OSVDB 59968-59974
                                                                       # community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
-     if $OPENSSL s_client $OPTIMAL_PROTO $STARTTLS -connect $NODEIP:$PORT $SNI $PROXY 2>&1 </dev/null &>$TMPFILE; then
+     $OPENSSL s_client $OPTIMAL_PROTO $STARTTLS -connect $NODEIP:$PORT $SNI $PROXY 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
+     if sclient_connect_successful $? $TMPFILE; then
           grep -iaq "$insecure_renogo_str" $TMPFILE
           sec_renego=$?                                                    # 0= Secure Renegotiation IS NOT supported
 #FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
@@ -3191,21 +3249,27 @@ run_renego() {
           0.9.9*|1.0*) ;;   # all ok
      esac
 
-     # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
-     echo R | $OPENSSL s_client $OPTIMAL_PROTO $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $SNI $PROXY &>$TMPFILE &     # msg enables us to look deeper into it while debugging
-     wait_kill $! $HEADER_MAXSLEEP
-     if [[ $? -eq 3 ]]; then
-          pr_litegreen "likely not vulnerable (OK)"; outln " (timed out)"       # it hung
+     if $CLIENT_AUTH; then
+          pr_litemagentaln "client authentication prevents this from being tested"
           sec_client_renego=1
      else
-          # second try in the foreground as we are sure now it won't hang
-          echo R | $OPENSSL s_client $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $SNI $PROXY &>$TMPFILE
-          sec_client_renego=$?                                                                 # 0=client is renegotiating & doesn't return an error --> vuln!
-          case $sec_client_renego in
-               0) pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" ;;
-               1) pr_litegreenln "not vulnerable (OK)" ;;
-               *) "FIXME (bug): $sec_client_renego" ;;
-          esac
+          # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
+          # msg enables us to look deeper into it while debugging
+          echo R | $OPENSSL s_client $OPTIMAL_PROTO $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $SNI $PROXY >$TMPFILE 2>>$ERRFILE &     
+          wait_kill $! $HEADER_MAXSLEEP
+          if [[ $? -eq 3 ]]; then
+               pr_litegreen "likely not vulnerable (OK)"; outln " (timed out)"       # it hung
+               sec_client_renego=1
+          else
+               # second try in the foreground as we are sure now it won't hang
+               echo R | $OPENSSL s_client $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $SNI $PROXY >$TMPFILE 2>>$ERRFILE
+               sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
+               case $sec_client_renego in
+                    0) pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" ;;
+                    1) pr_litegreenln "not vulnerable (OK)" ;;
+                    *) "FIXME (bug): $sec_client_renego" ;;
+               esac
+          fi
      fi
 
      #FIXME Insecure Client-Initiated Renegotiation is missing
@@ -3238,7 +3302,9 @@ run_crime() {
      $OPENSSL s_client $OPTIMAL_PROTO $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null &>$TMPFILE
      if grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
           pr_litegreen "not vulnerable (OK)"
-          [[ $SERVICE == "HTTP" ]] || out " (not using HTTP anyway)"
+          if [[ $SERVICE != "HTTP" ]] && ! $CLIENT_AUTH;  then 
+               out " (not using HTTP anyway)"
+          fi
           ret=0
      else
           if [[ $SERVICE == "HTTP" ]]; then
@@ -3248,8 +3314,8 @@ run_crime() {
           fi
           ret=1
      fi
-     # not clear whether this is a protocol != HTTP as one needs to have the ability to modify the
-     # compression input which is done via javascript in the context of HTTP
+     # not clear whether this is a protocol != HTTP as one needs to have the ability to repeatedly modify the input
+     # which is done e.g. via javascript in the context of HTTP
      outln
 
 # this needs to be re-done i order to remove the redundant check for spdy
@@ -3305,40 +3371,25 @@ run_breach() {
 
      url="$1"
      [[ -z "$url" ]] && url="/"
+     referer="https://google.com/"
+     useragent="$UA_STD"
      if $SNEAKY; then
           # see https://community.qualys.com/message/20360
           if [[ "$NODE" =~ google ]]; then
-               referer="http://yandex.ru/" # otherwise we have a false positive for google.com
-          else
-               referer="http://google.com/"
+               referer="https://yandex.ru/" # otherwise we have a false positive for google.com
           fi
           useragent="$UA_SNEAKY"
-     else
-          referer="TLS/SSL-Tester from $SWURL"
-          useragent="$UA_STD"
      fi
-     (
-     $OPENSSL s_client $OPTIMAL_PROTO -quiet -connect $NODEIP:$PORT $PROXY $SNI << EOF
-GET $url HTTP/1.1
-Host: $NODE
-User-Agent: $useragent
-Accept: text/*
-Accept-Language: en-US,en
-Accept-encoding: gzip,deflate,compress
-Referer: $referer
-Connection: close
-
-EOF
-) >$HEADERFILE_BREACH 2>$ERRFILE &
+     printf "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $OPTIMAL_PROTO -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI 1>$TMPFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
-     was_killed=$?                        # !=0 was killed
-     result=$(awk '/^Content-Encoding/ { print $2 }' $HEADERFILE_BREACH)
+     was_killed=$?                           # !=0 was killed
+     result=$(awk '/^Content-Encoding/ { print $2 }' $TMPFILE)
      result=$(strip_lf "$result")
-     debugme grep '^Content-Encodingi' $HEADERFILE_BREACH
-     if [[ ! -s $HEADERFILE_BREACH ]]; then
+     debugme grep '^Content-Encoding' $TMPFILE
+     if [[ ! -s $TMPFILE ]]; then
           pr_litemagenta "failed (HTTP header request stalled"
-          [[ $was_killed -ne 0 ]] && pr_litemagenta " and needed to be terminated"
-          pr_litemagentaln ")"
+          [[ $was_killed -ne 0 ]] && pr_litemagenta " and was terminated"
+          pr_litemagenta ") "
           ret=3
      elif [[ -z $result ]]; then
            pr_green "no HTTP compression (OK) "
@@ -3348,7 +3399,7 @@ EOF
            ret=1
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
-     outln "(only supplied \"$url\" tested)"
+     outln " - only supplied \"$url\" tested"
 
      tmpfile_handle $FUNCNAME.txt
      return $ret
@@ -3356,27 +3407,29 @@ EOF
 
 # Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
 run_ssl_poodle() {
-     local -i ret=0
+     local -i sclient_success=0
      local cbc_ciphers
      local cbc_ciphers="SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:EXP1024-RC2-CBC-MD5:DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5"
      local cbc_ciphers_krb="KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5"
 
      [ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption)" && outln "\n"
      pr_bold " POODLE, SSL"; out " (CVE-2014-3566)               "
+     #nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $cbc_ciphers:cbc_ciphers_krb))
      cbc_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' 2>$ERRFILE | awk '/CBC/ { print $1 }' | tr '\n' ':')
-#FIXME: even with worst openssl client (FreeBSD9) we have 17 reasonable ciphers but is that enough to check??
+
      debugme echo $cbc_ciphers
-     $OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
-     ret=$?
-     [[ $DEBUG -eq 2 ]] && egrep -q "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-     if [[ $ret -eq 0 ]]; then
+     $OPENSSL s_client -ssl3 $STARTTLS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+     sclient_connect_successful $? $TMPFILE
+     sclient_success=$?
+     [[ $DEBUG -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     if [[ $sclient_success -eq 0 ]]; then
           pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
      else
           pr_green "not vulnerable (OK)"
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
-     return $ret
+     return $sclient_success
 }
 
 # for appliance which use padding, no fallback needed
@@ -3396,8 +3449,7 @@ run_tls_fallback_scsv() {
      # the countermeasure to protect against protocol downgrade attacks.
 
      # First check we have support for TLS_FALLBACK_SCSV in our local OpenSSL
-     $OPENSSL s_client -h 2>&1 | grep -q "\-fallback_scsv"
-     if [[ $? -gt 0 ]]; then
+     if ! $OPENSSL s_client -h 2>&1 | grep -q "\-fallback_scsv"; then
           local_problem "$OPENSSL lacks TLS_FALLBACK_SCSV support"
           return 4
      fi
@@ -3407,11 +3459,12 @@ run_tls_fallback_scsv() {
      # d) minor: we should do "-state" here
 
      # first: make sure we have tls1_2:
-     if ! $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2  &>/dev/null </dev/null; then
+     $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2 >$TMPFILE 2>$ERRFILE </dev/null
+     if ! sclient_connect_successful $? $TMPFILE; then
           pr_litemagenta "Check failed: seems like TLS 1.2 is the only protocol "
           ret=7
      else
-          # ...and do the test
+          # ...and do the test (we need to parse the error here!)
           $OPENSSL s_client $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2 -fallback_scsv &>$TMPFILE </dev/null
           if grep -q "CONNECTED(00" "$TMPFILE"; then
                if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
@@ -3445,7 +3498,7 @@ run_tls_fallback_scsv() {
 
 # Factoring RSA Export Keys: don't use EXPORT RSA ciphers, see https://freakattack.com/
 run_freak() {
-     local -i ret=0
+     local -i sclient_success=0
      local -i nr_supported_ciphers=0
      # with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
      local exportrsa_cipher_list="EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-RC4-MD5:EXP-RC4-MD5"
@@ -3467,10 +3520,11 @@ run_freak() {
           4|5|6|7)
                addtl_warning=" (tested with $nr_supported_ciphers/9 ciphers)" ;;
      esac
-     $OPENSSL s_client $STARTTLS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
-     ret=$?
-     [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
-     if [[ $ret -eq 0 ]]; then
+     $OPENSSL s_client $STARTTLS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+     sclient_connect_successful $? $TMPFILE
+     sclient_success=$?
+     [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     if [[ $sclient_success -eq 0 ]]; then
           pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
      else
           pr_green "not vulnerable (OK)"; out "$addtl_warning"
@@ -3487,7 +3541,7 @@ run_freak() {
 
 # see https://weakdh.org/logjam.html
 run_logjam() {
-     local -i ret=0
+     local -i sclient_success=0
      local exportdhe_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
      local -i nr_supported_ciphers=0
      local addtl_warning=""
@@ -3504,9 +3558,10 @@ run_logjam() {
           3) addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers)" ;;
           4)   ;;
      esac
-     $OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
-     ret=$?
-     [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $TMPFILE | egrep -av "unable to get local|verify error"
+     $OPENSSL s_client $STARTTLS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+     sclient_connect_successful $? $TMPFILE
+     sclient_success=$?
+     [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      addtl_warning="$addtl_warning, common primes not checked."
      if $HAS_DH_BITS; then
           if ! $do_allciphers && ! $do_cipher_per_proto && $HAS_DH_BITS; then
@@ -3516,7 +3571,7 @@ run_logjam() {
           fi
      fi
           
-     if [[ $ret -eq 0 ]]; then
+     if [[ $sclient_success -eq 0 ]]; then
           pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers, common primes not checked."
      else
           pr_green "not vulnerable (OK)"; out "$addtl_warning"
@@ -3527,7 +3582,7 @@ run_logjam() {
      debugme echo $nr_supported_ciphers
 
      tmpfile_handle $FUNCNAME.txt
-     return $ret
+     return $sclient_success
 }
 # TODO: perfect candidate for replacement by sockets, so is freak
 
@@ -3537,10 +3592,10 @@ run_logjam() {
 run_beast(){
      local hexcode dash cbc_cipher sslvers kx auth enc mac export
      local detected_proto
-     local -i ret=0
+     local -i sclient_success=0
      local detected_cbc_ciphers=""
      local higher_proto_supported=""
-     local openssl_ret=0
+     local -i sclient_success=0
      local vuln_beast=false
      local spaces="                                           "
      local cr=$'\n'
@@ -3554,22 +3609,23 @@ run_beast(){
      fi
      pr_bold " BEAST"; out " (CVE-2011-3389)                     "
      $WIDE && outln
+# output in wide mode if cipher doesn't exist is not ok
 
      >$ERRFILE
 
      # first determine whether it's mitogated by higher protocols
      for proto in tls1_1 tls1_2; do
           $OPENSSL s_client -state -"$proto" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI 2>>$ERRFILE >$TMPFILE </dev/null
-          if [[ $? -eq 0 ]]; then
+          if sclient_connect_successful $? $TMPFILE; then
                higher_proto_supported="$higher_proto_supported ""$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol .*://' -e 's/ //g')"
           fi
      done
 
      for proto in ssl3 tls1; do
           $OPENSSL s_client -"$proto" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>>$ERRFILE </dev/null
-          if [[ $? -ne 0 ]]; then       # protocol supported?
-               if $continued; then      # second round: we hit TLS1:
-                    pr_litegreenln "no SSL3 or TLS1"
+          if ! sclient_connect_successful $? $TMPFILE; then # protocol supported?
+               if $continued; then                          # second round: we hit TLS1:
+                    pr_litegreenln " no SSL3 or TLS1"
                     return 0
                else                # protocol not succeeded but it';s the first time
                     continued=true
@@ -3579,7 +3635,7 @@ run_beast(){
 
           # now we test in one shot with the precompiled ciphers
           $OPENSSL s_client -"$proto" -cipher "$cbc_cipher_list" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>>$ERRFILE </dev/null
-          [[ $? -ne 0 ]] && continue
+          sclient_connect_successful $? $TMPFILE || continue
 
           if $WIDE; then
                outln "\n $(toupper $proto):";
@@ -3589,13 +3645,14 @@ run_beast(){
                read hexcode dash cbc_cipher sslvers kx auth enc mac < <($OPENSSL ciphers -V "$ciph" 2>>$ERRFILE)        # -V doesn't work with openssl < 1.0
                #                                                    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
                $OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>>$ERRFILE </dev/null
-               openssl_ret=$?
-               [[ $openssl_ret -eq 0 ]] && vuln_beast=true
+               sclient_connect_successful $? $TMPFILE
+               sclient_success=$?
+               [[ $sclient_success -eq 0 ]] && vuln_beast=true
                if $WIDE; then
                     normalize_ciphercode $hexcode
                     if [[ "$SHOW_EACH_C" -ne 0 ]]; then
                          neat_list $HEXC $cbc_cipher $kx $enc
-                         if [[ $openssl_ret -eq 0 ]]; then
+                         if [[ $sclient_success -eq 0 ]]; then
                               [[ -n "$higher_proto_supported" ]] && \
                                    pr_yellowln "available" || \
                                    pr_brownln "available" 
@@ -3604,10 +3661,10 @@ run_beast(){
                               outln "not a/v"
                          fi
                     else
-                         [[ $openssl_ret -eq 0 ]] && neat_list $HEXC $cbc_cipher $kx $enc && outln
+                         [[ $sclient_success -eq 0 ]] && neat_list $HEXC $cbc_cipher $kx $enc && outln
                     fi
                else # short display:
-                    if [[ $openssl_ret -eq 0 ]]; then
+                    if [[ $sclient_success -eq 0 ]]; then
                          detected_cbc_ciphers="$detected_cbc_ciphers ""$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
                          vuln_beast=true
                     fi
@@ -3674,6 +3731,7 @@ run_lucky13() {
 # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 run_rc4() {
      local -i rc4_offered=0
+     local -i sclient_success
      local hexcode dash rc4_cipher sslvers kx auth enc mac export
      local rc4_ciphers_list="ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:DHE-DSS-RC4-SHA:AECDH-RC4-SHA:ADH-RC4-MD5:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:RC4-MD5:RSA-PSK-RC4-SHA:PSK-RC4-SHA:KRB5-RC4-SHA:KRB5-RC4-MD5:RC4-64-MD5:EXP1024-DHE-DSS-RC4-SHA:EXP1024-RC4-SHA:EXP-ADH-RC4-MD5:EXP-RC4-MD5:EXP-RC4-MD5:EXP-KRB5-RC4-SHA:EXP-KRB5-RC4-MD5"
 
@@ -3683,25 +3741,24 @@ run_rc4() {
      fi
      pr_bold " RC4"; out " (CVE-2013-2566, CVE-2015-2808)        "
 
-     $OPENSSL ciphers -V 'RC4:@STRENGTH' >$TMPFILE 2>$ERRFILE    # -V doesn't work with openssl < 1.0, feeding this into the while loop below
-     $OPENSSL s_client -cipher $rc4_ciphers_list $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI &>/dev/null </dev/null
-     if [[ $? -eq 0 ]]; then
-          # FF >=39 won't connect to them unless it's in this white list: http://mxr.mozilla.org/mozilla-central/source/security/manager/ssl/IntolerantFallbackList.inc
+     $OPENSSL s_client -cipher $rc4_ciphers_list $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+     if sclient_connect_successful $? $TMPFILE; then
           pr_litered "VULNERABLE (NOT ok): "
           $WIDE && outln "\n"
           rc4_offered=1
           $WIDE && neat_header
           while read hexcode dash rc4_cipher sslvers kx auth enc mac; do
-               $OPENSSL s_client -cipher $rc4_cipher $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null &>/dev/null
-               ret=$?         # here we have a fp with openssl < 1.0
-               if [[ $ret -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
-                    continue  # no successful connect AND not verbose displaying each cipher
+               $OPENSSL s_client -cipher $rc4_cipher $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null >$TMPFILE 2>$ERRFILE
+               sclient_connect_successful $? $TMPFILE
+               sclient_success=$?            # here we may have a fp with openssl < 1.0, TBC
+               if [[ $sclient_success -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
+                    continue                 # no successful connect AND not verbose displaying each cipher
                fi
                if $WIDE; then
                     normalize_ciphercode $hexcode
                     neat_list $HEXC $rc4_cipher $kx $enc
                     if [[ "$SHOW_EACH_C" -ne 0 ]]; then
-                         if [[ $ret -eq 0 ]]; then
+                         if [[ $sclient_success -eq 0 ]]; then
                               pr_litered "available"
                          else
                               out "not a/v"
@@ -3714,11 +3771,10 @@ run_rc4() {
                else
                     pr_litered "$rc4_cipher "
                fi
-          done < $TMPFILE
-          #    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
+          done < <($OPENSSL ciphers -V $rc4_ciphers_list:@STRENGTH)
           outln
      else
-          pr_litegreenln "no RC4 ciphers detected (OK)"
+          pr_litegreenln " no RC4 ciphers detected (OK)"
           rc4_offered=0
      fi
      outln
@@ -3740,8 +3796,9 @@ return 0
 # https://secure-resumption.com/tlsauth.pdf
 run_tls_truncation() {
 #FIXME: difficult to test, is there any test available: pls let me know
-:
+    :
 }
+
 
 old_fart() {
      outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
@@ -3754,6 +3811,9 @@ get_install_dir() {
      #INSTALL_DIR=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
      INSTALL_DIR=$(dirname ${BASH_SOURCE[0]})
 
+     [[ -r "$RUN_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/etc/mapping-rfc.txt" 
+     [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+# those will disapper:
      [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/mapping-rfc.txt" 
      [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
 
@@ -3764,12 +3824,16 @@ get_install_dir() {
                INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
                # not sure whether Darwin has -f
           INSTALL_DIR=$(dirname $INSTALL_DIR 2>/dev/null)
+          [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+# will disappear:
           [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
      # still no mapping file:
      if [[ ! -r "$MAPPING_FILE_RFC" ]] && which realpath &>/dev/null ; then
           INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
+          MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+# will disappear
           MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
@@ -3848,6 +3912,12 @@ find_openssl_binary() {
      $OPENSSL s_client -ssl3 2>&1 | grep -aq "unknown option" || \
           HAS_SSL3=true && \
           HAS_SSL3=false
+     $OPENSSL s_client help 2>&1 | grep -qw '\-alpn' && \
+          HAS_ALPN=true || \
+          HAS_ALPN=false
+     $OPENSSL s_client help 2>&1 | grep -qw '\-nextprotoneg' && \
+          HAS_SPDY=true || \
+          HAS_SPDY=false
 
      return 0
 }
@@ -3963,11 +4033,9 @@ maketempf() {
           ERRFILE="/dev/null" 
      else
           ERRFILE=$TEMPDIR/errorfile.txt || exit -6
-          >$ERRFILE
      fi
      HOSTCERT=$TEMPDIR/host_certificate.txt
      HEADERFILE=$TEMPDIR/http_header.txt
-     HEADERFILE_BREACH=$TEMPDIR/http_header_breach.txt
      LOGFILE=$TEMPDIR/logfile.txt
      initialize_engine
      if [[ $DEBUG -ne 0 ]]; then
@@ -3993,12 +4061,17 @@ OSSL_VER_PLATFORM: "$OSSL_VER_PLATFORM"
 
 OPENSSL_CONF: $OPENSSL_CONF
 
+HAS_IPv6: $HAS_IPv6
+HAS_SSL2: $HAS_SSL2
+HAS_SSL3: $HAS_SSL3
+HAS_SPDY: $HAS_SPDY
+HAS_ALPN: $HAS_ALPN
+
 PATH: $PATH
 PROG_NAME: $PROG_NAME
 INSTALL_DIR: $INSTALL_DIR
 RUN_DIR: $RUN_DIR
 MAPPING_FILE_RFC: $MAPPING_FILE_RFC
-
 
 CAPATH: $CAPATH
 ECHO: $ECHO
@@ -4058,7 +4131,7 @@ mybanner() {
              modification under GPLv2 permitted. 
       USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @ https://testssl.sh/bugs/
+       ll disappearPlease file bugs @ https://testssl.sh/bugs/
 
 ###########################################################
 EOF
@@ -4408,28 +4481,37 @@ check_proxy(){
 }
 
 
-# this function determines OPTIMAL_PROTO. It is a workaround function as under certain circumstances 
+# this function determines OPTIMAL_PROTO. It is a workaround function as under certain circumstances  (e.g. IIS6.0)
 # openssl 1.0.2 (as opposed to 1.0.1) needs a protocol otherwise s_client -connect will fail!
 # Circumstances so far: 1.) IIS 6  2.) starttls + dovecot imap
-# The first try in the loop is empty as we prefer not to specify always a protocol f it works w/o.
+# The first try in the loop is empty as we prefer not to specify always a protocol if it works w/o.
 #
 determine_optimal_proto() {
      local all_failed
      local addcmd=""
 
-     #TODO: maybe qeury known openssl version before this workaround
+     #TODO: maybe query known openssl version before this workaround. 1.0.1 doesn't need this
 
+     >$ERRFILE
      if [[ -n "$1" ]]; then
           # starttls workaround needed see https://github.com/drwetter/testssl.sh/issues/188
           # kind of odd
           for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
-               $OPENSSL s_client $STARTTLS_OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY -starttls $1 </dev/null &>$TMPFILE && all_failed=1 && break
+               $OPENSSL s_client $STARTTLS_OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY -starttls $1 </dev/null >$TMPFILE 2>>$ERRFILE
+               if sclient_connect_successful $? $TMPFILE; then
+                    all_failed=1
+                    break
+               fi
                all_failed=0
           done
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
           for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2 ''; do
-               $OPENSSL s_client $OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY $SNI </dev/null &>$TMPFILE && all_failed=1 && break
+               $OPENSSL s_client $OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY $SNI </dev/null >$TMPFILE 2>>$ERRFILE
+               if sclient_connect_successful $? $TMPFILE; then
+                    all_failed=1
+                    break
+               fi
                all_failed=0
           done
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
@@ -4443,10 +4525,20 @@ determine_optimal_proto() {
           else
                pr_bold " $NODEIP:$PORT "
           fi
-          pr_boldln "doesn't seem a TLS/SSL enabled server or it requires a certificate";
+          tmpfile_handle $FUNCNAME.txt
+          pr_boldln "doesn't seem a TLS/SSL enabled server";
           ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
           [[ $? -ne 0 ]] && exit -2
      fi
+
+     if $CLIENT_AUTH; then
+          outln
+          tmpfile_handle $FUNCNAME.txt
+          fatal "$NODEIP:$PORT seems to require a certificate. It's not yet supported" -3
+     fi
+
+     tmpfile_handle $FUNCNAME.txt
+     return 0
 }
 
 
@@ -4455,7 +4547,7 @@ determine_service() {
      local ua 
      local protocol
 
-     if ! fd_socket; then                         # check if we can connect to $NODEIP:$PORT
+     if ! fd_socket; then          # check if we can connect to $NODEIP:$PORT
           [[ -n "$PROXY" ]] && \
                fatal "You're sure $PROXYNODE:$PROXYPORT allows tunneling here? Can't connect to \"$NODEIP:$PORT\"" -2 || \
                fatal "Can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" -2
@@ -4464,8 +4556,9 @@ determine_service() {
 
      datebanner "Testing"
      outln
-     if [[ -z "$1" ]]; then                       # no STARTTLS. For STARTTLS we do this where it fails ("Has server cipher order")
-          determine_optimal_proto "$1"            # in order to avoid unneccessary connects
+     if [[ -z "$1" ]]; then                       
+          # no STARTTLS. 
+          determine_optimal_proto "$1"
           $SNEAKY && \
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
@@ -4474,8 +4567,9 @@ determine_service() {
           GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
           HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
           runs_HTTP $OPTIMAL_PROTO
-     else                                         # STARTTLS
-          protocol=$(echo "$1" | sed 's/s$//')    # strip trailing s in ftp(s), smtp(s), pop3(s), imap(s), ldap(s), telnet(s)
+     else                                         
+          # STARTTLS
+          protocol=${protocol%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           case "$protocol" in
                ftp|smtp|pop3|imap|xmpp|telnet|ldap)
                     STARTTLS="-starttls $protocol"
@@ -4483,7 +4577,6 @@ determine_service() {
                     if [[ $protocol == "xmpp" ]]; then
                          # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
                          NODEIP="$NODE"
-
                          if [[ -n "$XMPP_HOST" ]]; then
                               if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
                                    fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -3
@@ -4861,9 +4954,10 @@ parse_cmd_line() {
                     ;;
                --devel) ### this development feature will soon disappear
                     HEX_CIPHER=""
-                    # DEBUG=3  ./testssl.sh -q 03 "cc, 13, c0, 13" google.de
-                    # DEBUG=3  ./testssl.sh -q 01 yandex.ru
-                    # DEBUG=3  ./testssl.sh -q 00 <host which still supports SSLv2>
+                    # DEBUG=3  ./testssl.sh --devel 03 "cc, 13, c0, 13" google.de    --> TLS 1.2
+                    # DEBUG=3  ./testssl.sh --devel 01 yandex.ru                     --> TLS 1.0
+                    # DEBUG=3  ./testssl.sh --devel 00 <host which supports SSLv3>
+                    # DEBUG=3  ./testssl.sh --devel 22 <host which still supports SSLv2>
                     TLS_LOW_BYTE="$2"; 
                     if [[ $# -eq 4 ]]; then  # protocol AND ciphers specified
                          HEX_CIPHER="$3"
@@ -4980,15 +5074,22 @@ nodeip_to_proper_ip6() {
 }
 
 
+reset_hostdepended_vars() {
+     TLS_EXTENSIONS=""
+     PROTOS_OFFERED=""
+     OPTIMAL_PROTO=""
+}
+
 lets_roll() {
      local ret
 
      [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" -1
      nodeip_to_proper_ip6
+     reset_hostdepended_vars
      determine_rdns
      determine_service "$1"        # any starttls service goes here
 
-     $do_tls_sockets && { [[ $TLS_LOW_BYTE -eq 0 ]] && \
+     $do_tls_sockets && { [[ $TLS_LOW_BYTE -eq 22 ]] && \
           sslv2_sockets || \
           tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
      $do_test_just_one && test_just_one ${single_cipher}
@@ -5104,4 +5205,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.401 2015/10/06 10:30:27 dirkw Exp $
+#  $Id: testssl.sh,v 1.404 2015/10/11 21:04:14 dirkw Exp $
