@@ -25,11 +25,15 @@ Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
 
 Update notification here or @ [twitter](https://twitter.com/drwetter). 
 
+----
 
 ## External contributions
+
+Please address questions not specifically to the code of testssl.sh to the respective projects
 
 ### Docker
 
 Docker images are available at:
 
 * https://quay.io/repository/jumanjiman/testssl
+* https://hub.docker.com/r/mvance/testssl/
