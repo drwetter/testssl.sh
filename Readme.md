@@ -17,6 +17,7 @@ Done so far:
 
 * Trust chain check against certificate stores from java, linux (system), microsoft, mozilla (works for openssl >=1.0.2)
 * IPv6 (status: 80% working, details see https://github.com/drwetter/testssl.sh/issues/11
+* works on servers requiring a client certificate for authentication
 * Even more compatibilty improvements for FreeBSD and RH-ish systems
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
