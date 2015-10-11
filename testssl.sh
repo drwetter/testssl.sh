@@ -4131,7 +4131,7 @@ mybanner() {
              modification under GPLv2 permitted. 
       USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       ll disappearPlease file bugs @ https://testssl.sh/bugs/
+       Please file bugs @ https://testssl.sh/bugs/
 
 ###########################################################
 EOF
@@ -5199,4 +5199,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.405 2015/10/11 21:23:34 dirkw Exp $
+#  $Id: testssl.sh,v 1.406 2015/10/11 21:34:52 dirkw Exp $
