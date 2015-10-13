@@ -4563,7 +4563,7 @@ determine_service() {
           runs_HTTP $OPTIMAL_PROTO
      else                                         
           # STARTTLS
-          protocol=${protocol%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+          protocol=${1%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           case "$protocol" in
                ftp|smtp|pop3|imap|xmpp|telnet|ldap)
                     STARTTLS="-starttls $protocol"
@@ -5199,4 +5199,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.406 2015/10/11 21:34:52 dirkw Exp $
+#  $Id: testssl.sh,v 1.407 2015/10/13 06:31:53 dirkw Exp $
