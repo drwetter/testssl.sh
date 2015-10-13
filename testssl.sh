@@ -3363,6 +3363,8 @@ run_breach() {
      local -i was_killed=0
      local referer useragent
      local url
+     local spaces="                                          "
+     local disclaimer=""
 
      [[ $SERVICE != "HTTP" ]] && return 7
 
@@ -3371,6 +3373,8 @@ run_breach() {
 
      url="$1"
      [[ -z "$url" ]] && url="/"
+     disclaimer=" - only supplied \"$url\" tested"
+
      referer="https://google.com/"
      useragent="$UA_STD"
      if $SNEAKY; then
@@ -3392,14 +3396,16 @@ run_breach() {
           pr_litemagenta ") "
           ret=3
      elif [[ -z $result ]]; then
-           pr_green "no HTTP compression (OK) "
-           ret=0
+          pr_green "no HTTP compression (OK) "
+          outln "$disclaimer"
+          ret=0
      else
-           pr_litered "NOT ok: uses $result HTTP compression "
+          pr_litered "potentially NOT ok, uses $result HTTP compression."
+          outln "$disclaimer"
+          outln "$spaces Can be ignored for static pages or if no secrets in the page"
            ret=1
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
-     outln " - only supplied \"$url\" tested"
 
      tmpfile_handle $FUNCNAME.txt
      return $ret
@@ -5199,4 +5205,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.407 2015/10/13 06:31:53 dirkw Exp $
+#  $Id: testssl.sh,v 1.408 2015/10/13 20:25:00 dirkw Exp $
