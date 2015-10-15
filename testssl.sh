@@ -2438,12 +2438,24 @@ starttls_line() {
           if egrep -q "$2" $TMPFILE; then
                debugme echo "---> reply matched \"$2\""
           else
-               debugme echo "---> reply didn't match \"$2\", see $TMPFILE"
-               pr_magenta "STARTTLS handshake problem. "
-               outln "Either switch to native openssl (--ssl-native), "
-               outln "   give the server more time to reply (STARTTLS_SLEEP=<seconds> ./testssh.sh ..) -- "
-               outln "   or debug what happened (add --debug=2)"
-               exit -3
+               # slow down for exim and friends who need a proper handshake:, see 
+               # https://github.com/drwetter/testssl.sh/issues/218
+               FAST_STARTTLS=false
+               debugme echo -e "\n=== sending with automated FAST_STARTTLS=false \"$1\" ..."
+               echo -e "$1" >&5
+               cat <&5 >$TMPFILE &
+               debugme echo "... received result: "
+               debugme cat $TMPFILE
+               if [[ -n "$2" ]]; then
+                    debugme echo "---> reply with automated FAST_STARTTLS=false matched \"$2\""
+               else
+                    debugme echo "---> reply didn't match \"$2\", see $TMPFILE"
+                    pr_magenta "STARTTLS handshake problem. "
+                    outln "Either switch to native openssl (--ssl-native), "
+                    outln "   give the server more time to reply (STARTTLS_SLEEP=<seconds> ./testssh.sh ..) -- "
+                    outln "   or debug what happened (add --debug=2)"
+                    return 3
+               fi
           fi
      fi
 
@@ -5239,4 +5251,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.410 2015/10/15 12:15:06 dirkw Exp $
+#  $Id: testssl.sh,v 1.411 2015/10/15 13:14:36 dirkw Exp $
