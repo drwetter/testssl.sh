@@ -1308,7 +1308,7 @@ run_allciphers(){
 
      nr_ciphers=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)")
      outln
-     pr_headlineln " Testing all locally available $nr_ciphers ciphers against the server, ordered by encryption strength "
+     pr_headlineln " Testing all $nr_ciphers locally available ciphers against the server, ordered by encryption strength "
      ! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      outln
      neat_header
