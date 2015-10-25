@@ -93,7 +93,7 @@ date --help >/dev/null 2>&1 && \
 echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      readonly HAS_SED_E=true || \
      readonly HAS_SED_E=false 
-TERM_DWITH=${COLUMNS:-$(tput cols)}     # for future custom line wrapping
+TERM_DWITH=${COLUMNS:-$(tput cols 2>/dev/null)}     # for future custom line wrapping
 TERM_CURRPOS=0                          # ^^^ we also need to find out the length or current pos in the line
 
 
@@ -340,6 +340,8 @@ set_color_functions() {
      underline=""
      italic=""
 
+     # Hey wait, do we actually have tput / ncurses ?
+     which tput &> /dev/null || return 0
      tput sgr0 &>/dev/null || linux_tput=false
      if [[ "$COLOR" -eq 2 ]]; then
           if $linux_tput; then
