@@ -5,36 +5,8 @@
 
 `testssl.sh` is a free command line tool which checks a server's service on any port for the support of TLS/SSL ciphers, protocols as well as some cryptographic flaws. It's designed to provide clear output in any case.
 
-It is working on every Linux distribution out of the box with some limitations of disabled features from the openssl client -- some workarounds are done with bash-socket-based checks. It also works on BSD and other Unices out of the box, supposed they have `/bin/bash` and standard tools like sed and awk installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL version >= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to display bit strengths for key exchanges.
+It's fork from "https://github.com/drwetter/testssl.sh"
 
-On github you will find in the master branch the development version of the software -- with new features and maybe some bugs. For the stable version and a more thorough description of the software please see [testssl.sh](https://testssl.sh/ "Go to the site with the stable version and more documentation"). 
+My favorite SSL Tester in bash !
+Fast/Simple/Efficient !
 
-Planned features in the release 2.7dev/2.8 are: 
-
-https://github.com/drwetter/testssl.sh/milestones/2.7dev%20%282.8%29
-
-Done so far:
-
-* Trust chain check against certificate stores from java, linux (system), microsoft, mozilla (works for openssl >=1.0.2)
-* IPv6 (status: 80% working, details see https://github.com/drwetter/testssl.sh/issues/11
-* works on servers requiring a client certificate for authentication
-* Even more compatibilty improvements for FreeBSD and RH-ish systems
-
-Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
-
-Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
-
-Update notification here or @ [twitter](https://twitter.com/drwetter). 
-
-----
-
-## External contributions
-
-Please address questions not specifically to the code of testssl.sh to the respective projects
-
-### Docker
-
-Docker images are available at:
-
-* https://quay.io/repository/jumanjiman/testssl
-* https://hub.docker.com/r/mvance/testssl/
