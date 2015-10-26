@@ -4,7 +4,7 @@
 
 * Peter Mosmans
  - started way better cmd line parsing
- - cleanups
+ - cleanups, fixes
  - openssl sources support with the "missing" features
 
 * John Newbigin
@@ -12,11 +12,14 @@
 
 * Jonathan Roach
  - TLS_FALLBACK_SCSV checks
- 
+
 * Mark Felder
  - lots of cleanups
  - Shellcheck static analysis
 
+* Jean Marsault
+ - client auth: ideas, code snipplets
+ 
 * Maciej Grela 
   - colorless handling
 
