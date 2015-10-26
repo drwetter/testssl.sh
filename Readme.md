@@ -5,7 +5,7 @@
 
 `testssl.sh` is a free command line tool which checks a server's service on any port for the support of TLS/SSL ciphers, protocols as well as some cryptographic flaws. It's designed to provide clear output in any case.
 
-It's fork from "https://github.com/drwetter/testssl.sh"
+It's a fork from "https://github.com/drwetter/testssl.sh"
 
 My favorite SSL Tester in bash !
 Fast/Simple/Efficient !
