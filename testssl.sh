@@ -94,7 +94,7 @@ echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      readonly HAS_SED_E=true || \
      readonly HAS_SED_E=false
 
-if [[ $- == *i*]]; then			#Prevent tput errors if running non interactive shell
+if [[ $- == *i* ]]; then			#Prevent tput errors if running non interactive shell
 	TERM_DWITH=${COLUMNS:-$(tput cols 2>/dev/null)}     # for future custom line wrapping
 	TERM_CURRPOS=0                          # ^^^ we also need to find out the length or current pos in the line
 fi
