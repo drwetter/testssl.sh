@@ -92,10 +92,12 @@ date --help >/dev/null 2>&1 && \
      readonly HAS_GNUDATE=false
 echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      readonly HAS_SED_E=true || \
-     readonly HAS_SED_E=false 
-TERM_DWITH=${COLUMNS:-$(tput cols 2>/dev/null)}     # for future custom line wrapping
-TERM_CURRPOS=0                          # ^^^ we also need to find out the length or current pos in the line
+     readonly HAS_SED_E=false
 
+if [[ $- == *i*]]; then			#Prevent tput errors if running non interactive shell
+	TERM_DWITH=${COLUMNS:-$(tput cols 2>/dev/null)}     # for future custom line wrapping
+	TERM_CURRPOS=0                          # ^^^ we also need to find out the length or current pos in the line
+fi
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
@@ -5199,7 +5201,9 @@ get_install_dir
 
 initialize_globals
 parse_cmd_line "$@"
-set_color_functions
+if [[ $- == *i* ]]; then			#Prevent tput errors if running non interactive shell
+	set_color_functions
+fi
 find_openssl_binary
 maketempf
 mybanner
