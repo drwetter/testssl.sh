@@ -4391,7 +4391,7 @@ get_a_record() {
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if [[ "$NODE" == *.local ]]; then
           if which avahi-resolve &>/dev/null; then
-               ip4=$(filter_ip4_address $(avahi-resolve -4 -n $NODE 2>/dev/null | sed -E 's/\t/  /' | sed "s/^.*$NODE //"))
+               ip4=$(filter_ip4_address $(avahi-resolve -4 -n $NODE 2>/dev/null | awk '{ print $2 }'))
           else
                fatal "Local hostname given but no 'avahi-resolve' avaliable."
           fi
@@ -4423,7 +4423,7 @@ get_aaaa_record() {
      if [[ -z "$ip6" ]]; then
           if [[ "$NODE" == *.local ]]; then
                if which avahi-resolve &>/dev/null; then
-                    ip6=$(filter_ip6_address $(avahi-resolve -6 -n $NODE 2>/dev/null | sed -E 's/\t/  /' | sed "s/^.*$NODE //"))
+                    ip6=$(filter_ip6_address $(avahi-resolve -6 -n $NODE 2>/dev/null | awk '{ print $2 }'))
                else
                     fatal "Local hostname given but no 'avahi-resolve' avaliable."
                fi
