@@ -60,6 +60,9 @@
  - Fix for HSTS + subdomains
  - LibreSSL patch
 
+* Laine Gholson
+ - avahi/mDNS support
+
 * Dmitri S
  - inspiration & help for Darwin port
 
