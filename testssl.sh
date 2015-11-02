@@ -94,9 +94,9 @@ echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      readonly HAS_SED_E=true || \
      readonly HAS_SED_E=false
 
-if [[ $- == *i* ]]; then			#Prevent tput errors if running non interactive shell
-	TERM_DWITH=${COLUMNS:-$(tput cols 2>/dev/null)}     # for future custom line wrapping
-	TERM_CURRPOS=0                          # ^^^ we also need to find out the length or current pos in the line
+if [[ $- == *i* ]]; then			                    # Prevent tput errors if running non interactive shell
+	TERM_DWITH=${COLUMNS:-$(tput cols 2>/dev/null)}   # for future custom line wrapping
+	TERM_CURRPOS=0                          
 fi
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
@@ -326,7 +326,7 @@ pr_dquoted() { out "\"$1\""; }
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 set_color_functions() {
-     local linux_tput=true
+     local ncurses_tput=true
 
      # empty vars if we have COLOR=0 equals no escape code:
      red=""
@@ -344,9 +344,9 @@ set_color_functions() {
 
      # Hey wait, do we actually have tput / ncurses ?
      which tput &> /dev/null || return 0
-     tput sgr0 &>/dev/null || linux_tput=false
+     tput sgr0 &>/dev/null || ncurses_tput=false
      if [[ "$COLOR" -eq 2 ]]; then
-          if $linux_tput; then
+          if $ncurses_tput; then
                red=$(tput setaf 1)
                green=$(tput setaf 2)
                brown=$(tput setaf 3)
@@ -368,7 +368,7 @@ set_color_functions() {
      fi
 
      if [[ "$COLOR" -ge 1 ]]; then
-          if $linux_tput; then
+          if $ncurses_tput; then
                bold=$(tput bold)
                underline=$(tput sgr 0 1)
                italic=$(tput sitm)
@@ -5214,9 +5214,6 @@ get_install_dir
 
 initialize_globals
 parse_cmd_line "$@"
-if [[ $- == *i* ]]; then			#Prevent tput errors if running non interactive shell
-	set_color_functions
-fi
 find_openssl_binary
 maketempf
 mybanner
