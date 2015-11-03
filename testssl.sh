@@ -94,10 +94,16 @@ echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      readonly HAS_SED_E=true || \
      readonly HAS_SED_E=false
 
-if [[ $- == *i* ]]; then			                    # Prevent tput errors if running non interactive shell
-	TERM_DWITH=${COLUMNS:-$(tput cols 2>/dev/null)}   # for future custom line wrapping
-	TERM_CURRPOS=0                          
+tty -s && \
+     readonly INTERACTIVE=true || \
+     readonly INTERACTIVE=false
+
+if ! tput cols &>/dev/null || ! $INTERACTIVE; then     # Prevent tput errors if running non interactive
+     TERM_DWITH=${COLUMNS:-80}
+else
+     TERM_DWITH=${COLUMNS:-$(tput cols)}               # for custom line wrapping and dashes
 fi
+TERM_CURRPOS=0                                         # custom line wrapping needs alter the current horizontal cursor pos
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
@@ -342,8 +348,8 @@ set_color_functions() {
      underline=""
      italic=""
 
-     # Hey wait, do we actually have tput / ncurses ?
-     which tput &> /dev/null || return 0
+     which tput &>/dev/null || return 0      # Hey wait, do we actually have tput / ncurses ?
+     tput cols &>/dev/null || return 0       # tput under BSDs and GNUs doesn't work either (TERM undefined?)
      tput sgr0 &>/dev/null || ncurses_tput=false
      if [[ "$COLOR" -eq 2 ]]; then
           if $ncurses_tput; then
@@ -565,7 +571,7 @@ runs_HTTP() {
                ;;
      esac
 
-     outln
+     outln "\n"
      tmpfile_handle $FUNCNAME.txt
      return $ret
 }
@@ -1449,11 +1455,11 @@ run_protocols() {
           pr_headlineln "(via native openssl)"
      else
           if [[ -n "$STARTTLS" ]]; then
-               pr_headlineln "(via openssl, SSLv2 via sockets)"
+               pr_headlineln "(via openssl, SSLv2 via sockets) "
                using_sockets=false
           else
                using_sockets=true
-               pr_headlineln "(via sockets except TLS 1.2 and SPDY/NPN)"
+               pr_headlineln "(via sockets except TLS 1.2 and SPDY/NPN) "
           fi
      fi
      outln
@@ -1760,6 +1766,7 @@ run_server_preference() {
           cipher_pref_check
      else
           outln "\n No further cipher order check has been done as order is determined by the client"
+          outln
      fi
      return 0
 }
@@ -1811,6 +1818,7 @@ cipher_pref_check() {
           done
      fi
 
+     outln
      tmpfile_handle $FUNCNAME.txt
      return 0
 }
@@ -1969,7 +1977,8 @@ tls_time() {
      return 0
 }
 
-# function which 
+# core function determining whether handshake succeded or not
+#
 sclient_connect_successful() {
      [[ $1 -eq 0 ]] && return 0
      [[ -z $(awk '/Master-Key: / { print $2 }' "$2") ]] && return 1
@@ -2254,7 +2263,6 @@ run_server_defaults() {
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      [[ x"$ocsp_uri" == "x" ]] && pr_literedln "--" || echo "$ocsp_uri"
 
-#set -x
      pr_bold " OCSP stapling               "
      if grep -a "OCSP response" $TMPFILE | grep -q "no response sent" ; then
           out " not offered"
@@ -2399,7 +2407,7 @@ run_spdy() {
 
      pr_bold " SPDY/NPN   "
      if ! spdy_pre ; then
-          echo
+          outln "\n"
           return 0
      fi
      $OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs </dev/null 2>$ERRFILE >$TMPFILE
@@ -2411,7 +2419,7 @@ run_spdy() {
           # now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
           if echo $tmpstr | egrep -aq "spdy|http" ; then
                out "$tmpstr" 
-               out " (advertised)"
+               outln " (advertised)"
                ret=0
           else
                pr_litemagentaln "please check manually, server response was ambigious ..."
@@ -4132,6 +4140,7 @@ CAPATH: $CAPATH
 ECHO: $ECHO
 COLOR: $COLOR
 TERM_DWITH: $TERM_DWITH
+INTERACTIVE: $INTERACTIVE
 HAS_GNUDATE: $HAS_GNUDATE
 HAS_SED_E: $HAS_SED_E
 
@@ -4397,7 +4406,7 @@ get_a_record() {
           else
                fatal "Local hostname given but no 'avahi-resolve' avaliable."
           fi
-	fi
+     fi
      if [[ -z "$ip4" ]]; then
           which dig &> /dev/null && \
                ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | sed '/^;;/d'))
@@ -4525,7 +4534,8 @@ get_mx_record() {
 }
 
 # We need to get the IP address of the proxy so we can use it in fd_socket
-check_proxy(){
+#
+check_proxy() {
      if [[ -n "$PROXY" ]]; then
           if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
                fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -1
@@ -4664,7 +4674,7 @@ determine_service() {
                     ;;
           esac
      fi
-     outln
+     #outln
 
      tmpfile_handle $FUNCNAME.txt
      return 0       # OPTIMAL_PROTO, GET_REQ*/HEAD_REQ* is set now
@@ -5214,6 +5224,7 @@ get_install_dir
 
 initialize_globals
 parse_cmd_line "$@"
+set_color_functions
 find_openssl_binary
 maketempf
 mybanner
@@ -5247,13 +5258,13 @@ else
           if [[ $(count_words "$(echo -n "$IPADDRs")") -gt 1 ]]; then           # we have more than one ipv4 address to check
                pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
                for ip in $IPADDRs; do
-                    draw_line "-" $((TERM_DWITH / 2))
+                    draw_line "-" $((TERM_DWITH * 2 / 3))
                     outln
                     NODEIP="$ip"
                     lets_roll "${STARTTLS_PROTOCOL}"
                     ret=$(($? + ret))
                done
-               draw_line "-" $((TERM_DWITH / 2))
+               draw_line "-" $((TERM_DWITH * 2 / 3))
                outln
                pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
           else                                                                  # we need just one ip4v to check
