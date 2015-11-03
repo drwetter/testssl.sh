@@ -147,6 +147,7 @@ TMPFILE=""
 ERRFILE=""
 CLIENT_AUTH=false
 CLIENT_AUTH_MSG=" cannot determine -- certificate based authentication"
+NO_SSL_SESSIONID=false
 HOSTCERT=""
 HEADERFILE=""
 LOGFILE=""
@@ -323,7 +324,6 @@ pr_reverse_bold() { [[ "$COLOR" -ne 0 ]] && out "\033[7m\033[1m$1" || out "$1"; 
 
 #pr_headline() { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m\033[47m$1" || out "$1"; pr_off; }
 pr_headline() { [[ "$COLOR" -ne 0 ]] && out "\033[1m\033[4m$1" || out "$1"; pr_off; }
-#pr_headline() { pr_underline "$1";  }
 pr_headlineln() { pr_headline "$1" ; outln; }
 
 pr_squoted() { out "'$1'"; }
@@ -1981,11 +1981,11 @@ tls_time() {
 #
 sclient_connect_successful() {
      [[ $1 -eq 0 ]] && return 0
-     [[ -z $(awk '/Master-Key: / { print $2 }' "$2") ]] && return 1
-     [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]] && return 1
-     # what's left now is: master key not empty and Session-ID not empty ==> probably client based auth with x509 certificate
-     CLIENT_AUTH=true
-     return 0
+     [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]] && return 0
+     # second check saved like 
+     # fgrep 'Cipher is (NONE)' "$2" &> /dev/null && return 1
+     # what's left now is: master key empty and Session-ID not empty ==> probably client based auth with x509 certificate
+     return 1
 }
 
 
@@ -2057,6 +2057,13 @@ run_server_defaults() {
           lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
           unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           outln "$lifetime $unit"
+     fi
+ 
+     pr_bold " SSL Session ID support       "
+     if $NO_SSL_SESSIONID; then
+          outln "no"
+     else
+          outln "yes"
      fi
 
      pr_bold " Server key size              "
@@ -4559,9 +4566,32 @@ check_proxy() {
 }
 
 
-# this function determines OPTIMAL_PROTO. It is a workaround function as under certain circumstances  (e.g. IIS6.0)
-# openssl 1.0.2 (as opposed to 1.0.1) needs a protocol otherwise s_client -connect will fail!
-# Circumstances so far: 1.) IIS 6  2.) starttls + dovecot imap
+# this is only being called from determine_optimal_proto in order to check whether we have a server
+# with client authentication, a server with no SSL session ID switched off
+#
+sclient_auth() {
+     [[ $1 -eq 0 ]] && return 0                                            # no client auth (CLIENT_AUTH=false is preset globally)
+     if [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]]; then           # connect succeeded
+          if grep -q '^<<< .*CertificateRequest' "$2"; then                # CertificateRequest message in -msg
+               CLIENT_AUTH=true 
+               return 0
+          fi
+          if [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]]; then      # probably no SSL session 
+               if [[ 2 -eq $(grep -c CERTIFICATE "$2") ]]; then            # do another sanity check to be sure
+                    CLIENT_AUTH=false
+                    NO_SSL_SESSIONID=true                                  # NO_SSL_SESSIONI is preset globally to false for all other cases
+                    return 0
+               fi
+          fi
+     fi
+     # what's left now is: master key empty, handshake returned not successful, session ID empty --> not sucessful
+     return 1
+}
+
+
+# this function determines OPTIMAL_PROTO. It is a workaround function as under certain circumstances 
+# (e.g. IIS6.0 and openssl 1.0.2 as opposed to 1.0.1) needs a protocol otherwise s_client -connect will fail!
+# Circumstances observed so far: 1.) IIS 6  2.) starttls + dovecot imap
 # The first try in the loop is empty as we prefer not to specify always a protocol if it works w/o.
 #
 determine_optimal_proto() {
@@ -4575,8 +4605,8 @@ determine_optimal_proto() {
           # starttls workaround needed see https://github.com/drwetter/testssl.sh/issues/188
           # kind of odd
           for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
-               $OPENSSL s_client $STARTTLS_OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY -starttls $1 </dev/null >$TMPFILE 2>>$ERRFILE
-               if sclient_connect_successful $? $TMPFILE; then
+               $OPENSSL s_client $STARTTLS_OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY -msg -starttls $1 </dev/null >$TMPFILE 2>>$ERRFILE
+               if sclient_auth $? $TMPFILE; then
                     all_failed=1
                     break
                fi
@@ -4585,8 +4615,8 @@ determine_optimal_proto() {
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
           for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2 ''; do
-               $OPENSSL s_client $OPTIMAL_PROTO -connect "$NODEIP:$PORT" $PROXY $SNI </dev/null >$TMPFILE 2>>$ERRFILE
-               if sclient_connect_successful $? $TMPFILE; then
+               $OPENSSL s_client $OPTIMAL_PROTO -connect "$NODEIP:$PORT" -msg $PROXY $SNI </dev/null >$TMPFILE 2>>$ERRFILE
+               if sclient_auth $? $TMPFILE; then
                     all_failed=1
                     break
                fi
@@ -5278,4 +5308,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.411 2015/10/15 13:14:36 dirkw Exp $
+#  $Id: testssl.sh,v 1.415 2015/11/03 12:13:09 dirkw Exp $
