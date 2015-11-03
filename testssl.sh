@@ -2057,7 +2057,7 @@ run_server_defaults() {
           lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
           unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
-          pr_yellowln "(PFS requires session ticket keys need to be rotated <= daily)"
+          pr_yellowln "(PFS requires session ticket keys to be rotated <= daily)"
      fi
  
      pr_bold " SSL Session ID support       "
@@ -5309,4 +5309,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.416 2015/11/03 18:51:04 dirkw Exp $
+#  $Id: testssl.sh,v 1.417 2015/11/03 18:51:44 dirkw Exp $
