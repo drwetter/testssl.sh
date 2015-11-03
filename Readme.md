@@ -20,7 +20,7 @@ Done so far:
 * works on servers requiring a client certificate for authentication
 * SSL Session ID check
 * avahi/mDNS based name resolution
-* Even more compatibilty improvements for FreeBSD and RH-ish systems
+* Even more compatibilty improvements for FreeBSD, RH-ish and F5 systems
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
 
