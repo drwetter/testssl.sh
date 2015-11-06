@@ -4411,10 +4411,10 @@ get_a_record() {
 
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if [[ "$NODE" == *.local ]]; then
-          if which dig &>/dev/null; then
-               ip4=$(filter_ip4_address $(dig @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
-          elif which avahi-resolve &>/dev/null; then
+          if which avahi-resolve &>/dev/null; then
                ip4=$(filter_ip4_address $(avahi-resolve -4 -n "$1" 2>/dev/null | awk '{ print $2 }'))
+          elif which dig &>/dev/null; then
+               ip4=$(filter_ip4_address $(dig @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
           else
                fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable."
           fi
@@ -4445,10 +4445,10 @@ get_aaaa_record() {
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if [[ -z "$ip6" ]]; then
           if [[ "$NODE" == *.local ]]; then
-               if which dig &>/dev/null; then
-                    ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
-               elif which avahi-resolve &>/dev/null; then
+               if which avahi-resolve &>/dev/null; then
                     ip6=$(filter_ip6_address $(avahi-resolve -6 -n "$NODE" 2>/dev/null | awk '{ print $2 }'))
+               elif which dig &>/dev/null; then
+                    ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
                else
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable."
                fi
@@ -4516,10 +4516,10 @@ determine_rdns() {
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
 
      if [[ "$NODEIP" == 192.168.*.* ]] ]]; then
-          if which dig &>/dev/null; then
-               rDNS=$(dig -x $NODEIP @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
-          elif which avahi-resolve &>/dev/null; then
+          if which avahi-resolve &>/dev/null; then
                rDNS=$(avahi-resolve -a $NODEIP 2>/dev/null | awk '{ print $2 }')
+          elif which dig &>/dev/null; then
+               rDNS=$(dig -x $NODEIP @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
           fi
      elif which dig &> /dev/null; then
           rDNS=$(dig -x $NODEIP +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
