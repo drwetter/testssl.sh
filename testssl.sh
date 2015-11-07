@@ -4515,7 +4515,7 @@ determine_rdns() {
      local saved_openssl_conf="$OPENSSL_CONF"
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
 
-     if [[ "$NODEIP" == 192.168.*.* ]]; then
+     if [[ "$NODE" == *.local ]]; then
           if which avahi-resolve &>/dev/null; then
                rDNS=$(avahi-resolve -a $NODEIP 2>/dev/null | awk '{ print $2 }')
           elif which dig &>/dev/null; then
