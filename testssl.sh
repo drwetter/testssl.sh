@@ -2373,7 +2373,7 @@ run_pfs() {
           done < <($OPENSSL ciphers -V "$pfs_cipher_list" 2>$ERRFILE)      # -V doesn't work with openssl < 1.0
           #    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
           debugme echo $pfs_offered
-          outln
+          $WIDE || outln
 
           if [[ "$pfs_offered" -eq 1 ]]; then
                 pr_brown "no PFS ciphers found"
@@ -4065,7 +4065,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol>
      --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
-     --ip <ipv4>                   a) tests the supplied <ipv4> instead of resolving host(s) in URI 
+     --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI 
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
      --file <fname>                mass testing option: Reads command lines from <fname>, one line per instance.
                                    Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch"
@@ -5353,4 +5353,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.420 2015/11/11 10:56:31 dirkw Exp $
+#  $Id: testssl.sh,v 1.421 2015/11/11 16:49:35 dirkw Exp $
