@@ -5,7 +5,7 @@
 
 `testssl.sh` is a free command line tool which checks a server's service on any port for the support of TLS/SSL ciphers, protocols as well as some cryptographic flaws. 
 
-Key features
+####Key features
 
 * Clear output: you can tell easily whether anything is good or bad
 * Ease of installation: It works for Linux, Darwin, FreeBSD and MSYS2/Cygwin out of the box: no need to install or configure something, no gems, CPAN, pip or the like.
@@ -17,12 +17,13 @@ Key features
 * Freedom: It's 100% open source. You can look at the code, see what's going on and you can change it. 
 * Heck, even the development is open (github)
 
+####General
 
 Here in the master branch you find the development version of the software -- with new features and maybe some bugs. For the stable version and **a more thorough description of the command line options** please see [testssl.sh](https://testssl.sh/ "Go to the site with the stable version and more documentation"). 
 
-
 testssl.sh is working on every Linux/BSD distribution out of the box with some limitations of disabled features from the openssl client -- some workarounds are done with bash-socket-based checks. It also works on other unixoid system out of the box, supposed they have `/bin/bash` and standard tools like sed and awk installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL version >= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to display bit strengths for key exchanges.
 
+####Current Development
 
 Planned features in the release 2.7dev/2.8 are: 
 
@@ -35,6 +36,7 @@ Done so far:
 * works on servers requiring a client certificate for authentication
 * SSL Session ID check
 * avahi/mDNS based name resolution
+* Logging to a file
 * Even more compatibilty improvements for FreeBSD, RH-ish and F5 systems
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
@@ -49,7 +51,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 Please address questions not specifically to the code of testssl.sh to the respective projects
 
-### Docker
+#### Docker
 
 Docker images are available at:
 
