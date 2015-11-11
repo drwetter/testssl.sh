@@ -107,9 +107,9 @@ TERM_CURRPOS=0                                         # custom line wrapping ne
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch
+# most of them can be set also by a cmd line switch
 
 declare -x OPENSSL
-EXPERIMENTAL=${EXPERIMENTAL:-false}
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
 SHOW_EACH_C=${SHOW_EACH_C:-0}           # where individual ciphers are tested show just the positively ones tested #FIXME: upside down value
 SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave behind just usual? 
@@ -122,6 +122,11 @@ DEBUG=${DEBUG:-0}                       # 1.: the temp files won't be erased.
                                         # 3: slight hexdumps + other info, 
                                         # 4: display bytes sent via sockets, 5: display bytes received via sockets, 6: whole 9 yards
 WIDE=${WIDE:-false}                     # whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
+LOGFILE=${LOGILE-""}                    # logfile if used
+HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
+
+# tuning vars, can not be set by a cmd line switch
+EXPERIMENTAL=${EXPERIMENTAL:-false}
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 readonly MAX_WAITSOCK=10                # waiting at max 10 seconds for socket reply
 readonly CCS_MAX_WAITSOCK=5             # for the two CCS payload (each)
@@ -130,28 +135,27 @@ STARTTLS_SLEEP=${STARTTLS_SLEEP:-1}     # max time to wait on a socket replay fo
 FAST_STARTTLS=${FAST_STARTTLS:-true}    #at the cost of reliabilty decrease the handshakes for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
-HAD_SLEPT=0
-
-CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
-FNAME=${FNAME:-""}                      # file name to read commands from
-IKNOW_FNAME=false
 HSTS_MIN=${HSTS_MIN:-179}               # >179 days is ok for HSTS
 HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, practical hints?
 readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test for PFS
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
+VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
 
-# further vars needed to follow
+HAD_SLEPT=0
+CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
+FNAME=${FNAME:-""}                      # file name to read commands from
+IKNOW_FNAME=false
+
+# further global vars just declared here
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
 CLIENT_AUTH=false
-CLIENT_AUTH_MSG=" cannot determine -- certificate based authentication"
 NO_SSL_SESSIONID=false
 HOSTCERT=""
 HEADERFILE=""
-LOGFILE=""
 PROTOS_OFFERED=""
 TLS_EXTENSIONS=""
 GOST_STATUS_PROBLEM=false
@@ -170,7 +174,6 @@ HAS_DH_BITS=${HAS_DH_BITS:-false}
 HAS_SSL2=true                           #TODO: in the future we'll do the fastest possible test (openssl s_client -ssl2 is currently faster than sockets)
 HAS_SSL3=true
 HAS_ALPN=false
-HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -184,7 +187,6 @@ PROXY=""
 PROXYIP=""
 PROXYPORT=""
 VULN_COUNT=0
-VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >1 we DON'T show a separate header line in the output each vuln. check
 IPS=""
 SERVICE=""                              # is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
@@ -4073,8 +4075,9 @@ partly mandatory parameters:
      pattern                       an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
      protocol                      is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
 
-tuning options:
+tuning options (can also be preset via environment variables):
 
+     --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assuming-http               if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
@@ -4082,12 +4085,13 @@ tuning options:
      -6                            use also IPv6 checks, works only with supporting OpenSSL version and IPv6 connectivity
      --sneaky                      leave less traces in target logs: user agent, referer
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
+     --log, --logging              logs stdtout to <NODE-YYYYMMDD-HHMM.log> in current working directory
+     --logfile <file>              logs stdtout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified file
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
-     --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
-     --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~105
+     --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~120
 
 All options requiring a value can also be called with '=' (e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 <URI> is always the last parameter.
@@ -4110,7 +4114,6 @@ maketempf() {
      fi
      HOSTCERT=$TEMPDIR/host_certificate.txt
      HEADERFILE=$TEMPDIR/http_header.txt
-     LOGFILE=$TEMPDIR/logfile.txt
      initialize_engine
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
@@ -4332,6 +4335,21 @@ parse_hn_port() {
      fi
      debugme echo $NODE:$PORT
      SNI="-servername $NODE"
+
+     # now do logging if instructed
+     if $do_logging; then
+          if [[ -z "$LOGFILE" ]]; then
+               LOGFILE=$NODE-$(date +"%Y%m%d-%H%M".log)
+          elif [[ -d "$LOGFILE" ]]; then
+               # actually we were instructed to place all files in a DIR instead of the current working dir
+               LOGFILE=$LOGFILE/$NODE-$(date +"%Y%m%d-%H%M".log)
+          else
+               : # just for clarity: a log file was specified, no need to do anything else
+          fi
+          exec > >(tee -a ${LOGFILE})
+          # not decided yet. Maybe good to have a separate file or none at all
+          #exec 2> >(tee -a ${LOGFILE} >&2)
+     fi
 
      URL_PATH=$(echo "$1" | sed 's/https:\/\///' | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
      URL_PATH=$(echo "$URL_PATH" | sed 's/\/\//\//g')       # we rather want // -> /
@@ -4843,6 +4861,7 @@ initialize_globals() {
      do_heartbleed=false
      do_mx_all_ips=false
      do_mass_testing=false
+     do_logging=false
      do_pfs=false
      do_protocols=false
      do_rc4=false
@@ -5110,7 +5129,7 @@ parse_cmd_line() {
                     case "$WARNINGS" in
                          batch|off|false) ;;
                          *)   pr_magentaln "\nwarnings can be either \"batch\", \"off\" or \"false\"" 
-                              help 1;;
+                              help 1
                     esac
                     ;;
                --show[-_]each)
@@ -5125,7 +5144,7 @@ parse_cmd_line() {
                     case $DEBUG in
                          [0-6]) ;;
                          *)   pr_magentaln "\nunrecognized debug value \"$1\", must be between 0..6" 1>&2
-                              help 1 ;;
+                              help 1 
                     esac
                     ;;
                --color|--color=*)
@@ -5135,9 +5154,18 @@ parse_cmd_line() {
                          [0-2]) ;;
                          *)   COLOR=2
                               pr_magentaln "\nunrecognized color: \"$1\", must be between 0..2" 1>&2
-                              help 1 ;;
+                              help 1
                     esac
                     ;;
+               --log|--logging)
+                    do_logging=true 
+                    ;;   # DEFINITION of LOGFILE if no arg specified via ENV or automagically in parse_hn_ports()
+                    # following does the same but we can specify a log location additionally
+               --logfile=*)
+                    LOGFILE=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    do_logging=true 
+                    ;;   
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
@@ -5175,7 +5203,7 @@ parse_cmd_line() {
           URI="$1"
      fi
 
-     [[ "$DEBUG" -ge 4 ]] && debug_globals
+     [[ "$DEBUG" -ge 5 ]] && debug_globals
      # if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
      query_globals && set_scanning_defaults
 }
@@ -5325,4 +5353,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.419 2015/11/08 21:14:27 dirkw Exp $
+#  $Id: testssl.sh,v 1.420 2015/11/11 10:56:31 dirkw Exp $
