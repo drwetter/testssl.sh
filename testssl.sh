@@ -4085,8 +4085,8 @@ tuning options (can also be preset via environment variables):
      -6                            use also IPv6 checks, works only with supporting OpenSSL version and IPv6 connectivity
      --sneaky                      leave less traces in target logs: user agent, referer
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
-     --log, --logging              logs stdtout to <NODE-YYYYMMDD-HHMM.log> in current working directory
-     --logfile <file>              logs stdtout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified file
+     --log, --logging              logs stdout to <NODE-YYYYMMDD-HHMM.log> in current working directory
+     --logfile <file>              logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified file
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
      --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
