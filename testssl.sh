@@ -13,7 +13,7 @@
 # Stable version from                https://testssl.sh
 # Please file bugs at github!        https://github.com/drwetter/testssl.sh/issues
 
-# Main author: Dirk Wetter, copyleft: 2007-today, contributions so far see CREDIT.md
+# Main author: Dirk Wetter, copyleft: 2007-today, contributions so far see CREDITS.md
 #
 # License: GPLv2, see http://www.fsf.org/licensing/licenses/info/GPLv2.html
 # and accompanying license "LICENSE.txt". Redistribution + modification under this
