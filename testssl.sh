@@ -82,10 +82,21 @@ readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname "$0")
 INSTALL_DIR=""
 MAPPING_FILE_RFC=""
+OPENSSL_LOCATION=""
+HNAME="$(hostname)"
+HNAME="${HNAME%%.*}"
 
-which git &>/dev/null && readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
+readonly CMDLINE="$@"
+
 readonly CVS_REL=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')
 readonly CVS_REL_SHORT=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')
+if which git &>/dev/null ; then
+     readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
+     readonly GIT_REL_SHORT=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1 }')
+     readonly REL_DATE=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $2 }')
+else
+     readonly REL_DATE=$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')
+fi
 readonly SYSTEM=$(uname -s)             
 date --help >/dev/null 2>&1 && \
      readonly HAS_GNUDATE=true || \
@@ -4216,19 +4227,20 @@ EOF
 )
      pr_bold "$bb"
      outln "\n"
-     outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$nr_ciphers ciphers] on"
-     out " $(hostname):"
+     outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$nr_ciphers ciphers]"
+     out "on $HNAME:"
 
      [[ -n "$GIT_REL" ]] && \
           cwd=$(/bin/pwd) || \
           cwd=$RUN_DIR
      if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
-          echo "\$PWD/bin/$(basename "$openssl_location")" 
+          OPENSSL_LOCATION="\$PWD/bin/$(basename "$openssl_location")" 
      elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
-          echo "${openssl_location%%$cwd}" 
+          OPENSSL_LOCATION="${openssl_location%%$cwd}" 
      else
-          echo "$openssl_location"
+         OPENSSL_LOCATION="$openssl_location"
      fi
+     echo "$OPENSSL_LOCATION"
      outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 }
 
@@ -4346,6 +4358,9 @@ parse_hn_port() {
           else
                : # just for clarity: a log file was specified, no need to do anything else
           fi
+          >$LOGFILE
+          outln "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
+          outln "## ($VERSION ${GIT_REL_SHORT:-CVS_REL_SHORT} from $REL_DATE, at $HNAME:$OPENSSL_LOCATION)\n" >>${LOGFILE}
           exec > >(tee -a ${LOGFILE})
           # not decided yet. Maybe good to have a separate file or none at all
           #exec 2> >(tee -a ${LOGFILE} >&2)
@@ -5353,4 +5368,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.421 2015/11/11 16:49:35 dirkw Exp $
+#  $Id: testssl.sh,v 1.422 2015/11/21 12:39:36 dirkw Exp $
