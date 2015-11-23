@@ -4432,8 +4432,8 @@ get_local_a() {
 }
 
 check_resolver_bins() {
-     if ! which dig &> /dev/null && ! which host &> /dev/null && ! which nslookup &>/dev/null; then
-          fatal "Neither \"dig\", \"host\" or \"nslookup\" is present" "-3"
+     if ! which dig &> /dev/null && ! which drill &> /dev/null && ! which host &> /dev/null && ! which nslookup &>/dev/null; then
+          fatal "Neither \"dig\", \"drill\", \"host\" or \"nslookup\" is present" "-3"
      fi
      return 0
 }
@@ -4462,8 +4462,11 @@ get_a_record() {
                ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | grep -v alias | sed 's/^.*address //'))
      fi
      if [[ -z "$ip4" ]]; then
+          which drill &> /dev/null && \
+               ip4=$(filter_ip4_address $(drill a "$1" 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d'))
+     fi
+     if [[ -z "$ip4" ]]; then
           if which nslookup &>/dev/null; then
-               # filtering from Name to EOF, remove iline with 'Name', the filter out non-numbers and ".'", and empty lines
                ip4=$(filter_ip4_address $(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name))
           fi
      fi
@@ -4490,8 +4493,9 @@ get_aaaa_record() {
                ip6=$(filter_ip6_address $(host -t aaaa "$NODE" | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
           elif which dig &> /dev/null; then
                ip6=$(filter_ip6_address $(dig +short -t aaaa "$NODE" 2>/dev/null))
+          elif which drill &> /dev/null; then
+               ip6=$(filter_ip6_address $(drill aaaa "$NODE" 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/^\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d'))
           elif which nslookup &>/dev/null; then
-               # same as above. Only we're using grep -A instead of awk
                ip6=$(filter_ip6_address $(nslookup -type=aaaa "$NODE" 2>/dev/null | grep -A10 Name | grep -v Name))
           fi
      fi
@@ -4559,6 +4563,8 @@ determine_rdns() {
           rDNS=$(dig -x $NODEIP +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
      elif which host &> /dev/null; then
           rDNS=$(host -t PTR $NODEIP 2>/dev/null | awk '/pointer/ { print $NF }')
+     elif which drill &> /dev/null; then
+          rDNS=$(drill -x ptr $NODEIP 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
      elif which nslookup &> /dev/null; then
           rDNS=$(nslookup -type=PTR $NODEIP 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
      fi
@@ -4578,10 +4584,12 @@ get_mx_record() {
           mxs=$(host -t MX "$1" 2>/dev/null | grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
      elif which dig &> /dev/null; then
           mxs=$(dig +short -t MX "$1" 2>/dev/null)
+     elif which drill &> /dev/null; then
+          mxs=$(drill mx "$1" 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
      elif which nslookup &> /dev/null; then
           mxs=$(nslookup -type=MX "$1" 2>/dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
      else
-          fatal "No dig, host or nslookup" -3
+          fatal "No dig, drill, host or nslookup" -3
      fi
      OPENSSL_CONF="$saved_openssl_conf"
      echo "$mxs"
