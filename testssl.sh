@@ -4234,7 +4234,7 @@ EOF
           cwd=$(/bin/pwd) || \
           cwd=$RUN_DIR
      if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
-          OPENSSL_LOCATION="\$PWD/bin/$(basename "$openssl_location")" 
+          OPENSSL_LOCATION="$PWD/bin/$(basename "$openssl_location")" 
      elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
           OPENSSL_LOCATION="${openssl_location%%$cwd}" 
      else
