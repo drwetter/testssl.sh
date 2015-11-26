@@ -2111,10 +2111,11 @@ run_server_defaults() {
      case $sig_algo in
           sha1WithRSAEncryption)   pr_brownln "SHA1 with RSA" ;;
           sha256WithRSAEncryption) pr_litegreenln "SHA256 with RSA" ;;
+          sha384WithRSAEncryption) pr_litegreenln "SHA384 with RSA" ;;
           sha512WithRSAEncryption) pr_litegreenln "SHA512 with RSA" ;;
           ecdsa-with-SHA256)       pr_litegreenln "ECDSA with SHA256" ;;
           md5*)                    pr_redln "MD5" ;;
-          *)                       outln "$algo" ;;
+          *)                       outln "$sig_algo" ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
@@ -2167,7 +2168,7 @@ run_server_defaults() {
                #FIXME: this is irritating and needs to be redone. Then also the wildcard match needs to be tested against  "$cn_nosni"
           elif [[ -z "$cn_nosni" ]]; then
                out " (request w/o SNI didn't succeed";
-               [[ $algo =~ ecdsa ]] && out ", usual for EC certificates"
+               [[ $sig_algo =~ ecdsa ]] && out ", usual for EC certificates"
                outln ")"
           elif [[ "$cn_nosni" == "*no CN field*" ]]; then
                outln ", (request w/o SNI: $cn_nosni)"
