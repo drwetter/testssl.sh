@@ -4235,7 +4235,7 @@ EOF
           cwd=$(/bin/pwd) || \
           cwd=$RUN_DIR
      if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
-          OPENSSL_LOCATION="$PWD/bin/$(basename "$openssl_location")" 
+          OPENSSL_LOCATION="\$PWD/bin/$(basename "$openssl_location")" 
      elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
           OPENSSL_LOCATION="${openssl_location%%$cwd}" 
      else
@@ -4433,8 +4433,8 @@ get_local_a() {
 }
 
 check_resolver_bins() {
-     if ! which dig &> /dev/null && ! which drill &> /dev/null && ! which host &> /dev/null && ! which nslookup &>/dev/null; then
-          fatal "Neither \"dig\", \"drill\", \"host\" or \"nslookup\" is present" "-3"
+     if ! which dig &> /dev/null && ! which host &> /dev/null && ! which drill &> /dev/null && ! which nslookup &>/dev/null; then
+          fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" "-3"
      fi
      return 0
 }
@@ -4590,7 +4590,7 @@ get_mx_record() {
      elif which nslookup &> /dev/null; then
           mxs=$(nslookup -type=MX "$1" 2>/dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
      else
-          fatal "No dig, drill, host or nslookup" -3
+          fatal "No dig, host, drill or nslookup" -3
      fi
      OPENSSL_CONF="$saved_openssl_conf"
      echo "$mxs"
@@ -5377,4 +5377,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.422 2015/11/21 12:39:36 dirkw Exp $
+#  $Id: testssl.sh,v 1.423 2015/11/28 16:33:09 dirkw Exp $
