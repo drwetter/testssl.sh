@@ -4361,7 +4361,7 @@ parse_hn_port() {
           fi
           >$LOGFILE
           outln "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-          outln "## ($VERSION ${GIT_REL_SHORT:-CVS_REL_SHORT} from $REL_DATE, at $HNAME:$OPENSSL_LOCATION)\n" >>${LOGFILE}
+          outln "## ($VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE, at $HNAME:$OPENSSL_LOCATION)\n" >>${LOGFILE}
           exec > >(tee -a ${LOGFILE})
           # not decided yet. Maybe good to have a separate file or none at all
           #exec 2> >(tee -a ${LOGFILE} >&2)
@@ -4787,6 +4787,8 @@ display_rdns_etc() {
      fi
      if "$LOCAL_A"; then
           outln " A record via            /etc/hosts "
+     elif  [[ -n "$CMDLINE_IP" ]]; then
+          outln " A record via            --ip=$CMDLINE_IP parameter"
      fi
      if [[ -n "$rDNS" ]]; then
           if $HAS_IPv6; then
@@ -4848,6 +4850,28 @@ mx_all_ips() {
      fi
      return $ret
 }
+
+run_mass_testing_parallel() {
+     local cmdline=""
+
+     if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
+          fatal "Can't read file \"$FNAME\"" "-1"
+     fi
+     pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln 
+     outln "(output is in ....\n)"
+     while read cmdline; do
+          cmdline=$(filter_input "$cmdline")
+          [[ -z "$cmdline" ]] && continue
+          [[ "$cmdline" == "EOF" ]] && break
+          echo "$0 -q $cmdline"
+          draw_line "=" $((TERM_DWITH / 2)); outln;
+          determine_logfile 
+          $0 -q $cmdline >$LOGFILE &
+          sleep $PARALLEL_SLEEP
+     done < "$FNAME"
+     exit $?
+}
+
 
 run_mass_testing() {
      local cmdline=""
@@ -5225,6 +5249,8 @@ parse_cmd_line() {
      else
      # left off here is the URI
           URI="$1"
+          # parameter after URI supplied:
+          [[ -n "$2" ]] && echo && fatal "URI comes last" "1"
      fi
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
@@ -5377,4 +5403,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.423 2015/11/28 16:33:09 dirkw Exp $
+#  $Id: testssl.sh,v 1.424 2015/12/08 12:31:50 dirkw Exp $
