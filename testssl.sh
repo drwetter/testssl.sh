@@ -90,7 +90,7 @@ readonly CMDLINE="$@"
 
 readonly CVS_REL=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')
 readonly CVS_REL_SHORT=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')
-if which git &>/dev/null ; then
+if git log &>/dev/null; then
      readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
      readonly GIT_REL_SHORT=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1 }')
      readonly REL_DATE=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $2 }')
@@ -5403,4 +5403,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.424 2015/12/08 12:31:50 dirkw Exp $
+#  $Id: testssl.sh,v 1.425 2015/12/08 15:37:34 dirkw Exp $
