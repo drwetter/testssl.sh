@@ -2040,7 +2040,7 @@ determine_tls_extensions() {
 run_server_defaults() {
      local proto
      local sessticket_str lifetime unit keysize sig_algo key_algo
-     local expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
+     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
      local policy_oid
      local spaces="                              "
      local wildcard=false
@@ -2235,9 +2235,21 @@ run_server_defaults() {
 #         https://certs.opera.com/03/ev-oids.xml
 
      pr_bold " Certificate Expiration       "
+
+     if $HAS_GNUDATE ; then
+          enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
+          startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
+          days2expire=$(( $(date --date="$enddate" "+%s") - $(date "+%s") ))    # in seconds
+     else
+          enddate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
+          startdate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
+          LC_ALL=C days2expire=$(( $(date -j -f "%F %H:%M %z" "$enddate" "+%s") - $(date "+%s") ))    # in seconds
+     fi
+     days2expire=$((days2expire  / 3600 / 24 )) 
+
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 0 2>>$ERRFILE)
      if ! echo $expire | grep -qw not; then
-     pr_red "expired!"
+          pr_red "expired!"
      else
           secs2warn=$((24 * 60 * 60 * DAYS2WARN2))  # low threshold first
           expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
@@ -2245,20 +2257,13 @@ run_server_defaults() {
                secs2warn=$((24 * 60 * 60 * DAYS2WARN1))
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
                if echo "$expire" | grep -qw not; then
-                    pr_litegreen ">= $DAYS2WARN1 days"
+                    pr_litegreen "$days2expire >= $DAYS2WARN1 days"
                else
-               pr_brown "expires < $DAYS2WARN1 days"
+               pr_brown "expires < $DAYS2WARN1 days ($days2expire)"
                fi
           else
-               pr_litered "expires < $DAYS2WARN2 days!"
+               pr_litered "expires < $DAYS2WARN2 days ($days2expire) !"
           fi
-     fi
-     if $HAS_GNUDATE ; then
-          enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
-          startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
-     else
-          enddate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
-          startdate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
      fi
      outln " ($startdate --> $enddate)"
 
@@ -5403,4 +5408,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.425 2015/12/08 15:37:34 dirkw Exp $
+#  $Id: testssl.sh,v 1.426 2015/12/08 16:50:57 dirkw Exp $
