@@ -145,6 +145,7 @@ DEBUG=${DEBUG:-0}                       # 1.: the temp files won't be erased.
                                         # 4: display bytes sent via sockets, 5: display bytes received via sockets, 6: whole 9 yards
 WIDE=${WIDE:-false}                     # whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
 LOGFILE=${LOGFILE:-""}                  # logfile if used
+JSONFILE="testssl.json"                 # jsonfile if used
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
 
 # tuning vars, can not be set by a cmd line switch
@@ -226,6 +227,7 @@ GET_REQ11=""
 HEAD_REQ10=""
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
+FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
 
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
@@ -418,6 +420,36 @@ set_color_functions() {
      fi
 }
 
+open_json_file() {
+     if $do_json; then
+          echo "[" > $JSONFILE
+     fi
+}
+
+close_json_file() {
+     if $do_json; then
+          echo "]" >> $JSONFILE
+     fi
+}
+
+output_finding() { # ID, IP, PORT, SEVERITY, FINDING
+     if $do_json; then
+          if ! $FIRST_FINDING; then
+               echo "," >> $JSONFILE
+          fi
+          echo "
+          {
+               'id'           : '$1',
+               'ip'           : '$2',
+               'port'         : '$3',
+               'severity'     : '$4',
+               'finding'      : '$5'
+          }" >> $JSONFILE
+     fi
+     if $FIRST_FINDING; then
+          FIRST_FINDING=false
+     fi
+}
 
 ###### helper function definitions ######
 
@@ -577,21 +609,26 @@ runs_HTTP() {
      case $SERVICE in
           HTTP)
                out " $SERVICE"
+               output_finding "service" "$NODEIP" "$PORT" "info" "Service detected: $SERVICE"
                ret=0 ;;
           IMAP|POP|SMTP|NNTP)
                out " $SERVICE, thus skipping HTTP specific checks"
+               output_finding "service" "$NODEIP" "$PORT" "info" "Service detected: $SERVICE, thus skipping HTTP specific checks"
                ret=0 ;;
           *)   if $CLIENT_AUTH; then
                     out "certificate based authentication => skipping all HTTP checks"
                     echo "certificate based authentication => skipping all HTTP checks" >$TMPFILE
+                    output_finding "client_auth" "$NODEIP" "$PORT" "warn" "certificate based authentication => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
                     if $ASSUMING_HTTP; then
                          SERVICE=HTTP
                          out " -- ASSUMING_HTTP set though"
+                         output_finding "service" "$NODEIP" "$PORT" "warn" "Couldn't determine service, --ASSUMING_HTTP set"
                          ret=0
                     else
                          out ", assuming no HTTP service => skipping all HTTP checks"
+                         output_finding "service" "$NODEIP" "$PORT" "warn" "Couldn't determine service, skipping all HTTP checks"
                          ret=1
                     fi
                fi
@@ -656,22 +693,53 @@ run_http_header() {
 
      out "  $status_code$msg_thereafter" 
      case $status_code in
-          301|302|307|308)    
-               redirect=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
-               out ", redirecting to \"$redirect"\"
-               if [[ $redirect == "http://"* ]]; then
+          301|302|307|308)
+               redirect = $(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
+               out ", redirecting to \"$redirect\"" 
+               if [[ $redirect != "https://"* ]]; then
                     pr_litered " -- Redirect to insecure URL (NOT ok)"
+                    output_finding "status_code" "$NODEIP" "$PORT" "NOT OK" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
                fi
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter, redirecting to \"$redirect\""
                ;;
-          200) ;;
-          206) out " -- WTF?" ;;
-          400) pr_litemagenta " (Hint: better try another URL)" ;;
-          401) grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
+          200) 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
-          403)  ;;
-          404) out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")" ;; 
-          405) ;;
-          *) pr_litemagenta ". Oh, didn't expect a $status_code$msg_thereafter";;
+          206) 
+               out " -- WTF?" 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter -- WTF?"
+               ;;
+          400) 
+               pr_litemagenta " (Hint: better try another URL)" 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: better try another URL)"
+               ;;
+          401) 
+               grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
+               ;;
+          403)  
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               ;;
+          404) 
+               out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")" 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
+               ;; 
+          405) 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               ;;
+          *) 
+               pr_litemagenta ". Oh, didn't expect a $status_code$msg_thereafter"
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter. Oh, didn't expect a $status_code$msg_thereafter"
+               ;;
      esac
      outln
 
@@ -687,6 +755,7 @@ detect_ipv4() {
      local result
      local first=true
      local spaces="                              "
+     local count
      
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -695,7 +764,8 @@ detect_ipv4() {
      # remove pagespeed header as it is mistakenly identified as ipv4 address https://github.com/drwetter/testssl.sh/issues/158
      # also facebook has a CSP rule for 127.0.0.1
      if egrep -vi "pagespeed|page-speed|Content-Security-Policy" $HEADERFILE | grep -iqE "$ipv4address"; then
-          pr_bold " IPv4 address in header       " 
+          pr_bold " IPv4 address in header       "
+          count=0 
           while read line; do
                result="$(grep -E "$ipv4address" <<< "$line")"
                result=$(strip_lf "$result")
@@ -708,7 +778,9 @@ detect_ipv4() {
                     fi
                     pr_litered "$result"
                     outln "\n$spaces$your_ip_msg"
+                    output_finding "ip_in_header_$count" "$NODEIP" "$PORT" "NOT OK" "IPv4 address in header  $result $your_ip_msg"
                fi
+               count=$count+1
           done < $HEADERFILE
      fi
 }    
@@ -736,8 +808,10 @@ run_http_date() {
                # process was killed, so we need to add an error:
                [[ $HAD_SLEPT -ne 0 ]] && difftime="$difftime (± 1.5)"
                out "$difftime sec from localtime";
+               output_finding "http_clock_skew" "$NODEIP" "$PORT" "INFO" "HTTP clock skew $difftime sec from localtime"
           else
                out "Got no HTTP time, maybe try different URL?";
+               output_finding "http_clock_skew" "$NODEIP" "$PORT" "INFO" "HTTP clock skew not measured. Got no HTTP time, maybe try different URL?"
           fi
           debugme out ", epoch: $HTTP_TIME"
      fi
@@ -4603,7 +4677,7 @@ EOF
      #' Fix syntax highlight on sublime
      exit $1
 }
-
+#' Do not break syntax highlighting in Sublime
 
 maketempf() {
      TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
@@ -5399,6 +5473,7 @@ initialize_globals() {
      do_mx_all_ips=false
      do_mass_testing=false
      do_logging=false
+     do_json=false
      do_pfs=false
      do_protocols=false
      do_rc4=false
@@ -5713,7 +5788,16 @@ parse_cmd_line() {
                     LOGFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_logging=true 
-                    ;;   
+                    ;; 
+               --json)
+                    do_json=true
+                    ;;   # DEFINITION of JSONFILE is not arg specified via ENV or automagically in parse_hn_ports()
+                    # following does the same but we can specify a log location additionally
+               --jsonfile=*)
+                    JSONFILE=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    do_json=true
+                    ;;                       
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
@@ -5777,6 +5861,7 @@ reset_hostdepended_vars() {
      PROTOS_OFFERED=""
      OPTIMAL_PROTO=""
 }
+
 
 lets_roll() {
      local ret
@@ -5857,8 +5942,9 @@ maketempf
 mybanner
 check_proxy
 openssl_age
+open_json_file
 
-# TODO: it's ugly to have those two vars here --> main()
+# TODO: it is ugly to have those two vars here --> main()
 ret=0
 ip=""
 
@@ -5901,6 +5987,8 @@ else
           fi
      fi
 fi
+
+close_json_file
 
 exit $?
 
