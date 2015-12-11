@@ -424,7 +424,7 @@ output_finding() { # ID, IP, PORT, SEVERITY, FINDING
           if ! $FIRST_FINDING; then
                echo "," >> $JSONFILE
           fi
-          echo "
+          echo -e "
           {
                'id'           : '$1',
                'ip'           : '$2',
@@ -596,26 +596,26 @@ runs_HTTP() {
      case $SERVICE in
           HTTP)
                out " $SERVICE"
-               output_finding "service" "$NODEIP" "$PORT" "info" "Service detected: $SERVICE"
+               output_finding "service" "$NODEIP" "$PORT" "INFO" "Service detected: $SERVICE"
                ret=0 ;;
           IMAP|POP|SMTP|NNTP)
                out " $SERVICE, thus skipping HTTP specific checks"
-               output_finding "service" "$NODEIP" "$PORT" "info" "Service detected: $SERVICE, thus skipping HTTP specific checks"
+               output_finding "service" "$NODEIP" "$PORT" "INFO" "Service detected: $SERVICE, thus skipping HTTP specific checks"
                ret=0 ;;
           *)   if $CLIENT_AUTH; then
                     out "certificate based authentication => skipping all HTTP checks"
                     echo "certificate based authentication => skipping all HTTP checks" >$TMPFILE
-                    output_finding "client_auth" "$NODEIP" "$PORT" "warn" "certificate based authentication => skipping all HTTP checks"
+                    output_finding "client_auth" "$NODEIP" "$PORT" "WARN" "certificate based authentication => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
                     if $ASSUMING_HTTP; then
                          SERVICE=HTTP
                          out " -- ASSUMING_HTTP set though"
-                         output_finding "service" "$NODEIP" "$PORT" "warn" "Couldn't determine service, --ASSUMING_HTTP set"
+                         output_finding "service" "$NODEIP" "$PORT" "WARN" "Couldn't determine service, --ASSUMING_HTTP set"
                          ret=0
                     else
                          out ", assuming no HTTP service => skipping all HTTP checks"
-                         output_finding "service" "$NODEIP" "$PORT" "warn" "Couldn't determine service, skipping all HTTP checks"
+                         output_finding "service" "$NODEIP" "$PORT" "WARN" "Couldn't determine service, skipping all HTTP checks"
                          ret=1
                     fi
                fi
@@ -805,13 +805,20 @@ run_http_date() {
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
           pr_litegreen ", includeSubDomains"
+          return 1
      else
           pr_litecyan ", just this domain"
+          return 0
      fi
 }
 
 preload() {
-     grep -aiqw preload "$1" && pr_litegreen ", preload"
+     if grep -aiqw preload "$1"; then
+          pr_litegreen ", preload"
+          return 1
+     else
+          return 0
+     fi
 }
 
 
@@ -832,16 +839,27 @@ run_hsts() {
           hsts_age_days=$(( hsts_age_sec / 86400))
           if [[ $hsts_age_days -gt $HSTS_MIN ]]; then
                pr_litegreen "$hsts_age_days days" ; out "=$hsts_age_sec s"
+               output_finding "hsts_time" "$NODEIP" "$PORT" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN days"
           else
                out "$hsts_age_sec s = "
                pr_brown "$hsts_age_days days, <$HSTS_MIN days is too short"
+               output_finding "hsts_time" "$NODEIP" "$PORT" "NOT OK" "HSTS timeout too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN days"
           fi
-          includeSubDomains "$TMPFILE"
-          preload "$TMPFILE"
+          if includeSubDomains "$TMPFILE"; then
+               output_finding "hsts_subdomains" "$NODEIP" "$PORT" "OK" "HSTS includes subdomains"
+          else
+               output_finding "hsts_subdomains" "$NODEIP" "$PORT" "WARN" "HSTS only for this domain, consider to include subdomains as well"
+          fi
+          if preload "$TMPFILE"; then
+               output_finding "hsts_preload" "$NODEIP" "$PORT" "OK" "HSTS domain is marked for preloading"
+          else
+               output_finding "hsts_preload" "$NODEIP" "$PORT" "INFO" "HSTS domain is NOT marked for preloading"
+          fi
           #FIXME: To be checked against e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc
           #                              and https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
      else
           out "--"
+          output_finding "hsts" "$NODEIP" "$PORT" "NOT OK" "No support for HTTP Strict Transport Security"
      fi
      outln
 
@@ -858,6 +876,8 @@ run_hpkp() {
      local spaces="                             "
      local key_found=false
      local i
+     local hpkp_headers
+     local first_hpkp_header
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -869,13 +889,17 @@ run_hpkp() {
           if egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" ; then
                :
           else
-               pr_brown "two HPKP headers: "
+               hpkp_headers=""
+               pr_brown "multiple HPKP headers: "
                for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
                     pr_italic $i
+                    hpkp_headers="$hpkp_headers$i "
                     out " "
                done
                out "\n$spaces using first "
-               pr_italic "$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1), "
+               first_hpkp_header=`awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1`
+               pr_italic "$first_hpkp_header, "
+               output_finding "hpkp_multiple" "$NODEIP" "$PORT" "WARN" "Multiple HPKP headers\n$hpkp_headers\nUsing first header: $first_hpkp_header"     
           fi
 
           # remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
@@ -889,8 +913,10 @@ run_hpkp() {
           out "# of keys: "
           if [[ $hpkp_nr_keys -eq 1 ]]; then
                pr_litered "1 (NOT ok), "
+               output_finding "hpkp_keys" "$NODEIP" "$PORT" "NOT OK" "Only one key pinned in HPKP header, this means the site may become unavaiable if the key is revoked"     
           else
                out "$hpkp_nr_keys, "
+               output_finding "hpkp_keys" "$NODEIP" "$PORT" "OK" "$hpkp_nr_keys keys pinned in HPKP header, additional keys are available if the current key is revoked"     
           fi
 
           # print key=value pair with awk, then strip non-numbers, to be improved with proper parsing of key-value with awk
@@ -898,13 +924,23 @@ run_hpkp() {
           hpkp_age_days=$((hpkp_age_sec / 86400))
           if [[ $hpkp_age_days -ge $HPKP_MIN ]]; then
                pr_litegreen "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
+               output_finding "hpkp_age" "$NODEIP" "$PORT" "OK" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec)"     
           else
                out "$hpkp_age_sec s = "
                pr_brown "$hpkp_age_days days (<$HPKP_MIN days is not good enough)"
+               output_finding "hpkp_age" "$NODEIP" "$PORT" "NOT OK" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec) < $HPKP_MIN days is not good enough."     
           fi
 
-          includeSubDomains "$TMPFILE"
-          preload "$TMPFILE"
+          if includeSubDomains "$TMPFILE"; then
+               output_finding "hpkp_subdomains" "$NODEIP" "$PORT" "INFO" "HPKP header is valid for subdomains as well"     
+          else
+               output_finding "hpkp_subdomains" "$NODEIP" "$PORT" "INFO" "HPKP header is valid for this domain only"     
+          fi
+          if preload "$TMPFILE"; then
+               output_finding "hpkp_preload" "$NODEIP" "$PORT" "INFO" "HPKP header is marked for browser preloading"     
+          else
+               output_finding "hpkp_preload" "$NODEIP" "$PORT" "INFO" "HPKP header is NOT marked for browser preloading"
+          fi
 
           [[ -s "$HOSTCERT" ]] || get_host_cert
           # get the key fingerprints
@@ -914,6 +950,7 @@ run_hpkp() {
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
                     out "\n$spaces matching host key: "
                     pr_litegreen "$hpkp_key"
+                    output_finding "hpkp_keymatch" "$NODEIP" "$PORT" "OK" "Key matches a key pinned in the HPKP header"
                     key_found=true
                fi
                debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
@@ -922,9 +959,11 @@ run_hpkp() {
                out "\n$spaces"
                pr_litered " No matching key for pins found "
                out "(CAs pinned? -- not yet checked)"
+               output_finding "hpkp_keymatch" "$NODEIP" "$PORT" "WARN" "The TLS key does not match any key pinned in the HPKP header. If you pinned a CA key you can ignore this"
           fi
      else
           out "--"
+          output_finding "hpkp" "$NODEIP" "$PORT" "WARN" "No support for HTTP Public Key Pinning"
      fi
      outln
 
@@ -976,16 +1015,21 @@ run_server_banner() {
           serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
           if [[ x"$serverbanner" == "x\n" ]] || [[ x"$serverbanner" == "x\n\r" ]] || [[ x"$serverbanner" == "x" ]]; then
                outln "banner exists but empty string"
+               output_finding "serverbanner" "$NODEIP" "$PORT" "INFO" "\"Server\" banner exists but empty string"
           else
                emphasize_stuff_in_headers "$serverbanner"
-               [[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]] && \
+               output_finding "serverbanner" "$NODEIP" "$PORT" "INFO" "\"Server\" banner identified: $serverbanner"               
+               if [[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
                     pr_litemagentaln "                              It's recommended to run another test w/ OpenSSL 1.01 !"
                     # see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
+                    output_finding "IIS6_openssl_mismatch" "$NODEIP" "$PORT" "WARN" "It is recommended to rerun this test w/ OpenSSL 1.01\nSee https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
+               fi
           fi
           # mozilla.github.io/server-side-tls/ssl-config-generator/
           # https://support.microsoft.com/en-us/kb/245030
      else
           outln "(no \"Server\" line in header, interesting!)"
+          output_finding "serverbanner" "$NODEIP" "$PORT" "WARN" "No \"Server\" banner in header, interesting!"
      fi
 
      tmpfile_handle $FUNCNAME.txt
@@ -996,6 +1040,7 @@ run_rp_banner() {
      local line
      local first=true
      local spaces="                              "
+     local rp_banners=""
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -1004,7 +1049,8 @@ run_rp_banner() {
      egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded' $HEADERFILE >$TMPFILE 
      if [[ $? -ne 0 ]]; then
           outln "--"
-     else
+          output_finding "rp_header" "$NODEIP" "$PORT" "INFO" "No reverse proxy banner found"
+    else
           while read line; do
                line=$(strip_lf "$line")
                if ! $first; then
@@ -1013,7 +1059,9 @@ run_rp_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
+               rp_banners="$rp_banners\n$line"
           done < $TMPFILE
+          output_finding "rp_header" "$NODEIP" "$PORT" "INFO" "Reverse proxy banner(s) found: $rp_banners"
      fi
      outln
 
@@ -1026,6 +1074,7 @@ run_application_banner() {
      local line
      local first=true
      local spaces="                              "
+     local app_banners=""
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -1034,6 +1083,7 @@ run_application_banner() {
      egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
+          output_finding "app_banner" "$NODEIP" "$PORT" "INFO" "No Applicaiton Banners found"
      else
           cat $TMPFILE | while read line; do
                line=$(strip_lf "$line")
@@ -1043,7 +1093,9 @@ run_application_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
+               app_banners="$app_banners\n$line"
           done
+          output_finding "app_banner" "$NODEIP" "$PORT" "WARN" "Applicaiton Banners found: $app_banners"
      fi
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -1062,6 +1114,7 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
      if [[ $? -eq 0 ]]; then
           nr_cookies=$(wc -l < $TMPFILE | sed 's/ //g')
           out "$nr_cookies issued: "
+          output_finding "cookie_count" "$NODEIP" "$PORT" "INFO" "$nr_cookies cookie(s) issued at \"$1\""
           if [[ $nr_cookies -gt 1 ]]; then
                negative_word="NONE"
           else
@@ -1073,15 +1126,26 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
                [123456789]) pr_litegreen "$nr_secure/$nr_cookies";;
           esac
           out " secure, "
+          if [ $nr_cookies == $nr_secure ]; then
+               output_finding "cookie_secure" "$NODEIP" "$PORT" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as secure"
+          else
+               output_finding "cookie_secure" "$NODEIP" "$PORT" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as secure"
+          fi
           nr_httponly=$(grep -cai httponly $TMPFILE)
           case $nr_httponly in
                0) pr_brown "$negative_word" ;;
                [123456789]) pr_litegreen "$nr_httponly/$nr_cookies";;
           esac
           out " HttpOnly"
+          if [ $nr_cookies == $nr_httponly ]; then
+               output_finding "cookie_httponly" "$NODEIP" "$PORT" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly"
+          else
+               output_finding "cookie_httponly" "$NODEIP" "$PORT" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly"
+          fi
      else
           out "(none issued at \"$1\")"
-     fi
+          output_finding "cookie_count" "$NODEIP" "$PORT" "INFO" "No cookies issued at \"$1\""
+    fi
      outln
 
      tmpfile_handle $FUNCNAME.txt
@@ -1106,6 +1170,7 @@ run_more_flags() {
      egrep -ai "$egrep_pattern" $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
+          output_finding "sec_headers" "$NODEIP" "$PORT" "WARN" "No security (or other interesting) headers detected"
           ret=1
      else
           ret=0
@@ -1124,7 +1189,7 @@ run_more_flags() {
                #pr_litegreen "$(sed 's/:.*$/:/' <<< "$result_str")"
                # print value in plain text:
                outln "${result_str#*:}"
-
+               output_finding "${result_str%%:*}" "$NODEIP" "$PORT" "OK" "${result_str%%:*}: ${result_str#*:}"
           done
           # now the same with other flags
           for f2t in $other_flags2test; do
@@ -1139,6 +1204,7 @@ run_more_flags() {
                pr_litecyan "${result_str%%:*}:"
                # print value in plain text:
                outln "${result_str#*:}"
+               output_finding "${result_str%%:*}" "$NODEIP" "$PORT" "WARN" "${result_str%%:*}: ${result_str#*:}"
           done
      fi
 #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
@@ -1237,21 +1303,41 @@ std_cipherlists() {
           debugme cat $ERRFILE
           case $3 in
                0)   # ok to offer
-                    [[ $sclient_success -eq 0 ]] && \
-                         pr_greenln "offered (OK)" || \
-                         pr_brownln "not offered (NOT ok)" ;;
+                    if [[ $sclient_success -eq 0 ]]; then
+                         pr_greenln "offered (OK)" 
+                         output_finding "std_$4" "$NODEIP" "$PORT" "OK" "$2 offered (OK)"
+                    else
+                         pr_brownln "not offered (NOT ok)"
+                         output_finding "std_$4" "$NODEIP" "$PORT" "NOT OK" "$2 not offered (NOT OK)"
+                    fi
+                    ;;
                1) # the ugly ones
-                    [[ $sclient_success -eq 0 ]] && \
-                         pr_redln "offered (NOT ok)" || \
-                         pr_greenln "not offered (OK)" ;;
+                    if [[ $sclient_success -eq 0 ]]; then
+                         pr_redln "offered (NOT ok)" 
+                         output_finding "std_$4" "$NODEIP" "$PORT" "NOT OK" "$2 offered (NOT OK) - ugly"
+                    else
+                         pr_greenln "not offered (OK)"
+                         output_finding "std_$4" "$NODEIP" "$PORT" "OK" "$2 not offered (OK)"
+                    fi
+                    ;;
                2)   # bad but not worst
-                    [[ $sclient_success -eq 0 ]] && \
-                         pr_literedln "offered (NOT ok)" || \
-                         pr_litegreenln "not offered (OK)" ;;
+                    if [[ $sclient_success -eq 0 ]]; then
+                         pr_literedln "offered (NOT ok)" 
+                         output_finding "std_$4" "$NODEIP" "$PORT" "NOT OK" "$2 offered (NOT OK) - bad"
+                    else
+                         pr_litegreenln "not offered (OK)"
+                         output_finding "std_$4" "$NODEIP" "$PORT" "OK" "$2 not offered (OK)"
+                    fi
+                    ;;
                3) # not totally bad 
-                    [[ $sclient_success -eq 0 ]] && \
-                         pr_brownln "offered (NOT ok)" || \
-                         outln "not offered (OK)" ;;
+                    if [[ $sclient_success -eq 0 ]]; then
+                         pr_brownln "offered (NOT ok)" 
+                         output_finding "std_$4" "$NODEIP" "$PORT" "NOT OK" "$2 offered (NOT OK) - not too bad"
+                    else
+                         outln "not offered (OK)"
+                         output_finding "std_$4" "$NODEIP" "$PORT" "OK" "$2 not offered (OK)"
+                    fi
+                    ;;
                *) # we shouldn't reach this
                     pr_litemagenta "? (please report this)" ;;
           esac
@@ -1259,6 +1345,7 @@ std_cipherlists() {
      else
           singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
           local_problem "No $singlespaces configured in $OPENSSL"
+          output_finding "std_$4" "$NODEIP" "$PORT" "WARN" "Cipher $2 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
      # we need 1xlf in those cases:
      debugme echo
@@ -1350,9 +1437,13 @@ test_just_one(){
      local re='^[0-9A-Fa-f]+$'
 
      pr_headline " Testing single cipher with "
-     [[ $1 =~ $re ]] && \
-          pr_headline "matching number pattern \"$1\" " || \
+     if [[ $1 =~ $re ]]; then
+          pr_headline "matching number pattern \"$1\" "
+          tjolines="$tjolines matching number pattern \"$1\"\n\n"
+     else
           pr_headline "word pattern "\"$1\"" (ignore case) "
+          tjolines="$tjolines word pattern \"$1\" (ignore case)\n\n"
+     fi
      outln
      ! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      outln
@@ -1384,12 +1475,15 @@ test_just_one(){
                     neat_list $HEXC $ciph "$kx" $enc
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_cyan "  available"
+                         output_finding "cipher_$HEXC" "$NODEIP" "$PORT" "INFO" "$(neat_header)\n$(neat_list $HEXC $ciph "$kx" $enc) available"
                     else
                          out "  not a/v"
+                         output_finding "cipher_$HEXC" "$NODEIP" "$PORT" "INFO" "$(neat_header)\n$(neat_list $HEXC $ciph "$kx" $enc) not a/v"
                     fi
                     outln
                fi
           done
+          exit
      done
      outln
 
@@ -1405,6 +1499,7 @@ run_allciphers(){
      local -i sclient_success=0
      local hexcode n ciph sslvers kx auth enc mac export
      local dhlen
+     local available
 
      nr_ciphers=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)")
      outln
@@ -1421,19 +1516,22 @@ run_allciphers(){
           if [[ $sclient_success -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
                continue       # no successful connect AND not verbose displaying each cipher
           fi
-          normalize_ciphercode $hexcode
+          normalize_ciphercode $hexcode 
           if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
                dhlen=$(read_dhbits_from_file $TMPFILE quiet)
                kx="$kx $dhlen"
           fi
           neat_list $HEXC $ciph "$kx" $enc
+          available="available"
           if [[ "$SHOW_EACH_C" -ne 0 ]]; then
                if [[ $sclient_success -eq 0 ]]; then
                     pr_cyan "  available"
                else
                     out "  not a/v"
+                    available="not a/v"
                fi
           fi
+          output_finding "cipher_$HEXC" "$NODEIP" "$PORT" "INFO" "$(neat_header)\n$(neat_list $HEXC $ciph "$kx" $enc) $available"
           outln
           tmpfile_handle $FUNCNAME.txt
      done
@@ -1447,6 +1545,8 @@ run_cipher_per_proto(){
      local hexcode n ciph sslvers kx auth enc mac export
      local -i sclient_success=0
      local dhlen
+     local available
+     local id
 
      pr_headlineln " Testing all locally available ciphers per protocol against the server, ordered by encryption strength "
      ! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
@@ -1468,14 +1568,19 @@ run_cipher_per_proto(){
                     kx="$kx $dhlen"
                fi
                neat_list $HEXC $ciph "$kx" $enc
+               available="available"
                if [[ "$SHOW_EACH_C" -ne 0 ]]; then
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_cyan "  available"
                     else
                          out "  not a/v"
+                         available="not a/v"
                     fi
                fi
                outln
+               id="cipher$proto"
+               id+="_$HEXC"
+               output_finding "$id" "$NODEIP" "$PORT" "INFO" "$proto_text\n$(neat_header)\n$(neat_list $HEXC $ciph "$kx" $enc) $available"
                tmpfile_handle $FUNCNAME.txt
           done
      done
@@ -1639,17 +1744,17 @@ run_std_cipherlists() {
      pr_headlineln " Testing ~standard cipher lists "
      outln
 # see ciphers(1ssl)
-     std_cipherlists 'NULL:eNULL'                       " Null Ciphers             " 1
-     std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   " 1
-     std_cipherlists 'ADH'                              " Anonymous DH Ciphers     " 1
-     std_cipherlists 'EXPORT40'                         " 40 Bit encryption        " 1
-     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        " 1
-     std_cipherlists 'EXPORT'                           " Export Ciphers (general) " 1
-     std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1
-     std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1
-     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2'       " Medium grade encryption  " 2
-     std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3
-     std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    " 0
+     std_cipherlists 'NULL:eNULL'                       " Null Ciphers             " 1 "NULL"
+     std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   " 1 "aNULL"
+     std_cipherlists 'ADH'                              " Anonymous DH Ciphers     " 1 "ADH"
+     std_cipherlists 'EXPORT40'                         " 40 Bit encryption        " 1 "EXPORT40"
+     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        " 1 "EXPORT56"
+     std_cipherlists 'EXPORT'                           " Export Ciphers (general) " 1 "EXPORT"
+     std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1 "LOW"
+     std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1 "DES"
+     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2'       " Medium grade encryption  " 2 "MEDIUM"
+     std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3 "3DES"
+     std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    " 0 "HIGH"
      outln
      return 0
 }
