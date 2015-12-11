@@ -2318,6 +2318,7 @@ run_server_preference() {
      # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
      local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
      local has_cipher_order=true
+     local isok
      
      outln
      pr_headlineln " Testing server preferences "
@@ -2330,6 +2331,7 @@ run_server_preference() {
           outln "$list_fwd  . "
           has_cipher_order=false
           ret=6
+          output_finding "order_bug" "$NODEIP" "$PORT" "WARN" "Could not determine server cipher order, no matching cipher in this list found (pls report this): $list_fwd"
      elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
           # now it still could be that we hit this bug: https://github.com/drwetter/testssl.sh/issues/188
           # workaround is to connect with a protocol
@@ -2341,6 +2343,7 @@ run_server_preference() {
                outln "$list_fwd  . "
                has_cipher_order=false
                ret=6
+               output_finding "order_bug" "$NODEIP" "$PORT" "WARN" "Could not determine server cipher order, no matching cipher in this list found (pls report this): $list_fwd"
           fi
      fi
 
@@ -2353,9 +2356,11 @@ run_server_preference() {
           if [[ "$cipher1" != "$cipher2" ]]; then
                pr_litered "nope (NOT ok)"
                remark4default_cipher=" (limited sense as client will pick)"
+               output_finding "order" "$NODEIP" "$PORT" "NOT OK" "Server does NOT set a cipher order (NOT ok)"
           else
                pr_green "yes (OK)"
                remark4default_cipher=""
+               output_finding "order" "$NODEIP" "$PORT" "OK" "Server sets a cipher order (ok)"
           fi
           [[ $DEBUG -ge 2 ]] && out "  $cipher1 | $cipher2"
           outln
@@ -2369,26 +2374,78 @@ run_server_preference() {
           fi
           default_proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
           case "$default_proto" in
-               *TLSv1.2)      pr_greenln $default_proto ;;
-               *TLSv1.1)      pr_litegreenln $default_proto ;;
-               *TLSv1)        outln $default_proto ;;
-               *SSLv2)        pr_redln $default_proto ;;
-               *SSLv3)        pr_redln $default_proto ;;
-               "")            pr_litemagenta "default proto empty";  [[ $OSSL_VER == 1.0.2* ]] && outln " (Hint: if IIS6 give OpenSSL 1.01 a try)" ;; 
-               *)             pr_litemagenta "FIXME line $LINENO: $default_proto" ;;
+               *TLSv1.2)      
+                    pr_greenln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "OK" "Default protocol TLS1.2 (OK)"
+                    ;;
+               *TLSv1.1)      
+                    pr_litegreenln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "OK" "Default protocol TLS1.1 (OK)"
+                    ;;
+               *TLSv1)        
+                    outln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "INFO" "Default protocol TLS1.0"
+                    ;;
+               *SSLv2)        
+                    pr_redln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "NOT OK" "Default protocol SSLv2"
+                    ;;
+               *SSLv3)        
+                    pr_redln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "NOT OK" "Default protocol SSLv3"
+                    ;;
+               "")            
+                    pr_litemagenta "default proto empty"
+                    if [[ $OSSL_VER == 1.0.2* ]]; then
+                         outln " (Hint: if IIS6 give OpenSSL 1.01 a try)" 
+                         output_finding "order_proto" "$NODEIP" "$PORT" "WARN" "Default protocol empty (Hint: if IIS6 give OpenSSL 1.01 a try)"
+                    else
+                         output_finding "order_proto" "$NODEIP" "$PORT" "WARN" "Default protocol empty"
+                    fi     
+                    ;; 
+               *)             
+                    pr_litemagenta "FIXME line $LINENO: $default_proto" 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "WARN" "FIXME line $LINENO: $default_proto"
+                    ;;
           esac
 
           pr_bold " Negotiated cipher            "
           default_cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
           case "$default_cipher" in
-               *NULL*|*EXP*)  pr_red "$default_cipher" ;;
-               *RC4*)         pr_litered "$default_cipher" ;;
-               *CBC*)         pr_brown "$default_cipher" ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
-               *GCM*)         pr_green "$default_cipher" ;;   # best ones
-               *CHACHA20*)    pr_green "$default_cipher" ;;   # best ones
-               ECDHE*AES*)    pr_yellow "$default_cipher" ;;  # it's CBC. --> lucky13
-               "")            pr_litemagenta "default cipher empty" ;  [[ $OSSL_VER == 1.0.2* ]] && out " (Hint: if IIS6 give OpenSSL 1.01 a try)" ;;
-               *)             out "$default_cipher" ;;
+               *NULL*|*EXP*)  
+                    pr_red "$default_cipher" 
+
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)\n$remark4default_cipher"
+                    ;;
+               *RC4*)         
+                    pr_litered "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)\n$remark4default_cipher"
+                    ;;
+               *CBC*)         
+                    pr_brown "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)\n$remark4default_cipher"
+                    ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
+               *GCM*|*CHACHA20*)    
+                    pr_green "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (OK)\n$remark4default_cipher"
+                    ;;   # best ones
+               ECDHE*AES*)    
+                    pr_yellow "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "WARN" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (cbc)\n$remark4default_cipher"
+                    ;;  # it's CBC. --> lucky13
+               "")            
+                    pr_litemagenta "default cipher empty" ;  
+                    if [[ $OSSL_VER == 1.0.2* ]]; then
+                         out " (Hint: if IIS6 give OpenSSL 1.01 a try)" 
+                         output_finding "order_cipher" "$NODEIP" "$PORT" "WARN" "Default cipher empty  (Hint: if IIS6 give OpenSSL 1.01 a try)\n$remark4default_cipher"
+                    else
+                         output_finding "order_cipher" "$NODEIP" "$PORT" "WARN" "Default cipher empty\n$remark4default_cipher"
+                    fi
+                    ;;
+               *)             
+                    out "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "INFO" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE")\n$remark4default_cipher"
+                    ;;
           esac
           read_dhbits_from_file "$TMPFILE"
           outln "$remark4default_cipher"
@@ -2397,8 +2454,8 @@ run_server_preference() {
                pr_bold " Negotiated cipher per proto"; outln " $remark4default_cipher"
                i=1
                for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
-               #locally_supported -"$p" "    " || continue
-               locally_supported -"$p" || continue
+                    #locally_supported -"$p" "    " || continue
+                    locally_supported -"$p" || continue
                     $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
@@ -2443,6 +2500,7 @@ run_server_preference() {
                              fi
                           fi
                     fi
+                    output_finding "order_${proto[i]}_cipher" "$NODEIP" "$PORT" "INFO" "Default cipher on ${proto[i]}: ${cipher[i]}\n$remark4default_cipher"
                done
           fi
      fi
@@ -2459,11 +2517,12 @@ run_server_preference() {
 
 cipher_pref_check() {
      local p proto protos
-     local tested_cipher cipher
+     local tested_cipher cipher order
 
      pr_bold " Cipher order"
 
      for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
+          order=""
           $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                tested_cipher=""
@@ -2473,14 +2532,17 @@ cipher_pref_check() {
                outln
                printf "     %-10s %s " "$proto:" "$cipher"
                tested_cipher="-"$cipher
+               order="$cipher"
                while true; do
                     $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     sclient_connect_successful $? $TMPFILE || break
                     cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                     out "$cipher "
+                    order+=" $cipher"
                     tested_cipher="$tested_cipher:-$cipher"
                done
           fi
+          [[ -z $order ]] || output_finding "order_$p" "$NODEIP" "$PORT" "INFO" "Default cipher order for protocol $p:\n$order"
      done
      outln
 
@@ -2489,18 +2551,22 @@ cipher_pref_check() {
      else
           protos=$($OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg \"\" </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
           for p in $protos; do
+               order=""
                $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
                cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                printf "     %-10s %s " "$p:" "$cipher"
                tested_cipher="-"$cipher
+               order="$cipher"
                while true; do
                     $OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
                     sclient_connect_successful $? $TMPFILE || break
                     cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                     out "$cipher "
                     tested_cipher="$tested_cipher:-$cipher"
+                    order+=" $cipher"
                done
-          outln
+               outln
+               [[ -z $order ]] || output_finding "order_spdy_$p" "$NODEIP" "$PORT" "INFO" "Default cipher order for SPDY protocol $p:\n$order"
           done
      fi
 
