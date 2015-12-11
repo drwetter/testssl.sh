@@ -3901,9 +3901,11 @@ get_install_dir() {
 
      [[ -r "$RUN_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/etc/mapping-rfc.txt" 
      [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+     if [[ ! -r "$MAPPING_FILE_RFC" ]]; then
 # those will disapper:
-     [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/mapping-rfc.txt" 
-     [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/mapping-rfc.txt" 
+          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+     fi
 
      # we haven't found the mapping file yet...
      if [[ ! -r "$MAPPING_FILE_RFC" ]] && which readlink &>/dev/null ; then
@@ -3912,9 +3914,9 @@ get_install_dir() {
                INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
                # not sure whether Darwin has -f
           INSTALL_DIR=$(dirname $INSTALL_DIR 2>/dev/null)
+          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
           [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear:
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
      # still no mapping file:
@@ -3922,7 +3924,7 @@ get_install_dir() {
           INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
           MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear
-          MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
      [[ ! -r "$MAPPING_FILE_RFC" ]] && unset MAPPING_FILE_RFC && pr_litemagentaln "\nNo mapping file found"
@@ -5408,4 +5410,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.426 2015/12/08 16:50:57 dirkw Exp $
+#  $Id: testssl.sh,v 1.427 2015/12/11 12:13:21 dirkw Exp $
