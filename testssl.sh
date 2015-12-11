@@ -1599,10 +1599,10 @@ locally_supported() {
 
 
 # the protocol check needs to be revamped. It sucks. 
-# 1) we need to have a variable where the resulta are being stored so that every other test doesn't have to do this again.
+# 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this again.
 # 2) the code is too old and one can do that way better
 # 3) HAS_SSL3/2 does already exist
-# we should do what's availabe and faster (opensssl vs. sockets) . Keep in mind tat the socket reply for SSLv2 returns the number # of ciphers!
+# we should do what's availabe and faster (openssl vs. sockets) . Keep in mind tat the socket reply for SSLv2 returns the number # of ciphers!
 #
 # arg1: -ssl2|-ssl3|-tls1
 # arg2: doesn't seem to be used in calling, seems to be a textstring with the protocol though
@@ -1640,21 +1640,26 @@ run_protocols() {
      local using_sockets=true
      local supported_no_ciph1="supported but couldn't detect a cipher (may need debugging)" 
      local supported_no_ciph2="supported but couldn't detect a cipher" 
+     local via=""
 
      outln; pr_headline " Testing protocols "
+     via="Protocol tested "
 
      #FIXME: use PROTOS_OFFERED here
 
      if $SSL_NATIVE; then
           using_sockets=false
           pr_headlineln "(via native openssl)"
+          via+="via native openssl"
      else
           if [[ -n "$STARTTLS" ]]; then
                pr_headlineln "(via openssl, SSLv2 via sockets) "
+               via+="via openssl, SSLv2 via sockets"
                using_sockets=false
           else
                using_sockets=true
                pr_headlineln "(via sockets except TLS 1.2 and SPDY/NPN) "
+               via+="via sockets except for TLS1.1 and SPDY/NPN"
           fi
      fi
      outln
@@ -1665,11 +1670,22 @@ run_protocols() {
      else
           run_prototest_openssl "-ssl2"
           case $? in
-               0) pr_redln   "offered (NOT ok)" ;;
-               1) pr_greenln "not offered (OK)" ;;
-               5) pr_litered "$supported_no_ciph2"; 
-                    outln " (may need further attention)"  ;;              # protocol ok, but no cipher
-               7) ;;                                                       # no local support
+               0) 
+                    pr_redln   "offered (NOT ok)" 
+                    output_finding "sslv2" "$NODEIP" "$PORT" "NOT OK" "SSLv2 is offered (NOT ok)"
+                    ;;
+               1) 
+                    pr_greenln "not offered (OK)" 
+                    output_finding "sslv2" "$NODEIP" "$PORT" "OK" "SSLv2 is not offered (OK)"
+                    ;;
+               5) 
+                    pr_litered "$supported_no_ciph2"; 
+                    outln " (may need further attention)"                  # protocol ok, but no cipher
+                    output_finding "sslv2" "$NODEIP" "$PORT" "WARN" "SSLv2 is $supported_no_ciph2 (may need further attention)"
+                    ;;
+               7) 
+                    output_finding "sslv2" "$NODEIP" "$PORT" "INFO" "SSLv2 is not tested due to lack of local support"
+                    ;;                                                       # no local support
           esac
      fi
 
@@ -1680,12 +1696,26 @@ run_protocols() {
           run_prototest_openssl "-ssl3"
      fi
      case $? in
-          0) pr_literedln "offered (NOT ok)" ;;
-          1) pr_greenln "not offered (OK)"   ;;
-          2) pr_litemagentaln "#FIXME: downgraded. still missing a test case here" ;;
-          5) pr_litered "$supported_no_ciph2"; 
-                    outln "(may need debugging)"  ;;                       # protocol ok, but no cipher
-          7) ;;                                                            # no local support
+          0) 
+               pr_literedln "offered (NOT ok)" 
+               output_finding "sslv3" "$NODEIP" "$PORT" "NOT OK" "SSLv3 is offered (NOT ok)"
+               ;;
+          1) 
+               pr_greenln "not offered (OK)"   
+               output_finding "sslv3" "$NODEIP" "$PORT" "OK" "SSLv3 is not offered (OK)"
+               ;;
+          2) 
+               pr_litemagentaln "#FIXME: downgraded. still missing a test case here" 
+               output_finding "sslv3" "$NODEIP" "$PORT" "WARN" "SSLv3: #FIXME: downgraded. still missing a test case here"
+               ;;
+          5) 
+               output_finding "sslv3" "$NODEIP" "$PORT" "WARN" "SSLv3 is $supported_no_ciph1"
+               pr_litered "$supported_no_ciph2"
+               outln "(may need debugging)"  
+               ;;                       # protocol ok, but no cipher
+          7) 
+               output_finding "sslv3" "$NODEIP" "$PORT" "INFO" "SSLv3 is not tested due to lack of local support"
+               ;;                                                            # no local support
      esac
 
      pr_bold " TLS 1      ";
@@ -1695,13 +1725,27 @@ run_protocols() {
           run_prototest_openssl "-tls1"
      fi
      case $? in
-          0) outln "offered" ;;                                            # nothing wrong with it -- per se
-          1) outln "not offered" ;;                                        # neither good or bad
-          2) pr_brown "not offered (NOT ok)"
+          0) 
+               outln "offered" 
+               output_finding "tls1" "$NODEIP" "$PORT" "INFO" "TLSv1.0 is offered"
+               ;;                                            # nothing wrong with it -- per se
+          1) 
+               outln "not offered" 
+               output_finding "tls1" "$NODEIP" "$PORT" "INFO" "TLSv1.0 is not offered"
+               ;;                                        # neither good or bad
+          2) 
+               pr_brown "not offered (NOT ok)"
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
-               outln ;;
-          5) outln "$supported_no_ciph1"  ;;                               # protocol ok, but no cipher
-          7) ;;                                                            # no local support
+               outln 
+               output_finding "tls1" "$NODEIP" "$PORT" "NOT OK" "TLSv1.0 is not offered, and downgraded to SSL (NOT ok)"
+               ;;
+          5) 
+               outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
+               output_finding "tls1" "$NODEIP" "$PORT" "WARN" "TLSv1.0 is $supported_no_ciph1"
+               ;;
+          7) 
+               output_finding "tlsv1" "$NODEIP" "$PORT" "INFO" "TLSv1.0 is not tested due to lack of local support"
+               ;;                                                            # no local support
      esac
 
      pr_bold " TLS 1.1    ";
@@ -1711,13 +1755,27 @@ run_protocols() {
           run_prototest_openssl "-tls1_1"
      fi   
      case $? in
-          0) outln "offered" ;;                                            # nothing wrong with it
-          1) outln "not offered" ;;                                        # neither good or bad
-          2) out "not offered" 
+          0) 
+               outln "offered" 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "INFO" "TLSv1.1 is offered"
+               ;;                                            # nothing wrong with it
+          1) 
+               outln "not offered" 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "INFO" "TLSv1.1 is not offered"
+               ;;                                        # neither good or bad
+          2) 
+               out "not offered" 
                [[ $DEBUG -eq 1 ]] && out " -- downgraded" 
-               outln ;;
-          5) outln "$supported_no_ciph1" ;;                                # protocol ok, but no cipher
-          7) ;;                                                            # no local support
+               outln 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "NOT OK" "TLSv1.1 is not offered, and downgraded to a weaker protocol (NOT ok)"
+               ;;
+          5) 
+               outln "$supported_no_ciph1" 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "WARN" "TLSv1.1 is $supported_no_ciph1"
+               ;;                                # protocol ok, but no cipher
+          7) 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "INFO" "TLSv1.1 is not tested due to lack of local support"
+               ;;                                                            # no local support
      esac
 
      pr_bold " TLS 1.2    ";
@@ -1727,13 +1785,27 @@ run_protocols() {
           run_prototest_openssl "-tls1_2"
      fi   
      case $? in
-          0) pr_greenln "offered (OK)" ;;                                  # GCM cipher in TLS 1.2: very good!
-          1) pr_brownln "not offered (NOT ok)" ;;                          # no GCM, penalty
-          2) pr_brown "not offered (NOT ok)"
+          0) 
+               pr_greenln "offered (OK)" 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "OK" "TLSv1.2 is offered (OK)"               
+               ;;                                  # GCM cipher in TLS 1.2: very good!
+          1) 
+               pr_brownln "not offered (NOT ok)" 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "NOT OK" "TLSv1.2 is not offered (NOT ok)"               
+               ;;                          # no GCM, penalty
+          2) 
+     pr_brown "not offered (NOT ok)"
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
-               outln ;;
-          5) outln "$supported_no_ciph1" ;;                                # protocol ok, but no cipher
-          7) ;;                                                            # no local support
+               outln 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "NOT OK" "TLSv1.2 is not offered and downgraded to a weaker protocol (NOT ok)"               
+               ;;
+          5) 
+               outln "$supported_no_ciph1" 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "WARN" "TLSv1.2 is $supported_no_ciph1"
+               ;;                                # protocol ok, but no cipher
+          7) 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "INFO" "TLSv1.2 is not tested due to lack of local support"
+               ;;                                                            # no local support
      esac
      return 0
 }
@@ -2998,22 +3070,32 @@ sslv2_sockets() {
                pr_litemagenta "strange v2 reply "
                outln " (rerun with DEBUG >=2)"
                [[ $DEBUG -ge 3 ]] && hexdump -C "$SOCK_REPLY_FILE" | head -1
-               ret=7 ;;
+               ret=7 
+               output_finding "sslv2" "$NODEIP" "$PORT" "WARN" "SSLv2: received a strange SSLv2 replay (rerun with DEBUG>=2)"
+               ;;
           1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
                pr_greenln "not offered (OK)"
-               ret=0 ;;
+               ret=0 
+               output_finding "sslv2" "$NODEIP" "$PORT" "OK" "SSLv2 not offered (OK)"
+               ;;
           0) # reset
                pr_greenln "not offered (OK)"
-               ret=0 ;;
+               ret=0 
+               output_finding "sslv2" "$NODEIP" "$PORT" "OK" "SSLv2 not offered (OK)"
+               ;;
           3) # everything else
                lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l | sed 's/ //g')
                [[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
                if [[ "$lines" -gt 1 ]]; then
                     ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$ciphers_detected" ]]; then
-                         pr_litered "supported but couldn't detect a cipher"; outln " (may need further attention)"
+                         pr_litered "supported but couldn't detect a cipher"; 
+                         outln " (may need further attention)"
+                         output_finding "sslv2" "$NODEIP" "$PORT" "NOT OK" "SSLv2 offered (NOT ok), but could not detect a cipher (may need futher attention)"
                     else
-                         pr_red "offered (NOT ok)"; outln " -- $ciphers_detected ciphers"
+                         pr_red "offered (NOT ok)"; 
+                         outln " -- $ciphers_detected ciphers"
+                         output_finding "sslv2" "$NODEIP" "$PORT" "NOT OK" "SSLv2 offered (NOT ok).\nDetected ciphers: $ciphers_detected"
                     fi
                     ret=1
                fi ;;
