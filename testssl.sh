@@ -186,6 +186,7 @@ HAS_DH_BITS=${HAS_DH_BITS:-false}
 HAS_SSL2=true                           #TODO: in the future we'll do the fastest possible test (openssl s_client -ssl2 is currently faster than sockets)
 HAS_SSL3=true
 HAS_ALPN=false
+CIPHER_MAPPING="rfc"                    # display RFC ciphernames
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -1224,17 +1225,24 @@ sockread() {
 
 
 show_rfc_style(){
-     local rfcname
+     if [[ "$CIPHER_MAPPING" == "no-rfc" ]] || [[ -z "$MAPPING_FILE_RFC" ]]; then
+          return 1
+     fi
 
-     [[ -z "$MAPPING_FILE_RFC" ]] && return 1
+     local rfcname
      rfcname=$(grep -iw "$1" "$MAPPING_FILE_RFC" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/')
      [[ -n "$rfcname" ]] && out "$rfcname"
      return 0
 }
 
 neat_header(){
-     printf -- "Hexcode  Cipher Suite Name (OpenSSL)    KeyExch.   Encryption Bits${MAPPING_FILE_RFC:+        Cipher Suite Name (RFC)}\n"
-     printf -- "%s-------------------------------------------------------------------------${MAPPING_FILE_RFC:+----------------------------------------------}\n"
+     local add_rfc_str="rfc"
+     if [[ "$CIPHER_MAPPING" == "no-rfc" ]] || [[ -z "$MAPPING_FILE_RFC" ]]; then
+          unset add_rfc_str
+     fi
+
+     printf -- "Hexcode  Cipher Suite Name (OpenSSL)    KeyExch.   Encryption Bits${add_rfc_str:+        Cipher Suite Name (RFC)}\n"
+     printf -- "%s-------------------------------------------------------------------------${add_rfc_str:+-------------------------------------------------}\n"
 }
 
 
@@ -1261,11 +1269,13 @@ neat_list(){
           [[ "${#kx}" -eq 19 ]] && kx="$kx "      # 19 means DH, colored >=1000. Add another space
           #echo ${#kx}                            # should be always 20
      fi
-     #if [[ -r "$MAPPING_FILE_RFC" ]]; then
-          printf -- " %-7s %-30s %-10s %-11s%-11s${MAPPING_FILE_RFC:+ %-48s}${SHOW_EACH_C:+  }" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
-     #else
-     #    printf -- " %-7s %-30s %-10s %-11s%-11s${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength"
-     #fi
+
+     local add_rfc_str="rfc"
+     if [[ "$CIPHER_MAPPING" == "no-rfc" ]] || [[ -z "$MAPPING_FILE_RFC" ]]; then
+          unset add_rfc_str
+     fi
+
+     printf -- " %-7s %-30s %-10s %-11s%-11s${add_rfc_str:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
 test_just_one(){
@@ -4102,6 +4112,7 @@ tuning options (can also be preset via environment variables):
      --logfile <file>              logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified file
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
+     --mapping <rfc|no-rfc>        display the RFC Cipher Suite Name or not
      --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --colorblind                  swap green and blue in the output
@@ -5199,6 +5210,16 @@ parse_cmd_line() {
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
+                    ;;
+               --mapping|--mapping=*)
+                    CIPHER_MAPPING=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    case "$CIPHER_MAPPING" in
+                         rfc|no-rfc) ;;
+                         *)   CIPHER_MAPPING="rfc"
+                              pr_magentaln "\nmapping can be either \"rfc\" or \"no-rfc\""
+                              help 1
+                    esac
                     ;;
                --proxy|--proxy=*)
                     PROXY=$(parse_opt_equal_sign "$1" "$2")
