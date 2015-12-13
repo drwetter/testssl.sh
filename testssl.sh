@@ -160,6 +160,8 @@ IKNOW_FNAME=false
 
 # further global vars just declared here
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
+# alpn_protos needs to be space-separated, not comma-seperated 
+readonly ALPN_PROTOs="h2 h2-17 h2-16 h2-15 h2-14 spdy/3.1 http/1.1"
 TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
@@ -2429,6 +2431,24 @@ spdy_pre(){
      return 0
 }
 
+http2_pre(){
+     if [[ -n "$STARTTLS" ]]; then
+          [[ -n "$1" ]] && out "$1"
+          out "(HTTP/2 is a HTTP protocol and thus not tested here)"
+          return 1
+     fi
+     if [[ -n "$PROXY" ]]; then
+          [[ -n "$1" ]] && pr_litemagenta " $1 "
+          pr_litemagenta "not tested as proxies do not support proxying it"
+          return 1
+     fi
+     if ! $HAS_ALPN; then
+          local_problem "$OPENSSL doesn't support HTTP2/ALPN";
+          return 7
+     fi
+     return 0
+}
+
 run_spdy() {
      local tmpstr
      local -i ret=0
@@ -2438,7 +2458,7 @@ run_spdy() {
           outln "\n"
           return 0
      fi
-     $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg $NPN_PROTOs </dev/null 2>$ERRFILE >$TMPFILE
+     $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg $NPN_PROTOs $SNI </dev/null 2>$ERRFILE >$TMPFILE
      tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
      if [[ -z "$tmpstr" ]] || [[ "$tmpstr" == " " ]]; then
           outln "not offered"
@@ -2454,13 +2474,46 @@ run_spdy() {
                ret=10
           fi
      fi
-     outln
+     #outln
      # btw: nmap can do that too http://nmap.org/nsedoc/scripts/tls-nextprotoneg.html
      # nmap --script=tls-nextprotoneg #NODE -p $PORT is your friend if your openssl doesn't want to test this
      tmpfile_handle $FUNCNAME.txt
      return $ret
 }
 
+
+run_http2() {
+     local tmpstr
+     local -i ret=0	
+
+     pr_bold " HTTP2/ALPN "
+     if ! http2_pre ; then
+          outln "\n"
+          return 0
+     fi
+     for proto in $ALPN_PROTOs; do
+          # for some reason OpenSSL doesn't list the advertised protocols, so instead try common protocols
+          $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -alpn $proto $SNI </dev/null 2>$ERRFILE >$TMPFILE
+          tmpstr=$(grep -a '^ALPN protocol' $TMPFILE | sed 's/ALPN protocol.*: //')
+          if [[ "$tmpstr" = "$proto" ]]; then
+              if [[ -z "$had_alpn_proto" ]]; then
+                  out "$proto"
+                  had_alpn_proto=1
+              else
+                  out ", $proto"
+              fi
+          fi
+     done
+     if [ "$had_alpn_proto" ]; then
+          outln " (offered)"
+          ret=0
+     else
+          outln "not offered"
+          ret=1
+     fi
+     tmpfile_handle $FUNCNAME.txt
+     return $ret
+}
 
 # arg1: string to send
 # arg2: possible success strings a egrep pattern, needed!
@@ -4062,6 +4115,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -S, --server_defaults         displays the servers default picks and certificate info
      -P, --preference              displays the servers picks: protocol+cipher
      -y, --spdy, --npn             checks for SPDY/NPN
+     -Y, --http2, --alpn           checks for HTTP2/ALPN
      -x, --single-cipher <pattern> tests matched <pattern> of ciphers
                                    (if <pattern> not a number: word match)
      -U, --vulnerable              tests all vulnerabilities
@@ -4925,6 +4979,7 @@ initialize_globals() {
      do_server_defaults=false
      do_server_preference=false
      do_spdy=false
+     do_http2=false
      do_ssl_poodle=false
      do_tls_fallback_scsv=false
      do_test_just_one=false
@@ -4952,6 +5007,7 @@ set_scanning_defaults() {
      do_server_defaults=true
      do_server_preference=true
      do_spdy=true
+     do_http2=true
      do_ssl_poodle=true
      do_tls_fallback_scsv=true
      VULN_COUNT=10
@@ -4963,7 +5019,7 @@ query_globals() {
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
-               do_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
+               do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
                do_test_just_one do_tls_sockets do_mass_testing; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
      done
@@ -4976,7 +5032,7 @@ debug_globals() {
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
-               do_std_cipherlists do_server_defaults do_server_preference do_spdy do_ssl_poodle do_tls_fallback_scsv \
+               do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
                do_test_just_one do_tls_sockets do_mass_testing; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
@@ -5064,9 +5120,13 @@ parse_cmd_line() {
                -p|--protocols)
                     do_protocols=true
                     do_spdy=true
+                    do_http2=true
                     ;;
                -y|--spdy|--npn)
                     do_spdy=true
+                    ;;
+               -Y|--http2|--alpn)
+                    do_http2=true
                     ;;
                -f|--ciphers)
                     do_std_cipherlists=true
@@ -5302,6 +5362,7 @@ lets_roll() {
      # all top level functions  now following have the prefix "run_"
      $do_protocols && { run_protocols; ret=$(($? + ret)); }
      $do_spdy && { run_spdy; ret=$(($? + ret)); }
+     $do_http2 && { run_http2; ret=$(($? + ret)); }
      $do_std_cipherlists && { run_std_cipherlists; ret=$(($? + ret)); }
      $do_pfs && { run_pfs; ret=$(($? + ret)); }
      $do_server_preference && { run_server_preference; ret=$(($? + ret)); }
