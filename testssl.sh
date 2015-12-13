@@ -2485,6 +2485,7 @@ run_spdy() {
 run_http2() {
      local tmpstr
      local -i ret=0	
+     local had_alpn_proto
 
      pr_bold " HTTP2/ALPN "
      if ! http2_pre ; then
