@@ -2455,7 +2455,7 @@ run_spdy() {
 
      pr_bold " SPDY/NPN   "
      if ! spdy_pre ; then
-          outln "\n"
+          outln
           return 0
      fi
      $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -nextprotoneg $NPN_PROTOs </dev/null 2>$ERRFILE >$TMPFILE
@@ -2488,7 +2488,7 @@ run_http2() {
 
      pr_bold " HTTP2/ALPN "
      if ! http2_pre ; then
-          outln "\n"
+          outln
           return 0
      fi
      for proto in $ALPN_PROTOs; do
