@@ -2458,7 +2458,7 @@ run_spdy() {
           outln "\n"
           return 0
      fi
-     $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg $NPN_PROTOs $SNI </dev/null 2>$ERRFILE >$TMPFILE
+     $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -nextprotoneg $NPN_PROTOs </dev/null 2>$ERRFILE >$TMPFILE
      tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
      if [[ -z "$tmpstr" ]] || [[ "$tmpstr" == " " ]]; then
           outln "not offered"
@@ -2493,7 +2493,7 @@ run_http2() {
      fi
      for proto in $ALPN_PROTOs; do
           # for some reason OpenSSL doesn't list the advertised protocols, so instead try common protocols
-          $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -alpn $proto $SNI </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -alpn $proto </dev/null 2>$ERRFILE >$TMPFILE
           tmpstr=$(grep -a '^ALPN protocol' $TMPFILE | sed 's/ALPN protocol.*: //')
           if [[ "$tmpstr" = "$proto" ]]; then
               if [[ -z "$had_alpn_proto" ]]; then
