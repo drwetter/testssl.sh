@@ -122,6 +122,7 @@ TERM_CURRPOS=0                                         # custom line wrapping ne
 
 declare -x OPENSSL
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
+COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the output
 SHOW_EACH_C=${SHOW_EACH_C:-0}           # where individual ciphers are tested show just the positively ones tested #FIXME: upside down value
 SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave behind just usual? 
 QUIET=${QUIET:-false}                   # don't output the banner. By doing this yiu acknowledge usage term appearing in the banner
@@ -185,6 +186,7 @@ HAS_DH_BITS=${HAS_DH_BITS:-false}
 HAS_SSL2=true                           #TODO: in the future we'll do the fastest possible test (openssl s_client -ssl2 is currently faster than sockets)
 HAS_SSL3=true
 HAS_ALPN=false
+CIPHER_MAPPING="rfc"                    # display RFC ciphernames
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -288,24 +290,24 @@ outln() { out "$1\n"; }
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
-pr_liteblue()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;34m$1" || out "$1"; pr_off; }                 # not yet used
+pr_liteblue()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;32m$1" || out "\033[0;34m$1" ) || out "$1"; pr_off; }    # not yet used
 pr_liteblueln() { pr_liteblue "$1"; outln; }
-pr_blue()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;34m$1" || out "$1"; pr_off; }                 # used for head lines of single tests
+pr_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;32m$1" || out "\033[1;34m$1" ) || out "$1"; pr_off; }    # used for head lines of single tests
 pr_blueln()     { pr_blue "$1"; outln; }
 
-pr_litered()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"; pr_off; }              # this is bad
+pr_litered()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"; pr_off; }                                            # this is bad
 pr_literedln() { pr_litered "$1"; outln; }
-pr_red()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }              # oh, this is really bad
+pr_red()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }                                            # oh, this is really bad
 pr_redln()     { pr_red "$1"; outln; }
 
-pr_litemagenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }     # local problem: one test cannot be done
+pr_litemagenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }                                   # local problem: one test cannot be done
 pr_litemagentaln() { pr_litemagenta "$1"; outln; }
-pr_magenta()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }     # Fatal error: quitting because of this!
+pr_magenta()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }                                   # Fatal error: quitting because of this!
 pr_magentaln()     { pr_magenta "$1"; outln; }
 
-pr_litecyan()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;36m$1" || out "$1"; pr_off; }                 # not yet used
+pr_litecyan()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;36m$1" || out "$1"; pr_off; }                                               # not yet used
 pr_litecyanln() { pr_litecyan "$1"; outln; }
-pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"; pr_off; }                 # additional hint
+pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"; pr_off; }                                               # additional hint
 pr_cyanln()     { pr_cyan "$1"; outln; }
 
 pr_litegreyln() { pr_litegrey "$1"; outln; }
@@ -313,14 +315,14 @@ pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off
 pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"; pr_off; }
 pr_greyln()     { pr_grey "$1"; outln; }
 
-pr_litegreen()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;32m$1" || out "$1"; pr_off; }                # This is good
+pr_litegreen()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # This is good
 pr_litegreenln() { pr_litegreen "$1"; outln; }
-pr_green()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;32m$1" || out "$1"; pr_off; }                # This is the best 
+pr_green()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # This is the best 
 pr_greenln()     { pr_green "$1"; outln; }
 
-pr_yellow()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # academic or minor problem 
+pr_yellow()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                                                 # academic or minor problem 
 pr_yellowln() { pr_yellow "$1"; outln; }
-pr_brown()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                   # it is not a bad problem but you shouldn't do this
+pr_brown()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                                                 # it is not a bad problem but you shouldn't do this
 pr_brownln()  { pr_brown "$1"; outln; }
 
 
@@ -1223,17 +1225,24 @@ sockread() {
 
 
 show_rfc_style(){
-     local rfcname
+     if [[ "$CIPHER_MAPPING" == "no-rfc" ]] || [[ -z "$MAPPING_FILE_RFC" ]]; then
+          return 1
+     fi
 
-     [[ -z "$MAPPING_FILE_RFC" ]] && return 1
+     local rfcname
      rfcname=$(grep -iw "$1" "$MAPPING_FILE_RFC" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/')
      [[ -n "$rfcname" ]] && out "$rfcname"
      return 0
 }
 
 neat_header(){
-     printf -- "Hexcode  Cipher Suite Name (OpenSSL)    KeyExch.   Encryption Bits${MAPPING_FILE_RFC:+        Cipher Suite Name (RFC)}\n"
-     printf -- "%s-------------------------------------------------------------------------${MAPPING_FILE_RFC:+----------------------------------------------}\n"
+     local add_rfc_str="rfc"
+     if [[ "$CIPHER_MAPPING" == "no-rfc" ]] || [[ -z "$MAPPING_FILE_RFC" ]]; then
+          unset add_rfc_str
+     fi
+
+     printf -- "Hexcode  Cipher Suite Name (OpenSSL)    KeyExch.   Encryption Bits${add_rfc_str:+        Cipher Suite Name (RFC)}\n"
+     printf -- "%s-------------------------------------------------------------------------${add_rfc_str:+-------------------------------------------------}\n"
 }
 
 
@@ -1260,11 +1269,13 @@ neat_list(){
           [[ "${#kx}" -eq 19 ]] && kx="$kx "      # 19 means DH, colored >=1000. Add another space
           #echo ${#kx}                            # should be always 20
      fi
-     #if [[ -r "$MAPPING_FILE_RFC" ]]; then
-          printf -- " %-7s %-30s %-10s %-11s%-11s${MAPPING_FILE_RFC:+ %-48s}${SHOW_EACH_C:+  }" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
-     #else
-     #    printf -- " %-7s %-30s %-10s %-11s%-11s${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength"
-     #fi
+
+     local add_rfc_str="rfc"
+     if [[ "$CIPHER_MAPPING" == "no-rfc" ]] || [[ -z "$MAPPING_FILE_RFC" ]]; then
+          unset add_rfc_str
+     fi
+
+     printf -- " %-7s %-30s %-10s %-11s%-11s${add_rfc_str:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
 test_just_one(){
@@ -4108,8 +4119,10 @@ tuning options (can also be preset via environment variables):
      --logfile <file>              logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified file
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
+     --mapping <rfc|no-rfc>        display the RFC Cipher Suite Name or not
      --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
+     --colorblind                  swap green and blue in the output
      --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~120
 
 All options requiring a value can also be called with '=' (e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
@@ -4172,6 +4185,7 @@ MAPPING_FILE_RFC: $MAPPING_FILE_RFC
 CAPATH: $CAPATH
 ECHO: $ECHO
 COLOR: $COLOR
+COLORBLIND: $COLORBLIND
 TERM_DWITH: $TERM_DWITH
 INTERACTIVE: $INTERACTIVE
 HAS_GNUDATE: $HAS_GNUDATE
@@ -5212,6 +5226,9 @@ parse_cmd_line() {
                               help 1
                     esac
                     ;;
+               --colorblind)
+                    COLORBLIND=true
+                    ;;
                --log|--logging)
                     do_logging=true 
                     ;;   # DEFINITION of LOGFILE if no arg specified via ENV or automagically in parse_hn_ports()
@@ -5224,6 +5241,16 @@ parse_cmd_line() {
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
+                    ;;
+               --mapping|--mapping=*)
+                    CIPHER_MAPPING=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    case "$CIPHER_MAPPING" in
+                         rfc|no-rfc) ;;
+                         *)   CIPHER_MAPPING="rfc"
+                              pr_magentaln "\nmapping can be either \"rfc\" or \"no-rfc\""
+                              help 1
+                    esac
                     ;;
                --proxy|--proxy=*)
                     PROXY=$(parse_opt_equal_sign "$1" "$2")
