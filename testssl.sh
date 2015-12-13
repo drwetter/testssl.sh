@@ -1744,8 +1744,8 @@ run_server_preference() {
 
                [[ -n "$PROXY" ]] && arg="   SPDY/NPN is"
                [[ -n "$STARTTLS" ]] && arg="    "
-               if spdy_pre " $arg" >/dev/null; then                                       # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
-                    $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg "$NPN_PROTOs" </dev/null 2>>$ERRFILE >$TMPFILE
+               if spdy_pre " $arg" ; then                                       # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
+                    $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg "$NPN_PROTOs" </dev/null 2>>$ERRFILE >$TMPFILE
                     if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
                          if [[ -z "${proto[i]}" ]]; then
@@ -1755,8 +1755,8 @@ run_server_preference() {
                               [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
                          fi
                     fi
-               #else
-                    #outln     # we miss for STARTTLS 1x LF otherwise
+               else
+                    outln     # we miss for STARTTLS 1x LF otherwise
                fi
 
                for i in 1 2 3 4 5 6; do
