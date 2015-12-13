@@ -2465,7 +2465,7 @@ run_spdy() {
           ret=1
      else
           # now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
-          if echo $tmpstr | egrep -aq "spdy|http" ; then
+          if echo $tmpstr | egrep -aq "h2|spdy|http" ; then
                out "$tmpstr" 
                outln " (advertised)"
                ret=0
