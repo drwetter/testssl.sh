@@ -4448,18 +4448,25 @@ run_breach() {
      debugme grep '^Content-Encoding' $TMPFILE
      if [[ ! -s $TMPFILE ]]; then
           pr_litemagenta "failed (HTTP header request stalled"
-          [[ $was_killed -ne 0 ]] && pr_litemagenta " and was terminated"
+          if [[ $was_killed -ne 0 ]]; then
+               pr_litemagenta " and was terminated"
+               output_finding "breach" "$NODEIP" "$PORT" "WARN" "BREACH (CVE-2013-3587) : Test failed (HTTP request stalled and was terminated)"
+          else
+               output_finding "breach" "$NODEIP" "$PORT" "WARN" "BREACH (CVE-2013-3587) : Test failed (HTTP request stalled)"
+          fi
           pr_litemagenta ") "
           ret=3
      elif [[ -z $result ]]; then
           pr_green "no HTTP compression (OK) "
           outln "$disclaimer"
+          output_finding "breach" "$NODEIP" "$PORT" "OK" "BREACH (CVE-2013-3587) : no HTTP compression (OK) $disclaimer"
           ret=0
      else
           pr_litered "potentially NOT ok, uses $result HTTP compression."
           outln "$disclaimer"
           outln "$spaces Can be ignored for static pages or if no secrets in the page"
-           ret=1
+          output_finding "breach" "$NODEIP" "$PORT" "NOT OK" "BREACH (CVE-2013-3587) : potentially VULNERABLE, uses $result HTTP compression. $disclaimer\nCan be ignored for static pages or if no secrets in the page"
+          ret=1
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
 
@@ -4486,8 +4493,10 @@ run_ssl_poodle() {
      [[ $DEBUG -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if [[ $sclient_success -eq 0 ]]; then
           pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
+          output_finding "poodle_ssl" "$NODEIP" "$PORT" "NOT OK" "POODLE, SSL (CVE-2014-3566) : VULNERABLE (NOT ok), uses SSLv3+CBC (check if TLS_FALLBACK_SCSV mitigation is used)"
      else
           pr_green "not vulnerable (OK)"
+          output_finding "poodle_ssl" "$NODEIP" "$PORT" "OK" "POODLE, SSL (CVE-2014-3566) : not vulnerable (OK)"
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
@@ -4496,9 +4505,10 @@ run_ssl_poodle() {
 
 # for appliance which use padding, no fallback needed
 run_tls_poodle() {
-     pr_bold " POODLE, SSL"; out " CVE-2014-8730), experimental "
+     pr_bold " POODLE, TLS"; out " (CVE-2014-8730), experimental "
      #FIXME
      echo "#FIXME"
+     output_finding "poodle_tls" "$NODEIP" "$PORT" "WARN" "POODLE, TLS (CVE-2014-8730) : Not tested. Not yet implemented #FIXME"
      return 7
 }
 
@@ -4531,13 +4541,16 @@ run_tls_fallback_scsv() {
           if grep -q "CONNECTED(00" "$TMPFILE"; then
                if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
                     pr_brown "Downgrade attack prevention NOT supported"
+                    output_finding "fallback_scsv" "$NODEIP" "$PORT" "NOT OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention NOT supported"
                     ret=1
                elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
                     pr_litegreen "Downgrade attack prevention supported (OK)"
+                    output_finding "fallback_scsv" "$NODEIP" "$PORT" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported (OK)"
                     ret=0
                elif grep -qa "alert handshake failure" "$TMPFILE"; then
                     # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
                     pr_brown "\"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
+                    output_finding "fallback_scsv" "$NODEIP" "$PORT" "NOT OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : \"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
                     ret=2
                elif grep -qa "ssl handshake failure" "$TMPFILE"; then
                     pr_brown "some unexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
@@ -4545,9 +4558,11 @@ run_tls_fallback_scsv() {
                else
                     pr_litemagenta "Check failed, unexpected result "
                     out ", run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
+                    output_finding "fallback_scsv" "$NODEIP" "$PORT" "WARN" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Check failed, unexpected result, run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
                fi
           else
                pr_litemagenta "test failed (couldn't connect)"
+               output_finding "fallback_scsv" "$NODEIP" "$PORT" "WARN" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Check failed. (couldn't connect)"
                ret=7
           fi
      fi
@@ -4573,8 +4588,11 @@ run_freak() {
      #echo "========= ${PIPESTATUS[*]}
 
      case $nr_supported_ciphers in
-          0)   local_problem "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
-               return 7 ;;
+          0)   
+               local_problem "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
+               output_finding "freak" "$NODEIP" "$PORT" "WARN" "FREAK (CVE-2015-0204) : Not tested. $OPENSSL doesn't have any EXPORT RSA ciphers configured"
+               return 7 
+               ;;
           1|2|3)
                addtl_warning=" ($magenta""tested only with $nr_supported_ciphers out of 9 ciphers only!$off)" ;;
           8|9|10|11)
@@ -4588,8 +4606,10 @@ run_freak() {
      [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if [[ $sclient_success -eq 0 ]]; then
           pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
+          output_finding "freak" "$NODEIP" "$PORT" "NOT OK" "FREAK (CVE-2015-0204) : VULNERABLE (NOT ok), uses EXPORT RSA ciphers"
      else
           pr_green "not vulnerable (OK)"; out "$addtl_warning"
+          output_finding "freak" "$NODEIP" "$PORT" "OK" "FREAK (CVE-2015-0204) : not vulnerable (OK) $addtl_warning"
      fi
      outln
 
@@ -4614,10 +4634,13 @@ run_logjam() {
      nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdhe_cipher_list))
 
      case $nr_supported_ciphers in
-          0)   local_problem "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
-               return 3 ;;
+          0)   
+               local_problem "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
+               output_finding "logjam" "$NODEIP" "$PORT" "WARN" "LOGJAM (CVE-2015-4000) : Not tested. $OPENSSL doesn't have any DHE EXPORT ciphers configured"
+               return 3 
+               ;;
           1|2) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
-          3) addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers)" ;;
+          3)   addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers)" ;;
           4)   ;;
      esac
      $OPENSSL s_client $STARTTLS $BUGS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
@@ -4635,8 +4658,10 @@ run_logjam() {
           
      if [[ $sclient_success -eq 0 ]]; then
           pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers, common primes not checked."
+          output_finding "logjam" "$NODEIP" "$PORT" "NOT OK" "LOGJAM (CVE-2015-4000) : VULNERABLE (NOT ok), uses DHE EXPORT ciphers, common primes not checked."
      else
           pr_green "not vulnerable (OK)"; out "$addtl_warning"
+          output_finding "logjam" "$NODEIP" "$PORT" "OK" "LOGJAM (CVE-2015-4000) : not vulnerable (OK) $addtl_warning"
      fi
      outln
 
