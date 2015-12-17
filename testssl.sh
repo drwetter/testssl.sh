@@ -2729,7 +2729,7 @@ tls_time() {
           else
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
                pr_bold " TLS clock skew" ; outln "               $difftime sec from localtime";
-               output_finding "tls_time" "$NODEIP" "$PORT" "INFO" "Your TLS time is skewed from tyour localtime by $difftime seconds"
+               output_finding "tls_time" "$NODEIP" "$PORT" "INFO" "Your TLS time is skewed from your localtime by $difftime seconds"
           fi
           debugme out "$TLS_TIME"
           outln
@@ -3077,7 +3077,7 @@ run_server_defaults() {
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
                if echo "$expire" | grep -qw not; then
                     pr_litegreen "$days2expire >= $DAYS2WARN1 days"
-                    expfinding+="$days2expire >= $DAYS2WARN1"
+                    expfinding+="$days2expire >= $DAYS2WARN1 days"
                else
                     pr_brown "expires < $DAYS2WARN1 days ($days2expire)"
                     expfinding+="expires < $DAYS2WARN1 days ($days2expire)"
@@ -3174,6 +3174,7 @@ run_pfs() {
      #local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EDH+aRSA EECDH !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
      local pfs_cipher_list="ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-CAMELLIA128-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA"
      local -i nr_supported_ciphers=0
+     local pfs_ciphers
 
      outln
      pr_headlineln " Testing (perfect) forward secrecy, (P)FS -- omitting 3DES, RC4 and Null Encryption here "
@@ -3183,6 +3184,7 @@ run_pfs() {
      if [[ "$nr_supported_ciphers" -le "$CLIENT_MIN_PFS" ]]; then
           outln
           local_problem "You only have $nr_supported_ciphers PFS ciphers on the client side "
+          output_finding "pfs" "$NODEIP" "$PORT" "WARN" "(Perfect) Forward Secrecy tests: Skipped. You only have $nr_supported_ciphers PFS ciphers on the client site. ($CLIENT_MIN_PFS are required)"
           return 1
      fi
 
@@ -3192,9 +3194,12 @@ run_pfs() {
      outln
      if [[ $sclient_success -ne 0 ]] || [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]]; then
           pr_brownln "Not OK: No ciphers supporting Forward Secrecy offered"
+          output_finding "pfs" "$NODEIP" "$PORT" "NOT OK" "(Perfect) Forward Secrecy : Not OK: No ciphers supporting Forward Secrecy offered"
      else
           pfs_offered=0
+          pfs_ciphers=""
           pr_litegreen " PFS is offered (OK)"
+          output_finding "pfs" "$NODEIP" "$PORT" "OK" "(Perfect) Forward Secrecy : PFS is offered (OK)"
           if $WIDE; then
                outln ", ciphers follow (client/browser support is here specially important) \n"
                neat_header
@@ -3227,6 +3232,7 @@ run_pfs() {
                     outln
                else
                     out "$pfs_cipher "
+                    pfs_ciphers+="$pfs_cipher "
                fi
           done < <($OPENSSL ciphers -V "$pfs_cipher_list" 2>$ERRFILE)      # -V doesn't work with openssl < 1.0
           #    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
@@ -3234,7 +3240,10 @@ run_pfs() {
           $WIDE || outln
 
           if [[ "$pfs_offered" -eq 1 ]]; then
-                pr_brown "no PFS ciphers found"
+               pr_brown "no PFS ciphers found"
+               output_finding "pfs_ciphers" "$NODEIP" "$PORT" "NOT OK" "(Perfect) Forward Secrecy Ciphers: no PFS ciphers found (NOT ok)"
+          else
+               output_finding "pfs_ciphers" "$NODEIP" "$PORT" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
           fi
      fi
      outln
