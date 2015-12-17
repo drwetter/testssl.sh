@@ -3866,6 +3866,7 @@ run_crime() {
      $OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib
      if [[ $? -eq 0 ]]; then
           local_problem "$OPENSSL lacks zlib support"
+          output_finding "crime" "$NODEIP" "$PORT" "WARN" "CRIME, TLS (CVE-2012-4929) : Not tested. $OPENSSL lacks zlib support"
           return 7
      fi
 
@@ -3875,13 +3876,18 @@ run_crime() {
           pr_litegreen "not vulnerable (OK)"
           if [[ $SERVICE != "HTTP" ]] && ! $CLIENT_AUTH;  then 
                out " (not using HTTP anyway)"
+               output_finding "crime" "$NODEIP" "$PORT" "OK" "CRIME, TLS (CVE-2012-4929) : Not vulnerable (OK) (not using HTTP anyway)"
+          else
+               output_finding "crime" "$NODEIP" "$PORT" "OK" "CRIME, TLS (CVE-2012-4929) : Not vulnerable (OK)"
           fi
           ret=0
      else
           if [[ $SERVICE == "HTTP" ]]; then
                pr_litered "VULNERABLE (NOT ok)"
+               output_finding "crime" "$NODEIP" "$PORT" "NOT OK" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (NOT ok)"
           else
                pr_brown "VULNERABLE (NOT ok), but not using HTTP: probably no exploit known"
+               output_finding "crime" "$NODEIP" "$PORT" "NOT OK" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (NOT ok), but not using HTTP: probably no exploit known"
           fi
           ret=1
      fi
