@@ -2837,16 +2837,19 @@ run_pfs() {
 spdy_pre(){
      if [[ -n "$STARTTLS" ]]; then
           [[ -n "$1" ]] && out "$1"
-          out "(SPDY is a HTTP protocol and thus not tested here)"
+          out "(SPDY is an HTTP protocol and thus not tested here)"
+          output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : (SPY is an HTTP protocol and thus not tested here)"
           return 1
      fi
      if [[ -n "$PROXY" ]]; then
           [[ -n "$1" ]] && pr_litemagenta " $1 "
           pr_litemagenta "not tested as proxies do not support proxying it"
+          output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : not tested as proxies do not support proxying it"
           return 1
      fi
      if ! $HAS_SPDY; then
           local_problem "$OPENSSL doesn't support SPDY/NPN";
+          output_finding "spdy_npn" "$NODEIP" "$PORT" "WARN" "SPDY/NPN : not tested $OPENSSL doesn't support SPDY/NPN"
           return 7
      fi
      return 0
@@ -2865,15 +2868,18 @@ run_spdy() {
      tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
      if [[ -z "$tmpstr" ]] || [[ "$tmpstr" == " " ]]; then
           outln "not offered"
+          output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : not offered"
           ret=1
      else
           # now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
           if echo $tmpstr | egrep -aq "spdy|http" ; then
                out "$tmpstr" 
                outln " (advertised)"
+               output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : $tmpstr (advertised)"
                ret=0
           else
                pr_litemagentaln "please check manually, server response was ambigious ..."
+               output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : please check manually, server response was ambigious ..."
                ret=10
           fi
      fi
