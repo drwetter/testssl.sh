@@ -4714,8 +4714,9 @@ run_beast(){
           if ! sclient_connect_successful $? $TMPFILE; then # protocol supported?
                if $continued; then                          # second round: we hit TLS1:
                     pr_litegreenln "no SSL3 or TLS1"
+                    output_finding "beast" "$NODEIP" "$PORT" "OK" "BEAST (CVE-2011-3389) : not vulnerable (OK) no SSL3 or TLS1"
                     return 0
-               else                # protocol not succeeded but it';s the first time
+               else                # protocol not succeeded but it's the first time
                     continued=true
                     continue       # protocol not supported, so we do not need to check each cipher with that protocol
                fi
@@ -4759,8 +4760,9 @@ run_beast(){
                fi
           done
 
-          if ! $WIDE; then
-               if [[ -n "$detected_cbc_ciphers" ]]; then
+          if [[ -n "$detected_cbc_ciphers" ]]; then
+               output_finding "cbc_$proto" "$NODEIP" "$PORT" "NOT OK" "BEAST (CVE-2011-3389) : CBC ciphers for $(toupper $proto): $detected_cbc_ciphers"
+               if ! $WIDE; then
                     detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
                     ! $first && out "$spaces"
                     out "$(toupper $proto):"
@@ -4769,13 +4771,14 @@ run_beast(){
                          pr_brownln "$detected_cbc_ciphers"
                     detected_cbc_ciphers="" # empty for next round
                     first=false
-               else
-                    [[ $proto == "tls1" ]] && ! $first && echo -n "$spaces"
-                    pr_litegreenln "no CBC ciphers for $(toupper $proto) (OK)"
-                    first=false
                fi
           else
-               $vuln_beast || pr_litegreenln " no CBC ciphers for $(toupper $proto) (OK)"
+               output_finding "cbc_$proto" "$NODEIP" "$PORT" "OK" "BEAST (CVE-2011-3389) : No CBC ciphers for $(toupper $proto) (OK)"
+               if ! $WIDE; then
+                    [[ $proto == "tls1" ]] && ! $first && echo -n "$spaces "
+                    first=false
+               fi
+               pr_litegreenln "no CBC ciphers for $(toupper $proto) (OK)"
           fi
      done  # for proto in ssl3 tls1
 
@@ -4791,6 +4794,7 @@ run_beast(){
                     pr_yellow "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                fi
+               output_finding "beast" "$NODEIP" "$PORT" "NOT OK" "BEAST (CVE-2011-3389) : VULNERABLE -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
           else
                if $WIDE; then
                     outln
@@ -4799,6 +4803,7 @@ run_beast(){
                fi
                pr_brown "VULNERABLE (NOT ok)"
                outln " -- and no higher protocols as mitigation supported"
+               output_finding "beast" "$NODEIP" "$PORT" "NOT OK" "BEAST (CVE-2011-3389) : VULNERABLE -- and no higher protocols as mitigation supported"
           fi
      fi
      $first && pr_litegreenln "no CBC ciphers found for any protocol (OK)"
@@ -4811,6 +4816,7 @@ run_lucky13() {
 #FIXME: to do . CVE-2013-0169
 # in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
      echo "FIXME"
+     output_finding "lucky13" "$NODEIP" "$PORT" "WARN" "LUCKY13 (CVE-2013-0169) : No tested. Not implemented. #FIXME"
      return -1
 }
 
@@ -4823,6 +4829,7 @@ run_rc4() {
      local -i sclient_success
      local hexcode dash rc4_cipher sslvers kx auth enc mac export
      local rc4_ciphers_list="ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:DHE-DSS-RC4-SHA:AECDH-RC4-SHA:ADH-RC4-MD5:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:RC4-MD5:RSA-PSK-RC4-SHA:PSK-RC4-SHA:KRB5-RC4-SHA:KRB5-RC4-MD5:RC4-64-MD5:EXP1024-DHE-DSS-RC4-SHA:EXP1024-RC4-SHA:EXP-ADH-RC4-MD5:EXP-RC4-MD5:EXP-RC4-MD5:EXP-KRB5-RC4-SHA:EXP-KRB5-RC4-MD5"
+     local rc4_detected=""
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || $WIDE; then
           outln
@@ -4861,10 +4868,13 @@ run_rc4() {
                else
                     pr_litered "$rc4_cipher "
                fi
+               rc4_detected+="$c4_cipher "
           done < <($OPENSSL ciphers -V $rc4_ciphers_list:@STRENGTH)
           outln
+          output_finding "rc4" "$NODEIP" "$PORT" "NOT OK" "RC4 (CVE-2013-2566, CVE-2015-2808) : VULNERABLE (NOT ok) Detected ciphers: $rc4_detected"
      else
           pr_litegreenln "no RC4 ciphers detected (OK)"
+          output_finding "rc4" "$NODEIP" "$PORT" "OK" "RC4 (CVE-2013-2566, CVE-2015-2808) : not vulnerable (OK)"
           rc4_offered=0
      fi
      outln
@@ -4891,6 +4901,7 @@ run_tls_truncation() {
 
 
 old_fart() {
+     output_finding "old_fart" "$NODEIP" "$PORT" "WARN" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed.\nGet precompiled bins or compile https://github.com/PeterMosmans/openssl ."
      outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
      fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -2
 }
@@ -5117,7 +5128,12 @@ tuning options (can also be preset via environment variables):
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~120
 
+output options:
+     --json                        output all findngs to a json file (defaults to testssl.json unless set)
+     --jsonfile <fname>            set output to json and output to the specified file
+
 All options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
+
 <URI> is always the last parameter.
 
 Need HTML output? Just pipe through "aha" (ANSI HTML Adapter: github.com/theZiz/aha) like
@@ -5127,7 +5143,6 @@ EOF
      #' Fix syntax highlight on sublime
      exit $1
 }
-#' Do not break syntax highlighting in Sublime
 
 maketempf() {
      TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
