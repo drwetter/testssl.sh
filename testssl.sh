@@ -3984,6 +3984,7 @@ run_heartbleed(){
      if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
           pr_green "not vulnerable (OK)"
           outln " (no heartbeat extension)"
+          output_finding "heartbleed" "$NODEIP" "$PORT" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK) (no heartbeat extension)"
           return 0
      fi
 
@@ -4077,9 +4078,19 @@ run_heartbleed(){
      lines_returned=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l | sed 's/ //g')
      if [[ $lines_returned -gt 1 ]]; then
           pr_red "VULNERABLE (NOT ok)"
+          if [[ $retval -eq 3 ]]; then
+               output_finding "heartbleed" "$NODEIP" "$PORT" "NOT OK" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok) (timed out)"
+          else
+               output_finding "heartbleed" "$NODEIP" "$PORT" "NOT OK" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok)"
+          fi
           ret=1
      else
           pr_green "not vulnerable (OK)"
+          if [[ $retval -eq 3 ]]; then
+               output_finding "heartbleed" "$NODEIP" "$PORT" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK) (timed out)"
+          else
+               output_finding "heartbleed" "$NODEIP" "$PORT" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK)"
+          fi
           ret=0
      fi
      [[ $retval -eq 3 ]] && out " (timed out)"
@@ -4196,9 +4207,19 @@ run_ccs_injection(){
 
      if [[ "$byte6" == "0a" ]] || [[ "$lines" -gt 1 ]]; then
           pr_green "not vulnerable (OK)"
+          if [[ $retval -eq 3 ]]; then
+               output_finding "ccs" "$NODEIP" "$PORT" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
+          else
+               output_finding "ccs" "$NODEIP" "$PORT" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
+          fi
           ret=0
      else
           pr_red "VULNERABLE (NOT ok)"
+          if [[ $retval -eq 3 ]]; then
+               output_finding "ccs" "$NODEIP" "$PORT" "NOT OK" "CCS (CVE-2014-0224): VULNERABLE (NOT ok) (timed out)"
+          else
+               output_finding "ccs" "$NODEIP" "$PORT" "NOT OK" "CCS (CVE-2014-0224): VULNERABLE (NOT ok)"
+          fi
           ret=1
      fi
      [[ $retval -eq 3 ]] && out " (timed out)"
@@ -4229,12 +4250,22 @@ run_renego() {
           sec_renego=$?                                                    # 0= Secure Renegotiation IS NOT supported
 #FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
           case $sec_renego in
-               0) pr_redln "VULNERABLE (NOT ok)" ;;
-               1) pr_greenln "not vulnerable (OK)" ;;
-               *) pr_litemagentaln "FIXME (bug): $sec_renego" ;;
+               0) 
+                    pr_redln "VULNERABLE (NOT ok)" 
+                    output_finding "secure_renego" "$NODEIP" "$PORT" "NOT OK" "Secure Renegotiation (CVE-2009-3555) : VULNERABLE (NOT ok)"
+                    ;;
+               1) 
+                    pr_greenln "not vulnerable (OK)" 
+                    output_finding "secure_renego" "$NODEIP" "$PORT" "OK" "Secure Renegotiation (CVE-2009-3555) : not vulnerable (OK)"
+                    ;;
+               *) 
+                    pr_litemagentaln "FIXME (bug): $sec_renego" 
+                    output_finding "secure_renego" "$NODEIP" "$PORT" "WARN" "Secure Renegotiation (CVE-2009-3555) : FIXME (bug) $sec_renego"
+                    ;;
           esac
      else
           pr_litemagentaln "handshake didn't succeed" 
+          output_finding "secure_renego" "$NODEIP" "$PORT" "WARN" "Secure Renegotiation (CVE-2009-3555) : handshake didn't succeed"
      fi
 
      pr_bold " Secure Client-Initiated Renegotiation     "  # RFC 5746
@@ -4243,16 +4274,25 @@ run_renego() {
      case "$OSSL_VER" in
           0.9.8*)             # we need this for Mac OSX unfortunately
                case "$OSSL_VER_APPENDIX" in
-                    [a-l]) local_problem "$OPENSSL cannot test this secure renegotiation vulnerability"
-                           return 3 ;;
-                    [m-z]) ;; # all ok
-               esac ;;
-          1.0.1*|1.0.2*) legacycmd="-legacy_renegotiation" ;;
-          0.9.9*|1.0*) ;;   # all ok
+                    [a-l]) 
+                         local_problem "$OPENSSL cannot test this secure renegotiation vulnerability"
+                         output_finding "sec_client_renego" "$NODEIP" "$PORT" "WARN" "Secure Client-Initiated Renegotiation : $OPENSSL cannot test this secure renegotiation vulnerability"
+                         return 3 
+                         ;;
+                    [m-z]) 
+                         ;; # all ok
+               esac 
+               ;;
+          1.0.1*|1.0.2*) 
+               legacycmd="-legacy_renegotiation" 
+               ;;
+          0.9.9*|1.0*) 
+               ;;   # all ok
      esac
 
      if $CLIENT_AUTH; then
           pr_litemagentaln "client authentication prevents this from being tested"
+          output_finding "sec_client_renego" "$NODEIP" "$PORT" "WARN" "Secure Client-Initiated Renegotiation : client authentication prevents this from being tested"
           sec_client_renego=1
      else
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
@@ -4261,15 +4301,25 @@ run_renego() {
           wait_kill $! $HEADER_MAXSLEEP
           if [[ $? -eq 3 ]]; then
                pr_litegreen "likely not vulnerable (OK)"; outln " (timed out)"       # it hung
+               output_finding "sec_client_renego" "$NODEIP" "$PORT" "OK" "Secure Client-Initiated Renegotiation : likely not vulnerable (OK) (timed out)"
                sec_client_renego=1
           else
                # second try in the foreground as we are sure now it won't hang
                echo R | $OPENSSL s_client $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $SNI $PROXY >$TMPFILE 2>>$ERRFILE
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case $sec_client_renego in
-                    0) pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" ;;
-                    1) pr_litegreenln "not vulnerable (OK)" ;;
-                    *) "FIXME (bug): $sec_client_renego" ;;
+                    0) 
+                         pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" 
+                         output_finding "sec_client_renego" "$NODEIP" "$PORT" "NOT OK" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), DoS threat"
+                         ;;
+                    1) 
+                         pr_litegreenln "not vulnerable (OK)" 
+                         output_finding "sec_client_renego" "$NODEIP" "$PORT" "OK" "Secure Client-Initiated Renegotiation : not vulnerable (OK)"
+                         ;;
+                    *) 
+                         pr_literedln "FIXME (bug): $sec_client_renego" 
+                         output_finding "sec_client_renego" "$NODEIP" "$PORT" "WARN" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report"
+                         ;;
                esac
           fi
      fi
