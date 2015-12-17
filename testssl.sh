@@ -3120,21 +3120,31 @@ run_server_defaults() {
 
      pr_bold " OCSP URI                     "
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
-     [[ x"$ocsp_uri" == "x" ]] && pr_literedln "--" || echo "$ocsp_uri"
+     if [[ x"$ocsp_uri" == "x" ]]; then
+          pr_literedln "--"
+          output_finding "ocsp_uri" "$NODEIP" "$PORT" "NOT OK" "OCSP URI : -- (NOT ok)"
+     else
+          outln "$ocsp_uri"
+          output_finding "ocsp_uri" "$NODEIP" "$PORT" "INFO" "OCSP URI : $ocsp_uri"
+     fi
 
      pr_bold " OCSP stapling               "
      if grep -a "OCSP response" $TMPFILE | grep -q "no response sent" ; then
           out " not offered"
+          output_finding "ocsp_stapling" "$NODEIP" "$PORT" "INFO" "OCSP stapeling : not offered"
      else
           if grep -a "OCSP Response Status" $TMPFILE | grep -q successful; then
                pr_litegreen " offered"
+               output_finding "ocsp_stapling" "$NODEIP" "$PORT" "OK" "OCSP stapeling : offered"
           else
                if $GOST_STATUS_PROBLEM; then
                     out " (GOST servers make problems here, sorry)"
+                    output_finding "ocsp_stapling" "$NODEIP" "$PORT" "OK" "OCSP stapeling : (GOST servers make problems here, sorry)"
                     ret=0
                else
                     outln " not sure what's going on here, debug:"
                     grep -aA 20 "OCSP response"  $TMPFILE
+                    output_finding "ocsp_stapling" "$NODEIP" "$PORT" "OK" "OCSP stapeling : not sure what's going on here, debug: `grep -aA 20 "OCSP response"  $TMPFILE`"
                     ret=2
                fi
           fi
