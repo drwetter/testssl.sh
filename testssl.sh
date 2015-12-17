@@ -2219,9 +2219,11 @@ determine_trust() {
 
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0" ]]; then
           pr_litemagentaln "Your $OPENSSL is too new, needed is version 1.0.2"
+          output_finding "trust" "$NODEIP" "$PORT" "WARN" "Your $OPENSSL is too new, need version 1.0.2 to determine trust"
           return 7
      elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]]; then
           pr_litemagentaln "Your $OPENSSL is too old, needed is version >=1.0.2"
+          output_finding "trust" "$NODEIP" "$PORT" "WARN" "Your $OPENSSL is too old, need version 1.0.2 to determine trust"
      fi
      debugme outln
 	for bundle_fname in $ca_bundles; do
@@ -2248,12 +2250,14 @@ determine_trust() {
 	# all stores ok
 	if ${trust[1]} && ${trust[2]} && ${trust[3]} && ${trust[4]}; then
 		pr_litegreen "Ok   "			
+          output_finding "trust" "$NODEIP" "$PORT" "OK" "All certificate trust checks passed"
 	# at least one failed
 	else
 		pr_litered "NOT ok"	
 		# all failed (we assume with the same issue)
 		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]} && ! ${trust[4]}; then
 			verify_retcode_helper "${verify_retcode[2]}"
+               output_finding "trust" "$NODEIP" "$PORT" "NOT OK" "All certificate trust checks failed: `verify_retcode_helper "${verify_retcode[2]}"`"
 		else
 			# is one ok and the others not?
 			if ${trust[1]} || ${trust[2]} || ${trust[3]} || ${trust[4]}; then
@@ -2263,10 +2267,10 @@ determine_trust() {
 						ok_was="${certificate_file[i]} $ok_was"
 					else
                               #code="$(verify_retcode_helper ${verify_retcode[i]})"
-                              #notok_was="${certificate_file[i]} $notok_was"
                               pr_litered "  ${certificate_file[i]}:"
                               verify_retcode_helper "${verify_retcode[i]}"
-					fi
+			               notok_was="${certificate_file[i]} - `verify_retcode_helper "${verify_retcode[i]}"`\n$notok_was"
+               		fi
 				done
 				#pr_litered "$notok_was "
                     #outln "$code"
@@ -2275,7 +2279,8 @@ determine_trust() {
                     [[ $DEBUG -eq 0 ]] && out "$spaces"
 				pr_litegreen "OK: $ok_was"
                fi
-		fi
+               output_finding "trust" "$NODEIP" "$PORT" "NOT OK" "Some certificate trust checks failed\nOK    : $ok_was\nNOT ok:\n$notok_was"
+          fi
 	fi
 	outln
      return 0
@@ -2298,14 +2303,17 @@ tls_time() {
           if [[ "${#difftime}" -gt 5 ]]; then
                # openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
                pr_bold " TLS timestamp" ; outln "                random values, no fingerprinting possible "
+               output_finding "tls_time" "$NODEIP" "$PORT" "INFO" "Your TLS time seems to be filled with random values to prevent fingerprinting"
           else
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
                pr_bold " TLS clock skew" ; outln "               $difftime sec from localtime";
+               output_finding "tls_time" "$NODEIP" "$PORT" "INFO" "Your TLS time is skewed from tyour localtime by $difftime seconds"
           fi
           debugme out "$TLS_TIME"
           outln
      else
           pr_bold " TLS timestamp" ; out "                "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
+          output_finding "tls_time" "$NODEIP" "$PORT" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
      fi
      return 0
 }
@@ -2363,6 +2371,9 @@ run_server_defaults() {
      local policy_oid
      local spaces="                              "
      local wildcard=false
+     local fingerprint cnfinding
+     local cnok="OK"
+     local expfinding expok="OK"
 
      outln
      pr_headlineln " Testing server defaults (Server Hello) "
@@ -2374,9 +2385,11 @@ run_server_defaults() {
      #extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
      if [[ -z "$TLS_EXTENSIONS" ]]; then
           outln "(none)"
+          output_finding "tls_extensions" "$NODEIP" "$PORT" "INFO" "TLS server extensions (std): (none)"
      else
           #echo $extensions | sed 's/ /,/g' 
           outln "$TLS_EXTENSIONS"
+          output_finding "tls_extensions" "$NODEIP" "$PORT" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
 
      cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
@@ -2386,18 +2399,22 @@ run_server_defaults() {
      sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
      if [[ -z "$sessticket_str" ]]; then
           outln "(none)"
+          output_finding "session_ticket" "$NODEIP" "$PORT" "INFO" "TLS session tickes RFC 5077 not supported"
      else
           lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
           unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
           pr_yellowln "(PFS requires session ticket keys to be rotated <= daily)"
+          output_finding "session_ticket" "$NODEIP" "$PORT" "INFO" "TLS session tickes RFC 5077 valid for $lifetime $unit\nPFS requires session ticket keys to be rotated at least daily"
      fi
  
      pr_bold " SSL Session ID support       "
      if $NO_SSL_SESSIONID; then
           outln "no"
+          output_finding "session_id" "$NODEIP" "$PORT" "INFO" "SSL session ID support: no"
      else
           outln "yes"
+          output_finding "session_id" "$NODEIP" "$PORT" "INFO" "SSL session ID support: yes"
      fi
 
      pr_bold " Server key size              "
@@ -2407,51 +2424,90 @@ run_server_defaults() {
 
      if [[ -z "$keysize" ]]; then
           outln "(couldn't determine)"
+          output_finding "key_size" "$NODEIP" "$PORT" "WARN" "Server keys size cannot be determined"
      else
           if [[ "$keysize" -le 768 ]]; then
                if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
                     pr_litegreen "EC $keysize"
+                    output_finding "key_size" "$NODEIP" "$PORT" "OK" "Server keys $keysize bits EC (OK)"
                else
                     pr_red "$keysize"
+                    output_finding "key_size" "$NODEIP" "$PORT" "NOT OK" "Server keys $keysize bits (NOT ok)"
                fi
           elif [[ "$keysize" -le 1024 ]]; then
                pr_brown "$keysize"
+               output_finding "key_size" "$NODEIP" "$PORT" "NOT OK" "Server keys $keysize bits (NOT ok)"
           elif [[ "$keysize" -le 2048 ]]; then
                out "$keysize"
+               output_finding "key_size" "$NODEIP" "$PORT" "INFO" "Server keys $keysize bits"
           elif [[ "$keysize" -le 4096 ]]; then
                pr_litegreen "$keysize"
+               output_finding "key_size" "$NODEIP" "$PORT" "OK" "Server keys $keysize bits (OK)"
           else
                out "weird keysize: $keysize"
+               output_finding "key_size" "$NODEIP" "$PORT" "WARN" "Server keys $keysize bits (Odd)"
           fi
      fi
      outln " bit"
 
      pr_bold " Signature Algorithm          "
      case $sig_algo in
-          sha1WithRSAEncryption)   pr_brownln "SHA1 with RSA" ;;
-          sha256WithRSAEncryption) pr_litegreenln "SHA256 with RSA" ;;
-          sha384WithRSAEncryption) pr_litegreenln "SHA384 with RSA" ;;
-          sha512WithRSAEncryption) pr_litegreenln "SHA512 with RSA" ;;
-          ecdsa-with-SHA256)       pr_litegreenln "ECDSA with SHA256" ;;
-          md5*)                    pr_redln "MD5" ;;
-          *)                       outln "$sig_algo" ;;
+          sha1WithRSAEncryption)   
+               pr_brownln "SHA1 with RSA" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "WARN" "Signature Algorithm: SHA1 with RSA (warning)"
+               ;;
+          sha256WithRSAEncryption) 
+               pr_litegreenln "SHA256 with RSA" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "OK" "Signature Algorithm: SHA256 with RSA (OK)"
+               ;;
+          sha384WithRSAEncryption) 
+               pr_litegreenln "SHA384 with RSA" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "OK" "Signature Algorithm: SHA384 with RSA (OK)"
+               ;;
+          sha512WithRSAEncryption) 
+               pr_litegreenln "SHA512 with RSA" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "OK" "Signature Algorithm: SHA512 with RSA (OK)"
+               ;;
+          ecdsa-with-SHA256)       
+               pr_litegreenln "ECDSA with SHA256" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
+               ;;
+          md5*)                    
+               pr_redln "MD5" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "NOT OK" "Signature Algorithm: MD5 (NOT ok)"
+               ;;
+          *)                       
+               outln "$sig_algo" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "INFO" "Signature Algorithm: $sign_algo"
+               ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
      pr_bold " Fingerprint / Serial         "
-     outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
-     outln "$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
+     #outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
+     #outln "$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
+     fingerprint="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
+     fingerprint+="\n"
+     fingerprint+="$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
+     outln "$fingerprint"
+     output_finding "fingerprint" "$NODEIP" "$PORT" "INFO" "Fingerprint / Serial:\n$fingerprint"
 
      pr_bold " Common Name (CN)             "
+     cnfinding="Common Name (CN) : "
      if $OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | grep -wq CN; then
           cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
           pr_dquoted "$cn"
+          cnfinding="$cn"
           if echo -n "$cn" | grep -q '^*.' ; then
                out " (wildcard certificate"
+               cnfinding+="(wildcard certificate "
                if [[ "$cn" == "*.$(echo -n "$cn" | sed 's/^\*.//')" ]]; then
                     out " match)"
+                    cnfinding+=" match)"
                     wildcard=true
                else
+                    cnfinding+=" NO match)"
+                    cnok="INFO"
                     :
                     #FIXME: we need to test also the SANs as they can contain a wild card (google.de .e.g) ==> 2.7dev
                fi
@@ -2459,6 +2515,8 @@ run_server_defaults() {
      else
           cn="(no CN field in subject)"
           out "$cn"
+          cnfinding="$cn"
+          cnok="INFO"
      fi
 
      $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
@@ -2476,38 +2534,50 @@ run_server_defaults() {
      if [[ $NODE == "$cn_nosni" ]]; then
           if [[ $SERVICE == "HTTP" ]] || $CLIENT_AUTH; then
                outln " (works w/o SNI)"
+               cnfinding+=" (works w/o SNI)"
           else
                outln " (matches certificate directly)"
+               cnfinding+=" (matches certificate directly)"
                # for services != HTTP it depends on the protocol, server and client but it is not named "SNI"
           fi
      else
           if [[ $SERVICE != "HTTP" ]]; then
                outln
+               cnfinding+="\n"
                #pr_brownln " (non-SNI clients don't match CN but for non-HTTP services it might be ok)"
                #FIXME: this is irritating and needs to be redone. Then also the wildcard match needs to be tested against  "$cn_nosni"
           elif [[ -z "$cn_nosni" ]]; then
                out " (request w/o SNI didn't succeed";
-               [[ $sig_algo =~ ecdsa ]] && out ", usual for EC certificates"
+               cnfinding+=" (request w/o SNI didn't succeed"
+               if [[ $sig_algo =~ ecdsa ]]; then
+                    out ", usual for EC certificates"
+                    cnfinding+=", usual for EC certificates"
+               fi
                outln ")"
+               cnfinding+=")"
           elif [[ "$cn_nosni" == "*no CN field*" ]]; then
                outln ", (request w/o SNI: $cn_nosni)"
+               cnfinding+=", (request w/o SNI: $cn_nosni)"
           else
                out " (CN in response to request w/o SNI: "; pr_dquoted "$cn_nosni"; outln ")"
+               cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
           fi
      fi
+     output_finding "cn" "$NODEIP" "$PORT" "$cnok" "$cnfinding"
 
      sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
           sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
 #                                                       ^^^ CACert
-
      pr_bold " subjectAltName (SAN)         "
      if [[ -n "$sans" ]]; then
           for san in $sans; do
                pr_dquoted "$san"
                out " "
           done
+          output_finding "san" "$NODEIP" "$PORT" "INFO" "subjectAltName (SAN) : $sans"
      else
           out "-- "
+          output_finding "san" "$NODEIP" "$PORT" "INFO" "subjectAltName (SAN) : --"
      fi
      outln
      pr_bold " Issuer                       "
@@ -2520,6 +2590,7 @@ run_server_defaults() {
      fi
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer" == "$CN" ]]; then
           pr_redln "selfsigned (NOT ok)"
+          output_finding "issuer" "$NODEIP" "$PORT" "NOT OK" "Issuer: selfsigned (NOT ok)"
      else
           pr_dquoted "$issuer"
           out " ("
@@ -2527,6 +2598,9 @@ run_server_defaults() {
           if [[ -n "$issuer_C" ]]; then
                out " from " 
                pr_dquoted "$issuer_C"
+               output_finding "issuer" "$NODEIP" "$PORT" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" from \"$issuer_C\")"
+          else
+               output_finding "issuer" "$NODEIP" "$PORT" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" )"
           fi
           outln ")"
      fi
@@ -2543,8 +2617,10 @@ run_server_defaults() {
           [[ 1.3.6.1.4.1.17326.10.8.12.1.2 == "$policy_oid" ]] || \
           [[ 1.3.6.1.4.1.13177.10.1.3.10 == "$policy_oid" ]] ; then     
           out "yes "
+          output_finding "ev" "$NODEIP" "$PORT" "OK" "Extended Validation (EV) (experimental) : yes"
      else
           out "no "
+          output_finding "ev" "$NODEIP" "$PORT" "INFO" "Extended Validation (EV) (experimental) : no"
      fi
      debugme echo "($(newline_to_spaces "$policy_oid"))"
      outln
@@ -2556,7 +2632,9 @@ run_server_defaults() {
      pr_bold " Certificate Expiration       "
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 0 2>>$ERRFILE)
      if ! echo $expire | grep -qw not; then
-     pr_red "expired!"
+          pr_red "expired!"
+          expfinding="expired!"
+          expok="NOT OK"
      else
           secs2warn=$((24 * 60 * 60 * DAYS2WARN2))  # low threshold first
           expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
@@ -2565,11 +2643,16 @@ run_server_defaults() {
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
                if echo "$expire" | grep -qw not; then
                     pr_litegreen ">= $DAYS2WARN1 days"
+                    expfinding+=">= $DAYS2WARN1"
                else
-               pr_brown "expires < $DAYS2WARN1 days"
+                    pr_brown "expires < $DAYS2WARN1 days"
+                    expfinding+="expires < $DAYS2WARN1 days"
+                    expok="WARN"
                fi
           else
                pr_litered "expires < $DAYS2WARN2 days!"
+               expfinding+="expires < $DAYS2WARN2 days!"
+               expok="NOT OK"
           fi
      fi
      if $HAS_GNUDATE ; then
@@ -2580,25 +2663,32 @@ run_server_defaults() {
           startdate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
      fi
      outln " ($startdate --> $enddate)"
+     output_finding "expiration" "$NODEIP" "$PORT" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
 
 
      pr_bold " # of certificates provided"; outln "   $(get_all_certs)"
+     output_finding "certcount" "$NODEIP" "$PORT" "INFO" "# of certificates provided :  $(get_all_certs)"
+
 
      pr_bold " Chain of trust"; out " (experim.)    "
-     determine_trust
+     determine_trust #Also handles output_finding
 
      pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
      if [[ -z "$crl" ]]; then
           pr_literedln "--"
+          output_finding "crl" "$NODEIP" "$PORT" "NOT OK" "No CRL provided (NOT ok)"
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
+               output_finding "crl" "$NODEIP" "$PORT" "INFO" "Certificate Revocation List : $crl"
           else # more than one CRL
                out_row_aligned "$crl" "$spaces" 
+               output_finding "crl" "$NODEIP" "$PORT" "INFO" "Certificate Revocation List : $crl"
           fi
      else
-          pr_litemagentaln "no parsable output \"$url\", pls report"
+          pr_litemagentaln "no parsable output \"$crl\", pls report"
+          output_finding "crl" "$NODEIP" "$PORT" "WARN" "Certificate Revocation List : no parsable output \"$crl\", pls report"
      fi
 
      pr_bold " OCSP URI                     "
