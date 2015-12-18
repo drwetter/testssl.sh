@@ -146,6 +146,7 @@ DEBUG=${DEBUG:-0}                       # 1.: the temp files won't be erased.
 WIDE=${WIDE:-false}                     # whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE="testssl.json"                 # jsonfile if used
+CSVFILE="testssl.csv"                   # csvfile if used
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
 
 # tuning vars, can not be set by a cmd line switch
@@ -420,20 +421,27 @@ set_color_functions() {
      fi
 }
 
-open_json_file() {
-     if $do_json; then
+strip_quote() {
+     echo $1|sed "s/\"/\\'/g" # Fix syntax highlighting
+}
+
+file_header() {
+     if [[ $do_json ]]; then
           echo "[" > $JSONFILE
+     fi
+     if [[ $do_csv ]]; then
+          echo "\"id\",\"ip\",\"port\",\"severity\",\"finding\"" > $CSVFILE
      fi
 }
 
-close_json_file() {
-     if $do_json; then
+file_footer() {
+     if [[ $do_json ]]; then
           echo "]" >> $JSONFILE
      fi
 }
 
 output_finding() { # ID, IP, PORT, SEVERITY, FINDING
-     if $do_json; then
+     if [[ $do_json ]]; then
           if ! $FIRST_FINDING; then
                echo "," >> $JSONFILE
           fi
@@ -445,6 +453,9 @@ output_finding() { # ID, IP, PORT, SEVERITY, FINDING
                'severity'     : '$4',
                'finding'      : '$5'
           }" >> $JSONFILE
+     fi
+     if [[ $do_csv ]]; then
+          echo -e "\"$(strip_quote "$1")\",\"$(strip_quote "$2")\",\"$(strip_quote "$3")\",\"$(strip_quote "$4")\",\"$(strip_quote "$5")\"" >>$CSVFILE
      fi
      if $FIRST_FINDING; then
           FIRST_FINDING=false
@@ -5130,7 +5141,9 @@ tuning options (can also be preset via environment variables):
 
 output options:
      --json                        output all findngs to a json file (defaults to testssl.json unless set)
-     --jsonfile <fname>            set output to json and output to the specified file
+     --jsonfile <fname>            set output to json and output json to the specified file
+     --csv                         output all findngs to a csv file (defaults to testssl.csv unless set)
+     --csvfile <fname>             set output to csv and output csv to the specified file
 
 All options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 
@@ -5939,6 +5952,7 @@ initialize_globals() {
      do_mass_testing=false
      do_logging=false
      do_json=false
+     do_csv=false
      do_pfs=false
      do_protocols=false
      do_rc4=false
@@ -6263,6 +6277,15 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_json=true
                     ;;                       
+               --csv)
+                    do_csv=true
+                    ;;   # DEFINITION of CSVFILE is not arg specified via ENV or automagically in parse_hn_ports()
+                    # following does the same but we can specify a log location additionally
+               --csvfile=*)
+                    CSVFILE=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    do_csv=true
+                    ;;                       
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
@@ -6407,7 +6430,7 @@ maketempf
 mybanner
 check_proxy
 openssl_age
-open_json_file
+file_header
 
 # TODO: it is ugly to have those two vars here --> main()
 ret=0
@@ -6453,7 +6476,7 @@ else
      fi
 fi
 
-close_json_file
+file_footer
 
 exit $?
 

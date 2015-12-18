@@ -71,8 +71,11 @@
 * Dmitri S
  - inspiration & help for Darwin port
 
+* Frank Breedijk
+ - JSON and CSV output
+
 * Bug reports:
-  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl
+  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl, Frank Breedijk
 
 ##### Last but not least:
 
