@@ -290,56 +290,56 @@ outln() { out "$1\n"; }
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
-pr_liteblue()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;32m$1" || out "\033[0;34m$1" ) || out "$1"; pr_off; }    # not yet used
+pr_liteblue()   { [[ "$COLOR" -eq 2 ]] && out "${blue}${1}" || out "$1"; pr_off; }                                      # not yet used
 pr_liteblueln() { pr_liteblue "$1"; outln; }
-pr_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;32m$1" || out "\033[1;34m$1" ) || out "$1"; pr_off; }    # used for head lines of single tests
+pr_blue()       { [[ "$COLOR" -eq 2 ]] && out "${bold}${blue}${1}" || out "$1"; pr_off; }                               # used for head lines of single tests
 pr_blueln()     { pr_blue "$1"; outln; }
 
-pr_svrty_high()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"; pr_off; }                                         # this is bad
+pr_svrty_high()   { [[ "$COLOR" -eq 2 ]] && out "${col_svrty_high}${1}" || pr_bold "$1"; pr_off; }                      # this is bad
 pr_svrty_highln() { pr_svrty_high "$1"; outln; }
-pr_svrty_critical()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }                                 # oh, this is really bad
-pr_svrty_criticalln()     { pr_svrty_critical "$1"; outln; }
+pr_svrty_critical()      { [[ "$COLOR" -eq 2 ]] && out "${col_svrty_critical}${1}" || pr_bold "$1"; pr_off; }           # oh, this is really bad
+pr_svrty_criticalln()    { pr_svrty_critical "$1"; outln; }
 
-pr_minor_prob()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }                                    # local problem: one test cannot be done
+pr_minor_prob()   { [[ "$COLOR" -eq 2 ]] && out "${col_prob_minor}${1}" || pr_underline "$1"; pr_off; }                # local problem: one test cannot be done
 pr_minor_probln() { pr_minor_prob "$1"; outln; }
-pr_fatal_prob()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }                                # Fatal error: quitting because of this!
-pr_fatal_probln()     { pr_fatal_prob "$1"; outln; }
+pr_fatal_prob()          { [[ "$COLOR" -eq 2 ]] && out "${col_prob_fatal}${1}" || pr_underline "$1"; pr_off; }         # Fatal error: quitting because of this!
+pr_fatal_probln()        { pr_fatal_prob "$1"; outln; }
 
-pr_litecyan()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;36m$1" || out "$1"; pr_off; }                                               # not yet used
+pr_litecyan()   { [[ "$COLOR" -eq 2 ]] && out "${cyan}${1}" || out "$1"; pr_off; }                                      # not yet used
 pr_litecyanln() { pr_litecyan "$1"; outln; }
-pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"; pr_off; }                                               # additional hint
+pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "${bold}${cyan}${1}" || out "$1"; pr_off; }                               # additional hint
 pr_cyanln()     { pr_cyan "$1"; outln; }
 
 pr_litegreyln() { pr_litegrey "$1"; outln; }
-pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off; }
-pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"; pr_off; }
+pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "${grey}${1}" || out "$1"; pr_off; }
+pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "${bold}${grey}${1}" || out "$1"; pr_off; }
 pr_greyln()     { pr_grey "$1"; outln; }
 
-pr_done_good()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # This is good
+pr_done_good()   { [[ "$COLOR" -eq 2 ]] && out "${col_done_good}${1}" || out "$1"; pr_off; }                           # This is good
 pr_done_goodln() { pr_done_good "$1"; outln; }
-pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # This is the best 
+pr_done_best()       { [[ "$COLOR" -eq 2 ]] && out "${col_done_best}${1}" ||  out "$1"; pr_off; }                      # This is the best 
 pr_done_bestln()     { pr_done_best "$1"; outln; }
 
-pr_svrty_minor()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                                            # academic or minor problem 
+pr_svrty_minor()   { [[ "$COLOR" -eq 2 ]] && out "${col_svrty_minor}${1}" || out "$1"; pr_off; }                       # academic or minor problem 
 pr_svrty_minorln() { pr_svrty_minor "$1"; outln; }
-pr_svrty_medium()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                                          # it is not a bad problem but you shouldn't do this
+pr_svrty_medium()    { [[ "$COLOR" -eq 2 ]] && out "${col_svrty_medium}${1}" || out "$1"; pr_off; }                    # it is not a bad problem but you shouldn't do this
 pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
 
 
 # color=1 functions
-pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m\c"; }
-pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off; }
+pr_off()          { [[ "$COLOR" -ne 0 ]] && out "${off}"; }
+pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "${bold}${1}" || out "$1"; pr_off; }
 pr_boldln()       { pr_bold "$1" ; outln; }
-pr_italic()       { [[ "$COLOR" -ne 0 ]] && out "\033[3m$1" || out "$1"; pr_off; } 
-pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "\033[4m$1" || out "$1"; pr_off; }
-pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off; }
-pr_reverse_bold() { [[ "$COLOR" -ne 0 ]] && out "\033[7m\033[1m$1" || out "$1"; pr_off; }
+pr_italic()       { [[ "$COLOR" -ne 0 ]] && out "${italic}${1}" || out "$1"; pr_off; }
+pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "${underline}${1}" || out "$1"; pr_off; }
+pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "${reverse}${1}" || out "$1"; pr_off; }
+pr_reverse_bold() { [[ "$COLOR" -ne 0 ]] && out "${reverse}${bold}${1}" || out "$1"; pr_off; }
 
 #pr_headline() { pr_blue "$1"; }
 #http://misc.flogisoft.com/bash/tip_colors_and_formatting
 
 #pr_headline() { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m\033[47m$1" || out "$1"; pr_off; }
-pr_headline() { [[ "$COLOR" -ne 0 ]] && out "\033[1m\033[4m$1" || out "$1"; pr_off; }
+pr_headline() { [[ "$COLOR" -ne 0 ]] && out "${bold}${underline}${1}" || out "$1"; pr_off; }
 pr_headlineln() { pr_headline "$1" ; outln; }
 
 pr_squoted() { out "'$1'"; }
@@ -349,60 +349,116 @@ pr_dquoted() { out "\"$1\""; }
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 set_color_functions() {
      local ncurses_tput=true
+     local use_bash_colors=false
 
      # empty vars if we have COLOR=0 equals no escape code:
-     red=""
-     green=""
-     brown=""
+     col_svrty_critical=""
+     col_svrty_high=""
+     col_svrty_medium=""
+     col_svrty_minor=""
+     col_prob_fatal=""
+     col_prob_minor=""
+     col_done_best=""
+     col_done_good=""
      blue=""
-     magenta=""
      cyan=""
      grey=""
-     yellow=""
      off=""
      bold=""
      underline=""
      italic=""
+     italic_end=""
+     reverse=""
 
-     which tput &>/dev/null || return 0      # Hey wait, do we actually have tput / ncurses ?
-     tput cols &>/dev/null || return 0       # tput under BSDs and GNUs doesn't work either (TERM undefined?)
+     which tput &>/dev/null || use_bash_colors=true      # Hey wait, do we actually have tput / ncurses ?
+     tput cols &>/dev/null || use_bash_colors=true       # tput under BSDs and GNUs doesn't work either (TERM undefined?)
      tput sgr0 &>/dev/null || ncurses_tput=false
      if [[ "$COLOR" -eq 2 ]]; then
-          if $ncurses_tput; then
-               red=$(tput setaf 1)
-               green=$(tput setaf 2)
-               brown=$(tput setaf 3)
-               blue=$(tput setaf 4)
-               magenta=$(tput setaf 5)
-               cyan=$(tput setaf 6)
-               grey=$(tput setaf 7)
-               yellow=$(tput setaf 3; tput bold)
-          else      # this is a try for old BSD, see terminfo(5)
-               red=$(tput AF 1)
-               green=$(tput AF 2)
-               brown=$(tput AF 3)
-               blue=$(tput AF 4)
-               magenta=$(tput AF 5)
-               cyan=$(tput AF 6)
-               grey=$(tput AF 7)
-               yellow=$(tput AF 3; tput md)
+          if $ncurses_tput && ! $use_bash_colors; then
+                                                  # use tput
+               col_svrty_critical=$(tput setaf 1; tput bold)          # bold red
+               col_svrty_high=$(tput setaf 1)                         # red
+               col_svrty_medium=$(tput setaf 3)                       # brown
+               col_svrty_minor=$(tput setaf 3; tput bold)             # bold yellow
+               col_prob_fatal=$(tput setaf 5; tput bold)              # bold magenta
+               col_prob_minor=$(tput setaf 5)                         # magenta
+               if $COLORBLIND; then
+                    col_done_best=$(tput setaf 4; tput bold)          # bold blue
+                    col_done_good=$(tput setaf 4)                     # blue
+                    blue=$(tput setaf 2)                              # green - rename var later
+               else
+                    col_done_best=$(tput setaf 2; tput bold)          # bold green
+                    col_done_good=$(tput setaf 2)                     # green
+                    blue=$(tput setaf 4)                              # blue - rename var later
+               fi
+               cyan=$(tput setaf 6)                                   # cyan - rename var later
+               grey=$(tput setaf 7)                                   # grey - rename var late
+          elif $use_bash_colors; then
+                                                  # tput not available - use bash color sequence
+               col_svrty_critical="\033[1;31m"                        # light red / bold red
+               col_svrty_high="\033[0;31m"                            # red
+               col_svrty_medium="\033[0;33m"                          # brown
+               col_svrty_minor="\033[1;33m"                           # yellow
+               col_prob_fatal="\033[1;35m"                            # light purple / bold purple
+               col_prob_minor="\033[0;35m"                            # purple
+               if $COLORBLIND; then
+                    col_done_best="\033[1;34m"                        # light blue / bold blue
+                    col_done_good="\033[0;34m"                        # blue
+                    blue="\033[0;32m"                                 # green - rename var later
+               else
+                    col_done_best="\033[1;32m"                        # light green / bold green
+                    col_done_good="\033[0;32m"                        # green
+                    blue="\033[0;34m"                                 # blue - rename var later
+               fi
+               cyan="\033[0;36m"                                      # cyan - rename var later
+               grey="\033[0;37m"                                      # light grey - rename var later
+          else
+                                                  # this is a try for old BSD, see terminfo(5)
+               col_svrty_critical=$(tput AF 1; tput md)               # bold red
+               col_svrty_high=$(tput AF 1)                            # red
+               col_svrty_medium=$(tput AF 3)                          # brown
+               col_svrty_minor=$(tput AF 3; tput md)                  # bold yellow
+               col_prob_fatal=$(tput AF 5; tput md)                   # bold magenta
+               col_prob_minor=$(tput AF 5)                            # magenta
+               if $COLORBLIND; then
+                    col_done_best=$(tput AF 4; tput md)               # bold blue
+                    col_done_good=$(tput AF 4)                        # blue
+                    blue=$(tput AF 2)                                 # green
+               else
+                    col_done_best=$(tput AF 2; tput md)               # bold green
+                    col_done_good=$(tput AF 2)                        # green
+                    blue=$(tput AF 4)                                 # blue
+               fi
+               cyan=$(tput AF 6)                                      # cyan - rename var later
+               grey=$(tput AF 7)                                      # grey - rename var later
           fi
      fi
 
      if [[ "$COLOR" -ge 1 ]]; then
-          if $ncurses_tput; then
-               bold=$(tput bold)
-               underline=$(tput sgr 0 1)
-               italic=$(tput sitm)
-               italic_end=$(tput ritm)
-               off=$(tput sgr0)
-          else      # this is a try for old BSD, see terminfo(5)
+          if $ncurses_tput && ! $use_bash_colors; then
+                                                  # use tput
+               bold=$(tput bold)                                      # bold
+               underline=$(tput sgr 0 1)                              # underline
+               italic=$(tput sitm)                                    # italic
+               italic_end=$(tput ritm)                                # turn off italic
+               reverse=$(tput rev)                                    # reverse
+               off=$(tput sgr0)                                       # reset all attributes
+          elif $use_bash_colors; then
+                                                  # tput not available - use bash color sequence
+               bold="\033[1m"                                         # bold
+               underline="\033[4m"                                    # underline
+               italic="\033[3m"                                       # italic
+               italic_end="\033[23m"                                  # turn off italic
+               reverse="\033[7m"                                      # reverse
+               off="\033[0m"                                          # reset all attributes
+          else
+                                                  # this is a try for old BSD, see terminfo(5)
                bold=$(tput md)
                underline=$(tput us)
-               italic=$(tput ZH)        # that doesn't work on FreeBSD 9+10.x
-               italic_end=$(tput ZR)    # here too. Probably entry missing in /etc/termcap
+               italic=$(tput ZH)                                      # that doesn't work on FreeBSD 9+10.x
+               italic_end=$(tput ZR)                                  # here too. Probably entry missing in /etc/termcap
                reverse=$(tput mr)
-               off=$(tput me)
+               off=$(tput me)                                         # reset all attributes
           fi
      fi
 }
