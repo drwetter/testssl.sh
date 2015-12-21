@@ -2646,6 +2646,7 @@ determine_trust() {
      local code
      local ca_bundles="$INSTALL_DIR/etc/*.pem"
      local spaces="                              "
+     local addtl_warning
 
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0" ]]; then
           pr_litemagentaln "Your $OPENSSL is too new, needed is version 1.0.2"
@@ -2653,7 +2654,8 @@ determine_trust() {
           return 7
      elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]]; then
           pr_litemagentaln "Your $OPENSSL is too old, needed is version >=1.0.2"
-          output_finding "trust" "$NODEIP" "$PORT" "WARN" "Your $OPENSSL is too old, need version 1.0.2 to determine trust"
+          addtl_warning="Your $OPENSSL is too old, need version 1.0.2 to determine trust. Results may be unrelyable."
+          output_finding "trust_warn" "$NODEIP" "$PORT" "WARN" "$addtl_warning"
      fi
      debugme outln
 	for bundle_fname in $ca_bundles; do
@@ -2680,14 +2682,14 @@ determine_trust() {
 	# all stores ok
 	if ${trust[1]} && ${trust[2]} && ${trust[3]} && ${trust[4]}; then
 		pr_litegreen "Ok   "			
-          output_finding "trust" "$NODEIP" "$PORT" "OK" "All certificate trust checks passed"
+          output_finding "trust" "$NODEIP" "$PORT" "OK" "All certificate trust checks passed.\n$addtl_warning"
 	# at least one failed
 	else
 		pr_red "NOT ok"	
 		# all failed (we assume with the same issue)
 		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]} && ! ${trust[4]}; then
 			verify_retcode_helper "${verify_retcode[2]}"
-               output_finding "trust" "$NODEIP" "$PORT" "NOT OK" "All certificate trust checks failed: `verify_retcode_helper "${verify_retcode[2]}"`"
+               output_finding "trust" "$NODEIP" "$PORT" "NOT OK" "All certificate trust checks failed: `verify_retcode_helper "${verify_retcode[2]}"`.\n$addtl_warning"
 		else
 			# is one ok and the others not?
 			if ${trust[1]} || ${trust[2]} || ${trust[3]} || ${trust[4]}; then
@@ -2712,7 +2714,7 @@ determine_trust() {
                     [[ $DEBUG -eq 0 ]] && out "$spaces"
 				pr_litegreen "OK: $ok_was"
                fi
-               output_finding "trust" "$NODEIP" "$PORT" "NOT OK" "Some certificate trust checks failed\nOK    : $ok_was\nNOT ok:\n$notok_was"
+               output_finding "trust" "$NODEIP" "$PORT" "NOT OK" "Some certificate trust checks failed\nOK    : $ok_was\nNOT ok:\n$notok_was\n\n$addtl_warning"
           fi
 	fi
 	outln
