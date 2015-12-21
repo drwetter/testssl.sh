@@ -68,6 +68,7 @@
 
 * Frank Breedijk
  - JSON and CSV output
+ - Warning when redirecting to an insecure URL
 
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl, Frank Breedijk

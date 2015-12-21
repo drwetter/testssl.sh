@@ -694,44 +694,49 @@ run_http_header() {
           301|302|307|308)
                redirect = $(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
                out ", redirecting to \"$redirect\"" 
-               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+               output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter, redirecting to \"$redirect\""
+               if [[ -z `echo $redirect|sed -e 's/^(\/|https\:\/\/).*//'` ]]; then
+                    output_finding "redirect" "$NODEIP" "$PORT" "INFO" "Redirect to secure url: \"$redirect\""
+               else
+                    pr_litered " -- Redirect to insecure url (NOT ok)"
+                    output_finding "redirect" "$NODEIP" "$PORT" "NOT OK" "Redirect to insecure url: \"$redirect\" (NOT ok)"
                ;;
           200) 
-               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+               output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           206) 
                out " -- WTF?" 
-               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+               output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter -- WTF?"
                ;;
           400) 
                pr_litemagenta " (Hint: better try another URL)" 
-               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+               output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: better try another URL)"
                ;;
           401) 
                grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
-               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+               output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
                ;;
           403)  
-               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+               output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           404) 
                out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")" 
-               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+               output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
                ;; 
           405) 
-               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+               output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           *) 
                pr_litemagenta ". Oh, didn't expect a $status_code$msg_thereafter"
-               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+               output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter. Oh, didn't expect a $status_code$msg_thereafter"
                ;;
      esac
