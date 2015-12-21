@@ -705,7 +705,7 @@ run_http_header() {
      out "  $status_code$msg_thereafter" 
      case $status_code in
           301|302|307|308)
-               redirect = $(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
+               redirect=`$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')`
                out ", redirecting to \"$redirect\"" 
                if [[ $redirect != "https://"* ]]; then
                     pr_litered " -- Redirect to insecure URL (NOT ok)"
