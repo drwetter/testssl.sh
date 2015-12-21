@@ -643,7 +643,14 @@ run_http_header() {
 
      out "  $status_code$msg_thereafter" 
      case $status_code in
-          301|302|307|308)    out ", redirecting to \"$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')\"" ;;
+          301|302|307|308)    
+               out ", redirecting to \"$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')\"" 
+               if [[ ( $redirect == https* ) || ( $redirect == /* ) ]]; then
+                    # Ok
+               else
+                    pr_litered " -- Redirect to insecure url (NOT ok)"
+               fi
+               ;;
           200) ;;
           206) out " -- WTF?" ;;
           400) pr_litemagenta " (Hint: better try another URL)" ;;
