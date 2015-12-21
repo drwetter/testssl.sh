@@ -134,6 +134,8 @@ DEBUG=${DEBUG:-0}                       # 1.: the temp files won't be erased.
                                         # 4: display bytes sent via sockets, 5: display bytes received via sockets, 6: whole 9 yards
 WIDE=${WIDE:-false}                     # whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
 LOGFILE=${LOGILE-""}                    # logfile if used
+JSONFILE="testssl.json"                 # jsonfile if used
+CSVFILE="testssl.csv"                   # csvfile if used
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
 
 # tuning vars, can not be set by a cmd line switch
@@ -213,6 +215,7 @@ GET_REQ11=""
 HEAD_REQ10=""
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
+FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
 
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
@@ -405,6 +408,46 @@ set_color_functions() {
      fi
 }
 
+strip_quote() {
+     echo $1|sed "s/\"/\\'/g" # Fix syntax highlighting
+}
+
+file_header() {
+     if [[ $do_json ]]; then
+          echo "[" > $JSONFILE
+     fi
+     if [[ $do_csv ]]; then
+          echo "\"id\",\"ip\",\"port\",\"severity\",\"finding\"" > $CSVFILE
+     fi
+}
+
+file_footer() {
+     if [[ $do_json ]]; then
+          echo "]" >> $JSONFILE
+     fi
+}
+
+output_finding() { # ID, IP, PORT, SEVERITY, FINDING
+     if [[ $do_json ]]; then
+          if ! $FIRST_FINDING; then
+               echo "," >> $JSONFILE
+          fi
+          echo -e "
+          {
+               'id'           : '$1',
+               'ip'           : '$2',
+               'port'         : '$3',
+               'severity'     : '$4',
+               'finding'      : '$5'
+          }" >> $JSONFILE
+     fi
+     if [[ $do_csv ]]; then
+          echo -e "\"$(strip_quote "$1")\",\"$(strip_quote "$2")\",\"$(strip_quote "$3")\",\"$(strip_quote "$4")\",\"$(strip_quote "$5")\"" >>$CSVFILE
+     fi
+     if $FIRST_FINDING; then
+          FIRST_FINDING=false
+     fi
+}
 
 ###### helper function definitions ######
 
@@ -564,21 +607,26 @@ runs_HTTP() {
      case $SERVICE in
           HTTP)
                out " $SERVICE"
+               output_finding "service" "$NODEIP" "$PORT" "INFO" "Service detected: $SERVICE"
                ret=0 ;;
           IMAP|POP|SMTP|NNTP)
                out " $SERVICE, thus skipping HTTP specific checks"
+               output_finding "service" "$NODEIP" "$PORT" "INFO" "Service detected: $SERVICE, thus skipping HTTP specific checks"
                ret=0 ;;
           *)   if $CLIENT_AUTH; then
                     out "certificate based authentication => skipping all HTTP checks"
                     echo "certificate based authentication => skipping all HTTP checks" >$TMPFILE
+                    output_finding "client_auth" "$NODEIP" "$PORT" "WARN" "certificate based authentication => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
                     if $ASSUMING_HTTP; then
                          SERVICE=HTTP
                          out " -- ASSUMING_HTTP set though"
+                         output_finding "service" "$NODEIP" "$PORT" "WARN" "Couldn't determine service, --ASSUMING_HTTP set"
                          ret=0
                     else
                          out ", assuming no HTTP service => skipping all HTTP checks"
+                         output_finding "service" "$NODEIP" "$PORT" "WARN" "Couldn't determine service, skipping all HTTP checks"
                          ret=1
                     fi
                fi
@@ -643,16 +691,49 @@ run_http_header() {
 
      out "  $status_code$msg_thereafter" 
      case $status_code in
-          301|302|307|308)    out ", redirecting to \"$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')\"" ;;
-          200) ;;
-          206) out " -- WTF?" ;;
-          400) pr_litemagenta " (Hint: better try another URL)" ;;
-          401) grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
+          301|302|307|308)
+               redirect=`$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')`
+               out ", redirecting to \"$redirect\"" 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter, redirecting to \"$redirect\""
                ;;
-          403)  ;;
-          404) out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")" ;; 
-          405) ;;
-          *) pr_litemagenta ". Oh, didn't expect a $status_code$msg_thereafter";;
+          200) 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               ;;
+          206) 
+               out " -- WTF?" 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter -- WTF?"
+               ;;
+          400) 
+               pr_litemagenta " (Hint: better try another URL)" 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: better try another URL)"
+               ;;
+          401) 
+               grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
+               ;;
+          403)  
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               ;;
+          404) 
+               out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")" 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
+               ;; 
+          405) 
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               ;;
+          *) 
+               pr_litemagenta ". Oh, didn't expect a $status_code$msg_thereafter"
+               output_finding "status_code" "$NODEIP" "$PORT" "info" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter. Oh, didn't expect a $status_code$msg_thereafter"
+               ;;
      esac
      outln
 
@@ -668,6 +749,7 @@ detect_ipv4() {
      local result
      local first=true
      local spaces="                              "
+     local count
      
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -676,7 +758,8 @@ detect_ipv4() {
      # remove pagespeed header as it is mistakenly identified as ipv4 address https://github.com/drwetter/testssl.sh/issues/158
      # also facebook has a CSP rule for 127.0.0.1
      if egrep -vi "pagespeed|page-speed|Content-Security-Policy" $HEADERFILE | grep -iqE "$ipv4address"; then
-          pr_bold " IPv4 address in header       " 
+          pr_bold " IPv4 address in header       "
+          count=0 
           while read line; do
                result="$(grep -E "$ipv4address" <<< "$line")"
                result=$(strip_lf "$result")
@@ -689,7 +772,9 @@ detect_ipv4() {
                     fi
                     pr_litered "$result"
                     outln "\n$spaces$your_ip_msg"
+                    output_finding "ip_in_header_$count" "$NODEIP" "$PORT" "NOT OK" "IPv4 address in header  $result $your_ip_msg"
                fi
+               count=$count+1
           done < $HEADERFILE
      fi
 }    
@@ -717,8 +802,10 @@ run_http_date() {
                # process was killed, so we need to add an error:
                [[ $HAD_SLEPT -ne 0 ]] && difftime="$difftime (± 1.5)"
                out "$difftime sec from localtime";
+               output_finding "http_clock_skew" "$NODEIP" "$PORT" "INFO" "HTTP clock skew $difftime sec from localtime"
           else
                out "Got no HTTP time, maybe try different URL?";
+               output_finding "http_clock_skew" "$NODEIP" "$PORT" "INFO" "HTTP clock skew not measured. Got no HTTP time, maybe try different URL?"
           fi
           debugme out ", epoch: $HTTP_TIME"
      fi
@@ -729,13 +816,20 @@ run_http_date() {
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
           pr_litegreen ", includeSubDomains"
+          return 1
      else
           pr_litecyan ", just this domain"
+          return 0
      fi
 }
 
 preload() {
-     grep -aiqw preload "$1" && pr_litegreen ", preload"
+     if grep -aiqw preload "$1"; then
+          pr_litegreen ", preload"
+          return 1
+     else
+          return 0
+     fi
 }
 
 
@@ -756,16 +850,27 @@ run_hsts() {
           hsts_age_days=$(( hsts_age_sec / 86400))
           if [[ $hsts_age_days -gt $HSTS_MIN ]]; then
                pr_litegreen "$hsts_age_days days" ; out "=$hsts_age_sec s"
+               output_finding "hsts_time" "$NODEIP" "$PORT" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN days"
           else
                out "$hsts_age_sec s = "
                pr_brown "$hsts_age_days days, <$HSTS_MIN days is too short"
+               output_finding "hsts_time" "$NODEIP" "$PORT" "NOT OK" "HSTS timeout too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN days"
           fi
-          includeSubDomains "$TMPFILE"
-          preload "$TMPFILE"
+          if includeSubDomains "$TMPFILE"; then
+               output_finding "hsts_subdomains" "$NODEIP" "$PORT" "OK" "HSTS includes subdomains"
+          else
+               output_finding "hsts_subdomains" "$NODEIP" "$PORT" "WARN" "HSTS only for this domain, consider to include subdomains as well"
+          fi
+          if preload "$TMPFILE"; then
+               output_finding "hsts_preload" "$NODEIP" "$PORT" "OK" "HSTS domain is marked for preloading"
+          else
+               output_finding "hsts_preload" "$NODEIP" "$PORT" "INFO" "HSTS domain is NOT marked for preloading"
+          fi
           #FIXME: To be checked against e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc
           #                              and https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
      else
           out "--"
+          output_finding "hsts" "$NODEIP" "$PORT" "NOT OK" "No support for HTTP Strict Transport Security"
      fi
      outln
 
@@ -782,6 +887,8 @@ run_hpkp() {
      local spaces="                             "
      local key_found=false
      local i
+     local hpkp_headers
+     local first_hpkp_header
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -793,13 +900,17 @@ run_hpkp() {
           if egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" ; then
                :
           else
-               pr_brown "two HPKP headers: "
+               hpkp_headers=""
+               pr_brown "multiple HPKP headers: "
                for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
                     pr_italic $i
+                    hpkp_headers="$hpkp_headers$i "
                     out " "
                done
                out "\n$spaces using first "
-               pr_italic "$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1), "
+               first_hpkp_header=`awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1`
+               pr_italic "$first_hpkp_header, "
+               output_finding "hpkp_multiple" "$NODEIP" "$PORT" "WARN" "Multiple HPKP headers\n$hpkp_headers\nUsing first header: $first_hpkp_header"     
           fi
 
           # remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
@@ -813,8 +924,10 @@ run_hpkp() {
           out "# of keys: "
           if [[ $hpkp_nr_keys -eq 1 ]]; then
                pr_litered "1 (NOT ok), "
+               output_finding "hpkp_keys" "$NODEIP" "$PORT" "NOT OK" "Only one key pinned in HPKP header, this means the site may become unavaiable if the key is revoked"     
           else
                out "$hpkp_nr_keys, "
+               output_finding "hpkp_keys" "$NODEIP" "$PORT" "OK" "$hpkp_nr_keys keys pinned in HPKP header, additional keys are available if the current key is revoked"     
           fi
 
           # print key=value pair with awk, then strip non-numbers, to be improved with proper parsing of key-value with awk
@@ -822,13 +935,23 @@ run_hpkp() {
           hpkp_age_days=$((hpkp_age_sec / 86400))
           if [[ $hpkp_age_days -ge $HPKP_MIN ]]; then
                pr_litegreen "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
+               output_finding "hpkp_age" "$NODEIP" "$PORT" "OK" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec)"     
           else
                out "$hpkp_age_sec s = "
                pr_brown "$hpkp_age_days days (<$HPKP_MIN days is not good enough)"
+               output_finding "hpkp_age" "$NODEIP" "$PORT" "NOT OK" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec) < $HPKP_MIN days is not good enough."     
           fi
 
-          includeSubDomains "$TMPFILE"
-          preload "$TMPFILE"
+          if includeSubDomains "$TMPFILE"; then
+               output_finding "hpkp_subdomains" "$NODEIP" "$PORT" "INFO" "HPKP header is valid for subdomains as well"     
+          else
+               output_finding "hpkp_subdomains" "$NODEIP" "$PORT" "INFO" "HPKP header is valid for this domain only"     
+          fi
+          if preload "$TMPFILE"; then
+               output_finding "hpkp_preload" "$NODEIP" "$PORT" "INFO" "HPKP header is marked for browser preloading"     
+          else
+               output_finding "hpkp_preload" "$NODEIP" "$PORT" "INFO" "HPKP header is NOT marked for browser preloading"
+          fi
 
           [[ -s "$HOSTCERT" ]] || get_host_cert
           # get the key fingerprints
@@ -838,6 +961,7 @@ run_hpkp() {
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
                     out "\n$spaces matching host key: "
                     pr_litegreen "$hpkp_key"
+                    output_finding "hpkp_keymatch" "$NODEIP" "$PORT" "OK" "Key matches a key pinned in the HPKP header"
                     key_found=true
                fi
                debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
@@ -846,9 +970,11 @@ run_hpkp() {
                out "\n$spaces"
                pr_litered " No matching key for pins found "
                out "(CAs pinned? -- not yet checked)"
+               output_finding "hpkp_keymatch" "$NODEIP" "$PORT" "WARN" "The TLS key does not match any key pinned in the HPKP header. If you pinned a CA key you can ignore this"
           fi
      else
           out "--"
+          output_finding "hpkp" "$NODEIP" "$PORT" "WARN" "No support for HTTP Public Key Pinning"
      fi
      outln
 
@@ -900,16 +1026,21 @@ run_server_banner() {
           serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
           if [[ x"$serverbanner" == "x\n" ]] || [[ x"$serverbanner" == "x\n\r" ]] || [[ x"$serverbanner" == "x" ]]; then
                outln "banner exists but empty string"
+               output_finding "serverbanner" "$NODEIP" "$PORT" "INFO" "\"Server\" banner exists but empty string"
           else
                emphasize_stuff_in_headers "$serverbanner"
-               [[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]] && \
+               output_finding "serverbanner" "$NODEIP" "$PORT" "INFO" "\"Server\" banner identified: $serverbanner"               
+               if [[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
                     pr_litemagentaln "                              It's recommended to run another test w/ OpenSSL 1.01 !"
                     # see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
+                    output_finding "IIS6_openssl_mismatch" "$NODEIP" "$PORT" "WARN" "It is recommended to rerun this test w/ OpenSSL 1.01\nSee https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
+               fi
           fi
           # mozilla.github.io/server-side-tls/ssl-config-generator/
           # https://support.microsoft.com/en-us/kb/245030
      else
           outln "(no \"Server\" line in header, interesting!)"
+          output_finding "serverbanner" "$NODEIP" "$PORT" "WARN" "No \"Server\" banner in header, interesting!"
      fi
 
      tmpfile_handle $FUNCNAME.txt
@@ -920,6 +1051,7 @@ run_rp_banner() {
      local line
      local first=true
      local spaces="                              "
+     local rp_banners=""
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -928,7 +1060,8 @@ run_rp_banner() {
      egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded' $HEADERFILE >$TMPFILE 
      if [[ $? -ne 0 ]]; then
           outln "--"
-     else
+          output_finding "rp_header" "$NODEIP" "$PORT" "INFO" "No reverse proxy banner found"
+    else
           while read line; do
                line=$(strip_lf "$line")
                if ! $first; then
@@ -937,7 +1070,9 @@ run_rp_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
+               rp_banners="$rp_banners\n$line"
           done < $TMPFILE
+          output_finding "rp_header" "$NODEIP" "$PORT" "INFO" "Reverse proxy banner(s) found: $rp_banners"
      fi
      outln
 
@@ -950,6 +1085,7 @@ run_application_banner() {
      local line
      local first=true
      local spaces="                              "
+     local app_banners=""
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -958,6 +1094,7 @@ run_application_banner() {
      egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
+          output_finding "app_banner" "$NODEIP" "$PORT" "INFO" "No Applicaiton Banners found"
      else
           cat $TMPFILE | while read line; do
                line=$(strip_lf "$line")
@@ -967,7 +1104,9 @@ run_application_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
+               app_banners="$app_banners\n$line"
           done
+          output_finding "app_banner" "$NODEIP" "$PORT" "WARN" "Applicaiton Banners found: $app_banners"
      fi
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -986,6 +1125,7 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
      if [[ $? -eq 0 ]]; then
           nr_cookies=$(wc -l < $TMPFILE | sed 's/ //g')
           out "$nr_cookies issued: "
+          output_finding "cookie_count" "$NODEIP" "$PORT" "INFO" "$nr_cookies cookie(s) issued at \"$1\""
           if [[ $nr_cookies -gt 1 ]]; then
                negative_word="NONE"
           else
@@ -997,15 +1137,26 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
                [123456789]) pr_litegreen "$nr_secure/$nr_cookies";;
           esac
           out " secure, "
+          if [ $nr_cookies == $nr_secure ]; then
+               output_finding "cookie_secure" "$NODEIP" "$PORT" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as secure"
+          else
+               output_finding "cookie_secure" "$NODEIP" "$PORT" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as secure"
+          fi
           nr_httponly=$(grep -cai httponly $TMPFILE)
           case $nr_httponly in
                0) pr_brown "$negative_word" ;;
                [123456789]) pr_litegreen "$nr_httponly/$nr_cookies";;
           esac
           out " HttpOnly"
+          if [ $nr_cookies == $nr_httponly ]; then
+               output_finding "cookie_httponly" "$NODEIP" "$PORT" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly"
+          else
+               output_finding "cookie_httponly" "$NODEIP" "$PORT" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly"
+          fi
      else
           out "(none issued at \"$1\")"
-     fi
+          output_finding "cookie_count" "$NODEIP" "$PORT" "INFO" "No cookies issued at \"$1\""
+    fi
      outln
 
      tmpfile_handle $FUNCNAME.txt
@@ -1030,6 +1181,7 @@ run_more_flags() {
      egrep -ai "$egrep_pattern" $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
+          output_finding "sec_headers" "$NODEIP" "$PORT" "WARN" "No security (or other interesting) headers detected"
           ret=1
      else
           ret=0
@@ -1048,7 +1200,7 @@ run_more_flags() {
                #pr_litegreen "$(sed 's/:.*$/:/' <<< "$result_str")"
                # print value in plain text:
                outln "${result_str#*:}"
-
+               output_finding "${result_str%%:*}" "$NODEIP" "$PORT" "OK" "${result_str%%:*}: ${result_str#*:}"
           done
           # now the same with other flags
           for f2t in $other_flags2test; do
@@ -1063,6 +1215,7 @@ run_more_flags() {
                pr_litecyan "${result_str%%:*}:"
                # print value in plain text:
                outln "${result_str#*:}"
+               output_finding "${result_str%%:*}" "$NODEIP" "$PORT" "WARN" "${result_str%%:*}: ${result_str#*:}"
           done
      fi
 #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
@@ -1161,21 +1314,41 @@ std_cipherlists() {
           debugme cat $ERRFILE
           case $3 in
                0)   # ok to offer
-                    [[ $sclient_success -eq 0 ]] && \
-                         pr_greenln "offered (OK)" || \
-                         pr_brownln "not offered (NOT ok)" ;;
+                    if [[ $sclient_success -eq 0 ]]; then
+                         pr_greenln "offered (OK)" 
+                         output_finding "std_$4" "$NODEIP" "$PORT" "OK" "$2 offered (OK)"
+                    else
+                         pr_brownln "not offered (NOT ok)"
+                         output_finding "std_$4" "$NODEIP" "$PORT" "NOT OK" "$2 not offered (NOT OK)"
+                    fi
+                    ;;
                1) # the ugly ones
-                    [[ $sclient_success -eq 0 ]] && \
-                         pr_redln "offered (NOT ok)" || \
-                         pr_greenln "not offered (OK)" ;;
+                    if [[ $sclient_success -eq 0 ]]; then
+                         pr_redln "offered (NOT ok)" 
+                         output_finding "std_$4" "$NODEIP" "$PORT" "NOT OK" "$2 offered (NOT OK) - ugly"
+                    else
+                         pr_greenln "not offered (OK)"
+                         output_finding "std_$4" "$NODEIP" "$PORT" "OK" "$2 not offered (OK)"
+                    fi
+                    ;;
                2)   # bad but not worst
-                    [[ $sclient_success -eq 0 ]] && \
-                         pr_literedln "offered (NOT ok)" || \
-                         pr_litegreenln "not offered (OK)" ;;
+                    if [[ $sclient_success -eq 0 ]]; then
+                         pr_literedln "offered (NOT ok)" 
+                         output_finding "std_$4" "$NODEIP" "$PORT" "NOT OK" "$2 offered (NOT OK) - bad"
+                    else
+                         pr_litegreenln "not offered (OK)"
+                         output_finding "std_$4" "$NODEIP" "$PORT" "OK" "$2 not offered (OK)"
+                    fi
+                    ;;
                3) # not totally bad 
-                    [[ $sclient_success -eq 0 ]] && \
-                         pr_brownln "offered (NOT ok)" || \
-                         outln "not offered (OK)" ;;
+                    if [[ $sclient_success -eq 0 ]]; then
+                         pr_brownln "offered (NOT ok)" 
+                         output_finding "std_$4" "$NODEIP" "$PORT" "NOT OK" "$2 offered (NOT OK) - not too bad"
+                    else
+                         outln "not offered (OK)"
+                         output_finding "std_$4" "$NODEIP" "$PORT" "OK" "$2 not offered (OK)"
+                    fi
+                    ;;
                *) # we shouldn't reach this
                     pr_litemagenta "? (please report this)" ;;
           esac
@@ -1183,6 +1356,7 @@ std_cipherlists() {
      else
           singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
           local_problem "No $singlespaces configured in $OPENSSL"
+          output_finding "std_$4" "$NODEIP" "$PORT" "WARN" "Cipher $2 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
      # we need 1xlf in those cases:
      debugme echo
@@ -1274,9 +1448,13 @@ test_just_one(){
      local re='^[0-9A-Fa-f]+$'
 
      pr_headline " Testing single cipher with "
-     [[ $1 =~ $re ]] && \
-          pr_headline "matching number pattern \"$1\" " || \
+     if [[ $1 =~ $re ]]; then
+          pr_headline "matching number pattern \"$1\" "
+          tjolines="$tjolines matching number pattern \"$1\"\n\n"
+     else
           pr_headline "word pattern "\"$1\"" (ignore case) "
+          tjolines="$tjolines word pattern \"$1\" (ignore case)\n\n"
+     fi
      outln
      ! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      outln
@@ -1308,12 +1486,15 @@ test_just_one(){
                     neat_list $HEXC $ciph "$kx" $enc
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_cyan "  available"
+                         output_finding "cipher_$HEXC" "$NODEIP" "$PORT" "INFO" "$(neat_header)\n$(neat_list $HEXC $ciph "$kx" $enc) available"
                     else
                          out "  not a/v"
+                         output_finding "cipher_$HEXC" "$NODEIP" "$PORT" "INFO" "$(neat_header)\n$(neat_list $HEXC $ciph "$kx" $enc) not a/v"
                     fi
                     outln
                fi
           done
+          exit
      done
      outln
 
@@ -1329,6 +1510,7 @@ run_allciphers(){
      local -i sclient_success=0
      local hexcode n ciph sslvers kx auth enc mac export
      local dhlen
+     local available
 
      nr_ciphers=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)")
      outln
@@ -1345,19 +1527,22 @@ run_allciphers(){
           if [[ $sclient_success -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
                continue       # no successful connect AND not verbose displaying each cipher
           fi
-          normalize_ciphercode $hexcode
+          normalize_ciphercode $hexcode 
           if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
                dhlen=$(read_dhbits_from_file $TMPFILE quiet)
                kx="$kx $dhlen"
           fi
           neat_list $HEXC $ciph "$kx" $enc
+          available="available"
           if [[ "$SHOW_EACH_C" -ne 0 ]]; then
                if [[ $sclient_success -eq 0 ]]; then
                     pr_cyan "  available"
                else
                     out "  not a/v"
+                    available="not a/v"
                fi
           fi
+          output_finding "cipher_$HEXC" "$NODEIP" "$PORT" "INFO" "$(neat_header)\n$(neat_list $HEXC $ciph "$kx" $enc) $available"
           outln
           tmpfile_handle $FUNCNAME.txt
      done
@@ -1371,6 +1556,8 @@ run_cipher_per_proto(){
      local hexcode n ciph sslvers kx auth enc mac export
      local -i sclient_success=0
      local dhlen
+     local available
+     local id
 
      pr_headlineln " Testing all locally available ciphers per protocol against the server, ordered by encryption strength "
      ! $HAS_DH_BITS && pr_litemagentaln "    (Your $OPENSSL cannot show DH/ECDH bits)"
@@ -1392,14 +1579,19 @@ run_cipher_per_proto(){
                     kx="$kx $dhlen"
                fi
                neat_list $HEXC $ciph "$kx" $enc
+               available="available"
                if [[ "$SHOW_EACH_C" -ne 0 ]]; then
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_cyan "  available"
                     else
                          out "  not a/v"
+                         available="not a/v"
                     fi
                fi
                outln
+               id="cipher$proto"
+               id+="_$HEXC"
+               output_finding "$id" "$NODEIP" "$PORT" "INFO" "$proto_text\n$(neat_header)\n$(neat_list $HEXC $ciph "$kx" $enc) $available"
                tmpfile_handle $FUNCNAME.txt
           done
      done
@@ -1418,10 +1610,10 @@ locally_supported() {
 
 
 # the protocol check needs to be revamped. It sucks. 
-# 1) we need to have a variable where the resulta are being stored so that every other test doesn't have to do this again.
+# 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this again.
 # 2) the code is too old and one can do that way better
 # 3) HAS_SSL3/2 does already exist
-# we should do what's availabe and faster (opensssl vs. sockets) . Keep in mind tat the socket reply for SSLv2 returns the number # of ciphers!
+# we should do what's availabe and faster (openssl vs. sockets) . Keep in mind tat the socket reply for SSLv2 returns the number # of ciphers!
 #
 # arg1: -ssl2|-ssl3|-tls1
 # arg2: doesn't seem to be used in calling, seems to be a textstring with the protocol though
@@ -1459,21 +1651,26 @@ run_protocols() {
      local using_sockets=true
      local supported_no_ciph1="supported but couldn't detect a cipher (may need debugging)" 
      local supported_no_ciph2="supported but couldn't detect a cipher" 
+     local via=""
 
      outln; pr_headline " Testing protocols "
+     via="Protocol tested "
 
      #FIXME: use PROTOS_OFFERED here
 
      if $SSL_NATIVE; then
           using_sockets=false
           pr_headlineln "(via native openssl)"
+          via+="via native openssl"
      else
           if [[ -n "$STARTTLS" ]]; then
                pr_headlineln "(via openssl, SSLv2 via sockets) "
+               via+="via openssl, SSLv2 via sockets"
                using_sockets=false
           else
                using_sockets=true
                pr_headlineln "(via sockets except TLS 1.2 and SPDY/NPN) "
+               via+="via sockets except for TLS1.1 and SPDY/NPN"
           fi
      fi
      outln
@@ -1484,11 +1681,22 @@ run_protocols() {
      else
           run_prototest_openssl "-ssl2"
           case $? in
-               0) pr_redln   "offered (NOT ok)" ;;
-               1) pr_greenln "not offered (OK)" ;;
-               5) pr_litered "$supported_no_ciph2"; 
-                    outln " (may need further attention)"  ;;              # protocol ok, but no cipher
-               7) ;;                                                       # no local support
+               0) 
+                    pr_redln   "offered (NOT ok)" 
+                    output_finding "sslv2" "$NODEIP" "$PORT" "NOT OK" "SSLv2 is offered (NOT ok)"
+                    ;;
+               1) 
+                    pr_greenln "not offered (OK)" 
+                    output_finding "sslv2" "$NODEIP" "$PORT" "OK" "SSLv2 is not offered (OK)"
+                    ;;
+               5) 
+                    pr_litered "$supported_no_ciph2"; 
+                    outln " (may need further attention)"                  # protocol ok, but no cipher
+                    output_finding "sslv2" "$NODEIP" "$PORT" "WARN" "SSLv2 is $supported_no_ciph2 (may need further attention)"
+                    ;;
+               7) 
+                    output_finding "sslv2" "$NODEIP" "$PORT" "INFO" "SSLv2 is not tested due to lack of local support"
+                    ;;                                                       # no local support
           esac
      fi
 
@@ -1499,12 +1707,26 @@ run_protocols() {
           run_prototest_openssl "-ssl3"
      fi
      case $? in
-          0) pr_literedln "offered (NOT ok)" ;;
-          1) pr_greenln "not offered (OK)"   ;;
-          2) pr_litemagentaln "#FIXME: downgraded. still missing a test case here" ;;
-          5) pr_litered "$supported_no_ciph2"; 
-                    outln "(may need debugging)"  ;;                       # protocol ok, but no cipher
-          7) ;;                                                            # no local support
+          0) 
+               pr_literedln "offered (NOT ok)" 
+               output_finding "sslv3" "$NODEIP" "$PORT" "NOT OK" "SSLv3 is offered (NOT ok)"
+               ;;
+          1) 
+               pr_greenln "not offered (OK)"   
+               output_finding "sslv3" "$NODEIP" "$PORT" "OK" "SSLv3 is not offered (OK)"
+               ;;
+          2) 
+               pr_litemagentaln "#FIXME: downgraded. still missing a test case here" 
+               output_finding "sslv3" "$NODEIP" "$PORT" "WARN" "SSLv3: #FIXME: downgraded. still missing a test case here"
+               ;;
+          5) 
+               output_finding "sslv3" "$NODEIP" "$PORT" "WARN" "SSLv3 is $supported_no_ciph1"
+               pr_litered "$supported_no_ciph2"
+               outln "(may need debugging)"  
+               ;;                       # protocol ok, but no cipher
+          7) 
+               output_finding "sslv3" "$NODEIP" "$PORT" "INFO" "SSLv3 is not tested due to lack of local support"
+               ;;                                                            # no local support
      esac
 
      pr_bold " TLS 1      ";
@@ -1514,13 +1736,27 @@ run_protocols() {
           run_prototest_openssl "-tls1"
      fi
      case $? in
-          0) outln "offered" ;;                                            # nothing wrong with it -- per se
-          1) outln "not offered" ;;                                        # neither good or bad
-          2) pr_brown "not offered (NOT ok)"
+          0) 
+               outln "offered" 
+               output_finding "tls1" "$NODEIP" "$PORT" "INFO" "TLSv1.0 is offered"
+               ;;                                            # nothing wrong with it -- per se
+          1) 
+               outln "not offered" 
+               output_finding "tls1" "$NODEIP" "$PORT" "INFO" "TLSv1.0 is not offered"
+               ;;                                        # neither good or bad
+          2) 
+               pr_brown "not offered (NOT ok)"
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
-               outln ;;
-          5) outln "$supported_no_ciph1"  ;;                               # protocol ok, but no cipher
-          7) ;;                                                            # no local support
+               outln 
+               output_finding "tls1" "$NODEIP" "$PORT" "NOT OK" "TLSv1.0 is not offered, and downgraded to SSL (NOT ok)"
+               ;;
+          5) 
+               outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
+               output_finding "tls1" "$NODEIP" "$PORT" "WARN" "TLSv1.0 is $supported_no_ciph1"
+               ;;
+          7) 
+               output_finding "tlsv1" "$NODEIP" "$PORT" "INFO" "TLSv1.0 is not tested due to lack of local support"
+               ;;                                                            # no local support
      esac
 
      pr_bold " TLS 1.1    ";
@@ -1530,13 +1766,27 @@ run_protocols() {
           run_prototest_openssl "-tls1_1"
      fi   
      case $? in
-          0) outln "offered" ;;                                            # nothing wrong with it
-          1) outln "not offered" ;;                                        # neither good or bad
-          2) out "not offered" 
+          0) 
+               outln "offered" 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "INFO" "TLSv1.1 is offered"
+               ;;                                            # nothing wrong with it
+          1) 
+               outln "not offered" 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "INFO" "TLSv1.1 is not offered"
+               ;;                                        # neither good or bad
+          2) 
+               out "not offered" 
                [[ $DEBUG -eq 1 ]] && out " -- downgraded" 
-               outln ;;
-          5) outln "$supported_no_ciph1" ;;                                # protocol ok, but no cipher
-          7) ;;                                                            # no local support
+               outln 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "NOT OK" "TLSv1.1 is not offered, and downgraded to a weaker protocol (NOT ok)"
+               ;;
+          5) 
+               outln "$supported_no_ciph1" 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "WARN" "TLSv1.1 is $supported_no_ciph1"
+               ;;                                # protocol ok, but no cipher
+          7) 
+               output_finding "tls1_1" "$NODEIP" "$PORT" "INFO" "TLSv1.1 is not tested due to lack of local support"
+               ;;                                                            # no local support
      esac
 
      pr_bold " TLS 1.2    ";
@@ -1546,13 +1796,27 @@ run_protocols() {
           run_prototest_openssl "-tls1_2"
      fi   
      case $? in
-          0) pr_greenln "offered (OK)" ;;                                  # GCM cipher in TLS 1.2: very good!
-          1) pr_brownln "not offered (NOT ok)" ;;                          # no GCM, penalty
-          2) pr_brown "not offered (NOT ok)"
+          0) 
+               pr_greenln "offered (OK)" 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "OK" "TLSv1.2 is offered (OK)"               
+               ;;                                  # GCM cipher in TLS 1.2: very good!
+          1) 
+               pr_brownln "not offered (NOT ok)" 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "NOT OK" "TLSv1.2 is not offered (NOT ok)"               
+               ;;                          # no GCM, penalty
+          2) 
+     pr_brown "not offered (NOT ok)"
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
-               outln ;;
-          5) outln "$supported_no_ciph1" ;;                                # protocol ok, but no cipher
-          7) ;;                                                            # no local support
+               outln 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "NOT OK" "TLSv1.2 is not offered and downgraded to a weaker protocol (NOT ok)"               
+               ;;
+          5) 
+               outln "$supported_no_ciph1" 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "WARN" "TLSv1.2 is $supported_no_ciph1"
+               ;;                                # protocol ok, but no cipher
+          7) 
+               output_finding "tls1_2" "$NODEIP" "$PORT" "INFO" "TLSv1.2 is not tested due to lack of local support"
+               ;;                                                            # no local support
      esac
      return 0
 }
@@ -1563,17 +1827,17 @@ run_std_cipherlists() {
      pr_headlineln " Testing ~standard cipher lists "
      outln
 # see ciphers(1ssl)
-     std_cipherlists 'NULL:eNULL'                       " Null Ciphers             " 1
-     std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   " 1
-     std_cipherlists 'ADH'                              " Anonymous DH Ciphers     " 1
-     std_cipherlists 'EXPORT40'                         " 40 Bit encryption        " 1
-     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        " 1
-     std_cipherlists 'EXPORT'                           " Export Ciphers (general) " 1
-     std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1
-     std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1
-     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2'       " Medium grade encryption  " 2
-     std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3
-     std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    " 0
+     std_cipherlists 'NULL:eNULL'                       " Null Ciphers             " 1 "NULL"
+     std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   " 1 "aNULL"
+     std_cipherlists 'ADH'                              " Anonymous DH Ciphers     " 1 "ADH"
+     std_cipherlists 'EXPORT40'                         " 40 Bit encryption        " 1 "EXPORT40"
+     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        " 1 "EXPORT56"
+     std_cipherlists 'EXPORT'                           " Export Ciphers (general) " 1 "EXPORT"
+     std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1 "LOW"
+     std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1 "DES"
+     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2'       " Medium grade encryption  " 2 "MEDIUM"
+     std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3 "3DES"
+     std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    " 0 "HIGH"
      outln
      return 0
 }
@@ -1646,6 +1910,7 @@ run_server_preference() {
      # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
      local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
      local has_cipher_order=true
+     local isok
      
      outln
      pr_headlineln " Testing server preferences "
@@ -1658,6 +1923,7 @@ run_server_preference() {
           outln "$list_fwd  . "
           has_cipher_order=false
           ret=6
+          output_finding "order_bug" "$NODEIP" "$PORT" "WARN" "Could not determine server cipher order, no matching cipher in this list found (pls report this): $list_fwd"
      elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
           # now it still could be that we hit this bug: https://github.com/drwetter/testssl.sh/issues/188
           # workaround is to connect with a protocol
@@ -1669,6 +1935,7 @@ run_server_preference() {
                outln "$list_fwd  . "
                has_cipher_order=false
                ret=6
+               output_finding "order_bug" "$NODEIP" "$PORT" "WARN" "Could not determine server cipher order, no matching cipher in this list found (pls report this): $list_fwd"
           fi
      fi
 
@@ -1681,9 +1948,11 @@ run_server_preference() {
           if [[ "$cipher1" != "$cipher2" ]]; then
                pr_litered "nope (NOT ok)"
                remark4default_cipher=" (limited sense as client will pick)"
+               output_finding "order" "$NODEIP" "$PORT" "NOT OK" "Server does NOT set a cipher order (NOT ok)"
           else
                pr_green "yes (OK)"
                remark4default_cipher=""
+               output_finding "order" "$NODEIP" "$PORT" "OK" "Server sets a cipher order (ok)"
           fi
           [[ $DEBUG -ge 2 ]] && out "  $cipher1 | $cipher2"
           outln
@@ -1697,26 +1966,78 @@ run_server_preference() {
           fi
           default_proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
           case "$default_proto" in
-               *TLSv1.2)      pr_greenln $default_proto ;;
-               *TLSv1.1)      pr_litegreenln $default_proto ;;
-               *TLSv1)        outln $default_proto ;;
-               *SSLv2)        pr_redln $default_proto ;;
-               *SSLv3)        pr_redln $default_proto ;;
-               "")            pr_litemagenta "default proto empty";  [[ $OSSL_VER == 1.0.2* ]] && outln " (Hint: if IIS6 give OpenSSL 1.01 a try)" ;; 
-               *)             pr_litemagenta "FIXME line $LINENO: $default_proto" ;;
+               *TLSv1.2)      
+                    pr_greenln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "OK" "Default protocol TLS1.2 (OK)"
+                    ;;
+               *TLSv1.1)      
+                    pr_litegreenln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "OK" "Default protocol TLS1.1 (OK)"
+                    ;;
+               *TLSv1)        
+                    outln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "INFO" "Default protocol TLS1.0"
+                    ;;
+               *SSLv2)        
+                    pr_redln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "NOT OK" "Default protocol SSLv2"
+                    ;;
+               *SSLv3)        
+                    pr_redln $default_proto 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "NOT OK" "Default protocol SSLv3"
+                    ;;
+               "")            
+                    pr_litemagenta "default proto empty"
+                    if [[ $OSSL_VER == 1.0.2* ]]; then
+                         outln " (Hint: if IIS6 give OpenSSL 1.01 a try)" 
+                         output_finding "order_proto" "$NODEIP" "$PORT" "WARN" "Default protocol empty (Hint: if IIS6 give OpenSSL 1.01 a try)"
+                    else
+                         output_finding "order_proto" "$NODEIP" "$PORT" "WARN" "Default protocol empty"
+                    fi     
+                    ;; 
+               *)             
+                    pr_litemagenta "FIXME line $LINENO: $default_proto" 
+                    output_finding "order_proto" "$NODEIP" "$PORT" "WARN" "FIXME line $LINENO: $default_proto"
+                    ;;
           esac
 
           pr_bold " Negotiated cipher            "
           default_cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
           case "$default_cipher" in
-               *NULL*|*EXP*)  pr_red "$default_cipher" ;;
-               *RC4*)         pr_litered "$default_cipher" ;;
-               *CBC*)         pr_brown "$default_cipher" ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
-               *GCM*)         pr_green "$default_cipher" ;;   # best ones
-               *CHACHA20*)    pr_green "$default_cipher" ;;   # best ones
-               ECDHE*AES*)    pr_yellow "$default_cipher" ;;  # it's CBC. --> lucky13
-               "")            pr_litemagenta "default cipher empty" ;  [[ $OSSL_VER == 1.0.2* ]] && out " (Hint: if IIS6 give OpenSSL 1.01 a try)" ;;
-               *)             out "$default_cipher" ;;
+               *NULL*|*EXP*)  
+                    pr_red "$default_cipher" 
+
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)\n$remark4default_cipher"
+                    ;;
+               *RC4*)         
+                    pr_litered "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)\n$remark4default_cipher"
+                    ;;
+               *CBC*)         
+                    pr_brown "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)\n$remark4default_cipher"
+                    ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
+               *GCM*|*CHACHA20*)    
+                    pr_green "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (OK)\n$remark4default_cipher"
+                    ;;   # best ones
+               ECDHE*AES*)    
+                    pr_yellow "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "WARN" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (cbc)\n$remark4default_cipher"
+                    ;;  # it's CBC. --> lucky13
+               "")            
+                    pr_litemagenta "default cipher empty" ;  
+                    if [[ $OSSL_VER == 1.0.2* ]]; then
+                         out " (Hint: if IIS6 give OpenSSL 1.01 a try)" 
+                         output_finding "order_cipher" "$NODEIP" "$PORT" "WARN" "Default cipher empty  (Hint: if IIS6 give OpenSSL 1.01 a try)\n$remark4default_cipher"
+                    else
+                         output_finding "order_cipher" "$NODEIP" "$PORT" "WARN" "Default cipher empty\n$remark4default_cipher"
+                    fi
+                    ;;
+               *)             
+                    out "$default_cipher" 
+                    output_finding "order_cipher" "$NODEIP" "$PORT" "INFO" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE")\n$remark4default_cipher"
+                    ;;
           esac
           read_dhbits_from_file "$TMPFILE"
           outln "$remark4default_cipher"
@@ -1725,8 +2046,8 @@ run_server_preference() {
                pr_bold " Negotiated cipher per proto"; outln " $remark4default_cipher"
                i=1
                for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
-               #locally_supported -"$p" "    " || continue
-               locally_supported -"$p" || continue
+                    #locally_supported -"$p" "    " || continue
+                    locally_supported -"$p" || continue
                     $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
@@ -1771,6 +2092,7 @@ run_server_preference() {
                              fi
                           fi
                     fi
+                    output_finding "order_${proto[i]}_cipher" "$NODEIP" "$PORT" "INFO" "Default cipher on ${proto[i]}: ${cipher[i]}\n$remark4default_cipher"
                done
           fi
      fi
@@ -1787,11 +2109,12 @@ run_server_preference() {
 
 cipher_pref_check() {
      local p proto protos
-     local tested_cipher cipher
+     local tested_cipher cipher order
 
      pr_bold " Cipher order"
 
      for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
+          order=""
           $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                tested_cipher=""
@@ -1801,14 +2124,17 @@ cipher_pref_check() {
                outln
                printf "     %-10s %s " "$proto:" "$cipher"
                tested_cipher="-"$cipher
+               order="$cipher"
                while true; do
                     $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     sclient_connect_successful $? $TMPFILE || break
                     cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                     out "$cipher "
+                    order+=" $cipher"
                     tested_cipher="$tested_cipher:-$cipher"
                done
           fi
+          [[ -z $order ]] || output_finding "order_$p" "$NODEIP" "$PORT" "INFO" "Default cipher order for protocol $p:\n$order"
      done
      outln
 
@@ -1817,18 +2143,22 @@ cipher_pref_check() {
      else
           protos=$($OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg \"\" </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
           for p in $protos; do
+               order=""
                $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
                cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                printf "     %-10s %s " "$p:" "$cipher"
                tested_cipher="-"$cipher
+               order="$cipher"
                while true; do
                     $OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
                     sclient_connect_successful $? $TMPFILE || break
                     cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                     out "$cipher "
                     tested_cipher="$tested_cipher:-$cipher"
+                    order+=" $cipher"
                done
-          outln
+               outln
+               [[ -z $order ]] || output_finding "order_spdy_$p" "$NODEIP" "$PORT" "INFO" "Default cipher order for SPDY protocol $p:\n$order"
           done
      fi
 
@@ -1897,12 +2227,16 @@ determine_trust() {
      local code
      local ca_bundles="$INSTALL_DIR/etc/*.pem"
      local spaces="                              "
+     local addtl_warning
 
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0" ]]; then
           pr_litemagentaln "Your $OPENSSL is too new, needed is version 1.0.2"
+          output_finding "trust" "$NODEIP" "$PORT" "WARN" "Your $OPENSSL is too new, need version 1.0.2 to determine trust"
           return 7
      elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]]; then
           pr_litemagentaln "Your $OPENSSL is too old, needed is version >=1.0.2"
+          addtl_warning="Your $OPENSSL is too old, need version 1.0.2 to determine trust. Results may be unrelyable."
+          output_finding "trust_warn" "$NODEIP" "$PORT" "WARN" "$addtl_warning"
      fi
      debugme outln
 	for bundle_fname in $ca_bundles; do
@@ -1929,12 +2263,14 @@ determine_trust() {
 	# all stores ok
 	if ${trust[1]} && ${trust[2]} && ${trust[3]} && ${trust[4]}; then
 		pr_litegreen "Ok   "			
+          output_finding "trust" "$NODEIP" "$PORT" "OK" "All certificate trust checks passed.\n$addtl_warning"
 	# at least one failed
 	else
 		pr_litered "NOT ok"	
 		# all failed (we assume with the same issue)
 		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]} && ! ${trust[4]}; then
 			verify_retcode_helper "${verify_retcode[2]}"
+               output_finding "trust" "$NODEIP" "$PORT" "NOT OK" "All certificate trust checks failed: `verify_retcode_helper "${verify_retcode[2]}"`.\n$addtl_warning"
 		else
 			# is one ok and the others not?
 			if ${trust[1]} || ${trust[2]} || ${trust[3]} || ${trust[4]}; then
@@ -1944,10 +2280,10 @@ determine_trust() {
 						ok_was="${certificate_file[i]} $ok_was"
 					else
                               #code="$(verify_retcode_helper ${verify_retcode[i]})"
-                              #notok_was="${certificate_file[i]} $notok_was"
                               pr_litered "  ${certificate_file[i]}:"
                               verify_retcode_helper "${verify_retcode[i]}"
-					fi
+			               notok_was="${certificate_file[i]} - `verify_retcode_helper "${verify_retcode[i]}"`\n$notok_was"
+               		fi
 				done
 				#pr_litered "$notok_was "
                     #outln "$code"
@@ -1956,7 +2292,8 @@ determine_trust() {
                     [[ $DEBUG -eq 0 ]] && out "$spaces"
 				pr_litegreen "OK: $ok_was"
                fi
-		fi
+               output_finding "trust" "$NODEIP" "$PORT" "NOT OK" "Some certificate trust checks failed\nOK    : $ok_was\nNOT ok:\n$notok_was\n\n$addtl_warning"
+          fi
 	fi
 	outln
      return 0
@@ -1979,14 +2316,17 @@ tls_time() {
           if [[ "${#difftime}" -gt 5 ]]; then
                # openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
                pr_bold " TLS timestamp" ; outln "                random values, no fingerprinting possible "
+               output_finding "tls_time" "$NODEIP" "$PORT" "INFO" "Your TLS time seems to be filled with random values to prevent fingerprinting"
           else
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
                pr_bold " TLS clock skew" ; outln "               $difftime sec from localtime";
+               output_finding "tls_time" "$NODEIP" "$PORT" "INFO" "Your TLS time is skewed from your localtime by $difftime seconds"
           fi
           debugme out "$TLS_TIME"
           outln
      else
           pr_bold " TLS timestamp" ; out "                "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
+          output_finding "tls_time" "$NODEIP" "$PORT" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
      fi
      return 0
 }
@@ -2044,6 +2384,9 @@ run_server_defaults() {
      local policy_oid
      local spaces="                              "
      local wildcard=false
+     local fingerprint cnfinding
+     local cnok="OK"
+     local expfinding expok="OK"
 
      outln
      pr_headlineln " Testing server defaults (Server Hello) "
@@ -2055,9 +2398,11 @@ run_server_defaults() {
      #extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
      if [[ -z "$TLS_EXTENSIONS" ]]; then
           outln "(none)"
+          output_finding "tls_extensions" "$NODEIP" "$PORT" "INFO" "TLS server extensions (std): (none)"
      else
           #echo $extensions | sed 's/ /,/g' 
           outln "$TLS_EXTENSIONS"
+          output_finding "tls_extensions" "$NODEIP" "$PORT" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
 
      cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
@@ -2067,18 +2412,22 @@ run_server_defaults() {
      sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
      if [[ -z "$sessticket_str" ]]; then
           outln "(none)"
+          output_finding "session_ticket" "$NODEIP" "$PORT" "INFO" "TLS session tickes RFC 5077 not supported"
      else
           lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
           unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
           pr_yellowln "(PFS requires session ticket keys to be rotated <= daily)"
+          output_finding "session_ticket" "$NODEIP" "$PORT" "INFO" "TLS session tickes RFC 5077 valid for $lifetime $unit\nPFS requires session ticket keys to be rotated at least daily"
      fi
  
      pr_bold " SSL Session ID support       "
      if $NO_SSL_SESSIONID; then
           outln "no"
+          output_finding "session_id" "$NODEIP" "$PORT" "INFO" "SSL session ID support: no"
      else
           outln "yes"
+          output_finding "session_id" "$NODEIP" "$PORT" "INFO" "SSL session ID support: yes"
      fi
 
      pr_bold " Server key size              "
@@ -2088,51 +2437,90 @@ run_server_defaults() {
 
      if [[ -z "$keysize" ]]; then
           outln "(couldn't determine)"
+          output_finding "key_size" "$NODEIP" "$PORT" "WARN" "Server keys size cannot be determined"
      else
           if [[ "$keysize" -le 768 ]]; then
                if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
                     pr_litegreen "EC $keysize"
+                    output_finding "key_size" "$NODEIP" "$PORT" "OK" "Server keys $keysize bits EC (OK)"
                else
                     pr_red "$keysize"
+                    output_finding "key_size" "$NODEIP" "$PORT" "NOT OK" "Server keys $keysize bits (NOT ok)"
                fi
           elif [[ "$keysize" -le 1024 ]]; then
                pr_brown "$keysize"
+               output_finding "key_size" "$NODEIP" "$PORT" "NOT OK" "Server keys $keysize bits (NOT ok)"
           elif [[ "$keysize" -le 2048 ]]; then
                out "$keysize"
+               output_finding "key_size" "$NODEIP" "$PORT" "INFO" "Server keys $keysize bits"
           elif [[ "$keysize" -le 4096 ]]; then
                pr_litegreen "$keysize"
+               output_finding "key_size" "$NODEIP" "$PORT" "OK" "Server keys $keysize bits (OK)"
           else
                out "weird keysize: $keysize"
+               output_finding "key_size" "$NODEIP" "$PORT" "WARN" "Server keys $keysize bits (Odd)"
           fi
      fi
      outln " bit"
 
      pr_bold " Signature Algorithm          "
      case $sig_algo in
-          sha1WithRSAEncryption)   pr_brownln "SHA1 with RSA" ;;
-          sha256WithRSAEncryption) pr_litegreenln "SHA256 with RSA" ;;
-          sha384WithRSAEncryption) pr_litegreenln "SHA384 with RSA" ;;
-          sha512WithRSAEncryption) pr_litegreenln "SHA512 with RSA" ;;
-          ecdsa-with-SHA256)       pr_litegreenln "ECDSA with SHA256" ;;
-          md5*)                    pr_redln "MD5" ;;
-          *)                       outln "$sig_algo" ;;
+          sha1WithRSAEncryption)   
+               pr_brownln "SHA1 with RSA" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "WARN" "Signature Algorithm: SHA1 with RSA (warning)"
+               ;;
+          sha256WithRSAEncryption) 
+               pr_litegreenln "SHA256 with RSA" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "OK" "Signature Algorithm: SHA256 with RSA (OK)"
+               ;;
+          sha384WithRSAEncryption) 
+               pr_litegreenln "SHA384 with RSA" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "OK" "Signature Algorithm: SHA384 with RSA (OK)"
+               ;;
+          sha512WithRSAEncryption) 
+               pr_litegreenln "SHA512 with RSA" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "OK" "Signature Algorithm: SHA512 with RSA (OK)"
+               ;;
+          ecdsa-with-SHA256)       
+               pr_litegreenln "ECDSA with SHA256" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
+               ;;
+          md5*)                    
+               pr_redln "MD5" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "NOT OK" "Signature Algorithm: MD5 (NOT ok)"
+               ;;
+          *)                       
+               outln "$sig_algo" 
+               output_finding "algorithm" "$NODEIP" "$PORT" "INFO" "Signature Algorithm: $sign_algo"
+               ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
      pr_bold " Fingerprint / Serial         "
-     outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
-     outln "$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
+     #outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
+     #outln "$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
+     fingerprint="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
+     fingerprint+="\n"
+     fingerprint+="$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
+     outln "$fingerprint"
+     output_finding "fingerprint" "$NODEIP" "$PORT" "INFO" "Fingerprint / Serial:\n$fingerprint"
 
      pr_bold " Common Name (CN)             "
+     cnfinding="Common Name (CN) : "
      if $OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | grep -wq CN; then
           cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
           pr_dquoted "$cn"
+          cnfinding="$cn"
           if echo -n "$cn" | grep -q '^*.' ; then
                out " (wildcard certificate"
+               cnfinding+="(wildcard certificate "
                if [[ "$cn" == "*.$(echo -n "$cn" | sed 's/^\*.//')" ]]; then
                     out " match)"
+                    cnfinding+=" match)"
                     wildcard=true
                else
+                    cnfinding+=" NO match)"
+                    cnok="INFO"
                     :
                     #FIXME: we need to test also the SANs as they can contain a wild card (google.de .e.g) ==> 2.7dev
                fi
@@ -2140,6 +2528,8 @@ run_server_defaults() {
      else
           cn="(no CN field in subject)"
           out "$cn"
+          cnfinding="$cn"
+          cnok="INFO"
      fi
 
      $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
@@ -2157,38 +2547,50 @@ run_server_defaults() {
      if [[ $NODE == "$cn_nosni" ]]; then
           if [[ $SERVICE == "HTTP" ]] || $CLIENT_AUTH; then
                outln " (works w/o SNI)"
+               cnfinding+=" (works w/o SNI)"
           else
                outln " (matches certificate directly)"
+               cnfinding+=" (matches certificate directly)"
                # for services != HTTP it depends on the protocol, server and client but it is not named "SNI"
           fi
      else
           if [[ $SERVICE != "HTTP" ]]; then
                outln
+               cnfinding+="\n"
                #pr_brownln " (non-SNI clients don't match CN but for non-HTTP services it might be ok)"
                #FIXME: this is irritating and needs to be redone. Then also the wildcard match needs to be tested against  "$cn_nosni"
           elif [[ -z "$cn_nosni" ]]; then
                out " (request w/o SNI didn't succeed";
-               [[ $sig_algo =~ ecdsa ]] && out ", usual for EC certificates"
+               cnfinding+=" (request w/o SNI didn't succeed"
+               if [[ $sig_algo =~ ecdsa ]]; then
+                    out ", usual for EC certificates"
+                    cnfinding+=", usual for EC certificates"
+               fi
                outln ")"
+               cnfinding+=")"
           elif [[ "$cn_nosni" == "*no CN field*" ]]; then
                outln ", (request w/o SNI: $cn_nosni)"
+               cnfinding+=", (request w/o SNI: $cn_nosni)"
           else
                out " (CN in response to request w/o SNI: "; pr_dquoted "$cn_nosni"; outln ")"
+               cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
           fi
      fi
+     output_finding "cn" "$NODEIP" "$PORT" "$cnok" "$cnfinding"
 
      sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
           sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
 #                                                       ^^^ CACert
-
      pr_bold " subjectAltName (SAN)         "
      if [[ -n "$sans" ]]; then
           for san in $sans; do
                pr_dquoted "$san"
                out " "
           done
+          output_finding "san" "$NODEIP" "$PORT" "INFO" "subjectAltName (SAN) : $sans"
      else
           out "-- "
+          output_finding "san" "$NODEIP" "$PORT" "INFO" "subjectAltName (SAN) : --"
      fi
      outln
      pr_bold " Issuer                       "
@@ -2201,6 +2603,7 @@ run_server_defaults() {
      fi
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer" == "$CN" ]]; then
           pr_redln "selfsigned (NOT ok)"
+          output_finding "issuer" "$NODEIP" "$PORT" "NOT OK" "Issuer: selfsigned (NOT ok)"
      else
           pr_dquoted "$issuer"
           out " ("
@@ -2208,6 +2611,9 @@ run_server_defaults() {
           if [[ -n "$issuer_C" ]]; then
                out " from " 
                pr_dquoted "$issuer_C"
+               output_finding "issuer" "$NODEIP" "$PORT" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" from \"$issuer_C\")"
+          else
+               output_finding "issuer" "$NODEIP" "$PORT" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" )"
           fi
           outln ")"
      fi
@@ -2224,8 +2630,10 @@ run_server_defaults() {
           [[ 1.3.6.1.4.1.17326.10.8.12.1.2 == "$policy_oid" ]] || \
           [[ 1.3.6.1.4.1.13177.10.1.3.10 == "$policy_oid" ]] ; then     
           out "yes "
+          output_finding "ev" "$NODEIP" "$PORT" "OK" "Extended Validation (EV) (experimental) : yes"
      else
           out "no "
+          output_finding "ev" "$NODEIP" "$PORT" "INFO" "Extended Validation (EV) (experimental) : no"
      fi
      debugme echo "($(newline_to_spaces "$policy_oid"))"
      outln
@@ -2250,6 +2658,8 @@ run_server_defaults() {
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 0 2>>$ERRFILE)
      if ! echo $expire | grep -qw not; then
           pr_red "expired!"
+          expfinding="expired!"
+          expok="NOT OK"
      else
           secs2warn=$((24 * 60 * 60 * DAYS2WARN2))  # low threshold first
           expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
@@ -2258,52 +2668,74 @@ run_server_defaults() {
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
                if echo "$expire" | grep -qw not; then
                     pr_litegreen "$days2expire >= $DAYS2WARN1 days"
+                    expfinding+="$days2expire >= $DAYS2WARN1 days"
                else
-               pr_brown "expires < $DAYS2WARN1 days ($days2expire)"
+                    pr_brown "expires < $DAYS2WARN1 days ($days2expire)"
+                    expfinding+="expires < $DAYS2WARN1 days ($days2expire)"
+                    expok="WARN"
                fi
           else
-               pr_litered "expires < $DAYS2WARN2 days ($days2expire) !"
+               pr_litered "expires < $DAYS2WARN2 days! ($days2expire)"
+               expfinding+="expires < $DAYS2WARN2 days! ($days2expire)"
+               expok="NOT OK"
           fi
      fi
      outln " ($startdate --> $enddate)"
+     output_finding "expiration" "$NODEIP" "$PORT" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
 
 
      pr_bold " # of certificates provided"; outln "   $(get_all_certs)"
+     output_finding "certcount" "$NODEIP" "$PORT" "INFO" "# of certificates provided :  $(get_all_certs)"
+
 
      pr_bold " Chain of trust"; out " (experim.)    "
-     determine_trust
+     determine_trust #Also handles output_finding
 
      pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
      if [[ -z "$crl" ]]; then
           pr_literedln "--"
+          output_finding "crl" "$NODEIP" "$PORT" "NOT OK" "No CRL provided (NOT ok)"
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
+               output_finding "crl" "$NODEIP" "$PORT" "INFO" "Certificate Revocation List : $crl"
           else # more than one CRL
                out_row_aligned "$crl" "$spaces" 
+               output_finding "crl" "$NODEIP" "$PORT" "INFO" "Certificate Revocation List : $crl"
           fi
      else
-          pr_litemagentaln "no parsable output \"$url\", pls report"
+          pr_litemagentaln "no parsable output \"$crl\", pls report"
+          output_finding "crl" "$NODEIP" "$PORT" "WARN" "Certificate Revocation List : no parsable output \"$crl\", pls report"
      fi
 
      pr_bold " OCSP URI                     "
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
-     [[ x"$ocsp_uri" == "x" ]] && pr_literedln "--" || echo "$ocsp_uri"
+     if [[ x"$ocsp_uri" == "x" ]]; then
+          pr_literedln "--"
+          output_finding "ocsp_uri" "$NODEIP" "$PORT" "NOT OK" "OCSP URI : -- (NOT ok)"
+     else
+          outln "$ocsp_uri"
+          output_finding "ocsp_uri" "$NODEIP" "$PORT" "INFO" "OCSP URI : $ocsp_uri"
+     fi
 
      pr_bold " OCSP stapling               "
      if grep -a "OCSP response" $TMPFILE | grep -q "no response sent" ; then
           out " not offered"
+          output_finding "ocsp_stapling" "$NODEIP" "$PORT" "INFO" "OCSP stapeling : not offered"
      else
           if grep -a "OCSP Response Status" $TMPFILE | grep -q successful; then
                pr_litegreen " offered"
+               output_finding "ocsp_stapling" "$NODEIP" "$PORT" "OK" "OCSP stapeling : offered"
           else
                if $GOST_STATUS_PROBLEM; then
                     out " (GOST servers make problems here, sorry)"
+                    output_finding "ocsp_stapling" "$NODEIP" "$PORT" "OK" "OCSP stapeling : (GOST servers make problems here, sorry)"
                     ret=0
                else
                     outln " not sure what's going on here, debug:"
                     grep -aA 20 "OCSP response"  $TMPFILE
+                    output_finding "ocsp_stapling" "$NODEIP" "$PORT" "OK" "OCSP stapeling : not sure what's going on here, debug: `grep -aA 20 "OCSP response"  $TMPFILE`"
                     ret=2
                fi
           fi
@@ -2333,6 +2765,7 @@ run_pfs() {
      #local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EDH+aRSA EECDH !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
      local pfs_cipher_list="ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-CAMELLIA128-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA"
      local -i nr_supported_ciphers=0
+     local pfs_ciphers
 
      outln
      pr_headlineln " Testing (perfect) forward secrecy, (P)FS -- omitting 3DES, RC4 and Null Encryption here "
@@ -2342,6 +2775,7 @@ run_pfs() {
      if [[ "$nr_supported_ciphers" -le "$CLIENT_MIN_PFS" ]]; then
           outln
           local_problem "You only have $nr_supported_ciphers PFS ciphers on the client side "
+          output_finding "pfs" "$NODEIP" "$PORT" "WARN" "(Perfect) Forward Secrecy tests: Skipped. You only have $nr_supported_ciphers PFS ciphers on the client site. ($CLIENT_MIN_PFS are required)"
           return 1
      fi
 
@@ -2351,9 +2785,12 @@ run_pfs() {
      outln
      if [[ $sclient_success -ne 0 ]] || [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]]; then
           pr_brownln "Not OK: No ciphers supporting Forward Secrecy offered"
+          output_finding "pfs" "$NODEIP" "$PORT" "NOT OK" "(Perfect) Forward Secrecy : Not OK: No ciphers supporting Forward Secrecy offered"
      else
           pfs_offered=0
+          pfs_ciphers=""
           pr_litegreen " PFS is offered (OK)"
+          output_finding "pfs" "$NODEIP" "$PORT" "OK" "(Perfect) Forward Secrecy : PFS is offered (OK)"
           if $WIDE; then
                outln ", ciphers follow (client/browser support is here specially important) \n"
                neat_header
@@ -2386,6 +2823,7 @@ run_pfs() {
                     outln
                else
                     out "$pfs_cipher "
+                    pfs_ciphers+="$pfs_cipher "
                fi
           done < <($OPENSSL ciphers -V "$pfs_cipher_list" 2>$ERRFILE)      # -V doesn't work with openssl < 1.0
           #    ^^^^^ posix redirect as shopt will either segfault or doesn't work with old bash versions
@@ -2393,7 +2831,10 @@ run_pfs() {
           $WIDE || outln
 
           if [[ "$pfs_offered" -eq 1 ]]; then
-                pr_brown "no PFS ciphers found"
+               pr_brown "no PFS ciphers found"
+               output_finding "pfs_ciphers" "$NODEIP" "$PORT" "NOT OK" "(Perfect) Forward Secrecy Ciphers: no PFS ciphers found (NOT ok)"
+          else
+               output_finding "pfs_ciphers" "$NODEIP" "$PORT" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
           fi
      fi
      outln
@@ -2414,16 +2855,19 @@ run_pfs() {
 spdy_pre(){
      if [[ -n "$STARTTLS" ]]; then
           [[ -n "$1" ]] && out "$1"
-          out "(SPDY is a HTTP protocol and thus not tested here)"
+          out "(SPDY is an HTTP protocol and thus not tested here)"
+          output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : (SPY is an HTTP protocol and thus not tested here)"
           return 1
      fi
      if [[ -n "$PROXY" ]]; then
           [[ -n "$1" ]] && pr_litemagenta " $1 "
           pr_litemagenta "not tested as proxies do not support proxying it"
+          output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : not tested as proxies do not support proxying it"
           return 1
      fi
      if ! $HAS_SPDY; then
           local_problem "$OPENSSL doesn't support SPDY/NPN";
+          output_finding "spdy_npn" "$NODEIP" "$PORT" "WARN" "SPDY/NPN : not tested $OPENSSL doesn't support SPDY/NPN"
           return 7
      fi
      return 0
@@ -2442,15 +2886,18 @@ run_spdy() {
      tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
      if [[ -z "$tmpstr" ]] || [[ "$tmpstr" == " " ]]; then
           outln "not offered"
+          output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : not offered"
           ret=1
      else
           # now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
           if echo $tmpstr | egrep -aq "spdy|http" ; then
                out "$tmpstr" 
                outln " (advertised)"
+               output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : $tmpstr (advertised)"
                ret=0
           else
                pr_litemagentaln "please check manually, server response was ambigious ..."
+               output_finding "spdy_npn" "$NODEIP" "$PORT" "INFO" "SPDY/NPN : please check manually, server response was ambigious ..."
                ret=10
           fi
      fi
@@ -2822,22 +3269,32 @@ sslv2_sockets() {
                pr_litemagenta "strange v2 reply "
                outln " (rerun with DEBUG >=2)"
                [[ $DEBUG -ge 3 ]] && hexdump -C "$SOCK_REPLY_FILE" | head -1
-               ret=7 ;;
+               ret=7 
+               output_finding "sslv2" "$NODEIP" "$PORT" "WARN" "SSLv2: received a strange SSLv2 replay (rerun with DEBUG>=2)"
+               ;;
           1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
                pr_greenln "not offered (OK)"
-               ret=0 ;;
+               ret=0 
+               output_finding "sslv2" "$NODEIP" "$PORT" "OK" "SSLv2 not offered (OK)"
+               ;;
           0) # reset
                pr_greenln "not offered (OK)"
-               ret=0 ;;
+               ret=0 
+               output_finding "sslv2" "$NODEIP" "$PORT" "OK" "SSLv2 not offered (OK)"
+               ;;
           3) # everything else
                lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l | sed 's/ //g')
                [[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
                if [[ "$lines" -gt 1 ]]; then
                     ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$ciphers_detected" ]]; then
-                         pr_litered "supported but couldn't detect a cipher"; outln " (may need further attention)"
+                         pr_litered "supported but couldn't detect a cipher"; 
+                         outln " (may need further attention)"
+                         output_finding "sslv2" "$NODEIP" "$PORT" "NOT OK" "SSLv2 offered (NOT ok), but could not detect a cipher (may need futher attention)"
                     else
-                         pr_red "offered (NOT ok)"; outln " -- $ciphers_detected ciphers"
+                         pr_red "offered (NOT ok)"; 
+                         outln " -- $ciphers_detected ciphers"
+                         output_finding "sslv2" "$NODEIP" "$PORT" "NOT OK" "SSLv2 offered (NOT ok).\nDetected ciphers: $ciphers_detected"
                     fi
                     ret=1
                fi ;;
@@ -3064,6 +3521,7 @@ run_heartbleed(){
      if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
           pr_green "not vulnerable (OK)"
           outln " (no heartbeat extension)"
+          output_finding "heartbleed" "$NODEIP" "$PORT" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK) (no heartbeat extension)"
           return 0
      fi
 
@@ -3157,9 +3615,19 @@ run_heartbleed(){
      lines_returned=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l | sed 's/ //g')
      if [[ $lines_returned -gt 1 ]]; then
           pr_red "VULNERABLE (NOT ok)"
+          if [[ $retval -eq 3 ]]; then
+               output_finding "heartbleed" "$NODEIP" "$PORT" "NOT OK" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok) (timed out)"
+          else
+               output_finding "heartbleed" "$NODEIP" "$PORT" "NOT OK" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok)"
+          fi
           ret=1
      else
           pr_green "not vulnerable (OK)"
+          if [[ $retval -eq 3 ]]; then
+               output_finding "heartbleed" "$NODEIP" "$PORT" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK) (timed out)"
+          else
+               output_finding "heartbleed" "$NODEIP" "$PORT" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK)"
+          fi
           ret=0
      fi
      [[ $retval -eq 3 ]] && out " (timed out)"
@@ -3276,9 +3744,19 @@ run_ccs_injection(){
 
      if [[ "$byte6" == "0a" ]] || [[ "$lines" -gt 1 ]]; then
           pr_green "not vulnerable (OK)"
+          if [[ $retval -eq 3 ]]; then
+               output_finding "ccs" "$NODEIP" "$PORT" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
+          else
+               output_finding "ccs" "$NODEIP" "$PORT" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
+          fi
           ret=0
      else
           pr_red "VULNERABLE (NOT ok)"
+          if [[ $retval -eq 3 ]]; then
+               output_finding "ccs" "$NODEIP" "$PORT" "NOT OK" "CCS (CVE-2014-0224): VULNERABLE (NOT ok) (timed out)"
+          else
+               output_finding "ccs" "$NODEIP" "$PORT" "NOT OK" "CCS (CVE-2014-0224): VULNERABLE (NOT ok)"
+          fi
           ret=1
      fi
      [[ $retval -eq 3 ]] && out " (timed out)"
@@ -3309,12 +3787,22 @@ run_renego() {
           sec_renego=$?                                                    # 0= Secure Renegotiation IS NOT supported
 #FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
           case $sec_renego in
-               0) pr_redln "VULNERABLE (NOT ok)" ;;
-               1) pr_greenln "not vulnerable (OK)" ;;
-               *) pr_litemagentaln "FIXME (bug): $sec_renego" ;;
+               0) 
+                    pr_redln "VULNERABLE (NOT ok)" 
+                    output_finding "secure_renego" "$NODEIP" "$PORT" "NOT OK" "Secure Renegotiation (CVE-2009-3555) : VULNERABLE (NOT ok)"
+                    ;;
+               1) 
+                    pr_greenln "not vulnerable (OK)" 
+                    output_finding "secure_renego" "$NODEIP" "$PORT" "OK" "Secure Renegotiation (CVE-2009-3555) : not vulnerable (OK)"
+                    ;;
+               *) 
+                    pr_litemagentaln "FIXME (bug): $sec_renego" 
+                    output_finding "secure_renego" "$NODEIP" "$PORT" "WARN" "Secure Renegotiation (CVE-2009-3555) : FIXME (bug) $sec_renego"
+                    ;;
           esac
      else
           pr_litemagentaln "handshake didn't succeed" 
+          output_finding "secure_renego" "$NODEIP" "$PORT" "WARN" "Secure Renegotiation (CVE-2009-3555) : handshake didn't succeed"
      fi
 
      pr_bold " Secure Client-Initiated Renegotiation     "  # RFC 5746
@@ -3323,16 +3811,25 @@ run_renego() {
      case "$OSSL_VER" in
           0.9.8*)             # we need this for Mac OSX unfortunately
                case "$OSSL_VER_APPENDIX" in
-                    [a-l]) local_problem "$OPENSSL cannot test this secure renegotiation vulnerability"
-                           return 3 ;;
-                    [m-z]) ;; # all ok
-               esac ;;
-          1.0.1*|1.0.2*) legacycmd="-legacy_renegotiation" ;;
-          0.9.9*|1.0*) ;;   # all ok
+                    [a-l]) 
+                         local_problem "$OPENSSL cannot test this secure renegotiation vulnerability"
+                         output_finding "sec_client_renego" "$NODEIP" "$PORT" "WARN" "Secure Client-Initiated Renegotiation : $OPENSSL cannot test this secure renegotiation vulnerability"
+                         return 3 
+                         ;;
+                    [m-z]) 
+                         ;; # all ok
+               esac 
+               ;;
+          1.0.1*|1.0.2*) 
+               legacycmd="-legacy_renegotiation" 
+               ;;
+          0.9.9*|1.0*) 
+               ;;   # all ok
      esac
 
      if $CLIENT_AUTH; then
           pr_litemagentaln "client authentication prevents this from being tested"
+          output_finding "sec_client_renego" "$NODEIP" "$PORT" "WARN" "Secure Client-Initiated Renegotiation : client authentication prevents this from being tested"
           sec_client_renego=1
      else
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
@@ -3341,15 +3838,25 @@ run_renego() {
           wait_kill $! $HEADER_MAXSLEEP
           if [[ $? -eq 3 ]]; then
                pr_litegreen "likely not vulnerable (OK)"; outln " (timed out)"       # it hung
+               output_finding "sec_client_renego" "$NODEIP" "$PORT" "OK" "Secure Client-Initiated Renegotiation : likely not vulnerable (OK) (timed out)"
                sec_client_renego=1
           else
                # second try in the foreground as we are sure now it won't hang
                echo R | $OPENSSL s_client $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $SNI $PROXY >$TMPFILE 2>>$ERRFILE
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case $sec_client_renego in
-                    0) pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" ;;
-                    1) pr_litegreenln "not vulnerable (OK)" ;;
-                    *) "FIXME (bug): $sec_client_renego" ;;
+                    0) 
+                         pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat" 
+                         output_finding "sec_client_renego" "$NODEIP" "$PORT" "NOT OK" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), DoS threat"
+                         ;;
+                    1) 
+                         pr_litegreenln "not vulnerable (OK)" 
+                         output_finding "sec_client_renego" "$NODEIP" "$PORT" "OK" "Secure Client-Initiated Renegotiation : not vulnerable (OK)"
+                         ;;
+                    *) 
+                         pr_literedln "FIXME (bug): $sec_client_renego" 
+                         output_finding "sec_client_renego" "$NODEIP" "$PORT" "WARN" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report"
+                         ;;
                esac
           fi
      fi
@@ -3377,6 +3884,7 @@ run_crime() {
      $OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib
      if [[ $? -eq 0 ]]; then
           local_problem "$OPENSSL lacks zlib support"
+          output_finding "crime" "$NODEIP" "$PORT" "WARN" "CRIME, TLS (CVE-2012-4929) : Not tested. $OPENSSL lacks zlib support"
           return 7
      fi
 
@@ -3386,13 +3894,18 @@ run_crime() {
           pr_litegreen "not vulnerable (OK)"
           if [[ $SERVICE != "HTTP" ]] && ! $CLIENT_AUTH;  then 
                out " (not using HTTP anyway)"
+               output_finding "crime" "$NODEIP" "$PORT" "OK" "CRIME, TLS (CVE-2012-4929) : Not vulnerable (OK) (not using HTTP anyway)"
+          else
+               output_finding "crime" "$NODEIP" "$PORT" "OK" "CRIME, TLS (CVE-2012-4929) : Not vulnerable (OK)"
           fi
           ret=0
      else
           if [[ $SERVICE == "HTTP" ]]; then
                pr_litered "VULNERABLE (NOT ok)"
+               output_finding "crime" "$NODEIP" "$PORT" "NOT OK" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (NOT ok)"
           else
                pr_brown "VULNERABLE (NOT ok), but not using HTTP: probably no exploit known"
+               output_finding "crime" "$NODEIP" "$PORT" "NOT OK" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (NOT ok), but not using HTTP: probably no exploit known"
           fi
           ret=1
      fi
@@ -3472,18 +3985,25 @@ run_breach() {
      debugme grep '^Content-Encoding' $TMPFILE
      if [[ ! -s $TMPFILE ]]; then
           pr_litemagenta "failed (HTTP header request stalled"
-          [[ $was_killed -ne 0 ]] && pr_litemagenta " and was terminated"
+          if [[ $was_killed -ne 0 ]]; then
+               pr_litemagenta " and was terminated"
+               output_finding "breach" "$NODEIP" "$PORT" "WARN" "BREACH (CVE-2013-3587) : Test failed (HTTP request stalled and was terminated)"
+          else
+               output_finding "breach" "$NODEIP" "$PORT" "WARN" "BREACH (CVE-2013-3587) : Test failed (HTTP request stalled)"
+          fi
           pr_litemagenta ") "
           ret=3
      elif [[ -z $result ]]; then
           pr_green "no HTTP compression (OK) "
           outln "$disclaimer"
+          output_finding "breach" "$NODEIP" "$PORT" "OK" "BREACH (CVE-2013-3587) : no HTTP compression (OK) $disclaimer"
           ret=0
      else
           pr_litered "potentially NOT ok, uses $result HTTP compression."
           outln "$disclaimer"
           outln "$spaces Can be ignored for static pages or if no secrets in the page"
-           ret=1
+          output_finding "breach" "$NODEIP" "$PORT" "NOT OK" "BREACH (CVE-2013-3587) : potentially VULNERABLE, uses $result HTTP compression. $disclaimer\nCan be ignored for static pages or if no secrets in the page"
+          ret=1
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
 
@@ -3510,8 +4030,10 @@ run_ssl_poodle() {
      [[ $DEBUG -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if [[ $sclient_success -eq 0 ]]; then
           pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
+          output_finding "poodle_ssl" "$NODEIP" "$PORT" "NOT OK" "POODLE, SSL (CVE-2014-3566) : VULNERABLE (NOT ok), uses SSLv3+CBC (check if TLS_FALLBACK_SCSV mitigation is used)"
      else
           pr_green "not vulnerable (OK)"
+          output_finding "poodle_ssl" "$NODEIP" "$PORT" "OK" "POODLE, SSL (CVE-2014-3566) : not vulnerable (OK)"
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
@@ -3520,9 +4042,10 @@ run_ssl_poodle() {
 
 # for appliance which use padding, no fallback needed
 run_tls_poodle() {
-     pr_bold " POODLE, SSL"; out " CVE-2014-8730), experimental "
+     pr_bold " POODLE, TLS"; out " (CVE-2014-8730), experimental "
      #FIXME
      echo "#FIXME"
+     output_finding "poodle_tls" "$NODEIP" "$PORT" "WARN" "POODLE, TLS (CVE-2014-8730) : Not tested. Not yet implemented #FIXME"
      return 7
 }
 
@@ -3555,13 +4078,16 @@ run_tls_fallback_scsv() {
           if grep -q "CONNECTED(00" "$TMPFILE"; then
                if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
                     pr_brown "Downgrade attack prevention NOT supported"
+                    output_finding "fallback_scsv" "$NODEIP" "$PORT" "NOT OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention NOT supported"
                     ret=1
                elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
                     pr_litegreen "Downgrade attack prevention supported (OK)"
+                    output_finding "fallback_scsv" "$NODEIP" "$PORT" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported (OK)"
                     ret=0
                elif grep -qa "alert handshake failure" "$TMPFILE"; then
                     # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
                     pr_brown "\"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
+                    output_finding "fallback_scsv" "$NODEIP" "$PORT" "NOT OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : \"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
                     ret=2
                elif grep -qa "ssl handshake failure" "$TMPFILE"; then
                     pr_brown "some unexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
@@ -3569,9 +4095,11 @@ run_tls_fallback_scsv() {
                else
                     pr_litemagenta "Check failed, unexpected result "
                     out ", run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
+                    output_finding "fallback_scsv" "$NODEIP" "$PORT" "WARN" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Check failed, unexpected result, run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
                fi
           else
                pr_litemagenta "test failed (couldn't connect)"
+               output_finding "fallback_scsv" "$NODEIP" "$PORT" "WARN" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Check failed. (couldn't connect)"
                ret=7
           fi
      fi
@@ -3597,8 +4125,11 @@ run_freak() {
      #echo "========= ${PIPESTATUS[*]}
 
      case $nr_supported_ciphers in
-          0)   local_problem "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
-               return 7 ;;
+          0)   
+               local_problem "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
+               output_finding "freak" "$NODEIP" "$PORT" "WARN" "FREAK (CVE-2015-0204) : Not tested. $OPENSSL doesn't have any EXPORT RSA ciphers configured"
+               return 7 
+               ;;
           1|2|3)
                addtl_warning=" ($magenta""tested only with $nr_supported_ciphers out of 9 ciphers only!$off)" ;;
           8|9|10|11)
@@ -3612,8 +4143,10 @@ run_freak() {
      [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if [[ $sclient_success -eq 0 ]]; then
           pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
+          output_finding "freak" "$NODEIP" "$PORT" "NOT OK" "FREAK (CVE-2015-0204) : VULNERABLE (NOT ok), uses EXPORT RSA ciphers"
      else
           pr_green "not vulnerable (OK)"; out "$addtl_warning"
+          output_finding "freak" "$NODEIP" "$PORT" "OK" "FREAK (CVE-2015-0204) : not vulnerable (OK) $addtl_warning"
      fi
      outln
 
@@ -3638,10 +4171,13 @@ run_logjam() {
      nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdhe_cipher_list))
 
      case $nr_supported_ciphers in
-          0)   local_problem "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
-               return 3 ;;
+          0)   
+               local_problem "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
+               output_finding "logjam" "$NODEIP" "$PORT" "WARN" "LOGJAM (CVE-2015-4000) : Not tested. $OPENSSL doesn't have any DHE EXPORT ciphers configured"
+               return 3 
+               ;;
           1|2) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
-          3) addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers)" ;;
+          3)   addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers)" ;;
           4)   ;;
      esac
      $OPENSSL s_client $STARTTLS $BUGS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
@@ -3659,8 +4195,10 @@ run_logjam() {
           
      if [[ $sclient_success -eq 0 ]]; then
           pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers, common primes not checked."
+          output_finding "logjam" "$NODEIP" "$PORT" "NOT OK" "LOGJAM (CVE-2015-4000) : VULNERABLE (NOT ok), uses DHE EXPORT ciphers, common primes not checked."
      else
           pr_green "not vulnerable (OK)"; out "$addtl_warning"
+          output_finding "logjam" "$NODEIP" "$PORT" "OK" "LOGJAM (CVE-2015-4000) : not vulnerable (OK) $addtl_warning"
      fi
      outln
 
@@ -3713,8 +4251,9 @@ run_beast(){
           if ! sclient_connect_successful $? $TMPFILE; then # protocol supported?
                if $continued; then                          # second round: we hit TLS1:
                     pr_litegreenln "no SSL3 or TLS1"
+                    output_finding "beast" "$NODEIP" "$PORT" "OK" "BEAST (CVE-2011-3389) : not vulnerable (OK) no SSL3 or TLS1"
                     return 0
-               else                # protocol not succeeded but it';s the first time
+               else                # protocol not succeeded but it's the first time
                     continued=true
                     continue       # protocol not supported, so we do not need to check each cipher with that protocol
                fi
@@ -3758,8 +4297,9 @@ run_beast(){
                fi
           done
 
-          if ! $WIDE; then
-               if [[ -n "$detected_cbc_ciphers" ]]; then
+          if [[ -n "$detected_cbc_ciphers" ]]; then
+               output_finding "cbc_$proto" "$NODEIP" "$PORT" "NOT OK" "BEAST (CVE-2011-3389) : CBC ciphers for $(toupper $proto): $detected_cbc_ciphers"
+               if ! $WIDE; then
                     detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
                     ! $first && out "$spaces"
                     out "$(toupper $proto):"
@@ -3768,13 +4308,14 @@ run_beast(){
                          pr_brownln "$detected_cbc_ciphers"
                     detected_cbc_ciphers="" # empty for next round
                     first=false
-               else
-                    [[ $proto == "tls1" ]] && ! $first && echo -n "$spaces"
-                    pr_litegreenln "no CBC ciphers for $(toupper $proto) (OK)"
-                    first=false
                fi
           else
-               $vuln_beast || pr_litegreenln " no CBC ciphers for $(toupper $proto) (OK)"
+               output_finding "cbc_$proto" "$NODEIP" "$PORT" "OK" "BEAST (CVE-2011-3389) : No CBC ciphers for $(toupper $proto) (OK)"
+               if ! $WIDE; then
+                    [[ $proto == "tls1" ]] && ! $first && echo -n "$spaces "
+                    first=false
+               fi
+               pr_litegreenln "no CBC ciphers for $(toupper $proto) (OK)"
           fi
      done  # for proto in ssl3 tls1
 
@@ -3790,6 +4331,7 @@ run_beast(){
                     pr_yellow "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                fi
+               output_finding "beast" "$NODEIP" "$PORT" "NOT OK" "BEAST (CVE-2011-3389) : VULNERABLE -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
           else
                if $WIDE; then
                     outln
@@ -3798,6 +4340,7 @@ run_beast(){
                fi
                pr_brown "VULNERABLE (NOT ok)"
                outln " -- and no higher protocols as mitigation supported"
+               output_finding "beast" "$NODEIP" "$PORT" "NOT OK" "BEAST (CVE-2011-3389) : VULNERABLE -- and no higher protocols as mitigation supported"
           fi
      fi
 
@@ -3809,6 +4352,7 @@ run_lucky13() {
 #FIXME: to do . CVE-2013-0169
 # in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
      echo "FIXME"
+     output_finding "lucky13" "$NODEIP" "$PORT" "WARN" "LUCKY13 (CVE-2013-0169) : No tested. Not implemented. #FIXME"
      return -1
 }
 
@@ -3821,6 +4365,7 @@ run_rc4() {
      local -i sclient_success
      local hexcode dash rc4_cipher sslvers kx auth enc mac export
      local rc4_ciphers_list="ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:DHE-DSS-RC4-SHA:AECDH-RC4-SHA:ADH-RC4-MD5:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:RC4-MD5:RSA-PSK-RC4-SHA:PSK-RC4-SHA:KRB5-RC4-SHA:KRB5-RC4-MD5:RC4-64-MD5:EXP1024-DHE-DSS-RC4-SHA:EXP1024-RC4-SHA:EXP-ADH-RC4-MD5:EXP-RC4-MD5:EXP-RC4-MD5:EXP-KRB5-RC4-SHA:EXP-KRB5-RC4-MD5"
+     local rc4_detected=""
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || $WIDE; then
           outln
@@ -3859,10 +4404,13 @@ run_rc4() {
                else
                     pr_litered "$rc4_cipher "
                fi
+               rc4_detected+="$c4_cipher "
           done < <($OPENSSL ciphers -V $rc4_ciphers_list:@STRENGTH)
           outln
+          output_finding "rc4" "$NODEIP" "$PORT" "NOT OK" "RC4 (CVE-2013-2566, CVE-2015-2808) : VULNERABLE (NOT ok) Detected ciphers: $rc4_detected"
      else
           pr_litegreenln "no RC4 ciphers detected (OK)"
+          output_finding "rc4" "$NODEIP" "$PORT" "OK" "RC4 (CVE-2013-2566, CVE-2015-2808) : not vulnerable (OK)"
           rc4_offered=0
      fi
      outln
@@ -3889,6 +4437,7 @@ run_tls_truncation() {
 
 
 old_fart() {
+     output_finding "old_fart" "$NODEIP" "$PORT" "WARN" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed.\nGet precompiled bins or compile https://github.com/PeterMosmans/openssl ."
      outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
      fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -2
 }
@@ -4112,6 +4661,12 @@ tuning options (can also be preset via environment variables):
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~120
 
+output options:
+     --json                        output all findngs to a json file (defaults to testssl.json unless set)
+     --jsonfile <fname>            set output to json and output json to the specified file
+     --csv                         output all findngs to a csv file (defaults to testssl.csv unless set)
+     --csvfile <fname>             set output to csv and output csv to the specified file
+
 All options requiring a value can also be called with '=' (e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 <URI> is always the last parameter.
 
@@ -4121,7 +4676,7 @@ Need HTML output? Just pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/
 EOF
      exit $1
 }
-
+#' Do not break syntax highlighting in Sublime
 
 maketempf() {
      TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
@@ -4917,6 +5472,8 @@ initialize_globals() {
      do_mx_all_ips=false
      do_mass_testing=false
      do_logging=false
+     do_json=false
+     do_csv=false
      do_pfs=false
      do_protocols=false
      do_rc4=false
@@ -5220,7 +5777,25 @@ parse_cmd_line() {
                     LOGFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_logging=true 
-                    ;;   
+                    ;; 
+               --json)
+                    do_json=true
+                    ;;   # DEFINITION of JSONFILE is not arg specified via ENV or automagically in parse_hn_ports()
+                    # following does the same but we can specify a log location additionally
+               --jsonfile=*)
+                    JSONFILE=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    do_json=true
+                    ;;                       
+               --csv)
+                    do_csv=true
+                    ;;   # DEFINITION of CSVFILE is not arg specified via ENV or automagically in parse_hn_ports()
+                    # following does the same but we can specify a log location additionally
+               --csvfile=*)
+                    CSVFILE=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    do_csv=true
+                    ;;                       
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
@@ -5284,6 +5859,7 @@ reset_hostdepended_vars() {
      PROTOS_OFFERED=""
      OPTIMAL_PROTO=""
 }
+
 
 lets_roll() {
      local ret
@@ -5362,8 +5938,9 @@ maketempf
 mybanner
 check_proxy
 openssl_age
+file_header
 
-# TODO: it's ugly to have those two vars here --> main()
+# TODO: it is ugly to have those two vars here --> main()
 ret=0
 ip=""
 
@@ -5406,6 +5983,8 @@ else
           fi
      fi
 fi
+
+file_footer
 
 exit $?
 
