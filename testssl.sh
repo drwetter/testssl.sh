@@ -133,7 +133,7 @@ DEBUG=${DEBUG:-0}                       # 1.: the temp files won't be erased.
                                         # 3: slight hexdumps + other info, 
                                         # 4: display bytes sent via sockets, 5: display bytes received via sockets, 6: whole 9 yards
 WIDE=${WIDE:-false}                     # whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
-LOGFILE=${LOGILE-""}                    # logfile if used
+LOGFILE=${LOGFILE:-""}                  # logfile if used
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
 
 # tuning vars, can not be set by a cmd line switch
@@ -220,7 +220,7 @@ readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Fire
 TLS_LOW_BYTE=""
 HEX_CIPHER=""
 
-                                             # The various hexdump commands we need to replace xxd (BSD compatibility))
+                                             # The various hexdump commands we need to replace xxd (BSD compatibility)
 HEXDUMPVIEW=(hexdump -C)                     # This is used in verbose mode to see what's going on
 HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"')   # This is used to analyze the reply
 HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')      # Replaces both xxd -p and tr -cd '[:print:]'
