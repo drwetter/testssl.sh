@@ -90,7 +90,7 @@ readonly CMDLINE="$@"
 
 readonly CVS_REL=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')
 readonly CVS_REL_SHORT=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')
-if which git &>/dev/null ; then
+if git log &>/dev/null; then
      readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
      readonly GIT_REL_SHORT=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1 }')
      readonly REL_DATE=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $2 }')
@@ -2380,7 +2380,7 @@ determine_tls_extensions() {
 run_server_defaults() {
      local proto
      local sessticket_str lifetime unit keysize sig_algo key_algo
-     local expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
+     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
      local policy_oid
      local spaces="                              "
      local wildcard=false
@@ -2643,6 +2643,18 @@ run_server_defaults() {
 #         https://certs.opera.com/03/ev-oids.xml
 
      pr_bold " Certificate Expiration       "
+
+     if $HAS_GNUDATE ; then
+          enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
+          startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
+          days2expire=$(( $(date --date="$enddate" "+%s") - $(date "+%s") ))    # in seconds
+     else
+          enddate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
+          startdate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
+          LC_ALL=C days2expire=$(( $(date -j -f "%F %H:%M %z" "$enddate" "+%s") - $(date "+%s") ))    # in seconds
+     fi
+     days2expire=$((days2expire  / 3600 / 24 )) 
+
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 0 2>>$ERRFILE)
      if ! echo $expire | grep -qw not; then
           pr_red "expired!"
@@ -2655,25 +2667,18 @@ run_server_defaults() {
                secs2warn=$((24 * 60 * 60 * DAYS2WARN1))
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
                if echo "$expire" | grep -qw not; then
-                    pr_litegreen ">= $DAYS2WARN1 days"
-                    expfinding+=">= $DAYS2WARN1 days"
+                    pr_litegreen "$days2expire >= $DAYS2WARN1 days"
+                    expfinding+="$days2expire >= $DAYS2WARN1 days"
                else
-                    pr_brown "expires < $DAYS2WARN1 days"
-                    expfinding+="expires < $DAYS2WARN1 days"
+                    pr_brown "expires < $DAYS2WARN1 days ($days2expire)"
+                    expfinding+="expires < $DAYS2WARN1 days ($days2expire)"
                     expok="WARN"
                fi
           else
-               pr_litered "expires < $DAYS2WARN2 days!"
-               expfinding+="expires < $DAYS2WARN2 days!"
+               pr_litered "expires < $DAYS2WARN2 days! ($days2expire)"
+               expfinding+="expires < $DAYS2WARN2 days! ($days2expire)"
                expok="NOT OK"
           fi
-     fi
-     if $HAS_GNUDATE ; then
-          enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
-          startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
-     else
-          enddate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
-          startdate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
      fi
      outln " ($startdate --> $enddate)"
      output_finding "expiration" "$NODEIP" "$PORT" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
@@ -4445,9 +4450,11 @@ get_install_dir() {
 
      [[ -r "$RUN_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/etc/mapping-rfc.txt" 
      [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+     if [[ ! -r "$MAPPING_FILE_RFC" ]]; then
 # those will disapper:
-     [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/mapping-rfc.txt" 
-     [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/mapping-rfc.txt" 
+          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+     fi
 
      # we haven't found the mapping file yet...
      if [[ ! -r "$MAPPING_FILE_RFC" ]] && which readlink &>/dev/null ; then
@@ -4456,9 +4463,9 @@ get_install_dir() {
                INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
                # not sure whether Darwin has -f
           INSTALL_DIR=$(dirname $INSTALL_DIR 2>/dev/null)
+          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
           [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear:
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
      # still no mapping file:
@@ -4466,7 +4473,7 @@ get_install_dir() {
           INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
           MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear
-          MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
      [[ ! -r "$MAPPING_FILE_RFC" ]] && unset MAPPING_FILE_RFC && pr_litemagentaln "\nNo mapping file found"
@@ -5982,4 +5989,4 @@ file_footer
 exit $?
 
 
-#  $Id: testssl.sh,v 1.424 2015/12/08 12:31:50 dirkw Exp $
+#  $Id: testssl.sh,v 1.427 2015/12/11 12:13:21 dirkw Exp $
