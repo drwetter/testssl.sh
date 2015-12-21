@@ -66,6 +66,9 @@
 * Dmitri S
  - inspiration & help for Darwin port
 
+* Frank Breedijk
+ - Detection of insecure redirect
+
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl
 
