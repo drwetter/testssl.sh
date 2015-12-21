@@ -692,11 +692,11 @@ run_http_header() {
      out "  $status_code$msg_thereafter" 
      case $status_code in
           301|302|307|308)
-               redirect = $(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
+               redirect=`grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n'`
                out ", redirecting to \"$redirect\"" 
                output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter, redirecting to \"$redirect\""
-               if [[ -z `echo $redirect|sed -e 's/^(\/|https\:\/\/).*//'` ]]; then
+               if [[ ( $redirect == https* ) || ( $redirect == /* ) ]]; then
                     output_finding "redirect" "$NODEIP" "$PORT" "INFO" "Redirect to secure url: \"$redirect\""
                else
                     pr_litered " -- Redirect to insecure url (NOT ok)"
