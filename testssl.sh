@@ -701,6 +701,7 @@ run_http_header() {
                else
                     pr_litered " -- Redirect to insecure url (NOT ok)"
                     output_finding "redirect" "$NODEIP" "$PORT" "NOT OK" "Redirect to insecure url: \"$redirect\" (NOT ok)"
+               fi
                ;;
           200) 
                output_finding "status_code" "$NODEIP" "$PORT" "INFO" \
