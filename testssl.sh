@@ -598,7 +598,7 @@ run_http_header() {
      local header
      local -i ret
      local referer useragent
-     local url
+     local url redirect
 
      outln; pr_headlineln " Testing HTTP header response @ \"$URL_PATH\" "
      outln
@@ -629,8 +629,8 @@ run_http_header() {
 
      debugme echo "$NOW_TIME: $HTTP_TIME"
 
-     sed  -e '/^<HTML/,$d' -e '/^<html/,$d' -e '/^<XML /,$d' -e '/<?XML /,$d' \
-          -e '/^<xml /,$d' -e '/<?xml /,$d'  -e '/^<\!DOCTYPE/,$d' -e '/^<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
+     sed  -e '/^ .<HTML/,$d' -e '/^ .<html/,$d' -e '/^ .<XML /,$d' -e '/ .<?XML /,$d' \
+          -e '/^ .<xml /,$d' -e '/ .<?xml /,$d'  -e '/^ .<\!DOCTYPE/,$d' -e '/^ .<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
 #### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
      mv $HEADERFILE.2  $HEADERFILE  # sed'ing in place doesn't work with BSD and Linux simultaneously
      ret=0
@@ -5478,4 +5478,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.428 2015/12/22 19:31:51 dirkw Exp $
+#  $Id: testssl.sh,v 1.429 2015/12/22 20:08:51 dirkw Exp $
