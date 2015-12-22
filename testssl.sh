@@ -646,11 +646,10 @@ run_http_header() {
      out "  $status_code$msg_thereafter" 
      case $status_code in
           301|302|307|308)    
-               out ", redirecting to \"$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')\"" 
-               if [[ ( $redirect == https* ) || ( $redirect == /* ) ]]; then
-                    # Ok
-               else
-                    pr_litered " -- Redirect to insecure url (NOT ok)"
+               redirect=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
+               out ", redirecting to \"$redirect"\"
+               if [[ $redirect == "http://"* ]]; then
+                    pr_litered " -- Redirect to insecure URL (NOT ok)"
                fi
                ;;
           200) ;;
@@ -5479,4 +5478,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.427 2015/12/11 12:13:21 dirkw Exp $
+#  $Id: testssl.sh,v 1.428 2015/12/22 19:31:51 dirkw Exp $
