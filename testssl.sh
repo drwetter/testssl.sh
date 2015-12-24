@@ -2491,7 +2491,7 @@ run_spdy() {
 run_http2() {
      local tmpstr
      local -i ret=0	
-     local had_alpn_proto
+     local had_alpn_proto=false
 
      pr_bold " HTTP2/ALPN "
      if ! http2_pre ; then
@@ -2501,17 +2501,19 @@ run_http2() {
      for proto in $ALPN_PROTOs; do
           # for some reason OpenSSL doesn't list the advertised protocols, so instead try common protocols
           $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -alpn $proto </dev/null 2>$ERRFILE >$TMPFILE
-          tmpstr=$(grep -a '^ALPN protocol' $TMPFILE | sed 's/ALPN protocol.*: //')
-          if [[ "$tmpstr" = "$proto" ]]; then
-              if [[ -z "$had_alpn_proto" ]]; then
+          #tmpstr=$(grep -a '^ALPN protocol' $TMPFILE | sed 's/ALPN protocol.*: //')
+          #tmpstr=$(awk '/^ALPN protocol*:/ { print $2 }' $TMPFILE)
+          tmpstr=$(awk -F':' '/^ALPN protocol*:/ { print $2 }' $TMPFILE)
+          if [[ "$tmpstr" == *"$proto" ]]; then
+              if ! $had_alpn_proto; then
                   out "$proto"
-                  had_alpn_proto=1
+                  had_alpn_proto=true
               else
                   out ", $proto"
               fi
           fi
      done
-     if [ "$had_alpn_proto" ]; then
+     if $had_alpn_proto; then
           outln " (offered)"
           ret=0
      else
@@ -5478,4 +5480,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.429 2015/12/22 20:08:51 dirkw Exp $
+#  $Id: testssl.sh,v 1.430 2015/12/24 22:00:21 dirkw Exp $
