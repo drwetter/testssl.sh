@@ -42,6 +42,11 @@
  - initial MX stuff
  - fixes
 
+* Laine Gholson
+ - avahi/mDNS support
+ - HTTP2/ALPN
+ - bugfixes
+
 * Дилян Палаузов
  - bug fix for 3des report
  - reported a tricky STARTTLS bug
@@ -59,9 +64,6 @@
 * Markus Manzke: 
  - Fix for HSTS + subdomains
  - LibreSSL patch
-
-* Laine Gholson
- - avahi/mDNS support
 
 * Dmitri S
  - inspiration & help for Darwin port
