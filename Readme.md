@@ -33,10 +33,11 @@ Done so far:
 
 * Trust chain check against certificate stores from java, linux (system), microsoft, mozilla (works for openssl >=1.0.2)
 * IPv6 (status: 80% working, details see https://github.com/drwetter/testssl.sh/issues/11
-* works on servers requiring a client certificate for authentication
+* works on servers requiring a x509 certificate for authentication
 * SSL Session ID check
 * avahi/mDNS based name resolution
-* Logging to a file
+* HTTP2/ALPN protocol check
+* Logging to a file / dir
 * Even more compatibilty improvements for FreeBSD, RH-ish and F5 systems
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
@@ -51,9 +52,11 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 Please address questions not specifically to the code of testssl.sh to the respective projects
 
-#### Docker
-
-Docker images are available at:
+#### Docker images are available at:
 
 * https://quay.io/repository/jumanjiman/testssl
 * https://hub.docker.com/r/mvance/testssl/
+
+#### brew package
+
+* see [#233](https://github.com/drwetter/testssl.sh/issues/233) and  [https://github.com/Homebrew/homebrew](https://github.com/Homebrew/homebrew)
