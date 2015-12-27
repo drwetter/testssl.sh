@@ -1481,7 +1481,7 @@ run_protocols() {
                using_sockets=false
           else
                using_sockets=true
-               pr_headlineln "(via sockets except TLS 1.2 and SPDY/NPN) "
+               pr_headlineln "(via sockets except TLS 1.2 and SPDY/HTTP2) "
           fi
      fi
      outln
@@ -5480,4 +5480,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.430 2015/12/24 22:00:21 dirkw Exp $
+#  $Id: testssl.sh,v 1.431 2015/12/27 12:33:51 dirkw Exp $
