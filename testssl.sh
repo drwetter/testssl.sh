@@ -4120,11 +4120,11 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
      -f, --ciphers                 checks common cipher suites
-     -p, --protocols               checks TLS/SSL protocols
-     -S, --server_defaults         displays the servers default picks and certificate info
-     -P, --preference              displays the servers picks: protocol+cipher
+     -p, --protocols               checks TLS/SSL protocols (including SPDY/HTTP2)
      -y, --spdy, --npn             checks for SPDY/NPN
      -Y, --http2, --alpn           checks for HTTP2/ALPN
+     -S, --server-defaults         displays the server's default picks and certificate info
+     -P, --preference              displays the server's picks: protocol+cipher
      -x, --single-cipher <pattern> tests matched <pattern> of ciphers
                                    (if <pattern> not a number: word match)
      -U, --vulnerable              tests all vulnerabilities
@@ -4138,7 +4138,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -F, --freak                   tests for FREAK vulnerability
      -A, --beast                   tests for BEAST vulnerability
      -J, --logjam                  tests for LOGJAM vulnerability
-     -s, --pfs, --fs,--nsa         checks (perfect) forward secrecy settings
+     -s, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
      -H, --header, --headers       tests HSTS, HPKP, server/app banner, security headers, cookie, reverse proxy, IPv4 address
 
@@ -4164,7 +4164,7 @@ tuning options (can also be preset via environment variables):
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
      --proxy <host>:<port>         connect via the specified HTTP proxy
-     -6                            use also IPv6 checks, works only with supporting OpenSSL version and IPv6 connectivity
+     -6                            use also IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --sneaky                      leave less traces in target logs: user agent, referer
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --log, --logging              logs stdout to <NODE-YYYYMMDD-HHMM.log> in current working directory
@@ -4175,10 +4175,10 @@ tuning options (can also be preset via environment variables):
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~120
 
-All options requiring a value can also be called with '=' (e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
+All options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 <URI> is always the last parameter.
 
-Need HTML output? Just pipe through "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like
+Need HTML output? Just pipe through "aha" (ANSI HTML Adapter: github.com/theZiz/aha) like
 
    "$PROG_NAME <options> <URI> | aha >output.html"
 EOF
@@ -5480,4 +5480,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.431 2015/12/27 12:33:51 dirkw Exp $
+#  $Id: testssl.sh,v 1.432 2015/12/27 13:51:17 dirkw Exp $
