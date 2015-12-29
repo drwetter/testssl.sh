@@ -4124,7 +4124,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -y, --spdy, --npn             checks for SPDY/NPN
      -Y, --http2, --alpn           checks for HTTP2/ALPN
      -S, --server-defaults         displays the server's default picks and certificate info
-     -P, --preference              displays the server's picks: protocol+cipher
+     -P, --server-preference       displays the server's picks: protocol+cipher
      -x, --single-cipher <pattern> tests matched <pattern> of ciphers
                                    (if <pattern> not a number: word match)
      -U, --vulnerable              tests all vulnerabilities
@@ -5143,7 +5143,7 @@ parse_cmd_line() {
                -S|--server[-_]defaults)
                     do_server_defaults=true
                     ;;
-               -P|--server[_-]preference)
+               -P|--server[_-]preference|--preference)
                     do_server_preference=true
                     ;;
                -H|--header|--headers)
@@ -5480,4 +5480,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.432 2015/12/27 13:51:17 dirkw Exp $
+#  $Id: testssl.sh,v 1.433 2015/12/29 09:05:19 dirkw Exp $
