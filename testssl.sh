@@ -2440,7 +2440,7 @@ spdy_pre(){
 http2_pre(){
      if [[ -n "$STARTTLS" ]]; then
           [[ -n "$1" ]] && out "$1"
-          out "(HTTP/2 is a HTTP protocol and thus not tested here)"
+          outln "(HTTP/2 is a HTTP protocol and thus not tested here)"
           return 1
      fi
      if [[ -n "$PROXY" ]]; then
@@ -5480,4 +5480,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.433 2015/12/29 09:05:19 dirkw Exp $
+#  $Id: testssl.sh,v 1.434 2015/12/29 16:07:02 dirkw Exp $
