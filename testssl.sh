@@ -1847,10 +1847,11 @@ cipher_pref_check() {
 
 
 # arg1 is proto or empty
+# arg2 is "-cipher <OpenSSL cipher>" or empty
 get_host_cert() {
      local tmpvar=$TEMPDIR/$FUNCNAME.txt     # change later to $TMPFILE
 
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $1 2>/dev/null </dev/null >$TEMPDIR/$FUNCNAME.txt
+     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $1 $2 2>/dev/null </dev/null >$TEMPDIR/$FUNCNAME.txt
      if sclient_connect_successful $? $tmpvar; then
           awk '/-----BEGIN/,/-----END/ { print $0 }' $tmpvar >$HOSTCERT
      else
@@ -1859,11 +1860,12 @@ get_host_cert() {
     #      return $((${PIPESTATUS[0]} + ${PIPESTATUS[1]}))
 }
 
+# arg1 is an OpenSSL cipher
 get_all_certs() {
      local savedir
      local nrsaved
 
-     $OPENSSL s_client -showcerts $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>$ERRFILE </dev/null >$TEMPDIR/allcerts.txt
+     $OPENSSL s_client -showcerts $STARTTLS $BUGS -cipher $1 -connect $NODEIP:$PORT $PROXY $SNI 2>$ERRFILE </dev/null >$TEMPDIR/allcerts.txt
      sclient_connect_successful $? $TMPFILE || \
           pr_litemagenta "problem getting all certs"
      savedir=$(pwd); cd $TEMPDIR
@@ -1896,6 +1898,7 @@ verify_retcode_helper() {
      return $ret
 }
 
+# arg1 is an OpenSSL cipher
 determine_trust() {
 	local i=1
 	local bundle_fname
@@ -1920,7 +1923,7 @@ determine_trust() {
                return 7
           fi
 		debugme printf -- " %-12s" "${certificate_file[i]}"
-		$OPENSSL s_client -purpose sslserver -CAfile $bundle_fname $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT $SNI </dev/null  >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+		$OPENSSL s_client -purpose sslserver -cipher $1 -CAfile $bundle_fname $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT $SNI </dev/null  >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
 		verify_retcode[i]=$(awk -F':' '/Verify return code: / { print $2 }' $TEMPDIR//${certificate_file[i]}.1)
 		if egrep -wq "ok|0" <<< ${verify_retcode[i]}; then
 			trust[i]=true
@@ -2010,7 +2013,7 @@ sclient_connect_successful() {
      return 1
 }
 
-
+# arg1 is "-cipher <OpenSSL cipher>" or empty
 determine_tls_extensions() {
      local proto
      local success
@@ -2022,14 +2025,16 @@ determine_tls_extensions() {
      success=7
      for proto in tls1_2 tls1_1 tls1 ssl3; do
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
-          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS $BUGS $1 -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0 && break
      done                          # this loop is needed for IIS/6
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
-          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS $BUGS $1 -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
-               pr_litemagentaln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+               if [ -z "$1" ]; then
+                   pr_litemagentaln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+               fi
                tmpfile_handle $FUNCNAME.txt
                return 7  # this is ugly, I know
           else
@@ -2037,7 +2042,7 @@ determine_tls_extensions() {
           fi
      fi
      TLS_EXTENSIONS=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
-     get_host_cert "-$proto"
+     get_host_cert "-$proto" "$1"
      success=$?
 
      tmpfile_handle $FUNCNAME.txt
@@ -2045,52 +2050,33 @@ determine_tls_extensions() {
 }
 
 
-run_server_defaults() {
+certificate_info() {
      local proto
-     local sessticket_str lifetime unit keysize sig_algo key_algo
+     local certificate_number=$1
+     local number_of_certificates=$2
+     local cipher=$3
+     local cipherlist=$4
+     local keysize=$5
+     local ocsp_response=$6
+     local ocsp_response_status=$7
+     local sig_algo key_algo
      local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
      local policy_oid
      local spaces="                              "
      local wildcard=false
 
      outln
-     pr_headlineln " Testing server defaults (Server Hello) "
+     out "  "
+     if [[ $number_of_certificates -gt 1 ]]; then
+         pr_headlineln " Server Certifcate #$certificate_number "
+         pr_bold "   Ciphers used with            "
+         outln "$cipherlist"
+     else
+         pr_headlineln " Server Certifcate "
+     fi
      outln
-
-     pr_bold " TLS server extensions (std)  "
-     [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
-
-     #extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
-     if [[ -z "$TLS_EXTENSIONS" ]]; then
-          outln "(none)"
-     else
-          #echo $extensions | sed 's/ /,/g' 
-          outln "$TLS_EXTENSIONS"
-     fi
-
-     cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
-     >$ERRFILE
-
-     pr_bold " Session Tickets RFC 5077     "
-     sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
-     if [[ -z "$sessticket_str" ]]; then
-          outln "(none)"
-     else
-          lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
-          unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
-          out "$lifetime $unit "
-          pr_yellowln "(PFS requires session ticket keys to be rotated <= daily)"
-     fi
  
-     pr_bold " SSL Session ID support       "
-     if $NO_SSL_SESSIONID; then
-          outln "no"
-     else
-          outln "yes"
-     fi
-
-     pr_bold " Server key size              "
-     keysize=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
+     pr_bold "   Server key size              "
      sig_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
      key_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2 }' | sort -u )
 
@@ -2115,7 +2101,7 @@ run_server_defaults() {
      fi
      outln " bit"
 
-     pr_bold " Signature Algorithm          "
+     pr_bold "   Signature Algorithm          "
      case $sig_algo in
           sha1WithRSAEncryption)   pr_brownln "SHA1 with RSA" ;;
           sha256WithRSAEncryption) pr_litegreenln "SHA256 with RSA" ;;
@@ -2127,11 +2113,11 @@ run_server_defaults() {
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
-     pr_bold " Fingerprint / Serial         "
+     pr_bold "   Fingerprint / Serial         "
      outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
      outln "$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
 
-     pr_bold " Common Name (CN)             "
+     pr_bold "   Common Name (CN)             "
      if $OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | grep -wq CN; then
           cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
           pr_dquoted "$cn"
@@ -2150,7 +2136,7 @@ run_server_defaults() {
           out "$cn"
      fi
 
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+     $OPENSSL s_client $STARTTLS $BUGS -cipher $cipher -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
      cn_nosni=""
      if [[ -s $HOSTCERT.nosni ]]; then
           if $OPENSSL x509 -in $HOSTCERT.nosni -noout -subject 2>>$ERRFILE | grep -wq CN; then
@@ -2189,7 +2175,7 @@ run_server_defaults() {
           sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
 #                                                       ^^^ CACert
 
-     pr_bold " subjectAltName (SAN)         "
+     pr_bold "   subjectAltName (SAN)         "
      if [[ -n "$sans" ]]; then
           for san in $sans; do
                pr_dquoted "$san"
@@ -2199,7 +2185,7 @@ run_server_defaults() {
           out "-- "
      fi
      outln
-     pr_bold " Issuer                       "
+     pr_bold "   Issuer                       "
      issuer=$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE| sed -e 's/^.*CN=//g' -e 's/\/.*$//g')
      issuer_O=$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE | sed 's/^.*O=//g' | sed 's/\/.*$//g')
      if $OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE | grep -q 'C=' ; then
@@ -2221,7 +2207,7 @@ run_server_defaults() {
      fi
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
-     pr_bold " EV cert"; out " (experimental)       "
+     pr_bold "   EV cert"; out " (experimental)       "
      policy_oid=$($OPENSSL x509 -in $HOSTCERT -text 2>>$ERRFILE | awk '/ .Policy: / { print $2 }')
      if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
           [[ 2.16.840.1.114028.10.1.2 == "$policy_oid" ]] || \
@@ -2242,7 +2228,7 @@ run_server_defaults() {
 #         http://src.chromium.org/chrome/trunk/src/net/cert/ev_root_ca_metadata.cc
 #         https://certs.opera.com/03/ev-oids.xml
 
-     pr_bold " Certificate Expiration       "
+     pr_bold "   Certificate Expiration       "
 
      if $HAS_GNUDATE ; then
           enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
@@ -2276,12 +2262,12 @@ run_server_defaults() {
      outln " ($startdate --> $enddate)"
 
 
-     pr_bold " # of certificates provided"; outln "   $(get_all_certs)"
+     pr_bold "   # of certificates provided"; outln "   $(get_all_certs $cipher)"
 
-     pr_bold " Chain of trust"; out " (experim.)    "
-     determine_trust
+     pr_bold "   Chain of trust"; out " (experim.)    "
+     determine_trust $cipher
 
-     pr_bold " Certificate Revocation List  "
+     pr_bold "   Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
      if [[ -z "$crl" ]]; then
           pr_literedln "--"
@@ -2295,15 +2281,15 @@ run_server_defaults() {
           pr_litemagentaln "no parsable output \"$url\", pls report"
      fi
 
-     pr_bold " OCSP URI                     "
+     pr_bold "   OCSP URI                     "
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      [[ x"$ocsp_uri" == "x" ]] && pr_literedln "--" || echo "$ocsp_uri"
 
-     pr_bold " OCSP stapling               "
-     if grep -a "OCSP response" $TMPFILE | grep -q "no response sent" ; then
+     pr_bold "   OCSP stapling               "
+     if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
           out " not offered"
      else
-          if grep -a "OCSP Response Status" $TMPFILE | grep -q successful; then
+          if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
                pr_litegreen " offered"
           else
                if $GOST_STATUS_PROBLEM; then
@@ -2311,22 +2297,115 @@ run_server_defaults() {
                     ret=0
                else
                     outln " not sure what's going on here, debug:"
-                    grep -aA 20 "OCSP response"  $TMPFILE
+                    grep -aA 20 "OCSP response"  <<<"$ocsp_response"
                     ret=2
                fi
           fi
      fi
      outln
 
-     # if we call tls_time before tmpfile_handle it throws an error because the function tls_sockets removed $TMPFILE 
-     # already -- and that was a different one -- means that would get overwritten anyway
-     tmpfile_handle $FUNCNAME.txt
-
-     tls_time
      return $ret
 }
 # FIXME: revoked, see checkcert.sh
 # FIXME: Trust (only CN)
+
+run_server_defaults() {
+     local hexcode n ciph sslvers kx auth enc mac export filename match_found success hostcert1 newhostcert
+     local sessticket_str=""
+     local lifetime unit
+     local i line
+     local all_tls_extensions=""
+     local certs_found=0
+     local -a previous_hostcert keysize cipher cipherlist ocsp_response ocsp_response_status
+     
+#     aNULL - all
+#     aSRP - not in 1.0.1h (in 1.0.1i)
+#     aPSK - not in 0.9.8zh (in 1.0.0)
+#     aKRB5 - not in 0.9.6m (in 0.9.7)
+     $OPENSSL ciphers -V 'aRSA:aDSS:aDH:aECDH:aECDSA:aGOST' 2>>$ERRFILE | (while read hexcode n ciph sslvers kx auth enc mac export; do
+#     $OPENSSL ciphers -V 'DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-GCM-SHA384:AES128-SHA' 2>>$ERRFILE | (while read hexcode n ciph sslvers kx auth enc mac export; do
+         determine_tls_extensions "-cipher $ciph"
+         success=$?
+         if [[ success -eq 0 ]]; then
+             # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
+             while read -d "\"" -r line; do
+                 if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
+                     if [[ $all_tls_extensions == "" ]]; then
+                         all_tls_extensions="\"${line}\""
+                     else
+                         all_tls_extensions="${all_tls_extensions} \"${line}\""
+                     fi
+                 fi
+             done <<<$TLS_EXTENSIONS
+             
+             cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+             >$ERRFILE
+             if [[ -z "$sessticket_str" ]]; then
+                 sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+             fi
+
+             # check whether the host's certificate has been seen before
+             match_found=false
+             i=1
+             newhostcert=$(cat $HOSTCERT)
+             while [[ $i -le $certs_found ]]; do
+                 if [ "$newhostcert" == "${previous_hostcert[i]}" ]; then
+                    match_found=true
+                    break;
+                 fi
+                 i=$(($i + 1))
+             done
+             if ! $match_found ; then
+                 certs_found=$(($certs_found + 1))
+                 cipher[certs_found]=$ciph
+                 cipherlist[certs_found]="$ciph"
+                 keysize[certs_found]=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
+                 ocsp_response[certs_found]=$(grep -aA 20 "OCSP response" $TMPFILE)
+                 ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
+                 previous_hostcert[certs_found]=$newhostcert
+             else
+                 cipherlist[i]="${cipherlist[i]} $ciph"
+             fi
+         fi
+     done
+
+     outln
+     pr_headlineln " Testing server defaults (Server Hello) "
+     outln
+     
+     pr_bold " TLS server extensions (std)  "
+     if [[ -z "$all_tls_extensions" ]]; then
+         outln "(none)"
+     else
+         outln "$all_tls_extensions"
+     fi
+
+     pr_bold " Session Tickets RFC 5077     "
+     if [[ -z "$sessticket_str" ]]; then
+          outln "(none)"
+     else
+          lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
+          unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
+          out "$lifetime $unit "
+          pr_yellowln "(PFS requires session ticket keys to be rotated <= daily)"
+     fi
+     
+     pr_bold " SSL Session ID support       "
+     if $NO_SSL_SESSIONID; then
+          outln "no"
+     else
+          outln "yes"
+     fi
+     
+     tls_time
+     
+     i=1
+     while [[ $i -le $certs_found ]]; do
+         echo "${previous_hostcert[i]}" > $HOSTCERT
+         certificate_info "$i" "$certs_found" "${cipher[i]}" "${cipherlist[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}"
+         i=$(($i + 1))
+     done)
+}
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 run_pfs() {
