@@ -4533,6 +4533,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -s, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
      -H, --header, --headers       tests HSTS, HPKP, server/app banner, security headers, cookie, reverse proxy, IPv4 address
+     -c, --client-simulation       test client simulations, see which client negotiates wich cipher and protocol
 
   special invocations:
 
