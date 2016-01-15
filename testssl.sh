@@ -20,10 +20,21 @@
 # license permitted.
 # If you enclose this script or parts of it in your software, it has to
 # be accompanied by the same license (see link) and the place where to get
-# the recent version of this program. Do not violate the license!
+# the recent version of this program. Do not violate the license andif 
+# you do not agree to all of these terms, do not use it in the first place.
 #
-# USAGE WITHOUT ANY WARRANTY, THE SOFTWARE IS PROVIDED "AS IS". USE IT AT
-# your OWN RISK!
+# OpenSSL which is being used and maybe distributed via one of this projects'
+# web site is subject to their licensing: https://www.openssl.org/source/license.txt
+# 
+# The client simulation data comes from SSLlabs and is licensed to the 'Qualys SSL Labs
+# Terms of Use' (v2.2), see https://www.ssllabs.com/downloads/Qualys_SSL_Labs_Terms_of_Use.pdf,
+# stating a CC BY 3.0 US license: https://creativecommons.org/licenses/by/3.0/us/
+#
+# Please note:  USAGE WITHOUT ANY WARRANTY, THE SOFTWARE IS PROVIDED "AS IS". 
+#
+# USE IT AT your OWN RISK! 
+# Seriously! The threat is you run this code on your computer and input could be /
+# is being supplied via untrusted sources.
 
 # HISTORY: 
 # Back in 2006 it all started with a few openssl commands...
@@ -5894,4 +5905,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.436 2016/01/15 15:37:46 dirkw Exp $
+#  $Id: testssl.sh,v 1.437 2016/01/15 16:04:15 dirkw Exp $
