@@ -1,5 +1,4 @@
 
-
 ##### Credits also to
 
 * Peter Mosmans
@@ -16,6 +15,10 @@
 * Mark Felder
  - lots of cleanups
  - Shellcheck static analysis
+
+* Frank Breedijk
+ - Detection of insecure redirect
+ - client simulation
 
 * Jean Marsault
  - client auth: ideas, code snipplets
@@ -68,13 +71,12 @@
 * Dmitri S
  - inspiration & help for Darwin port
 
-* Frank Breedijk
- - Detection of insecure redirect
-
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl
 
 ##### Last but not least:
 
-OpenSSL team for providing openssl.
+* OpenSSL team for providing openssl.
+
+* Ivan Ristic for the liberal license which made it possible  to use the client data
 
