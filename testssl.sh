@@ -1229,6 +1229,15 @@ sockread() {
      return $ret
 }
 
+#FIXME: fill the following two:
+openssl2rfc() {
+     :
+}
+
+rfc2openssl() {
+     :
+}
+
 
 show_rfc_style(){
      local rfcname
@@ -1760,7 +1769,7 @@ run_client_simulation() {
      debugme outln
      for name in "${short[@]}"; do
           #FIXME: printf formatting would look better, especially if we want a wide option here
-          out "${names[i]}   "
+          out " ${names[i]}   "
           $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE          
           debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
           sclient_connect_successful $? $TMPFILE
@@ -2321,7 +2330,7 @@ determine_trust() {
 			debugme outln "${verify_retcode[i]}"
 		else
 			trust[i]=false
-			debugme pr_litered "not trusted"
+			debugme pr_red "not trusted"
 			debugme outln "${verify_retcode[i]}"
 		fi
 		i=$(($i + 1))
@@ -2332,21 +2341,23 @@ determine_trust() {
 		pr_litegreen "Ok   "			
 	# at least one failed
 	else
-		pr_litered "NOT ok"	
+		pr_ed "NOT ok"	
 		# all failed (we assume with the same issue)
 		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]} && ! ${trust[4]}; then
 			verify_retcode_helper "${verify_retcode[2]}"
 		else
 			# is one ok and the others not?
 			if ${trust[1]} || ${trust[2]} || ${trust[3]} || ${trust[4]}; then
-				pr_litered ":"
+				pr_red ":"
+                    out "\n$spaces"
+                    pr_red "FAILED:"
 				for i in 1 2 3 4; do
 					if ${trust[i]}; then
 						ok_was="${certificate_file[i]} $ok_was"
 					else
                               #code="$(verify_retcode_helper ${verify_retcode[i]})"
                               #notok_was="${certificate_file[i]} $notok_was"
-                              pr_litered "  ${certificate_file[i]}:"
+                              pr_litered " ${certificate_file[i]} "
                               verify_retcode_helper "${verify_retcode[i]}"
 					fi
 				done
@@ -4255,6 +4266,7 @@ run_beast(){
                outln " -- and no higher protocols as mitigation supported"
           fi
      fi
+     $first && pr_litegreenln "no CBC ciphers found for any protocol (OK)"
 
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -4695,7 +4707,7 @@ EOF
      pr_bold "$bb"
      outln "\n"
      outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$nr_ciphers ciphers]"
-     out "on $HNAME:"
+     out " on $HNAME:"
 
      [[ -n "$GIT_REL" ]] && \
           cwd=$(/bin/pwd) || \
@@ -5254,7 +5266,7 @@ display_rdns_etc() {
      if "$LOCAL_A"; then
           outln " A record via            /etc/hosts "
      elif  [[ -n "$CMDLINE_IP" ]]; then
-          outln " A record via            --ip=$CMDLINE_IP parameter"
+          outln " A record via            supplied IP \"$CMDLINE_IP\""
      fi
      if [[ -n "$rDNS" ]]; then
           if $HAS_IPv6; then
@@ -5882,4 +5894,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.435 2016/01/15 14:53:02 dirkw Exp $
+#  $Id: testssl.sh,v 1.436 2016/01/15 15:37:46 dirkw Exp $
