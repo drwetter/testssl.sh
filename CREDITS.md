@@ -17,6 +17,10 @@
  - lots of cleanups
  - Shellcheck static analysis
 
+* Frank Breedijk
+ - Detection of insecure redirect
+ - client simulation
+
 * Jean Marsault
  - client auth: ideas, code snipplets
  
@@ -67,9 +71,6 @@
 
 * Dmitri S
  - inspiration & help for Darwin port
-
-* Frank Breedijk
- - Detection of insecure redirect
 
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl
