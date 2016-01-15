@@ -1,5 +1,4 @@
 
-
 ##### Credits also to
 
 * Peter Mosmans
@@ -77,5 +76,7 @@
 
 ##### Last but not least:
 
-OpenSSL team for providing openssl.
+* OpenSSL team for providing openssl.
+
+* Ivan Ristic for the liberal license which made it possible  to use the client data
 
