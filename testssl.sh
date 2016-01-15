@@ -2352,7 +2352,7 @@ determine_trust() {
 		pr_litegreen "Ok   "			
 	# at least one failed
 	else
-		pr_ed "NOT ok"	
+		pr_red "NOT ok"	
 		# all failed (we assume with the same issue)
 		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]} && ! ${trust[4]}; then
 			verify_retcode_helper "${verify_retcode[2]}"
@@ -5905,4 +5905,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.437 2016/01/15 16:04:15 dirkw Exp $
+#  $Id: testssl.sh,v 1.438 2016/01/15 16:30:46 dirkw Exp $
