@@ -2467,8 +2467,8 @@ determine_tls_extensions() {
 
 certificate_info() {
      local proto
-     local certificate_number=$1
-     local number_of_certificates=$2
+     local -i certificate_number=$1
+     local -i number_of_certificates=$2
      local cipher=$3
      local cipherlist=$4
      local keysize=$5
@@ -2725,31 +2725,98 @@ certificate_info() {
 # FIXME: Trust (only CN)
 
 run_server_defaults() {
-     local hexcode n ciph sslvers kx auth enc mac export filename match_found success hostcert1 newhostcert
+     local hexcode n ciph sslvers kx auth enc mac export filename match_found hostcert1 newhostcert
      local sessticket_str=""
      local lifetime unit
-     local i line
+     local line
+     local -i i
      local all_tls_extensions=""
-     local certs_found=0
+     local -i certs_found=0
      local -a previous_hostcert keysize cipher cipherlist ocsp_response ocsp_response_status
+     local supported_ciphers=""
+     local tmpvar=$TEMPDIR/$FUNCNAME.tls_extensions.txt
      
-#     aNULL - all
-#     aSRP - not in 1.0.1h (in 1.0.1i)
-#     aPSK - not in 0.9.8zh (in 1.0.0)
-#     aKRB5 - not in 0.9.6m (in 0.9.7)
-     $OPENSSL ciphers -V 'aRSA:aDSS:aDH:aECDH:aECDSA:aGOST' 2>>$ERRFILE | (while read hexcode n ciph sslvers kx auth enc mac export; do
-#     $OPENSSL ciphers -V 'DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-GCM-SHA384:AES128-SHA' 2>>$ERRFILE | (while read hexcode n ciph sslvers kx auth enc mac export; do
+     outln
+     pr_headlineln " Testing server defaults (Server Hello) "
+     outln
+
+     # First determine what types of certificates the server has and then only run tests using
+     # cipher suites corresponding to those certificate types
+     determine_tls_extensions "-cipher aRSA"
+     if [[ $? -eq 0 ]]; then
+         supported_ciphers="$supported_ciphers:aRSA"
+     fi
+     determine_tls_extensions "-cipher aDSS"
+     if [[ $? -eq 0 ]]; then
+         supported_ciphers="$supported_ciphers:aDSS"
+     fi
+     determine_tls_extensions "-cipher aDH"
+     if [[ $? -eq 0 ]]; then
+         supported_ciphers="$supported_ciphers:aDH"
+     fi
+     determine_tls_extensions "-cipher aECDH"
+     if [[ $? -eq 0 ]]; then
+         supported_ciphers="$supported_ciphers:aECDH"
+     fi
+     determine_tls_extensions "-cipher aECDSA"
+     if [[ $? -eq 0 ]]; then
+         supported_ciphers="$supported_ciphers:aECDSA"
+     fi
+     determine_tls_extensions "-cipher aGOST"
+     if [[ $? -eq 0 ]]; then
+         supported_ciphers="$supported_ciphers:aGOST"
+     fi
+
+     if [[ -z "$supported_ciphers" ]]; then
+         # could not find any server certificates.
+         pr_bold " TLS server extensions (std)  "
+         [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
+
+         #extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
+         if [[ -z "$TLS_EXTENSIONS" ]]; then
+              outln "(none)"
+         else
+              #echo $extensions | sed 's/ /,/g' 
+              outln "$TLS_EXTENSIONS"
+         fi
+
+         cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+         >$ERRFILE
+
+         pr_bold " Session Tickets RFC 5077     "
+         sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+         if [[ -z "$sessticket_str" ]]; then
+              outln "(none)"
+         else
+              lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
+              unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
+              out "$lifetime $unit "
+              pr_yellowln "(PFS requires session ticket keys to be rotated <= daily)"
+         fi
+ 
+        pr_bold " SSL Session ID support       "
+         if $NO_SSL_SESSIONID; then
+              outln "no"
+         else
+              outln "yes"
+         fi
+         tmpfile_handle $FUNCNAME.txt
+
+         tls_time
+         return 0
+     fi
+
+     # Now try each cipher suite that may be supported by the server in order to obtain all
+     # of the server's certificates (the server may have more than one certificate with the same
+     # type of subject public key.
+     supported_ciphers="${supported_ciphers:1}"
+     $OPENSSL ciphers -V "$supported_ciphers" 2>>$ERRFILE | (while read hexcode n ciph sslvers kx auth enc mac export; do
          determine_tls_extensions "-cipher $ciph"
-         success=$?
-         if [[ success -eq 0 ]]; then
+         if [[ $? -eq 0 ]]; then
              # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
              while read -d "\"" -r line; do
                  if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
-                     if [[ $all_tls_extensions == "" ]]; then
-                         all_tls_extensions="\"${line}\""
-                     else
-                         all_tls_extensions="${all_tls_extensions} \"${line}\""
-                     fi
+                     all_tls_extensions="${all_tls_extensions} \"${line}\""
                  fi
              done <<<$TLS_EXTENSIONS
              
@@ -2783,15 +2850,12 @@ run_server_defaults() {
              fi
          fi
      done
-
-     outln
-     pr_headlineln " Testing server defaults (Server Hello) "
-     outln
      
      pr_bold " TLS server extensions (std)  "
      if [[ -z "$all_tls_extensions" ]]; then
          outln "(none)"
      else
+         all_tls_extensions="${all_tls_extensions:1}"
          outln "$all_tls_extensions"
      fi
 
@@ -2819,7 +2883,9 @@ run_server_defaults() {
          echo "${previous_hostcert[i]}" > $HOSTCERT
          certificate_info "$i" "$certs_found" "${cipher[i]}" "${cipherlist[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}"
          i=$(($i + 1))
-     done)
+     done
+     echo "$all_tls_extensions" > $tmpvar)
+     TLS_EXTENSIONS=$(cat $tmpvar)
 }
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
