@@ -1977,6 +1977,7 @@ run_client_simulation() {
           sclient_success=$?
           if [[ $sclient_success -ne 0 ]]; then
                outln "No connection"
+               output_finding "client_${short[i]}" "$NODEIP" "$PORT" "INFO" "${names[i]} client simulation:\nNo connection"
           else
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                if [[ "$proto" == "TLSv1.2" ]]; then
@@ -2009,6 +2010,8 @@ run_client_simulation() {
                     out "                            "
                     outln "${warning[i]}"
                fi
+               output_finding "client_${short[i]}" "$NODEIP" "$PORT" "INFO" \
+                    "${names[i]} client simulation:\n$proto $cipher\n${warning[i]}"
                debugme cat $TMPFILE
           fi
           i=$((i+1))
@@ -3297,15 +3300,18 @@ http2_pre(){
      if [[ -n "$STARTTLS" ]]; then
           [[ -n "$1" ]] && out "$1"
           outln "(HTTP/2 is a HTTP protocol and thus not tested here)"
+          output_finding "https_alpn" "$NODEIP" "$PORT" "INFO" "HTTP2/ALPN : HTTP/2 is and HTTP protocol and thus not tested"
           return 1
      fi
      if [[ -n "$PROXY" ]]; then
           [[ -n "$1" ]] && pr_litemagenta " $1 "
           pr_litemagenta "not tested as proxies do not support proxying it"
+          output_finding "https_alpn" "$NODEIP" "$PORT" "INFO" "HTTP2/ALPN : HTTP/2 was not tested as proxies do not support proxying it"
           return 1
      fi
      if ! $HAS_ALPN; then
           local_problem "$OPENSSL doesn't support HTTP2/ALPN";
+          output_finding "https_alpn" "$NODEIP" "$PORT" "WARN" "HTTP2/ALPN : HTTP/2 was not tested as $OPENSSL does not support it"
           return 7
      fi
      return 0
@@ -3351,6 +3357,7 @@ run_http2() {
      local tmpstr
      local -i ret=0	
      local had_alpn_proto=false
+     local alpn_finding=""
 
      pr_bold " HTTP2/ALPN "
      if ! http2_pre ; then
@@ -3366,17 +3373,21 @@ run_http2() {
           if [[ "$tmpstr" == *"$proto" ]]; then
               if ! $had_alpn_proto; then
                   out "$proto"
+                  alpn_finding+="$proto"
                   had_alpn_proto=true
               else
                   out ", $proto"
+                  alpn_finding+=", $proto"
               fi
           fi
      done
      if $had_alpn_proto; then
           outln " (offered)"
+          output_finding "https_alpn" "$NODEIP" "$PORT" "INFO" "HTTP2/ALPN : offered\nProtocols: $alpn_finding"
           ret=0
      else
           outln "not offered"
+          output_finding "https_alpn" "$NODEIP" "$PORT" "INFO" "HTTP2/ALPN : not offered"
           ret=1
      fi
      tmpfile_handle $FUNCNAME.txt
