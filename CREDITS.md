@@ -73,6 +73,7 @@
 
 * Frank Breedijk
  - JSON and CSV output
+ - Client simulations
 
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl, Frank Breedijk
