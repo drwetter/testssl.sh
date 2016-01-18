@@ -2919,8 +2919,6 @@ run_server_defaults() {
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
      pr_bold " Fingerprint / Serial         "
-     #outln "$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
-     #outln "$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
      fingerprint="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' ) / $($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
      fingerprint+="\n"
      fingerprint+="$spaces$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
@@ -3097,8 +3095,8 @@ run_server_defaults() {
                     expok="WARN"
                fi
           else
-               pr_litered "expires < $DAYS2WARN2 days! ($days2expire)"
-               expfinding+="expires < $DAYS2WARN2 days! ($days2expire)"
+               pr_litered "expires < $DAYS2WARN2 days ($days2expire) !"
+               expfinding+="expires < $DAYS2WARN2 days ($days2expire) !"
                expok="NOT OK"
           fi
      fi
