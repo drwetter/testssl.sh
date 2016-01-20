@@ -198,6 +198,7 @@ HAS_DH_BITS=${HAS_DH_BITS:-false}
 HAS_SSL2=true                           #TODO: in the future we'll do the fastest possible test (openssl s_client -ssl2 is currently faster than sockets)
 HAS_SSL3=true
 HAS_ALPN=false
+ADD_RFC_STR="rfc"                       # display RFC ciphernames
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -1251,17 +1252,17 @@ rfc2openssl() {
 
 
 show_rfc_style(){
-     local rfcname
+     [[ -z "$ADD_RFC_STR" ]] && return 1
 
-     [[ -z "$MAPPING_FILE_RFC" ]] && return 1
+     local rfcname
      rfcname=$(grep -iw "$1" "$MAPPING_FILE_RFC" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/')
      [[ -n "$rfcname" ]] && out "$rfcname"
      return 0
 }
 
 neat_header(){
-     printf -- "Hexcode  Cipher Suite Name (OpenSSL)    KeyExch.   Encryption Bits${MAPPING_FILE_RFC:+        Cipher Suite Name (RFC)}\n"
-     printf -- "%s-------------------------------------------------------------------------${MAPPING_FILE_RFC:+----------------------------------------------}\n"
+     printf -- "Hexcode  Cipher Suite Name (OpenSSL)    KeyExch.   Encryption Bits${ADD_RFC_STR:+        Cipher Suite Name (RFC)}\n"
+     printf -- "%s-------------------------------------------------------------------------${ADD_RFC_STR:+-------------------------------------------------}\n"
 }
 
 
@@ -1288,11 +1289,8 @@ neat_list(){
           [[ "${#kx}" -eq 19 ]] && kx="$kx "      # 19 means DH, colored >=1000. Add another space
           #echo ${#kx}                            # should be always 20
      fi
-     #if [[ -r "$MAPPING_FILE_RFC" ]]; then
-          printf -- " %-7s %-30s %-10s %-11s%-11s${MAPPING_FILE_RFC:+ %-48s}${SHOW_EACH_C:+  }" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
-     #else
-     #    printf -- " %-7s %-30s %-10s %-11s%-11s${SHOW_EACH_C:+  }" "$1" "$2" "$kx" "$enc" "$strength"
-     #fi
+
+     printf -- " %-7s %-30s %-10s %-11s%-11s${ADD_RFC_STR:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
 test_just_one(){
@@ -4405,7 +4403,7 @@ get_install_dir() {
           [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
-     [[ ! -r "$MAPPING_FILE_RFC" ]] && unset MAPPING_FILE_RFC && pr_litemagentaln "\nNo mapping file found"
+     [[ ! -r "$MAPPING_FILE_RFC" ]] && unset MAPPING_FILE_RFC && unset ADD_RFC_STR && pr_litemagentaln "\nNo mapping file found"
      debugme echo "$MAPPING_FILE_RFC"
 }
 
@@ -4589,6 +4587,7 @@ tuning options (can also be preset via environment variables):
      --logfile <file>              logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified file
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
+     --mapping <no-rfc>            don't display the RFC Cipher Suite Name
      --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~120
@@ -5717,6 +5716,16 @@ parse_cmd_line() {
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
+                    ;;
+               --mapping|--mapping=*)
+                    local cipher_mapping
+                    cipher_mapping=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    case "$cipher_mapping" in
+                         no-rfc) unset ADD_RFC_STR;;
+                         *)   pr_magentaln "\nmapping can only be \"no-rfc\""
+                              help 1 ;;
+                    esac
                     ;;
                --proxy|--proxy=*)
                     PROXY=$(parse_opt_equal_sign "$1" "$2")
