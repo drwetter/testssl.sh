@@ -38,6 +38,8 @@ Done so far:
 * avahi/mDNS based name resolution
 * HTTP2/ALPN protocol check
 * Logging to a file / dir
+* Logging to JSON + CSV
+* Client Simulation
 * Even more compatibilty improvements for FreeBSD, RH-ish and F5 systems
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
