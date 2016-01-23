@@ -71,12 +71,16 @@
 * Dmitri S
  - inspiration & help for Darwin port
 
+* Frank Breedijk
+ - JSON and CSV output
+ - Client simulations
+
 * Bug reports:
-  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl
+  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl, Frank Breedijk
 
 ##### Last but not least:
 
 * OpenSSL team for providing openssl.
 
-* Ivan Ristic for the liberal license which made it possible  to use the client data
+* Ivan Ristic/Qualys for the liberal license which made it possible to use the client data
 
