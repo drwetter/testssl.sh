@@ -4562,6 +4562,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
   special invocations:
 
      -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol>
+                                   a differed port may be specified with <protocol>:<port>
      --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
      --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI 
@@ -5532,12 +5533,38 @@ parse_cmd_line() {
                     do_starttls=true
                     STARTTLS_PROTOCOL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
-                    case $STARTTLS_PROTOCOL in
-                         ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp) ;;
-                         ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
-                         *)   pr_magentaln "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
-                              help 1 ;;
-                    esac
+                    if [[ "$STARTTLS_PROTOCOL" =~ (^.*):([0-9]+)$ ]]; then
+                         PORT=${BASH_REMATCH[2]}
+                         STARTTLS_PROTOCOL=${BASH_REMATCH[1]}
+
+                         case $STARTTLS_PROTOCOL in
+                              ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp) ;;
+                              ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
+                              *)   pr_magentaln "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
+                                   help 1 ;;
+                         esac
+                    else
+                         case $STARTTLS_PROTOCOL in
+                              ftp|ftps)
+                                   PORT=21 ;;
+                              smtp|smtps)
+                                   PORT=25 ;;
+                              pop3|pop3s)
+                                   PORT=110 ;;
+                              imap|imaps)
+                                   PORT=143 ;;
+                              xmpp|xmpps)
+                                   PORT=5222 ;;
+                              telnet|telnets)
+                                   PORT=23 ;;
+                              ldap|ldaps)
+                                   PORT=389 ;;
+                              nntp|nntps)
+                                   PORT=119 ;;
+                              *)   pr_magentaln "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
+                                   help 1 ;;
+                         esac
+                    fi
                     ;;
                --xmpphost|--xmpphost=*)
                     XMPP_HOST=$(parse_opt_equal_sign "$1" "$2")
