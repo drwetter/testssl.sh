@@ -301,7 +301,13 @@ readonly SSLv2_CLIENT_HELLO="
 
 ###### output functions ######
 # a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
-out()   { /usr/bin/printf -- "${1//%/%%}"; }
+out(){ 
+#     if [[ "$BASH_VERSINFO" -eq 4 ]]; then
+          printf -- "%b" "${1//%/%%}"
+#     else
+#          /usr/bin/printf -- "${1//%/%%}"
+#     fi
+}
 outln() { out "$1\n"; }
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
@@ -468,8 +474,8 @@ hex2dec() {
 }
 
 dec2hex() {
-     /usr/bin/printf -- "%x" "$1"
-     #echo $((0x$1))
+     #/usr/bin/printf -- "%x" "$1"
+     echo $((0x$1))
 }
 
 # trim spaces for BSD and old sed
@@ -6507,4 +6513,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.443 2016/01/23 18:18:32 dirkw Exp $
+#  $Id: testssl.sh,v 1.444 2016/01/23 19:33:45 dirkw Exp $
