@@ -2610,44 +2610,28 @@ get_host_cert() {
     #      return $((${PIPESTATUS[0]} + ${PIPESTATUS[1]}))
 }
 
-get_all_certs() {
-     local savedir
-     local nrsaved
-
-     $OPENSSL s_client -showcerts $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>$ERRFILE </dev/null >$TEMPDIR/allcerts.txt
-     sclient_connect_successful $? $TMPFILE || \
-          pr_litemagenta "problem getting all certs"
-     savedir=$(pwd); cd $TEMPDIR
-     # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
-     awk -v n=-1 '/-----BEGIN CERTIFICATE-----/{ inc=1; n++ }
-             inc { print > ("level" n ".crt") }
-             /---END CERTIFICATE-----/{ inc=0 }' $TEMPDIR/allcerts.txt
-     nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
-     cd "$savedir"
-     echo $nrsaved
-}
-
-
 verify_retcode_helper() {
      local ret=0
+     local -i retcode=$1
 
-	case "$1" in
+	case $retcode in
 		# codes from ./doc/apps/verify.pod | verify(1ssl)
-		*"24 "*      ) out " (certificate unreadable)" ;; 	# X509_V_ERR_INVALID_CA
-		*23*revoked* ) out " (certificate revoked)" ;; 		# X509_V_ERR_CERT_REVOKED
-		*21*unable*  ) out " (chain incomplete, only 1 cert provided)" ;; 	# X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
-		*20*unable*  ) out " (chain incomplete)" ;;			# X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
-		*19*self*    ) out " (self signed CA in chain)" ;;	# X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
-		*18*self*    ) out " (self signed)" ;;				# X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
-		*10*expired* ) out " (expired)" ;;				     # X509_V_ERR_CERT_HAS_EXPIRED
-		*"9 "*       ) out " (not yet valid)" ;;		     # X509_V_ERR_CERT_NOT_YET_VALID
-		*"2 "*       ) out " (issuer cert missing)" ;;         # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
+		24) out "(certificate unreadable)" ;; 	# X509_V_ERR_INVALID_CA
+		23) out "(certificate revoked)" ;; 		# X509_V_ERR_CERT_REVOKED
+		21) out "(chain incomplete, only 1 cert provided)" ;; 	# X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
+		20) out "(chain incomplete)" ;;			# X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+		19) out "(self signed CA in chain)" ;;	# X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
+		18) out "(self signed)" ;;				# X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
+		10) out "(expired)" ;;				     # X509_V_ERR_CERT_HAS_EXPIRED
+		9)  out "(not yet valid)" ;;		     # X509_V_ERR_CERT_NOT_YET_VALID
+		2)  out "(issuer cert missing)" ;;         # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
 		*) ret=1 ; pr_litemagenta " (unknown, pls report) $1" ;;
 	esac
      return $ret
 }
 
 determine_trust() {
+	local heading=$1
 	local i=1
 	local bundle_fname
 	local -a certificate_file verify_retcode trust
@@ -2655,35 +2639,44 @@ determine_trust() {
 	local notok_was=""
      local code
      local ca_bundles="$INSTALL_DIR/etc/*.pem"
-     local spaces="                              "
+     local spaces="                                "
+     local -i certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
 
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0" ]]; then
           pr_litemagentaln "Your $OPENSSL is too new, needed is version 1.0.2"
-          fileout "trust" "WARN" "Your $OPENSSL is too new, need version 1.0.2 to determine trust"
+          out "$spaces"
+          fileout "$heading trust" "WARN" "Your $OPENSSL is too new, need version 1.0.2 to determine trust"
           return 7
      elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]]; then
           pr_litemagentaln "Your $OPENSSL is too old, needed is version >=1.0.2"
+          out "$spaces"
           addtl_warning="Your $OPENSSL is too old, need version 1.0.2 to determine trust. Results may be unreliable."
-          fileout "trust_warn" "WARN" "$addtl_warning"
+          fileout "$heading trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
 	for bundle_fname in $ca_bundles; do
-		certificate_file[i]=$(basename $bundle_fname | sed 's/\.pem//')
+		certificate_file[i]=$(basename "$bundle_fname" | sed 's/\.pem//')
           if [[ ! -r $bundle_fname ]]; then
                pr_litemagentaln "\"$bundle_fname\" cannot be found / not readable"
                return 7
           fi
 		debugme printf -- " %-12s" "${certificate_file[i]}"
-		$OPENSSL s_client -purpose sslserver -CAfile $bundle_fname $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT $SNI </dev/null  >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
-		verify_retcode[i]=$(awk -F':' '/Verify return code: / { print $2 }' $TEMPDIR//${certificate_file[i]}.1)
-		if egrep -wq "ok|0" <<< ${verify_retcode[i]}; then
+		# set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
+		(export SSL_CERT_DIR="/dev/null"
+		if [[ $certificates_provided -ge 2 ]]; then
+		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$ERRFILE 2>>$ERRFILE
+		else
+		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >>$ERRFILE 2>>$ERRFILE
+		fi)
+		verify_retcode[i]=$?
+		if [[ ${verify_retcode[i]} -eq 0 ]]; then
 			trust[i]=true
 			debugme pr_litegreen "Ok   "
 			debugme outln "${verify_retcode[i]}"
 		else
 			trust[i]=false
-			debugme pr_red "not trusted"
+			debugme pr_red "not trusted "
 			debugme outln "${verify_retcode[i]}"
 		fi
 		i=$(($i + 1))
@@ -2692,19 +2685,19 @@ determine_trust() {
 	# all stores ok
 	if ${trust[1]} && ${trust[2]} && ${trust[3]} && ${trust[4]}; then
 		pr_litegreen "Ok   "
-          fileout "trust" "OK" "All certificate trust checks passed.addtl_warning"
+          fileout "$heading trust" "OK" "All certificate trust checks passed. $addtl_warning"
 	# at least one failed
 	else
-		pr_red "NOT ok"
+		pr_red "NOT ok "
 		# all failed (we assume with the same issue)
 		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]} && ! ${trust[4]}; then
 			verify_retcode_helper "${verify_retcode[2]}"
-               fileout "trust" "NOT OK" "All certificate trust checks failed: verify_retcode_helper "${verify_retcode[2]}".addtl_warning"
+               fileout "$heading trust" "NOT OK" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
 		else
 			# is one ok and the others not?
 			if ${trust[1]} || ${trust[2]} || ${trust[3]} || ${trust[4]}; then
-				pr_red ":"
-                    out "spaces"
+				pr_redln ":"
+                    out "$spaces"
                     pr_red "FAILED:"
 				for i in 1 2 3 4; do
 					if ${trust[i]}; then
@@ -2714,7 +2707,7 @@ determine_trust() {
                               #notok_was="${certificate_file[i]} $notok_was"
                               pr_litered " ${certificate_file[i]} "
                               verify_retcode_helper "${verify_retcode[i]}"
-			               notok_was="${certificate_file[i]} - verify_retcode_helper "${verify_retcode[i]}"notok_was"
+			               notok_was="${certificate_file[i]} $(verify_retcode_helper "${verify_retcode[i]}") $notok_was"
                		fi
 				done
 				#pr_litered "$notok_was "
@@ -2724,7 +2717,7 @@ determine_trust() {
                     [[ "$DEBUG" -eq 0 ]] && out "$spaces"
 				pr_litegreen "OK: $ok_was"
                fi
-               fileout "trust" "NOT OK" "Some certificate trust checks failed OK    : $ok_was  NOT ok:notok_was  $addtl_warning"
+               fileout "$heading trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok : $notok_was  $addtl_warning"
           fi
 	fi
 	outln
@@ -2774,11 +2767,13 @@ sclient_connect_successful() {
      return 1
 }
 
-
+# arg1 is "-cipher <OpenSSL cipher>" or empty
 determine_tls_extensions() {
      local proto
      local success
      local alpn=""
+     local savedir
+     local nrsaved
 
      $HAS_ALPN && alpn="h2-14,h2-15,h2"
 
@@ -2786,14 +2781,16 @@ determine_tls_extensions() {
      success=7
      for proto in tls1_2 tls1_1 tls1 ssl3; do
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
-          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0 && break
      done                          # this loop is needed for IIS/6
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
-          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
-               pr_litemagentaln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+               if [ -z "$1" ]; then
+                   pr_litemagentaln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+               fi
                tmpfile_handle $FUNCNAME.txt
                return 7  # this is ugly, I know
           else
@@ -2801,143 +2798,139 @@ determine_tls_extensions() {
           fi
      fi
      TLS_EXTENSIONS=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
-     get_host_cert "-$proto"
-     success=$?
+
+     # Place the server's certificate in $HOSTCERT and any intermediate
+     # certificates that were provided in $TEMPDIR/intermediatecerts.pem
+     savedir=$(pwd); cd $TEMPDIR
+     # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
+     awk -v n=-1 '/Certificate chain/ {start=1}
+             /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+             inc { print > ("level" n ".crt") }
+             /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
+     nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
+     if [[ $nrsaved -eq 0 ]]; then
+         success=1
+     else
+         success=0
+         mv level0.crt $HOSTCERT
+         if [[ $nrsaved -eq 1 ]]; then
+             echo "" > $TEMPDIR/intermediatecerts.pem
+         else
+             cat level?.crt > $TEMPDIR/intermediatecerts.pem
+             rm level?.crt
+         fi
+     fi
+     cd "$savedir"
 
      tmpfile_handle $FUNCNAME.txt
      return $success
 }
 
 
-run_server_defaults() {
+certificate_info() {
      local proto
-     local sessticket_str lifetime unit keysize sig_algo key_algo
+     local -i certificate_number=$1
+     local -i number_of_certificates=$2
+     local cipher=$3
+     local keysize=$4
+     local ocsp_response=$5
+     local ocsp_response_status=$6
+     local sig_algo key_algo
      local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
-     local spaces="                              "
+     local spaces="                                "
      local wildcard=false
+     local -i certificates_provided
      local cnfinding
      local cnok="OK"
      local expfinding expok="OK"
+     local heading=""
 
      outln
-     pr_headlineln " Testing server defaults (Server Hello) "
+     out "  "
+     if [[ $number_of_certificates -gt 1 ]]; then
+         heading="Server Certifcate #$certificate_number"
+     else
+         heading="Server Certifcate"
+     fi
+      pr_headlineln " $heading "
      outln
 
-     pr_bold " TLS server extensions (std)  "
-     [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
-
-     #extensions=$(grep -aw "^TLS server extension" $TMPFILE | sed -e 's/^TLS server extension \"//' -e 's/\".*$/,/g')
-     if [[ -z "$TLS_EXTENSIONS" ]]; then
-          outln "(none)"
-          fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
-     else
-          #echo $extensions | sed 's/ /,/g'
-          outln "$TLS_EXTENSIONS"
-          fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
-     fi
-
-     cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
-     >$ERRFILE
-
-     pr_bold " Session Tickets RFC 5077     "
-     sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
-     if [[ -z "$sessticket_str" ]]; then
-          outln "(none)"
-          fileout "session_ticket" "INFO" "TLS session tickes RFC 5077 not supported"
-     else
-          lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
-          unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
-          out "$lifetime $unit "
-          pr_yellowln "(PFS requires session ticket keys to be rotated <= daily)"
-          fileout "session_ticket" "INFO" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
-     fi
-
-     pr_bold " SSL Session ID support       "
-     if $NO_SSL_SESSIONID; then
-          outln "no"
-          fileout "session_id" "INFO" "SSL session ID support: no"
-     else
-          outln "yes"
-          fileout "session_id" "INFO" "SSL session ID support: yes"
-     fi
-
-     pr_bold " Server key size              "
-     keysize=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
+     pr_bold "   Server key size              "
      sig_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
      key_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2 }' | sort -u )
 
      if [[ -z "$keysize" ]]; then
           outln "(couldn't determine)"
-          fileout "key_size" "WARN" "Server keys size cannot be determined"
+          fileout "$heading key_size" "WARN" "Server keys size cannot be determined"
      else
           if [[ "$keysize" -le 768 ]]; then
                if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
                     pr_litegreen "EC $keysize"
-                    fileout "key_size" "OK" "Server keys $keysize bits EC (OK)"
+                    fileout "$heading key_size" "OK" "Server keys $keysize bits EC (OK)"
                else
                     pr_red "$keysize"
-                    fileout "key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                fi
           elif [[ "$keysize" -le 1024 ]]; then
                pr_brown "$keysize"
-               fileout "key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
           elif [[ "$keysize" -le 2048 ]]; then
                out "$keysize"
-               fileout "key_size" "INFO" "Server keys $keysize bits"
+               fileout "$heading key_size" "INFO" "Server keys $keysize bits"
           elif [[ "$keysize" -le 4096 ]]; then
                pr_litegreen "$keysize"
-               fileout "key_size" "OK" "Server keys $keysize bits (OK)"
+               fileout "$heading key_size" "OK" "Server keys $keysize bits (OK)"
           else
                out "weird keysize: $keysize"
-               fileout "key_size" "WARN" "Server keys $keysize bits (Odd)"
+               fileout "$heading key_size" "WARN" "Server keys $keysize bits (Odd)"
           fi
      fi
      outln " bit"
 
-     pr_bold " Signature Algorithm          "
+     pr_bold "   Signature Algorithm          "
      case $sig_algo in
           sha1WithRSAEncryption)
                pr_brownln "SHA1 with RSA"
-               fileout "algorithm" "WARN" "Signature Algorithm: SHA1 with RSA (warning)"
+               fileout "$heading algorithm" "WARN" "Signature Algorithm: SHA1 with RSA (warning)"
                ;;
           sha256WithRSAEncryption)
                pr_litegreenln "SHA256 with RSA"
-               fileout "algorithm" "OK" "Signature Algorithm: SHA256 with RSA (OK)"
+               fileout "$heading algorithm" "OK" "Signature Algorithm: SHA256 with RSA (OK)"
                ;;
           sha384WithRSAEncryption)
                pr_litegreenln "SHA384 with RSA"
-               fileout "algorithm" "OK" "Signature Algorithm: SHA384 with RSA (OK)"
+               fileout "$heading algorithm" "OK" "Signature Algorithm: SHA384 with RSA (OK)"
                ;;
           sha512WithRSAEncryption)
                pr_litegreenln "SHA512 with RSA"
-               fileout "algorithm" "OK" "Signature Algorithm: SHA512 with RSA (OK)"
+               fileout "$heading algorithm" "OK" "Signature Algorithm: SHA512 with RSA (OK)"
                ;;
           ecdsa-with-SHA256)
                pr_litegreenln "ECDSA with SHA256"
-               fileout "algorithm" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
+               fileout "$heading algorithm" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
                ;;
           md5*)
                pr_redln "MD5"
-               fileout "algorithm" "NOT OK" "Signature Algorithm: MD5 (NOT ok)"
+               fileout "$heading algorithm" "NOT OK" "Signature Algorithm: MD5 (NOT ok)"
                ;;
           *)
                outln "$sig_algo"
-               fileout "algorithm" "INFO" "Signature Algorithm: $sign_algo"
+               fileout "$heading algorithm" "INFO" "Signature Algorithm: $sign_algo"
                ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
-     pr_bold " Fingerprint / Serial         "
+     pr_bold "   Fingerprint / Serial         "
      cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g')"
      cert_fingerprint_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
      cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
      outln "$cert_fingerprint_sha1 / $cert_fingerprint_serial"
      outln "$spaces$cert_fingerprint_sha2"
-     fileout "fingerprint" "INFO" "Fingerprints / Serial: $cert_fingerprint_sha1 / $cert_fingerprint_serial, $cert_fingerprint_sha2"
+     fileout "$heading fingerprint" "INFO" "Fingerprints / Serial: $cert_fingerprint_sha1 / $cert_fingerprint_serial, $cert_fingerprint_sha2"
 
-     pr_bold " Common Name (CN)             "
+     pr_bold "   Common Name (CN)             "
      cnfinding="Common Name (CN) : "
      if $OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | grep -wq CN; then
           cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
@@ -2964,7 +2957,7 @@ run_server_defaults() {
           cnok="INFO"
      fi
 
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+     $OPENSSL s_client $STARTTLS $BUGS -cipher $cipher -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
      cn_nosni=""
      if [[ -s $HOSTCERT.nosni ]]; then
           if $OPENSSL x509 -in $HOSTCERT.nosni -noout -subject 2>>$ERRFILE | grep -wq CN; then
@@ -3008,24 +3001,24 @@ run_server_defaults() {
                cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
           fi
      fi
-     fileout "cn" "$cnok" "$cnfinding"
+     fileout "$heading cn" "$cnok" "$cnfinding"
 
      sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
           sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
 #                                                       ^^^ CACert
-     pr_bold " subjectAltName (SAN)         "
+     pr_bold "   subjectAltName (SAN)         "
      if [[ -n "$sans" ]]; then
           for san in $sans; do
                pr_dquoted "$san"
                out " "
           done
-          fileout "san" "INFO" "subjectAltName (SAN) : $sans"
+          fileout "$heading san" "INFO" "subjectAltName (SAN) : $sans"
      else
           out "-- "
-          fileout "san" "INFO" "subjectAltName (SAN) : --"
+          fileout "$heading san" "INFO" "subjectAltName (SAN) : --"
      fi
      outln
-     pr_bold " Issuer                       "
+     pr_bold "   Issuer                       "
      issuer=$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE| sed -e 's/^.*CN=//g' -e 's/\/.*$//g')
      issuer_O=$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE | sed 's/^.*O=//g' | sed 's/\/.*$//g')
      if $OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE | grep -q 'C=' ; then
@@ -3035,7 +3028,7 @@ run_server_defaults() {
      fi
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer" == "$CN" ]]; then
           pr_redln "selfsigned (NOT ok)"
-          fileout "issuer" "NOT OK" "Issuer: selfsigned (NOT ok)"
+          fileout "$heading issuer" "NOT OK" "Issuer: selfsigned (NOT ok)"
      else
           pr_dquoted "$issuer"
           out " ("
@@ -3043,15 +3036,15 @@ run_server_defaults() {
           if [[ -n "$issuer_C" ]]; then
                out " from "
                pr_dquoted "$issuer_C"
-               fileout "issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" from \"$issuer_C\")"
+               fileout "$heading issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" from \"$issuer_C\")"
           else
-               fileout "issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" )"
+               fileout "$heading issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" )"
           fi
           outln ")"
      fi
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
-     pr_bold " EV cert"; out " (experimental)       "
+     pr_bold "   EV cert"; out " (experimental)       "
      policy_oid=$($OPENSSL x509 -in $HOSTCERT -text 2>>$ERRFILE | awk '/ .Policy: / { print $2 }')
      if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
           [[ 2.16.840.1.114028.10.1.2 == "$policy_oid" ]] || \
@@ -3062,10 +3055,10 @@ run_server_defaults() {
           [[ 1.3.6.1.4.1.17326.10.8.12.1.2 == "$policy_oid" ]] || \
           [[ 1.3.6.1.4.1.13177.10.1.3.10 == "$policy_oid" ]] ; then
           out "yes "
-          fileout "ev" "OK" "Extended Validation (EV) (experimental) : yes"
+          fileout "$heading ev" "OK" "Extended Validation (EV) (experimental) : yes"
      else
           out "no "
-          fileout "ev" "INFO" "Extended Validation (EV) (experimental) : no"
+          fileout "$heading ev" "INFO" "Extended Validation (EV) (experimental) : no"
      fi
      debugme echo "($(newline_to_spaces "$policy_oid"))"
      outln
@@ -3074,7 +3067,7 @@ run_server_defaults() {
 #         http://src.chromium.org/chrome/trunk/src/net/cert/ev_root_ca_metadata.cc
 #         https://certs.opera.com/03/ev-oids.xml
 
-     pr_bold " Certificate Expiration       "
+     pr_bold "   Certificate Expiration       "
 
      if $HAS_GNUDATE ; then
           enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
@@ -3113,76 +3106,205 @@ run_server_defaults() {
           fi
      fi
      outln " ($startdate --> $enddate)"
-     fileout "expiration" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
+     fileout "$heading expiration" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
+
+     certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
+     pr_bold "   # of certificates provided"; outln "   $certificates_provided"
+     fileout "$heading certcount" "INFO" "# of certificates provided :  $certificates_provided"
 
 
-     pr_bold " # of certificates provided"; outln "   $(get_all_certs)"
-     fileout "certcount" "INFO" "# of certificates provided :  $(get_all_certs)"
+     pr_bold "   Chain of trust"; out " (experim.)    "
+     determine_trust "$heading" #Also handles fileout
 
-
-     pr_bold " Chain of trust"; out " (experim.)    "
-     determine_trust #Also handles fileout
-
-     pr_bold " Certificate Revocation List  "
+     pr_bold "   Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
      if [[ -z "$crl" ]]; then
           pr_literedln "--"
-          fileout "crl" "NOT OK" "No CRL provided (NOT ok)"
+          fileout "$heading crl" "NOT OK" "No CRL provided (NOT ok)"
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
-               fileout "crl" "INFO" "Certificate Revocation List : $crl"
+               fileout "$heading crl" "INFO" "Certificate Revocation List : $crl"
           else # more than one CRL
                out_row_aligned "$crl" "$spaces"
-               fileout "crl" "INFO" "Certificate Revocation List : $crl"
+               fileout "$heading crl" "INFO" "Certificate Revocation List : $crl"
           fi
      else
           pr_litemagentaln "no parsable output \"$crl\", pls report"
-          fileout "crl" "WARN" "Certificate Revocation List : no parsable output \"$crl\", pls report"
+          fileout "$heading crl" "WARN" "Certificate Revocation List : no parsable output \"$crl\", pls report"
      fi
 
-     pr_bold " OCSP URI                     "
+     pr_bold "   OCSP URI                     "
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      if [[ -z "$ocsp_uri" ]]; then
           pr_literedln "--"
-          fileout "ocsp_uri" "NOT OK" "OCSP URI : -- (NOT ok)"
+          fileout "$heading ocsp_uri" "NOT OK" "OCSP URI : -- (NOT ok)"
      else
           outln "$ocsp_uri"
-          fileout "ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
+          fileout "$heading ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
      fi
 
-     pr_bold " OCSP stapling               "
-     if grep -a "OCSP response" $TMPFILE | grep -q "no response sent" ; then
+     pr_bold "   OCSP stapling               "
+     if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
           out " not offered"
-          fileout "ocsp_stapling" "INFO" "OCSP stapling : not offered"
+          fileout "$heading ocsp_stapling" "INFO" "OCSP stapling : not offered"
      else
-          if grep -a "OCSP Response Status" $TMPFILE | grep -q successful; then
+          if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
                pr_litegreen " offered"
-               fileout "ocsp_stapling" "OK" "OCSP stapling : offered"
+               fileout "$heading ocsp_stapling" "OK" "OCSP stapling : offered"
           else
                if $GOST_STATUS_PROBLEM; then
                     out " (GOST servers make problems here, sorry)"
-                    fileout "ocsp_stapling" "OK" "OCSP stapling : (GOST servers make problems here, sorry)"
+                    fileout "$heading ocsp_stapling" "OK" "OCSP stapling : (GOST servers make problems here, sorry)"
                     ret=0
                else
                     outln " not sure what's going on here, debug:"
-                    grep -aA 20 "OCSP response"  $TMPFILE
-                    fileout "ocsp_stapling" "OK" "OCSP stapling : not sure what's going on here, debug: grep -aA 20 "OCSP response"  $TMPFILE"
+                    grep -aA 20 "OCSP response"  <<<"$ocsp_response"
+                    fileout "$heading ocsp_stapling" "OK" "OCSP stapling : not sure what's going on here, debug: grep -aA 20 "OCSP response"  <<<"$ocsp_response""
                     ret=2
                fi
           fi
      fi
      outln
 
-     # if we call tls_time before tmpfile_handle it throws an error because the function tls_sockets removed $TMPFILE
-     # already -- and that was a different one -- means that would get overwritten anyway
-     tmpfile_handle $FUNCNAME.txt
-
-     tls_time
      return $ret
 }
 # FIXME: revoked, see checkcert.sh
 # FIXME: Trust (only CN)
+
+run_server_defaults() {
+     local ciph match_found newhostcert
+     local sessticket_str=""
+     local lifetime unit
+     local line
+     local -i i n
+     local all_tls_extensions=""
+     local -i certs_found=0
+     local -a previous_hostcert previous_intermediates keysize cipher ocsp_response ocsp_response_status
+     local -a ciphers_to_test
+     
+     # Try each public key type once:
+     # ciphers_to_test[1]: cipher suites using certificates with RSA signature public keys
+     # ciphers_to_test[2]: cipher suites using certificates with RSA key encipherment public keys
+     # ciphers_to_test[3]: cipher suites using certificates with DSA signature public keys
+     # ciphers_to_test[4]: cipher suites using certificates with DH key agreement public keys
+     # ciphers_to_test[5]: cipher suites using certificates with ECDH key agreement public keys
+     # ciphers_to_test[6]: cipher suites using certificates with ECDSA signature public keys
+     # ciphers_to_test[7]: cipher suites using certificates with GOST R 34.10 (either 2001 or 94) public keys
+     ciphers_to_test[1]=""
+     ciphers_to_test[2]=""
+     for ciph in $(colon_to_spaces $($OPENSSL ciphers "aRSA")); do
+         if grep -q "\-RSA\-" <<<$ciph; then
+             ciphers_to_test[1]="${ciphers_to_test[1]}:$ciph"
+         else
+             ciphers_to_test[2]="${ciphers_to_test[2]}:$ciph"
+         fi
+     done
+     [[ -n "${ciphers_to_test[1]}" ]] && ciphers_to_test[1]="${ciphers_to_test[1]:1}"
+     [[ -n "${ciphers_to_test[2]}" ]] && ciphers_to_test[2]="${ciphers_to_test[2]:1}"
+     ciphers_to_test[3]="aDSS"
+     ciphers_to_test[4]="aDH"
+     ciphers_to_test[5]="aECDH"
+     ciphers_to_test[6]="aECDSA"
+     ciphers_to_test[7]="aGOST"
+     
+     for n in 1 2 3 4 5 6 7 ; do
+         if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
+             determine_tls_extensions "-cipher ${ciphers_to_test[n]}"
+             if [[ $? -eq 0 ]]; then
+                 # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
+                 while read -d "\"" -r line; do
+                     if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
+                         all_tls_extensions="${all_tls_extensions} \"${line}\""
+                     fi
+                 done <<<$TLS_EXTENSIONS
+             
+                 cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+                 >$ERRFILE
+                 if [[ -z "$sessticket_str" ]]; then
+                     sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+                 fi
+
+                 # check whether the host's certificate has been seen before
+                 match_found=false
+                 i=1
+                 newhostcert=$(cat $HOSTCERT)
+                 while [[ $i -le $certs_found ]]; do
+                     if [ "$newhostcert" == "${previous_hostcert[i]}" ]; then
+                        match_found=true
+                        break;
+                     fi
+                     i=$(($i + 1))
+                 done
+                 if ! $match_found ; then
+                     certs_found=$(($certs_found + 1))
+                     cipher[certs_found]=${ciphers_to_test[n]}
+                     keysize[certs_found]=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
+                     ocsp_response[certs_found]=$(grep -aA 20 "OCSP response" $TMPFILE)
+                     ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
+                     previous_hostcert[certs_found]=$newhostcert
+                     previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
+                 fi
+             fi
+         fi
+     done
+     
+     if [[ $certs_found -eq 0 ]]; then
+         [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
+         [[ -n "$TLS_EXTENSIONS" ]] && all_tls_extensions=" $TLS_EXTENSIONS"
+
+         cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+         >$ERRFILE
+
+         sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+     fi
+
+     outln
+     pr_headlineln " Testing server defaults (Server Hello) "
+     outln
+
+     pr_bold " TLS server extensions (std)  "
+     if [[ -z "$all_tls_extensions" ]]; then
+         outln "(none)"
+         fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
+     else
+         all_tls_extensions="${all_tls_extensions:1}"
+         outln "$all_tls_extensions"
+         fileout "tls_extensions" "INFO" "TLS server extensions (std): $all_tls_extensions"
+     fi
+     TLS_EXTENSIONS="$all_tls_extensions"
+
+     pr_bold " Session Tickets RFC 5077     "
+     if [[ -z "$sessticket_str" ]]; then
+          outln "(none)"
+          fileout "session_ticket" "INFO" "TLS session tickes RFC 5077 not supported"
+     else
+          lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
+          unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
+          out "$lifetime $unit "
+          pr_yellowln "(PFS requires session ticket keys to be rotated <= daily)"
+          fileout "session_ticket" "INFO" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
+     fi
+     
+     pr_bold " SSL Session ID support       "
+     if $NO_SSL_SESSIONID; then
+          outln "no"
+          fileout "session_id" "INFO" "SSL session ID support: no"
+     else
+          outln "yes"
+          fileout "session_id" "INFO" "SSL session ID support: yes"
+     fi
+     
+     tls_time
+     
+     i=1
+     while [[ $i -le $certs_found ]]; do
+         echo "${previous_hostcert[i]}" > $HOSTCERT
+         echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
+         certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}"
+         i=$(($i + 1))
+     done
+}
 
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 run_pfs() {
