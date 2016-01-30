@@ -2730,27 +2730,29 @@ determine_trust() {
 
 tls_time() {
      local now difftime
+     local spaces="               "
 
      tls_sockets "01" "$TLS_CIPHER"                              # try first TLS 1.0 (mostfrequently used protocol)
      [[ -z "$TLS_TIME" ]] && tls_sockets "03" "$TLS12_CIPHER"    #           TLS 1.2
      [[ -z "$TLS_TIME" ]] && tls_sockets "02" "$TLS_CIPHER"      #           TLS 1.1
      [[ -z "$TLS_TIME" ]] && tls_sockets "00" "$TLS_CIPHER"      #           SSL 3
 
+     pr_bold " TLS clock skew" ; out "$spaces"
      if [[ -n "$TLS_TIME" ]]; then                               # nothing returned a time!
           difftime=$(($TLS_TIME - $TLS_NOW))                     # TLS_NOW is being set in tls_sockets()
           if [[ "${#difftime}" -gt 5 ]]; then
                # openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
-               pr_bold " TLS timestamp" ; outln "                random values, no fingerprinting possible "
+               out "random values, no fingerprinting possible "
                fileout "tls_time" "INFO" "Your TLS time seems to be filled with random values to prevent fingerprinting"
           else
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
-               pr_bold " TLS clock skew" ; outln "               $difftime sec from localtime";
+               out "$difftime"; out " sec from localtime";
                fileout "tls_time" "INFO" "Your TLS time is skewed from your localtime by $difftime seconds"
           fi
           debugme out "$TLS_TIME"
           outln
      else
-          pr_bold " TLS timestamp" ; out "                "; pr_litemagentaln "SSLv3 through TLS 1.2 didn't return a timestamp"
+          pr_litemagenta "SSLv3 through TLS 1.2 didn't return a timestamp"
           fileout "tls_time" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
      fi
      return 0
@@ -2839,25 +2841,26 @@ certificate_info() {
      local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
-     local spaces="                                "
+     local spaces=""
      local wildcard=false
      local -i certificates_provided
      local cnfinding
      local cnok="OK"
      local expfinding expok="OK"
-     local heading=""
+     local indent=""
 
-     outln
-     out "  "
      if [[ $number_of_certificates -gt 1 ]]; then
-         heading="Server Certifcate #$certificate_number"
+          [[ $certificate_number -eq 1 ]] && outln
+          indent="  "
+          out "$indent"
+          pr_headlineln "Server Certifcate #$certificate_number"
+          spaces="                                "
      else
-         heading="Server Certifcate"
+          spaces="                              "
      fi
-      pr_headlineln " $heading "
-     outln
-
-     pr_bold "   Server key size              "
+     
+     out "$indent"
+     pr_bold " Server key size              "
      sig_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
      key_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2 }' | sort -u )
 
@@ -2889,7 +2892,7 @@ certificate_info() {
      fi
      outln " bit"
 
-     pr_bold "   Signature Algorithm          "
+     out "$indent" ; pr_bold " Signature Algorithm          "
      case $sig_algo in
           sha1WithRSAEncryption)
                pr_brownln "SHA1 with RSA"
@@ -2922,7 +2925,7 @@ certificate_info() {
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
-     pr_bold "   Fingerprint / Serial         "
+     out "$indent"; pr_bold " Fingerprint / Serial         "
      cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g')"
      cert_fingerprint_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
      cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
@@ -2930,7 +2933,7 @@ certificate_info() {
      outln "$spaces$cert_fingerprint_sha2"
      fileout "$heading fingerprint" "INFO" "Fingerprints / Serial: $cert_fingerprint_sha1 / $cert_fingerprint_serial, $cert_fingerprint_sha2"
 
-     pr_bold "   Common Name (CN)             "
+     out "$indent"; pr_bold " Common Name (CN)             "
      cnfinding="Common Name (CN) : "
      if $OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | grep -wq CN; then
           cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
@@ -3006,7 +3009,7 @@ certificate_info() {
      sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
           sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
 #                                                       ^^^ CACert
-     pr_bold "   subjectAltName (SAN)         "
+     out "$indent"; pr_bold " subjectAltName (SAN)         "
      if [[ -n "$sans" ]]; then
           for san in $sans; do
                pr_dquoted "$san"
@@ -3018,7 +3021,7 @@ certificate_info() {
           fileout "$heading san" "INFO" "subjectAltName (SAN) : --"
      fi
      outln
-     pr_bold "   Issuer                       "
+     out "$indent"; pr_bold " Issuer                       "
      issuer=$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE| sed -e 's/^.*CN=//g' -e 's/\/.*$//g')
      issuer_O=$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE | sed 's/^.*O=//g' | sed 's/\/.*$//g')
      if $OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE | grep -q 'C=' ; then
@@ -3044,7 +3047,7 @@ certificate_info() {
      fi
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
-     pr_bold "   EV cert"; out " (experimental)       "
+     out "$indent"; pr_bold " EV cert"; out " (experimental)       "
      policy_oid=$($OPENSSL x509 -in $HOSTCERT -text 2>>$ERRFILE | awk '/ .Policy: / { print $2 }')
      if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
           [[ 2.16.840.1.114028.10.1.2 == "$policy_oid" ]] || \
@@ -3067,7 +3070,7 @@ certificate_info() {
 #         http://src.chromium.org/chrome/trunk/src/net/cert/ev_root_ca_metadata.cc
 #         https://certs.opera.com/03/ev-oids.xml
 
-     pr_bold "   Certificate Expiration       "
+     out "$indent"; pr_bold " Certificate Expiration       "
 
      if $HAS_GNUDATE ; then
           enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
@@ -3109,14 +3112,14 @@ certificate_info() {
      fileout "$heading expiration" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
-     pr_bold "   # of certificates provided"; outln "   $certificates_provided"
+     out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
      fileout "$heading certcount" "INFO" "# of certificates provided :  $certificates_provided"
 
 
-     pr_bold "   Chain of trust"; out " (experim.)    "
+     out "$indent"; pr_bold " Chain of trust"; out " (experim.)    "
      determine_trust "$heading" #Also handles fileout
 
-     pr_bold "   Certificate Revocation List  "
+     out "$indent"; pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
      if [[ -z "$crl" ]]; then
           pr_literedln "--"
@@ -3134,7 +3137,7 @@ certificate_info() {
           fileout "$heading crl" "WARN" "Certificate Revocation List : no parsable output \"$crl\", pls report"
      fi
 
-     pr_bold "   OCSP URI                     "
+     out "$indent"; pr_bold " OCSP URI                     "
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      if [[ -z "$ocsp_uri" ]]; then
           pr_literedln "--"
@@ -3144,17 +3147,17 @@ certificate_info() {
           fileout "$heading ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
      fi
 
-     pr_bold "   OCSP stapling               "
+     out "$indent"; pr_bold " OCSP stapling               "
      if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
-          out " not offered"
+          outln " not offered"
           fileout "$heading ocsp_stapling" "INFO" "OCSP stapling : not offered"
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
-               pr_litegreen " offered"
+               pr_litegreenln " offered"
                fileout "$heading ocsp_stapling" "OK" "OCSP stapling : offered"
           else
                if $GOST_STATUS_PROBLEM; then
-                    out " (GOST servers make problems here, sorry)"
+                    outln " (GOST servers make problems here, sorry)"
                     fileout "$heading ocsp_stapling" "OK" "OCSP stapling : (GOST servers make problems here, sorry)"
                     ret=0
                else
@@ -3287,7 +3290,7 @@ run_server_defaults() {
      fi
      
      pr_bold " SSL Session ID support       "
-     if $NO_SSL_SESSIONID; then
+     if "$NO_SSL_SESSIONID"; then
           outln "no"
           fileout "session_id" "INFO" "SSL session ID support: no"
      else
@@ -3302,7 +3305,7 @@ run_server_defaults() {
          echo "${previous_hostcert[i]}" > $HOSTCERT
          echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
          certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}"
-         i=$(($i + 1))
+         i=$((i + 1))
      done
 }
 
@@ -6662,4 +6665,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.445 2016/01/23 22:33:16 dirkw Exp $
+#  $Id: testssl.sh,v 1.447 2016/01/30 22:59:28 dirkw Exp $
