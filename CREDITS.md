@@ -20,6 +20,9 @@
  - Detection of insecure redirect
  - client simulation
 
+* dcooper16
+ - Detection + output of multiple certificates
+
 * Jean Marsault
  - client auth: ideas, code snipplets
  
