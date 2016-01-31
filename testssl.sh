@@ -1464,11 +1464,16 @@ neat_list(){
      enc=$(sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g' <<< "$enc")     # workaround for empty bits ChaCha20-Poly1305
      echo "$export" | grep -iq export && strength="$strength,export"
      # workaround for color escape codes:
-     if printf -- "$kx" | "${HEXDUMPVIEW[@]}" | grep -q 33 ; then         # here's a color code
+     if printf -- "$kx" | "${HEXDUMPVIEW[@]}" | grep -q 33 ; then          # here's a color code
           kx="$kx "                               # one for color code if ECDH and three digits
           [[ "${#kx}" -eq 18 ]] && kx="$kx  "     # 18 means DH, colored < 1000. Add another space
           [[ "${#kx}" -eq 19 ]] && kx="$kx "      # 19 means DH, colored >=1000. Add another space
           #echo ${#kx}                            # should be always 20
+     elif printf -- "$kx" | "${HEXDUMPVIEW[@]}" | grep -q "5b 6d" ; then   # here's a code from pr_off()
+          kx="$kx "                               # one for color code if ECDH and three digits
+          [[ "${#kx}" -eq 11 ]] && kx="$kx  "     # 11 means DH, colored < 1000. Add another space
+          [[ "${#kx}" -eq 12 ]] && kx="$kx "      # 12 means DH, colored >=1000. Add another space
+          #echo ${#kx}                            # should be always 13
      fi
 
      printf -- " %-7s %-30s %-10s %-11s%-11s${ADD_RFC_STR:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
