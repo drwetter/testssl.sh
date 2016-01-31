@@ -187,6 +187,7 @@ PROTOS_OFFERED=""
 TLS_EXTENSIONS=""
 GOST_STATUS_PROBLEM=false
 DETECTED_TLS_VERSION=""
+PATTERN2SHOW=""
 SOCKREPLY=""
 SOCK_REPLY_FILE=""
 HEXC=""
@@ -666,6 +667,7 @@ run_http_header() {
      local referer useragent
      local url redirect
 
+     HEADERFILE=$TEMPDIR/$NODEIP.http_header.txt
      outln; pr_headlineln " Testing HTTP header response @ \"$URL_PATH\" "
      outln
 
@@ -694,9 +696,10 @@ run_http_header() {
      # populate vars for HTTP time
 
      debugme echo "$NOW_TIME: $HTTP_TIME"
-
-     sed  -e '/^ .<HTML/,$d' -e '/^ .<html/,$d' -e '/^ .<XML /,$d' -e '/ .<?XML /,$d' \
-          -e '/^ .<xml /,$d' -e '/ .<?xml /,$d'  -e '/^ .<\!DOCTYPE/,$d' -e '/^ .<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
+     
+     # delete from pattern til the end. We ignore any leading spaces (e.g. www.amazon.de)
+     sed  -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<?XML/,$d' \
+          -e '/<xml/,$d' -e '/<?xml/,$d'  -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
 #### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
      mv $HEADERFILE.2  $HEADERFILE  # sed'ing in place doesn't work with BSD and Linux simultaneously
      ret=0
@@ -795,7 +798,7 @@ detect_ipv4() {
                          first=false
                     fi
                     pr_litered "$result"
-                    outln "spaces$your_ip_msg"
+                    outln "\n$spaces$your_ip_msg"
                     fileout "ip_in_header_$count" "NOT OK" "IPv4 address in header  $result $your_ip_msg"
                fi
                count=$count+1
@@ -2949,7 +2952,6 @@ certificate_info() {
                else
                     cnfinding+=" NO match)"
                     cnok="INFO"
-                    :
                     #FIXME: we need to test also the SANs as they can contain a wild card (google.de .e.g) ==> 2.7dev
                fi
           fi
@@ -5318,7 +5320,6 @@ maketempf() {
           ERRFILE=$TEMPDIR/errorfile.txt || exit -6
      fi
      HOSTCERT=$TEMPDIR/host_certificate.txt
-     HEADERFILE=$TEMPDIR/http_header.txt
      initialize_engine
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
@@ -6085,7 +6086,7 @@ run_mass_testing_parallel() {
           $cmdline >$LOGFILE &
           sleep $PARALLEL_SLEEP
      done < "$FNAME"
-     exit $?
+     return $?
 }
 
 
@@ -6105,8 +6106,7 @@ run_mass_testing() {
           outln "$cmdline"
           $cmdline
      done < "${FNAME}"
-     
-     exit $?
+     return $?
 }
 
 
@@ -6144,6 +6144,7 @@ initialize_globals() {
      do_test_just_one=false
      do_tls_sockets=false
      do_client_simulation=false
+     do_display_only=false
 }
 
 
@@ -6181,7 +6182,7 @@ query_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing ; do
+               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
      done
      return $true_nr
@@ -6194,17 +6195,18 @@ debug_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing; do
+               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
      printf "%-22s : %s\n" URI: "$URI"
 }
 
 
-# arg1+2 are just the options
+# arg1: either switch+value (=) or switch
+# arg2: value (if no = provided)
 parse_opt_equal_sign() {
      if [[ "$1" == *=* ]]; then
-          echo "$1" | awk -F'=' '{ print $2 }'
+          echo ${1#*=}
           return 1  # = means we don't need to shift args!
      else
           echo $2
@@ -6244,13 +6246,15 @@ parse_cmd_line() {
                     CMDLINE_IP=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     ;;
-               -V|-V=*|--local|--local=*)    # this is only displaying local ciphers, thus we don't put it in the loop
-                    find_openssl_binary
-                    maketempf                # for GOST support
-                    mybanner
-                    openssl_age
-                    prettyprint_local $(parse_opt_equal_sign "$1" "$2")
-                    exit $?
+               -V|-V=*|--local|--local=*)    # attention, this could have a value or not!
+                    do_display_only=true
+                    PATTERN2SHOW="$(parse_opt_equal_sign "$1" "$2")"
+                    retval=$?
+                    if [[ "$PATTERN2SHOW" == -* ]]; then
+                         unset PATTERN2SHOW  # we hit the next command ==> not our value
+                    else                     # it was ours, point to next arg
+                         [[ $retval -eq 0 ]] && shift
+                    fi
                     ;;
                -x|-x=*|--single[-_]cipher|--single[-_]cipher=*)
                     do_test_just_one=true
@@ -6506,7 +6510,7 @@ parse_cmd_line() {
      done
 
      # Show usage if no options were specified
-     if [[ -z "$1" ]] && [[ -z "$FNAME" ]] ; then
+     if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! $do_display_only; then
           help 0
      else
      # left off here is the URI
@@ -6625,7 +6629,15 @@ openssl_age
 ret=0
 ip=""
 
-$do_mass_testing && run_mass_testing
+if $do_display_only; then
+     prettyprint_local "$PATTERN2SHOW"
+     exit $?
+fi
+
+if $do_mass_testing; then
+     run_mass_testing
+     exit $?
+fi
 
 #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
 if $do_mx_all_ips; then
@@ -6668,4 +6680,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.450 2016/01/31 10:04:58 dirkw Exp $
+#  $Id: testssl.sh,v 1.451 2016/01/31 20:02:17 dirkw Exp $
