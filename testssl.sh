@@ -6091,7 +6091,7 @@ run_mass_testing_parallel() {
 run_mass_testing() {
      local cmdline=""
 
-     if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
+     if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
           fatal "Can't read file \"$FNAME\"" "-1"
      fi
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
@@ -6099,10 +6099,12 @@ run_mass_testing() {
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          echo "$0 -q $cmdline"
+          cmdline="$0 --warnings=batch -q $cmdline"
           draw_line "=" $((TERM_DWITH / 2)); outln;
-          $0 -q $cmdline
-     done < "$FNAME"
+          echo $cmdline
+          $cmdline
+     done < "${FNAME}"
+     
      exit $?
 }
 
@@ -6665,4 +6667,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.447 2016/01/30 22:59:28 dirkw Exp $
+#  $Id: testssl.sh,v 1.448 2016/01/31 00:51:12 dirkw Exp $
