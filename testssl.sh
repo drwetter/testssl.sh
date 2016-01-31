@@ -4473,7 +4473,7 @@ run_renego() {
                          fileout "sec_client_renego" "OK" "Secure Client-Initiated Renegotiation : not vulnerable (OK)"
                          ;;
                     *)
-                         pr_literedln "FIXME (bug): $sec_client_renego"
+                         pr_litemagentaln "FIXME (bug): $sec_client_renego"
                          fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report"
                          ;;
                esac
@@ -6668,4 +6668,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.449 2016/01/31 09:54:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.450 2016/01/31 10:04:58 dirkw Exp $
