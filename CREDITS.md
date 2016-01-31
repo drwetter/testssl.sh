@@ -22,6 +22,7 @@
 
 * dcooper16
  - Detection + output of multiple certificates
+ - cleanups of server certificate related stuff
 
 * Jean Marsault
  - client auth: ideas, code snipplets
