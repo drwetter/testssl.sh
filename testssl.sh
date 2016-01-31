@@ -1459,18 +1459,22 @@ neat_list(){
      kx="${3//Kx=/}"
      enc="${4//Enc=/}"
      strength=$(sed -e 's/.*(//' -e 's/)//' <<< "$enc")                              # strength = encryption bits
-
      strength="${strength//ChaCha20-Poly1305/ly1305}"
      enc=$(sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g' <<< "$enc")     # workaround for empty bits ChaCha20-Poly1305
      echo "$export" | grep -iq export && strength="$strength,export"
-     # workaround for color escape codes:
-     if printf -- "$kx" | "${HEXDUMPVIEW[@]}" | grep -q 33 ; then         # here's a color code
-          kx="$kx "                               # one for color code if ECDH and three digits
-          [[ "${#kx}" -eq 18 ]] && kx="$kx  "     # 18 means DH, colored < 1000. Add another space
-          [[ "${#kx}" -eq 19 ]] && kx="$kx "      # 19 means DH, colored >=1000. Add another space
-          #echo ${#kx}                            # should be always 20
-     fi
 
+     #printf -- "%q" "$kx" | xxd | head -1
+     # length correction for color escape codes (printf counts the escape color codes!!)
+     if printf -- "%q" "$kx" | egrep -aq '.;3.m|E\[1m' ; then     # here's a color code which screws up the formatting with prinf below
+          while [[ ${#kx} -lt 20 ]]; do
+               kx="$kx "
+          done
+     elif printf -- "%q" "$kx" | grep -aq 'E\[m' ; then   # for color=1/0 we have the pr_off which screws up the formatting
+          while [[ ${#kx} -lt 13 ]]; do                   # so it'll be filled up ok
+               kx="$kx "
+          done
+     fi
+     #echo "${#kx}"                            # should be always 20 / 13
      printf -- " %-7s %-30s %-10s %-11s%-11s${ADD_RFC_STR:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
@@ -6680,4 +6684,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.451 2016/01/31 20:02:17 dirkw Exp $
+#  $Id: testssl.sh,v 1.452 2016/01/31 22:53:12 dirkw Exp $
