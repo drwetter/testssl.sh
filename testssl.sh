@@ -2853,7 +2853,7 @@ certificate_info() {
           [[ $certificate_number -eq 1 ]] && outln
           indent="  "
           out "$indent"
-          pr_headlineln "Server Certifcate #$certificate_number"
+          pr_headlineln "Server Certificate #$certificate_number"
           spaces="                                "
      else
           spaces="                              "
@@ -3237,7 +3237,7 @@ run_server_defaults() {
                         match_found=true
                         break;
                      fi
-                     i=$(($i + 1))
+                     i=$((i + 1))
                  done
                  if ! $match_found ; then
                      certs_found=$(($certs_found + 1))
@@ -6078,10 +6078,11 @@ run_mass_testing_parallel() {
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          echo "$0 -q $cmdline"
+          cmdline="$0 --warnings=batch -q $cmdline"
           draw_line "=" $((TERM_DWITH / 2)); outln;
           determine_logfile
-          $0 -q $cmdline >$LOGFILE &
+          outln "$cmdline"
+          $cmdline >$LOGFILE &
           sleep $PARALLEL_SLEEP
      done < "$FNAME"
      exit $?
@@ -6101,7 +6102,7 @@ run_mass_testing() {
           [[ "$cmdline" == "EOF" ]] && break
           cmdline="$0 --warnings=batch -q $cmdline"
           draw_line "=" $((TERM_DWITH / 2)); outln;
-          echo $cmdline
+          outln "$cmdline"
           $cmdline
      done < "${FNAME}"
      
@@ -6667,4 +6668,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.448 2016/01/31 00:51:12 dirkw Exp $
+#  $Id: testssl.sh,v 1.449 2016/01/31 09:54:44 dirkw Exp $
