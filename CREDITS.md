@@ -7,7 +7,7 @@
  - openssl sources support with the "missing" features
 
 * John Newbigin
- - Proxy support
+ - Proxy support (sockets and openssl)
 
 * Jonathan Roach
  - TLS_FALLBACK_SCSV checks
@@ -17,12 +17,13 @@
  - Shellcheck static analysis
 
 * Frank Breedijk
- - Detection of insecure redirect
- - client simulation
+ - Detection of insecure redirects
+ - JSON and CSV output
+ - Client simulations
 
 * dcooper16
  - Detection + output of multiple certificates
- - cleanups of server certificate related stuff
+ - several cleanups of server certificate related stuff
 
 * Jean Marsault
  - client auth: ideas, code snipplets
@@ -61,6 +62,10 @@
 * Viktor Szépe
  - color function maker
 
+* Thomas Martens
+  - colorblind
+  - no-rfc mapping
+
 * Jonathon Rossi
   - fix for bash3 (Darwin)
   - and other Darwin fixes
@@ -74,10 +79,6 @@
 
 * Dmitri S
  - inspiration & help for Darwin port
-
-* Frank Breedijk
- - JSON and CSV output
- - Client simulations
 
 * Bug reports:
   - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl, Frank Breedijk
