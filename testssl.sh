@@ -2674,11 +2674,12 @@ determine_trust() {
 		# set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
 		(export SSL_CERT_DIR="/dev/null"
 		if [[ $certificates_provided -ge 2 ]]; then
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$ERRFILE 2>>$ERRFILE
+		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
 		else
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >>$ERRFILE 2>>$ERRFILE
+		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
 		fi)
-		verify_retcode[i]=$?
+		verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1)
+		[[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
 		if [[ ${verify_retcode[i]} -eq 0 ]]; then
 			trust[i]=true
 			debugme pr_litegreen "Ok   "
