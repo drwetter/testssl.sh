@@ -41,6 +41,7 @@ Done so far:
 * Logging to JSON + CSV
 * check for multiple server certificates
 * browser cipher simulation
+* assistance for color-blind users
 * Even more compatibilty improvements for FreeBSD, RH-ish and F5 systems
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
