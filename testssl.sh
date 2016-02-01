@@ -135,6 +135,7 @@ declare -x OPENSSL
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
 COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the output
 SHOW_EACH_C=${SHOW_EACH_C:-0}           # where individual ciphers are tested show just the positively ones tested #FIXME: upside down value
+SHOW_SIGALGO=${SHOW_SIGALGO:-false}     # "secret" switch weher testssl.sh shows the signature algorithm for -E / -e
 SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave behind just usual?
 QUIET=${QUIET:-false}                   # don't output the banner. By doing this yiu acknowledge usage term appearing in the banner
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
@@ -1582,8 +1583,12 @@ run_allciphers(){
                     available="not a/v"
                fi
           fi
+          if "$SHOW_SIGALGO"; then
+               $OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1
+          else
+               outln
+          fi
           fileout "cipher_$HEXC" "INFO" "$(neat_list "$HEXC" "$ciph" "$kx" "$enc") $available"
-          outln
           tmpfile_handle $FUNCNAME.txt
      done
      outln
@@ -1628,7 +1633,11 @@ run_cipher_per_proto(){
                          available="not a/v"
                     fi
                fi
-               outln
+               if "$SHOW_SIGALGO"; then
+                    $OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1
+               else
+                    outln
+               fi
                id="cipher$proto"
                id+="_$HEXC"
                fileout "$id" "INFO" "$proto_text  $(neat_list "$HEXC" "$ciph" "$kx" "$enc") $available"
@@ -2656,19 +2665,15 @@ determine_trust() {
      local addtl_warning
 
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0" ]]; then
-          pr_litemagentaln "Your $OPENSSL is too new, needed is version 1.0.2"
-          out "$spaces"
+          addtl_warning="(Your openssl 1.1.0 might be too new for a reliable check)"
           fileout "$heading trust" "WARN" "Your $OPENSSL is too new, need version 1.0.2 to determine trust"
-          return 7
      elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]]; then
-          pr_litemagentaln "Your $OPENSSL is too old, needed is version >=1.0.2"
-          out "$spaces"
-          addtl_warning="Your $OPENSSL is too old, need version 1.0.2 to determine trust. Results may be unreliable."
+          addtl_warning="(Your openssl <= 1.0.2 might be too unreliable to determine trust)"
           fileout "$heading trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
 	for bundle_fname in $ca_bundles; do
-		certificate_file[i]=$(basename "$bundle_fname" | sed 's/\.pem//')
+		certificate_file[i]=$(basename ${bundle_fname//.pem})
           if [[ ! -r $bundle_fname ]]; then
                pr_litemagentaln "\"$bundle_fname\" cannot be found / not readable"
                return 7
@@ -2696,14 +2701,14 @@ determine_trust() {
 		fi
 		i=$((i + 1))
 	done
-	num_ca_bundles=$(($i - 1))
+	num_ca_bundles=$((i - 1))
      debugme out " "
-	# all stores ok
 	if $all_ok; then
-		pr_litegreen "Ok   "
+	     # all stores ok
+		pr_litegreen "Ok   "; pr_litemagenta "$addtl_warning"
           fileout "$heading trust" "OK" "All certificate trust checks passed. $addtl_warning"
-	# at least one failed
 	else
+	     # at least one failed
 		pr_red "NOT ok"
 		if ! $some_ok; then
 		     # all failed (we assume with the same issue), we're displaying the reason
@@ -2728,20 +2733,19 @@ determine_trust() {
 				#pr_litered "$notok_was "
                     #outln "$code"
                     outln
-				#lf + green ones
+				# lf + green ones
                     [[ "$DEBUG" -eq 0 ]] && out "$spaces"
 				pr_litegreen "OK: $ok_was"
                fi
-               fileout "$heading trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was  $addtl_warning"
+               fileout "$heading trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
           fi
+          out "\n$spaces"; pr_litemagenta "$addtl_warning"
 	fi
 	outln
      return 0
 }
 
 # not handled: Root CA supplied (contains anchor)
-# attention: 1.0.1 fails on mozilla
-
 
 tls_time() {
      local now difftime
@@ -3121,7 +3125,7 @@ certificate_info() {
      fi
      days2expire=$((days2expire  / 3600 / 24 ))
 
-     expire=$($OPENSSL x509 -in $HOSTCERT -checkend 0 2>>$ERRFILE)
+     expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! echo $expire | grep -qw not; then
           pr_red "expired!"
           expfinding="expired!"
@@ -6716,4 +6720,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.456 2016/02/01 16:33:58 dirkw Exp $
+#  $Id: testssl.sh,v 1.458 2016/02/01 21:05:44 dirkw Exp $
