@@ -929,15 +929,17 @@ run_hpkp() {
           else
                hpkp_headers=""
                pr_brown "multiple HPKP headers: "
+               # https://scotthelme.co.uk is a candidate
+               #FIXME: should display both Public-Key-Pins+Public-Key-Pins-Report-Only --> egrep -ai -w
                for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
                     pr_italic $i
                     hpkp_headers="$hpkp_headers$i "
                     out " "
                done
-               out "spaces using first "
+               out "\n$spaces Examining first one: "
                first_hpkp_header=$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1)
                pr_italic "$first_hpkp_header, "
-               fileout "hpkp_multiple" "WARN" "Multiple HPKP headershpkp_headers\nUsing first header: $first_hpkp_header"
+               fileout "hpkp_multiple" "WARN" "Multiple HPKP headershpkp_headers. Using first header: $first_hpkp_header"
           fi
 
           # remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
@@ -986,7 +988,7 @@ run_hpkp() {
                $OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
           while read hpkp_key; do
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
-                    out "spaces matching host key: "
+                    out "\n$spaces matching host key: "
                     pr_litegreen "$hpkp_key"
                     fileout "hpkp_keymatch" "OK" "Key matches a key pinned in the HPKP header"
                     key_found=true
@@ -994,9 +996,9 @@ run_hpkp() {
                debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
           done < <(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
           if ! $key_found ; then
-               out "spaces"
+               out "\n$spaces"
                pr_litered " No matching key for pins found "
-               out "(CAs pinned? -- not yet checked)"
+               out "(CAs pinned? -- not checked for yet)"
                fileout "hpkp_keymatch" "WARN" "The TLS key does not match any key pinned in the HPKP header. If you pinned a CA key you can ignore this"
           fi
      else
@@ -6708,4 +6710,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.453 2016/02/01 09:18:25 dirkw Exp $
+#  $Id: testssl.sh,v 1.454 2016/02/01 12:23:27 dirkw Exp $
