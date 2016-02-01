@@ -2875,26 +2875,50 @@ certificate_info() {
           outln "(couldn't determine)"
           fileout "$heading key_size" "WARN" "Server keys size cannot be determined"
      else
-          if [[ "$keysize" -le 768 ]]; then
-               if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
-                    pr_litegreen "EC $keysize"
-                    fileout "$heading key_size" "OK" "Server keys $keysize bits EC (OK)"
+          # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
+          # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
+          # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
+          # Table 2 @ chapter 5.6.1 (~ p64)
+          if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
+               if [[ "$keysize" -le 110 ]]; then       # a guess 
+                    pr_red "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+               elif [[ "$keysize" -le 123 ]]; then    # a guess
+                    pr_litered "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+               elif [[ "$keysize" -le 163 ]]; then
+                    pr_brown "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+               elif [[ "$keysize" -le 224 ]]; then
+                    out "$keysize"
+                    fileout "$heading key_size" "INFO" "Server keys $keysize EC bits"
+               elif [[ "$keysize" -le 533 ]]; then
+                    pr_litegreen "$keysize"
+                    fileout "$heading key_size" "OK" "Server keys $keysize EC bits (OK)"
                else
+                    out "keysize: $keysize (not expected, FIXME)"
+                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (not expected)"
+               fi
+          else
+               if [[ "$keysize" -le 512 ]]; then
                     pr_red "$keysize"
                     fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               elif [[ "$keysize" -le 768 ]]; then
+                    pr_litered "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               elif [[ "$keysize" -le 1024 ]]; then
+                    pr_brown "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               elif [[ "$keysize" -le 2048 ]]; then
+                    out "$keysize"
+                    fileout "$heading key_size" "INFO" "Server keys $keysize bits"
+               elif [[ "$keysize" -le 4096 ]]; then
+                    pr_litegreen "$keysize"
+                    fileout "$heading key_size" "OK" "Server keys $keysize bits (OK)"
+               else
+                    out "weird keysize: $keysize (compatibility problems)"
+                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (Odd)"
                fi
-          elif [[ "$keysize" -le 1024 ]]; then
-               pr_brown "$keysize"
-               fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
-          elif [[ "$keysize" -le 2048 ]]; then
-               out "$keysize"
-               fileout "$heading key_size" "INFO" "Server keys $keysize bits"
-          elif [[ "$keysize" -le 4096 ]]; then
-               pr_litegreen "$keysize"
-               fileout "$heading key_size" "OK" "Server keys $keysize bits (OK)"
-          else
-               out "weird keysize: $keysize"
-               fileout "$heading key_size" "WARN" "Server keys $keysize bits (Odd)"
           fi
      fi
      outln " bit"
@@ -6684,4 +6708,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.452 2016/01/31 22:53:12 dirkw Exp $
+#  $Id: testssl.sh,v 1.453 2016/02/01 09:18:25 dirkw Exp $
