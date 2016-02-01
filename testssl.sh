@@ -2672,7 +2672,7 @@ determine_trust() {
           fi
 		debugme printf -- " %-12s" "${certificate_file[i]}"
 		# set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
-		(export SSL_CERT_DIR="/dev/null"
+		(export SSL_CERT_DIR="/dev/null; export SSL_CERT_FILE=/dev/null"
 		if [[ $certificates_provided -ge 2 ]]; then
 		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
 		else
@@ -2686,29 +2686,28 @@ determine_trust() {
 			debugme outln "${verify_retcode[i]}"
 		else
 			trust[i]=false
-			debugme pr_red "not trusted "
+			debugme pr_litered "not trusted "
 			debugme outln "${verify_retcode[i]}"
 		fi
-		i=$(($i + 1))
+		i=$((i + 1))
 	done
      debugme out " "
 	# all stores ok
-	if ${trust[1]} && ${trust[2]} && ${trust[3]} && ${trust[4]}; then
+	if ${trust[1]} && ${trust[2]} && ${trust[3]}; then
 		pr_litegreen "Ok   "
           fileout "$heading trust" "OK" "All certificate trust checks passed. $addtl_warning"
 	# at least one failed
 	else
-		pr_red "NOT ok "
-		# all failed (we assume with the same issue)
-		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]} && ! ${trust[4]}; then
+		pr_red "NOT ok"
+		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]}; then
+		     # all failed (we assume with the same issue), we're displaying the reason
+               out " "
 			verify_retcode_helper "${verify_retcode[2]}"
                fileout "$heading trust" "NOT OK" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
 		else
-			# is one ok and the others not?
-			if ${trust[1]} || ${trust[2]} || ${trust[3]} || ${trust[4]}; then
-				pr_redln ":"
-                    out "$spaces"
-                    pr_red "FAILED:"
+			# is one ok and the others not ==> display the culprit store
+			if ${trust[1]} || ${trust[2]} || ${trust[3]} ; then
+				pr_red ":"
 				for i in 1 2 3 4; do
 					if ${trust[i]}; then
 						ok_was="${certificate_file[i]} $ok_was"
@@ -2727,7 +2726,7 @@ determine_trust() {
                     [[ "$DEBUG" -eq 0 ]] && out "$spaces"
 				pr_litegreen "OK: $ok_was"
                fi
-               fileout "$heading trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok : $notok_was  $addtl_warning"
+               fileout "$heading trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was  $addtl_warning"
           fi
 	fi
 	outln
@@ -6711,4 +6710,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.454 2016/02/01 12:23:27 dirkw Exp $
+#  $Id: testssl.sh,v 1.456 2016/02/01 16:33:58 dirkw Exp $
