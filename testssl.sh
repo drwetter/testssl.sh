@@ -2641,11 +2641,14 @@ verify_retcode_helper() {
 
 determine_trust() {
 	local heading=$1
-	local i=1
+	local -i i=1
+	local -i num_ca_bundles=0
 	local bundle_fname
 	local -a certificate_file verify_retcode trust
 	local ok_was=""
 	local notok_was=""
+	local all_ok=true
+	local some_ok=false
      local code
      local ca_bundles="$INSTALL_DIR/etc/*.pem"
      local spaces="                                "
@@ -2682,33 +2685,36 @@ determine_trust() {
 		[[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
 		if [[ ${verify_retcode[i]} -eq 0 ]]; then
 			trust[i]=true
+			some_ok=true
 			debugme pr_litegreen "Ok   "
 			debugme outln "${verify_retcode[i]}"
 		else
 			trust[i]=false
+			all_ok=false
 			debugme pr_litered "not trusted "
 			debugme outln "${verify_retcode[i]}"
 		fi
 		i=$((i + 1))
 	done
+	num_ca_bundles=$(($i - 1))
      debugme out " "
 	# all stores ok
-	if ${trust[1]} && ${trust[2]} && ${trust[3]}; then
+	if $all_ok; then
 		pr_litegreen "Ok   "
           fileout "$heading trust" "OK" "All certificate trust checks passed. $addtl_warning"
 	# at least one failed
 	else
 		pr_red "NOT ok"
-		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]}; then
+		if ! $some_ok; then
 		     # all failed (we assume with the same issue), we're displaying the reason
                out " "
 			verify_retcode_helper "${verify_retcode[2]}"
                fileout "$heading trust" "NOT OK" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
 		else
 			# is one ok and the others not ==> display the culprit store
-			if ${trust[1]} || ${trust[2]} || ${trust[3]} ; then
+			if $some_ok ; then
 				pr_red ":"
-				for i in 1 2 3 4; do
+				for ((i=1;i<=num_ca_bundles;i++)); do
 					if ${trust[i]}; then
 						ok_was="${certificate_file[i]} $ok_was"
 					else
