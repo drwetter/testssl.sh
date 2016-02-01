@@ -187,6 +187,7 @@ PROTOS_OFFERED=""
 TLS_EXTENSIONS=""
 GOST_STATUS_PROBLEM=false
 DETECTED_TLS_VERSION=""
+PATTERN2SHOW=""
 SOCKREPLY=""
 SOCK_REPLY_FILE=""
 HEXC=""
@@ -666,6 +667,7 @@ run_http_header() {
      local referer useragent
      local url redirect
 
+     HEADERFILE=$TEMPDIR/$NODEIP.http_header.txt
      outln; pr_headlineln " Testing HTTP header response @ \"$URL_PATH\" "
      outln
 
@@ -694,9 +696,10 @@ run_http_header() {
      # populate vars for HTTP time
 
      debugme echo "$NOW_TIME: $HTTP_TIME"
-
-     sed  -e '/^ .<HTML/,$d' -e '/^ .<html/,$d' -e '/^ .<XML /,$d' -e '/ .<?XML /,$d' \
-          -e '/^ .<xml /,$d' -e '/ .<?xml /,$d'  -e '/^ .<\!DOCTYPE/,$d' -e '/^ .<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
+     
+     # delete from pattern til the end. We ignore any leading spaces (e.g. www.amazon.de)
+     sed  -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<?XML/,$d' \
+          -e '/<xml/,$d' -e '/<?xml/,$d'  -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
 #### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
      mv $HEADERFILE.2  $HEADERFILE  # sed'ing in place doesn't work with BSD and Linux simultaneously
      ret=0
@@ -795,7 +798,7 @@ detect_ipv4() {
                          first=false
                     fi
                     pr_litered "$result"
-                    outln "spaces$your_ip_msg"
+                    outln "\n$spaces$your_ip_msg"
                     fileout "ip_in_header_$count" "NOT OK" "IPv4 address in header  $result $your_ip_msg"
                fi
                count=$count+1
@@ -926,15 +929,17 @@ run_hpkp() {
           else
                hpkp_headers=""
                pr_brown "multiple HPKP headers: "
+               # https://scotthelme.co.uk is a candidate
+               #FIXME: should display both Public-Key-Pins+Public-Key-Pins-Report-Only --> egrep -ai -w
                for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
                     pr_italic $i
                     hpkp_headers="$hpkp_headers$i "
                     out " "
                done
-               out "spaces using first "
+               out "\n$spaces Examining first one: "
                first_hpkp_header=$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1)
                pr_italic "$first_hpkp_header, "
-               fileout "hpkp_multiple" "WARN" "Multiple HPKP headershpkp_headers\nUsing first header: $first_hpkp_header"
+               fileout "hpkp_multiple" "WARN" "Multiple HPKP headershpkp_headers. Using first header: $first_hpkp_header"
           fi
 
           # remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
@@ -983,7 +988,7 @@ run_hpkp() {
                $OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
           while read hpkp_key; do
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
-                    out "spaces matching host key: "
+                    out "\n$spaces matching host key: "
                     pr_litegreen "$hpkp_key"
                     fileout "hpkp_keymatch" "OK" "Key matches a key pinned in the HPKP header"
                     key_found=true
@@ -991,9 +996,9 @@ run_hpkp() {
                debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
           done < <(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
           if ! $key_found ; then
-               out "spaces"
+               out "\n$spaces"
                pr_litered " No matching key for pins found "
-               out "(CAs pinned? -- not yet checked)"
+               out "(CAs pinned? -- not checked for yet)"
                fileout "hpkp_keymatch" "WARN" "The TLS key does not match any key pinned in the HPKP header. If you pinned a CA key you can ignore this"
           fi
      else
@@ -1456,18 +1461,22 @@ neat_list(){
      kx="${3//Kx=/}"
      enc="${4//Enc=/}"
      strength=$(sed -e 's/.*(//' -e 's/)//' <<< "$enc")                              # strength = encryption bits
-
      strength="${strength//ChaCha20-Poly1305/ly1305}"
      enc=$(sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g' <<< "$enc")     # workaround for empty bits ChaCha20-Poly1305
      echo "$export" | grep -iq export && strength="$strength,export"
-     # workaround for color escape codes:
-     if printf -- "$kx" | "${HEXDUMPVIEW[@]}" | grep -q 33 ; then         # here's a color code
-          kx="$kx "                               # one for color code if ECDH and three digits
-          [[ "${#kx}" -eq 18 ]] && kx="$kx  "     # 18 means DH, colored < 1000. Add another space
-          [[ "${#kx}" -eq 19 ]] && kx="$kx "      # 19 means DH, colored >=1000. Add another space
-          #echo ${#kx}                            # should be always 20
-     fi
 
+     #printf -- "%q" "$kx" | xxd | head -1
+     # length correction for color escape codes (printf counts the escape color codes!!)
+     if printf -- "%q" "$kx" | egrep -aq '.;3.m|E\[1m' ; then     # here's a color code which screws up the formatting with prinf below
+          while [[ ${#kx} -lt 20 ]]; do
+               kx="$kx "
+          done
+     elif printf -- "%q" "$kx" | grep -aq 'E\[m' ; then   # for color=1/0 we have the pr_off which screws up the formatting
+          while [[ ${#kx} -lt 13 ]]; do                   # so it'll be filled up ok
+               kx="$kx "
+          done
+     fi
+     #echo "${#kx}"                            # should be always 20 / 13
      printf -- " %-7s %-30s %-10s %-11s%-11s${ADD_RFC_STR:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style $HEXC)"
 }
 
@@ -2632,11 +2641,14 @@ verify_retcode_helper() {
 
 determine_trust() {
 	local heading=$1
-	local i=1
+	local -i i=1
+	local -i num_ca_bundles=0
 	local bundle_fname
 	local -a certificate_file verify_retcode trust
 	local ok_was=""
 	local notok_was=""
+	local all_ok=true
+	local some_ok=false
      local code
      local ca_bundles="$INSTALL_DIR/etc/*.pem"
      local spaces="                                "
@@ -2663,43 +2675,46 @@ determine_trust() {
           fi
 		debugme printf -- " %-12s" "${certificate_file[i]}"
 		# set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
-		(export SSL_CERT_DIR="/dev/null"
+		(export SSL_CERT_DIR="/dev/null; export SSL_CERT_FILE=/dev/null"
 		if [[ $certificates_provided -ge 2 ]]; then
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$ERRFILE 2>>$ERRFILE
+		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
 		else
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >>$ERRFILE 2>>$ERRFILE
+		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
 		fi)
-		verify_retcode[i]=$?
+		verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1)
+		[[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
 		if [[ ${verify_retcode[i]} -eq 0 ]]; then
 			trust[i]=true
+			some_ok=true
 			debugme pr_litegreen "Ok   "
 			debugme outln "${verify_retcode[i]}"
 		else
 			trust[i]=false
-			debugme pr_red "not trusted "
+			all_ok=false
+			debugme pr_litered "not trusted "
 			debugme outln "${verify_retcode[i]}"
 		fi
-		i=$(($i + 1))
+		i=$((i + 1))
 	done
+	num_ca_bundles=$(($i - 1))
      debugme out " "
 	# all stores ok
-	if ${trust[1]} && ${trust[2]} && ${trust[3]} && ${trust[4]}; then
+	if $all_ok; then
 		pr_litegreen "Ok   "
           fileout "$heading trust" "OK" "All certificate trust checks passed. $addtl_warning"
 	# at least one failed
 	else
-		pr_red "NOT ok "
-		# all failed (we assume with the same issue)
-		if ! ${trust[1]} && ! ${trust[2]} && ! ${trust[3]} && ! ${trust[4]}; then
+		pr_red "NOT ok"
+		if ! $some_ok; then
+		     # all failed (we assume with the same issue), we're displaying the reason
+               out " "
 			verify_retcode_helper "${verify_retcode[2]}"
                fileout "$heading trust" "NOT OK" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
 		else
-			# is one ok and the others not?
-			if ${trust[1]} || ${trust[2]} || ${trust[3]} || ${trust[4]}; then
-				pr_redln ":"
-                    out "$spaces"
-                    pr_red "FAILED:"
-				for i in 1 2 3 4; do
+			# is one ok and the others not ==> display the culprit store
+			if $some_ok ; then
+				pr_red ":"
+				for ((i=1;i<=num_ca_bundles;i++)); do
 					if ${trust[i]}; then
 						ok_was="${certificate_file[i]} $ok_was"
 					else
@@ -2717,7 +2732,7 @@ determine_trust() {
                     [[ "$DEBUG" -eq 0 ]] && out "$spaces"
 				pr_litegreen "OK: $ok_was"
                fi
-               fileout "$heading trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok : $notok_was  $addtl_warning"
+               fileout "$heading trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was  $addtl_warning"
           fi
 	fi
 	outln
@@ -2868,26 +2883,50 @@ certificate_info() {
           outln "(couldn't determine)"
           fileout "$heading key_size" "WARN" "Server keys size cannot be determined"
      else
-          if [[ "$keysize" -le 768 ]]; then
-               if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
-                    pr_litegreen "EC $keysize"
-                    fileout "$heading key_size" "OK" "Server keys $keysize bits EC (OK)"
+          # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
+          # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
+          # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
+          # Table 2 @ chapter 5.6.1 (~ p64)
+          if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
+               if [[ "$keysize" -le 110 ]]; then       # a guess 
+                    pr_red "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+               elif [[ "$keysize" -le 123 ]]; then    # a guess
+                    pr_litered "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+               elif [[ "$keysize" -le 163 ]]; then
+                    pr_brown "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+               elif [[ "$keysize" -le 224 ]]; then
+                    out "$keysize"
+                    fileout "$heading key_size" "INFO" "Server keys $keysize EC bits"
+               elif [[ "$keysize" -le 533 ]]; then
+                    pr_litegreen "$keysize"
+                    fileout "$heading key_size" "OK" "Server keys $keysize EC bits (OK)"
                else
+                    out "keysize: $keysize (not expected, FIXME)"
+                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (not expected)"
+               fi
+          else
+               if [[ "$keysize" -le 512 ]]; then
                     pr_red "$keysize"
                     fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               elif [[ "$keysize" -le 768 ]]; then
+                    pr_litered "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               elif [[ "$keysize" -le 1024 ]]; then
+                    pr_brown "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               elif [[ "$keysize" -le 2048 ]]; then
+                    out "$keysize"
+                    fileout "$heading key_size" "INFO" "Server keys $keysize bits"
+               elif [[ "$keysize" -le 4096 ]]; then
+                    pr_litegreen "$keysize"
+                    fileout "$heading key_size" "OK" "Server keys $keysize bits (OK)"
+               else
+                    out "weird keysize: $keysize (compatibility problems)"
+                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (Odd)"
                fi
-          elif [[ "$keysize" -le 1024 ]]; then
-               pr_brown "$keysize"
-               fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
-          elif [[ "$keysize" -le 2048 ]]; then
-               out "$keysize"
-               fileout "$heading key_size" "INFO" "Server keys $keysize bits"
-          elif [[ "$keysize" -le 4096 ]]; then
-               pr_litegreen "$keysize"
-               fileout "$heading key_size" "OK" "Server keys $keysize bits (OK)"
-          else
-               out "weird keysize: $keysize"
-               fileout "$heading key_size" "WARN" "Server keys $keysize bits (Odd)"
           fi
      fi
      outln " bit"
@@ -2949,7 +2988,6 @@ certificate_info() {
                else
                     cnfinding+=" NO match)"
                     cnok="INFO"
-                    :
                     #FIXME: we need to test also the SANs as they can contain a wild card (google.de .e.g) ==> 2.7dev
                fi
           fi
@@ -5318,7 +5356,6 @@ maketempf() {
           ERRFILE=$TEMPDIR/errorfile.txt || exit -6
      fi
      HOSTCERT=$TEMPDIR/host_certificate.txt
-     HEADERFILE=$TEMPDIR/http_header.txt
      initialize_engine
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
@@ -6085,7 +6122,7 @@ run_mass_testing_parallel() {
           $cmdline >$LOGFILE &
           sleep $PARALLEL_SLEEP
      done < "$FNAME"
-     exit $?
+     return $?
 }
 
 
@@ -6105,8 +6142,7 @@ run_mass_testing() {
           outln "$cmdline"
           $cmdline
      done < "${FNAME}"
-     
-     exit $?
+     return $?
 }
 
 
@@ -6144,6 +6180,7 @@ initialize_globals() {
      do_test_just_one=false
      do_tls_sockets=false
      do_client_simulation=false
+     do_display_only=false
 }
 
 
@@ -6181,7 +6218,7 @@ query_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing ; do
+               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
      done
      return $true_nr
@@ -6194,17 +6231,18 @@ debug_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing; do
+               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
      printf "%-22s : %s\n" URI: "$URI"
 }
 
 
-# arg1+2 are just the options
+# arg1: either switch+value (=) or switch
+# arg2: value (if no = provided)
 parse_opt_equal_sign() {
      if [[ "$1" == *=* ]]; then
-          echo "$1" | awk -F'=' '{ print $2 }'
+          echo ${1#*=}
           return 1  # = means we don't need to shift args!
      else
           echo $2
@@ -6244,13 +6282,15 @@ parse_cmd_line() {
                     CMDLINE_IP=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     ;;
-               -V|-V=*|--local|--local=*)    # this is only displaying local ciphers, thus we don't put it in the loop
-                    find_openssl_binary
-                    maketempf                # for GOST support
-                    mybanner
-                    openssl_age
-                    prettyprint_local $(parse_opt_equal_sign "$1" "$2")
-                    exit $?
+               -V|-V=*|--local|--local=*)    # attention, this could have a value or not!
+                    do_display_only=true
+                    PATTERN2SHOW="$(parse_opt_equal_sign "$1" "$2")"
+                    retval=$?
+                    if [[ "$PATTERN2SHOW" == -* ]]; then
+                         unset PATTERN2SHOW  # we hit the next command ==> not our value
+                    else                     # it was ours, point to next arg
+                         [[ $retval -eq 0 ]] && shift
+                    fi
                     ;;
                -x|-x=*|--single[-_]cipher|--single[-_]cipher=*)
                     do_test_just_one=true
@@ -6506,7 +6546,7 @@ parse_cmd_line() {
      done
 
      # Show usage if no options were specified
-     if [[ -z "$1" ]] && [[ -z "$FNAME" ]] ; then
+     if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! $do_display_only; then
           help 0
      else
      # left off here is the URI
@@ -6625,7 +6665,15 @@ openssl_age
 ret=0
 ip=""
 
-$do_mass_testing && run_mass_testing
+if $do_display_only; then
+     prettyprint_local "$PATTERN2SHOW"
+     exit $?
+fi
+
+if $do_mass_testing; then
+     run_mass_testing
+     exit $?
+fi
 
 #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
 if $do_mx_all_ips; then
@@ -6668,4 +6716,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.450 2016/01/31 10:04:58 dirkw Exp $
+#  $Id: testssl.sh,v 1.456 2016/02/01 16:33:58 dirkw Exp $
