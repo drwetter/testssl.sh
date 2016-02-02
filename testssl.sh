@@ -2778,7 +2778,6 @@ tls_time() {
 }
 
 # core function determining whether handshake succeded or not
-#
 sclient_connect_successful() {
      [[ $1 -eq 0 ]] && return 0
      [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]] && return 0
@@ -2804,7 +2803,7 @@ determine_tls_extensions() {
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0 && break
-     done                          # this loop is needed for IIS/6
+     done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE
@@ -2818,7 +2817,13 @@ determine_tls_extensions() {
                GOST_STATUS_PROBLEM=true
           fi
      fi
-     TLS_EXTENSIONS=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
+     #TLS_EXTENSIONS=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
+     #
+     # this is not beautiful (grep+sed)
+     # but maybe we should just get the ids and do a private matching, according to
+     # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml <-- ALPN is missing
+     TLS_EXTENSIONS=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+     TLS_EXTENSIONS=$(echo $TLS_EXTENSIONS)       # into one line
 
      # Place the server's certificate in $HOSTCERT and any intermediate
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
@@ -2845,6 +2850,21 @@ determine_tls_extensions() {
 
      tmpfile_handle $FUNCNAME.txt
      return $success
+}
+
+# arg1: path to certificate
+# returns CN
+get_cn_from_cert() {
+     local subject
+
+     # attention! openssl 1.0.2 doesn't properly handle online output from certifcates from trustwave.com/github.com
+     #FIXME: use -nameopt oid for robustness 
+
+     # for e.g. russian sites -esc_msb,utf8 works in an UTF8 terminal -- any way to check platform indepedent?
+     # see x509(1ssl):
+     subject="$($OPENSSL x509 -in $1 -noout -subject -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
+     echo "$(awk -F'=' '/CN=/ { print $2 }' <<< "$subject")"
+     return $?
 }
 
 
@@ -2978,8 +2998,8 @@ certificate_info() {
 
      out "$indent"; pr_bold " Common Name (CN)             "
      cnfinding="Common Name (CN) : "
-     if $OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | grep -wq CN; then
-          cn=$($OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
+     cn="$(get_cn_from_cert $HOSTCERT)"
+     if [[ -n "$cn" ]]; then
           pr_dquoted "$cn"
           cnfinding="$cn"
           if echo -n "$cn" | grep -q '^*.' ; then
@@ -3002,16 +3022,12 @@ certificate_info() {
           cnok="INFO"
      fi
 
-     $OPENSSL s_client $STARTTLS $BUGS -cipher $cipher -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
-     cn_nosni=""
-     if [[ -s $HOSTCERT.nosni ]]; then
-          if $OPENSSL x509 -in $HOSTCERT.nosni -noout -subject 2>>$ERRFILE | grep -wq CN; then
-               cn_nosni=$($OPENSSL x509 -in $HOSTCERT.nosni -noout -subject 2>>$ERRFILE | sed 's/subject= //' | sed -e 's/^.*CN=//' -e 's/\/emailAdd.*//')
-          else
-               cn_nosni="no CN field in subject"
-          fi
-     fi
-#FIXME: check for SSLv3/v2 and look wheher it goes to a different CN
+     # no cipher suites specified here. We just want the default vhost subject
+     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+     cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
+     [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
+
+#FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
 
      debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
      if [[ $NODE == "$cn_nosni" ]]; then
@@ -3064,18 +3080,17 @@ certificate_info() {
      fi
      outln
      out "$indent"; pr_bold " Issuer                       "
-     issuer=$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE| sed -e 's/^.*CN=//g' -e 's/\/.*$//g')
-     issuer_O=$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE | sed 's/^.*O=//g' | sed 's/\/.*$//g')
-     if $OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE | grep -q 'C=' ; then
-          issuer_C=$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE | sed 's/^.*C=//g' | sed 's/\/.*$//g')
-     else
-          issuer_C=""         # CACert would have 'issuer= ' here otherwise
-     fi
-     if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer" == "$CN" ]]; then
-          pr_redln "selfsigned (NOT ok)"
+     #FIXME: oid would be better maybe (see above)
+     issuer="$($OPENSSL x509 -in  $HOSTCERT -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
+     issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
+     issuer_O="$(awk -F'=' '/O=/ { print $2 }' <<< "$issuer")"
+     issuer_C="$(awk -F'=' '/C=/ { print $2 }' <<< "$issuer")"
+
+     if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$CN" ]]; then
+          pr_redln "self-signed (NOT ok)"
           fileout "$heading issuer" "NOT OK" "Issuer: selfsigned (NOT ok)"
      else
-          pr_dquoted "$issuer"
+          pr_dquoted "$issuer_CN"
           out " ("
           pr_dquoted "$issuer_O"
           if [[ -n "$issuer_C" ]]; then
@@ -3217,6 +3232,9 @@ certificate_info() {
 # FIXME: revoked, see checkcert.sh
 # FIXME: Trust (only CN)
 
+
+
+
 run_server_defaults() {
      local ciph match_found newhostcert
      local sessticket_str=""
@@ -3308,7 +3326,7 @@ run_server_defaults() {
      pr_headlineln " Testing server defaults (Server Hello) "
      outln
 
-     pr_bold " TLS server extensions (std)  "
+     pr_bold " TLS extensions (standard)    "
      if [[ -z "$all_tls_extensions" ]]; then
          outln "(none)"
          fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
@@ -4900,7 +4918,7 @@ run_beast(){
 
      >$ERRFILE
 
-     # first determine whether it's mitogated by higher protocols
+     # first determine whether it's mitigated by higher protocols
      for proto in tls1_1 tls1_2; do
           $OPENSSL s_client -state -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>>$ERRFILE >$TMPFILE </dev/null
           if sclient_connect_successful $? $TMPFILE; then
@@ -6720,4 +6738,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.458 2016/02/01 21:05:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.459 2016/02/02 23:05:56 dirkw Exp $
