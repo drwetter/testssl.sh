@@ -43,6 +43,7 @@ Done so far:
 * browser cipher simulation
 * assistance for color-blind users
 * Even more compatibilty improvements for FreeBSD, RH-ish and F5 systems
+* OpenSSL 1.1.0 compliant
 
 Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
 
