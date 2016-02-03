@@ -2739,7 +2739,7 @@ determine_trust() {
                fi
                fileout "$heading trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
           fi
-          out "\n$spaces"; pr_litemagenta "$addtl_warning"
+          [[ -n "$addtl_warning" ]] && out "\n$spaces" && pr_litemagenta "$addtl_warning"
 	fi
 	outln
      return 0
@@ -2899,61 +2899,8 @@ certificate_info() {
      fi
      
      out "$indent"
-     pr_bold " Server key size              "
      sig_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
      key_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2 }' | sort -u )
-
-     if [[ -z "$keysize" ]]; then
-          outln "(couldn't determine)"
-          fileout "$heading key_size" "WARN" "Server keys size cannot be determined"
-     else
-          # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
-          # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
-          # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
-          # Table 2 @ chapter 5.6.1 (~ p64)
-          if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
-               if [[ "$keysize" -le 110 ]]; then       # a guess 
-                    pr_red "$keysize"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
-               elif [[ "$keysize" -le 123 ]]; then    # a guess
-                    pr_litered "$keysize"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
-               elif [[ "$keysize" -le 163 ]]; then
-                    pr_brown "$keysize"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
-               elif [[ "$keysize" -le 224 ]]; then
-                    out "$keysize"
-                    fileout "$heading key_size" "INFO" "Server keys $keysize EC bits"
-               elif [[ "$keysize" -le 533 ]]; then
-                    pr_litegreen "$keysize"
-                    fileout "$heading key_size" "OK" "Server keys $keysize EC bits (OK)"
-               else
-                    out "keysize: $keysize (not expected, FIXME)"
-                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (not expected)"
-               fi
-          else
-               if [[ "$keysize" -le 512 ]]; then
-                    pr_red "$keysize"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
-               elif [[ "$keysize" -le 768 ]]; then
-                    pr_litered "$keysize"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
-               elif [[ "$keysize" -le 1024 ]]; then
-                    pr_brown "$keysize"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
-               elif [[ "$keysize" -le 2048 ]]; then
-                    out "$keysize"
-                    fileout "$heading key_size" "INFO" "Server keys $keysize bits"
-               elif [[ "$keysize" -le 4096 ]]; then
-                    pr_litegreen "$keysize"
-                    fileout "$heading key_size" "OK" "Server keys $keysize bits (OK)"
-               else
-                    out "weird keysize: $keysize (compatibility problems)"
-                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (Odd)"
-               fi
-          fi
-     fi
-     outln " bit"
 
      out "$indent" ; pr_bold " Signature Algorithm          "
      case $sig_algo in
@@ -2982,11 +2929,72 @@ certificate_info() {
                fileout "$heading algorithm" "NOT OK" "Signature Algorithm: MD5 (NOT ok)"
                ;;
           *)
-               outln "$sig_algo"
+               out "$sig_algo ("
+               pr_litemagenta "Unknown"
+               outln ")"
                fileout "$heading algorithm" "INFO" "Signature Algorithm: $sign_algo"
                ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
+
+     pr_bold " Server key size              "
+     if [[ -z "$keysize" ]]; then
+          outln "(couldn't determine)"
+          fileout "$heading key_size" "WARN" "Server keys size cannot be determined"
+     else
+          # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
+          # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
+          # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
+          # Table 2 @ chapter 5.6.1 (~ p64)
+          if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
+               if [[ "$keysize" -le 110 ]]; then       # a guess 
+                    pr_red "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+               elif [[ "$keysize" -le 123 ]]; then    # a guess
+                    pr_litered "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+               elif [[ "$keysize" -le 163 ]]; then
+                    pr_brown "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+               elif [[ "$keysize" -le 224 ]]; then
+                    out "$keysize"
+                    fileout "$heading key_size" "INFO" "Server keys $keysize EC bits"
+               elif [[ "$keysize" -le 533 ]]; then
+                    pr_litegreen "$keysize"
+                    fileout "$heading key_size" "OK" "Server keys $keysize EC bits (OK)"
+               else
+                    out "keysize: $keysize (not expected, FIXME)"
+                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (not expected)"
+               fi
+               outln " bit"
+          elif [[ $sig_algo = *RSA* ]]; then
+               if [[ "$keysize" -le 512 ]]; then
+                    pr_red "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               elif [[ "$keysize" -le 768 ]]; then
+                    pr_litered "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               elif [[ "$keysize" -le 1024 ]]; then
+                    pr_brown "$keysize"
+                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+               elif [[ "$keysize" -le 2048 ]]; then
+                    out "$keysize"
+                    fileout "$heading key_size" "INFO" "Server keys $keysize bits"
+               elif [[ "$keysize" -le 4096 ]]; then
+                    pr_litegreen "$keysize"
+                    fileout "$heading key_size" "OK" "Server keys $keysize bits (OK)"
+               else
+                    out "weird keysize: $keysize (compatibility problems)"
+                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (Odd)"
+               fi
+               outln " bit"
+          else
+               out "$keysize bits ("
+               pr_litemagenta "can't tell whether $keysize bits is good or not"
+               outln ")"
+               fileout "$heading key_size" "WARN" "Server keys $keysize bits (unknown signature algorithm)"
+          fi
+     fi
 
      out "$indent"; pr_bold " Fingerprint / Serial         "
      cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g')"
@@ -3174,7 +3182,7 @@ certificate_info() {
 
 
      out "$indent"; pr_bold " Chain of trust"; out " (experim.)    "
-     determine_trust "$heading" #Also handles fileout
+     determine_trust "$heading" # Also handles fileout
 
      out "$indent"; pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
@@ -6738,4 +6746,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.459 2016/02/02 23:05:56 dirkw Exp $
+#  $Id: testssl.sh,v 1.460 2016/02/03 08:55:45 dirkw Exp $
