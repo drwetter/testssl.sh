@@ -369,6 +369,9 @@ pr_headlineln() { pr_headline "$1" ; outln; }
 pr_squoted() { out "'$1'"; }
 pr_dquoted() { out "\"$1\""; }
 
+local_problem_ln() { pr_litemagentaln "Local problem: $1"; }
+local_problem() { pr_litemagenta "Local problem: $1"; }
+
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 set_color_functions() {
@@ -1385,7 +1388,7 @@ std_cipherlists() {
           tmpfile_handle $FUNCNAME.$debugname.txt
      else
           singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
-          local_problem "No $singlespaces configured in $OPENSSL"
+          local_problem_ln "No $singlespaces configured in $OPENSSL"
           fileout "std_$4" "WARN" "Cipher $2 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
      # we need 1xlf in those cases:
@@ -2049,7 +2052,7 @@ run_client_simulation() {
 locally_supported() {
      [[ -n "$2" ]] && out "$2 "
      if $OPENSSL s_client "$1" 2>&1 | grep -aq "unknown option"; then
-          local_problem "$OPENSSL doesn't support \"s_client $1\""
+          local_problem_ln "$OPENSSL doesn't support \"s_client $1\""
           return 7
      fi
      return 0
@@ -2116,8 +2119,8 @@ run_protocols() {
                using_sockets=false
           else
                using_sockets=true
-               pr_headlineln "(via sockets except TLS 1.2 and SPDY/HTTP2) "
-               via+="via sockets except for TLS1.1 and SPDY/HTTP2"
+               pr_headlineln "(via sockets except TLS 1.2, SPDY+HTTP2) "
+               via+="via sockets except for TLS1.2, SPDY+HTTP2"
           fi
      fi
      outln
@@ -2555,7 +2558,7 @@ run_server_preference() {
 }
 
 cipher_pref_check() {
-     local p proto protos
+     local p proto protos npn_protos
      local tested_cipher cipher order
 
      pr_bold " Cipher order"
@@ -2588,8 +2591,8 @@ cipher_pref_check() {
      if ! spdy_pre "     SPDY/NPN: "; then       # is NPN/SPDY supported and is this no STARTTLS?
           outln
      else
-          protos=$($OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg \"\" </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
-          for p in $protos; do
+          npn_protos=$($OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg \"\" </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
+          for p in $npn_protos; do
                order=""
                $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
                cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
@@ -2619,12 +2622,13 @@ cipher_pref_check() {
 get_host_cert() {
      local tmpvar=$TEMPDIR/$FUNCNAME.txt     # change later to $TMPFILE
 
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $1 2>/dev/null </dev/null >$TEMPDIR/$FUNCNAME.txt
+     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $1 2>/dev/null </dev/null >$tmpdir
      if sclient_connect_successful $? $tmpvar; then
           awk '/-----BEGIN/,/-----END/ { print $0 }' $tmpvar >$HOSTCERT
      else
           return 1
      fi
+    tmpfile_handle $FUNCNAME.txt
     #      return $((${PIPESTATUS[0]} + ${PIPESTATUS[1]}))
 }
 
@@ -2898,7 +2902,6 @@ certificate_info() {
           spaces="                              "
      fi
      
-     out "$indent"
      sig_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
      key_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2 }' | sort -u )
 
@@ -2937,7 +2940,7 @@ certificate_info() {
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
-     pr_bold " Server key size              "
+     out "$indent"; pr_bold " Server key size              "
      if [[ -z "$keysize" ]]; then
           outln "(couldn't determine)"
           fileout "$heading key_size" "WARN" "Server keys size cannot be determined"
@@ -3024,8 +3027,8 @@ certificate_info() {
                fi
           fi
      else
-          cn="(no CN field in subject)"
-          out "$cn"
+          cn="no CN field in subject"
+          pr_litemagenta "($cn)"
           cnfinding="$cn"
           cnok="INFO"
      fi
@@ -3038,8 +3041,11 @@ certificate_info() {
 #FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
 
      debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
-     if [[ $NODE == "$cn_nosni" ]]; then
-          if [[ $SERVICE == "HTTP" ]] || $CLIENT_AUTH; then
+     if [[ "$cn_nosni" == "$cn" ]]; then
+          outln " (works w/o SNI)"
+          cnfinding+=" (works w/o SNI)"
+     elif [[ $NODE == "$cn_nosni" ]]; then
+          if [[ $SERVICE == "HTTP" ]] || $CLIENT_AUTH ; then
                outln " (works w/o SNI)"
                cnfinding+=" (works w/o SNI)"
           else
@@ -3062,7 +3068,7 @@ certificate_info() {
                fi
                outln ")"
                cnfinding+=")"
-          elif [[ "$cn_nosni" == "*no CN field*" ]]; then
+          elif [[ "$cn_nosni" == *"no CN field"* ]]; then
                outln ", (request w/o SNI: $cn_nosni)"
                cnfinding+=", (request w/o SNI: $cn_nosni)"
           else
@@ -3399,7 +3405,7 @@ run_pfs() {
      nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $pfs_cipher_list))
      if [[ "$nr_supported_ciphers" -le "$CLIENT_MIN_PFS" ]]; then
           outln
-          local_problem "You only have $nr_supported_ciphers PFS ciphers on the client side "
+          local_problem_ln "You only have $nr_supported_ciphers PFS ciphers on the client side "
           fileout "pfs" "WARN" "(Perfect) Forward Secrecy tests: Skipped. You only have $nr_supported_ciphers PFS ciphers on the client site. ($CLIENT_MIN_PFS are required)"
           return 1
      fi
@@ -3512,7 +3518,7 @@ http2_pre(){
           return 1
      fi
      if ! $HAS_ALPN; then
-          local_problem "$OPENSSL doesn't support HTTP2/ALPN";
+          local_problem_ln "$OPENSSL doesn't support HTTP2/ALPN";
           fileout "https_alpn" "WARN" "HTTP2/ALPN : HTTP/2 was not tested as $OPENSSL does not support it"
           return 7
      fi
@@ -4454,10 +4460,6 @@ run_ccs_injection(){
      return $ret
 }
 
-local_problem() {
-     pr_litemagentaln "Local problem: $1"
-}
-
 run_renego() {
 # no SNI here. Not needed as there won't be two different SSL stacks for one IP
      local legacycmd=""
@@ -4499,7 +4501,7 @@ run_renego() {
           0.9.8*)             # we need this for Mac OSX unfortunately
                case "$OSSL_VER_APPENDIX" in
                     [a-l])
-                         local_problem "$OPENSSL cannot test this secure renegotiation vulnerability"
+                         local_problem_ln "$OPENSSL cannot test this secure renegotiation vulnerability"
                          fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : $OPENSSL cannot test this secure renegotiation vulnerability"
                          return 3
                          ;;
@@ -4570,7 +4572,7 @@ run_crime() {
      # first we need to test whether OpenSSL binary has zlib support
      $OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib
      if [[ $? -eq 0 ]]; then
-          local_problem "$OPENSSL lacks zlib support"
+          local_problem_ln "$OPENSSL lacks zlib support"
           fileout "crime" "WARN" "CRIME, TLS (CVE-2012-4929) : Not tested. $OPENSSL lacks zlib support"
           return 7
      fi
@@ -4615,7 +4617,7 @@ run_crime() {
 #         return $ret
 #    esac
 
-#    $OPENSSL s_client help 2>&1 | grep -qw nextprotoneg
+#    $OPENSSL s_client -help 2>&1 | grep -qw nextprotoneg
 #    if [[ $? -eq 0 ]]; then
 #         $OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs  $SNI </dev/null 2>/dev/null >$TMPFILE
 #         if [[ $? -eq 0 ]]; then
@@ -4746,8 +4748,8 @@ run_tls_fallback_scsv() {
      # the countermeasure to protect against protocol downgrade attacks.
 
      # First check we have support for TLS_FALLBACK_SCSV in our local OpenSSL
-     if ! $OPENSSL s_client -h 2>&1 | grep -q "\-fallback_scsv"; then
-          local_problem "$OPENSSL lacks TLS_FALLBACK_SCSV support"
+     if ! $OPENSSL s_client -help 2>&1 | grep -q "\-fallback_scsv"; then
+          local_problem_ln "$OPENSSL lacks TLS_FALLBACK_SCSV support"
           return 4
      fi
      #TODO: this need some tuning: a) if one protocol is supported only it has practcally no value (theoretical it's interesting though)
@@ -4814,7 +4816,7 @@ run_freak() {
 
      case $nr_supported_ciphers in
           0)
-               local_problem "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
+               local_problem_ln "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
                fileout "freak" "WARN" "FREAK (CVE-2015-0204) : Not tested. $OPENSSL doesn't have any EXPORT RSA ciphers configured"
                return 7
                ;;
@@ -4860,7 +4862,7 @@ run_logjam() {
 
      case $nr_supported_ciphers in
           0)
-               local_problem "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
+               local_problem_ln "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
                fileout "logjam" "WARN" "LOGJAM (CVE-2015-4000) : Not tested. $OPENSSL doesn't have any DHE EXPORT ciphers configured"
                return 3
                ;;
@@ -5244,10 +5246,10 @@ find_openssl_binary() {
      $OPENSSL s_client -ssl3 2>&1 | grep -aq "unknown option" || \
           HAS_SSL3=true && \
           HAS_SSL3=false
-     $OPENSSL s_client help 2>&1 | grep -qw '\-alpn' && \
+     $OPENSSL s_client -help 2>&1 | grep -qw '\-alpn' && \
           HAS_ALPN=true || \
           HAS_ALPN=false
-     $OPENSSL s_client help 2>&1 | grep -qw '\-nextprotoneg' && \
+     $OPENSSL s_client -help 2>&1 | grep -qw '\-nextprotoneg' && \
           HAS_SPDY=true || \
           HAS_SPDY=false
 
@@ -5274,10 +5276,6 @@ openssl_age() {
                *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" ;;
           esac
           ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
-     fi
-     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0" ]]; then
-          pr_magentaln "$PROG_NAME doesn't work yet with OpenSSL 1.1.0!"
-          ignore_no_or_lame "Type \"yes\" to accept weird output, false negatives and positives "
      fi
      outln
 }
@@ -5882,7 +5880,7 @@ get_mx_record() {
 #
 check_proxy() {
      if [[ -n "$PROXY" ]]; then
-          if ! $OPENSSL s_client help 2>&1 | grep -qw proxy; then
+          if ! $OPENSSL s_client -help 2>&1 | grep -qw proxy; then
                fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -1
           fi
           PROXYNODE=${PROXY%:*}
@@ -6746,4 +6744,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.460 2016/02/03 08:55:45 dirkw Exp $
+#  $Id: testssl.sh,v 1.461 2016/02/03 16:55:52 dirkw Exp $
