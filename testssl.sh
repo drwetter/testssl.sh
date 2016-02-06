@@ -3218,28 +3218,28 @@ certificate_info() {
           fileout "$heading ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
      fi
 
-     out "$indent"; pr_bold " OCSP stapling               "
+     out "$indent"; pr_bold " OCSP stapling                "
      if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
-          outln " not offered"
+          pr_yellow "--"
           fileout "$heading ocsp_stapling" "INFO" "OCSP stapling : not offered"
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
-               pr_litegreenln " offered"
+               pr_litegreen "offered"
                fileout "$heading ocsp_stapling" "OK" "OCSP stapling : offered"
           else
                if $GOST_STATUS_PROBLEM; then
-                    outln " (GOST servers make problems here, sorry)"
+                    outln "(GOST servers make problems here, sorry)"
                     fileout "$heading ocsp_stapling" "OK" "OCSP stapling : (GOST servers make problems here, sorry)"
                     ret=0
                else
-                    outln " not sure what's going on here, debug:"
-                    grep -aA 20 "OCSP response"  <<<"$ocsp_response"
+                    out "(response status unknown)"
                     fileout "$heading ocsp_stapling" "OK" "OCSP stapling : not sure what's going on here, debug: grep -aA 20 "OCSP response"  <<<"$ocsp_response""
+                    debug grep -a -A20 -B2 "OCSP response"  <<<"$ocsp_response"
                     ret=2
                fi
           fi
      fi
-     outln
+     outln "\n"
 
      return $ret
 }
@@ -6744,4 +6744,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.461 2016/02/03 16:55:52 dirkw Exp $
+#  $Id: testssl.sh,v 1.462 2016/02/06 21:31:31 dirkw Exp $
