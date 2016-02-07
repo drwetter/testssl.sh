@@ -3234,7 +3234,7 @@ certificate_info() {
                else
                     out "(response status unknown)"
                     fileout "$heading ocsp_stapling" "OK" "OCSP stapling : not sure what's going on here, debug: grep -aA 20 "OCSP response"  <<<"$ocsp_response""
-                    debug grep -a -A20 -B2 "OCSP response"  <<<"$ocsp_response"
+                    debugme grep -a -A20 -B2 "OCSP response"  <<<"$ocsp_response"
                     ret=2
                fi
           fi
