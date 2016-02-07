@@ -1284,8 +1284,13 @@ prettyprint_local() {
      local hexcode dash ciph sslvers kx auth enc mac export
      local re='^[0-9A-Fa-f]+$'
 
+     if [[ "$1" == 0x* ]] || [[ "$1" == 0X* ]]; then
+          fatal "pls supply x<number> instead" 2
+     fi
+
      pr_headline " Displaying all local ciphers ";
      if [[ -n "$1" ]]; then
+          # pattern provided; which one?
           [[ $1 =~ $re ]] && \
                pr_headline "matching number pattern \"$1\" " || \
                pr_headline "matching word pattern "\"$1\"" (ignore case) "
@@ -2973,24 +2978,27 @@ certificate_info() {
           elif [[ $sig_algo = *RSA* ]]; then
                if [[ "$keysize" -le 512 ]]; then
                     pr_red "$keysize"
+                    outln " bits"
                     fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                elif [[ "$keysize" -le 768 ]]; then
                     pr_litered "$keysize"
+                    outln " bits"
                     fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                elif [[ "$keysize" -le 1024 ]]; then
                     pr_brown "$keysize"
+                    outln " bits"
                     fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                elif [[ "$keysize" -le 2048 ]]; then
-                    out "$keysize"
+                    outln "$keysize bits"
                     fileout "$heading key_size" "INFO" "Server keys $keysize bits"
                elif [[ "$keysize" -le 4096 ]]; then
                     pr_litegreen "$keysize"
                     fileout "$heading key_size" "OK" "Server keys $keysize bits (OK)"
+                    outln " bits"
                else
-                    out "weird keysize: $keysize (compatibility problems)"
+                    pr_magenta "weird keysize: $keysize bits"; outln " (could cause compatibility problems)"
                     fileout "$heading key_size" "WARN" "Server keys $keysize bits (Odd)"
                fi
-               outln " bit"
           else
                out "$keysize bits ("
                pr_litemagenta "can't tell whether $keysize bits is good or not"
@@ -4650,7 +4658,7 @@ run_breach() {
      local url
      local spaces="                                          "
      local disclaimer=""
-     local when_makesense="Can be ignored for static pages or if no secrets in the page"
+     local when_makesense=" Can be ignored for static pages or if no secrets in the page"
 
      [[ $SERVICE != "HTTP" ]] && return 7
 
@@ -4923,7 +4931,6 @@ run_beast(){
           outln
      fi
      pr_bold " BEAST"; out " (CVE-2011-3389)                     "
-     "$WIDE" && outln
 # output in wide mode if cipher doesn't exist is not ok
 
      >$ERRFILE
@@ -4938,16 +4945,18 @@ run_beast(){
 
      for proto in ssl3 tls1; do
           $OPENSSL s_client -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>>$ERRFILE </dev/null
-          if ! sclient_connect_successful $? $TMPFILE; then # protocol supported?
-               if "$continued"; then                          # second round: we hit TLS1:
-                    pr_litegreenln "no SSL3 or TLS1"
+          if ! sclient_connect_successful $? $TMPFILE; then      # protocol supported?
+               if "$continued"; then                             # second round: we hit TLS1
+                    pr_litegreenln "no SSL3 or TLS1 (OK)"
                     fileout "beast" "OK" "BEAST (CVE-2011-3389) : not vulnerable (OK) no SSL3 or TLS1"
                     return 0
                else                # protocol not succeeded but it's the first time
                     continued=true
                     continue       # protocol not supported, so we do not need to check each cipher with that protocol
+                    "$WIDE" && outln
                fi
           fi # protocol succeeded
+
 
           # now we test in one shot with the precompiled ciphers
           $OPENSSL s_client -"$proto" -cipher "$cbc_cipher_list" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>>$ERRFILE </dev/null
@@ -4955,7 +4964,7 @@ run_beast(){
 
           if "$WIDE"; then
                outln "\n $(toupper $proto):";
-               neat_header # NOT_THAT_NICE: we display the header also if in the end no cbc cipher is available on the client side
+               neat_header         # NOT_THAT_NICE: we display the header also if in the end no cbc cipher is available on the client side
           fi
           for ciph in $(colon_to_spaces "$cbc_cipher_list"); do
                read hexcode dash cbc_cipher sslvers kx auth enc mac < <($OPENSSL ciphers -V "$ciph" 2>>$ERRFILE)        # -V doesn't work with openssl < 1.0
@@ -4987,25 +4996,27 @@ run_beast(){
                fi
           done
 
-          if [[ -n "$detected_cbc_ciphers" ]]; then
-               fileout "cbc_$proto" "NOT OK" "BEAST (CVE-2011-3389) : CBC ciphers for $(toupper $proto): $detected_cbc_ciphers"
-               if ! "$WIDE"; then
+          if ! "$WIDE"; then
+               if [[ -n "$detected_cbc_ciphers" ]]; then
                     detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
+                    fileout "cbc_$proto" "NOT OK" "BEAST (CVE-2011-3389) : CBC ciphers for $(toupper $proto): $detected_cbc_ciphers"
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto):"
                     [[ -n "$higher_proto_supported" ]] && \
                          pr_yellowln "$detected_cbc_ciphers" || \
                          pr_brownln "$detected_cbc_ciphers"
-                    detected_cbc_ciphers="" # empty for next round
+                    detected_cbc_ciphers=""  # empty for next round
+                    first=false
+               else
+                    [[ $proto == "tls1" ]] && ! $first && echo -n "$spaces "
+                    pr_litegreenln "no CBC ciphers for $(toupper $proto) (OK)"
                     first=false
                fi
           else
-               fileout "cbc_$proto" "OK" "BEAST (CVE-2011-3389) : No CBC ciphers for $(toupper $proto) (OK)"
-               if ! "$WIDE"; then
-                    [[ $proto == "tls1" ]] && ! $first && echo -n "$spaces "
-                    first=false
+               if ! "$vuln_beast" ; then
+                    pr_litegreenln " no CBC ciphers for $(toupper $proto) (OK)"
+                    fileout "cbc_$proto" "OK" "BEAST (CVE-2011-3389) : No CBC ciphers for $(toupper $proto) (OK)"
                fi
-               pr_litegreenln "no CBC ciphers for $(toupper $proto) (OK)"
           fi
      done  # for proto in ssl3 tls1
 
@@ -5013,11 +5024,11 @@ run_beast(){
           if [[ -n "$higher_proto_supported" ]]; then
                if "$WIDE"; then
                     outln
-                    # BOT ok seems too harsh for me if we have TLS >1.0
+                    # NOT ok seems too harsh for me if we have TLS >1.0
                     pr_yellow "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                else
-                    out "${spaces}"
+                    out "$spaces"
                     pr_yellow "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                fi
@@ -5026,14 +5037,14 @@ run_beast(){
                if "$WIDE"; then
                     outln
                else
-                    out "${spaces}"
+                    out "$spaces"
                fi
                pr_brown "VULNERABLE (NOT ok)"
                outln " -- and no higher protocols as mitigation supported"
                fileout "beast" "NOT OK" "BEAST (CVE-2011-3389) : VULNERABLE -- and no higher protocols as mitigation supported"
           fi
      fi
-     $first && pr_litegreenln "no CBC ciphers found for any protocol (OK)"
+     "$first" && ! "$vuln_beast" && pr_litegreenln "no CBC ciphers found for any protocol (OK)"
 
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -6744,4 +6755,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.462 2016/02/06 21:31:31 dirkw Exp $
+#  $Id: testssl.sh,v 1.464 2016/02/07 18:13:58 dirkw Exp $
