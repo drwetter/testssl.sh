@@ -2658,7 +2658,7 @@ verify_retcode_helper() {
 }
 
 determine_trust() {
-	local heading=$1
+	local json_prefix=$1
 	local -i i=1
 	local -i num_ca_bundles=0
 	local bundle_fname
@@ -2669,16 +2669,20 @@ determine_trust() {
 	local some_ok=false
      local code
      local ca_bundles="$INSTALL_DIR/etc/*.pem"
-     local spaces="                                "
+     local spaces="                              "
      local -i certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
+     
+     # If $json_prefix is not empty, then there is more than one certificate 
+     # and the output should should be indented by two more spaces.
+     [[ -n $json_prefix ]] && spaces="                                "
 
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0" ]]; then
           addtl_warning="(Your openssl 1.1.0 might be too new for a reliable check)"
-          fileout "$heading trust" "WARN" "Your $OPENSSL is too new, need version 1.0.2 to determine trust"
+          fileout "${json_prefix}trust" "WARN" "Your $OPENSSL is too new, need version 1.0.2 to determine trust"
      elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]]; then
           addtl_warning="(Your openssl <= 1.0.2 might be too unreliable to determine trust)"
-          fileout "$heading trust_warn" "WARN" "$addtl_warning"
+          fileout "${json_prefix}trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
 	for bundle_fname in $ca_bundles; do
@@ -2715,7 +2719,7 @@ determine_trust() {
 	if $all_ok; then
 	     # all stores ok
 		pr_litegreen "Ok   "; pr_litemagenta "$addtl_warning"
-          fileout "$heading trust" "OK" "All certificate trust checks passed. $addtl_warning"
+          fileout "${json_prefix}trust" "OK" "All certificate trust checks passed. $addtl_warning"
 	else
 	     # at least one failed
 		pr_red "NOT ok"
@@ -2723,7 +2727,7 @@ determine_trust() {
 		     # all failed (we assume with the same issue), we're displaying the reason
                out " "
 			verify_retcode_helper "${verify_retcode[2]}"
-               fileout "$heading trust" "NOT OK" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
+               fileout "${json_prefix}trust" "NOT OK" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
 		else
 			# is one ok and the others not ==> display the culprit store
 			if $some_ok ; then
@@ -2746,7 +2750,7 @@ determine_trust() {
                     [[ "$DEBUG" -eq 0 ]] && out "$spaces"
 				pr_litegreen "OK: $ok_was"
                fi
-               fileout "$heading trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
+               fileout "${json_prefix}trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
           fi
           [[ -n "$addtl_warning" ]] && out "\n$spaces" && pr_litemagenta "$addtl_warning"
 	fi
@@ -2895,6 +2899,7 @@ certificate_info() {
      local cnfinding
      local cnok="OK"
      local expfinding expok="OK"
+     local json_prefix="" # string to place at begging of JSON IDs when there is more than one certificate
      local indent=""
 
      if [[ $number_of_certificates -gt 1 ]]; then
@@ -2902,6 +2907,7 @@ certificate_info() {
           indent="  "
           out "$indent"
           pr_headlineln "Server Certificate #$certificate_number"
+          json_prefix="Server Certificate #$certificate_number "
           spaces="                                "
      else
           spaces="                              "
@@ -2914,33 +2920,33 @@ certificate_info() {
      case $sig_algo in
           sha1WithRSAEncryption)
                pr_brownln "SHA1 with RSA"
-               fileout "$heading algorithm" "WARN" "Signature Algorithm: SHA1 with RSA (warning)"
+               fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: SHA1 with RSA (warning)"
                ;;
           sha256WithRSAEncryption)
                pr_litegreenln "SHA256 with RSA"
-               fileout "$heading algorithm" "OK" "Signature Algorithm: SHA256 with RSA (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA256 with RSA (OK)"
                ;;
           sha384WithRSAEncryption)
                pr_litegreenln "SHA384 with RSA"
-               fileout "$heading algorithm" "OK" "Signature Algorithm: SHA384 with RSA (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA384 with RSA (OK)"
                ;;
           sha512WithRSAEncryption)
                pr_litegreenln "SHA512 with RSA"
-               fileout "$heading algorithm" "OK" "Signature Algorithm: SHA512 with RSA (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA512 with RSA (OK)"
                ;;
           ecdsa-with-SHA256)
                pr_litegreenln "ECDSA with SHA256"
-               fileout "$heading algorithm" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
                ;;
           md5*)
                pr_redln "MD5"
-               fileout "$heading algorithm" "NOT OK" "Signature Algorithm: MD5 (NOT ok)"
+               fileout "${json_prefix}algorithm" "NOT OK" "Signature Algorithm: MD5 (NOT ok)"
                ;;
           *)
                out "$sig_algo ("
                pr_litemagenta "Unknown"
                outln ")"
-               fileout "$heading algorithm" "INFO" "Signature Algorithm: $sign_algo"
+               fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: $sign_algo"
                ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
@@ -2948,7 +2954,7 @@ certificate_info() {
      out "$indent"; pr_bold " Server key size              "
      if [[ -z "$keysize" ]]; then
           outln "(couldn't determine)"
-          fileout "$heading key_size" "WARN" "Server keys size cannot be determined"
+          fileout "${json_prefix}key_size" "WARN" "Server keys size cannot be determined"
      else
           # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
           # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
@@ -2957,53 +2963,53 @@ certificate_info() {
           if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
                if [[ "$keysize" -le 110 ]]; then       # a guess 
                     pr_red "$keysize"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
                elif [[ "$keysize" -le 123 ]]; then    # a guess
                     pr_litered "$keysize"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
                elif [[ "$keysize" -le 163 ]]; then
                     pr_brown "$keysize"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
                elif [[ "$keysize" -le 224 ]]; then
                     out "$keysize"
-                    fileout "$heading key_size" "INFO" "Server keys $keysize EC bits"
+                    fileout "${json_prefix}key_size" "INFO" "Server keys $keysize EC bits"
                elif [[ "$keysize" -le 533 ]]; then
                     pr_litegreen "$keysize"
-                    fileout "$heading key_size" "OK" "Server keys $keysize EC bits (OK)"
+                    fileout "${json_prefix}key_size" "OK" "Server keys $keysize EC bits (OK)"
                else
                     out "keysize: $keysize (not expected, FIXME)"
-                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (not expected)"
+                    fileout "${json_prefix}key_size" "WARN" "Server keys $keysize bits (not expected)"
                fi
                outln " bit"
           elif [[ $sig_algo = *RSA* ]]; then
                if [[ "$keysize" -le 512 ]]; then
                     pr_red "$keysize"
                     outln " bits"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                elif [[ "$keysize" -le 768 ]]; then
                     pr_litered "$keysize"
                     outln " bits"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                elif [[ "$keysize" -le 1024 ]]; then
                     pr_brown "$keysize"
                     outln " bits"
-                    fileout "$heading key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                elif [[ "$keysize" -le 2048 ]]; then
                     outln "$keysize bits"
-                    fileout "$heading key_size" "INFO" "Server keys $keysize bits"
+                    fileout "${json_prefix}key_size" "INFO" "Server keys $keysize bits"
                elif [[ "$keysize" -le 4096 ]]; then
                     pr_litegreen "$keysize"
-                    fileout "$heading key_size" "OK" "Server keys $keysize bits (OK)"
+                    fileout "${json_prefix}key_size" "OK" "Server keys $keysize bits (OK)"
                     outln " bits"
                else
                     pr_magenta "weird keysize: $keysize bits"; outln " (could cause compatibility problems)"
-                    fileout "$heading key_size" "WARN" "Server keys $keysize bits (Odd)"
+                    fileout "${json_prefix}key_size" "WARN" "Server keys $keysize bits (Odd)"
                fi
           else
                out "$keysize bits ("
                pr_litemagenta "can't tell whether $keysize bits is good or not"
                outln ")"
-               fileout "$heading key_size" "WARN" "Server keys $keysize bits (unknown signature algorithm)"
+               fileout "${json_prefix}key_size" "WARN" "Server keys $keysize bits (unknown signature algorithm)"
           fi
      fi
 
@@ -3013,7 +3019,7 @@ certificate_info() {
      cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
      outln "$cert_fingerprint_sha1 / $cert_fingerprint_serial"
      outln "$spaces$cert_fingerprint_sha2"
-     fileout "$heading fingerprint" "INFO" "Fingerprints / Serial: $cert_fingerprint_sha1 / $cert_fingerprint_serial, $cert_fingerprint_sha2"
+     fileout "${json_prefix}fingerprint" "INFO" "Fingerprints / Serial: $cert_fingerprint_sha1 / $cert_fingerprint_serial, $cert_fingerprint_sha2"
 
      out "$indent"; pr_bold " Common Name (CN)             "
      cnfinding="Common Name (CN) : "
@@ -3084,7 +3090,7 @@ certificate_info() {
                cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
           fi
      fi
-     fileout "$heading cn" "$cnok" "$cnfinding"
+     fileout "${json_prefix}cn" "$cnok" "$cnfinding"
 
      sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
           sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
@@ -3095,10 +3101,10 @@ certificate_info() {
                pr_dquoted "$san"
                out " "
           done
-          fileout "$heading san" "INFO" "subjectAltName (SAN) : $sans"
+          fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $sans"
      else
           out "-- "
-          fileout "$heading san" "INFO" "subjectAltName (SAN) : --"
+          fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : --"
      fi
      outln
      out "$indent"; pr_bold " Issuer                       "
@@ -3110,7 +3116,7 @@ certificate_info() {
 
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$CN" ]]; then
           pr_redln "self-signed (NOT ok)"
-          fileout "$heading issuer" "NOT OK" "Issuer: selfsigned (NOT ok)"
+          fileout "${json_prefix}issuer" "NOT OK" "Issuer: selfsigned (NOT ok)"
      else
           pr_dquoted "$issuer_CN"
           out " ("
@@ -3118,9 +3124,9 @@ certificate_info() {
           if [[ -n "$issuer_C" ]]; then
                out " from "
                pr_dquoted "$issuer_C"
-               fileout "$heading issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" from \"$issuer_C\")"
+               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" from \"$issuer_C\")"
           else
-               fileout "$heading issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" )"
+               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" )"
           fi
           outln ")"
      fi
@@ -3137,10 +3143,10 @@ certificate_info() {
           [[ 1.3.6.1.4.1.17326.10.8.12.1.2 == "$policy_oid" ]] || \
           [[ 1.3.6.1.4.1.13177.10.1.3.10 == "$policy_oid" ]] ; then
           out "yes "
-          fileout "$heading ev" "OK" "Extended Validation (EV) (experimental) : yes"
+          fileout "${json_prefix}ev" "OK" "Extended Validation (EV) (experimental) : yes"
      else
           out "no "
-          fileout "$heading ev" "INFO" "Extended Validation (EV) (experimental) : no"
+          fileout "${json_prefix}ev" "INFO" "Extended Validation (EV) (experimental) : no"
      fi
      debugme echo "($(newline_to_spaces "$policy_oid"))"
      outln
@@ -3188,60 +3194,60 @@ certificate_info() {
           fi
      fi
      outln " ($startdate --> $enddate)"
-     fileout "$heading expiration" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
+     fileout "${json_prefix}expiration" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
-     fileout "$heading certcount" "INFO" "# of certificates provided :  $certificates_provided"
+     fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
 
 
      out "$indent"; pr_bold " Chain of trust"; out " (experim.)    "
-     determine_trust "$heading" # Also handles fileout
+     determine_trust "$json_prefix" # Also handles fileout
 
      out "$indent"; pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
      if [[ -z "$crl" ]]; then
           pr_literedln "--"
-          fileout "$heading crl" "NOT OK" "No CRL provided (NOT ok)"
+          fileout "${json_prefix}crl" "NOT OK" "No CRL provided (NOT ok)"
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
-               fileout "$heading crl" "INFO" "Certificate Revocation List : $crl"
+               fileout "${json_prefix}crl" "INFO" "Certificate Revocation List : $crl"
           else # more than one CRL
                out_row_aligned "$crl" "$spaces"
-               fileout "$heading crl" "INFO" "Certificate Revocation List : $crl"
+               fileout "${json_prefix}crl" "INFO" "Certificate Revocation List : $crl"
           fi
      else
           pr_litemagentaln "no parsable output \"$crl\", pls report"
-          fileout "$heading crl" "WARN" "Certificate Revocation List : no parsable output \"$crl\", pls report"
+          fileout "${json_prefix}crl" "WARN" "Certificate Revocation List : no parsable output \"$crl\", pls report"
      fi
 
      out "$indent"; pr_bold " OCSP URI                     "
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      if [[ -z "$ocsp_uri" ]]; then
           pr_literedln "--"
-          fileout "$heading ocsp_uri" "NOT OK" "OCSP URI : -- (NOT ok)"
+          fileout "${json_prefix}ocsp_uri" "NOT OK" "OCSP URI : -- (NOT ok)"
      else
           outln "$ocsp_uri"
-          fileout "$heading ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
+          fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
      fi
 
      out "$indent"; pr_bold " OCSP stapling                "
      if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
           pr_yellow "--"
-          fileout "$heading ocsp_stapling" "INFO" "OCSP stapling : not offered"
+          fileout "${json_prefix}ocsp_stapling" "INFO" "OCSP stapling : not offered"
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
                pr_litegreen "offered"
-               fileout "$heading ocsp_stapling" "OK" "OCSP stapling : offered"
+               fileout "${json_prefix}ocsp_stapling" "OK" "OCSP stapling : offered"
           else
                if $GOST_STATUS_PROBLEM; then
                     outln "(GOST servers make problems here, sorry)"
-                    fileout "$heading ocsp_stapling" "OK" "OCSP stapling : (GOST servers make problems here, sorry)"
+                    fileout "${json_prefix}ocsp_stapling" "OK" "OCSP stapling : (GOST servers make problems here, sorry)"
                     ret=0
                else
                     out "(response status unknown)"
-                    fileout "$heading ocsp_stapling" "OK" "OCSP stapling : not sure what's going on here, debug: grep -aA 20 "OCSP response"  <<<"$ocsp_response""
+                    fileout "${json_prefix}ocsp_stapling" "OK" "OCSP stapling : not sure what's going on here, debug: grep -aA 20 "OCSP response"  <<<"$ocsp_response""
                     debugme grep -a -A20 -B2 "OCSP response"  <<<"$ocsp_response"
                     ret=2
                fi
