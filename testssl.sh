@@ -453,11 +453,10 @@ fileout_footer() {
 }
 
 fileout() { # ID, SEVERITY, FINDING
-     local finding="$5"
+     local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
 
      if "$do_json"; then
           "$FIRST_FINDING" || echo "," >> $JSONFILE
-          finding=$(newline_to_spaces "$(strip_quote "$3")")
           echo -e "
           {
                \"id\"           : \"$1\",
@@ -469,7 +468,7 @@ fileout() { # ID, SEVERITY, FINDING
      fi
      # does the following do any sanitization? 
      if "$do_csv"; then
-          echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$2"\",\"$(strip_quote "$3")\"" >>$CSVFILE
+          echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$2"\",\""$finding"\"" >>$CSVFILE
      fi
      "$FIRST_FINDING" && FIRST_FINDING=false
 }
