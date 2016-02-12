@@ -457,14 +457,14 @@ fileout() { # ID, SEVERITY, FINDING
 
      if "$do_json"; then
           "$FIRST_FINDING" || echo "," >> $JSONFILE
-          finding=$(strip_quote "$3")
+          finding=$(newline_to_spaces "$(strip_quote "$3")")
           echo -e "
           {
-               'id'           : '$1',
-               'ip'           : '$NODE/$NODEIP',
-               'port'         : '$PORT',
-               'severity'     : '$2',
-               'finding'      : '$finding'
+               \"id\"           : \"$1\",
+               \"ip\"           : \"$NODE/$NODEIP\",
+               \"port\"         : \"$PORT\",
+               \"severity\"     : \"$2\",
+               \"finding\"      : \"$finding\"
           }" >> $JSONFILE
      fi
      # does the following do any sanitization? 
