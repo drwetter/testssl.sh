@@ -3604,7 +3604,7 @@ run_http2() {
      done
      if $had_alpn_proto; then
           outln " (offered)"
-          fileout "https_alpn" "INFO" "HTTP2/ALPN : offered\nProtocols: $alpn_finding"
+          fileout "https_alpn" "INFO" "HTTP2/ALPN : offered; Protocols: $alpn_finding"
           ret=0
      else
           outln "not offered"
