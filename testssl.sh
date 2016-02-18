@@ -724,44 +724,44 @@ run_http_header() {
                     pr_litered " -- Redirect to insecure URL (NOT ok)"
                     fileout "status_code" "NOT OK" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
                fi
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter, redirecting to \"$redirect\""
                ;;
           200)
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           206)
                out " -- WTF?"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter -- WTF?"
                ;;
           400)
                pr_litemagenta " (Hint: better try another URL)"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: better try another URL)"
                ;;
           401)
                grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
                ;;
           403)
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           404)
                out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
                ;;
           405)
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           *)
                pr_litemagenta ". Oh, didn't expect a $status_code$msg_thereafter"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter. Oh, didn't expect a $status_code$msg_thereafter"
                ;;
      esac
