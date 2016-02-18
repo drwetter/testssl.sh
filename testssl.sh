@@ -1356,13 +1356,13 @@ std_cipherlists() {
                          fileout "std_$4" "OK" "$2 offered (OK)"
                     else
                          pr_brownln "not offered (NOT ok)"
-                         fileout "std_$4" "NOT OK" "$2 not offered (NOT OK)"
+                         fileout "std_$4" "NOT OK" "$2 not offered (NOT ok)"
                     fi
                     ;;
                1) # the ugly ones
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_redln "offered (NOT ok)"
-                         fileout "std_$4" "NOT OK" "$2 offered (NOT OK) - ugly"
+                         fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - ugly"
                     else
                          pr_greenln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
@@ -1371,7 +1371,7 @@ std_cipherlists() {
                2)   # bad but not worst
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_literedln "offered (NOT ok)"
-                         fileout "std_$4" "NOT OK" "$2 offered (NOT OK) - bad"
+                         fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - bad"
                     else
                          pr_litegreenln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
@@ -1380,7 +1380,7 @@ std_cipherlists() {
                3) # not totally bad
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_brownln "offered (NOT ok)"
-                         fileout "std_$4" "NOT OK" "$2 offered (NOT OK) - not too bad"
+                         fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - not too bad"
                     else
                          outln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
