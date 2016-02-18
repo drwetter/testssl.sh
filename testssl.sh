@@ -2406,7 +2406,7 @@ run_server_preference() {
           else
                pr_green "yes (OK)"
                remark4default_cipher=""
-               fileout "order" "OK" "Server sets a cipher order (ok)"
+               fileout "order" "OK" "Server sets a cipher order (OK)"
           fi
           [[ $DEBUG -ge 2 ]] && out "  $cipher1 | $cipher2"
           outln
