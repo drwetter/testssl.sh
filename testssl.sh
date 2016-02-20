@@ -985,10 +985,13 @@ run_hpkp() {
                fileout "hpkp_preload" "INFO" "HPKP header is NOT marked for browser preloading"
           fi
 
-          [[ -s "$HOSTCERT" ]] || get_host_cert
-          # get the key fingerprints
+          if [[ ! -s "$HOSTCERT" ]]; then
+               get_host_cert || return 1
+          fi
+          # get the key fingerprint from the host certificate
           hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
                $OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
+          # compare it with the ones provided in the header
           while read hpkp_key; do
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
                     out "\n$spaces matching host key: "
@@ -2626,14 +2629,16 @@ cipher_pref_check() {
 get_host_cert() {
      local tmpvar=$TEMPDIR/$FUNCNAME.txt     # change later to $TMPFILE
 
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $1 2>/dev/null </dev/null >$tmpdir
+     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $1 2>/dev/null </dev/null >$tmpvar
      if sclient_connect_successful $? $tmpvar; then
           awk '/-----BEGIN/,/-----END/ { print $0 }' $tmpvar >$HOSTCERT
+          return 0
      else
+          pr_litemagentaln "could not retrieve host certificate!"
           return 1
      fi
-    tmpfile_handle $FUNCNAME.txt
-    #      return $((${PIPESTATUS[0]} + ${PIPESTATUS[1]}))
+     #tmpfile_handle $FUNCNAME.txt
+     #return $((${PIPESTATUS[0]} + ${PIPESTATUS[1]}))
 }
 
 verify_retcode_helper() {
