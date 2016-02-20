@@ -3404,7 +3404,7 @@ run_server_defaults() {
 # http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 run_pfs() {
      local -i sclient_success
-     local -i pfs_offered=1
+     local pfs_offered=false
      local tmpfile
      local dhlen
      local hexcode dash pfs_cipher sslvers kx auth enc mac
@@ -3436,12 +3436,12 @@ run_pfs() {
           pr_brownln "Not OK: No ciphers supporting Forward Secrecy offered"
           fileout "pfs" "NOT OK" "(Perfect) Forward Secrecy : Not OK: No ciphers supporting Forward Secrecy offered"
      else
-          pfs_offered=0
+          pfs_offered=true
           pfs_ciphers=""
           pr_litegreen " PFS is offered (OK)"
           fileout "pfs" "OK" "(Perfect) Forward Secrecy : PFS is offered (OK)"
           if $WIDE; then
-               outln ", ciphers follow (client/browser support is here specially important) \n"
+               outln ", ciphers follow (client/browser support is important here) \n"
                neat_header
           else
                out "  "
@@ -3451,7 +3451,8 @@ run_pfs() {
                $OPENSSL s_client -cipher $pfs_cipher $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$tmpfile </dev/null
                sclient_connect_successful $? $tmpfile
                sclient_success=$?
-               if [[ $sclient_success -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
+               [[ "$sclient_success" -eq 0 ]] && pfs_offered=true
+               if [[ "$sclient_success" -ne 0 ]] && [[ "$SHOW_EACH_C" -eq 0 ]]; then
                     continue # no successful connect AND not verbose displaying each cipher
                fi
                if $WIDE; then
@@ -3461,7 +3462,6 @@ run_pfs() {
                          kx="$kx $dhlen"
                     fi
                     neat_list $HEXC $pfs_cipher "$kx" $enc $strength
-                    let "pfs_offered++"
                     if [[ "$SHOW_EACH_C" -ne 0 ]]; then
                          if [[ $sclient_success -eq 0 ]]; then
                               pr_green "works"
@@ -3479,7 +3479,7 @@ run_pfs() {
           debugme echo $pfs_offered
           $WIDE || outln
 
-          if [[ "$pfs_offered" -eq 1 ]]; then
+          if ! "$pfs_offered"; then
                pr_brown "no PFS ciphers found"
                fileout "pfs_ciphers" "NOT OK" "(Perfect) Forward Secrecy Ciphers: no PFS ciphers found (NOT ok)"
           else
@@ -3493,7 +3493,11 @@ run_pfs() {
 
      tmpfile_handle $FUNCNAME.txt
 #     sub1_curves
-     return $pfs_offered
+     if "$pfs_offered"; then
+          return 0
+     else
+          return 1
+     fi
 }
 
 
@@ -6776,4 +6780,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.464 2016/02/07 18:13:58 dirkw Exp $
+#  $Id: testssl.sh,v 1.466 2016/02/20 20:46:16 dirkw Exp $
