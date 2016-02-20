@@ -4935,9 +4935,11 @@ run_beast(){
      local continued=false
      local cbc_cipher_list="EXP-RC2-CBC-MD5:IDEA-CBC-SHA:EXP-DES-CBC-SHA:DES-CBC-SHA:DES-CBC3-SHA:EXP-DH-DSS-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:DH-DSS-DES-CBC3-SHA:EXP-DH-RSA-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-RSA-DES-CBC3-SHA:EXP-EDH-DSS-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:EDH-DSS-DES-CBC3-SHA:EXP-EDH-RSA-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EXP-ADH-DES-CBC-SHA:ADH-DES-CBC-SHA:ADH-DES-CBC3-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-IDEA-CBC-SHA:KRB5-DES-CBC-MD5:KRB5-DES-CBC3-MD5:KRB5-IDEA-CBC-MD5:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-MD5:EXP-KRB5-RC2-CBC-MD5:AES128-SHA:DH-DSS-AES128-SHA:DH-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DHE-RSA-AES128-SHA:ADH-AES128-SHA:AES256-SHA:DH-DSS-AES256-SHA:DH-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:ADH-AES256-SHA:AES128-SHA256:AES256-SHA256:DH-DSS-AES128-SHA256:DH-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DHE-RSA-CAMELLIA128-SHA:ADH-CAMELLIA128-SHA:EXP1024-DES-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:DHE-RSA-AES128-SHA256:DH-DSS-AES256-SHA256:DH-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES256-SHA256:ADH-AES128-SHA256:ADH-AES256-SHA256:CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DHE-RSA-CAMELLIA256-SHA:ADH-CAMELLIA256-SHA:PSK-3DES-EDE-CBC-SHA:PSK-AES128-CBC-SHA:PSK-AES256-CBC-SHA:SEED-SHA:DH-DSS-SEED-SHA:DH-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DHE-RSA-SEED-SHA:ADH-SEED-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:AECDH-DES-CBC3-SHA:AECDH-AES128-SHA:AECDH-AES256-SHA:SRP-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-DSS-AES-256-CBC-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDH-ECDSA-AES128-SHA256:ECDH-ECDSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDH-RSA-AES128-SHA256:ECDH-RSA-AES256-SHA384:RC2-CBC-MD5:EXP-RC2-CBC-MD5:IDEA-CBC-MD5:DES-CBC-MD5:DES-CBC3-MD5"
 
-     if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
           pr_headlineln " Testing for BEAST vulnerability "
+     fi
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
           outln
      fi
      pr_bold " BEAST"; out " (CVE-2011-3389)                     "
@@ -4973,8 +4975,10 @@ run_beast(){
           sclient_connect_successful $? $TMPFILE || continue
 
           if "$WIDE"; then
-               outln "\n $(toupper $proto):";
-               neat_header         # NOT_THAT_NICE: we display the header also if in the end no cbc cipher is available on the client side
+               out "\n "; pr_underline "$(toupper $proto):\n";
+               if "$first"; then
+                    neat_header         # NOT_THAT_NICE: we display the header also if in the end no cbc cipher is available on the client side
+               fi
           fi
           for ciph in $(colon_to_spaces "$cbc_cipher_list"); do
                read hexcode dash cbc_cipher sslvers kx auth enc mac < <($OPENSSL ciphers -V "$ciph" 2>>$ERRFILE)        # -V doesn't work with openssl < 1.0
@@ -4982,7 +4986,7 @@ run_beast(){
                $OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
-               [[ $sclient_success -eq 0 ]] && vuln_beast=true
+               [[ $sclient_success -eq 0 ]] && vuln_beast=true && "$WIDE" && first=false
                if "$WIDE"; then
                     normalize_ciphercode $hexcode
                     if [[ "$SHOW_EACH_C" -ne 0 ]]; then
@@ -5008,7 +5012,11 @@ run_beast(){
 
           if ! "$WIDE"; then
                if [[ -n "$detected_cbc_ciphers" ]]; then
-                    detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | sed -e "s/ /\\${cr}      ${spaces}/9" -e "s/ /\\${cr}      ${spaces}/6" -e "s/ /\\${cr}      ${spaces}/3")
+                    detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | \
+                         sed -e "s/ /\\${cr}      ${spaces}/12" \
+                             -e "s/ /\\${cr}      ${spaces}/9" \
+                             -e "s/ /\\${cr}      ${spaces}/6" \
+                             -e "s/ /\\${cr}      ${spaces}/3")
                     fileout "cbc_$proto" "NOT OK" "BEAST (CVE-2011-3389) : CBC ciphers for $(toupper $proto): $detected_cbc_ciphers"
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto):"
@@ -5080,16 +5088,18 @@ run_rc4() {
      local rc4_detected=""
      local available=""
 
-     if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || $WIDE; then
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
           pr_headlineln " Checking for vulnerable RC4 Ciphers "
+     fi
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
           outln
      fi
      pr_bold " RC4"; out " (CVE-2013-2566, CVE-2015-2808)        "
 
      $OPENSSL s_client -cipher $rc4_ciphers_list $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
      if sclient_connect_successful $? $TMPFILE; then
-          pr_litered "VULNERABLE (NOT ok): "
+          "$WIDE" || pr_litered "VULNERABLE (NOT ok): "
           rc4_offered=1
           if "$WIDE"; then
                outln "\n"
@@ -5123,6 +5133,7 @@ run_rc4() {
                rc4_detected+="$rc4_cipher "
           done < <($OPENSSL ciphers -V $rc4_ciphers_list:@STRENGTH)
           outln
+          "$WIDE" && pr_litered "VULNERABLE (NOT ok)"
           fileout "rc4" "NOT OK" "RC4 (CVE-2013-2566, CVE-2015-2808) : VULNERABLE (NOT ok) Detected ciphers: $rc4_detected"
      else
           pr_litegreenln "no RC4 ciphers detected (OK)"
