@@ -720,7 +720,7 @@ run_http_header() {
           301|302|307|308)
                redirect=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
                out ", redirecting to \"$redirect\""
-               if [[ $redirect != "https://"* ]]; then
+               if [[ $redirect == "http://"* ]]; then
                     pr_litered " -- Redirect to insecure URL (NOT ok)"
                     fileout "status_code" "NOT OK" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
                fi
@@ -6780,4 +6780,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.466 2016/02/20 20:46:16 dirkw Exp $
+#  $Id: testssl.sh,v 1.467 2016/02/22 09:44:42 dirkw Exp $
