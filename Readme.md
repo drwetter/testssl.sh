@@ -45,11 +45,18 @@ Done so far:
 * Even more compatibilty improvements for FreeBSD, RH-ish and F5 systems
 * OpenSSL 1.1.0 compliant
 
-Contributions, feedback, also bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
+Update notification here or @ [twitter](https://twitter.com/drwetter). 
+
+####Contributions
+Contributions, feedback,  bug reports are welcome! For contributions please note: One patch per feature -- bug fix/improvement. Please test your changes thouroughly as reliability is important for this project. 
+
+There's [coding guide line](https://github.com/drwetter/testssl.sh/wiki/Coding-Style). 
 
 Please file bug reports @ https://github.com/drwetter/testssl.sh/issues .
 
-Update notification here or @ [twitter](https://twitter.com/drwetter). 
+####Documentation
+
+For a start see the [wiki](https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation). Help is needed here.
 
 ----
 
