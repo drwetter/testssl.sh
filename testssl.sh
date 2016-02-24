@@ -724,44 +724,44 @@ run_http_header() {
                     pr_litered " -- Redirect to insecure URL (NOT ok)"
                     fileout "status_code" "NOT OK" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
                fi
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter, redirecting to \"$redirect\""
                ;;
           200)
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           206)
                out " -- WTF?"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter -- WTF?"
                ;;
           400)
                pr_litemagenta " (Hint: better try another URL)"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: better try another URL)"
                ;;
           401)
                grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
                ;;
           403)
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           404)
                out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
                ;;
           405)
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           *)
                pr_litemagenta ". Oh, didn't expect a $status_code$msg_thereafter"
-               fileout "status_code" "info" \
+               fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter. Oh, didn't expect a $status_code$msg_thereafter"
                ;;
      esac
@@ -1359,13 +1359,13 @@ std_cipherlists() {
                          fileout "std_$4" "OK" "$2 offered (OK)"
                     else
                          pr_brownln "not offered (NOT ok)"
-                         fileout "std_$4" "NOT OK" "$2 not offered (NOT OK)"
+                         fileout "std_$4" "NOT OK" "$2 not offered (NOT ok)"
                     fi
                     ;;
                1) # the ugly ones
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_redln "offered (NOT ok)"
-                         fileout "std_$4" "NOT OK" "$2 offered (NOT OK) - ugly"
+                         fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - ugly"
                     else
                          pr_greenln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
@@ -1374,7 +1374,7 @@ std_cipherlists() {
                2)   # bad but not worst
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_literedln "offered (NOT ok)"
-                         fileout "std_$4" "NOT OK" "$2 offered (NOT OK) - bad"
+                         fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - bad"
                     else
                          pr_litegreenln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
@@ -1383,7 +1383,7 @@ std_cipherlists() {
                3) # not totally bad
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_brownln "offered (NOT ok)"
-                         fileout "std_$4" "NOT OK" "$2 offered (NOT OK) - not too bad"
+                         fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - not too bad"
                     else
                          outln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
@@ -2409,7 +2409,7 @@ run_server_preference() {
           else
                pr_green "yes (OK)"
                remark4default_cipher=""
-               fileout "order" "OK" "Server sets a cipher order (ok)"
+               fileout "order" "OK" "Server sets a cipher order (OK)"
           fi
           [[ $DEBUG -ge 2 ]] && out "  $cipher1 | $cipher2"
           outln
