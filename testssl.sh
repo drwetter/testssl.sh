@@ -344,8 +344,8 @@ pr_done_goodln() { pr_done_good "$1"; outln; }
 pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # This is the best 
 pr_done_bestln()     { pr_done_best "$1"; outln; }
 
-pr_yellow()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # academic or minor problem 
-pr_yellowln() { pr_yellow "$1"; outln; }
+pr_svrty_minor()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # academic or minor problem 
+pr_svrty_minorln() { pr_svrty_minor "$1"; outln; }
 pr_brown()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                                                 # it is not a bad problem but you shouldn't do this
 pr_brownln()  { pr_brown "$1"; outln; }
 
@@ -2479,7 +2479,7 @@ run_server_preference() {
                     fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (OK)  $remark4default_cipher"
                     ;;   # best ones
                ECDHE*AES*)
-                    pr_yellow "$default_cipher"
+                    pr_svrty_minor "$default_cipher"
                     fileout "order_cipher" "WARN" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (cbc)  $remark4default_cipher"
                     ;;  # it's CBC. --> lucky13
                "")
@@ -3238,7 +3238,7 @@ certificate_info() {
 
      out "$indent"; pr_bold " OCSP stapling                "
      if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
-          pr_yellow "--"
+          pr_svrty_minor "--"
           fileout "${json_prefix}ocsp_stapling" "INFO" "OCSP stapling : not offered"
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
@@ -3377,7 +3377,7 @@ run_server_defaults() {
           lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
           unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
-          pr_yellowln "(PFS requires session ticket keys to be rotated <= daily)"
+          pr_svrty_minorln "(PFS requires session ticket keys to be rotated <= daily)"
           fileout "session_ticket" "INFO" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
      fi
      
@@ -4997,7 +4997,7 @@ run_beast(){
                          neat_list $HEXC $cbc_cipher $kx $enc
                          if [[ $sclient_success -eq 0 ]]; then
                               [[ -n "$higher_proto_supported" ]] && \
-                                   pr_yellowln "available" || \
+                                   pr_svrty_minorln "available" || \
                                    pr_brownln "available"
 
                          else
@@ -5025,7 +5025,7 @@ run_beast(){
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto):"
                     [[ -n "$higher_proto_supported" ]] && \
-                         pr_yellowln "$detected_cbc_ciphers" || \
+                         pr_svrty_minorln "$detected_cbc_ciphers" || \
                          pr_brownln "$detected_cbc_ciphers"
                     detected_cbc_ciphers=""  # empty for next round
                     first=false
@@ -5047,11 +5047,11 @@ run_beast(){
                if "$WIDE"; then
                     outln
                     # NOT ok seems too harsh for me if we have TLS >1.0
-                    pr_yellow "VULNERABLE"
+                    pr_svrty_minor "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                else
                     out "$spaces"
-                    pr_yellow "VULNERABLE"
+                    pr_svrty_minor "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                fi
                fileout "beast" "NOT OK" "BEAST (CVE-2011-3389) : VULNERABLE -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
