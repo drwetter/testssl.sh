@@ -339,8 +339,8 @@ pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off
 pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"; pr_off; }
 pr_greyln()     { pr_grey "$1"; outln; }
 
-pr_litegreen()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # This is good
-pr_litegreenln() { pr_litegreen "$1"; outln; }
+pr_done_good()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # This is good
+pr_done_goodln() { pr_done_good "$1"; outln; }
 pr_green()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # This is the best 
 pr_greenln()     { pr_green "$1"; outln; }
 
@@ -845,7 +845,7 @@ run_http_date() {
 
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
-          pr_litegreen ", includeSubDomains"
+          pr_done_good ", includeSubDomains"
           return 1
      else
           pr_litecyan ", just this domain"
@@ -855,7 +855,7 @@ includeSubDomains() {
 
 preload() {
      if grep -aiqw preload "$1"; then
-          pr_litegreen ", preload"
+          pr_done_good ", preload"
           return 1
      else
           return 0
@@ -879,7 +879,7 @@ run_hsts() {
 #FIXME: test for number!
           hsts_age_days=$(( hsts_age_sec / 86400))
           if [[ $hsts_age_days -gt $HSTS_MIN ]]; then
-               pr_litegreen "$hsts_age_days days" ; out "=$hsts_age_sec s"
+               pr_done_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "hsts_time" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN days"
           else
                out "$hsts_age_sec s = "
@@ -966,7 +966,7 @@ run_hpkp() {
           hpkp_age_sec=$(awk -F= '/max-age/{max_age=$2; print max_age}' $TMPFILE | sed -E 's/[^[:digit:]]//g')
           hpkp_age_days=$((hpkp_age_sec / 86400))
           if [[ $hpkp_age_days -ge $HPKP_MIN ]]; then
-               pr_litegreen "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
+               pr_done_good "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
                fileout "hpkp_age" "OK" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec)"
           else
                out "$hpkp_age_sec s = "
@@ -995,7 +995,7 @@ run_hpkp() {
           while read hpkp_key; do
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
                     out "\n$spaces matching host key: "
-                    pr_litegreen "$hpkp_key"
+                    pr_done_good "$hpkp_key"
                     fileout "hpkp_keymatch" "OK" "Key matches a key pinned in the HPKP header"
                     key_found=true
                fi
@@ -1169,7 +1169,7 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
           nr_secure=$(grep -iac secure $TMPFILE)
           case $nr_secure in
                0) pr_brown "$negative_word" ;;
-               [123456789]) pr_litegreen "$nr_secure/$nr_cookies";;
+               [123456789]) pr_done_good "$nr_secure/$nr_cookies";;
           esac
           out " secure, "
           if [[ $nr_cookies == $nr_secure ]]; then
@@ -1180,7 +1180,7 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
           nr_httponly=$(grep -cai httponly $TMPFILE)
           case $nr_httponly in
                0) pr_brown "$negative_word" ;;
-               [123456789]) pr_litegreen "$nr_httponly/$nr_cookies";;
+               [123456789]) pr_done_good "$nr_httponly/$nr_cookies";;
           esac
           out " HttpOnly"
           if [[ $nr_cookies == $nr_httponly ]]; then
@@ -1231,8 +1231,8 @@ run_more_flags() {
                     first=false
                fi
                # extract and print key(=flag) in green:
-               pr_litegreen "${result_str%%:*}:"
-               #pr_litegreen "$(sed 's/:.*$/:/' <<< "$result_str")"
+               pr_done_good "${result_str%%:*}:"
+               #pr_done_good "$(sed 's/:.*$/:/' <<< "$result_str")"
                # print value in plain text:
                outln "${result_str#*:}"
                fileout "${result_str%%:*}" "OK" "${result_str%%:*}: ${result_str#*:}"
@@ -1376,7 +1376,7 @@ std_cipherlists() {
                          pr_svrty_highln "offered (NOT ok)"
                          fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - bad"
                     else
-                         pr_litegreenln "not offered (OK)"
+                         pr_done_goodln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
                     fi
                     ;;
@@ -2334,7 +2334,7 @@ read_dhbits_from_file() {
           elif [[ "$bits" -le 1280 ]]; then
                pr_brown "$bits $add"
           elif [[ "$bits" -ge 2048 ]]; then
-               pr_litegreen "$bits $add"
+               pr_done_good "$bits $add"
           else
                out "$bits $add"
           fi
@@ -2346,7 +2346,7 @@ read_dhbits_from_file() {
           elif [[ "$bits" -le 163 ]]; then
                pr_svrty_high "$bits $add"
           elif [[ "$bits" -ge 224 ]]; then
-               pr_litegreen "$bits $add"
+               pr_done_good "$bits $add"
           else
                out "$bits $add"
           fi
@@ -2428,7 +2428,7 @@ run_server_preference() {
                     fileout "order_proto" "OK" "Default protocol TLS1.2 (OK)"
                     ;;
                *TLSv1.1)
-                    pr_litegreenln $default_proto
+                    pr_done_goodln $default_proto
                     fileout "order_proto" "OK" "Default protocol TLS1.1 (OK)"
                     ;;
                *TLSv1)
@@ -2708,7 +2708,7 @@ determine_trust() {
 		if [[ ${verify_retcode[i]} -eq 0 ]]; then
 			trust[i]=true
 			some_ok=true
-			debugme pr_litegreen "Ok   "
+			debugme pr_done_good "Ok   "
 			debugme outln "${verify_retcode[i]}"
 		else
 			trust[i]=false
@@ -2722,7 +2722,7 @@ determine_trust() {
      debugme out " "
 	if $all_ok; then
 	     # all stores ok
-		pr_litegreen "Ok   "; pr_litemagenta "$addtl_warning"
+		pr_done_good "Ok   "; pr_litemagenta "$addtl_warning"
           fileout "${json_prefix}trust" "OK" "All certificate trust checks passed. $addtl_warning"
 	else
 	     # at least one failed
@@ -2752,7 +2752,7 @@ determine_trust() {
                     outln
 				# lf + green ones
                     [[ "$DEBUG" -eq 0 ]] && out "$spaces"
-				pr_litegreen "OK: $ok_was"
+				pr_done_good "OK: $ok_was"
                fi
                fileout "${json_prefix}trust" "NOT OK" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
           fi
@@ -2927,19 +2927,19 @@ certificate_info() {
                fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: SHA1 with RSA (warning)"
                ;;
           sha256WithRSAEncryption)
-               pr_litegreenln "SHA256 with RSA"
+               pr_done_goodln "SHA256 with RSA"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA256 with RSA (OK)"
                ;;
           sha384WithRSAEncryption)
-               pr_litegreenln "SHA384 with RSA"
+               pr_done_goodln "SHA384 with RSA"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA384 with RSA (OK)"
                ;;
           sha512WithRSAEncryption)
-               pr_litegreenln "SHA512 with RSA"
+               pr_done_goodln "SHA512 with RSA"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA512 with RSA (OK)"
                ;;
           ecdsa-with-SHA256)
-               pr_litegreenln "ECDSA with SHA256"
+               pr_done_goodln "ECDSA with SHA256"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
                ;;
           md5*)
@@ -2978,7 +2978,7 @@ certificate_info() {
                     out "$keysize"
                     fileout "${json_prefix}key_size" "INFO" "Server keys $keysize EC bits"
                elif [[ "$keysize" -le 533 ]]; then
-                    pr_litegreen "$keysize"
+                    pr_done_good "$keysize"
                     fileout "${json_prefix}key_size" "OK" "Server keys $keysize EC bits (OK)"
                else
                     out "keysize: $keysize (not expected, FIXME)"
@@ -3002,7 +3002,7 @@ certificate_info() {
                     outln "$keysize bits"
                     fileout "${json_prefix}key_size" "INFO" "Server keys $keysize bits"
                elif [[ "$keysize" -le 4096 ]]; then
-                    pr_litegreen "$keysize"
+                    pr_done_good "$keysize"
                     fileout "${json_prefix}key_size" "OK" "Server keys $keysize bits (OK)"
                     outln " bits"
                else
@@ -3184,7 +3184,7 @@ certificate_info() {
                secs2warn=$((24 * 60 * 60 * DAYS2WARN1))
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
                if echo "$expire" | grep -qw not; then
-                    pr_litegreen "$days2expire >= $DAYS2WARN1 days"
+                    pr_done_good "$days2expire >= $DAYS2WARN1 days"
                     expfinding+="$days2expire >= $DAYS2WARN1 days"
                else
                     pr_brown "expires < $DAYS2WARN1 days ($days2expire)"
@@ -3242,7 +3242,7 @@ certificate_info() {
           fileout "${json_prefix}ocsp_stapling" "INFO" "OCSP stapling : not offered"
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
-               pr_litegreen "offered"
+               pr_done_good "offered"
                fileout "${json_prefix}ocsp_stapling" "OK" "OCSP stapling : offered"
           else
                if $GOST_STATUS_PROBLEM; then
@@ -3438,7 +3438,7 @@ run_pfs() {
      else
           pfs_offered=true
           pfs_ciphers=""
-          pr_litegreen " PFS is offered (OK)"
+          pr_done_good " PFS is offered (OK)"
           fileout "pfs" "OK" "(Perfect) Forward Secrecy : PFS is offered (OK)"
           if $WIDE; then
                outln ", ciphers follow (client/browser support is important here) \n"
@@ -4548,7 +4548,7 @@ run_renego() {
           echo R | $OPENSSL s_client $OPTIMAL_PROTO $BUGS $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $SNI $PROXY >$TMPFILE 2>>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
           if [[ $? -eq 3 ]]; then
-               pr_litegreen "likely not vulnerable (OK)"; outln " (timed out)"       # it hung
+               pr_done_good "likely not vulnerable (OK)"; outln " (timed out)"       # it hung
                fileout "sec_client_renego" "OK" "Secure Client-Initiated Renegotiation : likely not vulnerable (OK) (timed out)"
                sec_client_renego=1
           else
@@ -4561,7 +4561,7 @@ run_renego() {
                          fileout "sec_client_renego" "NOT OK" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), DoS threat"
                          ;;
                     1)
-                         pr_litegreenln "not vulnerable (OK)"
+                         pr_done_goodln "not vulnerable (OK)"
                          fileout "sec_client_renego" "OK" "Secure Client-Initiated Renegotiation : not vulnerable (OK)"
                          ;;
                     *)
@@ -4602,7 +4602,7 @@ run_crime() {
      [[ "$OSSL_VER" == "0.9.8"* ]] && addcmd="-no_ssl2"
      $OPENSSL s_client $OPTIMAL_PROTO $BUGS $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null &>$TMPFILE
      if grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
-          pr_litegreen "not vulnerable (OK)"
+          pr_done_good "not vulnerable (OK)"
           if [[ $SERVICE != "HTTP" ]] && ! $CLIENT_AUTH;  then
                out " (not using HTTP anyway)"
                fileout "crime" "OK" "CRIME, TLS (CVE-2012-4929) : Not vulnerable (OK) (not using HTTP anyway)"
@@ -4782,7 +4782,7 @@ run_tls_fallback_scsv() {
      # first: make sure we have tls1_2:
      $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2 >$TMPFILE 2>$ERRFILE </dev/null
      if ! sclient_connect_successful $? $TMPFILE; then
-          pr_litegreen "No fallback possible, TLS 1.2 is the only protocol (OK)"
+          pr_done_good "No fallback possible, TLS 1.2 is the only protocol (OK)"
           ret=7
      else
           # ...and do the test (we need to parse the error here!)
@@ -4793,7 +4793,7 @@ run_tls_fallback_scsv() {
                     fileout "fallback_scsv" "NOT OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention NOT supported"
                     ret=1
                elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
-                    pr_litegreen "Downgrade attack prevention supported (OK)"
+                    pr_done_good "Downgrade attack prevention supported (OK)"
                     fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported (OK)"
                     ret=0
                elif grep -qa "alert handshake failure" "$TMPFILE"; then
@@ -4963,7 +4963,7 @@ run_beast(){
           $OPENSSL s_client -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>>$ERRFILE </dev/null
           if ! sclient_connect_successful $? $TMPFILE; then      # protocol supported?
                if "$continued"; then                             # second round: we hit TLS1
-                    pr_litegreenln "no SSL3 or TLS1 (OK)"
+                    pr_done_goodln "no SSL3 or TLS1 (OK)"
                     fileout "beast" "OK" "BEAST (CVE-2011-3389) : not vulnerable (OK) no SSL3 or TLS1"
                     return 0
                else                # protocol not succeeded but it's the first time
@@ -5031,12 +5031,12 @@ run_beast(){
                     first=false
                else
                     [[ $proto == "tls1" ]] && ! $first && echo -n "$spaces "
-                    pr_litegreenln "no CBC ciphers for $(toupper $proto) (OK)"
+                    pr_done_goodln "no CBC ciphers for $(toupper $proto) (OK)"
                     first=false
                fi
           else
                if ! "$vuln_beast" ; then
-                    pr_litegreenln " no CBC ciphers for $(toupper $proto) (OK)"
+                    pr_done_goodln " no CBC ciphers for $(toupper $proto) (OK)"
                     fileout "cbc_$proto" "OK" "BEAST (CVE-2011-3389) : No CBC ciphers for $(toupper $proto) (OK)"
                fi
           fi
@@ -5066,7 +5066,7 @@ run_beast(){
                fileout "beast" "NOT OK" "BEAST (CVE-2011-3389) : VULNERABLE -- and no higher protocols as mitigation supported"
           fi
      fi
-     "$first" && ! "$vuln_beast" && pr_litegreenln "no CBC ciphers found for any protocol (OK)"
+     "$first" && ! "$vuln_beast" && pr_done_goodln "no CBC ciphers found for any protocol (OK)"
 
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -5140,7 +5140,7 @@ run_rc4() {
           "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
           fileout "rc4" "NOT OK" "RC4 (CVE-2013-2566, CVE-2015-2808) : VULNERABLE (NOT ok) Detected ciphers: $rc4_detected"
      else
-          pr_litegreenln "no RC4 ciphers detected (OK)"
+          pr_done_goodln "no RC4 ciphers detected (OK)"
           fileout "rc4" "OK" "RC4 (CVE-2013-2566, CVE-2015-2808) : not vulnerable (OK)"
           rc4_offered=0
      fi
