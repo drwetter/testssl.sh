@@ -341,8 +341,8 @@ pr_greyln()     { pr_grey "$1"; outln; }
 
 pr_done_good()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # This is good
 pr_done_goodln() { pr_done_good "$1"; outln; }
-pr_green()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # This is the best 
-pr_greenln()     { pr_green "$1"; outln; }
+pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # This is the best 
+pr_done_bestln()     { pr_done_best "$1"; outln; }
 
 pr_yellow()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # academic or minor problem 
 pr_yellowln() { pr_yellow "$1"; outln; }
@@ -1355,7 +1355,7 @@ std_cipherlists() {
           case $3 in
                0)   # ok to offer
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_greenln "offered (OK)"
+                         pr_done_bestln "offered (OK)"
                          fileout "std_$4" "OK" "$2 offered (OK)"
                     else
                          pr_brownln "not offered (NOT ok)"
@@ -1367,7 +1367,7 @@ std_cipherlists() {
                          pr_svrty_criticalln "offered (NOT ok)"
                          fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - ugly"
                     else
-                         pr_greenln "not offered (OK)"
+                         pr_done_bestln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
                     fi
                     ;;
@@ -2143,7 +2143,7 @@ run_protocols() {
                     fileout "sslv2" "NOT OK" "SSLv2 is offered (NOT ok)"
                     ;;
                1)
-                    pr_greenln "not offered (OK)"
+                    pr_done_bestln "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered (OK)"
                     ;;
                5)
@@ -2169,7 +2169,7 @@ run_protocols() {
                fileout "sslv3" "NOT OK" "SSLv3 is offered (NOT ok)"
                ;;
           1)
-               pr_greenln "not offered (OK)"
+               pr_done_bestln "not offered (OK)"
                fileout "sslv3" "OK" "SSLv3 is not offered (OK)"
                ;;
           2)
@@ -2254,7 +2254,7 @@ run_protocols() {
      fi
      case $? in
           0)
-               pr_greenln "offered (OK)"
+               pr_done_bestln "offered (OK)"
                fileout "tls1_2" "OK" "TLSv1.2 is offered (OK)"
                ;;                                  # GCM cipher in TLS 1.2: very good!
           1)
@@ -2407,7 +2407,7 @@ run_server_preference() {
                remark4default_cipher=" (limited sense as client will pick)"
                fileout "order" "NOT OK" "Server does NOT set a cipher order (NOT ok)"
           else
-               pr_green "yes (OK)"
+               pr_done_best "yes (OK)"
                remark4default_cipher=""
                fileout "order" "OK" "Server sets a cipher order (OK)"
           fi
@@ -2424,7 +2424,7 @@ run_server_preference() {
           default_proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
           case "$default_proto" in
                *TLSv1.2)
-                    pr_greenln $default_proto
+                    pr_done_bestln $default_proto
                     fileout "order_proto" "OK" "Default protocol TLS1.2 (OK)"
                     ;;
                *TLSv1.1)
@@ -2475,7 +2475,7 @@ run_server_preference() {
                     fileout "order_cipher" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  $remark4default_cipher"
                     ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
                *GCM*|*CHACHA20*)
-                    pr_green "$default_cipher"
+                    pr_done_best "$default_cipher"
                     fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (OK)  $remark4default_cipher"
                     ;;   # best ones
                ECDHE*AES*)
@@ -3464,7 +3464,7 @@ run_pfs() {
                     neat_list $HEXC $pfs_cipher "$kx" $enc $strength
                     if [[ "$SHOW_EACH_C" -ne 0 ]]; then
                          if [[ $sclient_success -eq 0 ]]; then
-                              pr_green "works"
+                              pr_done_best "works"
                          else
                               out "not a/v"
                          fi
@@ -3988,12 +3988,12 @@ sslv2_sockets() {
                fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 replay (rerun with DEBUG>=2)"
                ;;
           1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
-               pr_greenln "not offered (OK)"
+               pr_done_bestln "not offered (OK)"
                ret=0
                fileout "sslv2" "OK" "SSLv2 not offered (OK)"
                ;;
           0) # reset
-               pr_greenln "not offered (OK)"
+               pr_done_bestln "not offered (OK)"
                ret=0
                fileout "sslv2" "OK" "SSLv2 not offered (OK)"
                ;;
@@ -4234,7 +4234,7 @@ run_heartbleed(){
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
-          pr_green "not vulnerable (OK)"
+          pr_done_best "not vulnerable (OK)"
           outln " (no heartbeat extension)"
           fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK) (no heartbeat extension)"
           return 0
@@ -4337,7 +4337,7 @@ run_heartbleed(){
           fi
           ret=1
      else
-          pr_green "not vulnerable (OK)"
+          pr_done_best "not vulnerable (OK)"
           if [[ $retval -eq 3 ]]; then
                fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK) (timed out)"
           else
@@ -4355,7 +4355,7 @@ run_heartbleed(){
 
 # helper function
 ok_ids(){
-     pr_greenln "\n ok -- something resetted our ccs packets"
+     pr_done_bestln "\n ok -- something resetted our ccs packets"
      return 0
 }
 
@@ -4458,7 +4458,7 @@ run_ccs_injection(){
      debugme echo "lines: $lines, byte6: $byte6"
 
      if [[ "$byte6" == "0a" ]] || [[ "$lines" -gt 1 ]]; then
-          pr_green "not vulnerable (OK)"
+          pr_done_best "not vulnerable (OK)"
           if [[ $retval -eq 3 ]]; then
                fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
           else
@@ -4503,7 +4503,7 @@ run_renego() {
                     fileout "secure_renego" "NOT OK" "Secure Renegotiation (CVE-2009-3555) : VULNERABLE (NOT ok)"
                     ;;
                1)
-                    pr_greenln "not vulnerable (OK)"
+                    pr_done_bestln "not vulnerable (OK)"
                     fileout "secure_renego" "OK" "Secure Renegotiation (CVE-2009-3555) : not vulnerable (OK)"
                     ;;
                *)
@@ -4648,7 +4648,7 @@ run_crime() {
 
 #              STR=$(grep Compression $TMPFILE )
 #              if echo $STR | grep -q NONE >/dev/null; then
-#                   pr_green "not vulnerable (OK)"
+#                   pr_done_best "not vulnerable (OK)"
 #                   ret=$((ret + 0))
 #              else
 #                   pr_svrty_critical "VULNERABLE (NOT ok)"
@@ -4706,7 +4706,7 @@ run_breach() {
           pr_litemagenta ") "
           ret=3
      elif [[ -z $result ]]; then
-          pr_green "no HTTP compression (OK) "
+          pr_done_best "no HTTP compression (OK) "
           outln "$disclaimer"
           fileout "breach" "OK" "BREACH (CVE-2013-3587) : no HTTP compression (OK) $disclaimer"
           ret=0
@@ -4744,7 +4744,7 @@ run_ssl_poodle() {
           pr_svrty_high "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
           fileout "poodle_ssl" "NOT OK" "POODLE, SSL (CVE-2014-3566) : VULNERABLE (NOT ok), uses SSLv3+CBC (check if TLS_FALLBACK_SCSV mitigation is used)"
      else
-          pr_green "not vulnerable (OK)"
+          pr_done_best "not vulnerable (OK)"
           fileout "poodle_ssl" "OK" "POODLE, SSL (CVE-2014-3566) : not vulnerable (OK)"
      fi
      outln
@@ -4857,7 +4857,7 @@ run_freak() {
           pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
           fileout "freak" "NOT OK" "FREAK (CVE-2015-0204) : VULNERABLE (NOT ok), uses EXPORT RSA ciphers"
      else
-          pr_green "not vulnerable (OK)"; out "$addtl_warning"
+          pr_done_best "not vulnerable (OK)"; out "$addtl_warning"
           fileout "freak" "OK" "FREAK (CVE-2015-0204) : not vulnerable (OK) $addtl_warning"
      fi
      outln
@@ -4909,7 +4909,7 @@ run_logjam() {
           pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers, common primes not checked."
           fileout "logjam" "NOT OK" "LOGJAM (CVE-2015-4000) : VULNERABLE (NOT ok), uses DHE EXPORT ciphers, common primes not checked."
      else
-          pr_green "not vulnerable (OK)"; out "$addtl_warning"
+          pr_done_best "not vulnerable (OK)"; out "$addtl_warning"
           fileout "logjam" "OK" "LOGJAM (CVE-2015-4000) : not vulnerable (OK) $addtl_warning"
      fi
      outln
