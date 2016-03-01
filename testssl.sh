@@ -319,8 +319,8 @@ pr_liteblueln() { pr_liteblue "$1"; outln; }
 pr_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;32m$1" || out "\033[1;34m$1" ) || out "$1"; pr_off; }    # used for head lines of single tests
 pr_blueln()     { pr_blue "$1"; outln; }
 
-pr_litered()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"; pr_off; }                                            # this is bad
-pr_literedln() { pr_litered "$1"; outln; }
+pr_svrty_high()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"; pr_off; }                                            # this is bad
+pr_svrty_highln() { pr_svrty_high "$1"; outln; }
 pr_red()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }                                            # oh, this is really bad
 pr_redln()     { pr_red "$1"; outln; }
 
@@ -721,7 +721,7 @@ run_http_header() {
                redirect=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
                out ", redirecting to \"$redirect\""
                if [[ $redirect == "http://"* ]]; then
-                    pr_litered " -- Redirect to insecure URL (NOT ok)"
+                    pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
                     fileout "status_code" "NOT OK" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
                fi
                fileout "status_code" "INFO" \
@@ -800,7 +800,7 @@ detect_ipv4() {
                     else
                          first=false
                     fi
-                    pr_litered "$result"
+                    pr_svrty_high "$result"
                     outln "\n$spaces$your_ip_msg"
                     fileout "ip_in_header_$count" "NOT OK" "IPv4 address in header  $result $your_ip_msg"
                fi
@@ -955,7 +955,7 @@ run_hpkp() {
           hpkp_nr_keys=$(grep -ac pin-sha $TMPFILE)
           out "# of keys: "
           if [[ $hpkp_nr_keys -eq 1 ]]; then
-               pr_litered "1 (NOT ok), "
+               pr_svrty_high "1 (NOT ok), "
                fileout "hpkp_keys" "NOT OK" "Only one key pinned in HPKP header, this means the site may become unavaiable if the key is revoked"
           else
                out "$hpkp_nr_keys, "
@@ -1003,7 +1003,7 @@ run_hpkp() {
           done < <(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
           if ! $key_found ; then
                out "\n$spaces"
-               pr_litered " No matching key for pins found "
+               pr_svrty_high " No matching key for pins found "
                out "(CAs pinned? -- not checked for yet)"
                fileout "hpkp_keymatch" "WARN" "The TLS key does not match any key pinned in the HPKP header. If you pinned a CA key you can ignore this"
           fi
@@ -1373,7 +1373,7 @@ std_cipherlists() {
                     ;;
                2)   # bad but not worst
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_literedln "offered (NOT ok)"
+                         pr_svrty_highln "offered (NOT ok)"
                          fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - bad"
                     else
                          pr_litegreenln "not offered (OK)"
@@ -2147,7 +2147,7 @@ run_protocols() {
                     fileout "sslv2" "OK" "SSLv2 is not offered (OK)"
                     ;;
                5)
-                    pr_litered "$supported_no_ciph2";
+                    pr_svrty_high "$supported_no_ciph2";
                     outln " (may need further attention)"                  # protocol ok, but no cipher
                     fileout "sslv2" "WARN" "SSLv2 is $supported_no_ciph2 (may need further attention)"
                     ;;
@@ -2165,7 +2165,7 @@ run_protocols() {
      fi
      case $? in
           0)
-               pr_literedln "offered (NOT ok)"
+               pr_svrty_highln "offered (NOT ok)"
                fileout "sslv3" "NOT OK" "SSLv3 is offered (NOT ok)"
                ;;
           1)
@@ -2178,7 +2178,7 @@ run_protocols() {
                ;;
           5)
                fileout "sslv3" "WARN" "SSLv3 is $supported_no_ciph1"
-               pr_litered "$supported_no_ciph2"
+               pr_svrty_high "$supported_no_ciph2"
                outln "(may need debugging)"
                ;;                       # protocol ok, but no cipher
           7)
@@ -2330,7 +2330,7 @@ read_dhbits_from_file() {
           if [[ "$bits" -le 600 ]]; then
                pr_red "$bits $add"
           elif [[ "$bits" -le 800 ]]; then
-               pr_litered "$bits $add"
+               pr_svrty_high "$bits $add"
           elif [[ "$bits" -le 1280 ]]; then
                pr_brown "$bits $add"
           elif [[ "$bits" -ge 2048 ]]; then
@@ -2344,7 +2344,7 @@ read_dhbits_from_file() {
           if [[ "$bits" -le 128 ]]; then     # has that ever existed?
                pr_red "$bits $add"
           elif [[ "$bits" -le 163 ]]; then
-               pr_litered "$bits $add"
+               pr_svrty_high "$bits $add"
           elif [[ "$bits" -ge 224 ]]; then
                pr_litegreen "$bits $add"
           else
@@ -2403,7 +2403,7 @@ run_server_preference() {
           cipher2=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
 
           if [[ "$cipher1" != "$cipher2" ]]; then
-               pr_litered "nope (NOT ok)"
+               pr_svrty_high "nope (NOT ok)"
                remark4default_cipher=" (limited sense as client will pick)"
                fileout "order" "NOT OK" "Server does NOT set a cipher order (NOT ok)"
           else
@@ -2467,7 +2467,7 @@ run_server_preference() {
                     fileout "order_cipher" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  $remark4default_cipher"
                     ;;
                *RC4*)
-                    pr_litered "$default_cipher"
+                    pr_svrty_high "$default_cipher"
                     fileout "order_cipher" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  remark4default_cipher"
                     ;;
                *CBC*)
@@ -2713,7 +2713,7 @@ determine_trust() {
 		else
 			trust[i]=false
 			all_ok=false
-			debugme pr_litered "not trusted "
+			debugme pr_svrty_high "not trusted "
 			debugme outln "${verify_retcode[i]}"
 		fi
 		i=$((i + 1))
@@ -2742,12 +2742,12 @@ determine_trust() {
 					else
                               #code="$(verify_retcode_helper ${verify_retcode[i]})"
                               #notok_was="${certificate_file[i]} $notok_was"
-                              pr_litered " ${certificate_file[i]} "
+                              pr_svrty_high " ${certificate_file[i]} "
                               verify_retcode_helper "${verify_retcode[i]}"
 			               notok_was="${certificate_file[i]} $(verify_retcode_helper "${verify_retcode[i]}") $notok_was"
                		fi
 				done
-				#pr_litered "$notok_was "
+				#pr_svrty_high "$notok_was "
                     #outln "$code"
                     outln
 				# lf + green ones
@@ -2969,7 +2969,7 @@ certificate_info() {
                     pr_red "$keysize"
                     fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
                elif [[ "$keysize" -le 123 ]]; then    # a guess
-                    pr_litered "$keysize"
+                    pr_svrty_high "$keysize"
                     fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
                elif [[ "$keysize" -le 163 ]]; then
                     pr_brown "$keysize"
@@ -2991,7 +2991,7 @@ certificate_info() {
                     outln " bits"
                     fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                elif [[ "$keysize" -le 768 ]]; then
-                    pr_litered "$keysize"
+                    pr_svrty_high "$keysize"
                     outln " bits"
                     fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                elif [[ "$keysize" -le 1024 ]]; then
@@ -3192,7 +3192,7 @@ certificate_info() {
                     expok="WARN"
                fi
           else
-               pr_litered "expires < $DAYS2WARN2 days ($days2expire) !"
+               pr_svrty_high "expires < $DAYS2WARN2 days ($days2expire) !"
                expfinding+="expires < $DAYS2WARN2 days ($days2expire) !"
                expok="NOT OK"
           fi
@@ -3211,7 +3211,7 @@ certificate_info() {
      out "$indent"; pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
      if [[ -z "$crl" ]]; then
-          pr_literedln "--"
+          pr_svrty_highln "--"
           fileout "${json_prefix}crl" "NOT OK" "No CRL provided (NOT ok)"
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
@@ -3229,7 +3229,7 @@ certificate_info() {
      out "$indent"; pr_bold " OCSP URI                     "
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      if [[ -z "$ocsp_uri" ]]; then
-          pr_literedln "--"
+          pr_svrty_highln "--"
           fileout "${json_prefix}ocsp_uri" "NOT OK" "OCSP URI : -- (NOT ok)"
      else
           outln "$ocsp_uri"
@@ -4003,7 +4003,7 @@ sslv2_sockets() {
                if [[ "$lines" -gt 1 ]]; then
                     ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$ciphers_detected" ]]; then
-                         pr_litered "supported but couldn't detect a cipher";
+                         pr_svrty_high "supported but couldn't detect a cipher";
                          outln " (may need further attention)"
                          fileout "sslv2" "NOT OK" "SSLv2 offered (NOT ok), but could not detect a cipher (may need further attention)"
                     else
@@ -4557,7 +4557,7 @@ run_renego() {
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case "$sec_client_renego" in
                     0)
-                         pr_litered "VULNERABLE (NOT ok)"; outln ", DoS threat"
+                         pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
                          fileout "sec_client_renego" "NOT OK" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), DoS threat"
                          ;;
                     1)
@@ -4612,7 +4612,7 @@ run_crime() {
           ret=0
      else
           if [[ $SERVICE == "HTTP" ]]; then
-               pr_litered "VULNERABLE (NOT ok)"
+               pr_svrty_high "VULNERABLE (NOT ok)"
                fileout "crime" "NOT OK" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (NOT ok)"
           else
                pr_brown "VULNERABLE (NOT ok), but not using HTTP: probably no exploit known"
@@ -4711,7 +4711,7 @@ run_breach() {
           fileout "breach" "OK" "BREACH (CVE-2013-3587) : no HTTP compression (OK) $disclaimer"
           ret=0
      else
-          pr_litered "potentially NOT ok, uses $result HTTP compression."
+          pr_svrty_high "potentially NOT ok, uses $result HTTP compression."
           outln "$disclaimer"
           outln "$spaces$when_makesense"
           fileout "breach" "NOT OK" "BREACH (CVE-2013-3587) : potentially VULNERABLE, uses $result HTTP compression. $disclaimer ($when_makesense)"
@@ -4741,7 +4741,7 @@ run_ssl_poodle() {
      sclient_success=$?
      [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if [[ $sclient_success -eq 0 ]]; then
-          pr_litered "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
+          pr_svrty_high "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
           fileout "poodle_ssl" "NOT OK" "POODLE, SSL (CVE-2014-3566) : VULNERABLE (NOT ok), uses SSLv3+CBC (check if TLS_FALLBACK_SCSV mitigation is used)"
      else
           pr_green "not vulnerable (OK)"
@@ -5103,7 +5103,7 @@ run_rc4() {
 
      $OPENSSL s_client -cipher $rc4_ciphers_list $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
      if sclient_connect_successful $? $TMPFILE; then
-          "$WIDE" || pr_litered "VULNERABLE (NOT ok): "
+          "$WIDE" || pr_svrty_high "VULNERABLE (NOT ok): "
           rc4_offered=1
           if "$WIDE"; then
                outln "\n"
@@ -5122,7 +5122,7 @@ run_rc4() {
                     neat_list "$HEXC" "$rc4_cipher" "$kx" "$enc"
                     if [[ "$SHOW_EACH_C" -ne 0 ]]; then
                          if [[ $sclient_success -eq 0 ]]; then
-                              pr_litered "available"
+                              pr_svrty_high "available"
                          else
                               out "not a/v"
                          fi
@@ -5132,12 +5132,12 @@ run_rc4() {
                     fi
                     outln
                else
-                    pr_litered "$rc4_cipher "
+                    pr_svrty_high "$rc4_cipher "
                fi
                rc4_detected+="$rc4_cipher "
           done < <($OPENSSL ciphers -V $rc4_ciphers_list:@STRENGTH)
           outln
-          "$WIDE" && pr_litered "VULNERABLE (NOT ok)"
+          "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
           fileout "rc4" "NOT OK" "RC4 (CVE-2013-2566, CVE-2015-2808) : VULNERABLE (NOT ok) Detected ciphers: $rc4_detected"
      else
           pr_litegreenln "no RC4 ciphers detected (OK)"
