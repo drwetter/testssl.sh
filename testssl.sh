@@ -321,8 +321,8 @@ pr_blueln()     { pr_blue "$1"; outln; }
 
 pr_svrty_high()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"; pr_off; }                                            # this is bad
 pr_svrty_highln() { pr_svrty_high "$1"; outln; }
-pr_red()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }                                            # oh, this is really bad
-pr_redln()     { pr_red "$1"; outln; }
+pr_svrty_critical()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }                                            # oh, this is really bad
+pr_svrty_criticalln()     { pr_svrty_critical "$1"; outln; }
 
 pr_litemagenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }                                   # local problem: one test cannot be done
 pr_litemagentaln() { pr_litemagenta "$1"; outln; }
@@ -1364,7 +1364,7 @@ std_cipherlists() {
                     ;;
                1) # the ugly ones
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_redln "offered (NOT ok)"
+                         pr_svrty_criticalln "offered (NOT ok)"
                          fileout "std_$4" "NOT OK" "$2 offered (NOT ok) - ugly"
                     else
                          pr_greenln "not offered (OK)"
@@ -2139,7 +2139,7 @@ run_protocols() {
           run_prototest_openssl "-ssl2"
           case $? in
                0)
-                    pr_redln   "offered (NOT ok)"
+                    pr_svrty_criticalln   "offered (NOT ok)"
                     fileout "sslv2" "NOT OK" "SSLv2 is offered (NOT ok)"
                     ;;
                1)
@@ -2328,7 +2328,7 @@ read_dhbits_from_file() {
      if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]]; then
           [[ -z "$2" ]] && add="bit DH"
           if [[ "$bits" -le 600 ]]; then
-               pr_red "$bits $add"
+               pr_svrty_critical "$bits $add"
           elif [[ "$bits" -le 800 ]]; then
                pr_svrty_high "$bits $add"
           elif [[ "$bits" -le 1280 ]]; then
@@ -2342,7 +2342,7 @@ read_dhbits_from_file() {
      elif [[ $what_dh == "ECDH" ]]; then
           [[ -z "$2" ]] && add="bit ECDH"
           if [[ "$bits" -le 128 ]]; then     # has that ever existed?
-               pr_red "$bits $add"
+               pr_svrty_critical "$bits $add"
           elif [[ "$bits" -le 163 ]]; then
                pr_svrty_high "$bits $add"
           elif [[ "$bits" -ge 224 ]]; then
@@ -2436,11 +2436,11 @@ run_server_preference() {
                     fileout "order_proto" "INFO" "Default protocol TLS1.0"
                     ;;
                *SSLv2)
-                    pr_redln $default_proto
+                    pr_svrty_criticalln $default_proto
                     fileout "order_proto" "NOT OK" "Default protocol SSLv2"
                     ;;
                *SSLv3)
-                    pr_redln $default_proto
+                    pr_svrty_criticalln $default_proto
                     fileout "order_proto" "NOT OK" "Default protocol SSLv3"
                     ;;
                "")
@@ -2462,7 +2462,7 @@ run_server_preference() {
           default_cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
           case "$default_cipher" in
                *NULL*|*EXP*)
-                    pr_red "$default_cipher"
+                    pr_svrty_critical "$default_cipher"
 
                     fileout "order_cipher" "NOT OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  $remark4default_cipher"
                     ;;
@@ -2726,7 +2726,7 @@ determine_trust() {
           fileout "${json_prefix}trust" "OK" "All certificate trust checks passed. $addtl_warning"
 	else
 	     # at least one failed
-		pr_red "NOT ok"
+		pr_svrty_critical "NOT ok"
 		if ! $some_ok; then
 		     # all failed (we assume with the same issue), we're displaying the reason
                out " "
@@ -2735,7 +2735,7 @@ determine_trust() {
 		else
 			# is one ok and the others not ==> display the culprit store
 			if $some_ok ; then
-				pr_red ":"
+				pr_svrty_critical ":"
 				for ((i=1;i<=num_ca_bundles;i++)); do
 					if ${trust[i]}; then
 						ok_was="${certificate_file[i]} $ok_was"
@@ -2943,7 +2943,7 @@ certificate_info() {
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
                ;;
           md5*)
-               pr_redln "MD5"
+               pr_svrty_criticalln "MD5"
                fileout "${json_prefix}algorithm" "NOT OK" "Signature Algorithm: MD5 (NOT ok)"
                ;;
           *)
@@ -2966,7 +2966,7 @@ certificate_info() {
           # Table 2 @ chapter 5.6.1 (~ p64)
           if [[ $sig_algo =~ ecdsa ]] || [[ $key_algo =~ ecPublicKey  ]]; then
                if [[ "$keysize" -le 110 ]]; then       # a guess 
-                    pr_red "$keysize"
+                    pr_svrty_critical "$keysize"
                     fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize EC bits (NOT ok)"
                elif [[ "$keysize" -le 123 ]]; then    # a guess
                     pr_svrty_high "$keysize"
@@ -2987,7 +2987,7 @@ certificate_info() {
                outln " bit"
           elif [[ $sig_algo = *RSA* ]]; then
                if [[ "$keysize" -le 512 ]]; then
-                    pr_red "$keysize"
+                    pr_svrty_critical "$keysize"
                     outln " bits"
                     fileout "${json_prefix}key_size" "NOT OK" "Server keys $keysize bits (NOT ok)"
                elif [[ "$keysize" -le 768 ]]; then
@@ -3119,7 +3119,7 @@ certificate_info() {
      issuer_C="$(awk -F'=' '/C=/ { print $2 }' <<< "$issuer")"
 
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$CN" ]]; then
-          pr_redln "self-signed (NOT ok)"
+          pr_svrty_criticalln "self-signed (NOT ok)"
           fileout "${json_prefix}issuer" "NOT OK" "Issuer: selfsigned (NOT ok)"
      else
           pr_dquoted "$issuer_CN"
@@ -3174,7 +3174,7 @@ certificate_info() {
 
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! echo $expire | grep -qw not; then
-          pr_red "expired!"
+          pr_svrty_critical "expired!"
           expfinding="expired!"
           expok="NOT OK"
      else
@@ -4007,7 +4007,7 @@ sslv2_sockets() {
                          outln " (may need further attention)"
                          fileout "sslv2" "NOT OK" "SSLv2 offered (NOT ok), but could not detect a cipher (may need further attention)"
                     else
-                         pr_red "offered (NOT ok)";
+                         pr_svrty_critical "offered (NOT ok)";
                          outln " -- $ciphers_detected ciphers"
                          fileout "sslv2" "NOT OK" "SSLv2 offered (NOT ok).\nDetected ciphers: $ciphers_detected"
                     fi
@@ -4329,7 +4329,7 @@ run_heartbleed(){
 
      lines_returned=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l | sed 's/ //g')
      if [[ $lines_returned -gt 1 ]]; then
-          pr_red "VULNERABLE (NOT ok)"
+          pr_svrty_critical "VULNERABLE (NOT ok)"
           if [[ $retval -eq 3 ]]; then
                fileout "heartbleed" "NOT OK" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok) (timed out)"
           else
@@ -4466,7 +4466,7 @@ run_ccs_injection(){
           fi
           ret=0
      else
-          pr_red "VULNERABLE (NOT ok)"
+          pr_svrty_critical "VULNERABLE (NOT ok)"
           if [[ $retval -eq 3 ]]; then
                fileout "ccs" "NOT OK" "CCS (CVE-2014-0224): VULNERABLE (NOT ok) (timed out)"
           else
@@ -4499,7 +4499,7 @@ run_renego() {
 #FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
           case $sec_renego in
                0)
-                    pr_redln "VULNERABLE (NOT ok)"
+                    pr_svrty_criticalln "VULNERABLE (NOT ok)"
                     fileout "secure_renego" "NOT OK" "Secure Renegotiation (CVE-2009-3555) : VULNERABLE (NOT ok)"
                     ;;
                1)
@@ -4651,7 +4651,7 @@ run_crime() {
 #                   pr_green "not vulnerable (OK)"
 #                   ret=$((ret + 0))
 #              else
-#                   pr_red "VULNERABLE (NOT ok)"
+#                   pr_svrty_critical "VULNERABLE (NOT ok)"
 #                   ret=$((ret + 1))
 #              fi
 #         fi
@@ -4854,7 +4854,7 @@ run_freak() {
      sclient_success=$?
      [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if [[ $sclient_success -eq 0 ]]; then
-          pr_red "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
+          pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
           fileout "freak" "NOT OK" "FREAK (CVE-2015-0204) : VULNERABLE (NOT ok), uses EXPORT RSA ciphers"
      else
           pr_green "not vulnerable (OK)"; out "$addtl_warning"
@@ -4906,7 +4906,7 @@ run_logjam() {
      fi
 
      if [[ $sclient_success -eq 0 ]]; then
-          pr_red "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers, common primes not checked."
+          pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers, common primes not checked."
           fileout "logjam" "NOT OK" "LOGJAM (CVE-2015-4000) : VULNERABLE (NOT ok), uses DHE EXPORT ciphers, common primes not checked."
      else
           pr_green "not vulnerable (OK)"; out "$addtl_warning"
