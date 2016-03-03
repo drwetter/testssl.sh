@@ -135,7 +135,7 @@ declare -x OPENSSL
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
 COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the output
 SHOW_EACH_C=${SHOW_EACH_C:-0}           # where individual ciphers are tested show just the positively ones tested #FIXME: upside down value
-SHOW_SIGALGO=${SHOW_SIGALGO:-false}     # "secret" switch weher testssl.sh shows the signature algorithm for -E / -e
+SHOW_SIGALGO=${SHOW_SIGALGO:-false}     # "secret" switch whether testssl.sh shows the signature algorithm for -E / -e
 SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave behind just usual?
 QUIET=${QUIET:-false}                   # don't output the banner. By doing this yiu acknowledge usage term appearing in the banner
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
@@ -220,6 +220,7 @@ VULN_COUNT=0
 IPS=""
 SERVICE=""                              # is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
+CERT_FINGERPRINT_SHA2=""
 STARTTLS_PROTOCOL=""
 OPTIMAL_PROTO=""                        # we need this for IIS6 (sigh) and OpenSSL 1.02, otherwise some handshakes
                                         # will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
@@ -3023,6 +3024,9 @@ certificate_info() {
      outln "$cert_fingerprint_sha1 / $cert_fingerprint_serial"
      outln "$spaces$cert_fingerprint_sha2"
      fileout "${json_prefix}fingerprint" "INFO" "Fingerprints / Serial: $cert_fingerprint_sha1 / $cert_fingerprint_serial, $cert_fingerprint_sha2"
+     ][ -z $CERT_FINGERPRINT_SHA2 ]] && \
+          CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" || 
+          CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2 $CERT_FINGERPRINT_SHA2"
 
      out "$indent"; pr_bold " Common Name (CN)             "
      cnfinding="Common Name (CN) : "
@@ -3964,7 +3968,7 @@ parse_tls_serverhello() {
 
 
 sslv2_sockets() {
-     local ciphers_detected
+     local nr_ciphers_detected
 
      fd_socket 5 || return 6
      [[ "$DEBUG" -ge 2 ]] && outln "sending client hello... "
@@ -3997,17 +4001,17 @@ sslv2_sockets() {
                fileout "sslv2" "OK" "SSLv2 not offered (OK)"
                ;;
           3) # everything else
-               lines=$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null | wc -l | sed 's/ //g')
+               lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null)")
                [[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
                if [[ "$lines" -gt 1 ]]; then
-                    ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
-                    if [[ 0 -eq "$ciphers_detected" ]]; then
-                         pr_svrty_highln "CVE-2015-3197: supported but couldn't detect a cipher";
-                         fileout "sslv2" "NOT OK" "SSLv2 offered (NOT ok), CVE-2015-3197: but could not detect a cipher"
+                    nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
+                    if [[ 0 -eq "$nr_ciphers_detected" ]]; then
+                         pr_svrty_highln "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
+                         fileout "sslv2" "NOT OK" "SSLv2 offered (NOT ok), vulnerable to CVE-2015-3197"
                     else
-                         pr_svrty_critical "offered (NOT ok)";
-                         outln " -- $ciphers_detected ciphers"
-                         fileout "sslv2" "NOT OK" "SSLv2 offered (NOT ok).\nDetected ciphers: $ciphers_detected"
+                         pr_svrty_critical "offered (NOT ok), also VULNERABLE to DROWN attack";
+                         outln " -- $nr_ciphers_detected ciphers"
+                         fileout "sslv2" "NOT OK" "SSLv2 offered (NOT ok), vulnerable to DROWN attack.  Detected ciphers: $nr_ciphers_detected"
                     fi
                     ret=1
                fi ;;
@@ -4922,14 +4926,66 @@ run_logjam() {
 
 
 run_drown() {
+     local nr_ciphers_detected
+     local spaces="                                          "
+     local cert_fingerprint_sha2=""
 
+#FIXME: test for iexistence of RSA key exchange
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
           pr_headlineln " Testing for DROWN vulnerability "
+          outln
      fi
-# check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
+# if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
      pr_bold " DROWN"; out " (2016-0800, CVE-2016-0703)          "
-
+     fd_socket 5 || return 6
+     debugme outln "sending client hello... "
+     socksend_sslv2_clienthello "$SSLv2_CLIENT_HELLO"
+     sockread_serverhello 32768
+     debugme outln "reading server hello... "
+     if [[ "$DEBUG" -ge 4 ]]; then
+          hexdump -C "$SOCK_REPLY_FILE" | head -6
+          outln
+     fi
+     parse_sslv2_serverhello "$SOCK_REPLY_FILE"
+     case $? in
+          7) # strange reply, couldn't convert the cipher spec length to a hex number
+               pr_litemagenta "strange v2 reply "
+               outln " (rerun with DEBUG >=2)"
+               [[ $DEBUG -ge 3 ]] && hexdump -C "$SOCK_REPLY_FILE" | head -1
+               ret=7
+               fileout "DROWN" "MINOR_ERROR" "SSLv2: received a strange SSLv2 replay (rerun with DEBUG>=2)"
+               ;;
+          3)   # vulnerable
+               lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null)")
+               debugme out "  ($lines lines)  "
+               if [[ "$lines" -gt 1 ]]; then
+                    nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
+                    if [[ 0 -eq "$nr_ciphers_detected" ]]; then
+                         pr_svrty_highln "CVE-2015-3197: SSLv2 supported but couldn't detect a cipher (NOT ok)";
+                         fileout "DROWN" "NOT OK" "SSLv2 offered (NOT ok), CVE-2015-3197: but could not detect a cipher"
+                    else
+                         pr_svrty_criticalln  "vulnerable (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
+                         fileout "DROWN" "NOT OK" "vulnerable (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers"
+                    fi
+               fi
+               ret=1
+               ;;
+          *)   pr_done_bestln "not vulnerable on this port (OK)"
+               fileout "DROWN" "OK" "not vulnerable to DROWN"
+               outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
+               if [[ "$DEBUG" -ge 1 ]]; then
+# not advertising it as it after 5 tries and account is needed
+                    if [[ -z "$CERT_FINGERPRINT_SHA2" ]]; then
+                         get_host_cert || return 7
+                         cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed -e 's/^.*Fingerprint=//' -e 's/://g' )"
+                    else
+                         cert_fingerprint_sha2="$CERT_FINGERPRINT_SHA2"
+                    fi
+                    outln "$spaces https://censys.io/ipv4?q=$cert_fingerprint_sha2 could help you to find out"
+               fi
+               ;;
+     esac
 
      return $?
 }
@@ -6235,6 +6291,7 @@ initialize_globals() {
      do_crime=false
      do_freak=false
      do_logjam=false
+     do_drown=false
      do_header=false
      do_heartbleed=false
      do_mx_all_ips=false
@@ -6270,6 +6327,7 @@ set_scanning_defaults() {
      do_crime=true
      do_freak=true
      do_logjam=true
+     do_drown=true
      do_header=true
      do_heartbleed=true
      do_pfs=true
@@ -6292,7 +6350,7 @@ query_globals() {
      local true_nr=0
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
-               do_freak do_logjam do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
                do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
@@ -6305,7 +6363,7 @@ debug_globals() {
      local gbl
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
-               do_freak do_logjam do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
                do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
@@ -6430,6 +6488,7 @@ parse_cmd_line() {
                     do_ssl_poodle=true
                     do_tls_fallback_scsv=true
                     do_freak=true
+                    do_drown=true
                     do_logjam=true
                     do_beast=true
                     do_rc4=true
@@ -6466,6 +6525,10 @@ parse_cmd_line() {
                     ;;
                -F|--freak)
                     do_freak=true
+                    let "VULN_COUNT++"
+                    ;;
+               -D|--drown)
+                    do_drown=true
                     let "VULN_COUNT++"
                     ;;
                -J|--logjam)
@@ -6708,6 +6771,7 @@ lets_roll() {
      $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); }
      $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); }
      $do_freak && { run_freak; ret=$(($? + ret)); }
+     $do_drown && { run_drown ret=$(($? + ret)); }
      $do_logjam && { run_logjam; ret=$(($? + ret)); }
      $do_beast && { run_beast; ret=$(($? + ret)); }
      $do_rc4 && { run_rc4; ret=$(($? + ret)); }
@@ -6792,4 +6856,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.468 2016/03/03 10:39:30 dirkw Exp $
+#  $Id: testssl.sh,v 1.469 2016/03/03 18:50:43 dirkw Exp $
