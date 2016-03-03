@@ -4937,7 +4937,7 @@ run_drown() {
           outln
      fi
 # if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
-     pr_bold " DROWN"; out " (2016-0800, CVE-2016-0703)          "
+     pr_bold " DROWN"; out " (2016-0800, CVE-2016-0703), exper.  "
      fd_socket 5 || return 6
      debugme outln "sending client hello... "
      socksend_sslv2_clienthello "$SSLv2_CLIENT_HELLO"
@@ -6856,4 +6856,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.469 2016/03/03 18:50:43 dirkw Exp $
+#  $Id: testssl.sh,v 1.470 2016/03/03 19:04:19 dirkw Exp $
