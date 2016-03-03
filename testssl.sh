@@ -3024,7 +3024,7 @@ certificate_info() {
      outln "$cert_fingerprint_sha1 / $cert_fingerprint_serial"
      outln "$spaces$cert_fingerprint_sha2"
      fileout "${json_prefix}fingerprint" "INFO" "Fingerprints / Serial: $cert_fingerprint_sha1 / $cert_fingerprint_serial, $cert_fingerprint_sha2"
-     ][ -z $CERT_FINGERPRINT_SHA2 ]] && \
+     [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" || 
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2 $CERT_FINGERPRINT_SHA2"
 
