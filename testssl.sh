@@ -2147,9 +2147,8 @@ run_protocols() {
                     fileout "sslv2" "OK" "SSLv2 is not offered (OK)"
                     ;;
                5)
-                    pr_svrty_high "$supported_no_ciph2";
-                    outln " (may need further attention)"                  # protocol ok, but no cipher
-                    fileout "sslv2" "WARN" "SSLv2 is $supported_no_ciph2 (may need further attention)"
+                    pr_svrty_high "CVE-2015-3197: $supported_no_ciph2";
+                    fileout "sslv2" "WARN" "CVE-2015-3197: SSLv2 is $supported_no_ciph2"
                     ;;
                7)
                     fileout "sslv2" "INFO" "SSLv2 is not tested due to lack of local support"
@@ -4003,9 +4002,8 @@ sslv2_sockets() {
                if [[ "$lines" -gt 1 ]]; then
                     ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$ciphers_detected" ]]; then
-                         pr_svrty_high "supported but couldn't detect a cipher";
-                         outln " (may need further attention)"
-                         fileout "sslv2" "NOT OK" "SSLv2 offered (NOT ok), but could not detect a cipher (may need further attention)"
+                         pr_svrty_highln "CVE-2015-3197: supported but couldn't detect a cipher";
+                         fileout "sslv2" "NOT OK" "SSLv2 offered (NOT ok), CVE-2015-3197: but could not detect a cipher"
                     else
                          pr_svrty_critical "offered (NOT ok)";
                          outln " -- $ciphers_detected ciphers"
@@ -4921,6 +4919,20 @@ run_logjam() {
      return $sclient_success
 }
 # TODO: perfect candidate for replacement by sockets, so is freak
+
+
+run_drown() {
+
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
+          outln
+          pr_headlineln " Testing for DROWN vulnerability "
+     fi
+# check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
+     pr_bold " DROWN"; out " (2016-0800, CVE-2016-0703)          "
+
+
+     return $?
+}
 
 
 
@@ -6780,4 +6792,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.467 2016/02/22 09:44:42 dirkw Exp $
+#  $Id: testssl.sh,v 1.468 2016/03/03 10:39:30 dirkw Exp $
