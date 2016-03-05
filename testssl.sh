@@ -223,6 +223,7 @@ IPS=""
 SERVICE=""                              # is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
 CERT_FINGERPRINT_SHA2=""
+SHOW_CENSYS_LINK=${SHOW_CENSYS_LINK:-true}
 STARTTLS_PROTOCOL=""
 OPTIMAL_PROTO=""                        # we need this for IIS6 (sigh) and OpenSSL 1.02, otherwise some handshakes
                                         # will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
@@ -4999,7 +5000,7 @@ run_drown() {
           *)   pr_done_bestln "not vulnerable on this port (OK)"
                fileout "DROWN" "OK" "not vulnerable to DROWN"
                outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
-               if [[ "$DEBUG" -ge 1 ]]; then
+               if [[ "$DEBUG" -ge 1 ]] || "$SHOW_CENSYS_LINK"; then
 # not advertising it as it after 5 tries and account is needed
                     if [[ -z "$CERT_FINGERPRINT_SHA2" ]]; then
                          get_host_cert || return 7
@@ -6889,4 +6890,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.472 2016/03/05 20:07:48 dirkw Exp $
+#  $Id: testssl.sh,v 1.473 2016/03/05 20:35:27 dirkw Exp $
