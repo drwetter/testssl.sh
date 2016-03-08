@@ -86,10 +86,13 @@ Help is needed here.
 
 ----
 
-## External contributions
+## External/related projects
 
 Please address questions not specifically to the code of testssl.sh to the
 respective projects
+
+#### Web frontend
+* https://github.com/TKCERT/testssl.sh-webfrontend
 
 #### Docker images are available at:
 * https://quay.io/repository/jumanjiman/testssl
