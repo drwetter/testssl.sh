@@ -84,6 +84,11 @@ For a start see the
 [wiki](https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation).
 Help is needed here.
 
+#### Bugs reports
+
+Please file bugs in the issue tracker. Do not forget to provide either a detailed information, see https://github.com/drwetter/testssl.sh/wiki/Findings-and-HowTo-Fix-them#file-a-proper-bug-report
+Nobody can read your thoughts -- yet.
+
 ----
 
 ## External/related projects
