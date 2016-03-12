@@ -736,6 +736,10 @@ run_http_header() {
                fileout "status_code" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
+          204)
+               fileout "status_code" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               ;;
           206)
                out " -- WTF?"
                fileout "status_code" "INFO" \
@@ -765,7 +769,7 @@ run_http_header() {
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
                ;;
           *)
-               pr_warning ". Oh, didn't expect a $status_code$msg_thereafter"
+               pr_warning ". Oh, didn't expect \"$status_code$msg_thereafter\""
                fileout "status_code" "WARN" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter. Oh, didn't expect a $status_code$msg_thereafter"
                ;;
@@ -1014,7 +1018,7 @@ run_hpkp() {
           fi
      else
           out "--"
-          fileout "hpkp" "WARN" "No support for HTTP Public Key Pinning"
+          fileout "hpkp" "INFO" "No support for HTTP Public Key Pinning"
      fi
      outln
 
@@ -2418,7 +2422,7 @@ run_server_preference() {
                remark4default_cipher=""
                fileout "order" "OK" "Server sets a cipher order (OK)"
           fi
-          [[ $DEBUG -ge 2 ]] && out "  $cipher1 | $cipher2"
+          debugme out "  $cipher1 | $cipher2"
           outln
 
           pr_bold " Negotiated protocol          "
@@ -2684,6 +2688,7 @@ verify_retcode_helper() {
      return $ret
 }
 
+# arg1: number of certificate if provided >1
 determine_trust() {
 	local json_prefix=$1
 	local -i i=1
@@ -2704,10 +2709,7 @@ determine_trust() {
      # and the output should should be indented by two more spaces.
      [[ -n $json_prefix ]] && spaces="                                "
 
-     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0" ]]; then
-          addtl_warning="(Your openssl 1.1.0 might be too new for a reliable check)"
-          fileout "${json_prefix}trust" "WARN" "Your $OPENSSL is too new, need version 1.0.2 to determine trust"
-     elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]]; then
+     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]]; then
           addtl_warning="(Your openssl <= 1.0.2 might be too unreliable to determine trust)"
           fileout "${json_prefix}trust_warn" "WARN" "$addtl_warning"
      fi
@@ -2927,7 +2929,7 @@ certificate_info() {
      local cnfinding
      local cnok="OK"
      local expfinding expok="OK"
-     local json_prefix="" # string to place at begging of JSON IDs when there is more than one certificate
+     local json_prefix=""     # string to place at beginng of JSON IDs when there is more than one certificate
      local indent=""
 
      if [[ $number_of_certificates -gt 1 ]]; then
@@ -3997,11 +3999,11 @@ sslv2_sockets() {
      local nr_ciphers_detected
 
      fd_socket 5 || return 6
-     [[ "$DEBUG" -ge 2 ]] && outln "sending client hello... "
+     debugme outln "sending client hello... "
      socksend_sslv2_clienthello "$SSLv2_CLIENT_HELLO"
 
      sockread_serverhello 32768
-     [[ "$DEBUG" -ge 2 ]] && outln "reading server hello... "
+     debugme outln "reading server hello... "
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -6
           outln
@@ -4205,7 +4207,7 @@ tls_sockets() {
           fi
      fi
 
-     [[ "$DEBUG" -ge 2 ]] && echo "sending client hello..."
+     debugme echo "sending client hello..."
      socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send"
      ret=$?                             # 6 means opening socket didn't succeed, e.g. timeout
 
@@ -4213,8 +4215,8 @@ tls_sockets() {
      if [[ $ret -eq 0 ]]; then
           sockread_serverhello 32768
           TLS_NOW=$(LC_ALL=C date "+%s")
-          [[ "$DEBUG" -ge 2 ]] && outln "reading server hello..."
-          if [[ "$DEBUG" -ge 3 ]]; then
+          debugme outln "reading server hello..."
+          if [[ "$DEBUG" -ge 4 ]]; then
                hexdump -C $SOCK_REPLY_FILE | head -6
                echo
           fi
@@ -4224,7 +4226,7 @@ tls_sockets() {
 
           # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
           lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
-          [[ "$DEBUG" -ge 2 ]] && out "  (returned $lines lines)  "
+          debugme out "  (returned $lines lines)  "
 
           # determine the return value for higher level, so that they can tell what the result is
           if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
@@ -4334,12 +4336,12 @@ run_heartbleed(){
 
      fd_socket 5 || return 6
 
-     [[ $DEBUG -ge 2 ]] && outln "\nsending client hello (TLS version $tls_hexcode)"
+     debugme outln "\nsending client hello (TLS version $tls_hexcode)"
      socksend "$client_hello" 1
-     sockread 16384
 
-     [[ $DEBUG -ge 2 ]] && outln "\nreading server hello"
-     if [[ $DEBUG -ge 3 ]]; then
+     debugme outln "\nreading server hello"
+     sockread 32768
+     if [[ $DEBUG -ge 4 ]]; then
           echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
           outln "[...]"
           outln "\nsending payload with TLS version $tls_hexcode:"
@@ -4446,10 +4448,10 @@ run_ccs_injection(){
 # we now make a standard handshake ...
      debugme out "\nsending client hello, "
      socksend "$client_hello" 1
-     sockread 16384
 
      debugme outln "\nreading server hello"
-     if [[ $DEBUG -ge 3 ]]; then
+     sockread 32768
+     if [[ $DEBUG -ge 4 ]]; then
           echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
           outln "[...]"
           outln "\npayload #1 with TLS version $tls_hexcode:"
@@ -5008,6 +5010,7 @@ run_drown() {
                     else
                          cert_fingerprint_sha2="$CERT_FINGERPRINT_SHA2"
                     fi
+                    cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
                     outln "$spaces https://censys.io/ipv4?q=$cert_fingerprint_sha2 could help you to find out"
                fi
                ;;
@@ -6890,4 +6893,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.473 2016/03/05 20:35:27 dirkw Exp $
+#  $Id: testssl.sh,v 1.474 2016/03/12 16:08:42 dirkw Exp $
