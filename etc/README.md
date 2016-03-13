@@ -4,7 +4,7 @@
 The certificate stores were retrieved by
 
 * Mozilla; see https://curl.haxx.se/docs/caextract.html
-* Linux: Just copied from a up-to-date Linux machine
+* Linux: Just copied from an up-to-date Linux machine
 * Microsoft: under Windows >= 7,2008 MS decided not to provide
   a full certificate store bu default/via update as other OS. 
   It's being populated with time -- supposed you use e.g. IE while browsing. 
@@ -19,6 +19,7 @@ get a warning for  the other certificate storesthough while scanning internal
 networks.  If you scan other hosts in the internet the check against your 
 Root CA will fail, too. This will be fixed in the future, see #230.
 
-#### Mapping file
-The file mapping-rfc.txt uses the hexcode to map OpenSSL names
-against the RFC/IANA names
+#### Mapping files
+The file ``mapping-rfc.txt`` uses the hexcode to map OpenSSL names
+against the RFC/IANA names. ``curves.txt`` is not being used yet, it
+is supposed to map EC curve names properly.
