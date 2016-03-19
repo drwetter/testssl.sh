@@ -784,6 +784,7 @@ run_http_header() {
 detect_ipv4() {
      local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
      local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
+     local whitelisted_header="pagespeed|page-speed|^Content-Security-Policy|^MicrosoftSharePointTeamServices|^X-OWA-Version"
      local your_ip_msg="(check if it's your IP address or e.g. a cluster IP)"
      local result
      local first=true
@@ -794,9 +795,8 @@ detect_ipv4() {
           run_http_header "$1" || return 3
      fi
 
-     # remove pagespeed header as it is mistakenly identified as ipv4 address https://github.com/drwetter/testssl.sh/issues/158
-     # also facebook has a CSP rule for 127.0.0.1
-     if egrep -vi "pagespeed|page-speed|Content-Security-Policy" $HEADERFILE | grep -iqE "$ipv4address"; then
+     # white list some headers as they are mistakenly identified as ipv4 address. Issues 158, 323,o facebook has a CSP rule for 127.0.0.1
+     if egrep -vi "$whitelisted_header" $HEADERFILE | grep -iqE "$ipv4address"; then
           pr_bold " IPv4 address in header       "
           count=0
           while read line; do
@@ -1052,6 +1052,7 @@ emphasize_stuff_in_headers(){
           -e "s/X-Server/"$yellow"X-Server$off/g" \
           -e "s/X-Varnish/"$yellow"X-Varnish$off/g" \
           -e "s/X-OWA-Version/"$yellow"X-OWA-Version$off/g" \
+          -e "s/MicrosoftSharePointTeamServices/"$yellow"MicrosoftSharePointTeamServices$off/g" \
           -e "s/X-Version/"$yellow"X-Version$off/g" \
           -e "s/X-Powered-By/"$yellow"X-Powered-By$off/g" \
           -e "s/X-UA-Compatible/"$yellow"X-UA-Compatible$off/g" \
@@ -1135,7 +1136,7 @@ run_application_banner() {
           run_http_header "$1" || return 3
      fi
      pr_bold " Application banner           "
-     egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version' $HEADERFILE >$TMPFILE
+     egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "app_banner" "INFO" "No Application Banners found"
