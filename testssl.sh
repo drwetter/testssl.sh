@@ -631,6 +631,7 @@ runs_HTTP() {
           head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
           debugme head -50 $TMPFILE
      fi
+# FIXME: we can guess ports by port number if not properly recognized (and label it as guessed)
 
      out " Service detected:      $CORRECT_SPACES"
      case $SERVICE in
@@ -4734,7 +4735,7 @@ run_breach() {
           else
                fileout "breach" "WARN" "BREACH (CVE-2013-3587) : Test failed (HTTP request stalled)"
           fi
-          pr_warning ") "
+          pr_warningln ") "
           ret=3
      elif [[ -z $result ]]; then
           pr_done_best "no HTTP compression (OK) "
@@ -6894,4 +6895,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.474 2016/03/12 16:08:42 dirkw Exp $
+#  $Id: testssl.sh,v 1.475 2016/03/19 17:15:37 dirkw Exp $
