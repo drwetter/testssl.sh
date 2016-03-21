@@ -5462,6 +5462,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -F, --freak                   tests for FREAK vulnerability
      -A, --beast                   tests for BEAST vulnerability
      -J, --logjam                  tests for LOGJAM vulnerability
+     -D, --drown                   tests for DROWN vulnerability
      -s, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
 
@@ -6895,4 +6896,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.475 2016/03/19 17:15:37 dirkw Exp $
+#  $Id: testssl.sh,v 1.476 2016/03/21 22:03:41 dirkw Exp $
