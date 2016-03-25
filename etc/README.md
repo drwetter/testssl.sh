@@ -12,6 +12,13 @@ The certificate stores were retrieved by
   certmgr.msc and is an export of "Trusted Root Certification Authorities"  
   --> "Certificates". Third Party Root Certificates were for now deliberately 
   omitted. Feedback is welcome, see #317.
+* Apple.pem : it comes from Apple OS X keychain app
+  Open Keychain Access.
+  In the Finder window, under Favorites, click Applications, click Utilities
+  and then double-click Keychain Access.
+  In the Keychain Access window, under Keychains, click System and then
+  under Category, click All Items.
+  Select now all CA certificate then File, Export Items
 
 In this directory you can also save e.g. your company Root CA(s) in PEM 
 format, extension ``pem``. This has two catches momentarily: You will still 
