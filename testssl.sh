@@ -329,7 +329,7 @@ pr_warning() {                               # litemagenta, local problem: one t
      [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"
      pr_off
 }
-pr_warningln() { pr_warning "$1" "$2"; outln }
+pr_warningln() { pr_warning "$1" "$2"; outln; }
 
 
 pr_magenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }                               # Fatal error: quitting because of this!
@@ -351,7 +351,7 @@ pr_done_good() {                             # litegreen (liteblue), This is goo
      [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"
      pr_off
 }
-pr_done_goodln() { pr_done_good "$1" "$2"; outln }
+pr_done_goodln() { pr_done_good "$1" "$2"; outln; }
 
 
 pr_done_best() {                             # green (blue), This is the best
@@ -359,7 +359,7 @@ pr_done_best() {                             # green (blue), This is the best
      [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"
       pr_off
 }
-pr_done_bestln() { pr_done_best "$1" "$2"; outln }
+pr_done_bestln() { pr_done_best "$1" "$2"; outln; }
 
 
 pr_svrty_minor() {                           # yellow, academic or minor problem
@@ -367,7 +367,7 @@ pr_svrty_minor() {                           # yellow, academic or minor problem
      [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"
      pr_off
 }
-pr_svrty_minorln() { pr_svrty_minor "$1" "$2"; outln }
+pr_svrty_minorln() { pr_svrty_minor "$1" "$2"; outln; }
 
 
 pr_svrty_medium() {                          # brown, it's not a bad problem but you shouldn't do this
@@ -375,7 +375,7 @@ pr_svrty_medium() {                          # brown, it's not a bad problem but
      [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"
      pr_off
 }
-pr_svrty_mediumln() { pr_svrty_medium "$1" "$2"; outln }
+pr_svrty_mediumln() { pr_svrty_medium "$1" "$2"; outln; }
 
 
 pr_svrty_high() {                            # litered
@@ -383,7 +383,7 @@ pr_svrty_high() {                            # litered
      [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"
      pr_off
 }
-pr_svrty_highln() { pr_svrty_high "$1" "$2"; outln }
+pr_svrty_highln() { pr_svrty_high "$1" "$2"; outln; }
 
 
 pr_svrty_critical() {                        # red
@@ -391,7 +391,7 @@ pr_svrty_critical() {                        # red
      [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"
      pr_off
 }
-pr_svrty_criticalln() { pr_svrty_critical "$1" "$2"; outln }
+pr_svrty_criticalln() { pr_svrty_critical "$1" "$2"; outln; }
 
 
 # color=1 functions
