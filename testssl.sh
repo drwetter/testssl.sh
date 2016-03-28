@@ -323,8 +323,15 @@ pr_liteblueln() { pr_liteblue "$1"; outln; }
 pr_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;32m$1" || out "\033[1;34m$1" ) || out "$1"; pr_off; }    # used for head lines of single tests
 pr_blueln()     { pr_blue "$1"; outln; }
 
-pr_warning()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }                                       # litemagentai | local problem: one test cannot be done
-pr_warningln() { pr_warning "$1"; outln; }
+
+pr_warning() {                               # litemagenta, local problem: one test can't be done
+     [[ -n "$2" ]] && pr_bold "$2"
+     [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"
+     pr_off
+}
+pr_warningln() { pr_warning "$1" "$2"; outln }
+
+
 pr_magenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }                               # Fatal error: quitting because of this!
 pr_magentaln() { pr_magenta "$1"; outln; }
 
@@ -339,20 +346,52 @@ pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"; pr_off
 pr_greyln()     { pr_grey "$1"; outln; }
 
 
-pr_done_good()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # litegreen (liteblue), This is good
-pr_done_goodln()     { pr_done_good "$1"; outln; }
-pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best 
-pr_done_bestln()     { pr_done_best "$1"; outln; }
+pr_done_good() {                             # litegreen (liteblue), This is good
+     [[ -n "$2" ]] && pr_bold "$2"
+     [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"
+     pr_off
+}
+pr_done_goodln() { pr_done_good "$1" "$2"; outln }
 
-pr_svrty_minor()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem 
-pr_svrty_minorln()   { pr_svrty_minor "$1"; outln; }
-pr_svrty_medium()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                   # brown | it is not a bad problem but you shouldn't do this
-pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
 
-pr_svrty_high()      { [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"; pr_off; }               # litered
-pr_svrty_highln()    { pr_svrty_high "$1"; outln; }
-pr_svrty_critical()  { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }               # red
-pr_svrty_criticalln(){ pr_svrty_critical "$1"; outln; }
+pr_done_best() {                             # green (blue), This is the best
+     [[ -n "$2" ]] && pr_bold "$2"
+     [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"
+      pr_off
+}
+pr_done_bestln() { pr_done_best "$1" "$2"; outln }
+
+
+pr_svrty_minor() {                           # yellow, academic or minor problem
+     [[ -n "$2" ]] && pr_bold "$2"
+     [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"
+     pr_off
+}
+pr_svrty_minorln() { pr_svrty_minor "$1" "$2"; outln }
+
+
+pr_svrty_medium() {                          # brown, it's not a bad problem but you shouldn't do this
+     [[ -n "$2" ]] && pr_bold "$2"
+     [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"
+     pr_off
+}
+pr_svrty_mediumln() { pr_svrty_medium "$1" "$2"; outln }
+
+
+pr_svrty_high() {                            # litered
+     [[ -n "$2" ]] && pr_bold "$2"
+     [[ "$COLOR" -eq 2 ]] && out "\033[0;31m$1" || pr_bold "$1"
+     pr_off
+}
+pr_svrty_highln() { pr_svrty_high "$1" "$2"; outln }
+
+
+pr_svrty_critical() {                        # red
+     [[ -n "$2" ]] && pr_bold "$2" 
+     [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"
+     pr_off
+}
+pr_svrty_criticalln() { pr_svrty_critical "$1" "$2"; outln }
 
 
 # color=1 functions
