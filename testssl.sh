@@ -318,10 +318,10 @@ outln() { out "$1\n"; }
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
-pr_liteblue()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;32m$1" || out "\033[0;34m$1" ) || out "$1"; pr_off; }    # not yet used
-pr_liteblueln() { pr_liteblue "$1"; outln; }
-pr_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;32m$1" || out "\033[1;34m$1" ) || out "$1"; pr_off; }    # used for head lines of single tests
-pr_blueln()     { pr_blue "$1"; outln; }
+#pr_liteblue()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;32m$1" || out "\033[0;34m$1" ) || out "$1"; pr_off; }    # not yet used
+#pr_liteblueln() { pr_liteblue "$1"; outln; }
+#pr_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;32m$1" || out "\033[1;34m$1" ) || out "$1"; pr_off; }    # used for head lines of single tests
+#pr_blueln()     { pr_blue "$1"; outln; }
 
 
 pr_warning() {                               # litemagenta, local problem: one test can't be done
@@ -340,10 +340,10 @@ pr_litecyanln() { pr_litecyan "$1"; outln; }
 pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"; pr_off; }                                           # additional hint
 pr_cyanln()     { pr_cyan "$1"; outln; }
 
-pr_litegreyln() { pr_litegrey "$1"; outln; }
-pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off; }
-pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"; pr_off; }
-pr_greyln()     { pr_grey "$1"; outln; }
+#pr_litegreyln() { pr_litegrey "$1"; outln; }
+#pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off; }
+#pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"; pr_off; }                                         # not yet used
+#pr_greyln()     { pr_grey "$1"; outln; }
 
 
 pr_done_good() {                             # litegreen (liteblue), This is good
