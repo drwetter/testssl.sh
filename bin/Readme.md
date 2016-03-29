@@ -86,7 +86,9 @@ If you want to compile OpenSSL yourself, here are the instructions:
     enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 \
     -static experimental-jpake -DOPENSSL_USE_BUILD_DATE 
 
-(IPv6 would need additionally ``-DOPENSSL_USE_IPV6`` and the tree https://github.com/PeterMosmans/openssl/tree/ipv6.)
+(IPv6 would need additionally ``-DOPENSSL_USE_IPV6`` and the patch from ``fedora-dirk-ipv6.diff``
+-- this doesn't give you the option of an IPv6 enabled proxy -- yet.)
+
 Four GOST [1][2] ciphers come via engine support automagically with this setup. Two additional GOST 
 ciphers can be compiled in (``GOST-GOST94``, ``GOST-MD5``) with ``-DTEMP_GOST_TLS`` but as of now they make problems under rare circumstances, so unless you desperately need those ciphers I would stay away from ``-DTEMP_GOST_TLS``.
 
