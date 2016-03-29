@@ -6639,7 +6639,8 @@ parse_cmd_line() {
                     ;;
                --devel) ### this development feature will soon disappear
                     HEX_CIPHER=""
-                    # DEBUG=3  ./testssl.sh --devel 03 "cc, 13, c0, 13" google.de    --> TLS 1.2
+                    # DEBUG=3  ./testssl.sh --devel 03 "cc, 13, c0, 13" google.de                              --> TLS 1.2, old CHACHA/POLY
+                    # DEBUG=3  ./testssl.sh --devel 03 "cc,a8, cc,a9, cc,aa, cc,ab, cc,ac" blog.cloudflare.com -->          new CHACHA/POLY
                     # DEBUG=3  ./testssl.sh --devel 01 yandex.ru                     --> TLS 1.0
                     # DEBUG=3  ./testssl.sh --devel 00 <host which supports SSLv3>
                     # DEBUG=3  ./testssl.sh --devel 22 <host which still supports SSLv2>
@@ -6947,4 +6948,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.476 2016/03/21 22:03:41 dirkw Exp $
+#  $Id: testssl.sh,v 1.477 2016/03/29 19:56:30 dirkw Exp $
