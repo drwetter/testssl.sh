@@ -1670,11 +1670,14 @@ run_allciphers(){
      return 0
 }
 
-# test for all ciphers per protocol locally configured (w/o distinguishing whether they are good or bad
+# test for all ciphers per protocol locally configured (w/o distinguishing whether they are good or bad)
 run_cipher_per_proto(){
      local proto proto_text
-     local hexcode n ciph sslvers kx auth enc mac export
-     local -i sclient_success=0
+     local -i nr_ciphers
+     local n sslvers auth mac export
+     local -a hexcode ciph kx enc export2
+     local -i i j parent child end_of_bundle round_num bundle_size num_bundles mod_check
+     local -a ciphers_found
      local dhlen
      local available
      local id
@@ -1686,38 +1689,86 @@ run_cipher_per_proto(){
      outln " -ssl2 SSLv2\n -ssl3 SSLv3\n -tls1 TLS 1\n -tls1_1 TLS 1.1\n -tls1_2 TLS 1.2"| while read proto proto_text; do
           locally_supported "$proto" "$proto_text" || continue
           outln
-          $OPENSSL ciphers $proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | while read hexcode n ciph sslvers kx auth enc mac export; do   # -V doesn't work with openssl < 1.0
-               $OPENSSL s_client -cipher $ciph $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE  </dev/null
-               sclient_connect_successful "$?" "$TMPFILE"
-               sclient_success=$?
-               if [[ $sclient_success -ne 0 ]] && ! "$SHOW_EACH_C"; then
-                    continue       # no successful connect AND not verbose displaying each cipher
-               fi
-               normalize_ciphercode "$hexcode"
-               if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
-                    dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                    kx="$kx $dhlen"
-               fi
-               neat_list "$HEXC" "$ciph" "$kx" "$enc"
-               available="available"
-               if "$SHOW_EACH_C"; then
-                    if [[ $sclient_success -eq 0 ]]; then
-                         pr_cyan "  available"
-                    else
-                         out "  not a/v"
-                         available="not a/v"
-                    fi
-               fi
-               if "$SHOW_SIGALGO"; then
-                    $OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1
-               else
-                    outln
-               fi
-               id="cipher$proto"
-               id+="_$HEXC"
-               fileout "$id" "INFO" "$proto_text  $(neat_list "$HEXC" "$ciph" "$kx" "$enc") $available"
-               tmpfile_handle $FUNCNAME.txt
+          
+          nr_ciphers=0
+          $OPENSSL ciphers $proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | (while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do   # -V doesn't work with openssl < 1.0
+               nr_ciphers=$nr_ciphers+1
           done
+
+          # Split ciphers into bundles of size 4**n, starting with the smallest
+          # "n" that leaves the ciphers in one bundle, and then reduing "n" by
+          # one in each round. Only test a bundle of 4**n ciphers against the
+          # server if it was part of a bundle of 4**(n+1) ciphers that included
+          # a cipher supported by the server. Continue until n=0.
+
+          # Determine the smallest bundle size that will result in their being one bundle.
+          for((bundle_size=1;bundle_size<nr_ciphers;bundle_size*=4)); do
+              :
+          done
+
+          # set ciphers_found[1] so that the complete bundle will be tested in round 0.
+          ciphers_found[1]=true
+          for ((round_num=0;bundle_size>=1;bundle_size/=4)); do
+              # Note that since the number of ciphers isn't a power of 4, the number
+              # of bundles may be may be less than 4**(round_num+1), and the final
+              # bundle may have fewer than bundle_size ciphers.
+              num_bundles=$nr_ciphers/$bundle_size
+              mod_check=$nr_ciphers%$bundle_size
+              [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+              for ((i=0;i<num_bundles;i++)); do
+                  # parent=index of bundle from previous round that includes this bundle of ciphers
+                  parent=4**$round_num+$i/4
+                  # child=index for this bundle of ciphers
+                  child=4*4**$round_num+$i
+                  if ${ciphers_found[parent]}; then
+                      ciphers_to_test=""
+                      end_of_bundle=$i*$bundle_size+$bundle_size
+                      [[ $end_of_bundle -gt $nr_ciphers ]] && end_of_bundle=$nr_ciphers
+                      for ((j=i*bundle_size;j<end_of_bundle;j++)); do
+                          ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
+                      done
+                      ciphers_found[child]=false
+                      $OPENSSL s_client -cipher "${ciphers_to_test:1}" $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE  </dev/null
+                      sclient_connect_successful "$?" "$TMPFILE"
+                      [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                  else
+                      # No need to test, since test of parent demonstrated none of these ciphers work.
+                      ciphers_found[child]=false
+                  fi
+
+                  # If this is a "leaf" of the test tree, then print out the results.
+                  if [[ $bundle_size -eq 1 ]] && ( ${ciphers_found[child]} || "$SHOW_EACH_C"); then
+                      export=${export2[i]}
+                      normalize_ciphercode "${hexcode[i]}"
+                      if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                          if ${ciphers_found[child]}; then
+                              dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                              kx[i]="${kx[i]} $dhlen"
+                          fi
+                      fi
+                      neat_list "$HEXC" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+                      available="available"
+                      if "$SHOW_EACH_C"; then
+                          if ${ciphers_found[child]}; then
+                              pr_cyan "  available"
+                          else
+                              out "  not a/v"
+                              available="not a/v"
+                          fi
+                      fi
+                      if "$SHOW_SIGALGO" && ${ciphers_found[child]}; then
+                          $OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1
+                      else
+                          outln
+                      fi
+                      id="cipher$proto"
+                      id+="_$HEXC"
+                      fileout "$id" "INFO" "$proto_text  $(neat_list "$HEXC" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
+                      tmpfile_handle $FUNCNAME.txt
+                  fi
+               done
+               round_num=round_num+1
+          done)
      done
      return 0
 }
