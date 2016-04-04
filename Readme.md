@@ -50,8 +50,8 @@ https://github.com/drwetter/testssl.sh/milestones/2.7dev%20%282.8%29
 
 Done so far:
 
-* Trust chain check against certificate stores from java, linux (system),
-  microsoft, mozilla (works for openssl >=1.0.2)
+* Trust chain check against certificate stores from Apple (OS), Linux (OS),
+  Microsoft (OS), Mozilla (Firefox Browser), works for openssl >=1.0.1
 * IPv6 (status: 80% working, details see
   https://github.com/drwetter/testssl.sh/issues/11
 * works on servers requiring a x509 certificate for authentication
@@ -63,7 +63,8 @@ Done so far:
 * check for multiple server certificates
 * browser cipher simulation
 * assistance for color-blind users
-* Even more compatibilty improvements for FreeBSD, RH-ish and F5 systems
+* Even more compatibility improvements for FreeBSD, RH-ish and F5 systems
+* Considerable speed improvements for each cipher runs (-e/-E)
 * OpenSSL 1.1.0 compliant
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
@@ -96,14 +97,14 @@ Nobody can read your thoughts -- yet.
 Please address questions not specifically to the code of testssl.sh to the
 respective projects
 
-#### Web frontend
+#### Cool web frontend
 * https://github.com/TKCERT/testssl.sh-webfrontend
 
-#### Docker images are available at:
+#### Ready-to-go docker images are available at:
 * https://quay.io/repository/jumanjiman/testssl
 * https://hub.docker.com/r/mvance/testssl/
 
-#### brew package
+#### Brew package
 
 * see [#233](https://github.com/drwetter/testssl.sh/issues/233) and
   [https://github.com/Homebrew/homebrew](https://github.com/Homebrew/homebrew)
