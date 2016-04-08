@@ -1502,7 +1502,7 @@ neat_list(){
           done
      fi
      #echo "${#kx}"                            # should be always 20 / 13
-     printf -- " %-7s %-30s %-10s %-11s%-11s${ADD_RFC_STR:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style "$HEXC")"
+     printf -- " %-7s %-30s %-10s %-11s%-11s${ADD_RFC_STR:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style "$hexcode")"
 }
 
 test_just_one(){
