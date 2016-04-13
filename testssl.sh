@@ -4165,40 +4165,127 @@ sslv2_sockets() {
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # ARG2: CIPHER_SUITES string
 socksend_tls_clienthello() {
-#FIXME: redo this with all extensions!
      local tls_low_byte="$1"
      local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301 -- except: SSLv3
      local servername_hexstr len_servername len_servername_hex
-     local hexdump_format_str
-     local all_extensions
+     local hexdump_format_str part1 part2
+     local all_extensions=""
+     local -i i j len_extension
      local len_sni_listlen len_sni_ext len_extension_hex
-     local cipher_suites len_ciph_suites len_ciph_suites_word
+     local cipher_suites len_ciph_suites len_ciph_suites_byte len_ciph_suites_word
      local len_client_hello_word len_all_word
-
-     #len_servername=$(echo ${#NODE})
-     len_servername=${#NODE}
-     hexdump_format_str="$len_servername/1 \"%02x,\""
-     servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
+     local ecc_cipher_suite_found=false
+     local extension_signature_algorithms extension_heartbeat
+     local extension_session_ticket extension_next_protocol extensions_ecc
 
      code2network "$2"             # convert CIPHER_SUITES
      cipher_suites="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
 
-#formatted example for SNI
-#00 00    # extension server_name
-#00 1a    # length                      = the following +2 = server_name length + 5
-#00 18    # server_name list_length     = server_name length +3
-#00       # server_name type (hostname)
-#00 15    # server_name length
-#66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
-
-     # convert lengths we need to fill in from dec to hex:
-     len_servername_hex=$(printf "%02x\n" $len_servername)
-     len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
-     len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
-     len_extension_hex=$(printf "%02x\n" $((len_servername+9)))  #FIXME: for TLS 1.2 and IIS servers we need extension_signature_algorithms!!
-
      len_ciph_suites_byte=$(echo ${#cipher_suites})
      let "len_ciph_suites_byte += 2"
+
+     if [[ "$tls_low_byte" != "00" ]]; then
+          # Add extensions
+
+          # Check to see if any ECC cipher suites are included in cipher_suites
+          for (( i=0; i<len_ciph_suites_byte; i=i+8 )); do
+               j=$i+4
+               part1="0x${cipher_suites:$i:2}"
+               part2="0x${cipher_suites:$j:2}"
+               if [[ "$part1" == "0xc0" ]]; then
+                    if [[ "$part2" -ge "0x01" ]] && [[ "$part2" -le "0x19" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x23" ]] && [[ "$part2" -le "0x3b" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x48" ]] && [[ "$part2" -le "0x4f" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x5c" ]] && [[ "$part2" -le "0x63" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x70" ]] && [[ "$part2" -le "0x79" ]]; then
+                    ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x86" ]] && [[ "$part2" -le "0x8d" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x9a" ]] && [[ "$part2" -le "0x9b" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0xac" ]] && [[ "$part2" -le "0xaf" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    fi
+               elif [[ "$part1" == "0xcc" ]]; then
+                    if [[ "$part2" == "0xa8" ]] || [[ "$part2" == "0xa9" ]] || [[ "$part2" == "0xac" ]] || [[ "$part2" == "13" ]] || [[ "$part2" == "0x14" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    fi
+               fi
+          done
+
+          #formatted example for SNI
+          #00 00    # extension server_name
+          #00 1a    # length                      = the following +2 = server_name length + 5
+          #00 18    # server_name list_length     = server_name length +3
+          #00       # server_name type (hostname)
+          #00 15    # server_name length
+          #66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
+          len_servername=${#NODE}
+          hexdump_format_str="$len_servername/1 \"%02x,\""
+          servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
+          # convert lengths we need to fill in from dec to hex:
+          len_servername_hex=$(printf "%02x\n" $len_servername)
+          len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
+          len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
+
+          extension_signature_algorithms="
+          00, 0d,                    # Type: signature_algorithms , see RFC 5246
+          00, 20,                    # len
+          00,1e, 06,01, 06,02, 06,03, 05,01, 05,02, 05,03,
+          04,01, 04,02, 04,03, 03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
+
+          extension_heartbeat="
+          00, 0f, 00, 01, 01"
+
+          extension_session_ticket="
+          00, 23, 00, 00"
+
+          extension_next_protocol="
+          33, 74, 00, 00"
+
+          # Supported Elliptic Curves Extension and Supported Point Formats Extension.
+          extensions_ecc="
+          00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
+          00, 3a, 00, 38,            # lengths
+          00, 01, 00, 02, 00, 03, 00, 04, 00, 05, 00, 06, 00, 07, 00, 08,
+          00, 09, 00, 0a, 00, 0b, 00, 0c, 00, 0d, 00, 0e, 00, 0f, 00, 10,
+          00, 11, 00, 12, 00, 13, 00, 14, 00, 15, 00, 16, 00, 17, 00, 18,
+          00, 19, 00, 1a, 00, 1b, 00, 1c,
+          00, 0b,                    # Type: Supported Point Formats , see RFC 4492 
+          00, 02,                    # len
+          01, 00"
+          
+          all_extensions="
+           00, 00                  # extension server_name
+          ,00, $len_sni_ext        # length SNI EXT
+          ,00, $len_sni_listlen    # server_name list_length
+          ,00                      # server_name type (hostname)
+          ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
+          ,$servername_hexstr      # server_name target
+          ,$extension_signature_algorithms
+          ,$extension_heartbeat
+          ,$extension_session_ticket
+          ,$extension_next_protocol"
+
+          if $ecc_cipher_suite_found; then
+               all_extensions="$all_extensions
+               ,$extensions_ecc"
+          fi
+
+          code2network "$all_extensions" # convert extensions
+          all_extensions="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
+          len_extension=${#all_extensions}
+          len_extension+=2
+          len_extension=$len_extension/4
+          len_extension_hex=$(printf "%02x\n" $len_extension)
+          all_extensions="
+          ,00, $len_extension_hex  # first the len of all extentions.
+          ,$all_extensions"
+     fi
 
      # we have additional 2 chars \x in each 2 byte string and 2 byte ciphers, so we need to divide by 4:
      len_ciph_suites=$(printf "%02x\n" $(($len_ciph_suites_byte / 4 )))
@@ -4244,45 +4331,6 @@ socksend_tls_clienthello() {
      ,$cipher_suites
      ,01                      # Compression methods length
      ,00"                     # Compression method (x00 for NULL)
-
-#TODO,add (see heartbleed)
-# extension lenghth (word)
-# extension ec_point_formats (4 words) 1st: 00 0b
-#len                              00 04
-# ec prot formats len:            03
-# uncompressed                    00
-# EC point format: ansiX962_compressed_prime  01
-# EC point format: ansiX962_compressed_char2  02
-
-# ec, 1st:                 00 0a
-#     2nd length: (word)         e.g. 0x34
-#     3rd: ec curve len    ln-2  e.g. 0x32
-#     4.-n.  curves              e.g. 25 words
-
-# Extension: Session Ticket        00 23
-
-     extension_signature_algorithms="
-     00, 0d,                    # Type: signature_algorithms , see RFC 5246
-     00, 20,                    # len
-     00,1e, 06,01, 06,02, 06,03, 05,01, 05,02, 05,03,
-     04,01, 04,02, 04,03, 03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
-
-# Extension: Haertbeat             00 0f
-# len                              00 01
-# peer allowed to send requests       01
-
-     if [[ "$tls_low_byte" == "00" ]]; then
-          all_extensions=""
-     else                          #FIXME: we (probably) need extension_signature_algorithms here. TLS 1.2 fails on IIS otherwise
-          all_extensions="
-          ,00, $len_extension_hex  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
-          ,00, 00                  # extension server_name
-          ,00, $len_sni_ext        # length SNI EXT
-          ,00, $len_sni_listlen    # server_name list_length
-          ,00                      # server_name type (hostname)
-          ,00, $len_servername_hex # server_name length
-          ,$servername_hexstr"     # server_name target
-     fi
 
      fd_socket 5 || return 6
 
