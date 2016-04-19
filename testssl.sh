@@ -1578,11 +1578,10 @@ run_allciphers() {
      local dhlen
      local available
      local ciphers_to_test
-     local sslv2_locally_supported=false sslv2_supported=false
+     local sslv2_supported=false
 
      # get a list of all the cipher suites to test (only need the hexcode, ciph, sslvers, kx, enc, and export values)
      while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
-          [[ "${sslvers[nr_ciphers]}" == "SSLv2" ]] && sslv2_locally_supported=true
           nr_ciphers=$nr_ciphers+1
      done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
 
@@ -1592,7 +1591,7 @@ run_allciphers() {
      outln
      neat_header
 
-     if $sslv2_locally_supported; then
+     if "$HAS_SSL2"; then
           $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful "$?" "$TMPFILE"
           [[ "$?" -eq 0 ]] && sslv2_supported=true
