@@ -6383,6 +6383,7 @@ mx_all_ips() {
 
 run_mass_testing_parallel() {
      local cmdline=""
+     local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
           fatal "Can't read file \"$FNAME\"" "-1"
@@ -6393,7 +6394,7 @@ run_mass_testing_parallel() {
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 --warnings=batch -q $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
           draw_line "=" $((TERM_DWITH / 2)); outln;
           determine_logfile
           outln "$cmdline"
@@ -6406,16 +6407,18 @@ run_mass_testing_parallel() {
 
 run_mass_testing() {
      local cmdline=""
+     local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
           fatal "Can't read file \"$FNAME\"" "-1"
      fi
+
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
      while read cmdline; do
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 --warnings=batch -q $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
           draw_line "=" $((TERM_DWITH / 2)); outln;
           outln "$cmdline"
           $cmdline
