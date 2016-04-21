@@ -20,11 +20,11 @@
 # license permitted.
 # If you enclose this script or parts of it in your software, it has to
 # be accompanied by the same license (see link) and the place where to get
-# the recent version of this program. Do not violate the license andif
+# the recent version of this program. Do not violate the license and if
 # you do not agree to all of these terms, do not use it in the first place.
 #
-# OpenSSL which is being used and maybe distributed via one of this projects'
-# web site is subject to their licensing: https://www.openssl.org/source/license.txt
+# OpenSSL, which is being used and maybe distributed via one of this projects'
+# web sites, is subject to their licensing: https://www.openssl.org/source/license.txt
 #
 # The client simulation data comes from SSLlabs and is licensed to the 'Qualys SSL Labs
 # Terms of Use' (v2.2), see https://www.ssllabs.com/downloads/Qualys_SSL_Labs_Terms_of_Use.pdf,
@@ -42,7 +42,7 @@
 # wiki.openssl.org/index.php/Command_Line_Utilities) that it was difficult to resist
 # wrapping some shell commands around it, which I used for my pen tests. This is how
 # everything started.
-# Now it has grown up, it has bash socket support for some features which basically replacing
+# Now it has grown up, it has bash socket support for some features, which is basically replacing
 # more and more functions of OpenSSL and will serve as some kind of library in the future.
 # The socket checks in bash may sound cool and unique -- they are -- but probably you
 # can achieve e.g. the same result with my favorite interactive shell: zsh (zmodload zsh/net/socket
@@ -204,7 +204,6 @@ HAS_SSL2=false
 HAS_SSL3=false
 HAS_ALPN=false
 HAS_SPDY=false
-HAS_SSL2=false
 ADD_RFC_STR="rfc"                       # display RFC ciphernames
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
@@ -225,7 +224,7 @@ URI=""
 CERT_FINGERPRINT_SHA2=""
 SHOW_CENSYS_LINK=${SHOW_CENSYS_LINK:-true}
 STARTTLS_PROTOCOL=""
-OPTIMAL_PROTO=""                        # we need this for IIS6 (sigh) and OpenSSL 1.02, otherwise some handshakes
+OPTIMAL_PROTO=""                        # we need this for IIS6 (sigh) and OpenSSL 1.0.2, otherwise some handshakes
                                         # will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 STARTTLS_OPTIMAL_PROTO=""               # same for STARTTLS, see https://github.com/drwetter/testssl.sh/issues/188
 TLS_TIME=""
@@ -966,7 +965,7 @@ run_hpkp() {
           out "# of keys: "
           if [[ $hpkp_nr_keys -eq 1 ]]; then
                pr_svrty_high "1 (NOT ok), "
-               fileout "hpkp_keys" "NOT ok" "Only one key pinned in HPKP header, this means the site may become unavaiable if the key is revoked"
+               fileout "hpkp_keys" "NOT ok" "Only one key pinned in HPKP header, this means the site may become unavailable if the key is revoked"
           else
                out "$hpkp_nr_keys, "
                fileout "hpkp_keys" "OK" "$hpkp_nr_keys keys pinned in HPKP header, additional keys are available if the current key is revoked"
@@ -1077,9 +1076,9 @@ run_server_banner() {
                emphasize_stuff_in_headers "$serverbanner"
                fileout "serverbanner" "INFO" "Server banner identified: $serverbanner"
                if [[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
-                    pr_warningln "                              It's recommended to run another test w/ OpenSSL 1.01 !"
+                    pr_warningln "                              It's recommended to run another test w/ OpenSSL 1.0.1 !"
                     # see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
-                    fileout "IIS6_openssl_mismatch" "WARN" "It is recommended to rerun this test w/ OpenSSL 1.01\nSee https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
+                    fileout "IIS6_openssl_mismatch" "WARN" "It is recommended to rerun this test w/ OpenSSL 1.0.1\nSee https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
                fi
           fi
           # mozilla.github.io/server-side-tls/ssl-config-generator/
@@ -1492,7 +1491,7 @@ neat_list(){
 
      #printf -- "%q" "$kx" | xxd | head -1
      # length correction for color escape codes (printf counts the escape color codes!!)
-     if printf -- "%q" "$kx" | egrep -aq '.;3.m|E\[1m' ; then     # here's a color code which screws up the formatting with prinf below
+     if printf -- "%q" "$kx" | egrep -aq '.;3.m|E\[1m' ; then     # here's a color code which screws up the formatting with printf below
           while [[ ${#kx} -lt 20 ]]; do
                kx="$kx "
           done
@@ -1567,7 +1566,7 @@ test_just_one(){
 }
 
 
-# test for all ciphers locally configured (w/o distinguishing whether they are good or bad
+# test for all ciphers locally configured (w/o distinguishing whether they are good or bad)
 run_allciphers() {
      local tmpfile
      local -i nr_ciphers=0
@@ -2038,7 +2037,7 @@ run_client_simulation() {
      ciphers+=("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DH-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:DH-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DH-RSA-AES256-SHA256:DH-DSS-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:ECDH-RSA-AES256-GCM-SHA384:ECDH-ECDSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA384:ECDH-ECDSA-AES256-SHA384:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-GCM-SHA384:AES256-SHA256:AES256-SHA:CAMELLIA256-SHA:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DH-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:DH-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DH-RSA-AES128-SHA256:DH-DSS-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:ECDH-RSA-AES128-GCM-SHA256:ECDH-ECDSA-AES128-GCM-SHA256:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-GCM-SHA256:AES128-SHA256:AES128-SHA:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:DES-CBC-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
-     #warning+=("Tests are based on OpenSSL 1.01, therefore ciphers 0xe and 0xb are missing")
+     #warning+=("Tests are based on OpenSSL 1.0.1, therefore ciphers 0xe and 0xb are missing")
      warning+=("")
 
      names+=("Safari 5.1.9/ OSX 10.6.8   ")
@@ -2132,7 +2131,7 @@ run_client_simulation() {
                #FIXME: awk
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                if [[ "$proto" == TLSv1.2 ]]; then
-                    # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0 Need to figure out which one it is...
+                    # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                     for tls in ${tlsvers[i]}; do
                          $OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
                          debugme echo "$OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
@@ -2187,7 +2186,7 @@ locally_supported() {
 # 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this again.
 # 2) the code is too old and one can do that way better
 # 3) HAS_SSL3/2 does already exist
-# we should do what's available and faster (openssl vs. sockets) . Keep in mind that the socket reply for SSLv2 returns the number # of ciphers!
+# we should do what's available and faster (openssl vs. sockets). Keep in mind that the socket reply for SSLv2 returns the number # of ciphers!
 #
 # arg1: -ssl2|-ssl3|-tls1
 # arg2: doesn't seem to be used in calling, seems to be a textstring with the protocol though
@@ -2562,8 +2561,8 @@ run_server_preference() {
                "")
                     pr_warning "default proto empty"
                     if [[ $OSSL_VER == 1.0.2* ]]; then
-                         outln " (Hint: if IIS6 give OpenSSL 1.01 a try)"
-                         fileout "order_proto" "WARN" "Default protocol empty (Hint: if IIS6 give OpenSSL 1.01 a try)"
+                         outln " (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
+                         fileout "order_proto" "WARN" "Default protocol empty (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
                     else
                          fileout "order_proto" "WARN" "Default protocol empty"
                     fi
@@ -2601,8 +2600,8 @@ run_server_preference() {
                "")
                     pr_warning "default cipher empty" ;
                     if [[ $OSSL_VER == 1.0.2* ]]; then
-                         out " (Hint: if IIS6 give OpenSSL 1.01 a try)"
-                         fileout "order_cipher" "WARN" "Default cipher empty  (Hint: if IIS6 give OpenSSL 1.01 a try)  $remark4default_cipher"
+                         out " (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
+                         fileout "order_cipher" "WARN" "Default cipher empty  (Hint: if IIS6 give OpenSSL 1.0.1 a try)  $remark4default_cipher"
                     else
                          fileout "order_cipher" "WARN" "Default cipher empty  $remark4default_cipher"
                     fi
@@ -2621,11 +2620,11 @@ run_server_preference() {
                i=1
                for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
                     if [[ $p == ssl2 ]] && ! "$HAS_SSL2"; then
-                         out "     (SSLv2: "; local_problem "/usr/bin/openssl doesn't support \"s_client -ssl2\""; outln ")";
+                         out "     (SSLv2: "; local_problem "$OPENSSL doesn't support \"s_client -ssl2\""; outln ")";
                          continue
                     fi
                     if [[ $p == ssl3 ]] && ! "$HAS_SSL3"; then
-                         out "     (SSLv3: "; local_problem "/usr/bin/openssl doesn't support \"s_client -ssl3\"" ; outln ")";
+                         out "     (SSLv3: "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"" ; outln ")";
                          continue
                     fi
                     $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
@@ -2696,11 +2695,11 @@ cipher_pref_check() {
      for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
           order=""
           if [[ $p == ssl2 ]] && ! "$HAS_SSL2"; then
-               out "\n     SSLv2:     "; local_problem "/usr/bin/openssl doesn't support \"s_client -ssl2\"";
+               out "\n     SSLv2:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl2\"";
                continue
           fi
           if [[ $p == ssl3 ]] && ! "$HAS_SSL3"; then
-               out "\n     SSLv3:     "; local_problem "/usr/bin/openssl doesn't support \"s_client -ssl3\"";
+               out "\n     SSLv3:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
                continue
           fi
           $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
@@ -2899,7 +2898,7 @@ tls_time() {
      local now difftime
      local spaces="               "
 
-     tls_sockets "01" "$TLS_CIPHER"                              # try first TLS 1.0 (mostfrequently used protocol)
+     tls_sockets "01" "$TLS_CIPHER"                              # try first TLS 1.0 (most frequently used protocol)
      [[ -z "$TLS_TIME" ]] && tls_sockets "03" "$TLS12_CIPHER"    #           TLS 1.2
      [[ -z "$TLS_TIME" ]] && tls_sockets "02" "$TLS_CIPHER"      #           TLS 1.1
      [[ -z "$TLS_TIME" ]] && tls_sockets "00" "$TLS_CIPHER"      #           SSL 3
@@ -3115,7 +3114,7 @@ certificate_info() {
                     out "keysize: $cert_keysize (not expected, FIXME)"
                     fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (not expected)"
                fi
-               outln " bit"
+               outln " bits"
           elif [[ $cert_sig_algo = *RSA* ]]; then
                if [[ "$cert_keysize" -le 512 ]]; then
                     pr_svrty_critical "$cert_keysize"
@@ -3385,7 +3384,7 @@ certificate_info() {
                     ret=0
                else
                     out "(response status unknown)"
-                    fileout "${json_prefix}ocsp_stapling" "OK" "OCSP stapling : not sure what's going on here, debug: grep -aA 20 "OCSP response"  <<<"$ocsp_response""
+                    fileout "${json_prefix}ocsp_stapling" "OK" "OCSP stapling : not sure what's going on here, debug: $ocsp_response"
                     debugme grep -a -A20 -B2 "OCSP response"  <<<"$ocsp_response"
                     ret=2
                fi
@@ -3709,8 +3708,8 @@ run_spdy() {
                fileout "spdy_npn" "INFO" "SPDY/NPN : $tmpstr (advertised)"
                ret=0
           else
-               pr_cyanln "please check manually, server response was ambigious ..."
-               fileout "spdy_npn" "INFO" "SPDY/NPN : please check manually, server response was ambigious ..."
+               pr_cyanln "please check manually, server response was ambiguous ..."
+               fileout "spdy_npn" "INFO" "SPDY/NPN : please check manually, server response was ambiguous ..."
                ret=10
           fi
      fi
@@ -4024,7 +4023,7 @@ parse_tls_serverhello() {
      # byte 5:      handshake type (2=hello)      TLS alert: level (2=fatal), descr (0x28=handshake failure)
      # byte 6+7+8:  length server hello
      # byte 9+10:   03, TLS version word          see byte 1+2
-     # byte 11-14:  TLS timestamp                 for OpenSSL <1.01f
+     # byte 11-14:  TLS timestamp                 for OpenSSL <1.0.1f
      # byte 15-42:  random, 28 bytes
      # byte 43:     session id length
      # byte 44+45+sid-len:  cipher suite!
@@ -4124,7 +4123,7 @@ sslv2_sockets() {
                outln " (rerun with DEBUG >=2)"
                [[ $DEBUG -ge 3 ]] && hexdump -C "$SOCK_REPLY_FILE" | head -1
                ret=7
-               fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 replay (rerun with DEBUG>=2)"
+               fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
                ;;
           1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
                pr_done_bestln "not offered (OK)"
@@ -5090,7 +5089,7 @@ run_drown() {
                outln " (rerun with DEBUG >=2)"
                [[ $DEBUG -ge 3 ]] && hexdump -C "$SOCK_REPLY_FILE" | head -1
                ret=7
-               fileout "DROWN" "MINOR_ERROR" "SSLv2: received a strange SSLv2 replay (rerun with DEBUG>=2)"
+               fileout "DROWN" "MINOR_ERROR" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
                ;;
           3)   # vulnerable
                lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null)")
@@ -5387,7 +5386,7 @@ old_fart() {
      fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -2
 }
 
-# try very hard to determine th install path to get ahold of the mapping file
+# try very hard to determine the install path to get ahold of the mapping file
 # it provides "keycode/ RFC style name", see RFCs, cipher(1), www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
 get_install_dir() {
      #INSTALL_DIR=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
@@ -6165,7 +6164,7 @@ sclient_auth() {
           if [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]]; then      # probably no SSL session
                if [[ 2 -eq $(grep -c CERTIFICATE "$2") ]]; then            # do another sanity check to be sure
                     CLIENT_AUTH=false
-                    NO_SSL_SESSIONID=true                                  # NO_SSL_SESSIONI is preset globally to false for all other cases
+                    NO_SSL_SESSIONID=true                                  # NO_SSL_SESSIONID is preset globally to false for all other cases
                     return 0
                fi
           fi
