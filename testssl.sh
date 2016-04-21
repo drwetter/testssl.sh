@@ -1686,7 +1686,7 @@ run_allciphers() {
 
 # test for all ciphers per protocol locally configured (w/o distinguishing whether they are good or bad)
 run_cipher_per_proto() {
-     local proto proto_text
+     local proto proto_text ossl_ciphers_proto
      local -i nr_ciphers
      local n sslvers auth mac export
      local -a hexcode ciph kx enc export2
@@ -1704,11 +1704,17 @@ run_cipher_per_proto() {
           locally_supported "$proto" "$proto_text" || continue
           outln
           
+          # The OpenSSL ciphers function, prior to version 1.1.0, could only understand -ssl2, -ssl3, and -tls1.
+          if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == "-ssl3" ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
+               ossl_ciphers_proto="$proto"
+          else
+               ossl_ciphers_proto="-tls1"
+          fi
           # get a list of all the cipher suites to test (only need the hexcode, ciph, kx, enc, and export values)
           nr_ciphers=0
           while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
                nr_ciphers=$nr_ciphers+1
-          done < <($OPENSSL ciphers $proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)
+          done < <($OPENSSL ciphers $ossl_ciphers_proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)
 
           # Split ciphers into bundles of size 4**n, starting with the smallest
           # "n" that leaves the ciphers in one bundle, and then reducing "n" by
