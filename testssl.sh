@@ -3270,7 +3270,8 @@ certificate_info() {
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
-     policy_oid=$($OPENSSL x509 -in $HOSTCERT -text 2>>$ERRFILE | awk '/ .Policy: / { print $2 }')
+     # only the first one, seldom we have two
+     policy_oid=$($OPENSSL x509 -in $HOSTCERT -text 2>>$ERRFILE | awk '/ .Policy: / { print $2 }' | awk 'NR < 2')
      if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
           [[ 2.16.840.1.114028.10.1.2 == "$policy_oid" ]] || \
           [[ 2.16.840.1.114412.1.3.0.2 == "$policy_oid" ]] || \
@@ -5382,7 +5383,7 @@ run_tls_truncation() {
 
 old_fart() {
      outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
-     fileout "old_fart" "WARN" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed.\nGet precompiled bins or compile https://github.com/PeterMosmans/openssl ."
+     fileout "old_fart" "WARN" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed. Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
      fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -2
 }
 
@@ -7005,4 +7006,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.478 2016/03/30 21:28:30 dirkw Exp $
+#  $Id: testssl.sh,v 1.481 2016/04/21 16:44:56 dirkw Exp $
