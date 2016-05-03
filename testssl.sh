@@ -4170,19 +4170,25 @@ socksend_tls_clienthello() {
      local servername_hexstr len_servername len_servername_hex
      local hexdump_format_str part1 part2
      local all_extensions=""
-     local -i i j len_extension
-     local len_sni_listlen len_sni_ext len_extension_hex
+     local -i i j len_extension len_padding_extension len_all
+     local len_sni_listlen len_sni_ext len_extension_hex len_padding_extension_hex
      local cipher_suites len_ciph_suites len_ciph_suites_byte len_ciph_suites_word
      local len_client_hello_word len_all_word
      local ecc_cipher_suite_found=false
      local extension_signature_algorithms extension_heartbeat
-     local extension_session_ticket extension_next_protocol extensions_ecc
+     local extension_session_ticket extension_next_protocol extensions_ecc extension_padding
 
      code2network "$2"             # convert CIPHER_SUITES
      cipher_suites="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
 
      len_ciph_suites_byte=$(echo ${#cipher_suites})
      let "len_ciph_suites_byte += 2"
+
+     # we have additional 2 chars \x in each 2 byte string and 2 byte ciphers, so we need to divide by 4:
+     len_ciph_suites=$(printf "%02x\n" $(($len_ciph_suites_byte / 4 )))
+     len2twobytes "$len_ciph_suites"
+     len_ciph_suites_word="$LEN_STR"
+     #[[ $DEBUG -ge 3 ]] && echo $len_ciph_suites_word
 
      if [[ "$tls_low_byte" != "00" ]]; then
           # Add extensions
@@ -4211,7 +4217,7 @@ socksend_tls_clienthello() {
                          ecc_cipher_suite_found=true && break
                     fi
                elif [[ "$part1" == "0xcc" ]]; then
-                    if [[ "$part2" == "0xa8" ]] || [[ "$part2" == "0xa9" ]] || [[ "$part2" == "0xac" ]] || [[ "$part2" == "13" ]] || [[ "$part2" == "0x14" ]]; then
+                    if [[ "$part2" == "0xa8" ]] || [[ "$part2" == "0xa9" ]] || [[ "$part2" == "0xac" ]] || [[ "$part2" == "0x13" ]] || [[ "$part2" == "0x14" ]]; then
                          ecc_cipher_suite_found=true && break
                     fi
                fi
@@ -4282,16 +4288,31 @@ socksend_tls_clienthello() {
           len_extension+=2
           len_extension=$len_extension/4
           len_extension_hex=$(printf "%02x\n" $len_extension)
-          all_extensions="
-          ,00, $len_extension_hex  # first the len of all extentions.
-          ,$all_extensions"
-     fi
 
-     # we have additional 2 chars \x in each 2 byte string and 2 byte ciphers, so we need to divide by 4:
-     len_ciph_suites=$(printf "%02x\n" $(($len_ciph_suites_byte / 4 )))
-     len2twobytes "$len_ciph_suites"
-     len_ciph_suites_word="$LEN_STR"
-     #[[ $DEBUG -ge 3 ]] && echo $len_ciph_suites_word
+          # If the length of the Client Hello would be between 256 and 511 bytes,
+          # then add a padding extension (see RFC 7685)
+          len_all=$((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2))
+          if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]]; then
+               if [[ $len_all -gt 508 ]]; then
+                   len_padding_extension=0
+               else
+                   len_padding_extension=$((508 - 0x$len_ciph_suites - 0x2b - 0x$len_extension_hex - 0x2))
+               fi
+               len_padding_extension_hex=$(printf "%02x\n" $len_padding_extension)
+               len2twobytes "$len_padding_extension_hex"
+               all_extensions="$all_extensions\\x00\\x15\\x${LEN_STR:0:2}\\x${LEN_STR:4:2}"
+               for (( i=0; i<len_padding_extension; i++ )); do
+                    all_extensions="$all_extensions\\x00"
+               done
+               len_extension=$len_extension+$len_padding_extension+0x4
+               len_extension_hex=$(printf "%02x\n" $len_extension)
+          fi
+          len2twobytes "$len_extension_hex"
+          all_extensions="
+          ,$LEN_STR  # first the len of all extentions.
+          ,$all_extensions"
+          
+     fi
 
      # RFC 3546 doesn't specify SSLv3 to have SNI, openssl just ignores the switch if supplied
      if [[ "$tls_low_byte" == "00" ]]; then
