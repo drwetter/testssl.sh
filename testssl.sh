@@ -4272,10 +4272,16 @@ socksend_tls_clienthello() {
           ,00                      # server_name type (hostname)
           ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
           ,$servername_hexstr      # server_name target
-          ,$extension_signature_algorithms
           ,$extension_heartbeat
           ,$extension_session_ticket
           ,$extension_next_protocol"
+
+          # RFC 5246 says that clients MUST NOT offer the signature algorithms
+          # extension if they are offering TLS versions prior to 1.2.
+          if [[ "$tls_low_byte" == "03" ]]; then
+               all_extensions="$all_extensions
+               ,$extension_signature_algorithms"
+          fi
 
           if $ecc_cipher_suite_found; then
                all_extensions="$all_extensions
