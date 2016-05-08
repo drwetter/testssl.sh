@@ -7101,7 +7101,6 @@ nodeip_to_proper_ip6() {
      local len_nodeip=0
 
      if is_ipv6addr $NODEIP; then
-          NODEIP="[$NODEIP]"
           len_nodeip=${#NODEIP}
           CORRECT_SPACES="$(draw_line " " "$((len_nodeip - 16))" )"
           # IPv6 addresses are longer, this varaible takes care that "further IP" and "Service" is properly aligned
