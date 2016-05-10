@@ -6772,7 +6772,7 @@ parse_cmd_line() {
                     do_logging=true
                     ;;   # DEFINITION of LOGFILE if no arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
-               --logfile=*)
+               --logfile|--logfile=*)
                     LOGFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_logging=true
@@ -6781,7 +6781,7 @@ parse_cmd_line() {
                     do_json=true
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
-               --jsonfile=*)
+               --jsonfile|--jsonfile=*)
                     JSONFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_json=true
@@ -6790,7 +6790,7 @@ parse_cmd_line() {
                     do_csv=true
                     ;;   # DEFINITION of CSVFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
-               --csvfile=*)
+               --csvfile|--csvfile=*)
                     CSVFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
