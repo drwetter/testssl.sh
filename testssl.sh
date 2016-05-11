@@ -4278,7 +4278,7 @@ socksend_tls_clienthello() {
 
           # RFC 5246 says that clients MUST NOT offer the signature algorithms
           # extension if they are offering TLS versions prior to 1.2.
-          if [[ "$tls_low_byte" == "03" ]]; then
+          if [[ "0x$tls_low_byte" -ge "0x03" ]]; then
                all_extensions="$all_extensions
                ,$extension_signature_algorithms"
           fi
