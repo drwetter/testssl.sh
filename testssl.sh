@@ -4011,92 +4011,268 @@ parse_sslv2_serverhello() {
 # arg1: name of file with socket reply
 parse_tls_serverhello() {
      local tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$1")
-     local tls_content_type tls_protocol tls_len_all
-#TODO: all vars here
+     local tls_handshake_ascii="" tls_alert_ascii=""
+     local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
+     local tls_serverhello_ascii=""
+     local -i tls_serverhello_ascii_len=0
+     local tls_alert_descrip
+     local -i tls_sid_len offset
+     local tls_msg_type tls_content_type tls_protocol tls_protocol2 tls_hello_time
+     local tls_err_level tls_err_descr tls_cipher_suite tls_compression_method
+     local -i i
 
      TLS_TIME=""
      DETECTED_TLS_VERSION=""
 
-     # server hello, handshake details see http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#TLS_record
+     # $tls_hello_ascii may contain trailing whitespace. Remove it:
+     tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
+     [[ "$DEBUG" -eq 5 ]] && echo $tls_hello_ascii      # one line without any blanks
+
+     # Client messages, including handshake messages, are carried by the record layer.
+     # First, extract the handshake and alert messages.
+     # see http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#TLS_record
      # byte 0:      content type:                 0x14=CCS,    0x15=TLS alert  x16=Handshake,  0x17 Aplication, 0x18=HB
      # byte 1+2:    TLS version word, major is 03, minor 00=SSL3, 01=TLS1 02=TLS1.1 03=TLS 1.2
-     # byte 3+4:    length all
-     # byte 5:      handshake type (2=hello)      TLS alert: level (2=fatal), descr (0x28=handshake failure)
-     # byte 6+7+8:  length server hello
-     # byte 9+10:   03, TLS version word          see byte 1+2
-     # byte 11-14:  TLS timestamp                 for OpenSSL <1.0.1f
-     # byte 15-42:  random, 28 bytes
-     # byte 43:     session id length
-     # byte 44+45+sid-len:  cipher suite!
-     # byte 46+sid-len:     compression method:  00: none, 01: deflate
-     # byte 47+48+sid-len:  extension length
-
-     [[ "$DEBUG" -eq 5 ]] && echo $tls_hello_ascii      # one line without any blanks
-     if [[ -z "$tls_hello_ascii" ]]; then
-          debugme echo "server hello empty, TCP connection closed"
-          return 1              # no server hello received
+     # byte 3+4:    fragment length
+     # bytes 5...:  message fragment
+     tls_hello_ascii_len=${#tls_hello_ascii}
+     if [[ $DEBUG -ge 2 ]] && [[ $tls_hello_ascii_len -gt 0 ]]; then
+         echo "TLS message fragments:"
      fi
-
-     # now scrape two bytes out of the reply per byte
-     tls_content_type="${tls_hello_ascii:0:2}"         # normally this is x16 (Handshake) here
-     tls_protocol="${tls_hello_ascii:2:4}"
-     DETECTED_TLS_VERSION=$tls_protocol
-
-     tls_len_all=${tls_hello_ascii:6:4}
-
-     sid_len_offset=86
-     tls_hello="${tls_hello_ascii:10:2}"               # normally this is x02
-     tls_protocol2="${tls_hello_ascii:18:4}"
-     tls_hello_time="${tls_hello_ascii:22:8}"
-
-     if [[ $tls_content_type == "15" ]]; then          # TLS ALERT
-          tls_err_level=${tls_hello_ascii:10:2}        # 1: warning, 2: fatal
-          tls_err_descr=${tls_hello_ascii:12:2}        # 112/0x70: Unrecognized name, 111/0x6F: certificate_unobtainable,
-                                                       # 113/0x71: bad_certificate_status_response, #114/0x72: bad_certificate_hash_value
-          if [[ $DEBUG -ge 2 ]]; then
-               echo "tls_protocol (reclyr):  0x$tls_protocol"
-               echo "tls_content_type:       0x$tls_content_type"
-               echo "tls_len_all:            $tls_len_all"
-               echo "tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
-               echo "tls_err_level:          ${tls_err_level} (warning:1, fatal:2)"
+     for (( i=0; i<tls_hello_ascii_len; i=i+msg_len )); do
+          if [[ $tls_hello_ascii_len-$i -lt 10 ]]; then
+               # This could just be a result of the server's response being
+               # split across two or more packets.
+               continue
           fi
-          # now, here comes a strange thing... -- on the first glance
-          # IF an apache 2.2/2.4 server e.g. has a default servername configured but we send SNI <myhostname>
-          # we get a TLS ALERT saying "unrecognized_name" (0x70) and a warning (0x1), see RFC https://tools.ietf.org/html/rfc6066#page-17
-          # note that RFC recommended to fail instead: https://tools.ietf.org/html/rfc6066#section-3
-          # we need to handle this properly -- otherwise we always return that the protocol or cipher is not available!
-          if [[ "$tls_err_descr" == 70 ]] && [[ "${tls_err_level}" == "01" ]]; then
-               sid_len_offset=100                      # we are 2x7 bytes off (formerly: 86 instead of 100)
-               tls_hello="${tls_hello_ascii:24:2}"     # here, too       (normally this is (02)
-               tls_protocol2="${tls_hello_ascii:32:4}" # here, too
-               tls_hello_time="${tls_hello_ascii:36:8}"     # and here, too
-          else
+          tls_content_type="${tls_hello_ascii:i:2}"
+          i=$i+2
+          tls_protocol="${tls_hello_ascii:i:4}"
+          i=$i+4
+          msg_len=2*$(hex2dec "${tls_hello_ascii:i:4}")
+          i=$i+4
+
+          if [[ $DEBUG -ge 2 ]]; then
+               echo "     tls_protocol (reclyr):  0x$tls_protocol"
+               out  "     tls_content_type:       0x$tls_content_type"
+               case $tls_content_type in
+                    15) outln " (alert)" ;;
+                    16) outln " (handshake)" ;;
+                     *) outln ;;
+               esac
+               echo "     msg_len:                $((msg_len/2))"
+               outln
+          fi
+          if [[ $tls_content_type != "15" ]] && [[ $tls_content_type != "16" ]]; then
+               debugme pr_svrty_criticalln "Content type other than alert or handshake detected."
+               return 1
+          elif [[ "${tls_protocol:0:2}" != "03" ]]; then
+               debugme pr_svrty_criticalln "Protocol record_version.major is not 03."
                return 1
           fi
+          DETECTED_TLS_VERSION=$tls_protocol
+
+          if [[ $msg_len -gt $tls_hello_ascii_len-$i ]]; then
+               # This could just be a result of the server's response being
+               # split across two or more packets. Just grab the part that
+               # is available.
+               msg_len=$tls_hello_ascii_len-$i
+          fi
+
+          if [[ $tls_content_type == "16" ]]; then
+               tls_handshake_ascii="$tls_handshake_ascii${tls_hello_ascii:i:msg_len}"
+          elif [[ $tls_content_type == "15" ]]; then   # TLS ALERT
+               tls_alert_ascii="$tls_alert_ascii${tls_hello_ascii:i:msg_len}"
+          fi
+     done
+
+     # Now check the alert messages.
+     tls_alert_ascii_len=${#tls_alert_ascii}
+     if [[ $tls_alert_ascii_len -gt 0 ]]; then
+          debugme echo "TLS alert messages:"
+          for (( i=0; i+3 < tls_alert_ascii_len; i=i+4 )); do
+               tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
+               j=$i+2
+               tls_err_descr=${tls_alert_ascii:j:2}    # 112/0x70: Unrecognized name, 111/0x6F: certificate_unobtainable,
+                                                       # 113/0x71: bad_certificate_status_response, #114/0x72: bad_certificate_hash_value
+
+               debugme out  "     tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
+               case $tls_err_descr in
+                    00) tls_alert_descrip="close notify" ;;
+                    0A) tls_alert_descrip="unexpected message" ;;
+                    14) tls_alert_descrip="bad record mac" ;;
+                    15) tls_alert_descrip="decryption failed" ;;
+                    16) tls_alert_descrip="record overflow" ;;
+                    1E) tls_alert_descrip="decompression failure" ;;
+                    28) tls_alert_descrip="handshake failure" ;;
+                    29) tls_alert_descrip="no certificate RESERVED" ;;
+                    2A) tls_alert_descrip="bad certificate" ;;
+                    2B) tls_alert_descrip="unsupported certificate" ;;
+                    2C) tls_alert_descrip="certificate revoked" ;;
+                    2D) tls_alert_descrip="certificate expired" ;;
+                    2E) tls_alert_descrip="certificate unknown" ;;
+                    2F) tls_alert_descrip="illegal parameter" ;;
+                    30) tls_alert_descrip="unknown ca" ;;
+                    31) tls_alert_descrip="access denied" ;;
+                    32) tls_alert_descrip="decode error" ;;
+                    33) tls_alert_descrip="decrypt error" ;;
+                    3C) tls_alert_descrip="export restriction RESERVED" ;;
+                    46) tls_alert_descrip="protocol version" ;;
+                    47) tls_alert_descrip="insufficient security" ;;
+                    50) tls_alert_descrip="internal error" ;;
+                    56) tls_alert_descrip="inappropriate fallback" ;;
+                    5A) tls_alert_descrip="user canceled" ;;
+                    64) tls_alert_descrip="no renegotiation" ;;
+                    6E) tls_alert_descrip="unsupported extension" ;;
+                    6F) tls_alert_descrip="certificate unobtainable" ;;
+                    70) tls_alert_descrip="unrecognized name" ;;
+                    71) tls_alert_descrip="bad certificate status response" ;;
+                    72) tls_alert_descrip="bad certificate hash value" ;;
+                    73) tls_alert_descrip="unknown psk identity" ;;
+                    78) tls_alert_descrip="no application protocol" ;;
+                     *) tls_alert_descrip="$(hex2dec "$tls_err_descr")";;
+               esac
+
+               if [[ $DEBUG -ge 2 ]]; then
+                    outln " ($tls_alert_descrip)"
+                    out  "     tls_err_level:          ${tls_err_level}"
+                    case $tls_err_level in
+                         01) outln " (warning)" ;;
+                         02) outln " (fatal)" ;;
+                          *) outln ;;
+                    esac
+                    outln
+               fi
+               if [[ "$tls_err_level" != "01" ]] && [[ "$tls_err_level" != "02" ]]; then
+                    debugme pr_svrty_criticalln "Unexpected AlertLevel (0x$tls_err_level)."
+                    return 1
+               elif [[ "$tls_err_level" == "02" ]]; then
+                    # Fatal alert
+                    return 1
+               fi
+          done
      fi
 
+     # Now extract just the server hello handshake message.
+     tls_handshake_ascii_len=${#tls_handshake_ascii}
+     if [[ $DEBUG -ge 2 ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
+         echo "TLS handshake messages:"
+     fi
+     for (( i=0; i<tls_handshake_ascii_len; i=i+msg_len )); do
+          if [[ $tls_handshake_ascii_len-$i -lt 8 ]]; then
+               # This could just be a result of the server's response being
+               # split across two or more packets.
+               continue
+          fi
+          tls_msg_type="${tls_handshake_ascii:i:2}"
+          i=$i+2
+          msg_len=2*$(hex2dec "${tls_handshake_ascii:i:6}")
+          i=$i+6
+
+          if [[ $DEBUG -ge 2 ]]; then
+               out  "     handshake type:         0x${tls_msg_type}"
+               case $tls_msg_type in
+                    00) outln " (hello_request)" ;;
+                    01) outln " (client_hello)" ;;
+                    02) outln " (server_hello)" ;;
+                    03) outln " (hello_verify_request)" ;;
+                    04) outln " (NewSessionTicket)" ;;
+                    0B) outln " (certificate)" ;;
+                    0C) outln " (server_key_exchange)" ;;
+                    0D) outln " (certificate_request)" ;;
+                    0E) outln " (server_hello_done)" ;;
+                    0F) outln " (certificate_verify)" ;;
+                    10) outln " (client_key_exchange)" ;;
+                    14) outln " (finished)" ;;
+                    15) outln " (certificate_url)" ;;
+                    16) outln " (certificate_status)" ;;
+                    17) outln " (supplemental_data)" ;;
+                    *) outln ;;
+               esac
+               echo "     msg_len:                $((msg_len/2))"
+               outln
+          fi
+          if [[ $msg_len -gt $tls_handshake_ascii_len-$i ]]; then
+               # This could just be a result of the server's response being
+               # split across two or more packets. Just grab the part that
+               # is available.
+               msg_len=$tls_handshake_ascii_len-$i
+          fi
+
+          if [[ "$tls_msg_type" == "02" ]]; then
+               if [[ -n "$tls_serverhello_ascii" ]]; then
+                    debugme pr_svrty_criticalln "Response contained more than one ServerHello handshake message."
+                    return 1
+               fi
+               tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
+               tls_serverhello_ascii_len=$msg_len
+          fi
+     done
+
+     if [[ $tls_serverhello_ascii_len -eq 0 ]]; then
+          debugme echo "server hello empty, TCP connection closed"
+          return 1              # no server hello received
+     elif [[ $tls_serverhello_ascii_len -lt 76 ]]; then
+          debugme echo "Malformed response"
+          return 1
+     elif [[ "${tls_handshake_ascii:0:2}" != "02" ]]; then
+          # the ServerHello MUST be the first handshake message
+          debugme pr_svrty_criticalln "The first handshake protocol message is not a ServerHello."
+          return 1
+     fi
+
+     # Parse the server hello handshake message
+     # byte 0+1:    03, TLS version word          see byte 1+2
+     # byte 2-5:    TLS timestamp                 for OpenSSL <1.01f
+     # byte 6-33:  random, 28 bytes
+     # byte 34:     session id length
+     # byte 35+36+sid-len:  cipher suite!
+     # byte 37+sid-len:     compression method:  00: none, 01: deflate, 64: LZS
+     # byte 38+39+sid-len:  extension length
+     tls_protocol2="${tls_serverhello_ascii:0:4}"
+     if [[ "${tls_protocol2:0:2}" != "03" ]]; then
+          debugme pr_svrty_criticalln "server_version.major in ServerHello is not 03."
+          return 1
+     fi
+     DETECTED_TLS_VERSION="$tls_protocol2"
+
+     tls_hello_time="${tls_serverhello_ascii:4:8}"
      TLS_TIME=$(hex2dec "$tls_hello_time")
-     tls_sid_len=$(hex2dec "${tls_hello_ascii:$sid_len_offset:2}")
-     let sid_offset=$sid_len_offset+2+$tls_sid_len*2
-     tls_cipher_suite="${tls_hello_ascii:$sid_offset:4}"
-     let sid_offset=$sid_len_offset+6++$tls_sid_len*2
-     tls_compression_method="${tls_hello_ascii:$sid_offset:2}"
+
+     tls_sid_len=2*$(hex2dec "${tls_serverhello_ascii:68:2}")
+     let offset=70+$tls_sid_len
+
+     if [[ $tls_serverhello_ascii_len -lt 76+$tls_sid_len ]]; then
+          debugme echo "Malformed response"
+          return 1
+     fi
+
+     tls_cipher_suite="${tls_serverhello_ascii:$offset:4}"
+
+     let offset=74+$tls_sid_len
+     tls_compression_method="${tls_serverhello_ascii:$offset:2}"
 
      if [[ $DEBUG -ge 2 ]]; then
-          echo "tls_protocol (reclyr):  0x$tls_protocol"
-          echo "tls_hello:              0x$tls_hello"
+          echo "TLS server hello message:"
           if [[ $DEBUG -ge 4 ]]; then
-               echo "tls_protocol:           0x$tls_protocol2"
-               echo "tls_sid_len:            0x$(dec2hex $tls_sid_len) / = $tls_sid_len"
+               tls_sid_len=$tls_sid_len/2
+               echo "     tls_protocol:           0x$tls_protocol2"
+               echo "     tls_sid_len:            0x$(dec2hex $tls_sid_len) / = $tls_sid_len"
           fi
-          echo -n "tls_hello_time:         0x$tls_hello_time "
+          echo -n "     tls_hello_time:         0x$tls_hello_time "
           if "$HAS_GNUDATE"; then
                date --date="@$TLS_TIME" "+%Y-%m-%d %r"
           else
                LC_ALL=C date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r"
           fi
-          echo "tls_cipher_suite:       0x$tls_cipher_suite"
-          echo "tls_compression_method: 0x$tls_compression_method"
+          echo "     tls_cipher_suite:       0x$tls_cipher_suite"
+          echo -n "     tls_compression_method: 0x$tls_compression_method "
+          case $tls_compression_method in
+               00) echo "(NONE)" ;;
+               01) echo "(zlib compression)" ;;
+               40) echo "(LZS compression)" ;;
+                *) echo "(unrecognized compression method)" ;;
+          esac
           outln
      fi
      return 0
