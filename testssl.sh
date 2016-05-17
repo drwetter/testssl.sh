@@ -488,11 +488,6 @@ hex2dec() {
      echo $((16#$1))
 }
 
-dec2hex() {
-     #/usr/bin/printf -- "%x" "$1"
-     echo $((0x$1))
-}
-
 # trim spaces for BSD and old sed
 count_lines() {
      wc -l <<<"$1" | sed 's/ //g'
@@ -4015,7 +4010,7 @@ parse_tls_serverhello() {
      local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
      local tls_serverhello_ascii=""
      local -i tls_serverhello_ascii_len=0
-     local tls_alert_descrip
+     local tls_alert_descrip tls_sid_len_hex
      local -i tls_sid_len offset
      local tls_msg_type tls_content_type tls_protocol tls_protocol2 tls_hello_time
      local tls_err_level tls_err_descr tls_cipher_suite tls_compression_method
@@ -4239,7 +4234,8 @@ parse_tls_serverhello() {
      tls_hello_time="${tls_serverhello_ascii:4:8}"
      TLS_TIME=$(hex2dec "$tls_hello_time")
 
-     tls_sid_len=2*$(hex2dec "${tls_serverhello_ascii:68:2}")
+     tls_sid_len_hex="${tls_serverhello_ascii:68:2}"
+     tls_sid_len=2*$(hex2dec "$tls_sid_len_hex")
      let offset=70+$tls_sid_len
 
      if [[ $tls_serverhello_ascii_len -lt 76+$tls_sid_len ]]; then
@@ -4255,9 +4251,8 @@ parse_tls_serverhello() {
      if [[ $DEBUG -ge 2 ]]; then
           echo "TLS server hello message:"
           if [[ $DEBUG -ge 4 ]]; then
-               tls_sid_len=$tls_sid_len/2
                echo "     tls_protocol:           0x$tls_protocol2"
-               echo "     tls_sid_len:            0x$(dec2hex $tls_sid_len) / = $tls_sid_len"
+               echo "     tls_sid_len:            0x$tls_sid_len_hex / = $((tls_sid_len/2))"
           fi
           echo -n "     tls_hello_time:         0x$tls_hello_time "
           if "$HAS_GNUDATE"; then
