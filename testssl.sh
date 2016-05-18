@@ -3546,7 +3546,7 @@ run_pfs() {
      local pfs_ciphers
 
      outln
-     pr_headlineln " Testing (perfect) forward secrecy, (P)FS -- omitting 3DES, RC4 and Null Encryption here "
+     pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption as well as 3DES and RC4 here "
      if ! "$HAS_DH_BITS" && "$WIDE"; then
           pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      fi
@@ -4059,10 +4059,10 @@ parse_tls_serverhello() {
                outln
           fi
           if [[ $tls_content_type != "15" ]] && [[ $tls_content_type != "16" ]]; then
-               debugme pr_svrty_criticalln "Content type other than alert or handshake detected."
+               debugme pr_warningln "Content type other than alert or handshake detected."
                return 1
           elif [[ "${tls_protocol:0:2}" != "03" ]]; then
-               debugme pr_svrty_criticalln "Protocol record_version.major is not 03."
+               debugme pr_warningln "Protocol record_version.major is not 03."
                return 1
           fi
           DETECTED_TLS_VERSION=$tls_protocol
@@ -4139,7 +4139,7 @@ parse_tls_serverhello() {
                     outln
                fi
                if [[ "$tls_err_level" != "01" ]] && [[ "$tls_err_level" != "02" ]]; then
-                    debugme pr_svrty_criticalln "Unexpected AlertLevel (0x$tls_err_level)."
+                    debugme pr_warningln "Unexpected AlertLevel (0x$tls_err_level)."
                     return 1
                elif [[ "$tls_err_level" == "02" ]]; then
                     # Fatal alert
@@ -4196,7 +4196,7 @@ parse_tls_serverhello() {
 
           if [[ "$tls_msg_type" == "02" ]]; then
                if [[ -n "$tls_serverhello_ascii" ]]; then
-                    debugme pr_svrty_criticalln "Response contained more than one ServerHello handshake message."
+                    debugme pr_warningln "Response contained more than one ServerHello handshake message."
                     return 1
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -4212,7 +4212,7 @@ parse_tls_serverhello() {
           return 1
      elif [[ "${tls_handshake_ascii:0:2}" != "02" ]]; then
           # the ServerHello MUST be the first handshake message
-          debugme pr_svrty_criticalln "The first handshake protocol message is not a ServerHello."
+          debugme pr_warningln "The first handshake protocol message is not a ServerHello."
           return 1
      fi
 
@@ -4226,7 +4226,7 @@ parse_tls_serverhello() {
      # byte 38+39+sid-len:  extension length
      tls_protocol2="${tls_serverhello_ascii:0:4}"
      if [[ "${tls_protocol2:0:2}" != "03" ]]; then
-          debugme pr_svrty_criticalln "server_version.major in ServerHello is not 03."
+          debugme pr_warningln "server_version.major in ServerHello is not 03."
           return 1
      fi
      DETECTED_TLS_VERSION="$tls_protocol2"
@@ -7177,4 +7177,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.481 2016/04/21 16:44:56 dirkw Exp $
+#  $Id: testssl.sh,v 1.483 2016/05/18 17:06:25 dirkw Exp $
