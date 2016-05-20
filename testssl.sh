@@ -3018,7 +3018,7 @@ certificate_info() {
      local cert_keysize=$4
      local ocsp_response=$5
      local ocsp_response_status=$6
-     local cert_sig_algo cert_key_algo
+     local cert_sig_algo cert_sig_hash_algo cert_key_algo
      local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
@@ -3051,6 +3051,10 @@ certificate_info() {
                pr_svrty_mediumln "SHA1 with RSA"
                fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: SHA1 with RSA (warning)"
                ;;
+          sha224WithRSAEncryption)
+               outln "SHA224 with RSA"
+               fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: SHA224 with RSA"
+               ;;
           sha256WithRSAEncryption)
                pr_done_goodln "SHA256 with RSA"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA256 with RSA (OK)"
@@ -3063,9 +3067,74 @@ certificate_info() {
                pr_done_goodln "SHA512 with RSA"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA512 with RSA (OK)"
                ;;
+          ecdsa-with-SHA1)
+               pr_svrty_mediumln "ECDSA with SHA1"
+               fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: ECDSA with SHA1 (warning)"
+               ;;
+          ecdsa-with-SHA224)
+               outln "ECDSA with SHA224"
+               fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: ECDSA with SHA224"
+               ;;
           ecdsa-with-SHA256)
                pr_done_goodln "ECDSA with SHA256"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
+               ;;
+          ecdsa-with-SHA384)
+               pr_done_goodln "ECDSA with SHA384"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA384 (OK)"
+               ;;
+          ecdsa-with-SHA512)
+               pr_done_goodln "ECDSA with SHA512"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA512 (OK)"
+               ;;
+          dsaWithSHA1)
+               pr_svrty_mediumln "DSA with SHA1"
+               fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: DSA with SHA1 (warning)"
+               ;;
+          dsa_with_SHA224)
+               outln "DSA with SHA224"
+               fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: DSA with SHA224"
+               ;;
+          dsa_with_SHA256)
+               pr_done_goodln "DSA with SHA256"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: DSA with SHA256 (OK)"
+               ;;
+          rsassaPss)
+               cert_sig_hash_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 1 "Signature Algorithm" | head -2 | tail -1 | sed 's/^.*Hash Algorithm: //')"
+               case $cert_sig_hash_algo in
+                    sha1)
+                         pr_svrty_mediumln "RSASSA-PSS with SHA1"
+                         fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: RSASSA-PSS with SHA1 (warning)"
+                         ;;
+                    sha224)
+                         outln "RSASSA-PSS with SHA224"
+                         fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: RSASSA-PSS with SHA224"
+                         ;;
+                    sha256)
+                         pr_done_goodln "RSASSA-PSS with SHA256"
+                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA256 (OK)"
+                         ;;
+                    sha384)
+                         pr_done_goodln "RSASSA-PSS with SHA384"
+                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA384 (OK)"
+                         ;;
+                    sha512)
+                         pr_done_goodln "RSASSA-PSS with SHA512"
+                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA512 (OK)"
+                         ;;
+                    *)
+                         out "RSASSA-PSS with $cert_sig_hash_algo"
+                         pr_warningln " (Unknown hash algorithm)"
+                         fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: RSASSA-PSS with $cert_sig_hash_algo"
+                    esac
+                    ;;
+          md2*)
+               pr_svrty_criticalln "MD2"
+               fileout "${json_prefix}algorithm" "NOT ok" "Signature Algorithm: MD2 (NOT ok)"
+               ;;
+          md4*)
+               pr_svrty_criticalln "MD4"
+               fileout "${json_prefix}algorithm" "NOT ok" "Signature Algorithm: MD4 (NOT ok)"
                ;;
           md5*)
                pr_svrty_criticalln "MD5"
