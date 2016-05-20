@@ -1073,7 +1073,7 @@ run_server_banner() {
                if [[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
                     pr_warningln "                              It's recommended to run another test w/ OpenSSL 1.0.1 !"
                     # see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
-                    fileout "IIS6_openssl_mismatch" "WARN" "It is recommended to rerun this test w/ OpenSSL 1.0.1\nSee https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
+                    fileout "IIS6_openssl_mismatch" "WARN" "It is recommended to rerun this test w/ OpenSSL 1.0.1. See https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
                fi
           fi
           # mozilla.github.io/server-side-tls/ssl-config-generator/
@@ -5824,7 +5824,8 @@ special invocations:
 partly mandatory parameters:
      URI                           host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
      pattern                       an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
-     protocol                      is one of ftp,smtp,pop3,imap,xmpp,telnet,ldap (for the latter two you need e.g. the supplied openssl)
+     protocol                      is one of the STARTTLS protocols ftp,smtp,pop3,imap,xmpp,telnet,ldap 
+                                   (for the latter two you need e.g. the supplied openssl)
 
 tuning options (can also be preset via environment variables):
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
@@ -6081,6 +6082,11 @@ parse_hn_port() {
 
      # strip trailing urlpath
      NODE=$(echo "$NODE" | sed -e 's/\/.*$//')
+
+     # if there's a trailing ':' probably a starttls/application protocol was specified
+     if grep -q ':$' <<< $NODE ; then
+          fatal "\"$1\" is not a valid URI" 1
+     fi
 
      # was the address supplied like [AA:BB:CC::]:port ?
      if echo "$NODE" | grep -q ']' ; then
@@ -7246,4 +7252,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.483 2016/05/18 17:06:25 dirkw Exp $
+#  $Id: testssl.sh,v 1.485 2016/05/20 11:45:52 dirkw Exp $
