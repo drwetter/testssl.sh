@@ -3158,7 +3158,7 @@ certificate_info() {
           # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
           # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
           # Table 2 @ chapter 5.6.1 (~ p64)
-          if [[ $cert_sig_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey  ]]; then
+          if [[ $cert_key_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey  ]]; then
                if [[ "$cert_keysize" -le 110 ]]; then       # a guess 
                     pr_svrty_critical "$cert_keysize"
                     fileout "${json_prefix}key_size" "NOT ok" "Server keys $cert_keysize EC bits (NOT ok)"
@@ -3179,7 +3179,7 @@ certificate_info() {
                     fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (not expected)"
                fi
                outln " bits"
-          elif [[ $cert_sig_algo = *RSA* ]]; then
+          elif [[ $cert_key_algo = *RSA* ]] || [[ $cert_key_algo = *rsa* ]] || [[ $cert_key_algo = *dsa* ]]; then
                if [[ "$cert_keysize" -le 512 ]]; then
                     pr_svrty_critical "$cert_keysize"
                     outln " bits"
