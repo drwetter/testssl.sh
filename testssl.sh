@@ -2372,10 +2372,10 @@ run_protocols() {
                fileout "tls1_2" "NOT ok" "TLSv1.2 is not offered (NOT ok)"
                ;;                          # no GCM, penalty
           2)
-     pr_svrty_medium "not offered (NOT ok)"
+               pr_svrty_medium "not offered"
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
                outln
-               fileout "tls1_2" "NOT ok" "TLSv1.2 is not offered and downgraded to a weaker protocol (NOT ok)"
+               fileout "tls1_2" "INFO" "TLSv1.2 is not offered and downgraded to a weaker protocol (medium)"
                ;;
           5)
                outln "$supported_no_ciph1"
@@ -7252,4 +7252,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.486 2016/05/23 16:56:04 dirkw Exp $
+#  $Id: testssl.sh,v 1.487 2016/05/23 20:42:39 dirkw Exp $
