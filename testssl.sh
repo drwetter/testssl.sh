@@ -1387,8 +1387,8 @@ std_cipherlists() {
                     ;;
                3) # not totally bad
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_svrty_mediumln "offered (NOT ok)"
-                         fileout "std_$4" "NOT ok" "$2 offered (NOT ok) - not too bad"
+                         pr_svrty_mediumln "offered"
+                         fileout "std_$4" "NOT ok" "$2 offered - not too bad"
                     else
                          outln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
@@ -7252,4 +7252,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.485 2016/05/20 11:45:52 dirkw Exp $
+#  $Id: testssl.sh,v 1.486 2016/05/23 16:56:04 dirkw Exp $
