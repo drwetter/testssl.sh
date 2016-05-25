@@ -3800,7 +3800,7 @@ run_pfs() {
                          out "$pfs_cipher "
                     fi
                fi
-               pfs_ciphers+="$pfs_cipher "
+               [[ $sclient_success -eq 0 ]] && pfs_ciphers+="$pfs_cipher "
                debugme rm $tmpfile
           done < <($OPENSSL ciphers -V "$pfs_cipher_list" 2>$ERRFILE)      # -V doesn't work with openssl < 1.0
           debugme echo $pfs_offered
@@ -5713,9 +5713,9 @@ run_rc4() {
                     fi
                     outln
                else
-                    pr_svrty_high "$rc4_cipher "
+                    [[ $sclient_success -eq 0 ]] && pr_svrty_high "$rc4_cipher "
                fi
-               rc4_detected+="$rc4_cipher "
+               [[ $sclient_success -eq 0 ]] && rc4_detected+="$rc4_cipher "
           done < <($OPENSSL ciphers -V $rc4_ciphers_list:@STRENGTH)
           outln
           "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
