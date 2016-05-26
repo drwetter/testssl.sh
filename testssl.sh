@@ -1295,8 +1295,10 @@ prettyprint_local() {
           fatal "pls supply x<number> instead" 2
      fi
 
-     pr_headline " Displaying all local ciphers ";
-     if [[ -n "$1" ]]; then
+     if [[ -z "$1" ]]; then
+          pr_headline " Displaying all $OPENSSL_NR_CIPHERS local ciphers ";
+     else
+          pr_headline " Displaying all local ciphers ";
           # pattern provided; which one?
           [[ $1 =~ $re ]] && \
                pr_headline "matching number pattern \"$1\" " || \
@@ -1579,7 +1581,7 @@ run_allciphers() {
      done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
 
      outln
-     pr_headlineln " Testing all $nr_ciphers locally available ciphers against the server, ordered by encryption strength "
+     pr_headlineln " Testing all $OPENSSL_NR_CIPHERS locally available ciphers against the server, ordered by encryption strength "
      "$HAS_DH_BITS" || pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      outln
      neat_header
@@ -5730,6 +5732,8 @@ find_openssl_binary() {
           pr_warning "Please note: LibreSSL is not a good choice for testing INSECURE features!"
      fi
 
+     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
+
      $OPENSSL s_client -ssl2 2>&1 | grep -aq "unknown option" || \
           HAS_SSL2=true
 
@@ -5883,13 +5887,13 @@ CVS_REL: $CVS_REL
 GIT_REL: $GIT_REL
 
 PID: $$
+commandline: "$CMDLINE"
 bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}
 status: ${BASH_VERSINFO[4]}
 machine: ${BASH_VERSINFO[5]}
 operating system: $SYSTEM
 shellopts: $SHELLOPTS
 
-$OPENSSL version -a:
 $($OPENSSL version -a)
 OSSL_VER_MAJOR: $OSSL_VER_MAJOR
 OSSL_VER_MINOR: $OSSL_VER_MINOR
@@ -5897,6 +5901,7 @@ OSSL_VER_APPENDIX: $OSSL_VER_APPENDIX
 OSSL_BUILD_DATE: $OSSL_BUILD_DATE
 OSSL_VER_PLATFORM: $OSSL_VER_PLATFORM
 
+OPENSSL_NR_CIPHERS: $OPENSSL_NR_CIPHERS
 OPENSSL_CONF: $OPENSSL_CONF
 
 HAS_IPv6: $HAS_IPv6
@@ -5912,7 +5917,6 @@ RUN_DIR: $RUN_DIR
 MAPPING_FILE_RFC: $MAPPING_FILE_RFC
 
 CAPATH: $CAPATH
-ECHO: $ECHO
 COLOR: $COLOR
 COLORBLIND: $COLORBLIND
 TERM_DWITH: $TERM_DWITH
@@ -5949,14 +5953,13 @@ EOF
 
 
 mybanner() {
-     local nr_ciphers
      local idtag
      local bb
      local openssl_location="$(which $OPENSSL)"
      local cwd=""
 
      $QUIET && return
-     nr_ciphers=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
+     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
      [[ -z "$GIT_REL" ]] && \
           idtag="$CVS_REL" || \
           idtag="$GIT_REL -- $CVS_REL_SHORT"
@@ -5978,7 +5981,7 @@ EOF
 )
      pr_bold "$bb"
      outln "\n"
-     outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$nr_ciphers ciphers]"
+     outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$OPENSSL_NR_CIPHERS ciphers]"
      out " on $HNAME:"
 
      [[ -n "$GIT_REL" ]] && \
@@ -7252,4 +7255,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.487 2016/05/23 20:42:39 dirkw Exp $
+#  $Id: testssl.sh,v 1.489 2016/05/26 10:56:54 dirkw Exp $
