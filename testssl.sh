@@ -6338,21 +6338,23 @@ determine_ip_addresses() {
 determine_rdns() {
      local saved_openssl_conf="$OPENSSL_CONF"
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
+     local nodeip="$(tr -d '[]' <<< $NODEIP)"          # sockets do not need the square brackets we have of IPv6 addresses
+                                                       # we just need do it here, that's all!
 
      if [[ "$NODE" == *.local ]]; then
           if which avahi-resolve &>/dev/null; then
-               rDNS=$(avahi-resolve -a $NODEIP 2>/dev/null | awk '{ print $2 }')
+               rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
           elif which dig &>/dev/null; then
-               rDNS=$(dig -x $NODEIP @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
+               rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
           fi
      elif which dig &> /dev/null; then
-          rDNS=$(dig -x $NODEIP +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
+          rDNS=$(dig -x $nodeip +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
      elif which host &> /dev/null; then
-          rDNS=$(host -t PTR $NODEIP 2>/dev/null | awk '/pointer/ { print $NF }')
+          rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
      elif which drill &> /dev/null; then
-          rDNS=$(drill -x ptr $NODEIP 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
+          rDNS=$(drill -x ptr $nodeip 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
      elif which nslookup &> /dev/null; then
-          rDNS=$(nslookup -type=PTR $NODEIP 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
+          rDNS=$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
      rDNS="$(echo $rDNS)"
