@@ -167,6 +167,7 @@ readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
+UNBRACKETED_IPV6=${UNBRACKETED_IPV6:-false} # some versions of OpenSSL don't support [bracketed] IPv6 addresses as a connect parameter
 
 HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
@@ -7112,7 +7113,7 @@ nodeip_to_proper_ip6() {
      local len_nodeip=0
 
      if is_ipv6addr $NODEIP; then
-          NODEIP="[$NODEIP]"
+          ${UNBRACKETED_IPV6} || NODEIP="[$NODEIP]"
           len_nodeip=${#NODEIP}
           CORRECT_SPACES="$(draw_line " " "$((len_nodeip - 16))" )"
           # IPv6 addresses are longer, this varaible takes care that "further IP" and "Service" is properly aligned
