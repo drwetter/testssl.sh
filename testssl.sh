@@ -765,7 +765,7 @@ run_http_header() {
                ;;
           *)
                pr_warning ". Oh, didn't expect \"$status_code$msg_thereafter\""
-               fileout "status_code" "WARN" \
+               fileout "status_code" "DEBUG" \
                     "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter. Oh, didn't expect a $status_code$msg_thereafter"
                ;;
      esac
@@ -888,7 +888,7 @@ run_hsts() {
           else
                out "$hsts_age_sec s = "
                pr_svrty_medium "$hsts_age_days days, <$HSTS_MIN days is too short"
-               fileout "hsts_time" "NOT ok" "HSTS timeout too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN days"
+               fileout "hsts_time" "MEDIUM" "HSTS timeout too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN days"
           fi
           if includeSubDomains "$TMPFILE"; then
                fileout "hsts_subdomains" "OK" "HSTS includes subdomains"
@@ -975,7 +975,7 @@ run_hpkp() {
           else
                out "$hpkp_age_sec s = "
                pr_svrty_medium "$hpkp_age_days days (<$HPKP_MIN days is not good enough)"
-               fileout "hpkp_age" "NOT ok" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec) < $HPKP_MIN days is not good enough."
+               fileout "hpkp_age" "MEDIUM" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec) < $HPKP_MIN days is not good enough."
           fi
 
           if includeSubDomains "$TMPFILE"; then
@@ -1365,8 +1365,8 @@ std_cipherlists() {
                          pr_done_bestln "offered (OK)"
                          fileout "std_$4" "OK" "$2 offered (OK)"
                     else
-                         pr_svrty_mediumln "not offered (NOT ok)"
-                         fileout "std_$4" "NOT ok" "$2 not offered (NOT ok)"
+                         pr_svrty_mediumln "not offered"
+                         fileout "std_$4" "MEDIUM" "$2 not offered (WARN)"
                     fi
                     ;;
                1) # the ugly ones
@@ -1390,7 +1390,7 @@ std_cipherlists() {
                3) # not totally bad
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_svrty_mediumln "offered"
-                         fileout "std_$4" "NOT ok" "$2 offered - not too bad"
+                         fileout "std_$4" "MEDIUM" "$2 offered - not too bad"
                     else
                          outln "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
@@ -1439,7 +1439,7 @@ sockread() {
      dd bs=$1 of=$ddreply count=1 <&5 2>/dev/null &
      wait_kill $! $maxsleep
      ret=$?
-     SOCKREPLY=$(cat $ddreply)
+     SOCKREPLY=$(cat $ddreply 2>/dev/null)
      rm $ddreply
      return $ret
 }
@@ -2314,10 +2314,10 @@ run_protocols() {
                fileout "tls1" "INFO" "TLSv1.0 is not offered"
                ;;                                        # neither good or bad
           2)
-               pr_svrty_medium "not offered (NOT ok)"
+               pr_svrty_medium "not offered"
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
                outln
-               fileout "tls1" "NOT ok" "TLSv1.0 is not offered, and downgraded to SSL (NOT ok)"
+               fileout "tls1" "MEDIUM" "TLSv1.0 is not offered, and downgraded to SSL"
                ;;
           5)
                outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
@@ -2370,14 +2370,14 @@ run_protocols() {
                fileout "tls1_2" "OK" "TLSv1.2 is offered (OK)"
                ;;                                  # GCM cipher in TLS 1.2: very good!
           1)
-               pr_svrty_mediumln "not offered (NOT ok)"
-               fileout "tls1_2" "NOT ok" "TLSv1.2 is not offered (NOT ok)"
+               pr_svrty_mediumln "not offered"
+               fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered"
                ;;                          # no GCM, penalty
           2)
                pr_svrty_medium "not offered"
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
                outln
-               fileout "tls1_2" "INFO" "TLSv1.2 is not offered and downgraded to a weaker protocol (medium)"
+               fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered and downgraded to a weaker protocol"
                ;;
           5)
                outln "$supported_no_ciph1"
@@ -2453,11 +2453,17 @@ read_dhbits_from_file() {
      # https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography, http://www.keylength.com/en/compare/
      elif [[ $what_dh == "ECDH" ]]; then
           [[ -z "$2" ]] && add="bit ECDH"
-          if [[ "$bits" -le 128 ]]; then     # has that ever existed?
+          if [[ "$bits" -le 80 ]]; then      # has that ever existed?
                pr_svrty_critical "$bits $add"
-          elif [[ "$bits" -le 163 ]]; then
+          elif [[ "$bits" -le 108 ]]; then   # has that ever existed?
                pr_svrty_high "$bits $add"
-          elif [[ "$bits" -ge 224 ]]; then
+          elif [[ "$bits" -le 163 ]]; then
+               pr_svrty_medium "$bits $add"
+          elif [[ "$bits" -le 193 ]]; then   # hmm, according to https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography it should ok
+               pr_svrty_minor "$bits $add"   # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
+          elif [[ "$bits" -le 224 ]]; then
+               out "$bits $add" 
+          elif [[ "$bits" -gt 224 ]]; then
                pr_done_good "$bits $add"
           else
                out "$bits $add"
@@ -2575,7 +2581,6 @@ run_server_preference() {
           case "$default_cipher" in
                *NULL*|*EXP*)
                     pr_svrty_critical "$default_cipher"
-
                     fileout "order_cipher" "NOT ok" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  $remark4default_cipher"
                     ;;
                *RC4*)
@@ -2584,7 +2589,7 @@ run_server_preference() {
                     ;;
                *CBC*)
                     pr_svrty_medium "$default_cipher"
-                    fileout "order_cipher" "NOT ok" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  $remark4default_cipher"
+                    fileout "order_cipher" "MEDIUM" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
                     ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
                *GCM*|*CHACHA20*)
                     pr_done_best "$default_cipher"
@@ -3051,7 +3056,7 @@ certificate_info() {
      case $cert_sig_algo in
           sha1WithRSAEncryption)
                pr_svrty_mediumln "SHA1 with RSA"
-               fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: SHA1 with RSA (warning)"
+               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: SHA1 with RSA (warning)"
                ;;
           sha224WithRSAEncryption)
                outln "SHA224 with RSA"
@@ -3071,7 +3076,7 @@ certificate_info() {
                ;;
           ecdsa-with-SHA1)
                pr_svrty_mediumln "ECDSA with SHA1"
-               fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: ECDSA with SHA1 (warning)"
+               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: ECDSA with SHA1 (warning)"
                ;;
           ecdsa-with-SHA224)
                outln "ECDSA with SHA224"
@@ -3091,7 +3096,7 @@ certificate_info() {
                ;;
           dsaWithSHA1)
                pr_svrty_mediumln "DSA with SHA1"
-               fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: DSA with SHA1 (warning)"
+               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: DSA with SHA1 (warning)"
                ;;
           dsa_with_SHA224)
                outln "DSA with SHA224"
@@ -3106,7 +3111,7 @@ certificate_info() {
                case $cert_sig_hash_algo in
                     sha1)
                          pr_svrty_mediumln "RSASSA-PSS with SHA1"
-                         fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: RSASSA-PSS with SHA1 (warning)"
+                         fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: RSASSA-PSS with SHA1 (warning)"
                          ;;
                     sha224)
                          outln "RSASSA-PSS with SHA224"
@@ -3169,7 +3174,7 @@ certificate_info() {
                     fileout "${json_prefix}key_size" "NOT ok" "Server keys $cert_keysize EC bits (NOT ok)"
                elif [[ "$cert_keysize" -le 163 ]]; then
                     pr_svrty_medium "$cert_keysize"
-                    fileout "${json_prefix}key_size" "NOT ok" "Server keys $cert_keysize EC bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "MEDIUM" "Server keys $cert_keysize EC bits"
                elif [[ "$cert_keysize" -le 224 ]]; then
                     out "$cert_keysize"
                     fileout "${json_prefix}key_size" "INFO" "Server keys $cert_keysize EC bits"
@@ -3178,7 +3183,7 @@ certificate_info() {
                     fileout "${json_prefix}key_size" "OK" "Server keys $cert_keysize EC bits (OK)"
                else
                     out "keysize: $cert_keysize (not expected, FIXME)"
-                    fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (not expected)"
+                    fileout "${json_prefix}key_size" "DEBUG" "Server keys $cert_keysize bits (not expected)"
                fi
                outln " bits"
           elif [[ $cert_key_algo = *RSA* ]] || [[ $cert_key_algo = *rsa* ]] || [[ $cert_key_algo = *dsa* ]]; then
@@ -3193,7 +3198,7 @@ certificate_info() {
                elif [[ "$cert_keysize" -le 1024 ]]; then
                     pr_svrty_medium "$cert_keysize"
                     outln " bits"
-                    fileout "${json_prefix}key_size" "NOT ok" "Server keys $cert_keysize bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "MEDIUM" "Server keys $cert_keysize bits"
                elif [[ "$cert_keysize" -le 2048 ]]; then
                     outln "$cert_keysize bits"
                     fileout "${json_prefix}key_size" "INFO" "Server keys $cert_keysize bits"
@@ -3636,8 +3641,8 @@ run_pfs() {
      sclient_connect_successful $? $TMPFILE
      if [[ $? -ne 0 ]] || [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]]; then
           outln
-          pr_svrty_mediumln "NOT ok: No ciphers supporting Forward Secrecy offered"
-          fileout "pfs" "NOT ok" "(Perfect) Forward Secrecy : NOT ok: No ciphers supporting Forward Secrecy offered"
+          pr_svrty_mediumln "No ciphers supporting Forward Secrecy offered"
+          fileout "pfs" "MEDIUM" "(Perfect) Forward Secrecy : No ciphers supporting Forward Secrecy offered"
      else
           outln
           pfs_offered=true
@@ -3688,7 +3693,7 @@ run_pfs() {
           "$WIDE" || outln
 
           if ! "$pfs_offered"; then
-               pr_svrty_medium "no PFS ciphers found"
+               pr_svrty_medium "WARN: no PFS ciphers found"
                fileout "pfs_ciphers" "NOT ok" "(Perfect) Forward Secrecy Ciphers: no PFS ciphers found (NOT ok)"
           else
                fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
@@ -4995,8 +5000,8 @@ run_crime() {
                pr_svrty_high "VULNERABLE (NOT ok)"
                fileout "crime" "NOT ok" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (NOT ok)"
           else
-               pr_svrty_medium "VULNERABLE (NOT ok), but not using HTTP: probably no exploit known"
-               fileout "crime" "NOT ok" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (NOT ok), but not using HTTP: probably no exploit known"
+               pr_svrty_medium "VULNERABLE but not using HTTP: probably no exploit known"
+               fileout "crime" "MEDIUM" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (WARN), but not using HTTP: probably no exploit known"
           fi
           ret=1
      fi
@@ -5170,7 +5175,7 @@ run_tls_fallback_scsv() {
           if grep -q "CONNECTED(00" "$TMPFILE"; then
                if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
                     pr_svrty_medium "Downgrade attack prevention NOT supported"
-                    fileout "fallback_scsv" "NOT ok" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention NOT supported"
+                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention NOT supported"
                     ret=1
                elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
                     pr_done_good "Downgrade attack prevention supported (OK)"
@@ -5178,11 +5183,12 @@ run_tls_fallback_scsv() {
                     ret=0
                elif grep -qa "alert handshake failure" "$TMPFILE"; then
                     # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
-                    pr_svrty_medium "\"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
-                    fileout "fallback_scsv" "NOT ok" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : \"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
+                    pr_svrty_medium "\"handshake failure\" instead of \"inappropriate fallback\""
+                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : \"handshake failure\" instead of \"inappropriate fallback\" (likely: warning)"
                     ret=2
                elif grep -qa "ssl handshake failure" "$TMPFILE"; then
-                    pr_svrty_medium "some unexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely NOT ok)"
+                    pr_svrty_medium "some unexpected \"handshake failure\" instead of \"inappropriate fallback\""
+                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : some unexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely: warning)"
                     ret=3
                else
                     pr_warning "Check failed, unexpected result "
@@ -5477,7 +5483,7 @@ run_beast(){
                              -e "s/ /\\${cr}      ${spaces}/9" \
                              -e "s/ /\\${cr}      ${spaces}/6" \
                              -e "s/ /\\${cr}      ${spaces}/3")
-                    fileout "cbc_$proto" "NOT ok" "BEAST (CVE-2011-3389) : CBC ciphers for $(toupper $proto): $detected_cbc_ciphers"
+                    fileout "cbc_$proto" "MEDIUM" "BEAST (CVE-2011-3389) : CBC ciphers for $(toupper $proto): $detected_cbc_ciphers"
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto):"
                     [[ -n "$higher_proto_supported" ]] && \
@@ -5510,16 +5516,16 @@ run_beast(){
                     pr_svrty_minor "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                fi
-               fileout "beast" "NOT ok" "BEAST (CVE-2011-3389) : VULNERABLE -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
+               fileout "beast" "MINOR" "BEAST (CVE-2011-3389) : VULNERABLE -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
           else
                if "$WIDE"; then
                     outln
                else
                     out "$spaces"
                fi
-               pr_svrty_medium "VULNERABLE (NOT ok)"
+               pr_svrty_medium "VULNERABLE"
                outln " -- and no higher protocols as mitigation supported"
-               fileout "beast" "NOT ok" "BEAST (CVE-2011-3389) : VULNERABLE -- and no higher protocols as mitigation supported"
+               fileout "beast" "MEDIUM" "BEAST (CVE-2011-3389) : VULNERABLE -- and no higher protocols as mitigation supported"
           fi
      fi
      "$first" && ! "$vuln_beast" && pr_done_goodln "no CBC ciphers found for any protocol (OK)"
@@ -7255,4 +7261,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.489 2016/05/26 10:56:54 dirkw Exp $
+#  $Id: testssl.sh,v 1.490 2016/05/27 15:43:44 dirkw Exp $
