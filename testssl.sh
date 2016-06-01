@@ -3610,14 +3610,18 @@ run_server_defaults() {
                          
                          # FIXME: Not sure what the matching rule should be. At
                          # the moment, the no SNI certificate is considered a
-                         # match if the CNs are the same and the SANs contain
-                         # at least one DNS name in common.
+                         # match if the CNs are the same and the SANs (if
+                         # present) contain at least one DNS name in common.
                          if [[ "$cn_nosni" == "$cn_sni" ]]; then
                               sans_sni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
                                        sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
-                              for san in $sans_nosni; do
-                                   [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
-                              done
+                              if [[ "$sans_nosni" == "$sans_sni" ]]; then
+                                   success[n]=0
+                              else
+                                   for san in $sans_nosni; do
+                                        [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
+                                   done
+                              fi
                          fi
                      fi
                      # If the certificate found for TLSv1.1 w/o SNI appears to
