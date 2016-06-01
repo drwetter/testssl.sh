@@ -2937,6 +2937,7 @@ sclient_connect_successful() {
 }
 
 # arg1 is "-cipher <OpenSSL cipher>" or empty
+# arg2 is a list of protocols to try (tls1_2, tls1_1, tls1, ssl3) or empty (if all should be tried)
 determine_tls_extensions() {
      local proto
      local success
@@ -2946,9 +2947,15 @@ determine_tls_extensions() {
 
      "$HAS_ALPN" && alpn="h2-14,h2-15,h2"
 
+     if [[ -n "$2" ]]; then
+         protocols_to_try="$2"
+     else
+         protocols_to_try="tls1_2 tls1_1 tls1 ssl3"
+     fi
+
      # throwing 1st every cipher/protocol at the server to know what works
      success=7
-     for proto in tls1_2 tls1_1 tls1 ssl3; do
+     for proto in $protocols_to_try; do
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0 && break
@@ -3016,6 +3023,35 @@ get_cn_from_cert() {
      return $?
 }
 
+# Return 0 if the server name provided in arg1 matches the CN or SAN in arg2, otherwise return 1.
+compare_server_name_to_cert()
+{
+     local servername=$1
+     local cert=$2
+     local cn sans san basename
+
+     cn="$(get_cn_from_cert $cert)"
+     if [[ -n "$cn" ]]; then
+          [[ "$cn" == "$servername" ]] && return 0
+          # If the CN contains a wildcard name, then do a wildcard match
+          if echo -n "$cn" | grep -q '^*.'; then
+               basename="$(echo -n "$cn" | sed 's/^\*.//')"
+               [[ "$cn" == "*.$basename" ]] && [[ "$servername" == *".$basename" ]] && return 0
+          fi
+     fi
+
+     sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
+         sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+     for san in $sans; do
+          [[ "$san" == "$servername" ]] && return 0
+          # If $san is a wildcard name, then do a wildcard match
+          if echo -n "$san" | grep -q '^*.'; then
+               basename="$(echo -n "$san" | sed 's/^\*.//')"
+               [[ "$san" == "*.$basename" ]] && [[ "$servername" == *".$basename" ]] && return 0
+          fi
+     done
+     return 1
+}
 
 certificate_info() {
      local proto
@@ -3473,7 +3509,7 @@ certificate_info() {
 
 
 run_server_defaults() {
-     local ciph match_found newhostcert
+     local ciph match_found newhostcert sni
      local sessticket_str=""
      local lifetime unit
      local line
@@ -3481,8 +3517,9 @@ run_server_defaults() {
      local all_tls_extensions=""
      local -i certs_found=0
      local -a previous_hostcert previous_intermediates keysize cipher ocsp_response ocsp_response_status
-     local -a ciphers_to_test
-     
+     local -a ciphers_to_test success
+     local cn_nosni cn_sni sans_nosni sans_sni san
+
      # Try each public key type once:
      # ciphers_to_test[1]: cipher suites using certificates with RSA signature public keys
      # ciphers_to_test[2]: cipher suites using certificates with RSA key encipherment public keys
@@ -3507,11 +3544,29 @@ run_server_defaults() {
      ciphers_to_test[5]="aECDH"
      ciphers_to_test[6]="aECDSA"
      ciphers_to_test[7]="aGOST"
-     
-     for n in 1 2 3 4 5 6 7 ; do
+
+     for (( n=1; n <= 14 ; n++ )); do
+         # Some servers use a different certificate if the ClientHello
+         # specifies TLSv1.1 and doesn't include a server name extension.
+         # So, for each public key type for which a certificate was found,
+         # try again, but only with TLSv1.1 and without SNI.
+         if [[ $n -ge 8 ]]; then
+              ciphers_to_test[n]=""
+              [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}"
+         fi
+
          if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
-             determine_tls_extensions "-cipher ${ciphers_to_test[n]}"
-             if [[ $? -eq 0 ]]; then
+             if [[ $n -ge 8 ]]; then
+                  sni="$SNI"
+                  SNI=""
+                  determine_tls_extensions "-cipher ${ciphers_to_test[n]}" "tls1_1"
+                  success[n]=$?
+                  SNI="$sni"
+             else
+                  determine_tls_extensions "-cipher ${ciphers_to_test[n]}"
+                  success[n]=$?
+             fi
+             if [[ ${success[n]} -eq 0 ]]; then
                  # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
                  while read -d "\"" -r line; do
                      if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
@@ -3536,6 +3591,40 @@ run_server_defaults() {
                      fi
                      i=$((i + 1))
                  done
+                 if ! $match_found && [[ $n -ge 8 ]] && [[ $certs_found -ne 0 ]]; then
+                     # A new certificate was found using TLSv1.1 without SNI.
+                     # Check to see if the new certificate should be displayed.
+                     # It should be displayed if it is either a match for the
+                     # $NODE being tested or if it has the same subject
+                     # (CN and SAN) as other certificates for this host.
+                     compare_server_name_to_cert "$NODE" "$HOSTCERT"
+                     success[n]=$?
+
+                     if [[ ${success[n]} -ne 0 ]]; then
+                         cn_nosni="$(get_cn_from_cert $HOSTCERT)"
+                         sans_nosni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
+                              sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+
+                         echo "${previous_hostcert[1]}" > $HOSTCERT
+                         cn_sni="$(get_cn_from_cert $HOSTCERT)"
+                         
+                         # FIXME: Not sure what the matching rule should be. At
+                         # the moment, the no SNI certificate is considered a
+                         # match if the CNs are the same and the SANs contain
+                         # at least one DNS name in common.
+                         if [[ "$cn_nosni" == "$cn_sni" ]]; then
+                              sans_sni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
+                                       sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+                              for san in $sans_nosni; do
+                                   [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
+                              done
+                         fi
+                     fi
+                     # If the certificate found for TLSv1.1 w/o SNI appears to
+                     # be for a different host, then set match_found to true so
+                     # that the new certificate will not be included in the output.
+                     [[ ${success[n]} -ne 0 ]] && match_found=true
+                 fi
                  if ! $match_found ; then
                      certs_found=$(($certs_found + 1))
                      cipher[certs_found]=${ciphers_to_test[n]}
