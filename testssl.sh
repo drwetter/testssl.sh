@@ -149,7 +149,8 @@ WIDE=${WIDE:-false}                     # whether to display for some options th
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
-HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
+HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
+UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -167,7 +168,6 @@ readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
-UNBRACKETED_IPV6=${UNBRACKETED_IPV6:-false} # some versions of OpenSSL don't support [bracketed] IPv6 addresses as a connect parameter
 
 HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
@@ -6338,9 +6338,8 @@ determine_ip_addresses() {
 
 determine_rdns() {
      local saved_openssl_conf="$OPENSSL_CONF"
-     OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
-     local nodeip="$(tr -d '[]' <<< $NODEIP)"          # sockets do not need the square brackets we have of IPv6 addresses
-                                                       # we just need do it here, that's all!
+     OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
+     local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
 
      if [[ "$NODE" == *.local ]]; then
           if which avahi-resolve &>/dev/null; then
@@ -6359,7 +6358,7 @@ determine_rdns() {
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
      rDNS="$(echo $rDNS)"
-     [[ -z "$rDNS" ]] && rDNS=" --"
+     [[ -z "$rDNS" ]] && rDNS="--"
      return 0
 }
 
@@ -6557,6 +6556,8 @@ determine_service() {
 
 display_rdns_etc() {
      local ip
+     local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for displaying IPv6 addresses we don't need []
+
 
      if [[ -n "$PROXY" ]]; then
           out " Via Proxy:              $CORRECT_SPACES"
@@ -6579,11 +6580,7 @@ display_rdns_etc() {
           outln " A record via            supplied IP \"$CMDLINE_IP\""
      fi
      if [[ -n "$rDNS" ]]; then
-          if "$HAS_IPv6"; then
-               printf " %-23s %s" "rDNS $NODEIP:" "$rDNS"
-          else
-               printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS"
-          fi
+          printf " %-23s %s" "rDNS ($nodeip):" "$rDNS"
      fi
 }
 
@@ -7113,9 +7110,9 @@ nodeip_to_proper_ip6() {
      local len_nodeip=0
 
      if is_ipv6addr $NODEIP; then
-          ${UNBRACKETED_IPV6} || NODEIP="[$NODEIP]"
+          ${UNBRACKTD_IPV6} || NODEIP="[$NODEIP]"
           len_nodeip=${#NODEIP}
-          CORRECT_SPACES="$(draw_line " " "$((len_nodeip - 16))" )"
+          CORRECT_SPACES="$(draw_line " " "$((len_nodeip - 17))" )"
           # IPv6 addresses are longer, this varaible takes care that "further IP" and "Service" is properly aligned
      fi
 }
@@ -7264,4 +7261,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.490 2016/05/27 15:43:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.491 2016/06/02 07:59:51 dirkw Exp $
