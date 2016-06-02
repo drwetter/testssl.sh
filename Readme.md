@@ -65,7 +65,9 @@ Done so far:
 * assistance for color-blind users
 * Even more compatibility improvements for FreeBSD, RH-ish and F5 systems
 * Considerable speed improvements for each cipher runs (-e/-E)
+* more robust socket interface
 * OpenSSL 1.1.0 compliant
+* whole number of busg squashed
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
