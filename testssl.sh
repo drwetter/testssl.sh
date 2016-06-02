@@ -3378,6 +3378,11 @@ certificate_info() {
      fi
      days2expire=$((days2expire  / 3600 / 24 ))
 
+     if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then
+          DAYS2WARN2=$((DAYS2WARN2 / 2))
+          DAYS2WARN1=$((DAYS2WARN1 / 2))
+     fi
+
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! echo $expire | grep -qw not; then
           pr_svrty_critical "expired!"
@@ -7261,4 +7266,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.491 2016/06/02 07:59:51 dirkw Exp $
+#  $Id: testssl.sh,v 1.492 2016/06/02 19:31:23 dirkw Exp $
