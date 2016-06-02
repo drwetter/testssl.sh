@@ -149,7 +149,8 @@ WIDE=${WIDE:-false}                     # whether to display for some options th
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
-HAS_IPv6=${HAS_IPv6:-false}             # if you have OPENSSL with IPv6 support AND IPv6 networking set it to yes and testssl.sh works!
+HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
+UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -6464,26 +6465,27 @@ determine_ip_addresses() {
 
 determine_rdns() {
      local saved_openssl_conf="$OPENSSL_CONF"
-     OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
+     OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
+     local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
 
      if [[ "$NODE" == *.local ]]; then
           if which avahi-resolve &>/dev/null; then
-               rDNS=$(avahi-resolve -a $NODEIP 2>/dev/null | awk '{ print $2 }')
+               rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
           elif which dig &>/dev/null; then
-               rDNS=$(dig -x $NODEIP @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
+               rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
           fi
      elif which dig &> /dev/null; then
-          rDNS=$(dig -x $NODEIP +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
+          rDNS=$(dig -x $nodeip +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
      elif which host &> /dev/null; then
-          rDNS=$(host -t PTR $NODEIP 2>/dev/null | awk '/pointer/ { print $NF }')
+          rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
      elif which drill &> /dev/null; then
-          rDNS=$(drill -x ptr $NODEIP 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
+          rDNS=$(drill -x ptr $nodeip 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
      elif which nslookup &> /dev/null; then
-          rDNS=$(nslookup -type=PTR $NODEIP 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
+          rDNS=$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
      rDNS="$(echo $rDNS)"
-     [[ -z "$rDNS" ]] && rDNS=" --"
+     [[ -z "$rDNS" ]] && rDNS="--"
      return 0
 }
 
@@ -6681,6 +6683,8 @@ determine_service() {
 
 display_rdns_etc() {
      local ip
+     local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for displaying IPv6 addresses we don't need []
+
 
      if [[ -n "$PROXY" ]]; then
           out " Via Proxy:              $CORRECT_SPACES"
@@ -6703,11 +6707,7 @@ display_rdns_etc() {
           outln " A record via            supplied IP \"$CMDLINE_IP\""
      fi
      if [[ -n "$rDNS" ]]; then
-          if "$HAS_IPv6"; then
-               printf " %-23s %s" "rDNS $NODEIP:" "$rDNS"
-          else
-               printf " %-23s %s" "rDNS ($NODEIP):" "$rDNS"
-          fi
+          printf " %-23s %s" "rDNS ($nodeip):" "$rDNS"
      fi
 }
 
@@ -7237,9 +7237,9 @@ nodeip_to_proper_ip6() {
      local len_nodeip=0
 
      if is_ipv6addr $NODEIP; then
-          NODEIP="[$NODEIP]"
+          ${UNBRACKTD_IPV6} || NODEIP="[$NODEIP]"
           len_nodeip=${#NODEIP}
-          CORRECT_SPACES="$(draw_line " " "$((len_nodeip - 16))" )"
+          CORRECT_SPACES="$(draw_line " " "$((len_nodeip - 17))" )"
           # IPv6 addresses are longer, this varaible takes care that "further IP" and "Service" is properly aligned
      fi
 }
@@ -7388,4 +7388,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.490 2016/05/27 15:43:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.491 2016/06/02 07:59:51 dirkw Exp $
