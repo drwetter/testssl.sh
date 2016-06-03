@@ -357,7 +357,7 @@ pr_svrty_criticalln(){ pr_svrty_critical "$1"; outln; }
 
 
 # color=1 functions
-pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m\c"; }
+pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m"; }
 pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off; }
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_italic()       { [[ "$COLOR" -ne 0 ]] && out "\033[3m$1" || out "$1"; pr_off; }
@@ -4841,7 +4841,7 @@ tls_sockets() {
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 run_heartbleed(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
-     pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
+     pr_bold " Heartbleed"; out " (CVE-2014-0160)                "
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
@@ -5255,7 +5255,7 @@ run_crime() {
 #         $OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs  $SNI </dev/null 2>/dev/null >$TMPFILE
 #         if [[ $? -eq 0 ]]; then
 #              echo
-#              pr_bold "CRIME Vulnerability, SPDY \c" ; outln "(CVE-2012-4929): \c"
+#              pr_bold "CRIME Vulnerability, SPDY " ; outln "(CVE-2012-4929): "
 
 #              STR=$(grep Compression $TMPFILE )
 #              if echo $STR | grep -q NONE >/dev/null; then
