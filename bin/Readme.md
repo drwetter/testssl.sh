@@ -1,4 +1,8 @@
 
+----
+**Note: new binaries will come soon. Have a look @ https://testssl.sh/**
+----
+
 Binaries
 ========
 
