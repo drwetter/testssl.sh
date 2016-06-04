@@ -1,7 +1,7 @@
 
-----
-**Note: new binaries will come soon. Have a look @ https://testssl.sh/**
-----
+
+**Note: new, improved binaries (1.0.2i, compiled from a snapshot from Peter Mosman's fork: https://github.com/drwetter/openssl) will come soon. Have a look @ https://testssl.sh/**
+
 
 Binaries
 ========
