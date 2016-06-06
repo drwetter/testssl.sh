@@ -3038,6 +3038,8 @@ certificate_info() {
      local expfinding expok="OK"
      local json_prefix=""     # string to place at beginng of JSON IDs when there is more than one certificate
      local indent=""
+     local days2warn2=$DAYS2WARN2
+     local days2warn1=$DAYS2WARN1
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -3133,7 +3135,7 @@ certificate_info() {
                     *)
                          out "RSASSA-PSS with $cert_sig_hash_algo"
                          pr_warningln " (Unknown hash algorithm)"
-                         fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: RSASSA-PSS with $cert_sig_hash_algo"
+                         fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: RSASSA-PSS with $cert_sig_hash_algo"
                     esac
                     ;;
           md2*)
@@ -3150,9 +3152,9 @@ certificate_info() {
                ;;
           *)
                out "$cert_sig_algo ("
-               pr_warning "Unknown"
+               pr_warning "FIXME: is unknown"
                outln ")"
-               fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: $sign_algo"
+               fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $sign_algo"
                ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
@@ -3162,6 +3164,13 @@ certificate_info() {
           outln "(couldn't determine)"
           fileout "${json_prefix}key_size" "WARN" "Server keys size cannot be determined"
      else
+          case $cert_key_algo in
+               *RSA*|*rsa*)             out "RSA ";;
+               *DSA*|*dsa*)             out "DSA ";;
+               *ecdsa*|*ecPublicKey)    out "ECDSA ";;
+               *GOST*|*gost*)           out "GOST ";;
+               *)                       pr_warning "fixme: $cert_key_algo " ;;
+          esac
           # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
           # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
           # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
@@ -3213,7 +3222,7 @@ certificate_info() {
                fi
           else
                out "$cert_keysize bits ("
-               pr_warning "can't tell whether $cert_keysize bits is good or not"
+               pr_warning "FIXME: can't tell whether this is good here or not"
                outln ")"
                fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (unknown signature algorithm)"
           fi
@@ -3378,9 +3387,9 @@ certificate_info() {
      fi
      days2expire=$((days2expire  / 3600 / 24 ))
 
-     if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then
-          DAYS2WARN2=$((DAYS2WARN2 / 2))
-          DAYS2WARN1=$((DAYS2WARN1 / 2))
+     if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then          # we take the half of the thresholds for LE certificates
+          days2warn2=$((days2warn2 / 2))
+          days2warn1=$((days2warn1 / 2))
      fi
 
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
@@ -3389,22 +3398,22 @@ certificate_info() {
           expfinding="expired!"
           expok="NOT ok"
      else
-          secs2warn=$((24 * 60 * 60 * DAYS2WARN2))  # low threshold first
+          secs2warn=$((24 * 60 * 60 * days2warn2))  # low threshold first
           expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
           if echo "$expire" | grep -qw not; then
-               secs2warn=$((24 * 60 * 60 * DAYS2WARN1))
+               secs2warn=$((24 * 60 * 60 * days2warn1))
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
                if echo "$expire" | grep -qw not; then
-                    pr_done_good "$days2expire >= $DAYS2WARN1 days"
-                    expfinding+="$days2expire >= $DAYS2WARN1 days"
+                    pr_done_good "$days2expire >= $days2warn1 days"
+                    expfinding+="$days2expire >= $days2warn1 days"
                else
-                    pr_svrty_medium "expires < $DAYS2WARN1 days ($days2expire)"
-                    expfinding+="expires < $DAYS2WARN1 days ($days2expire)"
+                    pr_svrty_medium "expires < $days2warn1 days ($days2expire)"
+                    expfinding+="expires < $days2warn1 days ($days2expire)"
                     expok="WARN"
                fi
           else
-               pr_svrty_high "expires < $DAYS2WARN2 days ($days2expire) !"
-               expfinding+="expires < $DAYS2WARN2 days ($days2expire) !"
+               pr_svrty_high "expires < $days2warn2 days ($days2expire) !"
+               expfinding+="expires < $days2warn2 days ($days2expire) !"
                expok="NOT ok"
           fi
      fi
@@ -7266,4 +7275,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.492 2016/06/02 19:31:23 dirkw Exp $
+#  $Id: testssl.sh,v 1.493 2016/06/06 11:42:15 dirkw Exp $
