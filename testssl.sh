@@ -151,6 +151,7 @@ JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
+SIZELMT_W_ARND=${SIZELMT_W_ARND:-false} # workaround for servers which have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -2689,6 +2690,75 @@ run_server_preference() {
      return 0
 }
 
+check_tls12_pref() {
+     local batchremoved="-CAMELLIA:-IDEA:-KRB5:-PSK:-SRP:-aNULL:-eNULL"
+     local batchremoved_success=false
+     local tested_cipher="-$1"
+     local order="$1"
+
+     while true; do
+          $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "ALL:$tested_cipher:$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+          if sclient_connect_successful $? $TMPFILE ; then
+               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               order+=" $cipher"
+               tested_cipher="$tested_cipher:-$cipher"
+          else
+               debugme outln "A: $tested_cipher"
+               break
+          fi
+     done
+     batchremoved="${batchremoved//-/}"
+     while true; do
+          # no ciphers from "ALL:$tested_cipher:$batchremoved" left
+          # now we check $batchremoved, and remove the minus signs first:
+          $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+          if sclient_connect_successful $? $TMPFILE ; then
+               batchremoved_success=true               # signals that we have some of those ciphers and need to put everything together later on
+               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               order+=" $cipher"
+               batchremoved="$batchremoved:-$cipher"
+               debugme outln "B1: $batchremoved"
+          else
+               debugme outln "B2: $batchremoved"
+               break
+               # nothing left with batchremoved ciphers, we need to put everything together
+          fi
+     done
+
+     if "$batchremoved_success"; then
+          # now we combine the two cipher sets from both while loops
+          combined_ciphers="${order// /:}"
+          $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+          if sclient_connect_successful $? $TMPFILE ; then
+               # first cipher
+               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               order="$cipher"
+               tested_cipher="-$cipher"
+          else
+               pr_warningln "fixme: something weird happened around line $((LINENO - 6))"
+               return 1
+          fi
+          while true; do
+               $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+               if sclient_connect_successful $? $TMPFILE ; then
+                    cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                    order+=" $cipher"
+                    tested_cipher="$tested_cipher:-$cipher"
+               else
+                    # nothing left, we're done
+                    out " $order"
+                    break
+               fi
+          done
+
+     else
+          # second cipher set didn't succeed: we can just output everything
+          out " $order"
+     fi
+     return 0
+}
+
+
 cipher_pref_check() {
      local p proto protos npn_protos
      local tested_cipher cipher order
@@ -2710,19 +2780,28 @@ cipher_pref_check() {
                tested_cipher=""
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-               [[ -z "$proto" ]] && continue      # for early openssl versions sometimes needed
+               [[ -z "$proto" ]] && continue                # for early openssl versions sometimes needed
                outln
-               printf "     %-10s %s " "$proto:" "$cipher"
+               printf "    %-10s" "$proto: "
                tested_cipher="-"$cipher
                order="$cipher"
-               while true; do
-                    $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    sclient_connect_successful $? $TMPFILE || break
-                    cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-                    out "$cipher "
-                    order+=" $cipher"
-                    tested_cipher="$tested_cipher:-$cipher"
-               done
+               if [[ $p == tls1_2 ]] && "$SIZELMT_W_ARND"; then
+                    # for some servers the ServerHello is limited to 128 ciphers or the ServerHello itself has a length restriction
+                    # thus we reduce the number of ciphers we throw at the server and put later everything together
+                    # see #189
+                    # so far, this was only observed in TLS 1.2
+                    check_tls12_pref "$cipher"
+               else
+                    out " $cipher"  # this is the first cipher for protocol
+                    while true; do
+                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+                         sclient_connect_successful $? $TMPFILE || break
+                         cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                         out " $cipher"
+                         order+=" $cipher"
+                         tested_cipher="$tested_cipher:-$cipher"
+                    done
+               fi
           fi
           [[ -z "$order" ]] || fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
      done
@@ -2736,7 +2815,7 @@ cipher_pref_check() {
                order=""
                $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
                cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-               printf "     %-10s %s " "$p:" "$cipher"
+               printf "    %-10s %s " "$p:" "$cipher"
                tested_cipher="-"$cipher
                order="$cipher"
                while true; do
@@ -7275,4 +7354,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.494 2016/06/07 07:08:47 dirkw Exp $
+#  $Id: testssl.sh,v 1.495 2016/06/07 11:02:57 dirkw Exp $
