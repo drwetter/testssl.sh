@@ -21,9 +21,11 @@
  - JSON and CSV output
  - Client simulations
 
-* dcooper16
+* David Cooper
  - Detection + output of multiple certificates
  - several cleanups of server certificate related stuff
+ - improved parsing of TLS ServerHello messages
+ - speed improvements when testing all ciphers
 
 * Jean Marsault
  - client auth: ideas, code snipplets
