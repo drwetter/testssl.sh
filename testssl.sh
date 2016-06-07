@@ -6589,9 +6589,9 @@ display_rdns_etc() {
           outln
      fi
      if "$LOCAL_A"; then
-          outln " A record via            /etc/hosts "
+          outln " A record via           $CORRECT_SPACES /etc/hosts "
      elif  [[ -n "$CMDLINE_IP" ]]; then
-          outln " A record via            supplied IP \"$CMDLINE_IP\""
+          outln " A record via           $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
      fi
      if [[ -n "$rDNS" ]]; then
           printf " %-23s %s" "rDNS ($nodeip):" "$rDNS"
@@ -7275,4 +7275,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.493 2016/06/06 11:42:15 dirkw Exp $
+#  $Id: testssl.sh,v 1.494 2016/06/07 07:08:47 dirkw Exp $
