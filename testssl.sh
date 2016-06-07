@@ -1446,13 +1446,34 @@ sockread() {
      return $ret
 }
 
-#FIXME: fill the following two:
 openssl2rfc() {
-     :
+     local hexcode rfcname
+
+     hexcode=$($OPENSSL ciphers -V "$1" 2>>$ERRFILE | head -1 | awk '{ print $1 }')
+     [[ -z "$hexcode" ]] && return 0
+     normalize_ciphercode $hexcode
+     rfcname="$(strip_spaces $(grep -iw "$HEXC" "$MAPPING_FILE_RFC" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/'))"
+     [[ -n "$rfcname" ]] && out "$rfcname"
+     return 0
 }
 
 rfc2openssl() {
-     :
+     local hexcode ossl_hexcode ossl_name
+     local -i len
+
+     hexcode=$(grep -iw "$1" "$MAPPING_FILE_RFC" | head -1 | awk '{ print $1 }')
+     [[ -z "$hexcode" ]] && return 0
+     len=${#hexcode}
+     case $len in
+          3) ossl_hexcode="0x00,0x${hexcode:1:2}" ;;
+          5) ossl_hexcode="0x${hexcode:1:2},0x${hexcode:3:2}" ;;
+          7) ossl_hexcode="0x${hexcode:1:2},0x${hexcode:3:2},0x${hexcode:5:2}" ;;
+          *) return 0 ;;
+     esac
+     ossl_name="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " $ossl_hexcode " | awk '{ print $3 }')"
+     [[ -z "$ossl_name" ]] && ossl_name="-"
+     out "$ossl_name"
+     return 0
 }
 
 
@@ -2580,8 +2601,8 @@ run_server_preference() {
 
           pr_bold " Negotiated cipher            "
           default_cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-          case "$default_cipher" in
-               *NULL*|*EXP*)
+          case "$(openssl2rfc $default_cipher)" in
+               *NULL*|*EXPORT*)
                     pr_svrty_critical "$default_cipher"
                     fileout "order_cipher" "NOT ok" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  $remark4default_cipher"
                     ;;
@@ -2589,18 +2610,18 @@ run_server_preference() {
                     pr_svrty_high "$default_cipher"
                     fileout "order_cipher" "NOT ok" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  remark4default_cipher"
                     ;;
+               ECDHE*AES*CBC*)
+                    pr_svrty_minor "$default_cipher"
+                    fileout "order_cipher" "WARN" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (cbc)  $remark4default_cipher"
+                    ;;  # it's CBC. --> lucky13
                *CBC*)
                     pr_svrty_medium "$default_cipher"
                     fileout "order_cipher" "MEDIUM" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
-                    ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
+                    ;;
                *GCM*|*CHACHA20*)
                     pr_done_best "$default_cipher"
                     fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (OK)  $remark4default_cipher"
                     ;;   # best ones
-               ECDHE*AES*)
-                    pr_svrty_minor "$default_cipher"
-                    fileout "order_cipher" "WARN" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (cbc)  $remark4default_cipher"
-                    ;;  # it's CBC. --> lucky13
                "")
                     pr_warning "default cipher empty" ;
                     if [[ $OSSL_VER == 1.0.2* ]]; then
