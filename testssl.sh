@@ -151,6 +151,7 @@ JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
+SIZELMT_W_ARND=${SIZELMT_W_ARND:-false} # workaround for servers which have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -2689,6 +2690,75 @@ run_server_preference() {
      return 0
 }
 
+check_tls12_pref() {
+     local batchremoved="-CAMELLIA:-IDEA:-KRB5:-PSK:-SRP:-aNULL:-eNULL"
+     local batchremoved_success=false
+     local tested_cipher="-$1"
+     local order="$1"
+
+     while true; do
+          $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "ALL:$tested_cipher:$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+          if sclient_connect_successful $? $TMPFILE ; then
+               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               order+=" $cipher"
+               tested_cipher="$tested_cipher:-$cipher"
+          else
+               debugme outln "A: $tested_cipher"
+               break
+          fi
+     done
+     batchremoved="${batchremoved//-/}"
+     while true; do
+          # no ciphers from "ALL:$tested_cipher:$batchremoved" left
+          # now we check $batchremoved, and remove the minus signs first:
+          $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+          if sclient_connect_successful $? $TMPFILE ; then
+               batchremoved_success=true               # signals that we have some of those ciphers and need to put everything together later on
+               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               order+=" $cipher"
+               batchremoved="$batchremoved:-$cipher"
+               debugme outln "B1: $batchremoved"
+          else
+               debugme outln "B2: $batchremoved"
+               break
+               # nothing left with batchremoved ciphers, we need to put everything together
+          fi
+     done
+
+     if "$batchremoved_success"; then
+          # now we combine the two cipher sets from both while loops
+          combined_ciphers="${order// /:}"
+          $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+          if sclient_connect_successful $? $TMPFILE ; then
+               # first cipher
+               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               order="$cipher"
+               tested_cipher="-$cipher"
+          else
+               pr_warningln "fixme: something weird happened around line $((LINENO - 6))"
+               return 1
+          fi
+          while true; do
+               $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+               if sclient_connect_successful $? $TMPFILE ; then
+                    cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                    order+=" $cipher"
+                    tested_cipher="$tested_cipher:-$cipher"
+               else
+                    # nothing left, we're done
+                    out " $order"
+                    break
+               fi
+          done
+
+     else
+          # second cipher set didn't succeed: we can just output everything
+          out " $order"
+     fi
+     return 0
+}
+
+
 cipher_pref_check() {
      local p proto protos npn_protos
      local tested_cipher cipher order
@@ -2710,19 +2780,28 @@ cipher_pref_check() {
                tested_cipher=""
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-               [[ -z "$proto" ]] && continue      # for early openssl versions sometimes needed
+               [[ -z "$proto" ]] && continue                # for early openssl versions sometimes needed
                outln
-               printf "     %-10s %s " "$proto:" "$cipher"
+               printf "    %-10s" "$proto: "
                tested_cipher="-"$cipher
                order="$cipher"
-               while true; do
-                    $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    sclient_connect_successful $? $TMPFILE || break
-                    cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-                    out "$cipher "
-                    order+=" $cipher"
-                    tested_cipher="$tested_cipher:-$cipher"
-               done
+               if [[ $p == tls1_2 ]] && "$SIZELMT_W_ARND"; then
+                    # for some servers the ServerHello is limited to 128 ciphers or the ServerHello itself has a length restriction
+                    # thus we reduce the number of ciphers we throw at the server and put later everything together
+                    # see #189
+                    # so far, this was only observed in TLS 1.2
+                    check_tls12_pref "$cipher"
+               else
+                    out " $cipher"  # this is the first cipher for protocol
+                    while true; do
+                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+                         sclient_connect_successful $? $TMPFILE || break
+                         cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                         out " $cipher"
+                         order+=" $cipher"
+                         tested_cipher="$tested_cipher:-$cipher"
+                    done
+               fi
           fi
           [[ -z "$order" ]] || fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
      done
@@ -2736,7 +2815,7 @@ cipher_pref_check() {
                order=""
                $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
                cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-               printf "     %-10s %s " "$p:" "$cipher"
+               printf "    %-10s %s " "$p:" "$cipher"
                tested_cipher="-"$cipher
                order="$cipher"
                while true; do
@@ -3074,6 +3153,8 @@ certificate_info() {
      local expfinding expok="OK"
      local json_prefix=""     # string to place at beginng of JSON IDs when there is more than one certificate
      local indent=""
+     local days2warn2=$DAYS2WARN2
+     local days2warn1=$DAYS2WARN1
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -3169,7 +3250,7 @@ certificate_info() {
                     *)
                          out "RSASSA-PSS with $cert_sig_hash_algo"
                          pr_warningln " (Unknown hash algorithm)"
-                         fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: RSASSA-PSS with $cert_sig_hash_algo"
+                         fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: RSASSA-PSS with $cert_sig_hash_algo"
                     esac
                     ;;
           md2*)
@@ -3186,9 +3267,9 @@ certificate_info() {
                ;;
           *)
                out "$cert_sig_algo ("
-               pr_warning "Unknown"
+               pr_warning "FIXME: is unknown"
                outln ")"
-               fileout "${json_prefix}algorithm" "WARN" "Signature Algorithm: $sign_algo"
+               fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $sign_algo"
                ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
@@ -3198,6 +3279,13 @@ certificate_info() {
           outln "(couldn't determine)"
           fileout "${json_prefix}key_size" "WARN" "Server keys size cannot be determined"
      else
+          case $cert_key_algo in
+               *RSA*|*rsa*)             out "RSA ";;
+               *DSA*|*dsa*)             out "DSA ";;
+               *ecdsa*|*ecPublicKey)    out "ECDSA ";;
+               *GOST*|*gost*)           out "GOST ";;
+               *)                       pr_warning "fixme: $cert_key_algo " ;;
+          esac
           # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
           # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
           # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
@@ -3249,7 +3337,7 @@ certificate_info() {
                fi
           else
                out "$cert_keysize bits ("
-               pr_warning "can't tell whether $cert_keysize bits is good or not"
+               pr_warning "FIXME: can't tell whether this is good here or not"
                outln ")"
                fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (unknown signature algorithm)"
           fi
@@ -3414,28 +3502,33 @@ certificate_info() {
      fi
      days2expire=$((days2expire  / 3600 / 24 ))
 
+     if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then          # we take the half of the thresholds for LE certificates
+          days2warn2=$((days2warn2 / 2))
+          days2warn1=$((days2warn1 / 2))
+     fi
+
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! echo $expire | grep -qw not; then
           pr_svrty_critical "expired!"
           expfinding="expired!"
           expok="NOT ok"
      else
-          secs2warn=$((24 * 60 * 60 * DAYS2WARN2))  # low threshold first
+          secs2warn=$((24 * 60 * 60 * days2warn2))  # low threshold first
           expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
           if echo "$expire" | grep -qw not; then
-               secs2warn=$((24 * 60 * 60 * DAYS2WARN1))
+               secs2warn=$((24 * 60 * 60 * days2warn1))
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
                if echo "$expire" | grep -qw not; then
-                    pr_done_good "$days2expire >= $DAYS2WARN1 days"
-                    expfinding+="$days2expire >= $DAYS2WARN1 days"
+                    pr_done_good "$days2expire >= $days2warn1 days"
+                    expfinding+="$days2expire >= $days2warn1 days"
                else
-                    pr_svrty_medium "expires < $DAYS2WARN1 days ($days2expire)"
-                    expfinding+="expires < $DAYS2WARN1 days ($days2expire)"
+                    pr_svrty_medium "expires < $days2warn1 days ($days2expire)"
+                    expfinding+="expires < $days2warn1 days ($days2expire)"
                     expok="WARN"
                fi
           else
-               pr_svrty_high "expires < $DAYS2WARN2 days ($days2expire) !"
-               expfinding+="expires < $DAYS2WARN2 days ($days2expire) !"
+               pr_svrty_high "expires < $days2warn2 days ($days2expire) !"
+               expfinding+="expires < $days2warn2 days ($days2expire) !"
                expok="NOT ok"
           fi
      fi
@@ -6668,9 +6761,9 @@ display_rdns_etc() {
           outln
      fi
      if "$LOCAL_A"; then
-          outln " A record via            /etc/hosts "
+          outln " A record via           $CORRECT_SPACES /etc/hosts "
      elif  [[ -n "$CMDLINE_IP" ]]; then
-          outln " A record via            supplied IP \"$CMDLINE_IP\""
+          outln " A record via           $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
      fi
      if [[ -n "$rDNS" ]]; then
           printf " %-23s %s" "rDNS ($nodeip):" "$rDNS"
@@ -7354,4 +7447,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.491 2016/06/02 07:59:51 dirkw Exp $
+#  $Id: testssl.sh,v 1.495 2016/06/07 11:02:57 dirkw Exp $
