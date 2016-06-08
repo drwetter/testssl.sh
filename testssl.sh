@@ -4642,11 +4642,11 @@ socksend_tls_clienthello() {
           # Supported Elliptic Curves Extension and Supported Point Formats Extension.
           extensions_ecc="
           00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
-          00, 3a, 00, 38,            # lengths
+          00, 3e, 00, 3c,            # lengths
           00, 01, 00, 02, 00, 03, 00, 04, 00, 05, 00, 06, 00, 07, 00, 08,
           00, 09, 00, 0a, 00, 0b, 00, 0c, 00, 0d, 00, 0e, 00, 0f, 00, 10,
           00, 11, 00, 12, 00, 13, 00, 14, 00, 15, 00, 16, 00, 17, 00, 18,
-          00, 19, 00, 1a, 00, 1b, 00, 1c,
+          00, 19, 00, 1a, 00, 1b, 00, 1c, 00, 1d, 00, 1e,
           00, 0b,                    # Type: Supported Point Formats , see RFC 4492 
           00, 02,                    # len
           01, 00"
