@@ -1455,7 +1455,7 @@ openssl2rfc() {
      hexcode=$($OPENSSL ciphers -V "$1" 2>>$ERRFILE | head -1 | awk '{ print $1 }')
      [[ -z "$hexcode" ]] && return 0
      normalize_ciphercode $hexcode
-     rfcname="$(strip_spaces $(grep -iw "$HEXC" "$MAPPING_FILE_RFC" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/'))"
+     rfcname="$(strip_spaces $(grep -iw "$HEXC" "$MAPPING_FILE_RFC" 2>>$ERRFILE | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/'))"
      [[ -n "$rfcname" ]] && out "$rfcname"
      return 0
 }
@@ -1464,7 +1464,7 @@ rfc2openssl() {
      local hexcode ossl_hexcode ossl_name
      local -i len
 
-     hexcode=$(grep -iw "$1" "$MAPPING_FILE_RFC" | head -1 | awk '{ print $1 }')
+     hexcode=$(grep -iw "$1" "$MAPPING_FILE_RFC" 2>>$ERRFILE | head -1 | awk '{ print $1 }')
      [[ -z "$hexcode" ]] && return 0
      len=${#hexcode}
      case $len in
