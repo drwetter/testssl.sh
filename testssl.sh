@@ -324,14 +324,14 @@ pr_liteblueln() { pr_liteblue "$1"; outln; }
 pr_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;32m$1" || out "\033[1;34m$1" ) || out "$1"; pr_off; }    # used for head lines of single tests
 pr_blueln()     { pr_blue "$1"; outln; }
 
-pr_warning()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }                                       # litemagentai | local problem: one test cannot be done
-pr_warningln() { pr_warning "$1"; outln; }
-pr_magenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }                               # Fatal error: quitting because of this!
+pr_warning()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }                                  # some local problem: one test cannot be done
+pr_warningln() { pr_warning "$1"; outln; }                                                                                   # litemagenya
+pr_magenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }                                  # fatal error: quitting because of this!
 pr_magentaln() { pr_magenta "$1"; outln; }
 
-pr_litecyan()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;36m$1" || out "$1"; pr_off; }                                           # not yet used
+pr_litecyan()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;36m$1" || out "$1"; pr_off; }                                          # not yet used
 pr_litecyanln() { pr_litecyan "$1"; outln; }
-pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"; pr_off; }                                           # additional hint
+pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"; pr_off; }                                          # additional hint
 pr_cyanln()     { pr_cyan "$1"; outln; }
 
 pr_litegreyln() { pr_litegrey "$1"; outln; }
@@ -375,8 +375,11 @@ pr_headlineln() { pr_headline "$1" ; outln; }
 pr_squoted() { out "'$1'"; }
 pr_dquoted() { out "\"$1\""; }
 
-local_problem_ln() { pr_warningln "Local problem: $1"; }
 local_problem() { pr_warning "Local problem: $1"; }
+local_problem_ln() { pr_warningln "Local problem: $1"; }
+
+fixme() { pr_warning "fixme: $1"; }
+fixme() { pr_warningln "fixme: $1"; }
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
@@ -644,17 +647,17 @@ runs_HTTP() {
           *)   if $CLIENT_AUTH; then
                     out "certificate based authentication => skipping all HTTP checks"
                     echo "certificate based authentication => skipping all HTTP checks" >$TMPFILE
-                    fileout "client_auth" "WARN" "certificate based authentication => skipping all HTTP checks"
+                    fileout "client_auth" "INFO" "certificate based authentication => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
                     if $ASSUMING_HTTP; then
                          SERVICE=HTTP
                          out " -- ASSUMING_HTTP set though"
-                         fileout "service" "WARN" "Couldn't determine service, --ASSUMING_HTTP set"
+                         fileout "service" "DEBUG" "Couldn't determine service, --ASSUMING_HTTP set"
                          ret=0
                     else
                          out ", assuming no HTTP service => skipping all HTTP checks"
-                         fileout "service" "WARN" "Couldn't determine service, skipping all HTTP checks"
+                         fileout "service" "DEBUG" "Couldn't determine service, skipping all HTTP checks"
                          ret=1
                     fi
                fi
@@ -1014,7 +1017,7 @@ run_hpkp() {
                out "\n$spaces"
                pr_svrty_high " No matching key for pins found "
                out "(CAs pinned? -- not checked for yet)"
-               fileout "hpkp_keymatch" "WARN" "The TLS key does not match any key pinned in the HPKP header. If you pinned a CA key you can ignore this"
+               fileout "hpkp_keymatch" "DEBUG" "The TLS key does not match any key pinned in the HPKP header. If you pinned a CA key you can ignore this"
           fi
      else
           out "--"
@@ -2231,6 +2234,12 @@ run_prototest_openssl() {
      # 7: no local support
 }
 
+# idempotent function to add SSL/TLS protocols. It should ease testing
+# PROTOS_OFFERED's content is in openssl terminology
+add_tls_offered() {
+     grep -w "$1" <<< "$PROTOS_OFFERED" || PROTOS_OFFERED+="$1 "
+}
+
 
 # the protocol check needs to be revamped. It sucks, see above
 run_protocols() {
@@ -2270,6 +2279,7 @@ run_protocols() {
                0)
                     pr_svrty_criticalln   "offered (NOT ok)"
                     fileout "sslv2" "NOT ok" "SSLv2 is offered (NOT ok)"
+                    add_tls_offered "ssl2"
                     ;;
                1)
                     pr_done_bestln "not offered (OK)"
@@ -2278,6 +2288,7 @@ run_protocols() {
                5)
                     pr_svrty_high "CVE-2015-3197: $supported_no_ciph2";
                     fileout "sslv2" "WARN" "CVE-2015-3197: SSLv2 is $supported_no_ciph2"
+                    add_tls_offered "ssl2"
                     ;;
                7)
                     fileout "sslv2" "INFO" "SSLv2 is not tested due to lack of local support"
@@ -2295,6 +2306,7 @@ run_protocols() {
           0)
                pr_svrty_highln "offered (NOT ok)"
                fileout "sslv3" "NOT ok" "SSLv3 is offered (NOT ok)"
+               add_tls_offered "ssl3"
                ;;
           1)
                pr_done_bestln "not offered (OK)"
@@ -2308,7 +2320,8 @@ run_protocols() {
                fileout "sslv3" "WARN" "SSLv3 is $supported_no_ciph1"
                pr_svrty_high "$supported_no_ciph2"
                outln "(may need debugging)"
-               ;;                       # protocol ok, but no cipher
+               add_tls_offered "ssl3"
+               ;;       
           7)
                fileout "sslv3" "INFO" "SSLv3 is not tested due to lack of local support"
                ;;                                                            # no local support
@@ -2324,6 +2337,7 @@ run_protocols() {
           0)
                outln "offered"
                fileout "tls1" "INFO" "TLSv1.0 is offered"
+               add_tls_offered "tls1"
                ;;                                            # nothing wrong with it -- per se
           1)
                outln "not offered"
@@ -2334,10 +2348,12 @@ run_protocols() {
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
                outln
                fileout "tls1" "MEDIUM" "TLSv1.0 is not offered, and downgraded to SSL"
+               add_tls_offered "tls1"
                ;;
           5)
                outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
                fileout "tls1" "WARN" "TLSv1.0 is $supported_no_ciph1"
+               add_tls_offered "tls1"
                ;;
           7)
                fileout "tlsv1" "INFO" "TLSv1.0 is not tested due to lack of local support"
@@ -2354,6 +2370,7 @@ run_protocols() {
           0)
                outln "offered"
                fileout "tls1_1" "INFO" "TLSv1.1 is offered"
+               add_tls_offered "tls1_1"
                ;;                                            # nothing wrong with it
           1)
                outln "not offered"
@@ -2368,6 +2385,7 @@ run_protocols() {
           5)
                outln "$supported_no_ciph1"
                fileout "tls1_1" "WARN" "TLSv1.1 is $supported_no_ciph1"
+               add_tls_offered "tls1_1"
                ;;                                # protocol ok, but no cipher
           7)
                fileout "tls1_1" "INFO" "TLSv1.1 is not tested due to lack of local support"
@@ -2384,6 +2402,7 @@ run_protocols() {
           0)
                pr_done_bestln "offered (OK)"
                fileout "tls1_2" "OK" "TLSv1.2 is offered (OK)"
+               add_tls_offered "tls1_2"
                ;;                                  # GCM cipher in TLS 1.2: very good!
           1)
                pr_svrty_mediumln "not offered"
@@ -2398,11 +2417,13 @@ run_protocols() {
           5)
                outln "$supported_no_ciph1"
                fileout "tls1_2" "WARN" "TLSv1.2 is $supported_no_ciph1"
+               add_tls_offered "tls1_2"
                ;;                                # protocol ok, but no cipher
           7)
                fileout "tls1_2" "INFO" "TLSv1.2 is not tested due to lack of local support"
                ;;                                                            # no local support
      esac
+
      return 0
 }
 
@@ -2762,7 +2783,7 @@ check_tls12_pref() {
                order="$cipher"
                tested_cipher="-$cipher"
           else
-               pr_warningln "fixme: something weird happened around line $((LINENO - 6))"
+               fixmeln "something weird happened around line $((LINENO - 6))"
                return 1
           fi
           while true; do
@@ -2782,6 +2803,8 @@ check_tls12_pref() {
           # second cipher set didn't succeed: we can just output everything
           out " $order"
      fi
+
+     tmpfile_handle $FUNCNAME.txt
      return 0
 }
 
@@ -2819,7 +2842,7 @@ cipher_pref_check() {
                     # thus we reduce the number of ciphers we throw at the server and put later everything together
                     # see #189
                     # so far, this was only observed in TLS 1.2
-                    check_tls12_pref "$cipher"
+                    order=$(check_tls12_pref "$cipher")
                else
                     out " $cipher"  # this is the first cipher for protocol
                     while true; do
@@ -2856,7 +2879,7 @@ cipher_pref_check() {
                     order+=" $cipher"
                done
                outln
-               [[ -z $order ]] || fileout "order_spdy_$p" "INFO" "Default cipher order for SPDY protocol $p:order"
+               [[ -n $order ]] && fileout "order_spdy_$p" "INFO" "Default cipher order for SPDY protocol $p: $order"
           done
      fi
 
@@ -4545,6 +4568,7 @@ sslv2_sockets() {
                [[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
                if [[ "$lines" -gt 1 ]]; then
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
+                    add_tls_offered "ssl2"
                     if [[ 0 -eq "$nr_ciphers_detected" ]]; then
                          pr_svrty_highln "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
                          fileout "sslv2" "NOT ok" "SSLv2 offered (NOT ok), vulnerable to CVE-2015-3197"
@@ -4569,37 +4593,21 @@ sslv2_sockets() {
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # ARG2: CIPHER_SUITES string
 socksend_tls_clienthello() {
-#FIXME: redo this with all extensions!
      local tls_low_byte="$1"
      local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301 -- except: SSLv3
      local servername_hexstr len_servername len_servername_hex
-     local hexdump_format_str
-     local all_extensions
-     local len_sni_listlen len_sni_ext len_extension_hex
-     local cipher_suites len_ciph_suites len_ciph_suites_word
+     local hexdump_format_str part1 part2
+     local all_extensions=""
+     local -i i j len_extension len_padding_extension len_all
+     local len_sni_listlen len_sni_ext len_extension_hex len_padding_extension_hex
+     local cipher_suites len_ciph_suites len_ciph_suites_byte len_ciph_suites_word
      local len_client_hello_word len_all_word
-
-     #len_servername=$(echo ${#NODE})
-     len_servername=${#NODE}
-     hexdump_format_str="$len_servername/1 \"%02x,\""
-     servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
+     local ecc_cipher_suite_found=false
+     local extension_signature_algorithms extension_heartbeat
+     local extension_session_ticket extension_next_protocol extensions_ecc extension_padding
 
      code2network "$2"             # convert CIPHER_SUITES
      cipher_suites="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
-
-#formatted example for SNI
-#00 00    # extension server_name
-#00 1a    # length                      = the following +2 = server_name length + 5
-#00 18    # server_name list_length     = server_name length +3
-#00       # server_name type (hostname)
-#00 15    # server_name length
-#66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
-
-     # convert lengths we need to fill in from dec to hex:
-     len_servername_hex=$(printf "%02x\n" $len_servername)
-     len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
-     len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
-     len_extension_hex=$(printf "%02x\n" $((len_servername+9)))  #FIXME: for TLS 1.2 and IIS servers we need extension_signature_algorithms!!
 
      len_ciph_suites_byte=$(echo ${#cipher_suites})
      let "len_ciph_suites_byte += 2"
@@ -4609,6 +4617,136 @@ socksend_tls_clienthello() {
      len2twobytes "$len_ciph_suites"
      len_ciph_suites_word="$LEN_STR"
      #[[ $DEBUG -ge 3 ]] && echo $len_ciph_suites_word
+
+     if [[ "$tls_low_byte" != "00" ]]; then
+          # Add extensions
+
+          # Check to see if any ECC cipher suites are included in cipher_suites
+          for (( i=0; i<len_ciph_suites_byte; i=i+8 )); do
+               j=$i+4
+               part1="0x${cipher_suites:$i:2}"
+               part2="0x${cipher_suites:$j:2}"
+               if [[ "$part1" == "0xc0" ]]; then
+                    if [[ "$part2" -ge "0x01" ]] && [[ "$part2" -le "0x19" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x23" ]] && [[ "$part2" -le "0x3b" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x48" ]] && [[ "$part2" -le "0x4f" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x5c" ]] && [[ "$part2" -le "0x63" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x70" ]] && [[ "$part2" -le "0x79" ]]; then
+                    ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x86" ]] && [[ "$part2" -le "0x8d" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0x9a" ]] && [[ "$part2" -le "0x9b" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    elif [[ "$part2" -ge "0xac" ]] && [[ "$part2" -le "0xaf" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    fi
+               elif [[ "$part1" == "0xcc" ]]; then
+                    if [[ "$part2" == "0xa8" ]] || [[ "$part2" == "0xa9" ]] || [[ "$part2" == "0xac" ]] || [[ "$part2" == "0x13" ]] || [[ "$part2" == "0x14" ]]; then
+                         ecc_cipher_suite_found=true && break
+                    fi
+               fi
+          done
+
+          #formatted example for SNI
+          #00 00    # extension server_name
+          #00 1a    # length                      = the following +2 = server_name length + 5
+          #00 18    # server_name list_length     = server_name length +3
+          #00       # server_name type (hostname)
+          #00 15    # server_name length
+          #66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
+          len_servername=${#NODE}
+          hexdump_format_str="$len_servername/1 \"%02x,\""
+          servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
+          # convert lengths we need to fill in from dec to hex:
+          len_servername_hex=$(printf "%02x\n" $len_servername)
+          len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
+          len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
+
+          extension_signature_algorithms="
+          00, 0d,                    # Type: signature_algorithms , see RFC 5246
+          00, 20,                    # len
+          00,1e, 06,01, 06,02, 06,03, 05,01, 05,02, 05,03,
+          04,01, 04,02, 04,03, 03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
+
+          extension_heartbeat="
+          00, 0f, 00, 01, 01"
+
+          extension_session_ticket="
+          00, 23, 00, 00"
+
+          extension_next_protocol="
+          33, 74, 00, 00"
+
+          # Supported Elliptic Curves Extension and Supported Point Formats Extension.
+          extensions_ecc="
+          00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
+          00, 3a, 00, 38,            # lengths
+          00, 01, 00, 02, 00, 03, 00, 04, 00, 05, 00, 06, 00, 07, 00, 08,
+          00, 09, 00, 0a, 00, 0b, 00, 0c, 00, 0d, 00, 0e, 00, 0f, 00, 10,
+          00, 11, 00, 12, 00, 13, 00, 14, 00, 15, 00, 16, 00, 17, 00, 18,
+          00, 19, 00, 1a, 00, 1b, 00, 1c,
+          00, 0b,                    # Type: Supported Point Formats , see RFC 4492 
+          00, 02,                    # len
+          01, 00"
+          
+          all_extensions="
+           00, 00                  # extension server_name
+          ,00, $len_sni_ext        # length SNI EXT
+          ,00, $len_sni_listlen    # server_name list_length
+          ,00                      # server_name type (hostname)
+          ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
+          ,$servername_hexstr      # server_name target
+          ,$extension_heartbeat
+          ,$extension_session_ticket
+          ,$extension_next_protocol"
+
+          # RFC 5246 says that clients MUST NOT offer the signature algorithms
+          # extension if they are offering TLS versions prior to 1.2.
+          if [[ "0x$tls_low_byte" -ge "0x03" ]]; then
+               all_extensions="$all_extensions
+               ,$extension_signature_algorithms"
+          fi
+
+          if $ecc_cipher_suite_found; then
+               all_extensions="$all_extensions
+               ,$extensions_ecc"
+          fi
+
+          code2network "$all_extensions" # convert extensions
+          all_extensions="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
+          len_extension=${#all_extensions}
+          len_extension+=2
+          len_extension=$len_extension/4
+          len_extension_hex=$(printf "%02x\n" $len_extension)
+
+          # If the length of the Client Hello would be between 256 and 511 bytes,
+          # then add a padding extension (see RFC 7685)
+          len_all=$((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2))
+          if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]]; then
+               if [[ $len_all -gt 508 ]]; then
+                   len_padding_extension=0
+               else
+                   len_padding_extension=$((508 - 0x$len_ciph_suites - 0x2b - 0x$len_extension_hex - 0x2))
+               fi
+               len_padding_extension_hex=$(printf "%02x\n" $len_padding_extension)
+               len2twobytes "$len_padding_extension_hex"
+               all_extensions="$all_extensions\\x00\\x15\\x${LEN_STR:0:2}\\x${LEN_STR:4:2}"
+               for (( i=0; i<len_padding_extension; i++ )); do
+                    all_extensions="$all_extensions\\x00"
+               done
+               len_extension=$len_extension+$len_padding_extension+0x4
+               len_extension_hex=$(printf "%02x\n" $len_extension)
+          fi
+          len2twobytes "$len_extension_hex"
+          all_extensions="
+          ,$LEN_STR  # first the len of all extentions.
+          ,$all_extensions"
+          
+     fi
 
      # RFC 3546 doesn't specify SSLv3 to have SNI, openssl just ignores the switch if supplied
      if [[ "$tls_low_byte" == "00" ]]; then
@@ -4648,45 +4786,6 @@ socksend_tls_clienthello() {
      ,$cipher_suites
      ,01                      # Compression methods length
      ,00"                     # Compression method (x00 for NULL)
-
-#TODO,add (see heartbleed)
-# extension lenghth (word)
-# extension ec_point_formats (4 words) 1st: 00 0b
-#len                              00 04
-# ec prot formats len:            03
-# uncompressed                    00
-# EC point format: ansiX962_compressed_prime  01
-# EC point format: ansiX962_compressed_char2  02
-
-# ec, 1st:                 00 0a
-#     2nd length: (word)         e.g. 0x34
-#     3rd: ec curve len    ln-2  e.g. 0x32
-#     4.-n.  curves              e.g. 25 words
-
-# Extension: Session Ticket        00 23
-
-     extension_signature_algorithms="
-     00, 0d,                    # Type: signature_algorithms , see RFC 5246
-     00, 20,                    # len
-     00,1e, 06,01, 06,02, 06,03, 05,01, 05,02, 05,03,
-     04,01, 04,02, 04,03, 03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
-
-# Extension: Haertbeat             00 0f
-# len                              00 01
-# peer allowed to send requests       01
-
-     if [[ "$tls_low_byte" == "00" ]]; then
-          all_extensions=""
-     else                          #FIXME: we (probably) need extension_signature_algorithms here. TLS 1.2 fails on IIS otherwise
-          all_extensions="
-          ,00, $len_extension_hex  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
-          ,00, 00                  # extension server_name
-          ,00, $len_sni_ext        # length SNI EXT
-          ,00, $len_sni_listlen    # server_name list_length
-          ,00                      # server_name type (hostname)
-          ,00, $len_servername_hex # server_name length
-          ,$servername_hexstr"     # server_name target
-     fi
 
      fd_socket 5 || return 6
 
@@ -5500,11 +5599,11 @@ run_drown() {
      parse_sslv2_serverhello "$SOCK_REPLY_FILE"
      case $? in
           7) # strange reply, couldn't convert the cipher spec length to a hex number
-               pr_cyan "strange v2 reply "
+               fixme "strange v2 reply "
                outln " (rerun with DEBUG >=2)"
                [[ $DEBUG -ge 3 ]] && hexdump -C "$SOCK_REPLY_FILE" | head -1
                ret=7
-               fileout "DROWN" "MINOR_ERROR" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
+               fileout "drown" "MINOR_ERROR" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
                ;;
           3)   # vulnerable
                lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null)")
@@ -5513,16 +5612,16 @@ run_drown() {
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$nr_ciphers_detected" ]]; then
                          pr_svrty_highln "CVE-2015-3197: SSLv2 supported but couldn't detect a cipher (NOT ok)";
-                         fileout "DROWN" "NOT ok" "SSLv2 offered (NOT ok), CVE-2015-3197: but could not detect a cipher"
+                         fileout "drown" "NOT ok" "SSLv2 offered (NOT ok), CVE-2015-3197: but could not detect a cipher"
                     else
                          pr_svrty_criticalln  "vulnerable (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
-                         fileout "DROWN" "NOT ok" "vulnerable (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers"
+                         fileout "drown" "NOT ok" "vulnerable (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers"
                     fi
                fi
                ret=1
                ;;
           *)   pr_done_bestln "not vulnerable on this port (OK)"
-               fileout "DROWN" "OK" "not vulnerable to DROWN"
+               fileout "drown" "OK" "not vulnerable to DROWN"
                outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
                if [[ "$DEBUG" -ge 1 ]] || "$SHOW_CENSYS_LINK"; then
 # not advertising it as it after 5 tries and account is needed
@@ -5805,7 +5904,7 @@ run_tls_truncation() {
 
 old_fart() {
      outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
-     fileout "old_fart" "WARN" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed. Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
+     fileout "old_fart" "ERROR" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed. Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
      fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -2
 }
 
@@ -7436,4 +7535,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.495 2016/06/07 11:02:57 dirkw Exp $
+#  $Id: testssl.sh,v 1.496 2016/06/07 21:06:57 dirkw Exp $
