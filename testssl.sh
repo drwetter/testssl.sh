@@ -151,7 +151,7 @@ JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
-SIZELMT_W_ARND=${SIZELMT_W_ARND:-false} # workaround for servers which have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
+SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -2247,6 +2247,15 @@ add_tls_offered() {
      grep -w "$1" <<< "$PROTOS_OFFERED" || PROTOS_OFFERED+="$1 "
 }
 
+# function which checks whether SSLv2 - TLS 1.2 is being offereed
+has_server_protocol() {
+     [[ -z "$PROTOS_OFFERED" ]] && return 0            # if empty we rather return 0, means check at additional cost=connect will be done
+     if grep -w "$1" <<< "$PROTOS_OFFERED"; then
+          return 0
+     fi
+     return 1
+}
+
 
 # the protocol check needs to be revamped. It sucks, see above
 run_protocols() {
@@ -2257,8 +2266,6 @@ run_protocols() {
 
      outln; pr_headline " Testing protocols "
      via="Protocol tested "
-
-     #FIXME: use PROTOS_OFFERED here
 
      if $SSL_NATIVE; then
           using_sockets=false
@@ -2279,7 +2286,7 @@ run_protocols() {
 
      pr_bold " SSLv2      ";
      if ! $SSL_NATIVE; then
-          sslv2_sockets                                                    #FIXME: messages need to be moved to this higher level
+          sslv2_sockets                                                    #FIXME: messages/output need to be moved to this (higher) level
      else
           run_prototest_openssl "-ssl2"
           case $? in
@@ -2299,7 +2306,7 @@ run_protocols() {
                     ;;
                7)
                     fileout "sslv2" "INFO" "SSLv2 is not tested due to lack of local support"
-                    ;;                                                       # no local support
+                    ;;                                                     # no local support
           esac
      fi
 
@@ -2345,11 +2352,11 @@ run_protocols() {
                outln "offered"
                fileout "tls1" "INFO" "TLSv1.0 is offered"
                add_tls_offered "tls1"
-               ;;                                            # nothing wrong with it -- per se
+               ;;                                           # nothing wrong with it -- per se
           1)
                outln "not offered"
                fileout "tls1" "INFO" "TLSv1.0 is not offered"
-               ;;                                        # neither good or bad
+               ;;                                           # neither good or bad
           2)
                pr_svrty_medium "not offered"
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
@@ -2741,7 +2748,7 @@ check_tls12_pref() {
      while true; do
           $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "ALL:$tested_cipher:$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                order+=" $cipher"
                tested_cipher="$tested_cipher:-$cipher"
           else
@@ -2756,7 +2763,7 @@ check_tls12_pref() {
           $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                batchremoved_success=true               # signals that we have some of those ciphers and need to put everything together later on
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                order+=" $cipher"
                batchremoved="$batchremoved:-$cipher"
                debugme outln "B1: $batchremoved"
@@ -2773,7 +2780,7 @@ check_tls12_pref() {
           $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                # first cipher
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                order="$cipher"
                tested_cipher="-$cipher"
           else
@@ -2783,7 +2790,7 @@ check_tls12_pref() {
           while true; do
                $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                if sclient_connect_successful $? $TMPFILE ; then
-                    cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                    cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                     order+=" $cipher"
                     tested_cipher="$tested_cipher:-$cipher"
                else
@@ -2806,41 +2813,51 @@ check_tls12_pref() {
 cipher_pref_check() {
      local p proto protos npn_protos
      local tested_cipher cipher order
+     local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
 
      pr_bold " Cipher order"
 
      for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
           order=""
           if [[ $p == ssl2 ]] && ! "$HAS_SSL2"; then
-               out "\n     SSLv2:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl2\"";
+               out "\n    SSLv2:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl2\"";
                continue
           fi
           if [[ $p == ssl3 ]] && ! "$HAS_SSL3"; then
-               out "\n     SSLv3:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
+               out "\n    SSLv3:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
                continue
           fi
+          # with the supplied binaries SNI works also for SSLv2 (+ SSLv3)
           $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                tested_cipher=""
-               proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               proto=$(awk '/Protocol/ { print $3 }' $TMPFILE)
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                [[ -z "$proto" ]] && continue                # for early openssl versions sometimes needed
                outln
                printf "    %-10s" "$proto: "
                tested_cipher="-"$cipher
                order="$cipher"
-               if [[ $p == tls1_2 ]] && "$SIZELMT_W_ARND"; then
-                    # for some servers the ServerHello is limited to 128 ciphers or the ServerHello itself has a length restriction
-                    # thus we reduce the number of ciphers we throw at the server and put later everything together
-                    # see #189
-                    # so far, this was only observed in TLS 1.2
+               if [[ $p == tls1_2 ]]; then
+                    # for some servers the ClientHello is limited to 128 ciphers or the ClientHello itself has a length restriction.
+                    # So far, this was only observed in TLS 1.2, affected are e.g. old Cisco LBs or ASAs, see issue #189
+                    # To check whether a workaround is needed we send a laaarge list of ciphers/big client hello. If connect fails, 
+                    # we hit the bug and automagically do the workround. Cost: this is for all servers only 1x more connect
+                    $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$overflow_probe_cipherlist" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+                    if ! sclient_connect_successful $? $TMPFILE; then
+#FIXME this needs to be handled differently. We need 2 status: BUG={true,false,not tested yet}
+                         SERVER_SIZE_LIMIT_BUG=true
+                    fi
+               fi
+               if [[ $p == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
                     order=$(check_tls12_pref "$cipher")
+                    out "$order"
                else
                     out " $cipher"  # this is the first cipher for protocol
                     while true; do
                          $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                          sclient_connect_successful $? $TMPFILE || break
-                         cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                         cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                          out " $cipher"
                          order+=" $cipher"
                          tested_cipher="$tested_cipher:-$cipher"
@@ -2858,14 +2875,14 @@ cipher_pref_check() {
           for p in $npn_protos; do
                order=""
                $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                printf "    %-10s %s " "$p:" "$cipher"
                tested_cipher="-"$cipher
                order="$cipher"
                while true; do
                     $OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
                     sclient_connect_successful $? $TMPFILE || break
-                    cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                    cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                     out "$cipher "
                     tested_cipher="$tested_cipher:-$cipher"
                     order+=" $cipher"
@@ -7335,6 +7352,7 @@ reset_hostdepended_vars() {
      TLS_EXTENSIONS=""
      PROTOS_OFFERED=""
      OPTIMAL_PROTO=""
+     SERVER_SIZE_LIMIT_BUG=false
 }
 
 
@@ -7474,4 +7492,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.496 2016/06/07 21:06:57 dirkw Exp $
+#  $Id: testssl.sh,v 1.499 2016/06/09 13:56:51 dirkw Exp $
