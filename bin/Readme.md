@@ -13,12 +13,12 @@ via the argument (``--openssl=<here>``) or as an environment variable
 (``OPENSSL=<here> testssl.sh <yourargs>``).
 
 The Linux binaries with the trailing ``-krb5`` come with Kerberos 5 support, 
-they won't be automatically picked up as you need to make sure first they
+they won't be picked up automatically as you need to make sure first they
 run (see libraries below).
 
 All the precompiled binaries provided here have extended support for
 everything which is normally not in OpenSSL or LibreSSL -- 40+56 Bit,
-export/ANON ciphers, weak DH ciphers, SSLv2 etc. -- all the dirty
+export/ANON ciphers, weak DH ciphers, weak EC curves, SSLv2 etc. -- all the dirty
 features needed for testing. OTOH they also come with extended support
 for new / advanced cipher suites and/or features which are not in the 
 official branch like CHACHA20+POLY1305 and CAMELIA 256 bit ciphers.
@@ -29,6 +29,9 @@ Peter!
 
 Compiled Linux binaries so far come from Dirk, other contributors see ../CREDITS.md .
 
+**__New binaries inluding IPv6 support are @ https://testssl.sh__**. The ones here will be
+updated soon. 
+
 
 Compiling and Usage Instructions
 ================================
@@ -38,7 +41,7 @@ General
 
 Both 64+32 bit Linux binaries were compiled under Ubuntu 12.04 LTS. Likely you
 cannot use them for older distributions, younger worked in all my test environments. 
-I provide for each distributions two sets of binaries:
+I provide for each distributions two sets of binaries (no IPv6 here):
 
 * completely statically linked binaries
 * dynamically linked binaries, additionally with MIT Kerberos support ("krb5" in the name).
@@ -94,7 +97,9 @@ If you want to compile OpenSSL yourself, here are the instructions:
 -- this doesn't give you the option of an IPv6 enabled proxy -- yet.)
 
 Four GOST [1][2] ciphers come via engine support automagically with this setup. Two additional GOST 
-ciphers can be compiled in (``GOST-GOST94``, ``GOST-MD5``) with ``-DTEMP_GOST_TLS`` but as of now they make problems under rare circumstances, so unless you desperately need those ciphers I would stay away from ``-DTEMP_GOST_TLS``.
+ciphers can be compiled in (``GOST-GOST94``, ``GOST-MD5``) with ``-DTEMP_GOST_TLS`` but as of now they make 
+problems under some circumstances, so unless you desperately need those ciphers I would stay away from 
+``-DTEMP_GOST_TLS``.
 
 If you don't have / don't want Kerberos libraries and devel rpms/debs, just omit "--with-krb5-flavor=MIT"
 (see examples).  If you have another Kerberos flavor you would need to figure out by yourself.
