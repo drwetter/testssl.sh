@@ -2752,7 +2752,7 @@ check_tls12_pref() {
      while true; do
           $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "ALL:$tested_cipher:$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                order+=" $cipher"
                tested_cipher="$tested_cipher:-$cipher"
           else
@@ -2767,7 +2767,7 @@ check_tls12_pref() {
           $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                batchremoved_success=true               # signals that we have some of those ciphers and need to put everything together later on
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                order+=" $cipher"
                batchremoved="$batchremoved:-$cipher"
                debugme outln "B1: $batchremoved"
@@ -2784,7 +2784,7 @@ check_tls12_pref() {
           $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                # first cipher
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                order="$cipher"
                tested_cipher="-$cipher"
           else
@@ -2794,7 +2794,7 @@ check_tls12_pref() {
           while true; do
                $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                if sclient_connect_successful $? $TMPFILE ; then
-                    cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                    cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                     order+=" $cipher"
                     tested_cipher="$tested_cipher:-$cipher"
                else
@@ -2835,8 +2835,8 @@ cipher_pref_check() {
           $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                tested_cipher=""
-               proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               proto=$(awk '/Protocol/ { print $3 }' $TMPFILE)
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                [[ -z "$proto" ]] && continue                # for early openssl versions sometimes needed
                outln
                printf "    %-10s" "$proto: "
@@ -2849,6 +2849,7 @@ cipher_pref_check() {
                     # we hit the bug and automagically do the workround. Cost: this is for all servers only 1x more connect
                     $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$overflow_probe_cipherlist" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     if ! sclient_connect_successful $? $TMPFILE; then
+#FIXME this needs to be handled differently. We need 2 status: BUG={true,false,not tested yet}
                          SERVER_SIZE_LIMIT_BUG=true
                     fi
                fi
@@ -2860,7 +2861,7 @@ cipher_pref_check() {
                     while true; do
                          $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                          sclient_connect_successful $? $TMPFILE || break
-                         cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                         cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                          out " $cipher"
                          order+=" $cipher"
                          tested_cipher="$tested_cipher:-$cipher"
@@ -2878,14 +2879,14 @@ cipher_pref_check() {
           for p in $npn_protos; do
                order=""
                $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
-               cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                printf "    %-10s %s " "$p:" "$cipher"
                tested_cipher="-"$cipher
                order="$cipher"
                while true; do
                     $OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
                     sclient_connect_successful $? $TMPFILE || break
-                    cipher=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                    cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                     out "$cipher "
                     tested_cipher="$tested_cipher:-$cipher"
                     order+=" $cipher"
@@ -7495,4 +7496,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.498 2016/06/09 09:04:39 dirkw Exp $
+#  $Id: testssl.sh,v 1.499 2016/06/09 13:56:51 dirkw Exp $
