@@ -1611,7 +1611,13 @@ run_allciphers() {
 
      # set ciphers_found[1] so that all bundles will be tested in round 0.
      ciphers_found[1]=true
-     round_num=0
+     # Some servers can't handle a handshake with >= 128 ciphers.
+     for (( round_num=0; bundle_size/4 >= 128; bundle_size/=4 )); do
+          round_num=$round_num+1
+          for (( i=4**$round_num; i<2*4**$round_num; i++ )); do
+               ciphers_found[i]=true
+          done
+     done
 
      for (( bundle_size/=4; bundle_size>=1; bundle_size/=4 )); do
          # Note that since the number of ciphers isn't a power of 4, the number
@@ -1704,6 +1710,7 @@ run_cipher_per_proto() {
      outln " -ssl2 SSLv2\n -ssl3 SSLv3\n -tls1 TLS 1\n -tls1_1 TLS 1.1\n -tls1_2 TLS 1.2"| while read proto proto_text; do
           locally_supported "$proto" "$proto_text" || continue
           outln
+          has_server_protocol "${proto:1}" || continue
           
           # The OpenSSL ciphers function, prior to version 1.1.0, could only understand -ssl2, -ssl3, and -tls1.
           if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == "-ssl3" ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
@@ -1730,7 +1737,14 @@ run_cipher_per_proto() {
 
           # set ciphers_found[1] so that the complete bundle will be tested in round 0.
           ciphers_found[1]=true
-          for (( round_num=0; bundle_size>=1; bundle_size/=4 )); do
+          # Some servers can't handle a handshake with >= 128 ciphers.
+          for (( round_num=0; bundle_size>=128; bundle_size/=4 )); do
+               round_num=$round_num+1
+               for (( i=4**$round_num; i<2*4**$round_num; i++ )); do
+                    ciphers_found[i]=true
+               done
+          done
+          for (( 1; bundle_size>=1; bundle_size/=4 )); do
               # Note that since the number of ciphers isn't a power of 4, the number
               # of bundles may be may be less than 4**(round_num+1), and the final
               # bundle may have fewer than bundle_size ciphers.
@@ -2254,7 +2268,7 @@ add_tls_offered() {
 # function which checks whether SSLv2 - TLS 1.2 is being offereed
 has_server_protocol() {
      [[ -z "$PROTOS_OFFERED" ]] && return 0            # if empty we rather return 0, means check at additional cost=connect will be done
-     if grep -w "$1" <<< "$PROTOS_OFFERED"; then
+     if grep -qw "$1" <<< "$PROTOS_OFFERED"; then
           return 0
      fi
      return 1
@@ -2366,7 +2380,6 @@ run_protocols() {
                [[ $DEBUG -eq 1 ]] && out " -- downgraded"
                outln
                fileout "tls1" "MEDIUM" "TLSv1.0 is not offered, and downgraded to SSL"
-               add_tls_offered "tls1"
                ;;
           5)
                outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
