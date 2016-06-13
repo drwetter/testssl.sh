@@ -3468,15 +3468,18 @@ certificate_info() {
      fi
      fileout "${json_prefix}cn" "$cnok" "$cnfinding"
 
-     sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
-          sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
-#                                                       ^^^ CACert
+     sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | \
+          egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | \
+          sed -e 's/ *DNS://g' -e 's/ *IP Address://g' -e 's/ *email://g' -e 's/ *URI://g' -e 's/ *DirName://g' \
+              -e 's/ *Registered ID://g' -e 's/,/\n/g' \
+              -e 's/ *othername:<unsupported>//g' -e 's/ *X400Name:<unsupported>//g' -e 's/ *EdiPartyName:<unsupported>//g')
+#                   ^^^ CACert
      out "$indent"; pr_bold " subjectAltName (SAN)         "
      if [[ -n "$sans" ]]; then
-          for san in $sans; do
-               pr_dquoted "$san"
+          while read san; do
+               [[ -n "$san" ]] && pr_dquoted "$san"
                out " "
-          done
+          done <<< "$sans"
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $sans"
      else
           out "-- "

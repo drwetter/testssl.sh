@@ -56,18 +56,18 @@ Done so far:
   https://github.com/drwetter/testssl.sh/issues/11
 * works on servers requiring a x509 certificate for authentication
 * SSL Session ID check
-* avahi/mDNS based name resolution
+* Avahi/mDNS based name resolution
 * HTTP2/ALPN protocol check
 * Logging to a file / dir
 * Logging to JSON + CSV
-* check for multiple server certificates
-* browser cipher simulation
-* assistance for color-blind users
-* Even more compatibility improvements for FreeBSD, RH-ish and F5 systems
+* Check for multiple server certificates
+* Browser cipher simulation
+* Assistance for color-blind users
+* Even more compatibility improvements for FreeBSD, RH-ish, F5 and Cisco systems
 * Considerable speed improvements for each cipher runs (-e/-E)
-* more robust socket interface
+* More robust socket interface
 * OpenSSL 1.1.0 compliant
-* whole number of busg squashed
+* Whole number of bugs squashed
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
@@ -89,8 +89,8 @@ Help is needed here.
 
 #### Bug reports
 
-Please file bugs in the issue tracker. Do not forget to provide detailed information, see https://github.com/drwetter/testssl.sh/wiki/Findings-and-HowTo-Fix-them#file-a-proper-bug-report
-Nobody can read your thoughts -- yet.
+Please file bugs in the issue tracker. Do not forget to provide detailed information, see https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. (Nobody can read your thoughts 
+-- yet. And only agencies your screen) ;-)
 
 ----
 
