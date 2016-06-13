@@ -149,6 +149,7 @@ WIDE=${WIDE:-false}                     # whether to display for some options th
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
+APPEND=false                            # append file in stead of overwriting
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
@@ -453,12 +454,17 @@ strip_quote() {
 }
 
 fileout_header() {
-     "$do_json" && printf "[\n" > "$JSONFILE"
-     "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+     if [[ $APPEND ]]; then
+          "$do_json" && [[ ! -f "$JSONFILE" ]] && printf "[\n" > "$JSONFILE"
+          "$do_csv" && [[ ! -f "CSVFILE" ]] && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+     else
+          "$do_json" && printf "[\n" > "$JSONFILE"
+          "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+     fi
 }
 
 fileout_footer() {
-     "$do_json" && printf "]\n" >> "$JSONFILE"
+     "$do_json" && [[ -f "$JSONFILE" ]] && printf "]\n" >> "$JSONFILE"
 }
 
 fileout() { # ID, SEVERITY, FINDING
@@ -6237,7 +6243,7 @@ cleanup () {
           [[ -d "$TEMPDIR" ]] && rm -rf "$TEMPDIR";
      fi
      outln
-     fileout_footer
+     [[ $APPEND ]] || fileout_footer
 }
 
 fatal() {
@@ -6858,30 +6864,6 @@ mx_all_ips() {
      return $ret
 }
 
-run_mass_testing_parallel() {
-     local cmdline=""
-     local global_cmdline=${CMDLINE%%--file*}
-
-     if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
-          fatal "Can't read file \"$FNAME\"" "-1"
-     fi
-     pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln
-     outln "(output is in ....\n)"
-     while read cmdline; do
-          cmdline=$(filter_input "$cmdline")
-          [[ -z "$cmdline" ]] && continue
-          [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
-          draw_line "=" $((TERM_DWITH / 2)); outln;
-          determine_logfile
-          outln "$cmdline"
-          $cmdline >$LOGFILE &
-          sleep $PARALLEL_SLEEP
-     done < "$FNAME"
-     return $?
-}
-
-
 run_mass_testing() {
      local cmdline=""
      local global_cmdline=${CMDLINE%%--file*}
@@ -6891,15 +6873,17 @@ run_mass_testing() {
      fi
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
+     APPEND=false # Make sure we close out our files
      while read cmdline; do
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch -q --append $cmdline"
           draw_line "=" $((TERM_DWITH / 2)); outln;
           outln "$cmdline"
           $cmdline
      done < "${FNAME}"
+     fileout_footer
      return $?
 }
 
@@ -7271,6 +7255,9 @@ parse_cmd_line() {
                     CSVFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
+                    ;;
+               --append)
+                    APPEND=true
                     ;;
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
