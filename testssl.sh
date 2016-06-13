@@ -3161,7 +3161,7 @@ compare_server_name_to_cert()
 {
      local servername=$1
      local cert=$2
-     local cn sans san basename
+     local cn dns_sans ip_sans san basename
 
      cn="$(get_cn_from_cert $cert)"
      if [[ -n "$cn" ]]; then
@@ -3173,15 +3173,23 @@ compare_server_name_to_cert()
           fi
      fi
 
-     sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
-         sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
-     for san in $sans; do
+     # Check whether any of the DNS names in the certificate match the servername
+     dns_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | \
+              sed -e 's/,/\n/g' | grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
+     for san in $dns_sans; do
           [[ "$san" == "$servername" ]] && return 0
           # If $san is a wildcard name, then do a wildcard match
           if echo -n "$san" | grep -q '^*.'; then
                basename="$(echo -n "$san" | sed 's/^\*.//')"
                [[ "$san" == "*.$basename" ]] && [[ "$servername" == *".$basename" ]] && return 0
           fi
+     done
+
+     # Check whether any of the IP addresses in the certificate match the serername
+     ip_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | \
+             sed -e 's/,/\n/g' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
+     for san in $ip_sans; do
+          [[ "$san" == "$servername" ]] && return 0
      done
      return 1
 }
