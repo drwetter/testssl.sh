@@ -455,7 +455,11 @@ strip_quote() {
 
 fileout_header() {
      if [[ $APPEND ]]; then
-          "$do_json" && [[ ! -f "$JSONFILE" ]] && printf "[\n" > "$JSONFILE"
+          if [[ -f "$JSONFILE" ]]; then
+               FIRST_FINDING=false # We need to insert a comma, because there is file content already
+          else
+               "$do_json" && printf "[\n" > "$JSONFILE"
+          fi
           "$do_csv" && [[ ! -f "CSVFILE" ]] && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
      else
           "$do_json" && printf "[\n" > "$JSONFILE"
@@ -471,9 +475,8 @@ fileout() { # ID, SEVERITY, FINDING
      local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
 
      if "$do_json"; then
-          "$FIRST_FINDING" || echo "," >> $JSONFILE
-          echo -e "
-          {
+          "$FIRST_FINDING" || echo -n "," >> $JSONFILE
+          echo -e "         {
                \"id\"           : \"$1\",
                \"ip\"           : \"$NODE/$NODEIP\",
                \"port\"         : \"$PORT\",
