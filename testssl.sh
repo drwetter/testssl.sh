@@ -1503,7 +1503,7 @@ neat_list(){
           done
      fi
      #echo "${#kx}"                            # should be always 20 / 13
-     printf -- " %-7s %-30s %-10s %-11s%-11s${ADD_RFC_STR:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style "$hexcode")"
+     printf -- " %-7s %-31s %-10s %-11s%-11s${ADD_RFC_STR:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style "$hexcode")"
 }
 
 test_just_one(){
@@ -6702,7 +6702,7 @@ determine_optimal_proto() {
                pr_bold " $NODEIP:$PORT "
           fi
           tmpfile_handle $FUNCNAME.txt
-          pr_boldln "doesn't seem a TLS/SSL enabled server";
+          pr_boldln "doesn't seem to be a TLS/SSL enabled server";
           ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
           [[ $? -ne 0 ]] && exit -2
      fi
@@ -7487,4 +7487,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.499 2016/06/09 13:56:51 dirkw Exp $
+#  $Id: testssl.sh,v 1.501 2016/06/15 18:11:22 dirkw Exp $
