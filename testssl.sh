@@ -1464,14 +1464,14 @@ show_rfc_style(){
      #[[ -z "$1" ]] && return 0
 
      local rfcname
-     rfcname="$(grep -iw "$1" "$MAPPING_FILE_RFC" | sed -e 's/^.*TLS/TLS/' -e 's/^.*SSL/SSL/')"
+     rfcname="$(grep -iw "$1" "$MAPPING_FILE_RFC" | awk '{ print $2 }')"
      [[ -n "$rfcname" ]] && out "$rfcname"
      return 0
 }
 
 neat_header(){
-     printf -- "Hexcode  Cipher Suite Name (OpenSSL)    KeyExch.   Encryption Bits${ADD_RFC_STR:+        Cipher Suite Name (RFC)}\n"
-     printf -- "%s-------------------------------------------------------------------------${ADD_RFC_STR:+-------------------------------------------------}\n"
+     printf -- "Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.  Encryption Bits${ADD_RFC_STR:+     Cipher Suite Name (RFC)}\n"
+     printf -- "%s------------------------------------------------------------------------${ADD_RFC_STR:+---------------------------------------------------}\n"
 }
 
 
@@ -1489,7 +1489,7 @@ neat_list(){
      strength=$(sed -e 's/.*(//' -e 's/)//' <<< "$enc")                              # strength = encryption bits
      strength="${strength//ChaCha20-Poly1305/ly1305}"
      enc=$(sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g' <<< "$enc")     # workaround for empty bits ChaCha20-Poly1305
-     echo "$export" | grep -iq export && strength="$strength,export"
+     echo "$export" | grep -iq export && strength="$strength,exp"
 
      #printf -- "%q" "$kx" | xxd | head -1
      # length correction for color escape codes (printf counts the escape color codes!!)
@@ -1503,7 +1503,7 @@ neat_list(){
           done
      fi
      #echo "${#kx}"                            # should be always 20 / 13
-     printf -- " %-7s %-30s %-10s %-11s%-11s${ADD_RFC_STR:+ %-48s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style "$hexcode")"
+     printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style "$hexcode")"
 }
 
 test_just_one(){
@@ -1655,10 +1655,10 @@ run_allciphers() {
                  if "$SHOW_EACH_C"; then
                      if ${ciphers_found[child]}; then
                          available="available"
-                         pr_cyan "  available"
+                         pr_cyan "$available"
                      else
-                         out "  not a/v"
                          available="not a/v"
+                         out "$available"
                      fi
                  fi
                  if "$SHOW_SIGALGO" && ${ciphers_found[child]}; then
@@ -1763,13 +1763,13 @@ run_cipher_per_proto() {
                           fi
                       fi
                       neat_list "$HEXC" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
-                      available="available"
                       if "$SHOW_EACH_C"; then
                           if ${ciphers_found[child]}; then
-                              pr_cyan "  available"
+                              available="available"
+                              pr_cyan "$available"
                           else
-                              out "  not a/v"
                               available="not a/v"
+                              out "$available"
                           fi
                       fi
                       if "$SHOW_SIGALGO" && ${ciphers_found[child]}; then
@@ -6828,7 +6828,7 @@ determine_optimal_proto() {
                pr_bold " $NODEIP:$PORT "
           fi
           tmpfile_handle $FUNCNAME.txt
-          pr_boldln "doesn't seem a TLS/SSL enabled server";
+          pr_boldln "doesn't seem to be a TLS/SSL enabled server";
           ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
           [[ $? -ne 0 ]] && exit -2
      fi
@@ -7613,4 +7613,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.499 2016/06/09 13:56:51 dirkw Exp $
+#  $Id: testssl.sh,v 1.502 2016/06/15 19:31:09 dirkw Exp $
