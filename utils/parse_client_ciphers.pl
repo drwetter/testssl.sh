@@ -137,7 +137,7 @@ print OUT
 #tlsvers+=("-tls_1_2 -tls_1_1 -tls1")
 #lowest_protocol+=("0x0300")
 #highest_protocol+=("0x0304")
-#service+=("SMTP,POP,IMAP")";
+#service+=("SMTP,POP,IMAP")
 ';
 
 exit;
