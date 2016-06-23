@@ -109,9 +109,13 @@ else
      readonly REL_DATE=$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')
 fi
 readonly SYSTEM=$(uname -s)
-date --help >/dev/null 2>&1 && \
+date -d @735275209 >/dev/null 2>&1 && \
      readonly HAS_GNUDATE=true || \
      readonly HAS_GNUDATE=false
+# FreeBSD and OS X date(1) accept "-f inputformat"
+date -j -f '%s' 1234567 >/dev/null 2>&1 && \
+     readonly HAS_FREEBSDDATE=true || \
+     readonly HAS_FREEBSDDATE=false
 echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      readonly HAS_SED_E=true || \
      readonly HAS_SED_E=false
@@ -357,7 +361,7 @@ pr_svrty_criticalln(){ pr_svrty_critical "$1"; outln; }
 
 
 # color=1 functions
-pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m\c"; }
+pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m"; }
 pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off; }
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_italic()       { [[ "$COLOR" -ne 0 ]] && out "\033[3m$1" || out "$1"; pr_off; }
@@ -609,6 +613,20 @@ wait_kill(){
      return 3                 # means killed
 }
 
+# parse_date date format input-format
+if "$HAS_GNUDATE"; then  # Linux and NetBSD
+	parse_date() {
+		LC_ALL=C date -d "$1" "$2"
+	}
+elif "$HAS_FREEBSDDATE"; then # FreeBSD and OS X
+	parse_date() {
+		LC_ALL=C date -j -f "$3"  "$2" "$1"
+	}
+else
+	parse_date() {
+		LC_ALL=C date -j "$2" "$1"
+	}
+fi
 
 ###### check code starts here ######
 
@@ -830,11 +848,7 @@ run_http_date() {
           out "not tested as we're not targeting HTTP"
      else
           if [[ -n "$HTTP_TIME" ]]; then
-               if "$HAS_GNUDATE"; then
-                    HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
-               else
-                    HTTP_TIME=$(LC_ALL=C date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>>$ERRFILE) # the trailing \r confuses BSD flavors otherwise
-               fi
+               HTTP_TIME=$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE) # the trailing \r confuses BSD flavors otherwise
 
                difftime=$((HTTP_TIME - $NOW_TIME))
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
@@ -3520,15 +3534,9 @@ certificate_info() {
 
      out "$indent"; pr_bold " Certificate Expiration       "
 
-     if "$HAS_GNUDATE"; then
-          enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
-          startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
-          days2expire=$(( $(date --date="$enddate" "+%s") - $(date "+%s") ))    # in seconds
-     else
-          enddate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
-          startdate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
-          LC_ALL=C days2expire=$(( $(date -j -f "%F %H:%M %z" "$enddate" "+%s") - $(date "+%s") ))    # in seconds
-     fi
+     enddate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z" "%b %d %T %Y %Z")
+     startdate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M" "%b %d %T %Y %Z")
+     days2expire=$(( $(parse_date "$enddate" "+%s" "%F %H:%M %z") - $(LC_ALL=C date "+%s") ))    # in seconds
      days2expire=$((days2expire  / 3600 / 24 ))
 
      if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then          # we take the half of the thresholds for LE certificates
@@ -4490,11 +4498,7 @@ parse_tls_serverhello() {
                echo "     tls_sid_len:            0x$tls_sid_len_hex / = $((tls_sid_len/2))"
           fi
           echo -n "     tls_hello_time:         0x$tls_hello_time "
-          if "$HAS_GNUDATE"; then
-               date --date="@$TLS_TIME" "+%Y-%m-%d %r"
-          else
-               LC_ALL=C date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r"
-          fi
+          parse_date "$TLS_TIME" "+%Y-%m-%d %r" "%s"
           echo "     tls_cipher_suite:       0x$tls_cipher_suite"
           echo -n "     tls_compression_method: 0x$tls_compression_method "
           case $tls_compression_method in
@@ -4850,7 +4854,7 @@ tls_sockets() {
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 run_heartbleed(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
-     pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
+     pr_bold " Heartbleed"; out " (CVE-2014-0160)                "
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
@@ -5264,7 +5268,7 @@ run_crime() {
 #         $OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs  $SNI </dev/null 2>/dev/null >$TMPFILE
 #         if [[ $? -eq 0 ]]; then
 #              echo
-#              pr_bold "CRIME Vulnerability, SPDY \c" ; outln "(CVE-2012-4929): \c"
+#              pr_bold "CRIME Vulnerability, SPDY " ; outln "(CVE-2012-4929): "
 
 #              STR=$(grep Compression $TMPFILE )
 #              if echo $STR | grep -q NONE >/dev/null; then
@@ -6163,6 +6167,7 @@ COLORBLIND: $COLORBLIND
 TERM_DWITH: $TERM_DWITH
 INTERACTIVE: $INTERACTIVE
 HAS_GNUDATE: $HAS_GNUDATE
+HAS_FREEBSDDATE: $HAS_FREEBSDDATE
 HAS_SED_E: $HAS_SED_E
 
 SHOW_EACH_C: $SHOW_EACH_C
