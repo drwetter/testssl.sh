@@ -109,9 +109,13 @@ else
      readonly REL_DATE=$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')
 fi
 readonly SYSTEM=$(uname -s)
-date --help >/dev/null 2>&1 && \
+date -d @735275209 >/dev/null 2>&1 && \
      readonly HAS_GNUDATE=true || \
      readonly HAS_GNUDATE=false
+# FreeBSD and OS X date(1) accept "-f inputformat"
+date -j -f '%s' 1234567 >/dev/null 2>&1 && \
+     readonly HAS_FREEBSDDATE=true || \
+     readonly HAS_FREEBSDDATE=false
 echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      readonly HAS_SED_E=true || \
      readonly HAS_SED_E=false
@@ -149,6 +153,7 @@ WIDE=${WIDE:-false}                     # whether to display for some options th
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
+APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
@@ -357,7 +362,7 @@ pr_svrty_criticalln(){ pr_svrty_critical "$1"; outln; }
 
 
 # color=1 functions
-pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m\c"; }
+pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m"; }
 pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off; }
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_italic()       { [[ "$COLOR" -ne 0 ]] && out "\033[3m$1" || out "$1"; pr_off; }
@@ -453,21 +458,29 @@ strip_quote() {
 }
 
 fileout_header() {
-     "$do_json" && printf "[\n" > "$JSONFILE"
-     "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+     if "$APPEND"; then
+          if [[ -f "$JSONFILE" ]]; then
+               FIRST_FINDING=false # We need to insert a comma, because there is file content already
+          else
+               "$do_json" && printf "[\n" > "$JSONFILE"
+          fi
+          "$do_csv" && [[ ! -f "CSVFILE" ]] && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+     else
+          "$do_json" && printf "[\n" > "$JSONFILE"
+          "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+     fi
 }
 
 fileout_footer() {
-     "$do_json" && printf "]\n" >> "$JSONFILE"
+     "$do_json" && [[ -f "$JSONFILE" ]] && printf "]\n" >> "$JSONFILE"
 }
 
 fileout() { # ID, SEVERITY, FINDING
      local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
 
      if "$do_json"; then
-          "$FIRST_FINDING" || echo "," >> $JSONFILE
-          echo -e "
-          {
+          "$FIRST_FINDING" || echo -n "," >> $JSONFILE
+          echo -e "         {
                \"id\"           : \"$1\",
                \"ip\"           : \"$NODE/$NODEIP\",
                \"port\"         : \"$PORT\",
@@ -609,6 +622,20 @@ wait_kill(){
      return 3                 # means killed
 }
 
+# parse_date date format input-format
+if "$HAS_GNUDATE"; then  # Linux and NetBSD
+	parse_date() {
+		LC_ALL=C date -d "$1" "$2"
+	}
+elif "$HAS_FREEBSDDATE"; then # FreeBSD and OS X
+	parse_date() {
+		LC_ALL=C date -j -f "$3"  "$2" "$1"
+	}
+else
+	parse_date() {
+		LC_ALL=C date -j "$2" "$1"
+	}
+fi
 
 ###### check code starts here ######
 
@@ -830,11 +857,7 @@ run_http_date() {
           out "not tested as we're not targeting HTTP"
      else
           if [[ -n "$HTTP_TIME" ]]; then
-               if "$HAS_GNUDATE"; then
-                    HTTP_TIME=$(date --date="$HTTP_TIME" "+%s")
-               else
-                    HTTP_TIME=$(LC_ALL=C date -j -f "%a, %d %b %Y %T %Z" "$HTTP_TIME" "+%s" 2>>$ERRFILE) # the trailing \r confuses BSD flavors otherwise
-               fi
+               HTTP_TIME=$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE) # the trailing \r confuses BSD flavors otherwise
 
                difftime=$((HTTP_TIME - $NOW_TIME))
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
@@ -855,19 +878,19 @@ run_http_date() {
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
           pr_done_good ", includeSubDomains"
-          return 1
+          return 0
      else
           pr_litecyan ", just this domain"
-          return 0
+          return 1
      fi
 }
 
 preload() {
      if grep -aiqw preload "$1"; then
           pr_done_good ", preload"
-          return 1
-     else
           return 0
+     else
+          return 1
      fi
 }
 
@@ -885,9 +908,18 @@ run_hsts() {
      if [[ $? -eq 0 ]]; then
           grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" || out "(two HSTS header, using 1st one) "
           hsts_age_sec=$(sed -e 's/[^0-9]*//g' $TMPFILE | head -1)
-#FIXME: test for number!
-          hsts_age_days=$(( hsts_age_sec / 86400))
-          if [[ $hsts_age_days -gt $HSTS_MIN ]]; then
+          if [[ -n $hsts_age_sec ]]; then
+               hsts_age_days=$(( hsts_age_sec / 86400))
+          else
+               hsts_age_days=-1
+          fi
+          if [[ $hsts_age_days -eq -1 ]]; then
+               pr_svrty_medium "HSTS max-age is required but missing. Setting 15552000 s (180 days) or more is recommended"
+               fileout "hsts_time" "MEDIUM" "HSTS max-age missing. 15552000 s (180 days) or more recommnded"
+          elif [[ $hsts_age_days -eq 0 ]]; then
+               pr_svrty_medium "HSTS max-age is set to 0. HSTS is disabled"
+               fileout "hsts_time" "MEDIUM" "HSTS max-age set to 0. HSTS is disabled"
+          elif [[ $hsts_age_days -gt $HSTS_MIN ]]; then
                pr_done_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "hsts_time" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN days"
           else
@@ -3555,15 +3587,9 @@ certificate_info() {
 
      out "$indent"; pr_bold " Certificate Expiration       "
 
-     if "$HAS_GNUDATE"; then
-          enddate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
-          startdate=$(date --date="$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
-          days2expire=$(( $(date --date="$enddate" "+%s") - $(date "+%s") ))    # in seconds
-     else
-          enddate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z")
-          startdate=$(LC_ALL=C date -j -f "%b %d %T %Y %Z" "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M")
-          LC_ALL=C days2expire=$(( $(date -j -f "%F %H:%M %z" "$enddate" "+%s") - $(date "+%s") ))    # in seconds
-     fi
+     enddate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z" "%b %d %T %Y %Z")
+     startdate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M" "%b %d %T %Y %Z")
+     days2expire=$(( $(parse_date "$enddate" "+%s" "%F %H:%M %z") - $(LC_ALL=C date "+%s") ))    # in seconds
      days2expire=$((days2expire  / 3600 / 24 ))
 
      if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then          # we take the half of the thresholds for LE certificates
@@ -4582,11 +4608,7 @@ parse_tls_serverhello() {
                echo "     tls_sid_len:            0x$tls_sid_len_hex / = $((tls_sid_len/2))"
           fi
           echo -n "     tls_hello_time:         0x$tls_hello_time "
-          if "$HAS_GNUDATE"; then
-               date --date="@$TLS_TIME" "+%Y-%m-%d %r"
-          else
-               LC_ALL=C date -j -f %s "$TLS_TIME" "+%Y-%m-%d %r"
-          fi
+          parse_date "$TLS_TIME" "+%Y-%m-%d %r" "%s"
           echo "     tls_cipher_suite:       0x$tls_cipher_suite"
           echo -n "     tls_compression_method: 0x$tls_compression_method "
           case $tls_compression_method in
@@ -4942,7 +4964,7 @@ tls_sockets() {
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 run_heartbleed(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
-     pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
+     pr_bold " Heartbleed"; out " (CVE-2014-0160)                "
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
@@ -5356,7 +5378,7 @@ run_crime() {
 #         $OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs  $SNI </dev/null 2>/dev/null >$TMPFILE
 #         if [[ $? -eq 0 ]]; then
 #              echo
-#              pr_bold "CRIME Vulnerability, SPDY \c" ; outln "(CVE-2012-4929): \c"
+#              pr_bold "CRIME Vulnerability, SPDY " ; outln "(CVE-2012-4929): "
 
 #              STR=$(grep Compression $TMPFILE )
 #              if echo $STR | grep -q NONE >/dev/null; then
@@ -5866,7 +5888,7 @@ run_lucky13() {
 # in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
      echo "FIXME"
      fileout "lucky13" "WARN" "LUCKY13 (CVE-2013-0169) : No tested. Not implemented. #FIXME"
-     return -1
+     return 1
 }
 
 
@@ -6185,11 +6207,12 @@ output options (can also be preset via environment variables):
 
 file output options (can also be preset via environment variables):
      --log, --logging              logs stdout to <NODE-YYYYMMDD-HHMM.log> in current working directory
-     --logfile <file>              logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified file
-     --json                        additional output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd (experimental)
-     --jsonfile <file>             additional output to JSON and output JSON to the specified file (experimental)
-     --csv                         additional output of findings to CSV file  <NODE-YYYYMMDD-HHMM.csv> in cwd (experimental)
-     --csvfile <file>              set output to CSV and output CSV to the specified file (experimental)
+     --logfile <logfile>           logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified log file
+     --json                        additional output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
+     --jsonfile <jsonfile>         additional output to JSON and output JSON to the specified file
+     --csv                         additional output of findings to CSV file  <NODE-YYYYMMDD-HHMM.csv> in cwd
+     --csvfile <csvfile>           set output to CSV and output CSV to the specified file
+     --append                      if <csvfile> or <jsonfile> exists rather append then overwrite
 
 All options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 
@@ -6255,6 +6278,7 @@ COLORBLIND: $COLORBLIND
 TERM_DWITH: $TERM_DWITH
 INTERACTIVE: $INTERACTIVE
 HAS_GNUDATE: $HAS_GNUDATE
+HAS_FREEBSDDATE: $HAS_FREEBSDDATE
 HAS_SED_E: $HAS_SED_E
 
 SHOW_EACH_C: $SHOW_EACH_C
@@ -6341,7 +6365,7 @@ cleanup () {
           [[ -d "$TEMPDIR" ]] && rm -rf "$TEMPDIR";
      fi
      outln
-     fileout_footer
+     "$APPEND" || fileout_footer
 }
 
 fatal() {
@@ -6962,6 +6986,7 @@ mx_all_ips() {
      return $ret
 }
 
+
 run_mass_testing_parallel() {
      local cmdline=""
      local global_cmdline=${CMDLINE%%--file*}
@@ -6971,6 +6996,8 @@ run_mass_testing_parallel() {
      fi
      pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln
      outln "(output is in ....\n)"
+#FIXME: once this function is being called we need a handler which does the right thing 
+# ==> not overwrite
      while read cmdline; do
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
@@ -6995,15 +7022,17 @@ run_mass_testing() {
      fi
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
+     APPEND=false # Make sure we close out our files
      while read cmdline; do
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch -q --append $cmdline"
           draw_line "=" $((TERM_DWITH / 2)); outln;
           outln "$cmdline"
           $cmdline
      done < "${FNAME}"
+     fileout_footer
      return $?
 }
 
@@ -7376,6 +7405,9 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
                     ;;
+               --append)
+                    APPEND=true
+                    ;;
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
@@ -7588,4 +7620,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.502 2016/06/15 19:31:09 dirkw Exp $
+#  $Id: testssl.sh,v 1.505 2016/06/23 12:33:25 dirkw Exp $
