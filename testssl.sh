@@ -858,7 +858,7 @@ includeSubDomains() {
           return 0
      else
           pr_litecyan ", just this domain"
-          return -1
+          return 1
      fi
 }
 
@@ -867,7 +867,7 @@ preload() {
           pr_done_good ", preload"
           return 0
      else
-          return -1
+          return 1
      fi
 }
 
@@ -5774,7 +5774,7 @@ run_lucky13() {
 # in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
      echo "FIXME"
      fileout "lucky13" "WARN" "LUCKY13 (CVE-2013-0169) : No tested. Not implemented. #FIXME"
-     return -1
+     return 1
 }
 
 
@@ -7496,4 +7496,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.502 2016/06/15 19:31:09 dirkw Exp $
+#  $Id: testssl.sh,v 1.503 2016/06/23 10:04:44 dirkw Exp $
