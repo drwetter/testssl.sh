@@ -52,7 +52,7 @@ copyfiles() {
 
 testv6_patch() {
 	if grep -q 'ending bracket for IPv6' apps/s_socket.c; then
-		STDOPTIONS += "-DOPENSSL_USE_IPV6"
+		STDOPTIONS="$STDOPTIONS -DOPENSSL_USE_IPV6"
 	else
 		echo 
 		echo "no IPv6 patch (Fedora) detected!!  -- Press ^C and dl & apply from"
