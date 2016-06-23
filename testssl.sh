@@ -153,7 +153,7 @@ WIDE=${WIDE:-false}                     # whether to display for some options th
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
-APPEND=false                            # append file in stead of overwriting
+APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
@@ -458,7 +458,7 @@ strip_quote() {
 }
 
 fileout_header() {
-     if [[ $APPEND ]]; then
+     if "$APPEND"; then
           if [[ -f "$JSONFILE" ]]; then
                FIRST_FINDING=false # We need to insert a comma, because there is file content already
           else
@@ -6106,11 +6106,12 @@ output options (can also be preset via environment variables):
 
 file output options (can also be preset via environment variables):
      --log, --logging              logs stdout to <NODE-YYYYMMDD-HHMM.log> in current working directory
-     --logfile <file>              logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified file
-     --json                        additional output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd (experimental)
-     --jsonfile <file>             additional output to JSON and output JSON to the specified file (experimental)
-     --csv                         additional output of findings to CSV file  <NODE-YYYYMMDD-HHMM.csv> in cwd (experimental)
-     --csvfile <file>              set output to CSV and output CSV to the specified file (experimental)
+     --logfile <logfile>           logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified log file
+     --json                        additional output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
+     --jsonfile <jsonfile>         additional output to JSON and output JSON to the specified file
+     --csv                         additional output of findings to CSV file  <NODE-YYYYMMDD-HHMM.csv> in cwd
+     --csvfile <csvfile>           set output to CSV and output CSV to the specified file
+     --append                      if <csvfile> or <jsonfile> exists rather append then overwrite
 
 All options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 
@@ -6263,7 +6264,7 @@ cleanup () {
           [[ -d "$TEMPDIR" ]] && rm -rf "$TEMPDIR";
      fi
      outln
-     [[ $APPEND ]] || fileout_footer
+     "$APPEND" || fileout_footer
 }
 
 fatal() {
@@ -6884,6 +6885,33 @@ mx_all_ips() {
      return $ret
 }
 
+
+run_mass_testing_parallel() {
+     local cmdline=""
+     local global_cmdline=${CMDLINE%%--file*}
+
+     if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
+          fatal "Can't read file \"$FNAME\"" "-1"
+     fi
+     pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln
+     outln "(output is in ....\n)"
+#FIXME: once this function is being called we need a handler which does the right thing 
+# ==> not overwrite
+     while read cmdline; do
+          cmdline=$(filter_input "$cmdline")
+          [[ -z "$cmdline" ]] && continue
+          [[ "$cmdline" == "EOF" ]] && break
+          cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
+          draw_line "=" $((TERM_DWITH / 2)); outln;
+          determine_logfile
+          outln "$cmdline"
+          $cmdline >$LOGFILE &
+          sleep $PARALLEL_SLEEP
+     done < "$FNAME"
+     return $?
+}
+
+
 run_mass_testing() {
      local cmdline=""
      local global_cmdline=${CMDLINE%%--file*}
@@ -7491,4 +7519,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.503 2016/06/23 10:04:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.505 2016/06/23 12:33:25 dirkw Exp $
