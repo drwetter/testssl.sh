@@ -119,7 +119,25 @@ foreach my $client ( @$ssllabs ) {
 	printf OUT "lowest_protocol+=(\"0x%04x\")\n", $client->{lowestProtocol};
 	printf OUT "highest_protocol+=(\"0x%04x\")\n", $client->{highestProtocol};
 
-	print OUT "service+=(\"HTTP\")\n";
+	if ( lc($client->{name}) eq "java" || lc($client->{name}) eq "openssl" ) {
+		# Java and OpenSSL are generic clients
+		print OUT "service+=(\"ANY\")\n";		
+	} else {
+		# All others are HTTP(s) only
+		print OUT "service+=(\"HTTP\")\n";
+	}
+
+	# Bit size limitations
+	print OUT "minDhBits+=($client->{minDhBits})\n";
+	print OUT "maxDhBits+=($client->{maxDhBits})\n";
+	print OUT "minRsaBits+=($client->{minRsaBits})\n";
+	print OUT "maxRsaBits+=($client->{maxRsaBits})\n";
+	print OUT "minEcdsaBits+=($client->{minEcdsaBits})\n";
+	if ( defined $client->{requiresSha2} && $client->{requiresSha2} ) {
+		print OUT "requiresSha2+=(true)\n";
+	} else {
+		print OUT "requiresSha2+=(false)\n";		
+	}
 
 	print OUT "\n";
 }
