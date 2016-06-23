@@ -855,19 +855,19 @@ run_http_date() {
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
           pr_done_good ", includeSubDomains"
-          return 1
+          return 0
      else
           pr_litecyan ", just this domain"
-          return 0
+          return -1
      fi
 }
 
 preload() {
      if grep -aiqw preload "$1"; then
           pr_done_good ", preload"
-          return 1
-     else
           return 0
+     else
+          return -1
      fi
 }
 
@@ -885,9 +885,18 @@ run_hsts() {
      if [[ $? -eq 0 ]]; then
           grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" || out "(two HSTS header, using 1st one) "
           hsts_age_sec=$(sed -e 's/[^0-9]*//g' $TMPFILE | head -1)
-#FIXME: test for number!
-          hsts_age_days=$(( hsts_age_sec / 86400))
-          if [[ $hsts_age_days -gt $HSTS_MIN ]]; then
+          if [[ -n $hsts_age_sec ]]; then
+               hsts_age_days=$(( hsts_age_sec / 86400))
+          else
+               hsts_age_days=-1
+          fi
+          if [[ $hsts_age_days -eq -1 ]]; then
+               pr_svrty_medium "HSTS max-age is required but missing. Setting 15552000 s (180 days) or more is recommended"
+               fileout "hsts_time" "MEDIUM" "HSTS max-age missing. 15552000 s (180 days) or more recommnded"
+          elif [[ $hsts_age_days -eq 0 ]]; then
+               pr_svrty_medium "HSTS max-age is set to 0. HSTS is disabled"
+               fileout "hsts_time" "MEDIUM" "HSTS max-age set to 0. HSTS is disabled"
+          elif [[ $hsts_age_days -gt $HSTS_MIN ]]; then
                pr_done_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "hsts_time" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN days"
           else
