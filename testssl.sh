@@ -2178,6 +2178,7 @@ run_client_simulation() {
           else
                #FIXME: awk
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
+               [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
                if [[ "$proto" == TLSv1.2 ]]; then
                     # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                     for tls in ${tlsvers[i]}; do
@@ -7532,4 +7533,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.506 2016/06/23 17:42:25 dirkw Exp $
+#  $Id: testssl.sh,v 1.507 2016/06/24 17:00:58 dirkw Exp $
