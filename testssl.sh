@@ -125,9 +125,9 @@ tty -s && \
      readonly INTERACTIVE=false
 
 if ! tput cols &>/dev/null || ! $INTERACTIVE; then     # Prevent tput errors if running non interactive
-     TERM_DWITH=${COLUMNS:-80}
+     TERM_WIDTH=${COLUMNS:-80}
 else
-     TERM_DWITH=${COLUMNS:-$(tput cols)}               # for custom line wrapping and dashes
+     TERM_WIDTH=${COLUMNS:-$(tput cols)}               # for custom line wrapping and dashes
 fi
 TERM_CURRPOS=0                                         # custom line wrapping needs alter the current horizontal cursor pos
 
@@ -2178,6 +2178,7 @@ run_client_simulation() {
           else
                #FIXME: awk
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
+               [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
                if [[ "$proto" == TLSv1.2 ]]; then
                     # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                     for tls in ${tlsvers[i]}; do
@@ -6275,7 +6276,7 @@ MAPPING_FILE_RFC: $MAPPING_FILE_RFC
 CAPATH: $CAPATH
 COLOR: $COLOR
 COLORBLIND: $COLORBLIND
-TERM_DWITH: $TERM_DWITH
+TERM_WIDTH: $TERM_WIDTH
 INTERACTIVE: $INTERACTIVE
 HAS_GNUDATE: $HAS_GNUDATE
 HAS_FREEBSDDATE: $HAS_FREEBSDDATE
@@ -6432,7 +6433,6 @@ ignore_no_or_lame() {
 }
 
 # arg1: URI
-# arg2: protocol
 parse_hn_port() {
      local tmp_port
 
@@ -6465,13 +6465,27 @@ parse_hn_port() {
      debugme echo $NODE:$PORT
      SNI="-servername $NODE"
 
-     # now do logging if instructed
+     URL_PATH=$(echo "$1" | sed 's/https:\/\///' | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
+     URL_PATH=$(echo "$URL_PATH" | sed 's/\/\//\//g')       # we rather want // -> /
+     [[ -z "$URL_PATH" ]] && URL_PATH="/"
+     debugme echo $URL_PATH
+     return 0       # NODE, URL_PATH, PORT is set now
+}
+
+
+# now do logging if instructed
+# arg1: for testing mx records name we put a name of logfile in here, otherwise we get strange file names
+prepare_logging() {
+     local fname_prefix="$1"
+
+     [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"
+
      if "$do_logging"; then
           if [[ -z "$LOGFILE" ]]; then
-               LOGFILE=$NODE-$(date +"%Y%m%d-%H%M".log)
+               LOGFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".log)
           elif [[ -d "$LOGFILE" ]]; then
                # actually we were instructed to place all files in a DIR instead of the current working dir
-               LOGFILE=$LOGFILE/$NODE-$(date +"%Y%m%d-%H%M".log)
+               LOGFILE=$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)
           else
                : # just for clarity: a log file was specified, no need to do anything else
           fi
@@ -6485,32 +6499,26 @@ parse_hn_port() {
 
      if "$do_json"; then
           if [[ -z "$JSONFILE" ]]; then
-               JSONFILE=$NODE-$(date +"%Y%m%d-%H%M".json)
+               JSONFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".json)
           elif [[ -d "$JSONFILE" ]]; then
                # actually we were instructed to place all files in a DIR instead of the current working dir
-               JSONFILE=$JSONFILE/$NODE-$(date +"%Y%m%d-%H%M".json)
+               JSONFILE=$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)
           fi
      fi
-
      if "$do_csv"; then
           if [[ -z "$CSVFILE" ]]; then
-               CSVFILE=$NODE-$(date +"%Y%m%d-%H%M".csv)
+               CSVFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
           elif [[ -d "$CSVFILE" ]]; then
                # actually we were instructed to place all files in a DIR instead of the current working dir
-               CSVFILE=$CSVFILE/$NODE-$(date +"%Y%m%d-%H%M".csv)
+               CSVFILE=$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
           fi
      fi
-
      fileout_header           # write out any CSV/JSON header line
 
-     URL_PATH=$(echo "$1" | sed 's/https:\/\///' | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
-     URL_PATH=$(echo "$URL_PATH" | sed 's/\/\//\//g')       # we rather want // -> /
-     [[ -z "$URL_PATH" ]] && URL_PATH="/"
-     debugme echo $URL_PATH
-     return 0       # NODE, URL_PATH, PORT is set now
+     return 0
 }
 
-
+     
 # args: string containing ip addresses
 filter_ip6_address() {
      local a
@@ -6946,7 +6954,7 @@ draw_line() {
 }
 
 
-mx_all_ips() {
+run_mx_all_ips() {
      local mxs mx
      local mxport
      local -i ret=0
@@ -6956,12 +6964,17 @@ mx_all_ips() {
      # test first higher priority servers
      mxs=$(get_mx_record "$1" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
      mxport=${2:-25}
+     if [[ -n "$LOGFILE" ]]; then
+          prepare_logging
+     else
+          prepare_logging "mx-$1"
+     fi
      if [[ -n "$mxs" ]] && [[ "$mxs" != ' ' ]]; then
           [[ $mxport == "465" ]] && \
                STARTTLS_PROTOCOL=""          # no starttls for Port 465, on all other ports we speak starttls
           pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
           for mx in $mxs; do
-               draw_line "-" $((TERM_DWITH * 2 / 3))
+               draw_line "-" $((TERM_WIDTH * 2 / 3))
                outln
                parse_hn_port "$mx:$mxport"
                determine_ip_addresses || continue
@@ -6977,7 +6990,7 @@ mx_all_ips() {
                fi
                ret=$(($? + ret))
           done
-          draw_line "-" $((TERM_DWITH * 2 / 3))
+          draw_line "-" $((TERM_WIDTH * 2 / 3))
           outln
           pr_bold "Done testing now all MX records (on port $mxport): "; outln "$mxs"
      else
@@ -7003,7 +7016,7 @@ run_mass_testing_parallel() {
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
           cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
-          draw_line "=" $((TERM_DWITH / 2)); outln;
+          draw_line "=" $((TERM_WIDTH / 2)); outln;
           determine_logfile
           outln "$cmdline"
           $cmdline >$LOGFILE &
@@ -7028,7 +7041,7 @@ run_mass_testing() {
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
           cmdline="$0 $global_cmdline --warnings=batch -q --append $cmdline"
-          draw_line "=" $((TERM_DWITH / 2)); outln;
+          draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$cmdline"
           $cmdline
      done < "${FNAME}"
@@ -7583,10 +7596,11 @@ fi
 if $do_mx_all_ips; then
      query_globals                 # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
      [[ $? -eq 1 ]] && set_scanning_defaults
-     mx_all_ips "${URI}" $PORT
+     run_mx_all_ips "${URI}" $PORT # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
      ret=$?
 else
      parse_hn_port "${URI}"                                                     # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
+     prepare_logging
      if ! determine_ip_addresses && [[ -z "$CMDLINE_IP" ]]; then
           fatal "No IP address could be determined"
      fi
@@ -7600,13 +7614,13 @@ else
           if [[ $(count_words "$(echo -n "$IPADDRs")") -gt 1 ]]; then           # we have more than one ipv4 address to check
                pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
                for ip in $IPADDRs; do
-                    draw_line "-" $((TERM_DWITH * 2 / 3))
+                    draw_line "-" $((TERM_WIDTH * 2 / 3))
                     outln
                     NODEIP="$ip"
                     lets_roll "${STARTTLS_PROTOCOL}"
                     ret=$(($? + ret))
                done
-               draw_line "-" $((TERM_DWITH * 2 / 3))
+               draw_line "-" $((TERM_WIDTH * 2 / 3))
                outln
                pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
           else                                                                  # we need just one ip4v to check
@@ -7620,4 +7634,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.505 2016/06/23 12:33:25 dirkw Exp $
+#  $Id: testssl.sh,v 1.507 2016/06/24 17:00:58 dirkw Exp $
