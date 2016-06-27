@@ -160,7 +160,6 @@ SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
-#EXPERIMENTAL=true
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 readonly MAX_WAITSOCK=10                # waiting at max 10 seconds for socket reply
 readonly CCS_MAX_WAITSOCK=5             # for the two CCS payload (each)
@@ -2052,10 +2051,13 @@ run_client_simulation() {
                          [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
                     fi
                else
-                    $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} ${tlsvers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
-                    debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} ${tlsvers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
-                    sclient_connect_successful $? $TMPFILE
-                    sclient_success=$?
+                    for pflag in ${protos[i]}; do
+                         $OPENSSL s_client -cipher ${ciphers[i]} $pflag $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+                         debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} $pflag $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
+                         sclient_connect_successful $? $TMPFILE
+                         sclient_success=$?
+                         [[ $sclient_success -eq 0 ]] && break; # Stop trying if a protocol works
+                    done
                fi
                if [[ $sclient_success -ne 0 ]]; then
                     outln "No connection"
@@ -2064,31 +2066,6 @@ run_client_simulation() {
                     #FIXME: awk
                     proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                     [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
-                    if [[ "$proto" == TLSv1.2 ]] && ( ! $using_sockets || [[ -z "${handshakebytes[i]}" ]] ); then
-                         # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
-                         for tls in ${tlsvers[i]}; do
-                              $OPENSSL s_client $tls -no_ssl2 -no_ssl3 -cipher ${ciphers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
-                              debugme echo "$OPENSSL s_client $tls -no_ssl2 -no_ssl3 -cipher ${ciphers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
-                              sclient_connect_successful $? $TMPFILE
-                              sclient_success=$?
-                              if [[ $sclient_success -eq 0 ]]; then
-                                   case "$tls" in
-                                        "-tls1_2")
-                                             proto="TLSv1.2"
-                                             break
-                                             ;;
-                                        "-tls1_1")
-                                             proto="TLSv1.1"
-                                             break
-                                             ;;
-                                        "-tls1")
-                                             proto="TLSv1.0"
-                                             break
-                                             ;;
-                                   esac
-                              fi
-                         done
-                    fi
                     #FiXME: awk
                     cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
                     $using_sockets && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
