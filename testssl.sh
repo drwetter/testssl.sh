@@ -2009,14 +2009,23 @@ run_client_simulation() {
      local i=0
      local name tls proto cipher
      local using_sockets=true
+     local client_service
 
-     if $SSL_NATIVE || [[ -n "$STARTTLS" ]] || ! $EXPERIMENTAL; then
+     if [[ $SSL_NATIVE || ! $EXPERIMENTAL ]]; then
           using_sockets=false
      fi
 
-     # doesn't make sense for other services
-     if [[ $SERVICE != "HTTP" ]];  then
-          return 0
+     # That service should clients support for simulation?
+     if [[ "$SERVICE" != "" ]]; then
+          client_service="$SERVICE"
+     else
+          # Can we take the service from STARTTLS?
+          if [[ -n "$STARTTLS_PROTOCOL" ]]; then
+               client_service=$(toupper "${STARTTLS_PROTOCOL%s}")    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+          else
+               echo "Could not determine which protocol was started, only simulating generic clients."
+               client_service="undetermined"
+          fi
      fi
 
      # Get handshakes from external file
@@ -2028,68 +2037,71 @@ run_client_simulation() {
 
      debugme outln
      for name in "${short[@]}"; do
-          #FIXME: printf formatting would look better, especially if we want a wide option here
-          out " ${names[i]}   "
-          if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
-               client_simulation_sockets "${handshakebytes[i]}"
-               sclient_success=$?
-               if [[ $sclient_success -eq 0 ]]; then
-                    if [[ "0x${DETECTED_TLS_VERSION}" -lt ${lowest_protocol[i]} ]] || \
-                       [[ "0x${DETECTED_TLS_VERSION}" -gt ${highest_protocol[i]} ]]; then
-                         sclient_success=1
-                    fi
-                    [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
-               fi
-          else
-               $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} ${tlsvers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
-               debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} ${tlsvers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
-               sclient_connect_successful $? $TMPFILE
-               sclient_success=$?
-          fi
-          if [[ $sclient_success -ne 0 ]]; then
-               outln "No connection"
-               fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
-          else
-               #FIXME: awk
-               proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
-               [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
-               if [[ "$proto" == TLSv1.2 ]] && ( ! $using_sockets || [[ -z "${handshakebytes[i]}" ]] ); then
-                    # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
-                    for tls in ${tlsvers[i]}; do
-                         $OPENSSL s_client $tls -no_ssl2 -no_ssl3 -cipher ${ciphers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
-                         debugme echo "$OPENSSL s_client $tls -no_ssl2 -no_ssl3 -cipher ${ciphers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
-                         sclient_connect_successful $? $TMPFILE
-                         sclient_success=$?
-                         if [[ $sclient_success -eq 0 ]]; then
-                              case "$tls" in
-                                   "-tls1_2")
-                                        proto="TLSv1.2"
-                                        break
-                                        ;;
-                                   "-tls1_1")
-                                        proto="TLSv1.1"
-                                        break
-                                        ;;
-                                   "-tls1")
-                                        proto="TLSv1.0"
-                                        break
-                                        ;;
-                              esac
+          # Make sure we run client simulations for those clients that support it
+          if [[ `echo "${service[i]}" | grep "$client_service" | wc -l` -eq 1 || "${service[i]}" == "ANY" ]]; then
+               #FIXME: printf formatting would look better, especially if we want a wide option here
+               out " ${names[i]}   "
+               if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
+                    client_simulation_sockets "${handshakebytes[i]}"
+                    sclient_success=$?
+                    if [[ $sclient_success -eq 0 ]]; then
+                         if [[ "0x${DETECTED_TLS_VERSION}" -lt ${lowest_protocol[i]} ]] || \
+                            [[ "0x${DETECTED_TLS_VERSION}" -gt ${highest_protocol[i]} ]]; then
+                              sclient_success=1
                          fi
-                    done
+                         [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
+                    fi
+               else
+                    $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} ${tlsvers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+                    debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} ${tlsvers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
+                    sclient_connect_successful $? $TMPFILE
+                    sclient_success=$?
                fi
-               #FiXME: awk
-               cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
-               $using_sockets && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
-               outln "$proto $cipher"
-               if [[ -n "${warning[i]}" ]]; then
-                    out "                            "
-                    outln "${warning[i]}"
+               if [[ $sclient_success -ne 0 ]]; then
+                    outln "No connection"
+                    fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
+               else
+                    #FIXME: awk
+                    proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
+                    [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
+                    if [[ "$proto" == TLSv1.2 ]] && ( ! $using_sockets || [[ -z "${handshakebytes[i]}" ]] ); then
+                         # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
+                         for tls in ${tlsvers[i]}; do
+                              $OPENSSL s_client $tls -no_ssl2 -no_ssl3 -cipher ${ciphers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+                              debugme echo "$OPENSSL s_client $tls -no_ssl2 -no_ssl3 -cipher ${ciphers[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
+                              sclient_connect_successful $? $TMPFILE
+                              sclient_success=$?
+                              if [[ $sclient_success -eq 0 ]]; then
+                                   case "$tls" in
+                                        "-tls1_2")
+                                             proto="TLSv1.2"
+                                             break
+                                             ;;
+                                        "-tls1_1")
+                                             proto="TLSv1.1"
+                                             break
+                                             ;;
+                                        "-tls1")
+                                             proto="TLSv1.0"
+                                             break
+                                             ;;
+                                   esac
+                              fi
+                         done
+                    fi
+                    #FiXME: awk
+                    cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
+                    $using_sockets && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
+                    outln "$proto $cipher"
+                    if [[ -n "${warning[i]}" ]]; then
+                         out "                            "
+                         outln "${warning[i]}"
+                    fi
+                    fileout "client_${short[i]}" "INFO" \
+                         "$(strip_spaces "${names[i]}") client simulation:  $proto $cipher   ${warning[i]}"
+                    debugme cat $TMPFILE
                fi
-               fileout "client_${short[i]}" "INFO" \
-                    "$(strip_spaces "${names[i]}") client simulation:  $proto $cipher   ${warning[i]}"
-               debugme cat $TMPFILE
-          fi
+          fi # correct service?
           i=$((i+1))
      done
      tmpfile_handle $FUNCNAME.txt
