@@ -5,7 +5,7 @@ use Test::More;
 use Data::Dumper;
 use JSON;
 
-my $tests = 21;
+my $tests = 0;
 
 my (
 	$out,
@@ -13,11 +13,13 @@ my (
 	$found,
 );
 # OK
-my $okout = `./testssl.sh -S --jsonfile tmp.json --color 0 badssl.com`;
+ok("Running testssl.sh against badssl.com");
+my $okout = `./testssl.sh -S -e -U --jsonfile tmp.json --color 0 badssl.com`;
 my $okjson = json('tmp.json');
 cmp_ok(@$okjson,'>',10,"We have more then 10 findings");
 
 # Expiration
+ok("Running testssl against expired.badssl.com");
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 expired.badssl.com`;
 like($out, qr/Certificate Expiration\s+expired\!/,"The certificate should be expired");
 $json = json('tmp.json');
@@ -33,6 +35,7 @@ foreach my $f ( @$json ) {
 is($found,1,"We had a finding for this in the JSON output");
 
 # Self signed and not-expired
+ok("Running testssl against self-signed.badssl.com");
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 self-signed.badssl.com`;
 like($out, qr/Certificate Expiration\s+\d+/,"The certificate should not be expired");
 $json = json('tmp.json');
@@ -72,6 +75,7 @@ foreach my $f ( @$okjson ) {
 is($found,1,"We had a finding for this in the JSON output");
 
 # Wrong host
+#ok("Running testssl against wrong.host.badssl.com");
 #$out = `./testssl.sh -S --jsonfile tmp.json --color 0 wrong.host.badssl.com`;
 #unlike($out, qr/Certificate Expiration\s+expired\!/,"The certificate should not be expired");
 #$json = json('tmp.json');
@@ -87,8 +91,7 @@ is($found,1,"We had a finding for this in the JSON output");
 #is($found,1,"We had a finding for this in the JSON output");
 
 # Incomplete chain
-# Self signed and not-expired
-
+ok("Running testssl against incomplete-chain.badssl.com");
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 incomplete-chain.badssl.com`;
 like($out, qr/Chain of trust.*?NOT ok\s+\(chain incomplete\)/,"Chain of trust should fail because of incomplete");
 $json = json('tmp.json');
@@ -105,6 +108,21 @@ is($found,1,"We had a finding for this in the JSON output");
 
 # TODO: RSA 8192
 
+# CBC
+ok("Running testssl against cbc.badssl.com");
+$out = `./testssl.sh -e -U --jsonfile tmp.json --color 0 cbc.badssl.com`;
+like($out, qr/Chain of trust.*?NOT ok\s+\(chain incomplete\)/,"Chain of trust should fail because of incomplete");
+$json = json('tmp.json');
+$found = 0;
+foreach my $f ( @$json ) {
+	if ( $f->{id} eq "trust" ) {
+		$found = 1;
+		like($f->{finding},qr/^All certificate trust checks failed.*incomplete/,"Finding says certificate cannot be trusted.");
+		is($f->{severity}, "NOT ok", "Severity should be NOT ok");
+		last;
+    }
+}
+is($found,1,"We had a finding for this in the JSON output");
 
 
 done_testing($tests);
