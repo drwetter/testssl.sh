@@ -2740,7 +2740,11 @@ run_client_simulation() {
      requiresSha2+=(false)
 
      outln
-     pr_headlineln " Running browser simulations (experimental) "
+     if "$using_sockets"; then
+          pr_headlineln " Running browser simulations via sockets (experimental) "
+     else
+          pr_headlineln " Running browser simulations (experimental) "
+     fi
      outln
 
      debugme outln
@@ -8144,4 +8148,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.507 2016/06/24 17:00:58 dirkw Exp $
+#  $Id: testssl.sh,v 1.509 2016/06/28 10:21:48 dirkw Exp $
