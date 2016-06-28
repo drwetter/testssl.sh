@@ -13,116 +13,116 @@ my (
 	$found,
 );
 # OK
-ok("Running testssl.sh against badssl.com");
+ok("Running testssl.sh against badssl.com\n"); tests++;
 my $okout = `./testssl.sh -S -e -U --jsonfile tmp.json --color 0 badssl.com`;
 my $okjson = json('tmp.json');
-cmp_ok(@$okjson,'>',10,"We have more then 10 findings");
+cmp_ok(@$okjson,'>',10,"We have more then 10 findings"); tests++;
 
 # Expiration
-ok("Running testssl against expired.badssl.com");
+ok("Running testssl against expired.badssl.com\n"); tests++;
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 expired.badssl.com`;
-like($out, qr/Certificate Expiration\s+expired\!/,"The certificate should be expired");
+like($out, qr/Certificate Expiration\s+expired\!/,"The certificate should be expired"); tests++;
 $json = json('tmp.json');
 $found = 0;
 foreach my $f ( @$json ) {
 	if ( $f->{id} eq "expiration" ) {
 		$found = 1;
-		like($f->{finding},qr/^Certificate Expiration.*expired\!/,"Finding reads expired.");
-		is($f->{severity}, "NOT ok", "Severity should be NOT ok");
+		like($f->{finding},qr/^Certificate Expiration.*expired\!/,"Finding reads expired."); tests++;
+		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); tests++;
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output");
+is($found,1,"We had a finding for this in the JSON output"); tests++;
 
 # Self signed and not-expired
-ok("Running testssl against self-signed.badssl.com");
+ok("Running testssl against self-signed.badssl.com\n"); tests++;
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 self-signed.badssl.com`;
-like($out, qr/Certificate Expiration\s+\d+/,"The certificate should not be expired");
+like($out, qr/Certificate Expiration\s+\d+/,"The certificate should not be expired"); tests++;
 $json = json('tmp.json');
 $found = 0;
 foreach my $f ( @$json ) {
 	if ( $f->{id} eq "expiration" ) {
 		$found = 1;
-		like($f->{finding},qr/^Certificate Expiration \: \d+/,"Finding doesn't read expired.");
-		is($f->{severity}, "OK", "Severity should be ok");
+		like($f->{finding},qr/^Certificate Expiration \: \d+/,"Finding doesn't read expired."); tests++;
+		is($f->{severity}, "OK", "Severity should be ok"); tests++;
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output");
+is($found,1,"We had a finding for this in the JSON output"); tests++;
 
-like($out, qr/Chain of trust.*?NOT ok.*\(self signed\)/,"Chain of trust should fail because of self signed");
+like($out, qr/Chain of trust.*?NOT ok.*\(self signed\)/,"Chain of trust should fail because of self signed"); tests++;
 $found = 0;
 foreach my $f ( @$json ) {
 	if ( $f->{id} eq "trust" ) {
 		$found = 1;
-		like($f->{finding},qr/^All certificate trust checks failed/,"Finding says certificate cannot be trusted.");
-		is($f->{severity}, "NOT ok", "Severity should be NOT ok");
+		like($f->{finding},qr/^All certificate trust checks failed/,"Finding says certificate cannot be trusted."); tests++;
+		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); tests++;
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output");
+is($found,1,"We had a finding for this in the JSON output"); tests++;
 
-like($okout, qr/Chain of trust[^\n]*?Ok/,"Chain of trust should be ok");
+like($okout, qr/Chain of trust[^\n]*?Ok/,"Chain of trust should be ok"); tests++;
 $found = 0;
 foreach my $f ( @$okjson ) {
 	if ( $f->{id} eq "trust" ) {
 		$found = 1;
-		is($f->{finding},"All certificate trust checks passed.","Finding says certificate can be trusted.");
-		is($f->{severity}, "OK", "Severity should be OK");
+		is($f->{finding},"All certificate trust checks passed.","Finding says certificate can be trusted."); tests++;
+		is($f->{severity}, "OK", "Severity should be OK"); tests++;
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output");
+is($found,1,"We had a finding for this in the JSON output"); tests++;
 
 # Wrong host
-#ok("Running testssl against wrong.host.badssl.com");
+#ok("Running testssl against wrong.host.badssl.com"); tests++;
 #$out = `./testssl.sh -S --jsonfile tmp.json --color 0 wrong.host.badssl.com`;
-#unlike($out, qr/Certificate Expiration\s+expired\!/,"The certificate should not be expired");
+#unlike($out, qr/Certificate Expiration\s+expired\!/,"The certificate should not be expired"); tests++;
 #$json = json('tmp.json');
 #$found = 0;
 #foreach my $f ( @$json ) {
 #	if ( $f->{id} eq "expiration" ) {
 #		$found = 1;
-#		unlike($f->{finding},qr/^Certificate Expiration.*expired\!/,"Finding should not read expired.");
-#		is($f->{severity}, "ok", "Severity should be ok");
+#		unlike($f->{finding},qr/^Certificate Expiration.*expired\!/,"Finding should not read expired."); tests++;
+#		is($f->{severity}, "ok", "Severity should be ok"); tests++;
 #		last;
 #    }
 #}
-#is($found,1,"We had a finding for this in the JSON output");
+#is($found,1,"We had a finding for this in the JSON output"); tests++;
 
 # Incomplete chain
-ok("Running testssl against incomplete-chain.badssl.com");
+ok("Running testssl against incomplete-chain.badssl.com\n"); tests++;
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 incomplete-chain.badssl.com`;
-like($out, qr/Chain of trust.*?NOT ok\s+\(chain incomplete\)/,"Chain of trust should fail because of incomplete");
+like($out, qr/Chain of trust.*?NOT ok\s+\(chain incomplete\)/,"Chain of trust should fail because of incomplete"); tests++;
 $json = json('tmp.json');
 $found = 0;
 foreach my $f ( @$json ) {
 	if ( $f->{id} eq "trust" ) {
 		$found = 1;
-		like($f->{finding},qr/^All certificate trust checks failed.*incomplete/,"Finding says certificate cannot be trusted.");
-		is($f->{severity}, "NOT ok", "Severity should be NOT ok");
+		like($f->{finding},qr/^All certificate trust checks failed.*incomplete/,"Finding says certificate cannot be trusted."); tests++;
+		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); tests++;
 		last;
     }
 }
-is($found,1,"We had a finding for this in the JSON output");
+is($found,1,"We had a finding for this in the JSON output"); tests++;
 
 # TODO: RSA 8192
 
-# CBC
-ok("Running testssl against cbc.badssl.com");
-$out = `./testssl.sh -e -U --jsonfile tmp.json --color 0 cbc.badssl.com`;
-like($out, qr/Chain of trust.*?NOT ok\s+\(chain incomplete\)/,"Chain of trust should fail because of incomplete");
-$json = json('tmp.json');
-$found = 0;
-foreach my $f ( @$json ) {
-	if ( $f->{id} eq "trust" ) {
-		$found = 1;
-		like($f->{finding},qr/^All certificate trust checks failed.*incomplete/,"Finding says certificate cannot be trusted.");
-		is($f->{severity}, "NOT ok", "Severity should be NOT ok");
-		last;
-    }
-}
-is($found,1,"We had a finding for this in the JSON output");
+# TODO: CBC
+#ok("Running testssl against cbc.badssl.com\n"); tests++;
+#$out = `./testssl.sh -e -U --jsonfile tmp.json --color 0 cbc.badssl.com`;
+#like($out, qr/Chain of trust.*?NOT ok\s+\(chain incomplete\)/,"Chain of trust should fail because of incomplete"); tests++;
+#$json = json('tmp.json');
+#$found = 0;
+#foreach my $f ( @$json ) {
+#	if ( $f->{id} eq "trust" ) {
+#		$found = 1;
+#		like($f->{finding},qr/^All certificate trust checks failed.*incomplete/,"Finding says certificate cannot be trusted."); tests++;
+#		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); tests++;
+#		last;
+#    }
+#}
+#is($found,1,"We had a finding for this in the JSON output"); tests++;
 
 
 done_testing($tests);
