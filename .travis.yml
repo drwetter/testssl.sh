@@ -1,5 +1,9 @@
 language: perl
 perl:
   - "5.18"
+install:
+  - cpanm Test::More
+  - cpanm Data::Dumper
+  - cpanm JSON
 script:
   prove
