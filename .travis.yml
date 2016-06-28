@@ -10,4 +10,4 @@ install:
   - cpanm Data::Dumper
   - cpanm JSON
 script:
-  prove
+  - prove -v
