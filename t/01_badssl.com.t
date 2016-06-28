@@ -16,7 +16,7 @@ my (
 pass("Running testssl.sh against badssl.com to craete a baseline (may take 2~3 minutes)"); $tests++;
 my $okout = `./testssl.sh -S -e -U --jsonfile tmp.json --color 0 badssl.com`;
 my $okjson = json('tmp.json');
-cmp_pass(@$okjson,'>',10,"We have more then 10 findings"); $tests++;
+cmp_ok(@$okjson,'>',10,"We have more then 10 findings"); $tests++;
 
 # Expiration
 pass("Running testssl against expired.badssl.com"); $tests++;
