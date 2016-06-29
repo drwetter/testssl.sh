@@ -1487,7 +1487,22 @@ openssl2rfc() {
 }
 
 rfc2openssl() {
-     :
+     local hexcode ossl_hexcode ossl_name
+     local -i len
+
+     hexcode=$(grep -iw "$1" "$MAPPING_FILE_RFC" 2>>$ERRFILE | head -1 | awk '{ print $1 }')
+     [[ -z "$hexcode" ]] && return 0
+     len=${#hexcode}
+     case $len in
+          3) ossl_hexcode="0x00,0x${hexcode:1:2}" ;;
+          5) ossl_hexcode="0x${hexcode:1:2},0x${hexcode:3:2}" ;;
+          7) ossl_hexcode="0x${hexcode:1:2},0x${hexcode:3:2},0x${hexcode:5:2}" ;;
+          *) return 0 ;;
+     esac
+    ossl_name="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " $ossl_hexcode " | awk '{ print $3 }')"
+     [[ -z "$ossl_name" ]] && ossl_name="-"
+     out "$ossl_name"
+     return 0
 }
 
 
@@ -1821,6 +1836,155 @@ run_cipher_per_proto() {
      return 0
 }
 
+# arg1 is an ASCII-HEX encoded SSLv3 or TLS ClientHello.
+# If the ClientHello contains a server name extension, then
+# either:
+#  1) replace it with one corresponding to $SNI; or
+#  2) remove it, if $SNI is empty
+create_client_simulation_tls_clienthello() {
+     local tls_handshake_ascii="$1"
+     local -i len offset tls_handshake_ascii_len len_all len_clienthello
+     local -i len_extensions len_extension
+     local content_type tls_version_reclayer handshake_msg_type tls_clientversion
+     local tls_random tls_sid tls_cipher_suites tls_compression_methods
+     local tls_extensions="" extension_type len_extensions_hex
+     local len_servername hexdump_format_str servername_hexstr
+     local len_servername_hex len_sni_listlen len_sni_ext
+     local tls_client_hello len_clienthello_hex tls_handshake_ascii_len_hex
+     local sni_extension_found=false
+
+     tls_handshake_ascii_len=${#tls_handshake_ascii}
+
+     tls_content_type="${tls_handshake_ascii:0:2}"
+     tls_version_reclayer="${tls_handshake_ascii:2:4}"
+     len_all=$(hex2dec "${tls_handshake_ascii:6:4}")
+
+     handshake_msg_type="${tls_handshake_ascii:10:2}"
+     len_clienthello=$(hex2dec "${tls_handshake_ascii:12:6}")
+     tls_clientversion="${tls_handshake_ascii:18:4}"
+     tls_random="${tls_handshake_ascii:22:64}"
+     len=2*$(hex2dec "${tls_handshake_ascii:86:2}")+2
+     tls_sid="${tls_handshake_ascii:86:$len}"
+     offset=86+$len
+
+     len=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")+4
+     tls_cipher_suites="${tls_handshake_ascii:$offset:$len}"
+     offset=$offset+$len
+
+     len=2*$(hex2dec "${tls_handshake_ascii:$offset:2}")+2
+     tls_compression_methods="${tls_handshake_ascii:$offset:$len}"
+     offset=$offset+$len
+     
+     if [[ $offset -ge $tls_handshake_ascii_len ]]; then
+          # No extensions
+          out "$tls_handshake_ascii"
+          return 0
+     fi
+
+     len_extensions=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
+     offset=$offset+4
+     for (( 1; offset < tls_handshake_ascii_len; 1 )); do
+         extension_type="${tls_handshake_ascii:$offset:4}"
+         offset=$offset+4
+         len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
+
+         if [[ "$extension_type" != "0000" ]]; then
+             # The extension will just be copied into the revised ClientHello
+             sni_extension_found=true
+             offset=$offset-4
+             len=$len_extension+8
+             tls_extensions+="${tls_handshake_ascii:$offset:$len}"
+             offset=$offset+$len
+         elif [[ -n "$SNI" ]]; then
+             # Create a server name extension that corresponds to $SNI
+             len_servername=${#NODE}
+             hexdump_format_str="$len_servername/1 \"%02x\""
+             servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}")
+             # convert lengths we need to fill in from dec to hex:
+             len_servername_hex=$(printf "%02x\n" $len_servername)
+             len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
+             len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
+             tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
+             offset=$offset+$len_extension+4
+         fi
+     done
+
+     if ! $sni_extension_found; then
+          out "$tls_handshake_ascii"
+          return 0
+     fi
+
+     len_extensions=${#tls_extensions}/2
+     len_extensions_hex=$(printf "%02x\n" $len_extensions)
+     len2twobytes "$len_extensions_hex"
+     tls_extensions="${LEN_STR:0:2}${LEN_STR:4:2}${tls_extensions}"
+
+     tls_client_hello="${tls_clientversion}${tls_random}${tls_sid}${tls_cipher_suites}${tls_compression_methods}${tls_extensions}"
+     len_clienthello=${#tls_client_hello}/2
+     len_clienthello_hex=$(printf "%02x\n" $len_clienthello)
+     len2twobytes "$len_clienthello_hex"
+     tls_handshake_ascii="${handshake_msg_type}00${LEN_STR:0:2}${LEN_STR:4:2}${tls_client_hello}"
+
+     tls_handshake_ascii_len=${#tls_handshake_ascii}/2
+     tls_handshake_ascii_len_hex=$(printf "%02x\n" $tls_handshake_ascii_len)
+     len2twobytes "$tls_handshake_ascii_len_hex"
+     tls_handshake_ascii="${tls_content_type}${tls_version_reclayer}${LEN_STR:0:2}${LEN_STR:4:2}${tls_handshake_ascii}"
+     out "$tls_handshake_ascii"
+     return 0
+}
+
+client_simulation_sockets() {
+     local -i len i ret=0
+     local -i save=0
+     local lines clienthello data=""
+     local cipher_list_2send
+
+     if [[ "${1:0:4}" == "1603" ]]; then
+          clienthello="$(create_client_simulation_tls_clienthello "$1")"
+     else
+          clienthello="$1"
+     fi
+     len=${#clienthello}
+     for (( i=0; i < len; i=i+2 )); do
+         data+=", ${clienthello:i:2}"
+     done
+     debugme echo "sending client hello..."
+     code2network "${data}"
+     fd_socket 5 || return 6
+     data=$(echo $NW_STR)
+     [[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
+     printf -- "$data" >&5 2>/dev/null &
+     sleep $USLEEP_SND
+
+     sockread_serverhello 32768
+     TLS_NOW=$(LC_ALL=C date "+%s")
+     debugme outln "reading server hello..."
+     if [[ "$DEBUG" -ge 4 ]]; then
+          hexdump -C $SOCK_REPLY_FILE | head -6
+          echo
+     fi
+
+     parse_tls_serverhello "$SOCK_REPLY_FILE"
+     save=$?
+
+     # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
+     lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
+     debugme out "  (returned $lines lines)  "
+
+     # determine the return value for higher level, so that they can tell what the result is
+     if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
+          ret=1          # NOT available
+     else
+          ret=0
+     fi
+     debugme outln
+
+     close_socket
+     TMPFILE=$SOCK_REPLY_FILE
+     tmpfile_handle $FUNCNAME.dd
+     return $ret
+}
+
 run_client_simulation() {
      # Runs browser simulations. Browser capabilities gathered from:
      # https://www.ssllabs.com/ssltest/clients.html on 10 jan 2016
@@ -1831,7 +1995,23 @@ run_client_simulation() {
      local tlsvers=()
      local sni=()
      local warning=()
+     local handshakebytes=()
+     local lowest_protocol=()
+     local highest_protocol=()
+     local service=()
+     local minDhBits=()
+     local maxDhBits=()
+     local minRsaBits=()
+     local maxRsaBits=()
+     local minEcdsaBits=()
+     local requiresSha2=()
      local i=0
+     local name tls proto cipher
+     local using_sockets=true
+
+     if $SSL_NATIVE || [[ -n "$STARTTLS" ]] || ! $EXPERIMENTAL; then
+          using_sockets=false
+     fi
 
      # doesn't make sense for other services
      if [[ $SERVICE != "HTTP" ]];  then
@@ -1842,18 +2022,38 @@ run_client_simulation() {
      names+=("Android 2.3.7              ")
      short+=("android_237")
      protos+=("-no_tls1_2 -no_tls1_1 -no_ssl2")
-     ciphers+=("RC4-MD5:RC4-SHA:AES128-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:EXP-RC4-MD5:EXP-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA")
+     ciphers+=("RC4-MD5:RC4-SHA:AES128-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:EXP-RC4-MD5:EXP-DES-CBC-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA")
      tlsvers+=("-tls1")
      sni+=("")
      warning+=("")
+     handshakebytes+=("160301004b010000470301531f3de6b36804738bbb94a6ecd570a544789c3bb0a6ef8b9d702f997d928d4b00002000040005002f00330032000a00160013000900150012000300080014001100ff0100")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Android 4.0.4              ")
      short+=("android_404")
      protos+=("-no_tls1_2 -no_tls1_1 -no_ssl2")
-     ciphers+=("CDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5")
+     ciphers+=("ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5")
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100c6010000c20301531f479cc7785f455ca7a70142af5be929c1ba931eedbf46dba6b6638da75e95000038c014c00a00390038c00fc0050035c012c00800160013c00dc003000ac013c00900330032c00ec004002fc011c007c00cc0020005000400ff020100006000000014001200000f7777772e73736c6c6162732e636f6d000b000403000102000a00340032000100020003000400050006000700080009000a000b000c000d000e000f00100011001200130014001500160017001800190023000033740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Android 4.1.1              ")
      short+=("android_411")
@@ -1862,6 +2062,16 @@ run_client_simulation() {
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100d7010000d30301531f3f6dd9eb5f6b3586c628cc2cdc82cdb259b1a096237ba4df30dbbc0f26fb000044c014c00ac022c02100390038c00fc0050035c012c008c01cc01b00160013c00dc003000ac013c009c01fc01e00330032c00ec004002fc011c007c00cc0020005000400ff020100006500000014001200000f7777772e73736c6c6162732e636f6d000b000403000102000a00340032000e000d0019000b000c00180009000a00160017000800060007001400150004000500120013000100020003000f0010001100230000000f00010133740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Android 4.2.2              ")
      short+=("android_422")
@@ -1870,22 +2080,51 @@ run_client_simulation() {
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100d1010000cd0301531f40a89e11d5681f563f3dad094375227035d4e9d2c1654d7d3954e3254558000044c014c00ac022c02100390038c00fc0050035c012c008c01cc01b00160013c00dc003000ac013c009c01fc01e00330032c00ec004002fc011c007c00cc0020005000400ff0100006000000014001200000f7777772e73736c6c6162732e636f6d000b000403000102000a00340032000e000d0019000b000c00180009000a00160017000800060007001400150004000500120013000100020003000f001000110023000033740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Android 4.3                ")
      short+=("android_43")
-     protos+=("-no_ssl2")
+     protos+=("-no_tls1_2 -no_tls1_1 -no_ssl2")
      ciphers+=("ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5")
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100d1010000cd0301531f41c3c5110dd688458e5e48e06d30814572ad7b8f9d9df1b0a8820b270685000044c014c00ac022c02100390038c00fc0050035c012c008c01cc01b00160013c00dc003000ac013c009c01fc01e00330032c00ec004002fc011c007c00cc0020005000400ff0100006000000014001200000f7777772e73736c6c6162732e636f6d000b000403000102000a00340032000e000d0019000b000c00180009000a00160017000800060007001400150004000500120013000100020003000f001000110023000033740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Android 4.4.2              ")
      short+=("android_442")
      protos+=("-no_ssl2")
-     ciphers+=("CDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:AES256-GCM-SHA384:AES256-SHA256:AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DES-CBC3-SHA:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DHE-DSS-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:AES128-GCM-SHA256:AES128-SHA256:AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5")
-     tlsvers+=("-tl1_2 -tls1_1 -tls1")
+     ciphers+=("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:AES256-GCM-SHA384:AES256-SHA256:AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DES-CBC3-SHA:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DHE-DSS-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:AES128-GCM-SHA256:AES128-SHA256:AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5")
+     tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100d1010000cd0303531f4317998fb70d57feded18c14433a1b665f963f7e3b1b045b6cc3d61bf21300004cc030c02cc014c00a00a3009f006b006a00390038009d003d0035c012c00800160013000ac02fc02bc027c023c013c00900a2009e0067004000330032009c003c002fc011c0070005000400ff0100005800000014001200000f7777772e73736c6c6162732e636f6d000b00020100000a0008000600190018001700230000000d00220020060106020603050105020503040104020403030103020303020102020203010133740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Android 5.0.0              ")
      short+=("android_500")
@@ -1894,6 +2133,16 @@ run_client_simulation() {
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100bd010000b9030354c21737f3d9d10696c91debf12415f9c45833a83cfbbd4c60c9b91407d2316b000038cc14cc13cc15c014c00a003900380035c012c00800160013000ac02fc02bc013c00900a2009e00330032009c002fc011c0070005000400ff0100005800000014001200000f6465762e73736c6c6162732e636f6d00230000000d00220020060106020603050105020503040104020403030103020303020102020203010133740000000b00020100000a00080006001900180017")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Baidu Jan 2015             ")
      short+=("baidu_jan_2015")
@@ -1902,6 +2151,16 @@ run_client_simulation() {
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100a30100009f030154c1a814c755540538a93b25e7824623d0ee9fc294ee752869cf76819edb3aa200004800ffc00ac0140088008700390038c00fc00500840035c007c009c011c0130045004400330032c00cc00ec002c0040096004100040005002fc008c01200160013c00dc003feff000a0100002e00000014001200000f6465762e73736c6c6162732e636f6d000a00080006001700180019000b0002010000230000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("BingPreview Jan 2015       ")
      short+=("bingpreview_jan_2015")
@@ -1910,6 +2169,16 @@ run_client_simulation() {
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030101510100014d030354c13b79c1ca7169ae70c45d43311f9290d8ac1e326dfc36ff0aa99ea85406d50000a0c030c02cc028c024c014c00ac022c02100a3009f006b006a0039003800880087c032c02ec02ac026c00fc005009d003d00350084c012c008c01cc01b00160013c00dc003000ac02fc02bc027c023c013c009c01fc01e00a2009e0067004000330032009a009900450044c031c02dc029c025c00ec004009c003c002f009600410007c011c007c00cc002000500040015001200090014001100080006000300ff020100008300000014001200000f6465762e73736c6c6162732e636f6d000b000403000102000a00340032000e000d0019000b000c00180009000a00160017000800060007001400150004000500120013000100020003000f00100011000d002200200601060206030501050205030401040204030301030203030201020202030101000f000101")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Chrome 47 / OSX            ")
      short+=("chrome_47_osx")
@@ -1918,6 +2187,16 @@ run_client_simulation() {
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100ca010000c6030361f8858af23cda649baf596105ec66bfe5b4642046c486e3e5321b26588392f400001ec02bc02f009ecc14cc13c00ac0140039c009c0130033009c0035002f000a0100007fff0100010000000014001200000f6465762e73736c6c6162732e636f6d0017000000230000000d001600140601060305010503040104030301030302010203000500050100000000337400000012000000100017001508687474702f312e3108737064792f332e3102683275500000000b00020100000a0006000400170018")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(1024)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(8192)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Firefox 31.3.0ESR / Win7   ")
      short+=("firefox_3130esr_win7")
@@ -1926,14 +2205,34 @@ run_client_simulation() {
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100b1010000ad030357ce74b9799a67f62ffd7f53fde81675039c3597b2b17f9e18dbbbd418dd68f600002ec02bc02fc00ac009c013c014c012c007c0110033003200450039003800880016002f004100350084000a000500040100005600000014001200000f6465762e73736c6c6162732e636f6dff01000100000a00080006001700180019000b000201000023000033740000000500050100000000000d0012001004010501020104030503020304020202")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Firefox 42 / OSX           ")
+     names+=("Firefox 42 OS X            ")
      short+=("firefox_42_osx")
      protos+=("-no_ssl2 -no_ssl3")
      ciphers+=("ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:AES128-SHA:AES256-SHA:DES-CBC3-SHA")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100b8010000b403038abe51f10e414011c88d4807c3cf465ae02ba1ef74dd1d59a0b8f04c4f13c969000016c02bc02fc00ac009c013c01400330039002f0035000a0100007500000014001200000f6465762e73736c6c6162732e636f6dff01000100000a00080006001700180019000b00020100002300003374000000100017001502683208737064792f332e3108687474702f312e31000500050100000000000d001600140401050106010201040305030603020304020202")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(1023)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("GoogleBot Feb 2015         ")
      short+=("googlebot_feb_2015")
@@ -1942,236 +2241,532 @@ run_client_simulation() {
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100db010000d70303d9c72e000f6a7f0a156840bd4aa9fd0612df4aeb69a1a1c6452c5f1f4d0ba6b000002ac02bc02fc007c011c009c013c00ac014009c00050004002f000a003500330032001600130039003800ff0100008400000014001200000f6465762e73736c6c6162732e636f6d00230000000d0020001e06010602060305010502050304010402040303010302030302010202020333740000000b000403000102000a00340032000e000d0019000b000c00180009000a00160017000800060007001400150004000500120013000100020003000f00100011")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("IE6 / XP                   ")
-     short+=("ie6_xp")
-     protos+=("-no_tls1")
+     names+=("IE 6 XP                    ")
+     short+=("ie_6_xp")
+     protos+=("-no_tls1_2 -no_tls1_1 -no_tls1")
      tlsvers+=("")
      ciphers+=("RC4-MD5:RC4-SHA:DES-CBC3-SHA:RC4-MD5:DES-CBC3-MD5:RC2-CBC-MD5:DES-CBC-SHA:DES-CBC-MD5:EXP1024-RC4-SHA:EXP1024-DES-CBC-SHA:EXP-RC4-MD5:EXP-RC2-CBC-MD5:EXP-RC4-MD5:EXP-RC2-CBC-MD5:EDH-DSS-DES-CBC3-SHA:EDH-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA")
      sni+=("")
      warning+=("")
+     handshakebytes+=("804c01030000330000001000000400000500000a0100800700c003008000000906004000006400006200000300000602008004008000001300001200006317411550ac4c45ccbc8f4538dbc56d3a")
+     lowest_protocol+=("0x0200")
+     highest_protocol+=("0x0300")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("IE7 / Vista                ")
-     short+=("ie7_vista")
-     protos+=("-no_ssl2")
+     names+=("IE 7 Vista                 ")
+     short+=("ie_7_vista")
+     protos+=("-no_tls1_2 -no_tls1_1 -no_ssl2")
      ciphers+=("AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:EDH-DSS-DES-CBC3-SHA:RC4-MD5")
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("160301007d01000079030151fa62ab452795b7003c5f93ab677dbf57dd62bfa39e0ffaaeabe45b06552452000018002f00350005000ac009c00ac013c01400320038001300040100003800000014001200000f7777772e73736c6c6162732e636f6d000500050100000000000a00080006001700180019000b00020100ff01000100")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("IE8 / XP                   ")
-     short+=("ie8_xp")
-     protos+=("-no_ssl2")
+     names+=("IE 8 XP                    ")
+     short+=("ie_8_xp")
+     protos+=("-no_tls1_2 -no_tls1_1 -no_ssl2")
      ciphers+=("RC4-MD5:RC4-SHA:DES-CBC3-SHA:DES-CBC-SHA:EXP1024-RC4-SHA:EXP1024-DES-CBC-SHA:EXP-RC4-MD5:EXP-RC2-CBC-MD5:EDH-DSS-DES-CBC3-SHA:EDH-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA")
      tlsvers+=("-tls1")
      sni+=("")
      warning+=("")
+     handshakebytes+=("16030100410100003d030151fa5ac223f1d72558e48bb4f144baa494403ca6c360349cbd1449997d8dd1ec00001600040005000a000900640062000300060013001200630100")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("IE8-10 / Win7              ")
-     short+=("ie10_win7")
-     protos+=("-no_ssl2")
+     names+=("IE 8-10 Win 7              ")
+     short+=("ie_8-10_win7")
+     protos+=("-no_tls1_2 -no_tls1_1 -no_ssl2")
      ciphers+=("ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:RC4-SHA:RC4-MD5")
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("160301007d01000079030155f092059b76ac28cceda732dac7f07a52aecc126f8ed890ab80e12e7eca049c000018c014c0130035002fc00ac00900380032000a0013000500040100003800000014001200000f6465762e73736c6c6162732e636f6d000500050100000000000a00080006001700180019000b00020100ff01000100")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(1024)
+     maxDhBits+=(4096)
+     minRsaBits+=(-1)
+     maxRsaBits+=(16384)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("IE11 / Win7                ")
-     short+=("ie11_win7")
-     protos+=("-no_ssl2 -no_ssl3")
-     ciphers+=("ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DHE-DSS-AES256-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:RC4-SHA:RC4-MD5")
-     tlsvers+=("-tls1_2 -tls1_1 -tls1")
-     sni+=("$SNI")
-     warning+=("")
-
-     names+=("IE11 / Win8.1              ")
-     short+=("ie11_win81")
-     protos+=("-no_ssl2 -no_ssl3")
-     ciphers+=("ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:DHE-DSS-AES256-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA")
-     tlsvers+=("-tls1_2 -tls1_1 -tls1")
-     sni+=("$SNI")
-     warning+=("")
-
-     names+=("IE10 / Win Phone 8.0       ")
-     short+=("ie10_winphone_80")
+     names+=("IE 11 Win 7                ")
+     short+=("ie_11_win7")
      protos+=("-no_ssl2")
-     ciphers+=("AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:EDH-DSS-DES-CBC3-SHA:RC4-MD5")
-     tlsvers+=("-tls1")
+     ciphers+=("ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:DHE-DSS-AES256-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:RC4-SHA:RC4-MD5")
+     tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030300b1010000ad030354c22c0a4842eab5a1a10763a3c16df20357f1ba3fac1c67136e09bfa94c5c0f000034c028c027c014c013009f009e009d009c003d003c0035002fc02cc02bc024c023c00ac009006a004000380032000a00130005000401000050ff0100010000000014001200000f6465762e73736c6c6162732e636f6d000500050100000000000a00080006001700180019000b00020100000d00140012040105010601020104030503060302030202")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("IE11 / Win Phone 8.1       ")
-     short+=("ie10_winphone_81")
+     names+=("IE 11 Win 8.1              ")
+     short+=("ie_11_win81")
      protos+=("-no_ssl2")
      ciphers+=("AES128-SHA256:AES128-SHA:AES256-SHA256:AES256-SHA:DES-CBC3-SHA:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:EDH-DSS-DES-CBC3-SHA")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030300bb010000b7030352678fd707022be386508c7e5837f03bcb1b91c372733322f87872ff873af1db000026003c002f003d0035000ac027c013c014c02bc023c02cc024c009c00a00400032006a0038001301000068ff0100010000000014001200000f7777772e73736c6c6162732e636f6d000500050100000000000a0006000400170018000b00020100000d0010000e04010501020104030503020302020023000000100012001006737064792f3308687474702f312e3133740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("IE11 / Win Phone 8.1 Update")
-     short+=("ie10_winphone_81_update")
+     names+=("IE 10 Win Phone 8.0        ")
+     short+=("ie_10_winphone80")
+     protos+=("-no_tls1_2 -no_tls1_1 -no_ssl2")
+     ciphers+=("AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA:EDH-DSS-DES-CBC3-SHA:RC4-MD5")
+     tlsvers+=("-tls1")
+     sni+=("$SNI")
+     warning+=("")
+     handshakebytes+=("160301007f0100007b0301536487d458b1a364f27085798ca9e06353f0b300baeecd775e6ccc90a97037c2000018002f00350005000ac013c014c009c00a00320038001300040100003aff0100010000000014001200000f7777772e73736c6c6162732e636f6d000500050100000000000a0006000400170018000b0002010000230000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
+
+     names+=("IE 11 Win Phone 8.1        ")
+     short+=("ie_11_winphone81")
+     protos+=("-no_ssl2")
+     ciphers+=("AES128-SHA256:AES128-SHA:AES256-SHA256:AES256-SHA:DES-CBC3-SHA:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:EDH-DSS-DES-CBC3-SHA")
+     tlsvers+=("-tls1_2 -tls1_1 -tls1")
+     sni+=("$SNI")
+     warning+=("")
+     handshakebytes+=("16030300bb010000b703035363d297ad92a8fe276a4e5b9395d593e96fff9c3df0987e5dfbab544ce05832000026003c002f003d0035000ac027c013c014c02bc023c02cc024c009c00a00400032006a0038001301000068ff0100010000000014001200000f7777772e73736c6c6162732e636f6d000500050100000000000a0006000400170018000b00020100000d0010000e04010501020104030503020302020023000000100012001006737064792f3308687474702f312e3133740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
+
+     names+=("IE 11 Win Phone 8.1 Update ")
+     short+=("ie_11_winphone81update")
      protos+=("-no_ssl2")
      ciphers+=("ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:DHE-DSS-AES256-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030300c5010000c103035537a79a55362d42c3b3308fea91e85c5656021153d0a4baf03e7fef6e315c72000030c028c027c014c013009f009e009d009c003d003c0035002fc02cc02bc024c023c00ac009006a004000380032000a001301000068ff0100010000000014001200000f6465762e73736c6c6162732e636f6d000500050100000000000a0006000400170018000b00020100000d0010000e04010501020104030503020302020023000000100012001006737064792f3308687474702f312e3133740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("IE11 / Win10               ")
-     short+=("ie11_win10")
+     names+=("IE 11 Win 10               ")
+     short+=("ie_11_win10")
      protos+=("-no_ssl2 -no_ssl3")
      ciphers+=("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:DHE-DSS-AES256-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030300c9010000c50303558923f4d57c2d79aba0360f4030073f0554d057176bd610fb2aa74ee4407361000034c030c02fc028c027c014c013009f009e009d009c003d003c0035002fc02cc02bc024c023c00ac009006a004000380032000a00130100006800000014001200000f6465762e73736c6c6162732e636f6d000500050100000000000a0006000400170018000b00020100000d00140012040105010201040305030203020206010603002300000010000e000c02683208687474702f312e3100170000ff01000100")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(1024)
+     maxDhBits+=(4096)
+     minRsaBits+=(-1)
+     maxRsaBits+=(16384)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Edge 13 / Win10            ")
-     short+=("edge13_win10")
+     names+=("Edge 13 Win 10             ")
+     short+=("edge_13_win10")
      protos+=("-no_ssl2 -no_ssl3")
      ciphers+=("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:DHE-DSS-AES256-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:EDH-DSS-DES-CBC3-SHA")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030300d3010000cf0303565ee009f8e3f685347567b3edfd626034a1125966e4d818ec6f57a022d2fc9e000034c02cc02bc030c02f009f009ec024c023c028c027c00ac009c014c013009d009c003d003c0035002f000a006a00400038003200130100007200000014001200000f6465762e73736c6c6162732e636f6d000500050100000000000a0006000400170018000b00020100000d00140012040105010201040305030203020206010603002300000010000e000c02683208687474702f312e310017000055000006000100020002ff01000100")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(1024)
+     maxDhBits+=(4096)
+     minRsaBits+=(-1)
+     maxRsaBits+=(16384)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Edge 12 / Win Phone 10     ")
-     short+=("edge13_winphone10")
+     names+=("Edge 13 Win Phone 10       ")
+     short+=("edge_13_winphone10")
      protos+=("-no_ssl2 -no_ssl3")
      ciphers+=("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:DHE-DSS-AES256-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-AES128-SHA:EDH-DSS-DES-CBC3-SHA")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030300d3010000cf0303565ee836e62e7b9b734f4dca5f3f1ad62dc4e5f87bdf6c90f325b6a2e0012705000034c02cc02bc030c02f009f009ec024c023c028c027c00ac009c014c013009d009c003d003c0035002f000a006a00400038003200130100007200000014001200000f6465762e73736c6c6162732e636f6d000500050100000000000a0006000400170018000b00020100000d00140012040105010201040305030203020206010603002300000010000e000c02683208687474702f312e310017000055000006000100020002ff01000100")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(1024)
+     maxDhBits+=(4096)
+     minRsaBits+=(-1)
+     maxRsaBits+=(16384)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Java 6u45                  ")
-     short+=("java6u45")
+     short+=("java_6u45")
      protos+=("-no_tls1_2 -no_tls1_1")
      ciphers+=("RC4-MD5:RC4-MD5:RC4-SHA:AES128-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DES-CBC3-SHA:DES-CBC3-MD5:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DES-CBC-SHA:DES-CBC-MD5:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:EXP-RC4-MD5:EXP-RC4-MD5:EXP-DES-CBC-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA")
      tlsvers+=("-tls1")
      sni+=("")
      warning+=("")
+     handshakebytes+=("8065010301003c0000002000000401008000000500002f00003300003200000a0700c00000160000130000090600400000150000120000030200800000080000140000110000ff52173357f48ce6722f974dbb429b9279208d1cf5b9088947c9ba16d9ecbc0fa6")
+     lowest_protocol+=("0x0200")
+     highest_protocol+=("0x0301")
+     service+=("ANY")
+     minDhBits+=(-1)
+     maxDhBits+=(1024)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Java 7u25                  ")
-     short+=("java7u25")
+     short+=("java_7u25")
      protos+=("-no_ssl2 -no_tls1_2 -no_tls1_1")
      ciphers+=("ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES128-SHA:ECDH-ECDSA-AES128-SHA:ECDH-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-RSA-RC4-SHA:RC4-SHA:ECDH-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:RC4-MD5")
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100ad010000a9030152178334e8b855253e50e4623e475b6941c18cc312de6395a98e1cd4fd6735e700002ac009c013002fc004c00e00330032c007c0110005c002c00cc008c012000ac003c00d00160013000400ff01000056000a0034003200170001000300130015000600070009000a0018000b000c0019000d000e000f001000110002001200040005001400080016000b0002010000000014001200000f7777772e73736c6c6162732e636f6d")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("ANY")
+     minDhBits+=(-1)
+     maxDhBits+=(1024)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("Java 8u31                  ")
-     short+=("java8u31")
+     short+=("java_8u31")
      protos+=("-no_ssl2 -no_ssl3")
      ciphers+=("ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:AES128-SHA256:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES128-SHA:ECDH-ECDSA-AES128-SHA:ECDH-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:AES128-GCM-SHA256:ECDH-ECDSA-AES128-GCM-SHA256:ECDH-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-DES-CBC3-SHA:DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-RSA-RC4-SHA:RC4-SHA:ECDH-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:RC4-MD5")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030300e7010000e3030354c21168512b37f2a7410028c16673626ff931146918c7b29f78150b7339e5af000046c023c027003cc025c02900670040c009c013002fc004c00e00330032c02bc02f009cc02dc031009e00a2c008c012000ac003c00d00160013c007c0110005c002c00c000400ff01000074000a0034003200170001000300130015000600070009000a0018000b000c0019000d000e000f001000110002001200040005001400080016000b00020100000d001a001806030601050305010403040103030301020302010202010100000014001200000f6465762e73736c6c6162732e636f6d")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     service+=("ANY")
+     minDhBits+=(-1)
+     maxDhBits+=(2048)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("OpenSSL 0.9.8y             ")
-     short+=("openssl098y")
+     short+=("openssl_098y")
      protos+=("-no_ssl2 -no_tls1_2 -no_tls1_1")
      ciphers+=("DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:AES256-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DES-CBC3-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:AES128-SHA:IDEA-CBC-SHA:RC4-SHA:RC4-MD5:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DES-CBC-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5")
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100730100006f0301521782e707c1a780d3124742f35573dbb693babe5d3a7e9405c706af18b636bf00002a00390038003500160013000a00330032002f0007000500040015001200090014001100080006000300ff0100001c00000014001200000f7777772e73736c6c6162732e636f6d00230000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("ANY")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("OpenSSL 1.0.1l             ")
-     short+=("openssl101l")
+     short+=("openssl_101l")
      protos+=("-no_ssl2")
      ciphers+=("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:ECDH-RSA-AES256-GCM-SHA384:ECDH-ECDSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA384:ECDH-ECDSA-AES256-SHA384:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-GCM-SHA384:AES256-SHA256:AES256-SHA:CAMELLIA256-SHA:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DHE-DSS-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:ECDH-RSA-AES128-GCM-SHA256:ECDH-ECDSA-AES128-GCM-SHA256:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-GCM-SHA256:AES128-SHA256:AES128-SHA:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DES-CBC-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("160301014f0100014b030332b230e5dd8c5573c219a243f397e31f407c7a93b60a26e7c3d5cca06a566fe1000094c030c02cc028c024c014c00a00a3009f006b006a0039003800880087c032c02ec02ac026c00fc005009d003d00350084c02fc02bc027c023c013c00900a2009e0067004000330032009a009900450044c031c02dc029c025c00ec004009c003c002f009600410007c011c007c00cc00200050004c012c00800160013c00dc003000a0015001200090014001100080006000300ff0100008e00000014001200000f6465762e73736c6c6162732e636f6d000b000403000102000a00340032000e000d0019000b000c00180009000a00160017000800060007001400150004000500120013000100020003000f0010001100230000000d0020001e060106020603050105020503040104020403030103020303020102020203000500050100000000000f000101")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("ANY")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      names+=("OpenSSL 1.0.2e             ")
-     short+=("openssl102")
+     short+=("openssl_102e")
      protos+=("-no_ssl2")
-     ciphers+=("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DH-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:DH-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DH-RSA-AES256-SHA256:DH-DSS-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:ECDH-RSA-AES256-GCM-SHA384:ECDH-ECDSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA384:ECDH-ECDSA-AES256-SHA384:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-GCM-SHA384:AES256-SHA256:AES256-SHA:CAMELLIA256-SHA:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DH-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:DH-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DH-RSA-AES128-SHA256:DH-DSS-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:ECDH-RSA-AES128-GCM-SHA256:ECDH-ECDSA-AES128-GCM-SHA256:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-GCM-SHA256:AES128-SHA256:AES128-SHA:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:DES-CBC-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5")
+     ciphers+=("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DH-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:DH-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DH-RSA-AES256-SHA256:DH-DSS-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:ECDH-RSA-AES256-GCM-SHA384:ECDH-ECDSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA384:ECDH-ECDSA-AES256-SHA384:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-GCM-SHA384:AES256-SHA256:AES256-SHA:CAMELLIA256-SHA:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DH-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:DH-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DH-RSA-AES128-SHA256:DH-DSS-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:ECDH-RSA-AES128-GCM-SHA256:ECDH-ECDSA-AES128-GCM-SHA256:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-GCM-SHA256:AES128-SHA256:AES128-SHA:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:DES-CBC-SHA")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      #warning+=("Tests are based on OpenSSL 1.0.1, therefore ciphers 0xe and 0xb are missing")
      warning+=("")
+     handshakebytes+=("16030101590100015503032a9db79b37d9364a9a685dc25bfec88c21ef88c206a20b9801108c67607e79800000b6c030c02cc028c024c014c00a00a500a300a1009f006b006a0069006800390038003700360088008700860085c032c02ec02ac026c00fc005009d003d00350084c02fc02bc027c023c013c00900a400a200a0009e00670040003f003e0033003200310030009a0099009800970045004400430042c031c02dc029c025c00ec004009c003c002f009600410007c011c007c00cc00200050004c012c008001600130010000dc00dc003000a00150012000f000c000900ff0100007600000014001200000f6465762e73736c6c6162732e636f6d000b000403000102000a001c001a00170019001c001b0018001a0016000e000d000b000c0009000a00230000000d0020001e060106020603050105020503040104020403030103020303020102020203000500050100000000000f000101")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("ANY")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Safari 5.1.9/ OSX 10.6.8   ")
-     short+=("safari519_osx1068")
+     names+=("Safari 5.1.9 OS X 10.6.8   ")
+     short+=("safari_519_osx1068")
      protos+=("-no_ssl2 -no_tls1_2 -no_tls1_1")
      ciphers+=("ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:ECDHE-RSA-RC4-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-AES256-SHA:ECDH-ECDSA-RC4-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDH-RSA-RC4-SHA:ECDH-RSA-DES-CBC3-SHA:AES128-SHA:RC4-SHA:RC4-MD5:AES256-SHA:DES-CBC3-SHA:DES-CBC-SHA:EXP-RC4-MD5:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:DHE-DSS-AES128-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:EDH-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC-SHA:EXP-EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC3-SHA:EDH-DSS-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA")
      tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("160301009d01000099030151d15dc2887b1852fd4291e36c3f4e8a35266e15dd6354779fbf5438b59b42da000046c00ac009c007c008c013c014c011c012c004c005c002c003c00ec00fc00cc00d002f000500040035000a000900030008000600320033003800390016001500140013001200110100002a00000014001200000f7777772e73736c6c6162732e636f6d000a00080006001700180019000b00020100")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(4096)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Safari 6 / iOS 6.0.1       ")
-     short+=("safari6_ios601")
+     names+=("Safari 6 iOS 6.0.1         ")
+     short+=("safari_6_ios601")
      protos+=("-no_ssl2")
      ciphers+=("ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDH-ECDSA-AES256-SHA384:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES256-SHA384:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-AES256-SHA:ECDH-ECDSA-RC4-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDH-RSA-RC4-SHA:ECDH-RSA-DES-CBC3-SHA:AES256-SHA256:AES128-SHA256:AES128-SHA:RC4-SHA:RC4-MD5:AES256-SHA:DES-CBC3-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:EDH-RSA-DES-CBC3-SHA:ECDHE-ECDSA-NULL-SHA:ECDHE-RSA-NULL-SHA:ECDH-ECDSA-NULL-SHA:ECDH-RSA-NULL-SHA:NULL-SHA256:NULL-SHA:NULL-MD5")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030300bf010000bb030351d15ce21834380a8b5f491a00790b6d097014bb1e04124706631c6a6a3f973800005800ffc024c023c00ac009c007c008c028c027c014c013c011c012c026c025c02ac029c004c005c002c003c00ec00fc00cc00d003d003c002f000500040035000a0067006b003300390016c006c010c001c00b003b000200010100003a00000014001200000f7777772e73736c6c6162732e636f6d000a00080006001700180019000b00020100000d000c000a05010401020104030203")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(4096)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Safari 6.0.4/ OS X 10.8.4  ")
-     short+=("safari604_osx1084")
+     names+=("Safari 6.0.4 OS X 10.8.4   ")
+     short+=("safari_604_osx1084")
      protos+=("-no_ssl2 -no_tls1_2 -no_tls1_1")
      ciphers+=("ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-AES256-SHA:ECDH-ECDSA-RC4-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDH-RSA-RC4-SHA:ECDH-RSA-DES-CBC3-SHA:AES128-SHA:RC4-SHA:RC4-MD5:AES256-SHA:DES-CBC3-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:EDH-RSA-DES-CBC3-SHA")
-     tlsvers+=("-tls1_2 -tls1_1 -tls1")
+     tlsvers+=("-tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100a9010000a5030151fa327c6576dadde1e8a89d4d45bdc1d0c107b8cbe998337e02ca419a0bcb30204dd1c85d9fbc1607b27a35ec9dfd1dae2c589483843a73999c9de205748633b1003200ffc00ac009c007c008c014c013c011c012c004c005c002c003c00ec00fc00cc00d002f000500040035000a0033003900160100002a00000014001200000f7777772e73736c6c6162732e636f6d000a00080006001700180019000b00020100")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0301")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(4096)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Safari 7 / iOS 7.1         ")
-     short+=("safari7_ios71")
+     names+=("Safari 7 iOS 7.1           ")
+     short+=("safari_7_ios71")
      protos+=("-no_ssl2")
      ciphers+=("ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDH-ECDSA-AES256-SHA384:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES256-SHA384:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES256-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-RC4-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-RC4-SHA:ECDH-RSA-DES-CBC3-SHA:AES256-SHA256:AES128-SHA256:AES128-SHA:RC4-SHA:RC4-MD5:AES256-SHA:DES-CBC3-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:EDH-RSA-DES-CBC3-SHA")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100b1010000ad0303532017204048bb5331c62bf295ab4c2f2b3964f515c649a7d0947c8102d7348600004a00ffc024c023c00ac009c007c008c028c027c014c013c011c012c026c025c02ac029c005c004c002c003c00fc00ec00cc00d003d003c002f000500040035000a0067006b0033003900160100003a00000014001200000f7777772e73736c6c6162732e636f6d000a00080006001700180019000b00020100000d000c000a05010401020104030203")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(4096)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Safari 7 / OS X 10.9       ")
-     short+=("safari7_osx109")
+     names+=("Safari 7 OS X 10.9         ")
+     short+=("safari_7_osx109")
      protos+=("-no_ssl2")
      ciphers+=("ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDH-ECDSA-AES256-SHA384:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES256-SHA384:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES256-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-RC4-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-RC4-SHA:ECDH-RSA-DES-CBC3-SHA:AES256-SHA256:AES128-SHA256:AES128-SHA:RC4-SHA:RC4-MD5:AES256-SHA:DES-CBC3-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:EDH-RSA-DES-CBC3-SHA")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100d1010000cd030351fa3664edce86d82606540539ccd388418b1a5cb8cfda5e15349c635d4b028b203bf83c63e3da6777e407300b5d657e429f11cd7d857977e4390fda365b8d4664004a00ffc024c023c00ac009c007c008c028c027c014c013c011c012c026c025c02ac029c005c004c002c003c00fc00ec00cc00d003d003c002f000500040035000a0067006b0033003900160100003a00000014001200000f7777772e73736c6c6162732e636f6d000a00080006001700180019000b00020100000d000c000a05010401020104030203")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(4096)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Safari 8 / iOS 8.4         ")
-     short+=("safari8_ios84")
+     names+=("Safari 8 iOS 8.4           ")
+     short+=("safari_8_ios84")
      protos+=("-no_ssl2")
      ciphers+=("ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDH-ECDSA-AES256-SHA384:ECDH-ECDSA-AES128-SHA256:ECDH-ECDSA-AES256-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-RSA-AES256-SHA384:ECDH-RSA-AES128-SHA256:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:EDH-RSA-DES-CBC3-SHA:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:RC4-SHA:RC4-MD5")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100b5010000b1030354c20f1647345d0cac1db29f0489aab5e2016e6b2baca65e8c5eb6dd48a1fcd400004a00ffc024c023c00ac009c008c028c027c014c013c012c026c025c005c004c003c02ac029c00fc00ec00d006b0067003900330016003d003c0035002f000ac007c011c002c00c000500040100003e00000014001200000f6465762e73736c6c6162732e636f6d000a00080006001700180019000b00020100000d000c000a0501040102010403020333740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(768)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(4096)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Safari 8 / OS X 10.10      ")
-     short+=("safari8_osx1010")
+     names+=("Safari 8 OS X 10.10        ")
+     short+=("safari_8_osx1010")
      protos+=("-no_ssl2")
      ciphers+=("ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDH-ECDSA-AES256-SHA384:ECDH-ECDSA-AES128-SHA256:ECDH-ECDSA-AES256-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-RSA-AES256-SHA384:ECDH-RSA-AES128-SHA256:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:EDH-RSA-DES-CBC3-SHA:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:ECDH-RSA-RC4-SHA:RC4-SHA:RC4-MD5")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100b5010000b1030354c20a44e0d7681f3d55d7e9a764b67e6ffa6722c17b21e15bc2c9c98892460a00004a00ffc024c023c00ac009c008c028c027c014c013c012c026c025c005c004c003c02ac029c00fc00ec00d006b0067003900330016003d003c0035002f000ac007c011c002c00c000500040100003e00000014001200000f6465762e73736c6c6162732e636f6d000a00080006001700180019000b00020100000d000c000a0501040102010403020333740000")
+     lowest_protocol+=("0x0300")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(768)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(8192)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Safari 9 / iOS 9           ")
-     short+=("safari9_ios9")
+     names+=("Safari 9 iOS 9             ")
+     short+=("safari_9_ios9")
      protos+=("-no_ssl2 -no_ssl3")
      ciphers+=("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-RSA-RC4-SHA:RC4-SHA:RC4-MD5")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100e2010000de030355fb38fdc94c6c1ff6ee066f0e69579f40a83ce5454787e8834b60fd8c31e5ac00003400ffc02cc02bc024c023c00ac009c008c030c02fc028c027c014c013c012009d009c003d003c0035002f000ac007c011000500040100008100000014001200000f6465762e73736c6c6162732e636f6d000a00080006001700180019000b00020100000d000e000c0501040102010503040302033374000000100030002e0268320568322d31360568322d31350568322d313408737064792f332e3106737064792f3308687474702f312e3100050005010000000000120000")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(768)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(8192)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
-     names+=("Safari 9 / OS X 10.11      ")
-     short+=("safari9_osx1011")
+     names+=("Safari 9 OS X 10.11        ")
+     short+=("safari_9_osx1011")
      protos+=("-no_ssl2 -no_ssl3")
      ciphers+=("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-RSA-RC4-SHA:RC4-SHA:RC4-MD5")
      tlsvers+=("-tls1_2 -tls1_1 -tls1")
      sni+=("$SNI")
      warning+=("")
+     handshakebytes+=("16030100e2010000de030355def1c4d1f6a12227389012da236581104b0bfa8b8a5bc849372531349dccc600003400ffc02cc02bc024c023c00ac009c008c030c02fc028c027c014c013c012009d009c003d003c0035002f000ac007c011000500040100008100000014001200000f6465762e73736c6c6162732e636f6d000a00080006001700180019000b00020100000d000e000c0501040102010503040302033374000000100030002e0268320568322d31360568322d31350568322d313408737064792f332e3106737064792f3308687474702f312e3100050005010000000000120000")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(768)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(8192)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
 
      outln
-     pr_headlineln " Running browser simulations (experimental) "
+     if "$using_sockets"; then
+          pr_headlineln " Running browser simulations via sockets (experimental) "
+     else
+          pr_headlineln " Running browser simulations (experimental) "
+     fi
      outln
 
      debugme outln
      for name in "${short[@]}"; do
           #FIXME: printf formatting would look better, especially if we want a wide option here
           out " ${names[i]}   "
-          $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
-          debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
-          sclient_connect_successful $? $TMPFILE
-          sclient_success=$?
+          if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
+               client_simulation_sockets "${handshakebytes[i]}"
+               sclient_success=$?
+               if [[ $sclient_success -eq 0 ]]; then
+                    if [[ "0x${DETECTED_TLS_VERSION}" -lt ${lowest_protocol[i]} ]] || \
+                       [[ "0x${DETECTED_TLS_VERSION}" -gt ${highest_protocol[i]} ]]; then
+                         sclient_success=1
+                    fi
+                    [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
+               fi
+          else
+               $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+               debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
+               sclient_connect_successful $? $TMPFILE
+               sclient_success=$?
+          fi
           if [[ $sclient_success -ne 0 ]]; then
                outln "No connection"
                fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
@@ -2179,7 +2774,7 @@ run_client_simulation() {
                #FIXME: awk
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
-               if [[ "$proto" == TLSv1.2 ]]; then
+               if [[ "$proto" == TLSv1.2 ]] && ( ! $using_sockets || [[ -z "${handshakebytes[i]}" ]] ); then
                     # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                     for tls in ${tlsvers[i]}; do
                          $OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
@@ -2205,6 +2800,7 @@ run_client_simulation() {
                fi
                #FiXME: awk
                cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
+               $using_sockets && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
                outln "$proto $cipher"
                if [[ -n "${warning[i]}" ]]; then
                     out "                            "
@@ -4397,6 +4993,7 @@ parse_tls_serverhello() {
 
      TLS_TIME=""
      DETECTED_TLS_VERSION=""
+     [[ -n "$tls_hello_ascii" ]] && echo "CONNECTED(00000003)" > $TMPFILE
 
      # $tls_hello_ascii may contain trailing whitespace. Remove it:
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
@@ -4627,6 +5224,23 @@ parse_tls_serverhello() {
      let offset=74+$tls_sid_len
      tls_compression_method="${tls_serverhello_ascii:$offset:2}"
 
+     if [[ "$tls_protocol2" == "0300" ]]; then
+          echo "Protocol  : SSLv3" >> $TMPFILE
+     else
+          echo "Protocol  : TLSv1.$((0x$tls_protocol2-0x0301))" >> $TMPFILE
+     fi
+     echo "===============================================================================" >> $TMPFILE
+     if [[ -n "$MAPPING_FILE_RFC" ]]; then
+          if [[ "${tls_cipher_suite:0:2}" == "00" ]]; then
+               echo "Cipher    : $(strip_spaces $(show_rfc_style "x${tls_cipher_suite:2:2}"))" >> $TMPFILE
+          else
+               echo "Cipher    : $(strip_spaces $(show_rfc_style "x${tls_cipher_suite:0:4}"))" >> $TMPFILE
+          fi
+     else
+          echo "Cipher    : $($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')" >> $TMPFILE
+     fi
+     echo "===============================================================================" >> $TMPFILE
+
      if [[ $DEBUG -ge 2 ]]; then
           echo "TLS server hello message:"
           if [[ $DEBUG -ge 4 ]]; then
@@ -4645,6 +5259,7 @@ parse_tls_serverhello() {
           esac
           outln
      fi
+     tmpfile_handle $FUNCNAME.txt
      return 0
 }
 
@@ -7659,4 +8274,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.507 2016/06/24 17:00:58 dirkw Exp $
+#  $Id: testssl.sh,v 1.509 2016/06/28 10:21:48 dirkw Exp $
