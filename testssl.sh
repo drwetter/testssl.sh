@@ -2010,7 +2010,7 @@ run_client_simulation() {
      local using_sockets=true
      local client_service
 
-     if [[ $SSL_NATIVE || ! $EXPERIMENTAL ]]; then
+     if $SSL_NATIVE; then
           using_sockets=false
      fi
 
