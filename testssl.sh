@@ -3913,7 +3913,7 @@ certificate_info() {
                ;;
           *)
                out "$cert_sig_algo ("
-               pr_warning "FIXME: is unknown"
+               pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
                fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $sign_algo"
                ;;
@@ -3983,7 +3983,7 @@ certificate_info() {
                fi
           else
                out "$cert_keysize bits ("
-               pr_warning "FIXME: can't tell whether this is good here or not"
+               pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
                fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (unknown signature algorithm)"
           fi
@@ -8148,4 +8148,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.509 2016/06/28 10:21:48 dirkw Exp $
+#  $Id: testssl.sh,v 1.510 2016/07/01 10:03:44 dirkw Exp $
