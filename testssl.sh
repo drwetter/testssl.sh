@@ -2009,7 +2009,7 @@ run_client_simulation() {
      local name tls proto cipher
      local using_sockets=true
 
-     if $SSL_NATIVE || [[ -n "$STARTTLS" ]] || ! $EXPERIMENTAL; then
+     if $SSL_NATIVE || [[ -n "$STARTTLS" ]]; then
           using_sockets=false
      fi
 
@@ -8148,4 +8148,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.510 2016/07/01 10:03:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.511 2016/07/01 16:26:03 dirkw Exp $
