@@ -6643,6 +6643,13 @@ openssl_age() {
      outln
 }
 
+bsd-bash() {
+     if [[ $(uname) -eq "FreeBSD" ]] && [[ $(count_lines "$(ls /dev/fd)") -le 3 ]]; then
+          echo "You need to mount fdescfs on FreeBSD: mount -t fdescfs fdesc /dev/fd"
+          exit 1
+     fi
+}
+
 
 help() {
      cat << EOF
@@ -8091,6 +8098,7 @@ maketempf
 mybanner
 check_proxy
 openssl_age
+bsd-bash
 
 # TODO: it is ugly to have those two vars here --> main()
 ret=0
