@@ -4002,7 +4002,7 @@ run_client_simulation() {
      for name in "${short[@]}"; do
           # Make sure we run client simulations for those clients that support it
           if $do_all_simulations || ${current[i]} ; then
-               if $do_all_simulations || [[ `echo "${service[i]}" | grep "$client_service" | wc -l` -eq 1 || "${service[i]}" == "ANY" ]]; then
+               if $do_all_simulations || [[ $(count_lines "$(echo \"${service[i]}\" | grep \"$client_service\"") -eq 1 || "${service[i]}" == "ANY" ]]; then
                     #FIXME: printf formatting would look better, especially if we want a wide option here
                     out " ${names[i]}   "
                     if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
