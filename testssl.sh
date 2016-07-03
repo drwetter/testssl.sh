@@ -83,7 +83,7 @@ readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
 
-readonly VERSION="2.7dev"
+readonly VERSION="2.8rc1"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
@@ -1535,9 +1535,13 @@ neat_list(){
 
      kx="${3//Kx=/}"
      enc="${4//Enc=/}"
-     strength=$(sed -e 's/.*(//' -e 's/)//' <<< "$enc")                              # strength = encryption bits
-     strength="${strength//ChaCha20-Poly1305/ly1305}"
-     enc=$(sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g' <<< "$enc")     # workaround for empty bits ChaCha20-Poly1305
+     strength="${enc//\)/}"             # retrieve (). first remove traling ")"
+     strength="${strength#*\(}"         # exfiltrate (VAL
+     enc="${enc%%\(*}"
+
+     enc="${enc//POLY1305/}"            # remove POLY1305
+     enc="${enc//\//}"                  # remove "/"
+
      echo "$export" | grep -iq export && strength="$strength,exp"
 
      #printf -- "%q" "$kx" | xxd | head -1
@@ -8145,4 +8149,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.512 2016/07/03 19:45:48 dirkw Exp $
+#  $Id: testssl.sh,v 1.513 2016/07/03 20:35:20 dirkw Exp $
