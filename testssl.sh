@@ -3977,7 +3977,7 @@ run_client_simulation() {
           using_sockets=false
      fi
 
-     # That service should clients support for simulation?
+     # What service should clients support for simulation?
      if [[ "$SERVICE" != "" ]]; then
           client_service="$SERVICE"
      else
@@ -5148,7 +5148,7 @@ certificate_info() {
                ;;
           *)
                out "$cert_sig_algo ("
-               pr_warning "FIXME: is unknown"
+               pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
                fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $sign_algo"
                ;;
@@ -5218,7 +5218,7 @@ certificate_info() {
                fi
           else
                out "$cert_keysize bits ("
-               pr_warning "FIXME: can't tell whether this is good here or not"
+               pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
                fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (unknown signature algorithm)"
           fi
@@ -9391,4 +9391,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.509 2016/06/28 10:21:48 dirkw Exp $
+#  $Id: testssl.sh,v 1.511 2016/07/01 16:26:03 dirkw Exp $
