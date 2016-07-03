@@ -2041,48 +2041,50 @@ run_client_simulation() {
      debugme outln
      for name in "${short[@]}"; do
           # Make sure we run client simulations for those clients that support it
-          if [[ `echo "${service[i]}" | grep "$client_service" | wc -l` -eq 1 || "${service[i]}" == "ANY" ]]; then
-               #FIXME: printf formatting would look better, especially if we want a wide option here
-               out " ${names[i]}   "
-               if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
-                    client_simulation_sockets "${handshakebytes[i]}"
-                    sclient_success=$?
-                    if [[ $sclient_success -eq 0 ]]; then
-                         if [[ "0x${DETECTED_TLS_VERSION}" -lt ${lowest_protocol[i]} ]] || \
-                            [[ "0x${DETECTED_TLS_VERSION}" -gt ${highest_protocol[i]} ]]; then
-                              sclient_success=1
-                         fi
-                         [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
-                    fi
-               else
-                    for pflag in ${protos[i]}; do
-                         $OPENSSL s_client -cipher ${ciphers[i]} $pflag $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
-                         debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} $pflag $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
-                         sclient_connect_successful $? $TMPFILE
+          if $do_all_simulations || ${current[i]} ; then
+               if $do_all_simulations || [[ `echo "${service[i]}" | grep "$client_service" | wc -l` -eq 1 || "${service[i]}" == "ANY" ]]; then
+                    #FIXME: printf formatting would look better, especially if we want a wide option here
+                    out " ${names[i]}   "
+                    if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
+                         client_simulation_sockets "${handshakebytes[i]}"
                          sclient_success=$?
-                         [[ $sclient_success -eq 0 ]] && break; # Stop trying if a protocol works
-                    done
-               fi
-               if [[ $sclient_success -ne 0 ]]; then
-                    outln "No connection"
-                    fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
-               else
-                    #FIXME: awk
-                    proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
-                    [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
-                    #FiXME: awk
-                    cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
-                    $using_sockets && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
-                    outln "$proto $cipher"
-                    if [[ -n "${warning[i]}" ]]; then
-                         out "                            "
-                         outln "${warning[i]}"
+                         if [[ $sclient_success -eq 0 ]]; then
+                              if [[ "0x${DETECTED_TLS_VERSION}" -lt ${lowest_protocol[i]} ]] || \
+                                 [[ "0x${DETECTED_TLS_VERSION}" -gt ${highest_protocol[i]} ]]; then
+                                   sclient_success=1
+                              fi
+                              [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
+                         fi
+                    else
+                         for pflag in ${protos[i]}; do
+                              $OPENSSL s_client -cipher ${ciphers[i]} $pflag $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+                              debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} $pflag $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
+                              sclient_connect_successful $? $TMPFILE
+                              sclient_success=$?
+                              [[ $sclient_success -eq 0 ]] && break; # Stop trying if a protocol works
+                         done
                     fi
-                    fileout "client_${short[i]}" "INFO" \
-                         "$(strip_spaces "${names[i]}") client simulation:  $proto $cipher   ${warning[i]}"
-                    debugme cat $TMPFILE
-               fi
-          fi # correct service?
+                    if [[ $sclient_success -ne 0 ]]; then
+                         outln "No connection"
+                         fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
+                    else
+                         #FIXME: awk
+                         proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
+                         [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
+                         #FiXME: awk
+                         cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
+                         $using_sockets && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
+                         outln "$proto $cipher"
+                         if [[ -n "${warning[i]}" ]]; then
+                              out "                            "
+                              outln "${warning[i]}"
+                         fi
+                         fileout "client_${short[i]}" "INFO" \
+                              "$(strip_spaces "${names[i]}") client simulation:  $proto $cipher   ${warning[i]}"
+                         debugme cat $TMPFILE
+                    fi
+               fi # correct service?
+          fi #current?
           i=$((i+1))
      done
      tmpfile_handle $FUNCNAME.txt
@@ -5982,6 +5984,8 @@ tuning options (can also be preset via environment variables):
      --proxy <host>:<port>         connect via the specified HTTP proxy
      -6                            use also IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --sneaky                      leave less traces in target logs: user agent, referer
+     --all-clients                 simulate all clients, not just all clients that are current and support the 
+                                   service we are testing
 
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
@@ -6872,6 +6876,7 @@ initialize_globals() {
      do_test_just_one=false
      do_tls_sockets=false
      do_client_simulation=false
+     do_all_simulations=false
      do_display_only=false
 }
 
@@ -6901,6 +6906,7 @@ set_scanning_defaults() {
      do_ssl_poodle=true
      do_tls_fallback_scsv=true
      do_client_simulation=true
+     do_all_simulations=false
      VULN_COUNT=10
 }
 
@@ -7036,6 +7042,10 @@ parse_cmd_line() {
                     ;;
                -c|--client-simulation)
                     do_client_simulation=true
+                    ;;
+               --all-clients)
+                    do_client_simulation=true
+                    do_all_simulations=true
                     ;;
                -U|--vulnerable)
                     do_vulnerabilities=true
