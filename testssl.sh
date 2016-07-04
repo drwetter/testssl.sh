@@ -6620,7 +6620,7 @@ find_openssl_binary() {
      return 0
 }
 
-openssl_age() {
+check4openssl_oldfarts() {
      case "$OSSL_VER" in
           0.9.7*|0.9.6*|0.9.5*)
                # 0.9.5a was latest in 0.9.5 an released 2000/4/1, that'll NOT suffice for this test
@@ -7006,7 +7006,9 @@ prepare_logging() {
           fi
           >$LOGFILE
           outln "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-          outln "## ($VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE, at $HNAME:$OPENSSL_LOCATION)\n" >>${LOGFILE}
+          outln "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
+          outln "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
+          outln "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
           exec > >(tee -a ${LOGFILE})
           # not decided yet. Maybe good to have a separate file or none at all
           #exec 2> >(tee -a ${LOGFILE} >&2)
@@ -8091,7 +8093,7 @@ find_openssl_binary
 maketempf
 mybanner
 check_proxy
-openssl_age
+check4openssl_oldfarts
 
 # TODO: it is ugly to have those two vars here --> main()
 ret=0
@@ -8149,4 +8151,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.513 2016/07/03 20:35:20 dirkw Exp $
+#  $Id: testssl.sh,v 1.514 2016/07/04 11:59:38 dirkw Exp $
