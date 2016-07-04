@@ -6644,7 +6644,7 @@ openssl_age() {
 }
 
 bsd-bash() {
-     if [[ $(uname) -eq "FreeBSD" ]] && [[ $(count_lines "$(ls /dev/fd)") -le 3 ]]; then
+     if [[ $(uname) -eq "FreeBSD" ]] && [[ $(count_lines "$(mount | grep '/dev/fd' | grep -q fdescfs)") -le 3 ]]; then
           echo "You need to mount fdescfs on FreeBSD: mount -t fdescfs fdesc /dev/fd"
           exit 1
      fi
