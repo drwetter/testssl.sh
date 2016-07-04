@@ -1063,15 +1063,15 @@ run_hpkp() {
 
                # Compare them against the hashes found
                if [[ nrsaved -ge 2 ]]; then
-                    echo -n "" > "/tmp/hashes.intermediate"
+                    echo -n "" > "$TEMPDIR/hashes.intermediate"
                     for cert_fname in $TEMPDIR/level?.crt; do
                          hpkp_key_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC|$OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
                          issuer="$(get_cn_from_cert $cert_fname)"
                          [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout| sed "s/^subject= //") 
-                         echo "$hpkp_key_ca $bundle_name $issuer" >> "/tmp/hashes.intermediate"
+                         echo "$hpkp_key_ca $bundle_name $issuer" >> "$TEMPDIR/hashes.intermediate"
                     done
                     for hpkp_key in $(echo $pins); do
-                         hpkp_matches=$(grep "$hpkp_key" /tmp/hashes.intermediate)
+                         hpkp_matches=$(grep "$hpkp_key" $TEMPDIR/hashes.intermediate)
                          if [[ -n $hpkp_matches ]]; then
                               # We have a winner!
                               key_found=true
@@ -1095,30 +1095,29 @@ run_hpkp() {
                     # Split up the certificate bundle
                     awk -v n=-1 "BEGIN {start=1}
                             /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
-                            inc { print >> (\"/tmp/$bundle_name.\" n \".crt\") ; close (\"/tmp/$bundle_name.\" n \".crt\") }
+                            inc { print >> (\"$TEMPDIR/$bundle_name.\" n \".crt\") ; close (\"$TEMPDIR/$bundle_name.\" n \".crt\") }
                             /---END CERTIFICATE-----/{ inc=0 }" $bundle_fname
                     # Clear temp file
-                    echo -n "" > "/tmp/hashes.$bundle_name"
-                    for cert_fname in /tmp/$bundle_name.*.crt; do
+                    echo -n "" > "$TEMPDIR/hashes.$bundle_name"
+                    for cert_fname in $TEMPDIR/$bundle_name.*.crt; do
                          hpkp_key_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC|$OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
                          issuer="$(get_cn_from_cert $cert_fname)"
                          [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout| sed "s/^subject= //") 
-                         echo "$hpkp_key_ca $bundle_name : $issuer" >> "/tmp/hashes.$bundle_name"
+                         echo "$hpkp_key_ca $bundle_name : $issuer" >> "$TEMPDIR/hashes.$bundle_name"
                     done
                done
                for hpkp_key in $(echo $pins); do
-                    hpkp_matches=$(grep -h "$hpkp_key" /tmp/hashes.*)
+                    hpkp_matches=$(grep -h "$hpkp_key" $TEMPDIR/hashes.*)
                     if [[ -n $hpkp_matches ]]; then
                          # We have a winner!
                          key_found=true
                          out "\n$spaces Root CA match : "
                          pr_done_goodln "$hpkp_key"
-                         out "$hpkp_matches"
+                         #out "$hpkp_matches"
 
                          fileout "hpkp_keymatch" "OK" "Root CA key matches a key pinned in the HPKP header\nKey/OS/CA: $hpkp_matches"
                     fi
                done 
-               exit 99
           fi
 
           # If all else fails...
