@@ -4071,7 +4071,7 @@ certificate_info() {
           fi
      else
           cn="no CN field in subject"
-          outln "($cn)"
+          out "($cn)"
           cnfinding="$cn"
           cnok="INFO"
      fi
@@ -8270,4 +8270,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.517 2016/07/04 21:52:51 dirkw Exp $
+#  $Id: testssl.sh,v 1.518 2016/07/04 22:02:33 dirkw Exp $
