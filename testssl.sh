@@ -6497,7 +6497,7 @@ run_tls_truncation() {
 old_fart() {
      outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
      fileout "old_fart" "ERROR" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed. Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
-     fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -2
+     fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -5
 }
 
 # try very hard to determine the install path to get ahold of the mapping file
@@ -6580,7 +6580,7 @@ find_openssl_binary() {
      # no ERRFILE initialized yet, thus we use /dev/null for stderr directly
      $OPENSSL version -a 2>/dev/null >/dev/null
      if [[ $? -ne 0 ]] || [[ ! -x "$OPENSSL" ]]; then
-          fatal "\ncannot exec or find any openssl binary" -1
+          fatal "\ncannot exec or find any openssl binary" -5
      fi
 
      # http://www.openssl.org/news/openssl-notes.html
@@ -6642,6 +6642,16 @@ check4openssl_oldfarts() {
           ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
      fi
      outln
+}
+
+
+# FreeBSD needs to have /dev/fd mounted. This is a friendly hint, see #258
+check_bsd_mount() {
+     if [[ "$(uname)" == FreeBSD ]]; then 
+          if ! mount | grep '/dev/fd' | grep -q fdescfs; then
+               fatal "You need to mount fdescfs on FreeBSD: \"mount -t fdescfs fdesc /dev/fd\"" -3
+          fi
+     fi
 }
 
 
@@ -6887,6 +6897,13 @@ cleanup () {
 fatal() {
      pr_magentaln "Fatal error: $1" >&2
      exit $2
+     # 1:  cmd line error
+     # 2:  secondary/other cmd line error
+     # -1: other user error
+     # -2: network problem
+     # -3: s.th. fatal is not supported in the client
+     # -4: s.th. is not supported yet
+     # -5: openssl problem
 }
 
 
@@ -6935,9 +6952,9 @@ EOF
 ignore_no_or_lame() {
      local a
 
-     [[ "$WARNINGS" == "off" ]] && return 0
-     [[ "$WARNINGS" == "false" ]] && return 0
-     [[ "$WARNINGS" == "batch" ]] && return 1
+     [[ "$WARNINGS" == off ]] && return 0
+     [[ "$WARNINGS" == false ]] && return 0
+     [[ "$WARNINGS" == batch ]] && return 1
      pr_magenta "$1 "
      read a
      case $a in
@@ -7112,7 +7129,7 @@ get_a_record() {
           elif which dig &>/dev/null; then
                ip4=$(filter_ip4_address $(dig @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
           else
-               fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable."
+               fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable." -3
           fi
      fi
      if [[ -z "$ip4" ]]; then
@@ -7149,7 +7166,7 @@ get_aaaa_record() {
                elif which dig &>/dev/null; then
                     ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
                else
-                    fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable."
+                    fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable." -3
                fi
           elif which host &> /dev/null ; then
                ip6=$(filter_ip6_address $(host -t aaaa "$NODE" | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
@@ -7263,11 +7280,11 @@ get_mx_record() {
 check_proxy() {
      if [[ -n "$PROXY" ]]; then
           if ! $OPENSSL s_client -help 2>&1 | grep -qw proxy; then
-               fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -1
+               fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -5
           fi
           PROXYNODE=${PROXY%:*}
           PROXYPORT=${PROXY#*:}
-          is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" "-3"
+          is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" "2"
 
           #if is_ipv4addr "$PROXYNODE" || is_ipv6addr "$PROXYNODE" ; then
           # IPv6 via openssl -proxy: that doesn't work. Sockets does
@@ -7277,7 +7294,7 @@ check_proxy() {
           else
                check_resolver_bins
                PROXYIP=$(get_a_record $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-               [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "-3"
+               [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "2"
           fi
           PROXY="-proxy $PROXYIP:$PROXYPORT"
      fi
@@ -7394,12 +7411,12 @@ determine_service() {
                ftp|smtp|pop3|imap|xmpp|telnet|ldap)
                     STARTTLS="-starttls $protocol"
                     SNI=""
-                    if [[ $protocol == "xmpp" ]]; then
+                    if [[ "$protocol" == xmpp ]]; then
                          # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
                          NODEIP="$NODE"
                          if [[ -n "$XMPP_HOST" ]]; then
                               if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
-                                   fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -3
+                                   fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -5
                               fi
                               STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # it's a hack -- instead of changing calls all over the place
                               # see http://xmpp.org/rfcs/rfc3920.html
@@ -7418,7 +7435,7 @@ determine_service() {
                     outln
                     ;;
                *)   outln
-                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet and ldap allowed" -1
+                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet and ldap allowed" -4
                     ;;
           esac
      fi
@@ -7522,7 +7539,7 @@ run_mass_testing_parallel() {
      local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
-          fatal "Can't read file \"$FNAME\"" "-1"
+          fatal "Can't read file \"$FNAME\"" "2"
      fi
      pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln
      outln "(output is in ....\n)"
@@ -7548,7 +7565,7 @@ run_mass_testing() {
      local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
-          fatal "Can't read file \"$FNAME\"" "-1"
+          fatal "Can't read file \"$FNAME\"" "2"
      fi
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
@@ -8017,7 +8034,7 @@ reset_hostdepended_vars() {
 lets_roll() {
      local ret
 
-     [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" -1
+     [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" 2
      nodeip_to_proper_ip6
      reset_hostdepended_vars
      determine_rdns
@@ -8094,6 +8111,7 @@ maketempf
 mybanner
 check_proxy
 check4openssl_oldfarts
+check_bsd_mount
 
 # TODO: it is ugly to have those two vars here --> main()
 ret=0
@@ -8119,7 +8137,7 @@ else
      parse_hn_port "${URI}"                                                     # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
      prepare_logging
      if ! determine_ip_addresses && [[ -z "$CMDLINE_IP" ]]; then
-          fatal "No IP address could be determined"
+          fatal "No IP address could be determined" 2
      fi
      if [[ -n "$CMDLINE_IP" ]]; then
           [[ "$CMDLINE_IP" == "one" ]] && \
@@ -8151,4 +8169,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.514 2016/07/04 11:59:38 dirkw Exp $
+#  $Id: testssl.sh,v 1.515 2016/07/04 21:05:11 dirkw Exp $
