@@ -4071,7 +4071,7 @@ certificate_info() {
           fi
      else
           cn="no CN field in subject"
-          pr_warning "($cn)"
+          outln "($cn)"
           cnfinding="$cn"
           cnok="INFO"
      fi
@@ -4378,7 +4378,7 @@ run_server_defaults() {
                      fi
                      i=$((i + 1))
                  done
-                 if ! $match_found && [[ $n -ge 8 ]] && [[ $certs_found -ne 0 ]]; then
+                 if ! "$match_found" && [[ $n -ge 8 ]] && [[ $certs_found -ne 0 ]]; then
                      # A new certificate was found using TLSv1.1 without SNI.
                      # Check to see if the new certificate should be displayed.
                      # It should be displayed if it is either a match for the
@@ -4416,7 +4416,7 @@ run_server_defaults() {
                      # that the new certificate will not be included in the output.
                      [[ ${success[n]} -ne 0 ]] && match_found=true
                  fi
-                 if ! $match_found ; then
+                 if ! "$match_found"; then
                      certs_found=$(($certs_found + 1))
                      cipher[certs_found]=${ciphers_to_test[n]}
                      keysize[certs_found]=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
@@ -8270,4 +8270,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.515 2016/07/04 21:05:11 dirkw Exp $
+#  $Id: testssl.sh,v 1.517 2016/07/04 21:52:51 dirkw Exp $
