@@ -83,7 +83,7 @@ readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
 
-readonly VERSION="2.7dev"
+readonly VERSION="2.8rc1"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
@@ -170,10 +170,12 @@ USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
 HSTS_MIN=${HSTS_MIN:-179}               # >179 days is ok for HSTS
 HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, practical hints?
-readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test for PFS
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
+readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test for PFS
+                                        # generated from 'kEECDH:kEDH:!aNULL:!eNULL:!DES:!3DES:!RC4' with openssl 1.0.2i and openssl 1.1.0
+readonly ROBUST_PFS_CIPHERS="DHE-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA:DHE-DSS-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA:DHE-DSS-SEED-SHA:DHE-RSA-AES128-CCM8:DHE-RSA-AES128-CCM:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-CCM8:DHE-RSA-AES256-CCM:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-RSA-CHACHA20-POLY1305-OLD:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-SEED-SHA:ECDHE-ECDSA-AES128-CCM8:ECDHE-ECDSA-AES128-CCM:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-CCM8:ECDHE-ECDSA-AES256-CCM:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305-OLD:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-RSA-CHACHA20-POLY1305-OLD:ECDHE-RSA-CHACHA20-POLY1305"
 
 HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
@@ -1611,9 +1613,13 @@ neat_list(){
 
      kx="${3//Kx=/}"
      enc="${4//Enc=/}"
-     strength=$(sed -e 's/.*(//' -e 's/)//' <<< "$enc")                              # strength = encryption bits
-     strength="${strength//ChaCha20-Poly1305/ly1305}"
-     enc=$(sed -e 's/(.*)//g' -e 's/ChaCha20-Poly1305/ChaCha20-Po/g' <<< "$enc")     # workaround for empty bits ChaCha20-Poly1305
+     strength="${enc//\)/}"             # retrieve (). first remove traling ")"
+     strength="${strength#*\(}"         # exfiltrate (VAL
+     enc="${enc%%\(*}"
+
+     enc="${enc//POLY1305/}"            # remove POLY1305
+     enc="${enc//\//}"                  # remove "/"
+
      echo "$export" | grep -iq export && strength="$strength,exp"
 
      #printf -- "%q" "$kx" | xxd | head -1
@@ -2087,7 +2093,7 @@ run_client_simulation() {
      local name tls proto cipher
      local using_sockets=true
 
-     if $SSL_NATIVE || [[ -n "$STARTTLS" ]] || ! $EXPERIMENTAL; then
+     if $SSL_NATIVE || [[ -n "$STARTTLS" ]]; then
           using_sockets=false
      fi
 
@@ -3991,7 +3997,7 @@ certificate_info() {
                ;;
           *)
                out "$cert_sig_algo ("
-               pr_warning "FIXME: is unknown"
+               pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
                fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $sign_algo"
                ;;
@@ -4061,7 +4067,7 @@ certificate_info() {
                fi
           else
                out "$cert_keysize bits ("
-               pr_warning "FIXME: can't tell whether this is good here or not"
+               pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
                fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (unknown signature algorithm)"
           fi
@@ -4457,18 +4463,13 @@ run_server_defaults() {
      done
 }
 
-# http://www.heise.de/security/artikel/Forward-Secrecy-testen-und-einrichten-1932806.html
 run_pfs() {
      local -i sclient_success
      local pfs_offered=false
      local tmpfile
      local dhlen
      local hexcode dash pfs_cipher sslvers kx auth enc mac
-     # https://community.qualys.com/blogs/securitylabs/2013/08/05/configuring-apache-nginx-and-openssl-for-forward-secrecy -- but with RC4:
-     #local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EECDH+aRSA+RC4 EDH+aRSA EECDH RC4 !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
-     #w/o RC4:
-     #local pfs_ciphers='EECDH+ECDSA+AESGCM EECDH+aRSA+AESGCM EECDH+ECDSA+SHA256 EECDH+aRSA+SHA256 EDH+aRSA EECDH !RC4-SHA !aNULL !eNULL !LOW !3DES !MD5 !EXP !PSK !SRP !DSS:@STRENGTH'
-     local pfs_cipher_list="ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-CAMELLIA128-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA"
+     local pfs_cipher_list="$ROBUST_PFS_CIPHERS"
      local -i nr_supported_ciphers=0
      local pfs_ciphers
 
@@ -4488,7 +4489,7 @@ run_pfs() {
           return 1
      fi
 
-     $OPENSSL s_client -cipher 'ECDH:DH' $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+     $OPENSSL s_client -cipher $pfs_cipher_list $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
      sclient_connect_successful $? $TMPFILE
      if [[ $? -ne 0 ]] || [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]]; then
           outln
@@ -6697,7 +6698,7 @@ find_openssl_binary() {
      return 0
 }
 
-openssl_age() {
+check4openssl_oldfarts() {
      case "$OSSL_VER" in
           0.9.7*|0.9.6*|0.9.5*)
                # 0.9.5a was latest in 0.9.5 an released 2000/4/1, that'll NOT suffice for this test
@@ -7090,7 +7091,9 @@ prepare_logging() {
           fi
           >$LOGFILE
           outln "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-          outln "## ($VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE, at $HNAME:$OPENSSL_LOCATION)\n" >>${LOGFILE}
+          outln "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
+          outln "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
+          outln "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
           exec > >(tee -a ${LOGFILE})
           # not decided yet. Maybe good to have a separate file or none at all
           #exec 2> >(tee -a ${LOGFILE} >&2)
@@ -8175,7 +8178,7 @@ find_openssl_binary
 maketempf
 mybanner
 check_proxy
-openssl_age
+check4openssl_oldfarts
 bsd-bash
 
 # TODO: it is ugly to have those two vars here --> main()
@@ -8234,4 +8237,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.509 2016/06/28 10:21:48 dirkw Exp $
+#  $Id: testssl.sh,v 1.514 2016/07/04 11:59:38 dirkw Exp $
