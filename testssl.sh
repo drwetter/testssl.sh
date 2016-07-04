@@ -3809,7 +3809,7 @@ compare_server_name_to_cert()
      fi
 
      # Check whether any of the DNS names in the certificate match the servername
-     dns_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | \
+     dns_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
               sed -e 's/,/\n/g' | grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
      for san in $dns_sans; do
           [[ "$san" == "$servername" ]] && return 0
@@ -3821,7 +3821,7 @@ compare_server_name_to_cert()
      done
 
      # Check whether any of the IP addresses in the certificate match the serername
-     ip_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | \
+     ip_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
              sed -e 's/,/\n/g' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
      for san in $ip_sans; do
           [[ "$san" == "$servername" ]] && return 0
@@ -4121,7 +4121,7 @@ certificate_info() {
      fi
      fileout "${json_prefix}cn" "$cnok" "$cnfinding"
 
-     sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | \
+     sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
           egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | \
           sed -e 's/ *DNS://g' -e 's/ *IP Address://g' -e 's/ *email://g' -e 's/ *URI://g' -e 's/ *DirName://g' \
               -e 's/ *Registered ID://g' -e 's/,/\n/g' \
@@ -4389,7 +4389,7 @@ run_server_defaults() {
 
                      if [[ ${success[n]} -ne 0 ]]; then
                          cn_nosni="$(get_cn_from_cert $HOSTCERT)"
-                         sans_nosni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
+                         sans_nosni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | grep "DNS:" | \
                               sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
 
                          echo "${previous_hostcert[1]}" > $HOSTCERT
@@ -4400,7 +4400,7 @@ run_server_defaults() {
                          # match if the CNs are the same and the SANs (if
                          # present) contain at least one DNS name in common.
                          if [[ "$cn_nosni" == "$cn_sni" ]]; then
-                              sans_sni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | grep "DNS:" | \
+                              sans_sni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | grep "DNS:" | \
                                        sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
                               if [[ "$sans_nosni" == "$sans_sni" ]]; then
                                    success[n]=0
@@ -8270,4 +8270,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.518 2016/07/04 22:02:33 dirkw Exp $
+#  $Id: testssl.sh,v 1.519 2016/07/04 22:08:50 dirkw Exp $
