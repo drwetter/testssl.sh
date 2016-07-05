@@ -3803,6 +3803,7 @@ sclient_connect_successful() {
 }
 
 # arg1 is "-cipher <OpenSSL cipher>" or empty
+# arg2 is a list of protocols to try (tls1_2, tls1_1, tls1, ssl3) or empty (if all should be tried)
 determine_tls_extensions() {
      local proto
      local success
@@ -3812,9 +3813,15 @@ determine_tls_extensions() {
 
      "$HAS_ALPN" && alpn="h2-14,h2-15,h2"
 
+     if [[ -n "$2" ]]; then
+         protocols_to_try="$2"
+     else
+         protocols_to_try="tls1_2 tls1_1 tls1 ssl3"
+     fi
+
      # throwing 1st every cipher/protocol at the server to know what works
      success=7
-     for proto in tls1_2 tls1_1 tls1 ssl3; do
+     for proto in $protocols_to_try; do
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0 && break
@@ -3883,6 +3890,43 @@ get_cn_from_cert() {
      return $?
 }
 
+# Return 0 if the server name provided in arg1 matches the CN or SAN in arg2, otherwise return 1.
+compare_server_name_to_cert()
+{
+     local servername=$1
+     local cert=$2
+     local cn dns_sans ip_sans san basename
+
+     cn="$(get_cn_from_cert $cert)"
+     if [[ -n "$cn" ]]; then
+          [[ "$cn" == "$servername" ]] && return 0
+          # If the CN contains a wildcard name, then do a wildcard match
+          if echo -n "$cn" | grep -q '^*.'; then
+               basename="$(echo -n "$cn" | sed 's/^\*.//')"
+               [[ "$cn" == "*.$basename" ]] && [[ "$servername" == *".$basename" ]] && return 0
+          fi
+     fi
+
+     # Check whether any of the DNS names in the certificate match the servername
+     dns_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+              sed -e 's/,/\n/g' | grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
+     for san in $dns_sans; do
+          [[ "$san" == "$servername" ]] && return 0
+          # If $san is a wildcard name, then do a wildcard match
+          if echo -n "$san" | grep -q '^*.'; then
+               basename="$(echo -n "$san" | sed 's/^\*.//')"
+               [[ "$san" == "*.$basename" ]] && [[ "$servername" == *".$basename" ]] && return 0
+          fi
+     done
+
+     # Check whether any of the IP addresses in the certificate match the serername
+     ip_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+             sed -e 's/,/\n/g' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
+     for san in $ip_sans; do
+          [[ "$san" == "$servername" ]] && return 0
+     done
+     return 1
+}
 
 certificate_info() {
      local proto
@@ -4126,7 +4170,7 @@ certificate_info() {
           fi
      else
           cn="no CN field in subject"
-          pr_warning "($cn)"
+          out "($cn)"
           cnfinding="$cn"
           cnok="INFO"
      fi
@@ -4176,7 +4220,7 @@ certificate_info() {
      fi
      fileout "${json_prefix}cn" "$cnok" "$cnfinding"
 
-     sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A3 "Subject Alternative Name" | \
+     sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
           egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | \
           sed -e 's/ *DNS://g' -e 's/ *IP Address://g' -e 's/ *email://g' -e 's/ *URI://g' -e 's/ *DirName://g' \
               -e 's/ *Registered ID://g' -e 's/,/\n/g' \
@@ -4351,7 +4395,7 @@ certificate_info() {
 
 
 run_server_defaults() {
-     local ciph match_found newhostcert
+     local ciph match_found newhostcert sni
      local sessticket_str=""
      local lifetime unit
      local line
@@ -4359,8 +4403,9 @@ run_server_defaults() {
      local all_tls_extensions=""
      local -i certs_found=0
      local -a previous_hostcert previous_intermediates keysize cipher ocsp_response ocsp_response_status
-     local -a ciphers_to_test
-     
+     local -a ciphers_to_test success
+     local cn_nosni cn_sni sans_nosni sans_sni san
+
      # Try each public key type once:
      # ciphers_to_test[1]: cipher suites using certificates with RSA signature public keys
      # ciphers_to_test[2]: cipher suites using certificates with RSA key encipherment public keys
@@ -4385,11 +4430,29 @@ run_server_defaults() {
      ciphers_to_test[5]="aECDH"
      ciphers_to_test[6]="aECDSA"
      ciphers_to_test[7]="aGOST"
-     
-     for n in 1 2 3 4 5 6 7 ; do
+
+     for (( n=1; n <= 14 ; n++ )); do
+         # Some servers use a different certificate if the ClientHello
+         # specifies TLSv1.1 and doesn't include a server name extension.
+         # So, for each public key type for which a certificate was found,
+         # try again, but only with TLSv1.1 and without SNI.
+         if [[ $n -ge 8 ]]; then
+              ciphers_to_test[n]=""
+              [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}"
+         fi
+
          if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
-             determine_tls_extensions "-cipher ${ciphers_to_test[n]}"
-             if [[ $? -eq 0 ]]; then
+             if [[ $n -ge 8 ]]; then
+                  sni="$SNI"
+                  SNI=""
+                  determine_tls_extensions "-cipher ${ciphers_to_test[n]}" "tls1_1"
+                  success[n]=$?
+                  SNI="$sni"
+             else
+                  determine_tls_extensions "-cipher ${ciphers_to_test[n]}"
+                  success[n]=$?
+             fi
+             if [[ ${success[n]} -eq 0 ]]; then
                  # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
                  while read -d "\"" -r line; do
                      if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
@@ -4414,7 +4477,45 @@ run_server_defaults() {
                      fi
                      i=$((i + 1))
                  done
-                 if ! $match_found ; then
+                 if ! "$match_found" && [[ $n -ge 8 ]] && [[ $certs_found -ne 0 ]]; then
+                     # A new certificate was found using TLSv1.1 without SNI.
+                     # Check to see if the new certificate should be displayed.
+                     # It should be displayed if it is either a match for the
+                     # $NODE being tested or if it has the same subject
+                     # (CN and SAN) as other certificates for this host.
+                     compare_server_name_to_cert "$NODE" "$HOSTCERT"
+                     success[n]=$?
+
+                     if [[ ${success[n]} -ne 0 ]]; then
+                         cn_nosni="$(get_cn_from_cert $HOSTCERT)"
+                         sans_nosni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | grep "DNS:" | \
+                              sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+
+                         echo "${previous_hostcert[1]}" > $HOSTCERT
+                         cn_sni="$(get_cn_from_cert $HOSTCERT)"
+                         
+                         # FIXME: Not sure what the matching rule should be. At
+                         # the moment, the no SNI certificate is considered a
+                         # match if the CNs are the same and the SANs (if
+                         # present) contain at least one DNS name in common.
+                         if [[ "$cn_nosni" == "$cn_sni" ]]; then
+                              sans_sni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | grep "DNS:" | \
+                                       sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+                              if [[ "$sans_nosni" == "$sans_sni" ]]; then
+                                   success[n]=0
+                              else
+                                   for san in $sans_nosni; do
+                                        [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
+                                   done
+                              fi
+                         fi
+                     fi
+                     # If the certificate found for TLSv1.1 w/o SNI appears to
+                     # be for a different host, then set match_found to true so
+                     # that the new certificate will not be included in the output.
+                     [[ ${success[n]} -ne 0 ]] && match_found=true
+                 fi
+                 if ! "$match_found"; then
                      certs_found=$(($certs_found + 1))
                      cipher[certs_found]=${ciphers_to_test[n]}
                      keysize[certs_found]=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
@@ -6596,7 +6697,7 @@ run_tls_truncation() {
 old_fart() {
      outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
      fileout "old_fart" "ERROR" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed. Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
-     fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -2
+     fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -5
 }
 
 # try very hard to determine the install path to get ahold of the mapping file
@@ -6679,7 +6780,7 @@ find_openssl_binary() {
      # no ERRFILE initialized yet, thus we use /dev/null for stderr directly
      $OPENSSL version -a 2>/dev/null >/dev/null
      if [[ $? -ne 0 ]] || [[ ! -x "$OPENSSL" ]]; then
-          fatal "\ncannot exec or find any openssl binary" -1
+          fatal "\ncannot exec or find any openssl binary" -5
      fi
 
      # http://www.openssl.org/news/openssl-notes.html
@@ -6741,6 +6842,15 @@ check4openssl_oldfarts() {
           ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
      fi
      outln
+}
+
+# FreeBSD needs to have /dev/fd mounted. This is a friendly hint, see #258
+check_bsd_mount() {
+     if [[ "$(uname)" == FreeBSD ]]; then 
+          if ! mount | grep '/dev/fd' | grep -q fdescfs; then
+               fatal "You need to mount fdescfs on FreeBSD: \"mount -t fdescfs fdesc /dev/fd\"" -3
+          fi
+     fi
 }
 
 help() {
@@ -6985,6 +7095,13 @@ cleanup () {
 fatal() {
      pr_magentaln "Fatal error: $1" >&2
      exit $2
+     # 1:  cmd line error
+     # 2:  secondary/other cmd line error
+     # -1: other user error
+     # -2: network problem
+     # -3: s.th. fatal is not supported in the client
+     # -4: s.th. is not supported yet
+     # -5: openssl problem
 }
 
 
@@ -7033,9 +7150,9 @@ EOF
 ignore_no_or_lame() {
      local a
 
-     [[ "$WARNINGS" == "off" ]] && return 0
-     [[ "$WARNINGS" == "false" ]] && return 0
-     [[ "$WARNINGS" == "batch" ]] && return 1
+     [[ "$WARNINGS" == off ]] && return 0
+     [[ "$WARNINGS" == false ]] && return 0
+     [[ "$WARNINGS" == batch ]] && return 1
      pr_magenta "$1 "
      read a
      case $a in
@@ -7210,7 +7327,7 @@ get_a_record() {
           elif which dig &>/dev/null; then
                ip4=$(filter_ip4_address $(dig @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
           else
-               fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable."
+               fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable." -3
           fi
      fi
      if [[ -z "$ip4" ]]; then
@@ -7247,7 +7364,7 @@ get_aaaa_record() {
                elif which dig &>/dev/null; then
                     ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
                else
-                    fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable."
+                    fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable." -3
                fi
           elif which host &> /dev/null ; then
                ip6=$(filter_ip6_address $(host -t aaaa "$NODE" | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
@@ -7361,11 +7478,11 @@ get_mx_record() {
 check_proxy() {
      if [[ -n "$PROXY" ]]; then
           if ! $OPENSSL s_client -help 2>&1 | grep -qw proxy; then
-               fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -1
+               fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -5
           fi
           PROXYNODE=${PROXY%:*}
           PROXYPORT=${PROXY#*:}
-          is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" "-3"
+          is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" "2"
 
           #if is_ipv4addr "$PROXYNODE" || is_ipv6addr "$PROXYNODE" ; then
           # IPv6 via openssl -proxy: that doesn't work. Sockets does
@@ -7375,7 +7492,7 @@ check_proxy() {
           else
                check_resolver_bins
                PROXYIP=$(get_a_record $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
-               [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "-3"
+               [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "2"
           fi
           PROXY="-proxy $PROXYIP:$PROXYPORT"
      fi
@@ -7492,12 +7609,12 @@ determine_service() {
                ftp|smtp|pop3|imap|xmpp|telnet|ldap)
                     STARTTLS="-starttls $protocol"
                     SNI=""
-                    if [[ $protocol == "xmpp" ]]; then
+                    if [[ "$protocol" == xmpp ]]; then
                          # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
                          NODEIP="$NODE"
                          if [[ -n "$XMPP_HOST" ]]; then
                               if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
-                                   fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -3
+                                   fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -5
                               fi
                               STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # it's a hack -- instead of changing calls all over the place
                               # see http://xmpp.org/rfcs/rfc3920.html
@@ -7516,7 +7633,7 @@ determine_service() {
                     outln
                     ;;
                *)   outln
-                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet and ldap allowed" -1
+                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet and ldap allowed" -4
                     ;;
           esac
      fi
@@ -7620,7 +7737,7 @@ run_mass_testing_parallel() {
      local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
-          fatal "Can't read file \"$FNAME\"" "-1"
+          fatal "Can't read file \"$FNAME\"" "2"
      fi
      pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln
      outln "(output is in ....\n)"
@@ -7646,7 +7763,7 @@ run_mass_testing() {
      local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
-          fatal "Can't read file \"$FNAME\"" "-1"
+          fatal "Can't read file \"$FNAME\"" "2"
      fi
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
@@ -8115,7 +8232,7 @@ reset_hostdepended_vars() {
 lets_roll() {
      local ret
 
-     [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" -1
+     [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" 2
      nodeip_to_proper_ip6
      reset_hostdepended_vars
      determine_rdns
@@ -8192,6 +8309,7 @@ maketempf
 mybanner
 check_proxy
 check4openssl_oldfarts
+check_bsd_mount
 
 # TODO: it is ugly to have those two vars here --> main()
 ret=0
@@ -8217,7 +8335,7 @@ else
      parse_hn_port "${URI}"                                                     # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
      prepare_logging
      if ! determine_ip_addresses && [[ -z "$CMDLINE_IP" ]]; then
-          fatal "No IP address could be determined"
+          fatal "No IP address could be determined" 2
      fi
      if [[ -n "$CMDLINE_IP" ]]; then
           [[ "$CMDLINE_IP" == "one" ]] && \
@@ -8249,4 +8367,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.514 2016/07/04 11:59:38 dirkw Exp $
+#  $Id: testssl.sh,v 1.519 2016/07/04 22:08:50 dirkw Exp $
