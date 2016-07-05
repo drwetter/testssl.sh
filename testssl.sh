@@ -1150,7 +1150,7 @@ run_hpkp() {
                     out "\n\n$spaces Unmatched key   : "
                     pr_warning "$hpkp_key"
                     out "\n$spaces ( This is OK for a backup pin of a leaf cert )"
-                    fileout "hpkp_$hpkp_key" "WARN" "PIN $hpkp_key doesn't matchyour leaf certificate or and intermediate or known root CA\nThis could be ok if it is a backup pin for a leaf certificate"
+                    fileout "hpkp_$hpkp_key" "WARN" "PIN $hpkp_key doesn't match anything.\nThis could be ok if it is a backup pin for a leaf certificate"
                fi
           done 
 
