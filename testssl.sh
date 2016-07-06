@@ -6817,7 +6817,7 @@ tuning options (can also be preset via environment variables):
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assuming-http               if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
-     --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
+     --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
      --proxy <host>:<port>         connect via the specified HTTP proxy
      -6                            use also IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --sneaky                      leave less traces in target logs: user agent, referer
