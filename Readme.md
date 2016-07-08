@@ -11,7 +11,7 @@ cryptographic flaws.
 #### Key features
 
 * Clear output: you can tell easily whether anything is good or bad
-* Ease of installation: It works for Linux, Darwin, FreeBSD and
+* Ease of installation: It works for Linux, Darwin, FreeBSD, NetBSD and
   MSYS2/Cygwin out of the box: no need to install or configure something,
   no gems, CPAN, pip or the like.
 * Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not
@@ -64,7 +64,7 @@ Done so far:
 * Check for multiple server certificates
 * Browser cipher simulation
 * Assistance for color-blind users
-* Even more compatibility improvements for FreeBSD, RH-ish, F5 and Cisco systems
+* Even more compatibility improvements for FreeBSD, NetBSD, Gentoo, RH-ish, F5 and Cisco systems
 * Considerable speed improvements for each cipher runs (-e/-E)
 * More robust socket interface
 * OpenSSL 1.1.0 compliant
