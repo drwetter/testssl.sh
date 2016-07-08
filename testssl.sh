@@ -145,11 +145,13 @@ QUIET=${QUIET:-false}                   # don't output the banner. By doing this
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
 ASSUMING_HTTP=${ASSUMING_HTTP:-false}   # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
-DEBUG=${DEBUG:-0}                       # 1.: the temp files won't be erased.
-                                        # 2: list more what's going on (formerly: eq VERBOSE=1, VERBERR=true), lists some errors of connections
+DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ are kept for further debugging purposes
+                                        # 2: list more what's going on , also lists some errors of connections
                                         # 3: slight hexdumps + other info,
-                                        # 4: display bytes sent via sockets, 5: display bytes received via sockets, 6: whole 9 yards
-WIDE=${WIDE:-false}                     # whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
+                                        # 4: display bytes sent via sockets 
+                                        # 5: display bytes received via sockets
+                                        # 6: whole 9 yards
+WIDE=${WIDE:-false}                     # whether to display for some options just ciphers or a table w hexcode/KX,Enc,strength etc.
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
@@ -6827,7 +6829,7 @@ output options (can also be preset via environment variables):
      --mapping <no-rfc>            don't display the RFC Cipher Suite Name
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --colorblind                  swap green and blue in the output
-     --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~120
+     --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
 
 file output options (can also be preset via environment variables):
      --log, --logging              logs stdout to <NODE-YYYYMMDD-HHMM.log> in current working directory
@@ -8267,4 +8269,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.519 2016/07/04 22:08:50 dirkw Exp $
+#  $Id: testssl.sh,v 1.521 2016/07/08 09:15:40 dirkw Exp $
