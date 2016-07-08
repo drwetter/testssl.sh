@@ -132,8 +132,7 @@ fi
 TERM_CURRPOS=0                                         # custom line wrapping needs alter the current horizontal cursor pos
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
-# 0 means (normally) true here. Some of the variables are also accessible with a command line switch
-# most of them can be set also by a cmd line switch
+# 0 means (normally) true here. Some of the variables are also accessible with a command line switch, see --help
 
 declare -x OPENSSL
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
@@ -145,11 +144,13 @@ QUIET=${QUIET:-false}                   # don't output the banner. By doing this
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
 ASSUMING_HTTP=${ASSUMING_HTTP:-false}   # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
-DEBUG=${DEBUG:-0}                       # 1.: the temp files won't be erased.
-                                        # 2: list more what's going on (formerly: eq VERBOSE=1, VERBERR=true), lists some errors of connections
+DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ are kept for further debugging purposes
+                                        # 2: list more what's going on , also lists some errors of connections
                                         # 3: slight hexdumps + other info,
-                                        # 4: display bytes sent via sockets, 5: display bytes received via sockets, 6: whole 9 yards
-WIDE=${WIDE:-false}                     # whether to display for some options the cipher or the table with hexcode/KX,Enc,strength etc.
+                                        # 4: display bytes sent via sockets 
+                                        # 5: display bytes received via sockets
+                                        # 6: whole 9 yards
+WIDE=${WIDE:-false}                     # whether to display for some options just ciphers or a table w hexcode/KX,Enc,strength etc.
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
@@ -6203,14 +6204,11 @@ run_breach() {
 # Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
 run_ssl_poodle() {
      local -i sclient_success=0
-     local cbc_ciphers
-     local cbc_ciphers="SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:EXP1024-RC2-CBC-MD5:DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5"
-     local cbc_ciphers_krb="KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5"
+     local cbc_ciphers="ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:DHE-PSK-AES256-CBC-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:AECDH-AES256-SHA:ADH-AES256-SHA:ADH-CAMELLIA256-SHA:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-SHA:ECDHE-PSK-AES256-CBC-SHA:CAMELLIA256-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:AECDH-AES128-SHA:ADH-AES128-SHA:ADH-SEED-SHA:ADH-CAMELLIA128-SHA:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-SHA:ECDHE-PSK-AES128-CBC-SHA:DHE-PSK-AES128-CBC-SHA:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:DES-CBC-MD5:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5"
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption) " && outln
      pr_bold " POODLE, SSL"; out " (CVE-2014-3566)               "
-     #nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $cbc_ciphers:cbc_ciphers_krb))
-     cbc_ciphers=$($OPENSSL ciphers -v 'ALL:eNULL' 2>$ERRFILE | awk '/CBC/ { print $1 }' | tr '\n' ':')
+     cbc_ciphers=$(actually_supported_ciphers $cbc_ciphers)
 
      debugme echo $cbc_ciphers
      $OPENSSL s_client -ssl3 $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
@@ -6943,7 +6941,7 @@ tuning options (can also be preset via environment variables):
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assuming-http               if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
-     --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME
+     --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
      --proxy <host>:<port>         connect via the specified HTTP proxy
      -6                            use also IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --sneaky                      leave less traces in target logs: user agent, referer
@@ -6956,7 +6954,7 @@ output options (can also be preset via environment variables):
      --mapping <no-rfc>            don't display the RFC Cipher Suite Name
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --colorblind                  swap green and blue in the output
-     --debug <0-6>                 1: screen output normal but debug output in temp files.  2-6: see line ~120
+     --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
 
 file output options (can also be preset via environment variables):
      --log, --logging              logs stdout to <NODE-YYYYMMDD-HHMM.log> in current working directory
@@ -8396,4 +8394,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.519 2016/07/04 22:08:50 dirkw Exp $
+#  $Id: testssl.sh,v 1.522 2016/07/08 09:25:39 dirkw Exp $
