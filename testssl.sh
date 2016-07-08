@@ -132,8 +132,7 @@ fi
 TERM_CURRPOS=0                                         # custom line wrapping needs alter the current horizontal cursor pos
 
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
-# 0 means (normally) true here. Some of the variables are also accessible with a command line switch
-# most of them can be set also by a cmd line switch
+# 0 means (normally) true here. Some of the variables are also accessible with a command line switch, see --help
 
 declare -x OPENSSL
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
@@ -8269,4 +8268,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.521 2016/07/08 09:15:40 dirkw Exp $
+#  $Id: testssl.sh,v 1.522 2016/07/08 09:25:39 dirkw Exp $
