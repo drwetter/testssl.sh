@@ -3811,7 +3811,7 @@ compare_server_name_to_cert()
 
      # Check whether any of the DNS names in the certificate match the servername
      dns_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-              sed -e 's/,/\n/g' | grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
+               tr '.' '\n'  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
      for san in $dns_sans; do
           [[ "$san" == "$servername" ]] && return 0
           # If $san is a wildcard name, then do a wildcard match
@@ -3823,7 +3823,7 @@ compare_server_name_to_cert()
 
      # Check whether any of the IP addresses in the certificate match the serername
      ip_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-             sed -e 's/,/\n/g' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
+             tr ',' '\n' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
      for san in $ip_sans; do
           [[ "$san" == "$servername" ]] && return 0
      done
@@ -8268,4 +8268,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.522 2016/07/08 09:25:39 dirkw Exp $
+#  $Id: testssl.sh,v 1.523 2016/07/11 14:20:35 dirkw Exp $
