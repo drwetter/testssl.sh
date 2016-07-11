@@ -4519,13 +4519,13 @@ run_pfs() {
      sclient_connect_successful $? $TMPFILE
      if [[ $? -ne 0 ]] || [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]]; then
           outln
-          pr_svrty_mediumln "No ciphers supporting Forward Secrecy offered"
+          pr_svrty_mediumln " No ciphers supporting Forward Secrecy offered"
           fileout "pfs" "MEDIUM" "(Perfect) Forward Secrecy : No ciphers supporting Forward Secrecy offered"
      else
           outln
           pfs_offered=true
           pfs_ciphers=""
-          pr_done_good " PFS is offered (OK)"
+          pr_done_good " PFS is offered (OK)        "
           fileout "pfs" "OK" "(Perfect) Forward Secrecy : PFS is offered (OK)"
           if "$WIDE"; then
                outln ", ciphers follow (client/browser support is important here) \n"
@@ -4579,7 +4579,7 @@ run_pfs() {
           fi
      fi
 
-     if $ecdhe_offered; then
+     if "$ecdhe_offered"; then
           # find out what elliptic curves are supported.
           curves_offered=""
           for curve in "${curves[@]}"; do
@@ -4589,8 +4589,8 @@ run_pfs() {
                [[ "$sclient_success" -eq 0 ]] && curves_offered+="$curve "
           done
           if [[ -n "$curves_offered" ]]; then
-               pr_bold " Elliptic curves offered: "; outln "$curves_offered"
-               fileout "ecdhe_curves" "INFO" "Elliptic curves offered: $curves_offered"
+               pr_bold " Elliptic curves offered:     "; outln "$curves_offered"
+               fileout "ecdhe_curves" "INFO" "Elliptic curves offered $curves_offered"
           fi
      fi
      outln
@@ -8286,4 +8286,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.523 2016/07/11 14:20:35 dirkw Exp $
+#  $Id: testssl.sh,v 1.524 2016/07/11 16:44:27 dirkw Exp $
