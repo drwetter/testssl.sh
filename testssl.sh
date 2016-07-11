@@ -4489,13 +4489,15 @@ run_server_defaults() {
 
 run_pfs() {
      local -i sclient_success
-     local pfs_offered=false
+     local pfs_offered=false ecdhe_offered=false
      local tmpfile
      local dhlen
-     local hexcode dash pfs_cipher sslvers kx auth enc mac
+     local hexcode dash pfs_cipher sslvers kx auth enc mac curve
      local pfs_cipher_list="$ROBUST_PFS_CIPHERS"
+     local ecdhe_cipher_list=""
+     local -a curves=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
      local -i nr_supported_ciphers=0
-     local pfs_ciphers
+     local pfs_ciphers curves_offered
 
      outln
      pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption as well as 3DES and RC4 here "
@@ -4539,6 +4541,7 @@ run_pfs() {
                if [[ "$sclient_success" -ne 0 ]] && ! "$SHOW_EACH_C"; then
                     continue                 # no successful connect AND not verbose displaying each cipher
                fi
+               [[ "$sclient_success" -eq 0 ]] && [[ $pfs_cipher == "ECDHE-"* ]] && ecdhe_offered=true && ecdhe_cipher_list+=":$pfs_cipher"
 
                if "$WIDE"; then
                     normalize_ciphercode $hexcode
@@ -4573,6 +4576,21 @@ run_pfs() {
                fileout "pfs_ciphers" "NOT ok" "(Perfect) Forward Secrecy Ciphers: no PFS ciphers found (NOT ok)"
           else
                fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
+          fi
+     fi
+
+     if $ecdhe_offered; then
+          # find out what elliptic curves are supported.
+          curves_offered=""
+          for curve in "${curves[@]}"; do
+               $OPENSSL s_client -cipher "${ecdhe_cipher_list:1}" -curves $curve $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$tmpfile </dev/null
+               sclient_connect_successful $? $tmpfile
+               sclient_success=$?
+               [[ "$sclient_success" -eq 0 ]] && curves_offered+="$curve "
+          done
+          if [[ -n "$curves_offered" ]]; then
+               pr_bold " Elliptic curves offered: "; outln "$curves_offered"
+               fileout "ecdhe_curves" "INFO" "Elliptic curves offered: $curves_offered"
           fi
      fi
      outln
