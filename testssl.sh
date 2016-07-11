@@ -3444,7 +3444,7 @@ run_server_preference() {
                [[ -n "$PROXY" ]] && arg="   SPDY/NPN is"
                [[ -n "$STARTTLS" ]] && arg="    "
                if spdy_pre " $arg" ; then                                       # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
-                    $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg "$NPN_PROTOs" </dev/null 2>>$ERRFILE >$TMPFILE
+                    $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg "$NPN_PROTOs" $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
                          if [[ -z "${proto[i]}" ]]; then
@@ -3619,16 +3619,16 @@ cipher_pref_check() {
      if ! spdy_pre "     SPDY/NPN: "; then       # is NPN/SPDY supported and is this no STARTTLS?
           outln
      else
-          npn_protos=$($OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg \"\" </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
+          npn_protos=$($OPENSSL s_client $BUGS -nextprotoneg \"\" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
           for p in $npn_protos; do
                order=""
-               $OPENSSL s_client -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
+               $OPENSSL s_client $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                printf "    %-10s %s " "$p:" "$cipher"
                tested_cipher="-"$cipher
                order="$cipher"
                while true; do
-                    $OPENSSL s_client -cipher "ALL:$tested_cipher" -host $NODE -port $PORT $BUGS -nextprotoneg "$p" $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
+                    $OPENSSL s_client -cipher "ALL:$tested_cipher" $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     sclient_connect_successful $? $TMPFILE || break
                     cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                     out "$cipher "
@@ -3931,7 +3931,7 @@ compare_server_name_to_cert()
 
      # Check whether any of the DNS names in the certificate match the servername
      dns_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-              sed -e 's/,/\n/g' | grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
+               tr '.' '\n'  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
      for san in $dns_sans; do
           [[ "$san" == "$servername" ]] && return 0
           # If $san is a wildcard name, then do a wildcard match
@@ -3943,7 +3943,7 @@ compare_server_name_to_cert()
 
      # Check whether any of the IP addresses in the certificate match the serername
      ip_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-             sed -e 's/,/\n/g' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
+             tr ',' '\n' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
      for san in $ip_sans; do
           [[ "$san" == "$servername" ]] && return 0
      done
@@ -4243,9 +4243,9 @@ certificate_info() {
      fileout "${json_prefix}cn" "$cnok" "$cnfinding"
 
      sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-          egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | \
+          egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
           sed -e 's/ *DNS://g' -e 's/ *IP Address://g' -e 's/ *email://g' -e 's/ *URI://g' -e 's/ *DirName://g' \
-              -e 's/ *Registered ID://g' -e 's/,/\n/g' \
+              -e 's/ *Registered ID://g' \
               -e 's/ *othername:<unsupported>//g' -e 's/ *X400Name:<unsupported>//g' -e 's/ *EdiPartyName:<unsupported>//g')
 #                   ^^^ CACert
      out "$indent"; pr_bold " subjectAltName (SAN)         "
@@ -8394,4 +8394,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.522 2016/07/08 09:25:39 dirkw Exp $
+#  $Id: testssl.sh,v 1.523 2016/07/11 14:20:35 dirkw Exp $
