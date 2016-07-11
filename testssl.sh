@@ -4123,9 +4123,9 @@ certificate_info() {
      fileout "${json_prefix}cn" "$cnok" "$cnfinding"
 
      sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-          egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | \
+          egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
           sed -e 's/ *DNS://g' -e 's/ *IP Address://g' -e 's/ *email://g' -e 's/ *URI://g' -e 's/ *DirName://g' \
-              -e 's/ *Registered ID://g' -e 's/,/\n/g' \
+              -e 's/ *Registered ID://g' \
               -e 's/ *othername:<unsupported>//g' -e 's/ *X400Name:<unsupported>//g' -e 's/ *EdiPartyName:<unsupported>//g')
 #                   ^^^ CACert
      out "$indent"; pr_bold " subjectAltName (SAN)         "
