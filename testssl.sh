@@ -134,7 +134,7 @@ TERM_CURRPOS=0                                         # custom line wrapping ne
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch, see --help
 
-declare -x OPENSSL
+declare -x OPENSSL OPENSSL_TIMEOUT
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
 COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the output
 SHOW_EACH_C=${SHOW_EACH_C:-false}       # where individual ciphers are tested show just the positively ones tested
@@ -6734,6 +6734,10 @@ find_openssl_binary() {
      $OPENSSL s_client -help 2>&1 | grep -qw '\-nextprotoneg' && \
           HAS_SPDY=true
 
+     if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
+          OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
+     fi
+
      return 0
 }
 
@@ -8074,6 +8078,10 @@ parse_cmd_line() {
                     ;;
                --openssl|--openssl=*)
                     OPENSSL=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    ;;
+               --openssl-timeout|--openssl-timeout=*)
+                    OPENSSL_TIMEOUT=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     ;;
                --mapping|--mapping=*)
