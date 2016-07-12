@@ -7131,7 +7131,7 @@ parse_hn_port() {
 prepare_logging() {
      local fname_prefix="$1"
 
-     [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"
+     [[ -z "$fname_prefix" ]] && fname_prefix="$NODE:$PORT"
 
      if "$do_logging"; then
           if [[ -z "$LOGFILE" ]]; then
