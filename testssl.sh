@@ -4525,13 +4525,13 @@ run_pfs() {
           outln
           pfs_offered=true
           pfs_ciphers=""
-          pr_done_good " PFS is offered (OK)        "
+          pr_done_good " PFS is offered (OK)"
           fileout "pfs" "OK" "(Perfect) Forward Secrecy : PFS is offered (OK)"
           if "$WIDE"; then
                outln ", ciphers follow (client/browser support is important here) \n"
                neat_header
           else
-               out "  "
+               out "          "
           fi
           while read hexcode dash pfs_cipher sslvers kx auth enc mac; do
                tmpfile=$TMPFILE.$hexcode
@@ -4589,6 +4589,7 @@ run_pfs() {
                [[ "$sclient_success" -eq 0 ]] && curves_offered+="$curve "
           done
           if [[ -n "$curves_offered" ]]; then
+               "$WIDE" && outln
                pr_bold " Elliptic curves offered:     "; outln "$curves_offered"
                fileout "ecdhe_curves" "INFO" "Elliptic curves offered $curves_offered"
           fi
@@ -6765,7 +6766,11 @@ check4openssl_oldfarts() {
 # FreeBSD needs to have /dev/fd mounted. This is a friendly hint, see #258
 check_bsd_mount() {
      if [[ "$(uname)" == FreeBSD ]]; then 
-          if ! mount | grep '/dev/fd' | grep -q fdescfs; then
+          if ! mount | grep -q "^devfs"; then
+               outln "you seem to run $PROG_NAME= in a jail. Hopefully you're did \"mount -t fdescfs fdesc /dev/fd\""
+          elif mount | grep '/dev/fd' | grep -q fdescfs; then
+               :
+          else
                fatal "You need to mount fdescfs on FreeBSD: \"mount -t fdescfs fdesc /dev/fd\"" -3
           fi
      fi
@@ -8286,4 +8291,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.525 2016/07/11 17:41:32 dirkw Exp $
+#  $Id: testssl.sh,v 1.526 2016/07/16 18:48:55 dirkw Exp $
