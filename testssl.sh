@@ -4495,9 +4495,12 @@ run_pfs() {
      local hexcode dash pfs_cipher sslvers kx auth enc mac curve
      local pfs_cipher_list="$ROBUST_PFS_CIPHERS"
      local ecdhe_cipher_list=""
-     local -a curves=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
-     local -i nr_supported_ciphers=0
-     local pfs_ciphers curves_offered
+     local -a curves_ossl=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
+     local -a curves_ossl_output=("K-163" "sect163r1" "B-163" "sect193r1" "sect193r2" "K-233" "B-233" "sect239k1" "K-283" "B-283" "K-409" "B-409" "K-571" "B-571" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "P-192" "secp224k1" "P-224" "secp256k1" "P-256" "P-384" "P-521" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
+     local -a supported_curves=()
+     local -i nr_supported_ciphers=0 nr_curves=0 i j low high
+     local pfs_ciphers curves_offered curves_to_test temp
+     local curve_found curve_used
 
      outln
      pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption as well as 3DES and RC4 here "
@@ -4582,11 +4585,52 @@ run_pfs() {
      if "$ecdhe_offered"; then
           # find out what elliptic curves are supported.
           curves_offered=""
-          for curve in "${curves[@]}"; do
-               $OPENSSL s_client -cipher "${ecdhe_cipher_list:1}" -curves $curve $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$tmpfile </dev/null
-               sclient_connect_successful $? $tmpfile
-               sclient_success=$?
-               [[ "$sclient_success" -eq 0 ]] && curves_offered+="$curve "
+          for curve in "${curves_ossl[@]}"; do
+              $OPENSSL ecparam -list_curves | grep -q $curve
+              [[ $? -eq 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
+          done
+
+          # OpenSSL limits the number of curves that can be specified in the
+          # "-curves" option to 28. So, the list is broken in two since there
+          # are currently 30 curves defined.
+          for i in 1 2; do
+               case $i in
+                   1) low=0; high=$nr_curves/2 ;;
+                   2) low=$nr_curves/2; high=$nr_curves ;;
+               esac
+               sclient_success=0
+               while [[ "$sclient_success" -eq 0 ]]; do
+                    curves_to_test=""
+                    for (( j=low; j < high; j++ )); do
+                         [[ ! " $curves_offered " =~ " ${supported_curves[j]} " ]] && curves_to_test+=":${supported_curves[j]}"
+                    done
+                    if [[ -n "$curves_to_test" ]]; then
+                         $OPENSSL s_client -cipher "${ecdhe_cipher_list:1}" -curves "${curves_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$tmpfile </dev/null
+                         sclient_connect_successful $? $tmpfile
+                         sclient_success=$?
+                    else
+                         sclient_success=1
+                    fi
+                    if [[ "$sclient_success" -eq 0 ]]; then
+                         temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$tmpfile")
+                         curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+                         j=0; curve_used=""
+                         for curve in "${curves_ossl[@]}"; do
+                              [[ "${curves_ossl_output[j]}" == "$curve_found" ]] && curve_used="${curves_ossl[j]}" && break
+                              j+=1
+                         done
+                         if [[ -n "$curve_used" ]]; then
+                              curves_offered+="$curve "
+                         else
+                              sclient_success=1
+                         fi
+                    fi
+               done
+          done
+          # Reorder list of curves that were found to match their ordering in NamedCurve
+          curve_found=""
+          for curve in "${curves_ossl[@]}"; do
+               [[ " $curves_offered " =~ " $curve " ]] && curve_found+="$curve "
           done
           if [[ -n "$curves_offered" ]]; then
                "$WIDE" && outln
