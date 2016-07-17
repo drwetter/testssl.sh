@@ -3999,9 +3999,9 @@ run_client_simulation() {
 
      outln
      if "$using_sockets"; then
-          pr_headlineln " Running browser simulations via sockets (experimental) "
+          pr_headlineln " Running client simulations via sockets (experimental) "
      else
-          pr_headlineln " Running browser simulations (experimental) "
+          pr_headlineln " Running client simulations (experimental) "
      fi
      outln
 
