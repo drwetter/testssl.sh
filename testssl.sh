@@ -3839,7 +3839,7 @@ certificate_info() {
      local ocsp_response=$5
      local ocsp_response_status=$6
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
-     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
+     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn cn_nosni
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
      local spaces=""
@@ -4145,7 +4145,7 @@ certificate_info() {
      issuer="$($OPENSSL x509 -in  $HOSTCERT -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
      issuer_O="$(awk -F'=' '/O=/ { print $2 }' <<< "$issuer")"
-     issuer_C="$(awk -F'=' '/C=/ { print $2 }' <<< "$issuer")"
+     issuer_C="$(awk -F'=' '/ C=/ { print $2 }' <<< "$issuer")"
 
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$CN" ]]; then
           pr_svrty_criticalln "self-signed (NOT ok)"
@@ -4157,9 +4157,9 @@ certificate_info() {
           if [[ -n "$issuer_C" ]]; then
                out " from "
                pr_dquoted "$issuer_C"
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" from \"$issuer_C\")"
+               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" from \"$issuer_C\")"
           else
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" )"
+               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" )"
           fi
           outln ")"
      fi
