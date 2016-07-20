@@ -963,7 +963,7 @@ run_hpkp() {
      local i
      local hpkp_headers
      local first_hpkp_header
-     local ca_bundles="$INSTALL_DIR/etc/*.pem"
+     local ca_hashes="$INSTALL_DIR/etc/ca_hashes.txt"
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -1072,32 +1072,9 @@ run_hpkp() {
 
           # Get keys from Root CAs
 
-          # Clear temp file
-          echo -n "" > "$TEMPDIR/cahashes"
-          for bundle_fname in $ca_bundles; do
-               if [[ ! -r $bundle_fname ]]; then
-                    pr_warningln "\"$bundle_fname\" cannot be found / not readable"
-                    return 7
-               fi
-               # Split up the certificate bundle
-               awk -v n=-1 "BEGIN {start=1}
-                       /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
-                       inc { print >> (\"$TEMPDIR/$bundle_name.\" n \".crt\") ; close (\"$TEMPDIR/$bundle_name.\" n \".crt\") }
-                       /---END CERTIFICATE-----/{ inc=0 }" $bundle_fname
-               for cert_fname in $TEMPDIR/$bundle_name.*.crt; do
-                    hpkp_key_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | $OPENSSL base64 -d |
-                         $OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
-                    issuer=$(get_cn_from_cert $cert_fname)
-                    [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout| sed "s/^subject= //") 
-                    echo "$hpkp_key_ca $issuer" >> "$TEMPDIR/cahashes"
-
-# haven't done any measuremenst but I suspect this takes time. How abount precomputing them and put them into a file?
-               done
-          done
-
           pins_match=false
-# exho needed here?
           for hpkp_key in $(echo $pins); do
+# exho needed here? ^^^^
                key_found=false
                # compare pin against the leaf certificate
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
@@ -1125,7 +1102,7 @@ run_hpkp() {
                fi
 
                if ! "$key_found"; then
-                    hpkp_matches=$(grep -h "$hpkp_key" $TEMPDIR/cahashes | sort -u)
+                    hpkp_matches=$(grep -h "$hpkp_key" $ca_hashes | sort -u)
                     if [[ -n $hpkp_matches ]]; then
                          # We have a winner!
                          key_found=true
