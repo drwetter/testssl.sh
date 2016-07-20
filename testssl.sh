@@ -3839,7 +3839,7 @@ certificate_info() {
      local ocsp_response=$5
      local ocsp_response_status=$6
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
-     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn cn_nosni
+     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer_DC issuer issuerfinding sans san cn cn_nosni
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
      local spaces=""
@@ -4146,22 +4146,33 @@ certificate_info() {
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
      issuer_O="$(awk -F'=' '/O=/ { print $2 }' <<< "$issuer")"
      issuer_C="$(awk -F'=' '/ C=/ { print $2 }' <<< "$issuer")"
+     issuer_DC="$(awk -F'=' '/DC=/ { print $2 }' <<< "$issuer")"
 
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$CN" ]]; then
           pr_svrty_criticalln "self-signed (NOT ok)"
           fileout "${json_prefix}issuer" "NOT ok" "Issuer: selfsigned (NOT ok)"
      else
-          pr_dquoted "$issuer_CN"
-          out " ("
-          pr_dquoted "$issuer_O"
-          if [[ -n "$issuer_C" ]]; then
-               out " from "
-               pr_dquoted "$issuer_C"
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" from \"$issuer_C\")"
-          else
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" )"
+          issuerfinding="$(pr_dquoted "$issuer_CN")"
+          if [[ -z "$issuer_O" ]] && [[ -n "$issuer_DC" ]]; then
+               for san in $issuer_DC; do
+                    if [[ -z "$issuer_O" ]]; then
+                         issuer_O="${san}"
+                    else
+                         issuer_O="${san}.${issuer_O}"
+                    fi
+               done
           fi
-          outln ")"
+          if [[ -n "$issuer_O" ]]; then
+               issuerfinding+=" ("
+               issuerfinding+="$(pr_dquoted "$issuer_O")"
+               if [[ -n "$issuer_C" ]]; then
+                    issuerfinding+=" from "
+                    issuerfinding+="$(pr_dquoted "$issuer_C")"
+               fi
+               issuerfinding+=")"
+          fi
+          outln "$issuerfinding"
+          fileout "${json_prefix}issuer" "INFO" "Issuer: $issuerfinding"
      fi
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
