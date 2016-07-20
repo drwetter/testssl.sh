@@ -3839,7 +3839,8 @@ certificate_info() {
      local ocsp_response=$5
      local ocsp_response_status=$6
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
-     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn cn_nosni
+     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn
+     local cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
      local spaces=""
@@ -4079,8 +4080,10 @@ certificate_info() {
 
      # no cipher suites specified here. We just want the default vhost subject
      $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
-     cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
-     [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
+     if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
+          cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
+          [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
+     fi
 
 #FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
 
