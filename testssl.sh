@@ -3822,7 +3822,7 @@ compare_server_name_to_cert()
 
      # Check whether any of the DNS names in the certificate match the servername
      dns_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-               tr '.' '\n'  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
+               tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
      for san in $dns_sans; do
           [[ "$san" == "$servername" ]] && return 0
           # If $san is a wildcard name, then do a wildcard match
@@ -3850,7 +3850,8 @@ certificate_info() {
      local ocsp_response=$5
      local ocsp_response_status=$6
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
-     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_C issuer_O issuer sans san cn cn_nosni
+     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn
+     local cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
      local spaces=""
@@ -4090,8 +4091,10 @@ certificate_info() {
 
      # no cipher suites specified here. We just want the default vhost subject
      $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
-     cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
-     [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
+     if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
+          cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
+          [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
+     fi
 
 #FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
 
@@ -4156,7 +4159,7 @@ certificate_info() {
      issuer="$($OPENSSL x509 -in  $HOSTCERT -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
      issuer_O="$(awk -F'=' '/O=/ { print $2 }' <<< "$issuer")"
-     issuer_C="$(awk -F'=' '/C=/ { print $2 }' <<< "$issuer")"
+     issuer_C="$(awk -F'=' '/ C=/ { print $2 }' <<< "$issuer")"
 
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$CN" ]]; then
           pr_svrty_criticalln "self-signed (NOT ok)"
@@ -4168,9 +4171,9 @@ certificate_info() {
           if [[ -n "$issuer_C" ]]; then
                out " from "
                pr_dquoted "$issuer_C"
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" from \"$issuer_C\")"
+               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" from \"$issuer_C\")"
           else
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer\" ( \"$issuer_O\" )"
+               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" )"
           fi
           outln ")"
      fi
@@ -4500,13 +4503,18 @@ run_server_defaults() {
 
 run_pfs() {
      local -i sclient_success
-     local pfs_offered=false
+     local pfs_offered=false ecdhe_offered=false
      local tmpfile
      local dhlen
-     local hexcode dash pfs_cipher sslvers kx auth enc mac
+     local hexcode dash pfs_cipher sslvers kx auth enc mac curve
      local pfs_cipher_list="$ROBUST_PFS_CIPHERS"
-     local -i nr_supported_ciphers=0
-     local pfs_ciphers
+     local ecdhe_cipher_list=""
+     local -a curves_ossl=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
+     local -a curves_ossl_output=("K-163" "sect163r1" "B-163" "sect193r1" "sect193r2" "K-233" "B-233" "sect239k1" "K-283" "B-283" "K-409" "B-409" "K-571" "B-571" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "P-192" "secp224k1" "P-224" "secp256k1" "P-256" "P-384" "P-521" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
+     local -a supported_curves=()
+     local -i nr_supported_ciphers=0 nr_curves=0 i j low high
+     local pfs_ciphers curves_offered curves_to_test temp
+     local curve_found curve_used
 
      outln
      pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption as well as 3DES and RC4 here "
@@ -4528,7 +4536,7 @@ run_pfs() {
      sclient_connect_successful $? $TMPFILE
      if [[ $? -ne 0 ]] || [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]]; then
           outln
-          pr_svrty_mediumln "No ciphers supporting Forward Secrecy offered"
+          pr_svrty_mediumln " No ciphers supporting Forward Secrecy offered"
           fileout "pfs" "MEDIUM" "(Perfect) Forward Secrecy : No ciphers supporting Forward Secrecy offered"
      else
           outln
@@ -4540,7 +4548,7 @@ run_pfs() {
                outln ", ciphers follow (client/browser support is important here) \n"
                neat_header
           else
-               out "  "
+               out "          "
           fi
           while read hexcode dash pfs_cipher sslvers kx auth enc mac; do
                tmpfile=$TMPFILE.$hexcode
@@ -4550,6 +4558,7 @@ run_pfs() {
                if [[ "$sclient_success" -ne 0 ]] && ! "$SHOW_EACH_C"; then
                     continue                 # no successful connect AND not verbose displaying each cipher
                fi
+               [[ "$sclient_success" -eq 0 ]] && [[ $pfs_cipher == "ECDHE-"* ]] && ecdhe_offered=true && ecdhe_cipher_list+=":$pfs_cipher"
 
                if "$WIDE"; then
                     normalize_ciphercode $hexcode
@@ -4584,6 +4593,63 @@ run_pfs() {
                fileout "pfs_ciphers" "NOT ok" "(Perfect) Forward Secrecy Ciphers: no PFS ciphers found (NOT ok)"
           else
                fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
+          fi
+     fi
+
+     if "$ecdhe_offered"; then
+          # find out what elliptic curves are supported.
+          curves_offered=""
+          for curve in "${curves_ossl[@]}"; do
+              $OPENSSL ecparam -list_curves | grep -q $curve
+              [[ $? -eq 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
+          done
+
+          # OpenSSL limits the number of curves that can be specified in the
+          # "-curves" option to 28. So, the list is broken in two since there
+          # are currently 30 curves defined.
+          for i in 1 2; do
+               case $i in
+                   1) low=0; high=$nr_curves/2 ;;
+                   2) low=$nr_curves/2; high=$nr_curves ;;
+               esac
+               sclient_success=0
+               while [[ "$sclient_success" -eq 0 ]]; do
+                    curves_to_test=""
+                    for (( j=low; j < high; j++ )); do
+                         [[ ! " $curves_offered " =~ " ${supported_curves[j]} " ]] && curves_to_test+=":${supported_curves[j]}"
+                    done
+                    if [[ -n "$curves_to_test" ]]; then
+                         $OPENSSL s_client -cipher "${ecdhe_cipher_list:1}" -curves "${curves_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$tmpfile </dev/null
+                         sclient_connect_successful $? $tmpfile
+                         sclient_success=$?
+                    else
+                         sclient_success=1
+                    fi
+                    if [[ "$sclient_success" -eq 0 ]]; then
+                         temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$tmpfile")
+                         curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+                         j=0; curve_used=""
+                         for curve in "${curves_ossl[@]}"; do
+                              [[ "${curves_ossl_output[j]}" == "$curve_found" ]] && curve_used="${curves_ossl[j]}" && break
+                              j+=1
+                         done
+                         if [[ -n "$curve_used" ]]; then
+                              curves_offered+="$curve "
+                         else
+                              sclient_success=1
+                         fi
+                    fi
+               done
+          done
+          # Reorder list of curves that were found to match their ordering in NamedCurve
+          curve_found=""
+          for curve in "${curves_ossl[@]}"; do
+               [[ " $curves_offered " =~ " $curve " ]] && curve_found+="$curve "
+          done
+          if [[ -n "$curves_offered" ]]; then
+               "$WIDE" && outln
+               pr_bold " Elliptic curves offered:     "; outln "$curves_offered"
+               fileout "ecdhe_curves" "INFO" "Elliptic curves offered $curves_offered"
           fi
      fi
      outln
@@ -5407,10 +5473,10 @@ socksend_tls_clienthello() {
           extensions_ecc="
           00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
           00, 3e, 00, 3c,            # lengths
-          00, 01, 00, 02, 00, 03, 00, 04, 00, 05, 00, 06, 00, 07, 00, 08,
-          00, 09, 00, 0a, 00, 0b, 00, 0c, 00, 0d, 00, 0e, 00, 0f, 00, 10,
-          00, 11, 00, 12, 00, 13, 00, 14, 00, 15, 00, 16, 00, 17, 00, 18,
-          00, 19, 00, 1a, 00, 1b, 00, 1c, 00, 1d, 00, 1e,
+          00, 0e, 00, 0d, 00, 19, 00, 1c, 00, 1e, 00, 0b, 00, 0c, 00, 1b,
+          00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
+          00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
+          00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11,
           00, 0b,                    # Type: Supported Point Formats , see RFC 4492 
           00, 02,                    # len
           01, 00"
@@ -6758,7 +6824,11 @@ check4openssl_oldfarts() {
 # FreeBSD needs to have /dev/fd mounted. This is a friendly hint, see #258
 check_bsd_mount() {
      if [[ "$(uname)" == FreeBSD ]]; then 
-          if ! mount | grep '/dev/fd' | grep -q fdescfs; then
+          if ! mount | grep -q "^devfs"; then
+               outln "you seem to run $PROG_NAME= in a jail. Hopefully you're did \"mount -t fdescfs fdesc /dev/fd\""
+          elif mount | grep '/dev/fd' | grep -q fdescfs; then
+               :
+          else
                fatal "You need to mount fdescfs on FreeBSD: \"mount -t fdescfs fdesc /dev/fd\"" -3
           fi
      fi
@@ -8644,4 +8714,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.523 2016/07/11 14:20:35 dirkw Exp $
+#  $Id: testssl.sh,v 1.527 2016/07/20 15:36:50 dirkw Exp $
