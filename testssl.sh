@@ -1054,7 +1054,7 @@ run_hpkp() {
                   inc { print > (\"$TEMPDIR/level\" n \".crt\") }
                   /---END CERTIFICATE-----/{ inc=0 }" $TMPFILE
           nrsaved=$(count_words "$(echo $TEMPDIR/level?.crt 2>/dev/null)")
-          rm $TEMPDIR/level0.crt 
+          rm $TEMPDIR/level0.crt 2>/dev/null
 
           if [[ nrsaved -ge 2 ]]; then
                echo -n "" > "$TEMPDIR/intermediate.hashes"
@@ -1067,7 +1067,8 @@ run_hpkp() {
                     echo "$hpkp_key_ca $hpkp_name" >> "$TEMPDIR/intermediate.hashes"
                done
           fi
-          rm $TEMPDIR/level*.crt
+          rm $TEMPDIR/level*.crt 2>/dev/null
+# I'd like to keep all certs retrieved for debugging
 
           # Get keys from Root CAs
 
@@ -1089,16 +1090,18 @@ run_hpkp() {
                     issuer=$(get_cn_from_cert $cert_fname)
                     [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout| sed "s/^subject= //") 
                     echo "$hpkp_key_ca $issuer" >> "$TEMPDIR/cahashes"
+
+# haven't done any measuremenst but I suspect this takes time. How abount precomputing them and put them into a file?
                done
           done
 
           pins_match=false
+# exho needed here?
           for hpkp_key in $(echo $pins); do
                key_found=false
-
                # compare pin against the leaf certificate
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
-                    out "\n\n$spaces Leaf cert match : "
+                    out "\n$spaces Host cert match: "
                     pr_done_good "$hpkp_key"
                     fileout "hpkp_$hpkp_key" "OK" "PIN $hpkp_key matches the leaf certificate"
                     key_found=true
@@ -1107,20 +1110,21 @@ run_hpkp() {
                debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
 
                # Check for intermediate match
-               if ! $key_found ; then
-                    hpkp_matches=$(grep "$hpkp_key" $TEMPDIR/intermediate.hashes)
+               if ! "$key_found"; then
+# doesn't work, "grep: /tmp/ssltester.Dp2ovS/intermediate.hashes: No such file or directory" if teested against testss.sh
+                    hpkp_matches=$(grep "$hpkp_key" $TEMPDIR/intermediate.hashes 2>/dev/null)
                     if [[ -n $hpkp_matches ]]; then
                          # We have a winner!
                          key_found=true
                          pins_match=true
-                         out "\n\n$spaces Sub  CA   match : "
+                         out "\n$spaces Sub CA match:    "
                          pr_done_good "$hpkp_key"
                          out "\n$spaces $(echo $hpkp_matches|sed "s/^[a-zA-Z0-9\+\/]*=* *//")"
-                         fileout "hpkp_$hpkp_key" "OK" "Intermediate CA key matches a key pinned in the HPKP header.\\nKey/CA: $hpkp_matches"
+                         fileout "hpkp_$hpkp_key" "OK" "Intermediate CA key matches a key pinned in the HPKP header. Key/CA: $hpkp_matches"
                     fi
                fi
 
-               if ! $key_found ; then
+               if ! "$key_found"; then
                     hpkp_matches=$(grep -h "$hpkp_key" $TEMPDIR/cahashes | sort -u)
                     if [[ -n $hpkp_matches ]]; then
                          # We have a winner!
@@ -1131,32 +1135,33 @@ run_hpkp() {
                          else
                               match_ca=""
                          fi
-                         out "\n\n$spaces Root CA   match : "
+                         out "\n\n$spaces Root CA match:   "
                          pr_done_good "$hpkp_key"
                          echo "$hpkp_matches"|sort -u|while read line; do
                               out "\n$spaces $(echo $line |sed "s/^[a-zA-Z0-9\+\/]*=* *//")"
                          done
                          if [[ $match_ca == $hpkp_ca ]]; then
-                              pr_done_good "\n$spaces This CA is part of the chain"
-                              fileout "hpkp_$hpkp_key" "OK" "Root CA key matches a key pinned in the HPKP header\\nKey/OS/CA: $hpkp_matches\\nThe CA is part of the chain"
+                              out " (part of the chain)"
+                              fileout "hpkp_$hpkp_key" "INFO" "Root CA key matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is part of the chain"
                          else
+# there's a root CA match for github AND this message. 
                               out "\n$spaces This CA is not part of the chain and likely a backup PIN"
-                              fileout "hpkp_$hpkp_key" "OK" "Root CA key matches a key pinned in the HPKP header\\nKey/OS/CA: $hpkp_matches\\nThe CA is not part of the chain, this is a backup PIN"
+                              fileout "hpkp_$hpkp_key" "INFO" "Root CA key matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is not part of the chain, this is a backup PIN"
                          fi
                     fi
                fi
 
-               if ! $key_found ; then
+               if ! "$key_found" && [[ $DEBUG -eq 1 ]]; then
                     # Houston we may have a problem
-                    out "\n\n$spaces Unmatched key   : "
-                    pr_warning "$hpkp_key"
-                    out "\n$spaces ( This is OK for a backup pin of a leaf cert )"
-                    fileout "hpkp_$hpkp_key" "WARN" "PIN $hpkp_key doesn't match anything.\nThis could be ok if it is a backup pin for a leaf certificate"
+                    out "\n\n$spaces Unmatched key:    "
+                    out "$hpkp_key"
+                    out "\n$spaces (This is OK for a backup pin of a leaf cert)"
+                    fileout "hpkp_$hpkp_key" "INFO" "PIN $hpkp_key doesn't match anything. This could be ok if it is a backup pin for a leaf certificate"
                fi
           done 
 
           # If all else fails...
-          if ! $pins_match ; then
+          if ! "$pins_match"; then
                pr_svrty_high " No matching key for pins found "
                fileout "hpkp_keymatch" "NOT ok" "None of the HPKP PINS match your leaf certificate, intermediate CA or known root CAs. You may have bricked this site"
           fi
