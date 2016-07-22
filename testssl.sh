@@ -4151,7 +4151,7 @@ certificate_info() {
      issuer_C="$(awk -F'=' '/ C=/ { print $2 }' <<< "$issuer")"
      issuer_DC="$(awk -F'=' '/DC=/ { print $2 }' <<< "$issuer")"
 
-     if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$CN" ]]; then
+     if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$cn" ]]; then
           pr_svrty_criticalln "self-signed (NOT ok)"
           fileout "${json_prefix}issuer" "NOT ok" "Issuer: selfsigned (NOT ok)"
      else
