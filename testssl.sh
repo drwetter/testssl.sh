@@ -3586,7 +3586,7 @@ determine_trust() {
 
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]]; then
           addtl_warning="(Your openssl <= 1.0.2 might be too unreliable to determine trust)"
-          fileout "${json_prefix}trust_warn" "WARN" "$addtl_warning"
+          fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
 	for bundle_fname in $ca_bundles; do
@@ -3624,7 +3624,7 @@ determine_trust() {
 	     # all stores ok
 		pr_done_good "Ok   "; pr_warning "$addtl_warning"
           # we did to stdout the warning above already, so we could stay here with INFO:
-          fileout "${json_prefix}trust" "OK" "All certificate trust checks passed. $addtl_warning"
+          fileout "${json_prefix}chain_of_trust" "OK" "All certificate trust checks passed. $addtl_warning"
 	else
 	     # at least one failed
 		pr_svrty_critical "NOT ok"
@@ -3632,7 +3632,7 @@ determine_trust() {
 		     # all failed (we assume with the same issue), we're displaying the reason
                out " "
 			verify_retcode_helper "${verify_retcode[2]}"
-               fileout "${json_prefix}trust" "NOT ok" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
+               fileout "${json_prefix}chain_of_trust" "NOT ok" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
 		else
 			# is one ok and the others not ==> display the culprit store
 			if $some_ok ; then
@@ -3655,7 +3655,7 @@ determine_trust() {
                     [[ "$DEBUG" -eq 0 ]] && out "$spaces"
 				pr_done_good "OK: $ok_was"
                fi
-               fileout "${json_prefix}trust" "NOT ok" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
+               fileout "${json_prefix}chain_of_trust" "NOT ok" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
           fi
           [[ -n "$addtl_warning" ]] && out "\n$spaces" && pr_warning "$addtl_warning"
 	fi
@@ -3792,42 +3792,128 @@ get_cn_from_cert() {
      return $?
 }
 
-# Return 0 if the server name provided in arg1 matches the CN or SAN in arg2, otherwise return 1.
+# Return 0 if the name provided in arg1 is a wildcard name
+is_wildcard()
+{
+     local certname="$1"
+
+     # If the first label in the DNS name begins "xn--", then assume it is an
+     # A-label and not a wildcard name (RFC 6125, Section 6.4.3).
+     [[ "${certname:0:4}" == "xn--" ]] && return 1
+
+     # Remove part of name preceding '*' or '.'. If no "*" appears in the
+     # left-most label, then it is not a wildcard name (RFC 6125, Section 6.4.3).
+     basename="$(echo -n "$certname" | sed 's/^[a-zA-Z0-9\-]*//')"
+     [[ "${basename:0:1}" != "*" ]] && return 1 # not a wildcard name
+
+     # Check that there are no additional wildcard ('*') characters or any
+     # other characters that do not belong in a DNS name.
+     [[ -n $(echo -n "${basename:1}" | sed 's/^[\.a-zA-Z0-9\-]*//') ]] && return 1
+     return 0
+}
+
+# Return 0 if the name provided in arg2 is a wildcard name and it matches the name provided in arg1.
+wildcard_match()
+{
+     local servername="$1"
+     local certname="$2"
+     local basename
+     local -i basename_offset len_certname len_part1 len_basename
+     local -i len_servername len_wildcard
+
+     len_servername=${#servername}
+     len_certname=${#certname}
+
+     # Use rules from RFC 6125 to perform the match.
+
+     # Assume the "*" in the wildcard needs to be replaced by one or more
+     # characters, although RFC 6125 is not clear about that.
+     [[ $len_servername -lt $len_certname ]] && return 1
+
+     is_wildcard "$certname"
+     [[ $? -ne 0 ]] && return 1
+
+     # Comparisons of DNS names are case insenstive, so convert both names to uppercase.
+     certname="$(toupper "$certname")"
+     servername="$(toupper "$servername")"
+
+     # Extract part of name that comes after the "*"
+     basename="$(echo -n "$certname" | sed 's/^[A-Z0-9\-]*\*//')"
+     len_basename=${#basename}
+     len_part1=$len_certname-$len_basename-1
+     len_wildcard=$len_servername-$len_certname+1
+     basename_offset=$len_servername-$len_basename
+
+     # Check that initial part of $servername matches initial part of $certname
+     # and that final part of $servername matches final part of $certname. 
+     [[ "${servername:0:len_part1}" != "${certname:0:len_part1}" ]] && return 1
+     [[ "${servername:basename_offset:len_basename}" != "$basename" ]] && return 1
+
+     # Check that part of $servername that matches "*" is all part of a single
+     # domain label.
+     [[ -n $(echo -n "${servername:len_part1:len_wildcard}" | sed 's/^[A-Z0-9\-]*//') ]] && return 1
+
+     return 0
+}
+
+# Compare the server name provided in arg1 to the CN and SAN in arg2 and return:
+#    0, if server name provided does not match any of the names in the CN or SAN
+#    1, if the server name provided matches a name in the SAN
+#    2, if the server name provided is a wildcard match against a name in the SAN
+#    4, if the server name provided matches the CN
+#    5, if the server name provided matches the CN AND a name in the SAN
+#    6, if the server name provided matches the CN AND is a wildcard match against a name in the SAN
+#    8, if the server name provided is a wildcard match against the CN
+#    9, if the server name provided matches a name in the SAN AND is a wildcard match against the CN
+#   10, if the server name provided is a wildcard match against the CN AND a name in the SAN
+
 compare_server_name_to_cert()
 {
-     local servername=$1
-     local cert=$2
-     local cn dns_sans ip_sans san basename
-
-     cn="$(get_cn_from_cert $cert)"
-     if [[ -n "$cn" ]]; then
-          [[ "$cn" == "$servername" ]] && return 0
-          # If the CN contains a wildcard name, then do a wildcard match
-          if echo -n "$cn" | grep -q '^*.'; then
-               basename="$(echo -n "$cn" | sed 's/^\*.//')"
-               [[ "$cn" == "*.$basename" ]] && [[ "$servername" == *".$basename" ]] && return 0
-          fi
-     fi
+     local servername="$(toupper "$1")"
+     local cert="$2"
+     local cn dns_sans ip_sans san
+     local -i ret=0
 
      # Check whether any of the DNS names in the certificate match the servername
-     dns_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+     dns_sans=$($OPENSSL x509 -in "$cert" -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
                tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
      for san in $dns_sans; do
-          [[ "$san" == "$servername" ]] && return 0
-          # If $san is a wildcard name, then do a wildcard match
-          if echo -n "$san" | grep -q '^*.'; then
-               basename="$(echo -n "$san" | sed 's/^\*.//')"
-               [[ "$san" == "*.$basename" ]] && [[ "$servername" == *".$basename" ]] && return 0
-          fi
+          [[ $(toupper "$san") == "$servername" ]] && ret=1 && break
      done
 
-     # Check whether any of the IP addresses in the certificate match the serername
-     ip_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-             tr ',' '\n' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
-     for san in $ip_sans; do
-          [[ "$san" == "$servername" ]] && return 0
-     done
-     return 1
+     if [[ $req -eq 0 ]]; then
+          # Check whether any of the IP addresses in the certificate match the servername
+          ip_sans=$($OPENSSL x509 -in "$cert" -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+                  tr ',' '\n' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
+          for san in $ip_sans; do
+               [[ "$san" == "$servername" ]] && ret=1 && break
+          done
+     fi
+
+     # Check whether any of the DNS names in the certificate are wildcard names
+     # that match the servername
+     if [[ $req -eq 0 ]]; then
+          for san in $dns_sans; do
+               wildcard_match "$servername" "$san"
+               [[ $? -eq 0 ]] && ret=2 && break
+          done
+     fi
+
+     cn="$(get_cn_from_cert "$cert")"
+
+     # If the CN contains any characters that are not valid for a DNS name,
+     # then assume it does not contain a DNS name.
+     [[ -n $(echo -n "$cn" | sed 's/^[\.a-zA-Z0-9*\-]*//') ]] && return $ret
+
+     # Check whether the CN in the certificate matches the servername
+     [[ $(toupper "$cn") == "$servername" ]] && ret+=4 && return $ret
+
+     # Check whether the CN in the certificate is a wildcard name that matches
+     # the servername
+     wildcard_match "$servername" "$cn"
+     [[ $? -eq 0 ]] && ret+=8
+
+     return $ret
 }
 
 certificate_info() {
@@ -3844,9 +3930,9 @@ certificate_info() {
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
      local spaces=""
-     local wildcard=false
+     local trust_sni=0 trust_nosni=0 has_dns_sans
      local -i certificates_provided
-     local cnfinding
+     local cnfinding trustfinding trustfinding_nosni
      local cnok="OK"
      local expfinding expok="OK"
      local json_prefix=""     # string to place at beginng of JSON IDs when there is more than one certificate
@@ -4058,19 +4144,6 @@ certificate_info() {
      if [[ -n "$cn" ]]; then
           pr_dquoted "$cn"
           cnfinding="$cn"
-          if echo -n "$cn" | grep -q '^*.' ; then
-               out " (wildcard certificate"
-               cnfinding+="(wildcard certificate "
-               if [[ "$cn" == "*.$(echo -n "$cn" | sed 's/^\*.//')" ]]; then
-                    out " match)"
-                    cnfinding+=" match)"
-                    wildcard=true
-               else
-                    cnfinding+=" NO match)"
-                    cnok="INFO"
-                    #FIXME: we need to test also the SANs as they can contain a wild card (google.de .e.g) ==> 2.7dev
-               fi
-          fi
      else
           cn="no CN field in subject"
           out "($cn)"
@@ -4088,40 +4161,23 @@ certificate_info() {
 #FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
 
      debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
-     if [[ "$cn_nosni" == "$cn" ]]; then
-          outln " (works w/o SNI)"
-          cnfinding+=" (works w/o SNI)"
-     elif [[ $NODE == "$cn_nosni" ]]; then
-          if [[ $SERVICE == "HTTP" ]] || $CLIENT_AUTH ; then
-               outln " (works w/o SNI)"
-               cnfinding+=" (works w/o SNI)"
-          else
-               outln " (matches certificate directly)"
-               cnfinding+=" (matches certificate directly)"
-               # for services != HTTP it depends on the protocol, server and client but it is not named "SNI"
+     if [[ "$(toupper "$cn_nosni")" == "$(toupper "$cn")" ]]; then
+          outln
+     elif [[ -z "$cn_nosni" ]]; then
+          out " (request w/o SNI didn't succeed";
+          cnfinding+=" (request w/o SNI didn't succeed"
+          if [[ $cert_sig_algo =~ ecdsa ]]; then
+               out ", usual for EC certificates"
+               cnfinding+=", usual for EC certificates"
           fi
+          outln ")"
+          cnfinding+=")"
+     elif [[ "$cn_nosni" == *"no CN field"* ]]; then
+          outln ", (request w/o SNI: $cn_nosni)"
+          cnfinding+=", (request w/o SNI: $cn_nosni)"
      else
-          if [[ $SERVICE != "HTTP" ]]; then
-               outln
-               cnfinding+="\n"
-               #pr_svrty_mediumln " (non-SNI clients don't match CN but for non-HTTP services it might be ok)"
-               #FIXME: this is irritating and needs to be redone. Then also the wildcard match needs to be tested against  "$cn_nosni"
-          elif [[ -z "$cn_nosni" ]]; then
-               out " (request w/o SNI didn't succeed";
-               cnfinding+=" (request w/o SNI didn't succeed"
-               if [[ $cert_sig_algo =~ ecdsa ]]; then
-                    out ", usual for EC certificates"
-                    cnfinding+=", usual for EC certificates"
-               fi
-               outln ")"
-               cnfinding+=")"
-          elif [[ "$cn_nosni" == *"no CN field"* ]]; then
-               outln ", (request w/o SNI: $cn_nosni)"
-               cnfinding+=", (request w/o SNI: $cn_nosni)"
-          else
-               out " (CN in response to request w/o SNI: "; pr_dquoted "$cn_nosni"; outln ")"
-               cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
-          fi
+          out " (CN in response to request w/o SNI: "; pr_dquoted "$cn_nosni"; outln ")"
+          cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
      fi
      fileout "${json_prefix}cn" "$cnok" "$cnfinding"
 
@@ -4176,6 +4232,90 @@ certificate_info() {
           fi
           outln "$issuerfinding"
           fileout "${json_prefix}issuer" "INFO" "Issuer: $issuerfinding"
+     fi
+
+     out "$indent"; pr_bold " Trust                        "
+     compare_server_name_to_cert "$NODE" "$HOSTCERT"
+     trust_sni=$?
+
+     # Find out if the subjectAltName extension is present and contains
+     # a DNS name, since Section 6.3 of RFC 6125 says:
+     #      Security Warning: A client MUST NOT seek a match for a reference
+     #      identifier of CN-ID if the presented identifiers include a DNS-ID,
+     #      SRV-ID, URI-ID, or any application-specific identifier types
+     #      supported by the client.
+     $OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
+          grep -A2 "Subject Alternative Name" | grep -q "DNS:" && \
+          has_dns_sans=true || has_dns_sans=false
+
+     case $trust_sni in
+          0) trustfinding="certificate does not match URI" ;;
+          1) trustfinding="Ok via SAN" ;;
+          2) trustfinding="Ok via SAN wildcard" ;;
+          4) if $has_dns_sans; then
+                  trustfinding="Ok via CN, but not SAN"
+             else
+                  trustfinding="Ok via CN"
+             fi
+             ;;
+          5) trustfinding="Ok via SAN and CN" ;;
+          6) trustfinding="Ok via SAN wildcard and CN"
+             ;;
+          8) if $has_dns_sans; then
+                  trustfinding="Ok via CN wildcard, but not SAN"
+             else
+                  trustfinding="Ok via CN wildcard"
+             fi
+             ;;
+          9) trustfinding="Ok via CN wildcard and SAN"
+             ;;
+         10) trustfinding="Ok via SAN wildcard and CN wildcard"
+             ;;
+     esac
+
+     if [[ $trust_sni -eq 0 ]]; then
+          pr_svrty_medium "$trustfinding"
+          trust_sni="fail"
+     elif $has_dns_sans && ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
+          pr_svrty_medium "$trustfinding"
+          trust_sni="warn"
+     else
+          out "$trustfinding"
+          trust_sni="ok"
+     fi
+
+     if [[ -n "$cn_nosni" ]]; then
+          compare_server_name_to_cert "$NODE" "$HOSTCERT.nosni"
+          trust_nosni=$?
+          $OPENSSL x509 -in "$HOSTCERT.nosni" -noout -text 2>>$ERRFILE | \
+               grep -A2 "Subject Alternative Name" | grep -q "DNS:" && \
+               has_dns_sans=true || has_dns_sans=false
+     fi
+
+     if $has_dns_sans && [[ $trust_nosni -eq 4 ]]; then
+          trustfinding_nosni=" (w/o SNI: Ok via CN, but not SAN)"
+     elif $has_dns_sans && [[ $trust_nosni -eq 8 ]]; then
+          trustfinding_nosni=" (w/o SNI: Ok via CN wildcard, but not SAN)"
+     elif [[ $trust_nosni -eq 0 ]] && ( [[ "$trust_sni" == "ok" ]] || [[ "$trust_sni" == "warn" ]] ); then
+          trustfinding_nosni=" (SNI mandatory)"
+     elif [[ "$trust_sni" == "ok" ]] || [[ "$trust_sni" == "warn" ]]; then
+          trustfinding_nosni=" (works w/o SNI)"
+     elif [[ $trust_nosni -ne 0 ]]; then
+          trustfinding_nosni=" (however, works w/o SNI)"
+     else
+          trustfinding_nosni=""
+          outln
+     fi
+     if $has_dns_sans && ( [[ $trust_nosni -eq 4 ]] || [[ $trust_nosni -eq 8 ]] ); then
+          pr_svrty_mediumln "$trustfinding_nosni"
+     else
+          outln "$trustfinding_nosni"
+     fi
+
+     if [[ "$trust_sni" == "ok" ]]; then
+          fileout "${json_prefix}trust" "INFO" "${trustfinding}${trustfinding_nosni}"
+     else
+          fileout "${json_prefix}trust" "WARN" "${trustfinding}${trustfinding_nosni}"
      fi
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
@@ -4400,23 +4540,23 @@ run_server_defaults() {
                      # $NODE being tested or if it has the same subject
                      # (CN and SAN) as other certificates for this host.
                      compare_server_name_to_cert "$NODE" "$HOSTCERT"
-                     success[n]=$?
+                     [[ $? -ne 0 ]] && success[n]=0 || success[n]=1
 
                      if [[ ${success[n]} -ne 0 ]]; then
-                         cn_nosni="$(get_cn_from_cert $HOSTCERT)"
-                         sans_nosni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | grep "DNS:" | \
-                              sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+                         cn_nosni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
+                         sans_nosni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+                              tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
 
                          echo "${previous_hostcert[1]}" > $HOSTCERT
-                         cn_sni="$(get_cn_from_cert $HOSTCERT)"
-                         
+                         cn_sni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
+
                          # FIXME: Not sure what the matching rule should be. At
                          # the moment, the no SNI certificate is considered a
                          # match if the CNs are the same and the SANs (if
                          # present) contain at least one DNS name in common.
                          if [[ "$cn_nosni" == "$cn_sni" ]]; then
-                              sans_sni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | grep "DNS:" | \
-                                       sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+                              sans_sni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+                                       tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
                               if [[ "$sans_nosni" == "$sans_sni" ]]; then
                                    success[n]=0
                               else
