@@ -2016,7 +2016,7 @@ run_client_simulation() {
      local name tls proto cipher
      local using_sockets=true
 
-     if $SSL_NATIVE || [[ -n "$STARTTLS" ]]; then
+     if "$SSL_NATIVE" || [[ -n "$STARTTLS" ]]; then
           using_sockets=false
      fi
 
@@ -2758,7 +2758,7 @@ run_client_simulation() {
      for name in "${short[@]}"; do
           #FIXME: printf formatting would look better, especially if we want a wide option here
           out " ${names[i]}   "
-          if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
+          if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
                client_simulation_sockets "${handshakebytes[i]}"
                sclient_success=$?
                if [[ $sclient_success -eq 0 ]]; then
@@ -2781,7 +2781,7 @@ run_client_simulation() {
                #FIXME: awk
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
-               if [[ "$proto" == TLSv1.2 ]] && ( ! $using_sockets || [[ -z "${handshakebytes[i]}" ]] ); then
+               if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
                     # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                     for tls in ${tlsvers[i]}; do
                          $OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
@@ -2807,7 +2807,7 @@ run_client_simulation() {
                fi
                #FiXME: awk
                cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
-               $using_sockets && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
+               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
                outln "$proto $cipher"
                if [[ -n "${warning[i]}" ]]; then
                     out "                            "
@@ -2893,11 +2893,11 @@ run_protocols() {
      local supported_no_ciph2="supported but couldn't detect a cipher"
      local latest_supported=""  # version.major and version.minor of highest version supported by the server.
      local detected_version_string latest_supported_string
-     local extra_spaces=""
+     local extra_spaces="         "
 
      outln; pr_headline " Testing protocols "
 
-     if $SSL_NATIVE; then
+     if "$SSL_NATIVE"; then
           using_sockets=false
           pr_headlineln "(via native openssl)"
      else
@@ -2906,9 +2906,8 @@ run_protocols() {
                using_sockets=false
           else
                using_sockets=true
-               if $EXPERIMENTAL; then
+               if "$EXPERIMENTAL"; then
                     pr_headlineln "(via sockets except SPDY+HTTP2) "
-                    extra_spaces="         "
                else
                     pr_headlineln "(via sockets except TLS 1.2, SPDY+HTTP2) "
                fi
@@ -2917,7 +2916,7 @@ run_protocols() {
      outln
 
      pr_bold " SSLv2      $extra_spaces";
-     if ! $SSL_NATIVE; then
+     if ! "$SSL_NATIVE"; then
           sslv2_sockets                                                    #FIXME: messages/output need to be moved to this (higher) level
      else
           run_prototest_openssl "-ssl2"
@@ -2943,7 +2942,7 @@ run_protocols() {
      fi
 
      pr_bold " SSLv3      $extra_spaces";
-     if $using_sockets; then
+     if "$using_sockets"; then
           tls_sockets "00" "$TLS_CIPHER"
      else
           run_prototest_openssl "-ssl3"
@@ -2982,7 +2981,7 @@ run_protocols() {
      esac
 
      pr_bold " TLS 1      $extra_spaces";
-     if $using_sockets; then
+     if "$using_sockets"; then
           tls_sockets "01" "$TLS_CIPHER"
      else
           run_prototest_openssl "-tls1"
@@ -2997,7 +2996,7 @@ run_protocols() {
                ;;                                           # nothing wrong with it -- per se
           1)
                out "not offered"
-               if ! $using_sockets || [[ -z $latest_supported ]]; then
+               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
                     fileout "tls1" "INFO" "TLSv1.0 is not offered" # neither good or bad
                else
@@ -3031,7 +3030,7 @@ run_protocols() {
      esac
 
      pr_bold " TLS 1.1    $extra_spaces";
-     if $using_sockets; then
+     if "$using_sockets"; then
           tls_sockets "02" "$TLS_CIPHER"
      else
           run_prototest_openssl "-tls1_1"
@@ -3046,7 +3045,7 @@ run_protocols() {
                ;;                                            # nothing wrong with it
           1)
                out "not offered"
-               if ! $using_sockets || [[ -z $latest_supported ]]; then
+               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
                     fileout "tls1_1" "INFO" "TLSv1.1 is not offered"  # neither good or bad
                else
@@ -3083,7 +3082,7 @@ run_protocols() {
      esac
 
      pr_bold " TLS 1.2    $extra_spaces";
-     if $using_sockets && $EXPERIMENTAL; then               #TODO: IIS servers do have a problem here with our handshake
+     if "$using_sockets" && "$EXPERIMENTAL"; then               #TODO: IIS servers do have a problem here with our handshake
           tls_sockets "03" "$TLS12_CIPHER"
      else
           run_prototest_openssl "-tls1_2"
@@ -3098,7 +3097,7 @@ run_protocols() {
                ;;                                  # GCM cipher in TLS 1.2: very good!
           1)
                pr_svrty_mediumln "not offered"
-               if ! $using_sockets || ! $EXPERIMENTAL || [[ -z $latest_supported ]]; then
+               if ! "$using_sockets" || ! "$EXPERIMENTAL" || [[ -z $latest_supported ]]; then
                     outln
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered" # no GCM, penalty
                else
@@ -3143,8 +3142,8 @@ run_protocols() {
      #    If a TLS server receives a ClientHello containing a version number
      #    greater than the highest version supported by the server, it MUST
      #    reply according to the highest version supported by the server.
-     if [[ -n $latest_supported ]] && $using_sockets && $EXPERIMENTAL; then
-          pr_bold " Version Negotiation ";
+     if [[ -n $latest_supported ]] && "$using_sockets"; then
+          pr_bold " Version tolerance   "
           tls_sockets "05" "$TLS12_CIPHER"
           case $? in
                0) 
@@ -4971,9 +4970,7 @@ http2_pre(){
 run_spdy() {
      local tmpstr
      local -i ret=0
-     extra_spaces=""
-
-     ! $SSL_NATIVE && [[ -z "$STARTTLS" ]] && $EXPERIMENTAL && extra_spaces="         "
+     local extra_spaces="         "
 
      pr_bold " SPDY/NPN   $extra_spaces"
      if ! spdy_pre ; then
@@ -5012,9 +5009,7 @@ run_http2() {
      local -i ret=0
      local had_alpn_proto=false
      local alpn_finding=""
-     extra_spaces=""
-
-     ! $SSL_NATIVE && [[ -z "$STARTTLS" ]] && $EXPERIMENTAL && extra_spaces="         "
+     local extra_spaces="         "
 
      pr_bold " HTTP2/ALPN $extra_spaces"
      if ! http2_pre ; then
@@ -8613,4 +8608,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.530 2016/07/23 12:52:24 dirkw Exp $
+#  $Id: testssl.sh,v 1.531 2016/07/23 13:12:12 dirkw Exp $
