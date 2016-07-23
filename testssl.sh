@@ -483,7 +483,7 @@ fileout() { # ID, SEVERITY, FINDING
 
      if "$do_json"; then
           "$FIRST_FINDING" || echo -n "," >> $JSONFILE
-          echo -e "         {
+          echo "         {
                \"id\"           : \"$1\",
                \"ip\"           : \"$NODE/$NODEIP\",
                \"port\"         : \"$PORT\",
@@ -963,6 +963,7 @@ run_hpkp() {
      local i
      local hpkp_headers
      local first_hpkp_header
+     local ca_bundles="$INSTALL_DIR/etc/*.pem"
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -1029,27 +1030,135 @@ run_hpkp() {
                fileout "hpkp_preload" "INFO" "HPKP header is NOT marked for browser preloading"
           fi
 
+          # Get the pins first
+          pins=$(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
+
+
+          # Look at the host certificate first
+          # get the key fingerprint from the host certificate
           if [[ ! -s "$HOSTCERT" ]]; then
                get_host_cert || return 1
           fi
-          # get the key fingerprint from the host certificate
+
           hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
                $OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
-          # compare it with the ones provided in the header
-          while read hpkp_key; do
+          hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
+
+          # Get keys/hashes from intermediate certificates
+          $OPENSSL s_client -showcerts $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+          # Place the server's certificate in $HOSTCERT and any intermediate
+          # certificates that were provided in $TEMPDIR/intermediatecerts.pem
+          # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
+          awk -v n=-1 "/Certificate chain/ {start=1}
+                  /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+                  inc { print > (\"$TEMPDIR/level\" n \".crt\") }
+                  /---END CERTIFICATE-----/{ inc=0 }" $TMPFILE
+          nrsaved=$(count_words "$(echo $TEMPDIR/level?.crt 2>/dev/null)")
+          rm $TEMPDIR/level0.crt 
+
+          if [[ nrsaved -ge 2 ]]; then
+               echo -n "" > "$TEMPDIR/intermediate.hashes"
+               for cert_fname in $TEMPDIR/level?.crt; do
+                    hpkp_key_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | $OPENSSL base64 -d |
+                         $OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
+                    hpkp_name="$(get_cn_from_cert $cert_fname)"
+                    hpkp_ca="$($OPENSSL x509 -in $cert_fname -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
+                    [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout | sed 's/^subject= //') 
+                    echo "$hpkp_key_ca $hpkp_name" >> "$TEMPDIR/intermediate.hashes"
+               done
+          fi
+          rm $TEMPDIR/level*.crt
+
+          # Get keys from Root CAs
+
+          # Clear temp file
+          echo -n "" > "$TEMPDIR/cahashes"
+          for bundle_fname in $ca_bundles; do
+               if [[ ! -r $bundle_fname ]]; then
+                    pr_warningln "\"$bundle_fname\" cannot be found / not readable"
+                    return 7
+               fi
+               # Split up the certificate bundle
+               awk -v n=-1 "BEGIN {start=1}
+                       /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+                       inc { print >> (\"$TEMPDIR/$bundle_name.\" n \".crt\") ; close (\"$TEMPDIR/$bundle_name.\" n \".crt\") }
+                       /---END CERTIFICATE-----/{ inc=0 }" $bundle_fname
+               for cert_fname in $TEMPDIR/$bundle_name.*.crt; do
+                    hpkp_key_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | $OPENSSL base64 -d |
+                         $OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
+                    issuer=$(get_cn_from_cert $cert_fname)
+                    [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout| sed "s/^subject= //") 
+                    echo "$hpkp_key_ca $issuer" >> "$TEMPDIR/cahashes"
+               done
+          done
+
+          pins_match=false
+          for hpkp_key in $(echo $pins); do
+               key_found=false
+
+               # compare pin against the leaf certificate
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
-                    out "\n$spaces matching host key: "
+                    out "\n\n$spaces Leaf cert match : "
                     pr_done_good "$hpkp_key"
-                    fileout "hpkp_keymatch" "OK" "Key matches a key pinned in the HPKP header"
+                    fileout "hpkp_$hpkp_key" "OK" "PIN $hpkp_key matches the leaf certificate"
                     key_found=true
+                    pins_match=true
                fi
                debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
-          done < <(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
-          if ! $key_found ; then
-               out "\n$spaces"
+
+               # Check for intermediate match
+               if ! $key_found ; then
+                    hpkp_matches=$(grep "$hpkp_key" $TEMPDIR/intermediate.hashes)
+                    if [[ -n $hpkp_matches ]]; then
+                         # We have a winner!
+                         key_found=true
+                         pins_match=true
+                         out "\n\n$spaces Sub  CA   match : "
+                         pr_done_good "$hpkp_key"
+                         out "\n$spaces $(echo $hpkp_matches|sed "s/^[a-zA-Z0-9\+\/]*=* *//")"
+                         fileout "hpkp_$hpkp_key" "OK" "Intermediate CA key matches a key pinned in the HPKP header.\\nKey/CA: $hpkp_matches"
+                    fi
+               fi
+
+               if ! $key_found ; then
+                    hpkp_matches=$(grep -h "$hpkp_key" $TEMPDIR/cahashes | sort -u)
+                    if [[ -n $hpkp_matches ]]; then
+                         # We have a winner!
+                         key_found=true
+                         pins_match=true
+                         if [[ $(count_lines "$hpkp_matches") -eq 1 ]]; then
+                              match_ca=$(echo "$hpkp_matches" | sed "s/[a-zA-Z0-9\+\/]*=* *//")
+                         else
+                              match_ca=""
+                         fi
+                         out "\n\n$spaces Root CA   match : "
+                         pr_done_good "$hpkp_key"
+                         echo "$hpkp_matches"|sort -u|while read line; do
+                              out "\n$spaces $(echo $line |sed "s/^[a-zA-Z0-9\+\/]*=* *//")"
+                         done
+                         if [[ $match_ca == $hpkp_ca ]]; then
+                              pr_done_good "\n$spaces This CA is part of the chain"
+                              fileout "hpkp_$hpkp_key" "OK" "Root CA key matches a key pinned in the HPKP header\\nKey/OS/CA: $hpkp_matches\\nThe CA is part of the chain"
+                         else
+                              out "\n$spaces This CA is not part of the chain and likely a backup PIN"
+                              fileout "hpkp_$hpkp_key" "OK" "Root CA key matches a key pinned in the HPKP header\\nKey/OS/CA: $hpkp_matches\\nThe CA is not part of the chain, this is a backup PIN"
+                         fi
+                    fi
+               fi
+
+               if ! $key_found ; then
+                    # Houston we may have a problem
+                    out "\n\n$spaces Unmatched key   : "
+                    pr_warning "$hpkp_key"
+                    out "\n$spaces ( This is OK for a backup pin of a leaf cert )"
+                    fileout "hpkp_$hpkp_key" "WARN" "PIN $hpkp_key doesn't match anything.\nThis could be ok if it is a backup pin for a leaf certificate"
+               fi
+          done 
+
+          # If all else fails...
+          if ! $pins_match ; then
                pr_svrty_high " No matching key for pins found "
-               out "(CAs pinned? -- not checked for yet)"
-               fileout "hpkp_keymatch" "DEBUG" "The TLS key does not match any key pinned in the HPKP header. If you pinned a CA key you can ignore this"
+               fileout "hpkp_keymatch" "NOT ok" "None of the HPKP PINS match your leaf certificate, intermediate CA or known root CAs. You may have bricked this site"
           fi
      else
           out "--"
@@ -7079,7 +7188,6 @@ check4openssl_oldfarts() {
      outln
 }
 
-
 # FreeBSD needs to have /dev/fd mounted. This is a friendly hint, see #258
 check_bsd_mount() {
      if [[ "$(uname)" == FreeBSD ]]; then 
@@ -7092,7 +7200,6 @@ check_bsd_mount() {
           fi
      fi
 }
-
 
 help() {
      cat << EOF
