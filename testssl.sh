@@ -4234,7 +4234,7 @@ certificate_info() {
           fileout "${json_prefix}issuer" "INFO" "Issuer: $issuerfinding"
      fi
 
-     out "$indent"; pr_bold " Trust                        "
+     out "$indent"; pr_bold " Trust (hostname)             "
      compare_server_name_to_cert "$NODE" "$HOSTCERT"
      trust_sni=$?
 
@@ -4249,7 +4249,7 @@ certificate_info() {
           has_dns_sans=true || has_dns_sans=false
 
      case $trust_sni in
-          0) trustfinding="certificate does not match URI" ;;
+          0) trustfinding="certificate does not match supplied URI" ;;
           1) trustfinding="Ok via SAN" ;;
           2) trustfinding="Ok via SAN wildcard" ;;
           4) if $has_dns_sans; then
@@ -4276,11 +4276,11 @@ certificate_info() {
      if [[ $trust_sni -eq 0 ]]; then
           pr_svrty_medium "$trustfinding"
           trust_sni="fail"
-     elif $has_dns_sans && ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
+     elif "$has_dns_sans" && ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
           pr_svrty_medium "$trustfinding"
           trust_sni="warn"
      else
-          out "$trustfinding"
+          pr_done_good "$trustfinding"
           trust_sni="ok"
      fi
 
@@ -4292,9 +4292,9 @@ certificate_info() {
                has_dns_sans=true || has_dns_sans=false
      fi
 
-     if $has_dns_sans && [[ $trust_nosni -eq 4 ]]; then
+     if "$has_dns_sans" && [[ $trust_nosni -eq 4 ]]; then
           trustfinding_nosni=" (w/o SNI: Ok via CN, but not SAN)"
-     elif $has_dns_sans && [[ $trust_nosni -eq 8 ]]; then
+     elif "$has_dns_sans" && [[ $trust_nosni -eq 8 ]]; then
           trustfinding_nosni=" (w/o SNI: Ok via CN wildcard, but not SAN)"
      elif [[ $trust_nosni -eq 0 ]] && ( [[ "$trust_sni" == "ok" ]] || [[ "$trust_sni" == "warn" ]] ); then
           trustfinding_nosni=" (SNI mandatory)"
@@ -4304,9 +4304,8 @@ certificate_info() {
           trustfinding_nosni=" (however, works w/o SNI)"
      else
           trustfinding_nosni=""
-          outln
      fi
-     if $has_dns_sans && ( [[ $trust_nosni -eq 4 ]] || [[ $trust_nosni -eq 8 ]] ); then
+     if "$has_dns_sans" && ( [[ $trust_nosni -eq 4 ]] || [[ $trust_nosni -eq 8 ]] ); then
           pr_svrty_mediumln "$trustfinding_nosni"
      else
           outln "$trustfinding_nosni"
@@ -8489,4 +8488,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.527 2016/07/20 15:36:50 dirkw Exp $
+#  $Id: testssl.sh,v 1.528 2016/07/23 09:16:12 dirkw Exp $
