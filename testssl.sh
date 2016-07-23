@@ -4317,6 +4317,9 @@ certificate_info() {
           fileout "${json_prefix}trust" "WARN" "${trustfinding}${trustfinding_nosni}"
      fi
 
+     out "$indent"; pr_bold " Chain of trust"; out "               "
+     determine_trust "$json_prefix" # Also handles fileout
+
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
      # only the first one, seldom we have two
@@ -4385,10 +4388,6 @@ certificate_info() {
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
      fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
-
-
-     out "$indent"; pr_bold " Chain of trust"; out " (experim.)    "
-     determine_trust "$json_prefix" # Also handles fileout
 
      out "$indent"; pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
@@ -8488,4 +8487,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.528 2016/07/23 09:16:12 dirkw Exp $
+#  $Id: testssl.sh,v 1.530 2016/07/23 12:52:24 dirkw Exp $
