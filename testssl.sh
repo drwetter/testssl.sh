@@ -2042,12 +2042,12 @@ run_client_simulation() {
 
      outln
      if "$using_sockets"; then
-          pr_headlineln " Running client simulations via sockets "
+          pr_headlineln " Running client simulations via sockets (experimental) "
      else
-          pr_headlineln " Running client simulations (experimental) "
+          pr_headlineln " Running client simulations via openssl (experimental) "
           outln
           pr_warningln " Depending on your openssl client and the server side this may yield to false values"
-          fileout "client_simulation" "WARNING" "Depending on your openssl client and the server side this may yield to false values"
+          fileout "client_simulation_openssl" "WARNING" "Running simulations via openssl, depending on your openssl client and the server side this may yield to false values"
      fi
      outln
 
@@ -2055,7 +2055,9 @@ run_client_simulation() {
      for name in "${short[@]}"; do
           # Make sure we run client simulations for those clients that support it
           if $do_all_simulations || ${current[i]} ; then
-               if $do_all_simulations || [[ $(count_lines "$(echo "${service[i]}" | grep "$client_service")")  -eq 1 || "${service[i]}" == "ANY" ]]; then
+               # if $do_all_simulations || [[ $(count_lines "$(echo "${service[i]}" | grep "$client_service")")  -eq 1 || "${service[i]}" == "ANY" ]]; then
+               # I know @drwetter hates wc -l, but in this case wc -l and count_lines give different results
+               if $do_all_simulations || [[ $(echo "${service[i]}" | grep "$client_service" |wc -l ) -eq 1 || "${service[i]}" == "ANY" ]]; then
                     #FIXME: printf formatting would look better, especially if we want a wide option here
                     out " ${names[i]}   "
                     if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
@@ -3121,7 +3123,7 @@ certificate_info() {
      local ocsp_response_status=$6
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
      local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn
-     local cn_nosni=""
+     local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
      local spaces=""
@@ -3430,22 +3432,33 @@ certificate_info() {
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
      issuer_O="$(awk -F'=' '/O=/ { print $2 }' <<< "$issuer")"
      issuer_C="$(awk -F'=' '/ C=/ { print $2 }' <<< "$issuer")"
+     issuer_DC="$(awk -F'=' '/DC=/ { print $2 }' <<< "$issuer")"
 
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$CN" ]]; then
           pr_svrty_criticalln "self-signed (NOT ok)"
           fileout "${json_prefix}issuer" "NOT ok" "Issuer: selfsigned (NOT ok)"
      else
-          pr_dquoted "$issuer_CN"
-          out " ("
-          pr_dquoted "$issuer_O"
-          if [[ -n "$issuer_C" ]]; then
-               out " from "
-               pr_dquoted "$issuer_C"
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" from \"$issuer_C\")"
-          else
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" )"
+          issuerfinding="$(pr_dquoted "$issuer_CN")"
+          if [[ -z "$issuer_O" ]] && [[ -n "$issuer_DC" ]]; then
+               for san in $issuer_DC; do
+                    if [[ -z "$issuer_O" ]]; then
+                         issuer_O="${san}"
+                    else
+                         issuer_O="${san}.${issuer_O}"
+                    fi
+               done
           fi
-          outln ")"
+          if [[ -n "$issuer_O" ]]; then
+               issuerfinding+=" ("
+               issuerfinding+="$(pr_dquoted "$issuer_O")"
+               if [[ -n "$issuer_C" ]]; then
+                    issuerfinding+=" from "
+                    issuerfinding+="$(pr_dquoted "$issuer_C")"
+               fi
+               issuerfinding+=")"
+          fi
+          outln "$issuerfinding"
+          fileout "${json_prefix}issuer" "INFO" "Issuer: $issuerfinding"
      fi
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
