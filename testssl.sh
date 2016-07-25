@@ -1640,16 +1640,17 @@ test_just_one(){
 run_allciphers() {
      local tmpfile
      local -i nr_ciphers=0
-     local n sslvers auth mac export
-     local -a hexcode ciph kx enc export2
+     local n auth mac export
+     local -a hexcode ciph sslvers kx enc export2
      local -i i j parent child end_of_bundle round_num bundle_size num_bundles mod_check
      local -a ciphers_found
      local dhlen
      local available
      local ciphers_to_test
+     local sslv2_supported=false
 
-     # get a list of all the cipher suites to test (only need the hexcode, ciph, kx, enc, and export values)
-     while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+     # get a list of all the cipher suites to test (only need the hexcode, ciph, sslvers, kx, enc, and export values)
+     while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
           nr_ciphers=$nr_ciphers+1
      done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
 
@@ -1658,6 +1659,12 @@ run_allciphers() {
      "$HAS_DH_BITS" || pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      outln
      neat_header
+
+     if "$HAS_SSL2"; then
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful "$?" "$TMPFILE"
+          [[ "$?" -eq 0 ]] && sslv2_supported=true
+     fi
 
      # Split ciphers into bundles of size 4**n, starting with an "n" that
      # splits the ciphers into 4 bundles, and then reducing "n" by one in each
@@ -1697,17 +1704,24 @@ run_allciphers() {
                  end_of_bundle=$i*$bundle_size+$bundle_size
                  [[ $end_of_bundle -gt $nr_ciphers ]] && end_of_bundle=$nr_ciphers
                  for ((j=i*bundle_size;j<end_of_bundle;j++)); do
-                     ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
+                     [[ "${sslvers[j]}" != "SSLv2" ]] && ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
                  done
                  ciphers_found[child]=false
-                 $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
-                 sclient_connect_successful "$?" "$TMPFILE"
-                 [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                 if [[ -n "${ciphers_to_test:1}" ]]; then
+                      $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+                      sclient_connect_successful "$?" "$TMPFILE"
+                      [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                 fi
              else
                  # No need to test, since test of parent demonstrated none of these ciphers work.
                  ciphers_found[child]=false
              fi
 
+             if $sslv2_supported && [[ $bundle_size -eq 1 ]] && [[ "${sslvers[i]}" == "SSLv2" ]]; then
+                 $OPENSSL s_client -cipher "${ciph[i]}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+                 sclient_connect_successful "$?" "$TMPFILE"
+                 [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+             fi
              # If this is a "leaf" of the test tree, then print out the results.
              if [[ $bundle_size -eq 1 ]] && ( ${ciphers_found[child]} || "$SHOW_EACH_C"); then
                  export=${export2[i]}
@@ -1747,7 +1761,7 @@ run_allciphers() {
 
 # test for all ciphers per protocol locally configured (w/o distinguishing whether they are good or bad)
 run_cipher_per_proto() {
-     local proto proto_text
+     local proto proto_text ossl_ciphers_proto
      local -i nr_ciphers
      local n sslvers auth mac export
      local -a hexcode ciph kx enc export2
@@ -1766,11 +1780,17 @@ run_cipher_per_proto() {
           outln
           has_server_protocol "${proto:1}" || continue
           
+          # The OpenSSL ciphers function, prior to version 1.1.0, could only understand -ssl2, -ssl3, and -tls1.
+          if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == "-ssl3" ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
+               ossl_ciphers_proto="$proto"
+          else
+               ossl_ciphers_proto="-tls1"
+          fi
           # get a list of all the cipher suites to test (only need the hexcode, ciph, kx, enc, and export values)
           nr_ciphers=0
           while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
                nr_ciphers=$nr_ciphers+1
-          done < <($OPENSSL ciphers $proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)
+          done < <($OPENSSL ciphers $ossl_ciphers_proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)
 
           # Split ciphers into bundles of size 4**n, starting with the smallest
           # "n" that leaves the ciphers in one bundle, and then reducing "n" by
@@ -1812,7 +1832,12 @@ run_cipher_per_proto() {
                           ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
                       done
                       ciphers_found[child]=false
-                      $OPENSSL s_client -cipher "${ciphers_to_test:1}" $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE  </dev/null
+                      if [[ "$proto" =~ ssl ]]; then
+                           # SSLv2 and SSLv3 do not have SNI
+                           $OPENSSL s_client -cipher "${ciphers_to_test:1}" $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE  </dev/null
+                      else
+                           $OPENSSL s_client -cipher "${ciphers_to_test:1}" $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE  </dev/null
+                      fi
                       sclient_connect_successful "$?" "$TMPFILE"
                       [[ "$?" -eq 0 ]] && ciphers_found[child]=true
                   else
