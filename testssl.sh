@@ -2030,7 +2030,7 @@ run_client_simulation() {
      local name tls proto cipher
      local using_sockets=true
 
-     if $SSL_NATIVE || [[ -n "$STARTTLS" ]]; then
+     if "$SSL_NATIVE" || [[ -n "$STARTTLS" ]]; then
           using_sockets=false
      fi
 
@@ -2772,7 +2772,7 @@ run_client_simulation() {
      for name in "${short[@]}"; do
           #FIXME: printf formatting would look better, especially if we want a wide option here
           out " ${names[i]}   "
-          if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
+          if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
                client_simulation_sockets "${handshakebytes[i]}"
                sclient_success=$?
                if [[ $sclient_success -eq 0 ]]; then
@@ -2795,7 +2795,7 @@ run_client_simulation() {
                #FIXME: awk
                proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
-               if [[ "$proto" == TLSv1.2 ]] && ( ! $using_sockets || [[ -z "${handshakebytes[i]}" ]] ); then
+               if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
                     # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                     for tls in ${tlsvers[i]}; do
                          $OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
@@ -2821,7 +2821,7 @@ run_client_simulation() {
                fi
                #FiXME: awk
                cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
-               $using_sockets && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
+               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
                outln "$proto $cipher"
                if [[ -n "${warning[i]}" ]]; then
                     out "                            "
@@ -2905,30 +2905,32 @@ run_protocols() {
      local using_sockets=true
      local supported_no_ciph1="supported but couldn't detect a cipher (may need debugging)"
      local supported_no_ciph2="supported but couldn't detect a cipher"
-     local via=""
+     local latest_supported=""  # version.major and version.minor of highest version supported by the server.
+     local detected_version_string latest_supported_string
+     local extra_spaces="         "
 
      outln; pr_headline " Testing protocols "
-     via="Protocol tested "
 
-     if $SSL_NATIVE; then
+     if "$SSL_NATIVE"; then
           using_sockets=false
           pr_headlineln "(via native openssl)"
-          via+="via native openssl"
      else
           if [[ -n "$STARTTLS" ]]; then
                pr_headlineln "(via openssl, SSLv2 via sockets) "
-               via+="via openssl, SSLv2 via sockets"
                using_sockets=false
           else
                using_sockets=true
-               pr_headlineln "(via sockets except TLS 1.2, SPDY+HTTP2) "
-               via+="via sockets except for TLS1.2, SPDY+HTTP2"
+               if "$EXPERIMENTAL"; then
+                    pr_headlineln "(via sockets except SPDY+HTTP2) "
+               else
+                    pr_headlineln "(via sockets except TLS 1.2, SPDY+HTTP2) "
+               fi
           fi
      fi
      outln
 
-     pr_bold " SSLv2      ";
-     if ! $SSL_NATIVE; then
+     pr_bold " SSLv2      $extra_spaces";
+     if ! "$SSL_NATIVE"; then
           sslv2_sockets                                                    #FIXME: messages/output need to be moved to this (higher) level
      else
           run_prototest_openssl "-ssl2"
@@ -2953,8 +2955,8 @@ run_protocols() {
           esac
      fi
 
-     pr_bold " SSLv3      ";
-     if $using_sockets; then
+     pr_bold " SSLv3      $extra_spaces";
+     if "$using_sockets"; then
           tls_sockets "00" "$TLS_CIPHER"
      else
           run_prototest_openssl "-ssl3"
@@ -2963,6 +2965,8 @@ run_protocols() {
           0)
                pr_svrty_highln "offered (NOT ok)"
                fileout "sslv3" "NOT ok" "SSLv3 is offered (NOT ok)"
+               latest_supported="0300"
+               latest_supported_string="SSLv3"
                add_tls_offered "ssl3"
                ;;
           1)
@@ -2970,8 +2974,14 @@ run_protocols() {
                fileout "sslv3" "OK" "SSLv3 is not offered (OK)"
                ;;
           2)
-               pr_warningln "#FIXME: downgraded. still missing a test case here"
-               fileout "sslv3" "WARN" "SSLv3: #FIXME: downgraded. still missing a test case here"
+               if [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
+                    detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
+                    pr_svrty_criticalln "server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+                    fileout "sslv3" "NOT ok" "SSLv3: server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+               else
+                    pr_svrty_criticalln "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    fileout "sslv3" "NOT ok" "SSLv3: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+               fi
                ;;
           5)
                fileout "sslv3" "WARN" "SSLv3 is $supported_no_ciph1"
@@ -2984,8 +2994,8 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
-     pr_bold " TLS 1      ";
-     if $using_sockets; then
+     pr_bold " TLS 1      $extra_spaces";
+     if "$using_sockets"; then
           tls_sockets "01" "$TLS_CIPHER"
      else
           run_prototest_openssl "-tls1"
@@ -2994,17 +3004,34 @@ run_protocols() {
           0)
                outln "offered"
                fileout "tls1" "INFO" "TLSv1.0 is offered"
+               latest_supported="0301"
+               latest_supported_string="TLSv1.0"
                add_tls_offered "tls1"
                ;;                                           # nothing wrong with it -- per se
           1)
-               outln "not offered"
-               fileout "tls1" "INFO" "TLSv1.0 is not offered"
-               ;;                                           # neither good or bad
+               out "not offered"
+               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
+                    outln
+                    fileout "tls1" "INFO" "TLSv1.0 is not offered" # neither good or bad
+               else
+                    pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
+                    fileout "tls1" "NOT ok" "TLSv1.0: connection failed rather than downgrading to $latest_supported_string (NOT ok)"
+               fi
+               ;;
           2)
                pr_svrty_medium "not offered"
-               [[ $DEBUG -eq 1 ]] && out " -- downgraded"
-               outln
-               fileout "tls1" "MEDIUM" "TLSv1.0 is not offered, and downgraded to SSL"
+               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+                    [[ $DEBUG -eq 1 ]] && out " -- downgraded"
+                    outln
+                    fileout "tls1" "MEDIUM" "TLSv1.0 is not offered, and downgraded to SSL"
+               elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
+                    detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
+                    pr_svrty_criticalln " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    fileout "tls1" "NOT ok" "TLSv1.0: server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+               else
+                    pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    fileout "tls1" "NOT ok" "TLSv1.0: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+               fi
                ;;
           5)
                outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
@@ -3016,8 +3043,8 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
-     pr_bold " TLS 1.1    ";
-     if $using_sockets; then
+     pr_bold " TLS 1.1    $extra_spaces";
+     if "$using_sockets"; then
           tls_sockets "02" "$TLS_CIPHER"
      else
           run_prototest_openssl "-tls1_1"
@@ -3026,17 +3053,37 @@ run_protocols() {
           0)
                outln "offered"
                fileout "tls1_1" "INFO" "TLSv1.1 is offered"
+               latest_supported="0302"
+               latest_supported_string="TLSv1.1"
                add_tls_offered "tls1_1"
                ;;                                            # nothing wrong with it
           1)
-               outln "not offered"
-               fileout "tls1_1" "INFO" "TLSv1.1 is not offered"
-               ;;                                        # neither good or bad
+               out "not offered"
+               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
+                    outln
+                    fileout "tls1_1" "INFO" "TLSv1.1 is not offered"  # neither good or bad
+               else
+                    pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string"
+                    fileout "tls1_1" "NOT ok" "TLSv1.1: connection failed rather than downgrading to $latest_supported_string (NOT ok)"
+               fi
+               ;;
           2)
                out "not offered"
-               [[ $DEBUG -eq 1 ]] && out " -- downgraded"
-               outln
-               fileout "tls1_1" "NOT ok" "TLSv1.1 is not offered, and downgraded to a weaker protocol (NOT ok)"
+               if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
+                    [[ $DEBUG -eq 1 ]] && out " -- downgraded"
+                    outln
+                    fileout "tls1_1" "NOT ok" "TLSv1.1 is not offered, and downgraded to a weaker protocol (NOT ok)"
+               elif [[ "$DETECTED_TLS_VERSION" == "0300" ]] && [[ "$latest_supported" == "0301" ]]; then
+                    pr_svrty_criticalln " -- server supports TLSv1.0, but downgraded to SSLv3 (NOT ok)"
+                    fileout "tls1_1" "NOT ok" "TLSv1.1 is not offered, and downgraded to SSLv3 rather than TLSv1.0 (NOT ok)"
+               elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0302 ]]; then
+                    detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
+                    pr_svrty_criticalln " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+                    fileout "tls1_1" "NOT ok" "TLSv1.1 is not offered, server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+               else
+                    pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    fileout "tls1" "NOT ok" "TLSv1.1: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+               fi
                ;;
           5)
                outln "$supported_no_ciph1"
@@ -3048,8 +3095,8 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
-     pr_bold " TLS 1.2    ";
-     if $using_sockets && $EXPERIMENTAL; then               #TODO: IIS servers do have a problem here with our handshake
+     pr_bold " TLS 1.2    $extra_spaces";
+     if "$using_sockets" && "$EXPERIMENTAL"; then               #TODO: IIS servers do have a problem here with our handshake
           tls_sockets "03" "$TLS12_CIPHER"
      else
           run_prototest_openssl "-tls1_2"
@@ -3058,17 +3105,41 @@ run_protocols() {
           0)
                pr_done_bestln "offered (OK)"
                fileout "tls1_2" "OK" "TLSv1.2 is offered (OK)"
+               latest_supported="0303"
+               latest_supported_string="TLSv1.2"
                add_tls_offered "tls1_2"
                ;;                                  # GCM cipher in TLS 1.2: very good!
           1)
                pr_svrty_mediumln "not offered"
-               fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered"
-               ;;                          # no GCM, penalty
+               if ! "$using_sockets" || ! "$EXPERIMENTAL" || [[ -z $latest_supported ]]; then
+                    outln
+                    fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered" # no GCM, penalty
+               else
+                    pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string"
+                    fileout "tls1_1" "NOT ok" "TLSv1.2: connection failed rather than downgrading to $latest_supported_string"
+               fi
+               ;;
           2)
                pr_svrty_medium "not offered"
-               [[ $DEBUG -eq 1 ]] && out " -- downgraded"
-               outln
-               fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered and downgraded to a weaker protocol"
+               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+                    detected_version_string="SSLv3"
+               elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
+                    detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
+               fi
+               if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
+                    [[ $DEBUG -eq 1 ]] && out " -- downgraded"
+                    outln
+                    fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered and downgraded to a weaker protocol"
+               elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
+                    pr_svrty_criticalln " -- server supports $latest_supported_string, but downgraded to $detected_version_string"
+                    fileout "tls1_2" "NOT ok" "TLSv1.2 is not offered, and downgraded to $detected_version_string rather than $latest_supported_string (NOT ok)"
+               elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0303 ]]; then
+                    pr_svrty_criticalln " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    fileout "tls1_2" "NOT ok" "TLSv1.2 is not offered, server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+               else
+                    pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    fileout "tls1" "NOT ok" "TLSv1.2: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+               fi
                ;;
           5)
                outln "$supported_no_ciph1"
@@ -3080,6 +3151,54 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
+     # Testing version negotiation. RFC 5246, Appendix E.1, states:
+     #
+     #    If a TLS server receives a ClientHello containing a version number
+     #    greater than the highest version supported by the server, it MUST
+     #    reply according to the highest version supported by the server.
+     if [[ -n $latest_supported ]] && "$using_sockets"; then
+          pr_bold " Version tolerance   "
+          tls_sockets "05" "$TLS12_CIPHER"
+          case $? in
+               0) 
+                    pr_svrty_criticalln "server claims support for non-existent TLSv1.4"
+                    fileout "TLS Version Negotiation" "NOT ok" "Server claims support for non-existent TLSv1.4 (NOT ok)"
+                    ;;
+               1)
+                    pr_svrty_criticalln "version negotiation did not work -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
+                    fileout "TLS Version Negotiation" "NOT ok" "Version negotiation did not work -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
+                    ;;
+               2)
+                    case $DETECTED_TLS_VERSION in
+                         0304)
+                                 pr_svrty_criticalln "server claims support for TLSv1.3, which is still a working draft (NOT ok)"
+                                 fileout "TLS Version Negotiation" "NOT ok" "Server claims support for TLSv1.3, which is still a working draft (NOT ok)"
+                                 ;;
+                         0303|0302|0301|0300)
+                                 if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+                                      detected_version_string="SSLv3"
+                                 else
+                                      detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
+                                 fi
+                                 if [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
+                                      pr_svrty_criticalln "server supports $latest_supported_string, but downgraded to $detected_version_string (NOT ok)"
+                                      fileout "TLS Version Negotiation" "NOT ok" "Downgraded to $detected_version_string rather than $latest_supported_string (NOT ok)"
+                                 else
+                                      pr_done_bestln "downgraded to $detected_version_string (OK)"
+                                      fileout "TLS Version Negotiation" "OK" "Downgraded to $detected_version_string"
+                                 fi
+                                 ;;
+                         *)
+                                 pr_svrty_criticalln "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                                 fileout "TLS Version Negotiation" "NOT ok" "TLSv1.4: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                                 ;;
+                    esac ;;
+               5)
+                    pr_svrty_criticalln "server claims support for non-existent TLSv1.4 (NOT ok)"
+                    fileout "TLS Version Negotiation" "NOT ok" "Server claims support for non-existent TLSv1.4 (NOT ok)"
+                    ;;
+          esac
+     fi
      return 0
 }
 
@@ -3615,7 +3734,7 @@ determine_trust() {
 
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]]; then
           addtl_warning="(Your openssl <= 1.0.2 might be too unreliable to determine trust)"
-          fileout "${json_prefix}trust_warn" "WARN" "$addtl_warning"
+          fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
 	for bundle_fname in $ca_bundles; do
@@ -3653,7 +3772,7 @@ determine_trust() {
 	     # all stores ok
 		pr_done_good "Ok   "; pr_warning "$addtl_warning"
           # we did to stdout the warning above already, so we could stay here with INFO:
-          fileout "${json_prefix}trust" "OK" "All certificate trust checks passed. $addtl_warning"
+          fileout "${json_prefix}chain_of_trust" "OK" "All certificate trust checks passed. $addtl_warning"
 	else
 	     # at least one failed
 		pr_svrty_critical "NOT ok"
@@ -3661,7 +3780,7 @@ determine_trust() {
 		     # all failed (we assume with the same issue), we're displaying the reason
                out " "
 			verify_retcode_helper "${verify_retcode[2]}"
-               fileout "${json_prefix}trust" "NOT ok" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
+               fileout "${json_prefix}chain_of_trust" "NOT ok" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
 		else
 			# is one ok and the others not ==> display the culprit store
 			if $some_ok ; then
@@ -3684,7 +3803,7 @@ determine_trust() {
                     [[ "$DEBUG" -eq 0 ]] && out "$spaces"
 				pr_done_good "OK: $ok_was"
                fi
-               fileout "${json_prefix}trust" "NOT ok" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
+               fileout "${json_prefix}chain_of_trust" "NOT ok" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
           fi
           [[ -n "$addtl_warning" ]] && out "\n$spaces" && pr_warning "$addtl_warning"
 	fi
@@ -3855,42 +3974,128 @@ get_cn_from_cert() {
      return $?
 }
 
-# Return 0 if the server name provided in arg1 matches the CN or SAN in arg2, otherwise return 1.
+# Return 0 if the name provided in arg1 is a wildcard name
+is_wildcard()
+{
+     local certname="$1"
+
+     # If the first label in the DNS name begins "xn--", then assume it is an
+     # A-label and not a wildcard name (RFC 6125, Section 6.4.3).
+     [[ "${certname:0:4}" == "xn--" ]] && return 1
+
+     # Remove part of name preceding '*' or '.'. If no "*" appears in the
+     # left-most label, then it is not a wildcard name (RFC 6125, Section 6.4.3).
+     basename="$(echo -n "$certname" | sed 's/^[a-zA-Z0-9\-]*//')"
+     [[ "${basename:0:1}" != "*" ]] && return 1 # not a wildcard name
+
+     # Check that there are no additional wildcard ('*') characters or any
+     # other characters that do not belong in a DNS name.
+     [[ -n $(echo -n "${basename:1}" | sed 's/^[\.a-zA-Z0-9\-]*//') ]] && return 1
+     return 0
+}
+
+# Return 0 if the name provided in arg2 is a wildcard name and it matches the name provided in arg1.
+wildcard_match()
+{
+     local servername="$1"
+     local certname="$2"
+     local basename
+     local -i basename_offset len_certname len_part1 len_basename
+     local -i len_servername len_wildcard
+
+     len_servername=${#servername}
+     len_certname=${#certname}
+
+     # Use rules from RFC 6125 to perform the match.
+
+     # Assume the "*" in the wildcard needs to be replaced by one or more
+     # characters, although RFC 6125 is not clear about that.
+     [[ $len_servername -lt $len_certname ]] && return 1
+
+     is_wildcard "$certname"
+     [[ $? -ne 0 ]] && return 1
+
+     # Comparisons of DNS names are case insenstive, so convert both names to uppercase.
+     certname="$(toupper "$certname")"
+     servername="$(toupper "$servername")"
+
+     # Extract part of name that comes after the "*"
+     basename="$(echo -n "$certname" | sed 's/^[A-Z0-9\-]*\*//')"
+     len_basename=${#basename}
+     len_part1=$len_certname-$len_basename-1
+     len_wildcard=$len_servername-$len_certname+1
+     basename_offset=$len_servername-$len_basename
+
+     # Check that initial part of $servername matches initial part of $certname
+     # and that final part of $servername matches final part of $certname. 
+     [[ "${servername:0:len_part1}" != "${certname:0:len_part1}" ]] && return 1
+     [[ "${servername:basename_offset:len_basename}" != "$basename" ]] && return 1
+
+     # Check that part of $servername that matches "*" is all part of a single
+     # domain label.
+     [[ -n $(echo -n "${servername:len_part1:len_wildcard}" | sed 's/^[A-Z0-9\-]*//') ]] && return 1
+
+     return 0
+}
+
+# Compare the server name provided in arg1 to the CN and SAN in arg2 and return:
+#    0, if server name provided does not match any of the names in the CN or SAN
+#    1, if the server name provided matches a name in the SAN
+#    2, if the server name provided is a wildcard match against a name in the SAN
+#    4, if the server name provided matches the CN
+#    5, if the server name provided matches the CN AND a name in the SAN
+#    6, if the server name provided matches the CN AND is a wildcard match against a name in the SAN
+#    8, if the server name provided is a wildcard match against the CN
+#    9, if the server name provided matches a name in the SAN AND is a wildcard match against the CN
+#   10, if the server name provided is a wildcard match against the CN AND a name in the SAN
+
 compare_server_name_to_cert()
 {
-     local servername=$1
-     local cert=$2
-     local cn dns_sans ip_sans san basename
-
-     cn="$(get_cn_from_cert $cert)"
-     if [[ -n "$cn" ]]; then
-          [[ "$cn" == "$servername" ]] && return 0
-          # If the CN contains a wildcard name, then do a wildcard match
-          if echo -n "$cn" | grep -q '^*.'; then
-               basename="$(echo -n "$cn" | sed 's/^\*.//')"
-               [[ "$cn" == "*.$basename" ]] && [[ "$servername" == *".$basename" ]] && return 0
-          fi
-     fi
+     local servername="$(toupper "$1")"
+     local cert="$2"
+     local cn dns_sans ip_sans san
+     local -i ret=0
 
      # Check whether any of the DNS names in the certificate match the servername
-     dns_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+     dns_sans=$($OPENSSL x509 -in "$cert" -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
                tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
      for san in $dns_sans; do
-          [[ "$san" == "$servername" ]] && return 0
-          # If $san is a wildcard name, then do a wildcard match
-          if echo -n "$san" | grep -q '^*.'; then
-               basename="$(echo -n "$san" | sed 's/^\*.//')"
-               [[ "$san" == "*.$basename" ]] && [[ "$servername" == *".$basename" ]] && return 0
-          fi
+          [[ $(toupper "$san") == "$servername" ]] && ret=1 && break
      done
 
-     # Check whether any of the IP addresses in the certificate match the serername
-     ip_sans=$($OPENSSL x509 -in $cert -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-             tr ',' '\n' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
-     for san in $ip_sans; do
-          [[ "$san" == "$servername" ]] && return 0
-     done
-     return 1
+     if [[ $req -eq 0 ]]; then
+          # Check whether any of the IP addresses in the certificate match the servername
+          ip_sans=$($OPENSSL x509 -in "$cert" -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+                  tr ',' '\n' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
+          for san in $ip_sans; do
+               [[ "$san" == "$servername" ]] && ret=1 && break
+          done
+     fi
+
+     # Check whether any of the DNS names in the certificate are wildcard names
+     # that match the servername
+     if [[ $req -eq 0 ]]; then
+          for san in $dns_sans; do
+               wildcard_match "$servername" "$san"
+               [[ $? -eq 0 ]] && ret=2 && break
+          done
+     fi
+
+     cn="$(get_cn_from_cert "$cert")"
+
+     # If the CN contains any characters that are not valid for a DNS name,
+     # then assume it does not contain a DNS name.
+     [[ -n $(echo -n "$cn" | sed 's/^[\.a-zA-Z0-9*\-]*//') ]] && return $ret
+
+     # Check whether the CN in the certificate matches the servername
+     [[ $(toupper "$cn") == "$servername" ]] && ret+=4 && return $ret
+
+     # Check whether the CN in the certificate is a wildcard name that matches
+     # the servername
+     wildcard_match "$servername" "$cn"
+     [[ $? -eq 0 ]] && ret+=8
+
+     return $ret
 }
 
 certificate_info() {
@@ -3903,13 +4108,13 @@ certificate_info() {
      local ocsp_response_status=$6
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
      local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn
-     local cn_nosni=""
+     local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
      local spaces=""
-     local wildcard=false
+     local trust_sni=0 trust_nosni=0 has_dns_sans
      local -i certificates_provided
-     local cnfinding
+     local cnfinding trustfinding trustfinding_nosni
      local cnok="OK"
      local expfinding expok="OK"
      local json_prefix=""     # string to place at beginng of JSON IDs when there is more than one certificate
@@ -4121,19 +4326,6 @@ certificate_info() {
      if [[ -n "$cn" ]]; then
           pr_dquoted "$cn"
           cnfinding="$cn"
-          if echo -n "$cn" | grep -q '^*.' ; then
-               out " (wildcard certificate"
-               cnfinding+="(wildcard certificate "
-               if [[ "$cn" == "*.$(echo -n "$cn" | sed 's/^\*.//')" ]]; then
-                    out " match)"
-                    cnfinding+=" match)"
-                    wildcard=true
-               else
-                    cnfinding+=" NO match)"
-                    cnok="INFO"
-                    #FIXME: we need to test also the SANs as they can contain a wild card (google.de .e.g) ==> 2.7dev
-               fi
-          fi
      else
           cn="no CN field in subject"
           out "($cn)"
@@ -4151,40 +4343,23 @@ certificate_info() {
 #FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
 
      debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
-     if [[ "$cn_nosni" == "$cn" ]]; then
-          outln " (works w/o SNI)"
-          cnfinding+=" (works w/o SNI)"
-     elif [[ $NODE == "$cn_nosni" ]]; then
-          if [[ $SERVICE == "HTTP" ]] || $CLIENT_AUTH ; then
-               outln " (works w/o SNI)"
-               cnfinding+=" (works w/o SNI)"
-          else
-               outln " (matches certificate directly)"
-               cnfinding+=" (matches certificate directly)"
-               # for services != HTTP it depends on the protocol, server and client but it is not named "SNI"
+     if [[ "$(toupper "$cn_nosni")" == "$(toupper "$cn")" ]]; then
+          outln
+     elif [[ -z "$cn_nosni" ]]; then
+          out " (request w/o SNI didn't succeed";
+          cnfinding+=" (request w/o SNI didn't succeed"
+          if [[ $cert_sig_algo =~ ecdsa ]]; then
+               out ", usual for EC certificates"
+               cnfinding+=", usual for EC certificates"
           fi
+          outln ")"
+          cnfinding+=")"
+     elif [[ "$cn_nosni" == *"no CN field"* ]]; then
+          outln ", (request w/o SNI: $cn_nosni)"
+          cnfinding+=", (request w/o SNI: $cn_nosni)"
      else
-          if [[ $SERVICE != "HTTP" ]]; then
-               outln
-               cnfinding+="\n"
-               #pr_svrty_mediumln " (non-SNI clients don't match CN but for non-HTTP services it might be ok)"
-               #FIXME: this is irritating and needs to be redone. Then also the wildcard match needs to be tested against  "$cn_nosni"
-          elif [[ -z "$cn_nosni" ]]; then
-               out " (request w/o SNI didn't succeed";
-               cnfinding+=" (request w/o SNI didn't succeed"
-               if [[ $cert_sig_algo =~ ecdsa ]]; then
-                    out ", usual for EC certificates"
-                    cnfinding+=", usual for EC certificates"
-               fi
-               outln ")"
-               cnfinding+=")"
-          elif [[ "$cn_nosni" == *"no CN field"* ]]; then
-               outln ", (request w/o SNI: $cn_nosni)"
-               cnfinding+=", (request w/o SNI: $cn_nosni)"
-          else
-               out " (CN in response to request w/o SNI: "; pr_dquoted "$cn_nosni"; outln ")"
-               cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
-          fi
+          out " (CN in response to request w/o SNI: "; pr_dquoted "$cn_nosni"; outln ")"
+          cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
      fi
      fileout "${json_prefix}cn" "$cnok" "$cnfinding"
 
@@ -4212,23 +4387,120 @@ certificate_info() {
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
      issuer_O="$(awk -F'=' '/O=/ { print $2 }' <<< "$issuer")"
      issuer_C="$(awk -F'=' '/ C=/ { print $2 }' <<< "$issuer")"
+     issuer_DC="$(awk -F'=' '/DC=/ { print $2 }' <<< "$issuer")"
 
-     if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$CN" ]]; then
+     if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$cn" ]]; then
           pr_svrty_criticalln "self-signed (NOT ok)"
           fileout "${json_prefix}issuer" "NOT ok" "Issuer: selfsigned (NOT ok)"
      else
-          pr_dquoted "$issuer_CN"
-          out " ("
-          pr_dquoted "$issuer_O"
-          if [[ -n "$issuer_C" ]]; then
-               out " from "
-               pr_dquoted "$issuer_C"
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" from \"$issuer_C\")"
-          else
-               fileout "${json_prefix}issuer" "INFO" "Issuer: \"$issuer_CN\" ( \"$issuer_O\" )"
+          issuerfinding="$(pr_dquoted "$issuer_CN")"
+          if [[ -z "$issuer_O" ]] && [[ -n "$issuer_DC" ]]; then
+               for san in $issuer_DC; do
+                    if [[ -z "$issuer_O" ]]; then
+                         issuer_O="${san}"
+                    else
+                         issuer_O="${san}.${issuer_O}"
+                    fi
+               done
           fi
-          outln ")"
+          if [[ -n "$issuer_O" ]]; then
+               issuerfinding+=" ("
+               issuerfinding+="$(pr_dquoted "$issuer_O")"
+               if [[ -n "$issuer_C" ]]; then
+                    issuerfinding+=" from "
+                    issuerfinding+="$(pr_dquoted "$issuer_C")"
+               fi
+               issuerfinding+=")"
+          fi
+          outln "$issuerfinding"
+          fileout "${json_prefix}issuer" "INFO" "Issuer: $issuerfinding"
      fi
+
+     out "$indent"; pr_bold " Trust (hostname)             "
+     compare_server_name_to_cert "$NODE" "$HOSTCERT"
+     trust_sni=$?
+
+     # Find out if the subjectAltName extension is present and contains
+     # a DNS name, since Section 6.3 of RFC 6125 says:
+     #      Security Warning: A client MUST NOT seek a match for a reference
+     #      identifier of CN-ID if the presented identifiers include a DNS-ID,
+     #      SRV-ID, URI-ID, or any application-specific identifier types
+     #      supported by the client.
+     $OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
+          grep -A2 "Subject Alternative Name" | grep -q "DNS:" && \
+          has_dns_sans=true || has_dns_sans=false
+
+     case $trust_sni in
+          0) trustfinding="certificate does not match supplied URI" ;;
+          1) trustfinding="Ok via SAN" ;;
+          2) trustfinding="Ok via SAN wildcard" ;;
+          4) if $has_dns_sans; then
+                  trustfinding="Ok via CN, but not SAN"
+             else
+                  trustfinding="Ok via CN"
+             fi
+             ;;
+          5) trustfinding="Ok via SAN and CN" ;;
+          6) trustfinding="Ok via SAN wildcard and CN"
+             ;;
+          8) if $has_dns_sans; then
+                  trustfinding="Ok via CN wildcard, but not SAN"
+             else
+                  trustfinding="Ok via CN wildcard"
+             fi
+             ;;
+          9) trustfinding="Ok via CN wildcard and SAN"
+             ;;
+         10) trustfinding="Ok via SAN wildcard and CN wildcard"
+             ;;
+     esac
+
+     if [[ $trust_sni -eq 0 ]]; then
+          pr_svrty_medium "$trustfinding"
+          trust_sni="fail"
+     elif "$has_dns_sans" && ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
+          pr_svrty_medium "$trustfinding"
+          trust_sni="warn"
+     else
+          pr_done_good "$trustfinding"
+          trust_sni="ok"
+     fi
+
+     if [[ -n "$cn_nosni" ]]; then
+          compare_server_name_to_cert "$NODE" "$HOSTCERT.nosni"
+          trust_nosni=$?
+          $OPENSSL x509 -in "$HOSTCERT.nosni" -noout -text 2>>$ERRFILE | \
+               grep -A2 "Subject Alternative Name" | grep -q "DNS:" && \
+               has_dns_sans=true || has_dns_sans=false
+     fi
+
+     if "$has_dns_sans" && [[ $trust_nosni -eq 4 ]]; then
+          trustfinding_nosni=" (w/o SNI: Ok via CN, but not SAN)"
+     elif "$has_dns_sans" && [[ $trust_nosni -eq 8 ]]; then
+          trustfinding_nosni=" (w/o SNI: Ok via CN wildcard, but not SAN)"
+     elif [[ $trust_nosni -eq 0 ]] && ( [[ "$trust_sni" == "ok" ]] || [[ "$trust_sni" == "warn" ]] ); then
+          trustfinding_nosni=" (SNI mandatory)"
+     elif [[ "$trust_sni" == "ok" ]] || [[ "$trust_sni" == "warn" ]]; then
+          trustfinding_nosni=" (works w/o SNI)"
+     elif [[ $trust_nosni -ne 0 ]]; then
+          trustfinding_nosni=" (however, works w/o SNI)"
+     else
+          trustfinding_nosni=""
+     fi
+     if "$has_dns_sans" && ( [[ $trust_nosni -eq 4 ]] || [[ $trust_nosni -eq 8 ]] ); then
+          pr_svrty_mediumln "$trustfinding_nosni"
+     else
+          outln "$trustfinding_nosni"
+     fi
+
+     if [[ "$trust_sni" == "ok" ]]; then
+          fileout "${json_prefix}trust" "INFO" "${trustfinding}${trustfinding_nosni}"
+     else
+          fileout "${json_prefix}trust" "WARN" "${trustfinding}${trustfinding_nosni}"
+     fi
+
+     out "$indent"; pr_bold " Chain of trust"; out "               "
+     determine_trust "$json_prefix" # Also handles fileout
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
@@ -4298,10 +4570,6 @@ certificate_info() {
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
      fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
-
-
-     out "$indent"; pr_bold " Chain of trust"; out " (experim.)    "
-     determine_trust "$json_prefix" # Also handles fileout
 
      out "$indent"; pr_bold " Certificate Revocation List  "
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
@@ -4452,23 +4720,23 @@ run_server_defaults() {
                      # $NODE being tested or if it has the same subject
                      # (CN and SAN) as other certificates for this host.
                      compare_server_name_to_cert "$NODE" "$HOSTCERT"
-                     success[n]=$?
+                     [[ $? -ne 0 ]] && success[n]=0 || success[n]=1
 
                      if [[ ${success[n]} -ne 0 ]]; then
-                         cn_nosni="$(get_cn_from_cert $HOSTCERT)"
-                         sans_nosni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | grep "DNS:" | \
-                              sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+                         cn_nosni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
+                         sans_nosni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+                              tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
 
                          echo "${previous_hostcert[1]}" > $HOSTCERT
-                         cn_sni="$(get_cn_from_cert $HOSTCERT)"
-                         
+                         cn_sni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
+
                          # FIXME: Not sure what the matching rule should be. At
                          # the moment, the no SNI certificate is considered a
                          # match if the CNs are the same and the SANs (if
                          # present) contain at least one DNS name in common.
                          if [[ "$cn_nosni" == "$cn_sni" ]]; then
-                              sans_sni=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | grep "DNS:" | \
-                                       sed -e 's/DNS://g' -e 's/ //g' -e 's/,/ /g' -e 's/othername:<unsupported>//g')
+                              sans_sni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+                                       tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
                               if [[ "$sans_nosni" == "$sans_sni" ]]; then
                                    success[n]=0
                               else
@@ -4765,8 +5033,9 @@ http2_pre(){
 run_spdy() {
      local tmpstr
      local -i ret=0
+     local extra_spaces="         "
 
-     pr_bold " SPDY/NPN   "
+     pr_bold " SPDY/NPN   $extra_spaces"
      if ! spdy_pre ; then
           outln
           return 0
@@ -4803,8 +5072,9 @@ run_http2() {
      local -i ret=0
      local had_alpn_proto=false
      local alpn_finding=""
+     local extra_spaces="         "
 
-     pr_bold " HTTP2/ALPN "
+     pr_bold " HTTP2/ALPN $extra_spaces"
      if ! http2_pre ; then
           outln
           return 0
@@ -8420,4 +8690,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.527 2016/07/20 15:36:50 dirkw Exp $
+#  $Id: testssl.sh,v 1.531 2016/07/23 13:12:12 dirkw Exp $
