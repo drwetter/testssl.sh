@@ -1056,8 +1056,8 @@ run_hpkp() {
           nrsaved=$(count_words "$(echo $TEMPDIR/level?.crt 2>/dev/null)")
           rm $TEMPDIR/level0.crt 2>/dev/null
 
+          echo -n > "$TEMPDIR/intermediate.hashes"
           if [[ nrsaved -ge 2 ]]; then
-               echo -n "" > "$TEMPDIR/intermediate.hashes"
                for cert_fname in $TEMPDIR/level?.crt; do
                     hpkp_key_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | $OPENSSL base64 -d |
                          $OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
@@ -1067,14 +1067,11 @@ run_hpkp() {
                     echo "$hpkp_key_ca $hpkp_name" >> "$TEMPDIR/intermediate.hashes"
                done
           fi
-          rm $TEMPDIR/level*.crt 2>/dev/null
-# I'd like to keep all certs retrieved for debugging
 
-          # Get keys from Root CAs
-
+          # This is where the matching magic happens...
           pins_match=false
-          for hpkp_key in $(echo $pins); do
-# exho needed here? ^^^^
+          has_backup_pin=false
+          for hpkp_key in $pins; do
                key_found=false
                # compare pin against the host certificate
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
@@ -1089,7 +1086,6 @@ run_hpkp() {
 
                # Check for intermediate match
                if ! $key_found; then
-# doesn't work, "grep: /tmp/ssltester.Dp2ovS/intermediate.hashes: No such file or directory" if teested against testss.sh
                     hpkp_matches=$(grep "$hpkp_key" $TEMPDIR/intermediate.hashes 2>/dev/null)
                     if [[ -n $hpkp_matches ]]; then
                          # We have a match
@@ -1122,7 +1118,7 @@ run_hpkp() {
                               out " (part of the chain)"
                               fileout "hpkp_$hpkp_key" "INFO" "Root CA key matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is part of the chain"
                          else
-# there's a root CA match for github AND this message. 
+                              has_backup_pin=true
                               out "\n$spaces This CA is not part of the chain and likely a backup PIN"
                               fileout "hpkp_$hpkp_key" "INFO" "Root CA key matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is not part of the chain, this is a backup PIN"
                          fi
@@ -1131,6 +1127,7 @@ run_hpkp() {
 
                if ! $key_found; then
                     # Most likely a backup pin
+                    has_backup_pin=true
                     out "\n\n$spaces Unmatched key:    "
                     out "$hpkp_key"
                     out "\n$spaces (This is OK for a backup pin of a host cert)"
@@ -1143,6 +1140,11 @@ run_hpkp() {
                pr_svrty_high " No matching key for pins found "
                fileout "hpkp_keymatch" "NOT ok" "None of the HPKP PINS match your host certificate, intermediate CA or known root CAs. You may have bricked this site"
           fi
+
+          if ! $has_backup_pin; then
+               pr_svrty_high " No backup pins found. Loss/compromise of the currently pinned key(s) will lead to bricked site. "
+               fileout "hpkp_backup" "NOT ok" "No backup pins found. Loss/compromise of the currently pinned key(s) will lead to bricked site."
+          fi               
      else
           out "--"
           fileout "hpkp" "INFO" "No support for HTTP Public Key Pinning"
