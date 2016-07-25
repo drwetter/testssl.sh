@@ -17,9 +17,9 @@ my $socketout = `./testssl.sh -c -t smtp --jsonfile tmp.json --color 0 smtp-rela
 my $socket = json('tmp.json');
 like($socketout, qr/Running client simulations via sockets/, "Tests ran via sockets"); $tests++;
 
-my $i = 0;
-foreach my $o ( @$openssl ) {
-	my $s = $$socket[$i];
+my $i = 1; # Need to start counting at 1
+foreach my $s ( @$socket ) {
+	my $o = $$openssl[$i];
 	if ( $o->{id} =~ /^client_/ ) {
 		pass("Comparing $o->{id}"); $tests++;
 		cmp_ok($o->{id}, "eq", $s->{id}, "Id's match"); $tests++;
