@@ -211,11 +211,16 @@ foreach my $shortname ( reverse sort keys %sims ) {
 			$sims{$shortname}->{current} = "current+=(false)";
 		}
 	} elsif ($shortname =~ /^firefox/) {
-		$count{firefox}++;
-		if ( $count{firefox} <= 3 ) {
-			$sims{$shortname}->{current} = "current+=(true)";
+		# Latest version + ESR releases
+		if ( $shortname =~ /ESR/ ) {
+			$sims{$shortname}->{current} = "current+=(true)";			
 		} else {
-			$sims{$shortname}->{current} = "current+=(false)";
+			$count{firefox}++;
+			if ( $count{firefox} <= 1 ) {
+				$sims{$shortname}->{current} = "current+=(true)";
+			} else {
+				$sims{$shortname}->{current} = "current+=(false)";
+			}
 		}
 	} elsif ($shortname =~ /^googlebot/) {
 		$count{googlebot}++;
@@ -246,8 +251,43 @@ foreach my $shortname ( reverse sort keys %sims ) {
 			$sims{$shortname}->{current} = "current+=(false)";
 		}
 	} elsif ($shortname =~ /^opera/) {
-		# Opera isn't a current browser
+		$count{opera}++;
+		if ( $count{opera} <= 1 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
+	} elsif ($shortname =~ /^java 7/) {
+		$count{java7}++;
+		if ( $count{java7} <= 1 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
+	} elsif ($shortname =~ /^java 8/) {
+		$count{java8}++;
+		if ( $count{java8} <= 1 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
+	} elsif ($shortname =~ /^java/) {
+		# Other/older versions of java aren't current
 		$sims{$shortname}->{current} = "current+=(false)";
+	} elsif ($shortname =~ /^openssl/) {
+		$count{openssl}++;
+		if ( $count{openssl} <= 1 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
+	} elsif ($shortname =~ /^safari/) {
+		$count{safari}++;
+		if ( $count{safari} <= 2 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
 	} else {
 		# All versions are current
 		$sims{$shortname}->{current} = "current+=(true)";

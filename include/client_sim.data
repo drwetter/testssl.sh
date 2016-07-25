@@ -1085,7 +1085,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Firefox 46 Win 7              ")
      short+=("firefox_46_win7")
@@ -1103,7 +1103,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Firefox 47 Win 7              ")
      short+=("firefox_47_win7")
@@ -1427,7 +1427,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Java 7u25                     ")
      short+=("java_7u25")
@@ -1445,7 +1445,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Java 8b132                    ")
      short+=("java_8b132")
@@ -1463,7 +1463,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Java 8u31                     ")
      short+=("java_8u31")
@@ -1481,7 +1481,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("OpenSSL 0.9.8y                ")
      short+=("openssl_098y")
@@ -1499,7 +1499,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("OpenSSL 1.0.1h                ")
      short+=("openssl_101h")
@@ -1517,7 +1517,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("OpenSSL 1.0.1l                ")
      short+=("openssl_101l")
@@ -1535,7 +1535,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("OpenSSL 1.0.2e                ")
      short+=("openssl_102e")
@@ -1625,7 +1625,7 @@
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(false)
+     current+=(true)
 
      names+=("Safari 5.1.9 OS X 10.6.8      ")
      short+=("safari_519_osx1068")
@@ -1643,7 +1643,7 @@
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 5 iOS 5.1.1            ")
      short+=("safari_5_ios511")
@@ -1661,7 +1661,7 @@
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 6.0.4 OS X 10.8.4      ")
      short+=("safari_604_osx1084")
@@ -1679,7 +1679,7 @@
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 6 iOS 6.0.1            ")
      short+=("safari_6_ios601")
@@ -1697,7 +1697,7 @@
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 7 iOS 7.1              ")
      short+=("safari_7_ios71")
@@ -1715,7 +1715,7 @@
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 7 OS X 10.9            ")
      short+=("safari_7_osx109")
@@ -1733,7 +1733,7 @@
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 8 iOS 8.0 Beta         ")
      short+=("safari_8_ios80beta")
@@ -1751,7 +1751,7 @@
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 8 iOS 8.4              ")
      short+=("safari_8_ios84")
@@ -1769,7 +1769,7 @@
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 8 OS X 10.10           ")
      short+=("safari_8_osx1010")
@@ -1787,7 +1787,7 @@
      maxRsaBits+=(8192)
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 9 iOS 9                ")
      short+=("safari_9_ios9")
