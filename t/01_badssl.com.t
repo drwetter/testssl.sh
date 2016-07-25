@@ -53,7 +53,7 @@ is($found,1,"We had a finding for this in the JSON output"); $tests++;
 like($out, qr/Chain of trust.*?NOT ok.*\(self signed\)/,"Chain of trust should fail because of self signed"); $tests++;
 $found = 0;
 foreach my $f ( @$json ) {
-	if ( $f->{id} eq "trust" ) {
+	if ( $f->{id} eq "chain_of_trust" ) {
 		$found = 1;
 		like($f->{finding},qr/^All certificate trust checks failed/,"Finding says certificate cannot be trusted."); $tests++;
 		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
@@ -65,7 +65,7 @@ is($found,1,"We had a finding for this in the JSON output"); $tests++;
 like($okout, qr/Chain of trust[^\n]*?Ok/,"Chain of trust should be ok"); $tests++;
 $found = 0;
 foreach my $f ( @$okjson ) {
-	if ( $f->{id} eq "trust" ) {
+	if ( $f->{id} eq "chain_of_trust" ) {
 		$found = 1;
 		is($f->{finding},"All certificate trust checks passed.","Finding says certificate can be trusted."); $tests++;
 		is($f->{severity}, "OK", "Severity should be OK"); $tests++;
@@ -97,7 +97,7 @@ like($out, qr/Chain of trust.*?NOT ok\s+\(chain incomplete\)/,"Chain of trust sh
 $json = json('tmp.json');
 $found = 0;
 foreach my $f ( @$json ) {
-	if ( $f->{id} eq "trust" ) {
+	if ( $f->{id} eq "chain_of_trust" ) {
 		$found = 1;
 		like($f->{finding},qr/^All certificate trust checks failed.*incomplete/,"Finding says certificate cannot be trusted."); $tests++;
 		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
@@ -115,7 +115,7 @@ is($found,1,"We had a finding for this in the JSON output"); $tests++;
 #$json = json('tmp.json');
 #$found = 0;
 #foreach my $f ( @$json ) {
-#	if ( $f->{id} eq "trust" ) {
+#	if ( $f->{id} eq "chain_of_trust" ) {
 #		$found = 1;
 #		like($f->{finding},qr/^All certificate trust checks failed.*incomplete/,"Finding says certificate cannot be trusted."); $tests++;
 #		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
