@@ -1076,22 +1076,23 @@ run_hpkp() {
           for hpkp_key in $(echo $pins); do
 # exho needed here? ^^^^
                key_found=false
-               # compare pin against the leaf certificate
+               # compare pin against the host certificate
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
-                    out "\n$spaces Host cert match: "
-                    pr_done_good "$hpkp_key"
-                    fileout "hpkp_$hpkp_key" "OK" "PIN $hpkp_key matches the leaf certificate"
+                    # We have a match
                     key_found=true
                     pins_match=true
+                    out "\n$spaces Host cert match: "
+                    pr_done_good "$hpkp_key"
+                    fileout "hpkp_$hpkp_key" "OK" "PIN $hpkp_key matches the host certificate"
                fi
                debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
 
                # Check for intermediate match
-               if ! "$key_found"; then
+               if ! $key_found; then
 # doesn't work, "grep: /tmp/ssltester.Dp2ovS/intermediate.hashes: No such file or directory" if teested against testss.sh
                     hpkp_matches=$(grep "$hpkp_key" $TEMPDIR/intermediate.hashes 2>/dev/null)
                     if [[ -n $hpkp_matches ]]; then
-                         # We have a winner!
+                         # We have a match
                          key_found=true
                          pins_match=true
                          out "\n$spaces Sub CA match:    "
@@ -1101,10 +1102,10 @@ run_hpkp() {
                     fi
                fi
 
-               if ! "$key_found"; then
+               if ! $key_found; then
                     hpkp_matches=$(grep -h "$hpkp_key" $ca_hashes | sort -u)
                     if [[ -n $hpkp_matches ]]; then
-                         # We have a winner!
+                         # We have a match
                          key_found=true
                          pins_match=true
                          if [[ $(count_lines "$hpkp_matches") -eq 1 ]]; then
@@ -1128,19 +1129,19 @@ run_hpkp() {
                     fi
                fi
 
-               if ! "$key_found" && [[ $DEBUG -eq 1 ]]; then
-                    # Houston we may have a problem
+               if ! $key_found; then
+                    # Most likely a backup pin
                     out "\n\n$spaces Unmatched key:    "
                     out "$hpkp_key"
-                    out "\n$spaces (This is OK for a backup pin of a leaf cert)"
-                    fileout "hpkp_$hpkp_key" "INFO" "PIN $hpkp_key doesn't match anything. This could be ok if it is a backup pin for a leaf certificate"
+                    out "\n$spaces (This is OK for a backup pin of a host cert)"
+                    fileout "hpkp_$hpkp_key" "INFO" "PIN $hpkp_key doesn't match anything. This could be ok if it is a backup pin for a host certificate"
                fi
           done 
 
           # If all else fails...
-          if ! "$pins_match"; then
+          if ! $pins_match; then
                pr_svrty_high " No matching key for pins found "
-               fileout "hpkp_keymatch" "NOT ok" "None of the HPKP PINS match your leaf certificate, intermediate CA or known root CAs. You may have bricked this site"
+               fileout "hpkp_keymatch" "NOT ok" "None of the HPKP PINS match your host certificate, intermediate CA or known root CAs. You may have bricked this site"
           fi
      else
           out "--"
