@@ -18,45 +18,45 @@ $out = `./testssl.sh -H --jsonfile tmp.json --color 0 ssl.sectionzero.org`;
 $json = json('tmp.json');
 
 # It is better to have findings in a hash
-# Look for a leaf cert match in the process.
+# Look for a host cert match in the process.
 my $found = 0;
 my %findings;
 foreach my $f ( @$json ) {
 	$findings{$f->{id}} = $f;
-	if ( $f->{finding} =~ /matches the leaf certificate/ ) {
+	if ( $f->{finding} =~ /matches the host certificate/ ) {
 		$found++;
 	}
 }
-is($found,1,"We found 1 'matches the leaf certificate' finding"); $tests++;
-like($out,'/Leaf cert match/',"There is a 'Leaf cert match' in the text output"); $tests++;
+is($found,1,"We found 1 'matches the host certificate' finding"); $tests++;
+like($out,'/Host cert match/',"There is a 'Leaf cert match' in the text output"); $tests++;
 
 # Sub CA match
 ok( exists $findings{"hpkp_YLh1dUR9y6Kja30RrAn7JKnbQG/uEtLMkBgFF2Fuihg"},"We have a finding for key YLh1dUR9y6Kja30RrAn7JKnbQG/uEtLMkBgFF2Fuihg"); $tests++;
 like($findings{"hpkp_YLh1dUR9y6Kja30RrAn7JKnbQG/uEtLMkBgFF2Fuihg"}->{finding},'/Intermediate CA key matches a key pinned in the HPKP header/',"We have our Sub CA finding"); $tests++;
 is($findings{"hpkp_YLh1dUR9y6Kja30RrAn7JKnbQG/uEtLMkBgFF2Fuihg"}->{severity}, "OK", "The finding is ok"); $tests++;
-like($out,'/Sub  CA   match \: YLh1dUR9y6Kja30RrAn7JKnbQG\/uEtLMkBgFF2Fuihg/',"There is a 'Sub CA match' in the text output"); $tests++;
+like($out,'/Sub CA match\:    YLh1dUR9y6Kja30RrAn7JKnbQG\/uEtLMkBgFF2Fuihg/',"There is a 'Sub CA match' in the text output"); $tests++;
 
 # Root CA match Lets encrypt
 ok( exists $findings{"hpkp_Vjs8r4z+80wjNcr1YKepWQboSIRi63WsWXhIMN+eWys"},"We have a finding for key Vjs8r4z+80wjNcr1YKepWQboSIRi63WsWXhIMN+eWys"); $tests++;
 like($findings{"hpkp_Vjs8r4z+80wjNcr1YKepWQboSIRi63WsWXhIMN+eWys"}->{finding},'/Root CA key matches a key pinned in the HPKP header/',"This is a Root CA finding"); $tests++;
 like($findings{"hpkp_Vjs8r4z+80wjNcr1YKepWQboSIRi63WsWXhIMN+eWys"}->{finding},'/DST Root CA X3/',"Correct Root CA"); $tests++;
 like($findings{"hpkp_Vjs8r4z+80wjNcr1YKepWQboSIRi63WsWXhIMN+eWys"}->{finding},'/The CA is part of the chain/',"CA is indeed part of chain"); $tests++;
-is($findings{"hpkp_Vjs8r4z+80wjNcr1YKepWQboSIRi63WsWXhIMN+eWys"}->{severity}, "OK", "The finding is ok"); $tests++;
-like($out,'/Root CA   match \: Vjs8r4z\+80wjNcr1YKepWQboSIRi63WsWXhIMN\+eWys/',"There is a 'Root CA match' in the text output"); $tests++;
+is($findings{"hpkp_Vjs8r4z+80wjNcr1YKepWQboSIRi63WsWXhIMN+eWys"}->{severity}, "INFO", "The finding is informational"); $tests++;
+like($out,'/Root CA match\:   Vjs8r4z\+80wjNcr1YKepWQboSIRi63WsWXhIMN\+eWys/',"There is a 'Root CA match' in the text output"); $tests++;
 
 # Root CA StartCom
 ok( exists $findings{"hpkp_5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU"},"We have a finding for key 5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU"); $tests++;
 like($findings{"hpkp_5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU"}->{finding},'/Root CA key matches a key pinned in the HPKP header/',"This is a Root CA finding"); $tests++;
 like($findings{"hpkp_5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU"}->{finding},'/StartCom Certification Authority/',"Correct Root CA"); $tests++;
 like($findings{"hpkp_5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU"}->{finding},'/The CA is not part of the chain/',"CA is indeed NOT part of chain"); $tests++;
-is($findings{"hpkp_5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU"}->{severity}, "OK", "The finding is ok"); $tests++;
-like($out,'/Root CA   match \: 5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU/',"There is a 'Root CA match' in the text output"); $tests++;
+is($findings{"hpkp_5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU"}->{severity}, "INFO", "The finding is informational"); $tests++;
+like($out,'/Root CA match\:   5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU/',"There is a 'Root CA match' in the text output"); $tests++;
 
 # Bad PIN
 ok( exists $findings{"hpkp_123bad123bad123bad123bad123bad123bd123bad12"},"We have a finding for key 123bad123bad123bad123bad123bad123bd123bad12"); $tests++;
 like($findings{"hpkp_123bad123bad123bad123bad123bad123bd123bad12"}->{finding},'/doesn\'t match anything/',"It doesn't match indeed"); $tests++;
-is($findings{"hpkp_123bad123bad123bad123bad123bad123bd123bad12"}->{severity}, "WARN", "The finding is ok"); $tests++;
-like($out,'/Unmatched key   : 123bad123bad123bad123bad123bad123bd123bad12/',"There is an 'unmatched key' in the text output"); $tests++;
+is($findings{"hpkp_123bad123bad123bad123bad123bad123bd123bad12"}->{severity}, "INFO", "The finding is informational"); $tests++;
+like($out,'/Unmatched key\:    123bad123bad123bad123bad123bad123bd123bad12/',"There is an 'unmatched key' in the text output"); $tests++;
 
 like($findings{hpkp_keys}->{finding},'/5 keys pinned/',"5 keys pinned in json"); $tests++;
 like($out,'/\# of keys: 5/',"5 keys pinned in text output"); $tests++;
