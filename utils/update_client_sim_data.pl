@@ -132,7 +132,8 @@ foreach my $client ( @$ssllabs ) {
 
 #
 # This is where we maintain our own clients
-my $sim = {};
+my $sim;
+$sim = {};
 #$sim->{name} = "names+=(\"Mail iOS 9.3.2                \")";
 #$sim->{shortname} = "short+=(\"mail_ios_932\")";
 #$sim->{ciphers} = "ciphers+=(\"ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:EDH-RSA-DES-CBC3-SHA:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-RSA-RC4-SHA:RC4-SHA:RC4-MD5\")";
@@ -167,6 +168,7 @@ my $sim = {};
 #$sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
 #$sim->{requiresSha2} = "requiresSha2+=(false)";
 
+$sim = {};
 $sim->{name} = "names+=(\"Thunderbird 45.1.1 OSX 10.11  \")";
 $sim->{shortname} = "short+=(\"thunderbird_45.1.1_osx_101115\")";
 $sim->{ciphers} = "ciphers+=(\"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:AES128-SHA:AES256-SHA:DES-CBC3-SHA\")";
@@ -183,6 +185,7 @@ $sim->{minRsaBits} = "minRsaBits+=(-1)";
 $sim->{maxRsaBits} = "maxRsaBits+=(-1)";#
 $sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
 $sim->{requiresSha2} = "requiresSha2+=(false)";
+$sims{$sim->{shortname}} = $sim;
 
 my %count;
 foreach my $shortname ( reverse sort keys %sims ) {
@@ -251,8 +254,11 @@ foreach my $shortname ( reverse sort keys %sims ) {
 	}
 }
 
-open OUT, ">client-simulation-data.sh" or die "Unable to open client-simulation-data.sh";
-print OUT "#!/bin/bash
+open OUT, ">include/client_sim.data" or die "Unable to open include/client_sim.data";
+print OUT "#!/usr/bin/env bash
+#
+# vim:ts=5:sw=5:expandtab
+# we have a spaces softtab, that ensures readability with other editors too
 
 # This file contains client handshake data used in the run_client_simulation function
 # Don't update this file by hand, but run util/update_client_sim_data.pl instead
@@ -262,7 +268,7 @@ print OUT "#!/bin/bash
 foreach my $shortname ( sort keys %sims ) {
 	foreach my $k ( qw(name shortname ciphers sni warning handshakebytes protos lowestProtocol highestProtocol service
 		minDhBits maxDhBits minRsaBits maxRsaBits minEcdsaBits requiresSha2 current) ) {
-		print OUT "$sims{$shortname}->{$k}\n";
+		print OUT "     $sims{$shortname}->{$k}\n";
 	}
 	print OUT "\n";
 }
