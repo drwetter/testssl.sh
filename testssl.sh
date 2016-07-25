@@ -1601,11 +1601,7 @@ test_just_one(){
                     neat_list $HEXC $ciph $kx $enc | grep -qwai "$arg"
                fi
                if [[ $? -eq 0 ]]; then    # string matches, so we can ssl to it:
-                    if [[ "$sslvers" == "SSLv2" ]]; then
-                         $OPENSSL s_client -ssl2 -cipher $ciph $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY 2>$ERRFILE >$TMPFILE </dev/null
-                    else
-                         $OPENSSL s_client -cipher $ciph $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>$ERRFILE >$TMPFILE </dev/null
-                    fi
+                    $OPENSSL s_client -cipher $ciph $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>$ERRFILE >$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE
                     sclient_success=$?
                     if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
