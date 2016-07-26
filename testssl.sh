@@ -7811,7 +7811,7 @@ sclient_auth() {
 #
 determine_optimal_proto() {
      local all_failed
-     local addcmd=""
+     local sni=""
 
      #TODO: maybe query known openssl version before this workaround. 1.0.1 doesn't need this
 
@@ -7829,8 +7829,9 @@ determine_optimal_proto() {
           done
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
-          for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2 ''; do
-               $OPENSSL s_client $OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI </dev/null >$TMPFILE 2>>$ERRFILE
+          for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
+               [[ "$OPTIMAL_PROTO" =~ ssl ]] && sni="" || sni=$SNI
+               $OPENSSL s_client $OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $sni </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
                     all_failed=1
                     break
@@ -7838,6 +7839,9 @@ determine_optimal_proto() {
                all_failed=0
           done
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
+          pr_warningln "$NODEIP:$PORT appears to only support SSLv2."
+          ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
+          [[ $? -ne 0 ]] && exit -2
      fi
      grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
 
