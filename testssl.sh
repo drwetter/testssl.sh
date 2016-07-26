@@ -3477,9 +3477,7 @@ run_server_preference() {
                          out "     (SSLv3: "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"" ; outln ")";
                          continue
                     fi
-                    addcmd=""
-                    [[ ! "$p" =~ ssl ]] && addcmd="$SNI"
-                    $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $addcmd </dev/null 2>>$ERRFILE >$TMPFILE
+                    $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                          cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
@@ -3610,7 +3608,7 @@ check_tls12_pref() {
 
 
 cipher_pref_check() {
-     local p proto protos npn_protos addcmd=""
+     local p proto protos npn_protos
      local tested_cipher cipher order
      local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
 
@@ -3626,10 +3624,8 @@ cipher_pref_check() {
                out "\n    SSLv3:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
                continue
           fi
-          addcmd=""
-          [[ ! "$p" =~ ssl ]] && addcmd="$SNI"
           # with the supplied binaries SNI works also for SSLv2 (+ SSLv3)
-          $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $addcmd </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                tested_cipher=""
                proto=$(awk '/Protocol/ { print $3 }' $TMPFILE)
@@ -3656,7 +3652,7 @@ cipher_pref_check() {
                else
                     out " $cipher"  # this is the first cipher for protocol
                     while true; do
-                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $addcmd </dev/null 2>>$ERRFILE >$TMPFILE
+                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                          sclient_connect_successful $? $TMPFILE || break
                          cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                          out " $cipher"
