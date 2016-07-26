@@ -23,16 +23,13 @@ everything which is normally not in OpenSSL or LibreSSL -- 40+56 Bit,
 export/ANON ciphers, weak DH ciphers, weak EC curves, SSLv2 etc. -- all the dirty
 features needed for testing. OTOH they also come with extended support
 for new / advanced cipher suites and/or features which are not in the 
-official branch like CHACHA20+POLY1305 and CAMELIA 256 bit ciphers.
+official branch like (old version of the) CHACHA20+POLY1305 and CAMELIA 256 bit ciphers.
 
 The binaries in this directory are all compiled from an OpenSSL 1.0.2 fork
 from Peter Mosmans (https://github.com/PeterMosmans/openssl). Thx a bunch, 
 Peter!
 
-Compiled Linux binaries so far come from Dirk, other contributors see ../CREDITS.md .
-
-**__New binaries inluding IPv6 support are @ https://testssl.sh__**. The ones here will be
-updated soon. 
+Compiled Linux and FreeBSD binaries so far come from Dirk, other contributors see ../CREDITS.md .
 
 
 Compiling and Usage Instructions
@@ -95,8 +92,7 @@ If you want to compile OpenSSL yourself, here are the instructions:
     enable-seed enable-camellia enable-idea enable-rfc3779 no-ec_nistp_64_gcc_128 \
     -static experimental-jpake -DOPENSSL_USE_BUILD_DATE 
 
-(IPv6 would need additionally ``-DOPENSSL_USE_IPV6`` and the patch from ``fedora-dirk-ipv6.diff``
--- this doesn't give you the option of an IPv6 enabled proxy -- yet.)
+IPv6 support would need additionally the patch from ``fedora-dirk-ipv6.diff``. This doesn't give you the option of an IPv6 enabled proxy yet. It is good practice to compile those binaries with ``-DOPENSSL_USE_IPV6`` as later on you can tell them apart by``openssl version -a``.
 
 Four GOST [1][2] ciphers come via engine support automagically with this setup. Two additional GOST 
 ciphers can be compiled in (``GOST-GOST94``, ``GOST-MD5``) with ``-DTEMP_GOST_TLS`` but as of now they make 
@@ -113,10 +109,10 @@ If you don't have / don't want Kerberos libraries and devel rpms/debs, just omit
 5.) make report (check whether it runs ok!)
 
 6.) ``./apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l`` lists for me
-* 191(+4 GOST) ciphers -- including kerberos 
+* 193(+4 GOST) ciphers including kerberos 
 * 177(+4 GOST) ciphers without kerberos
 
-as opposed to 111/109 from Ubuntu or Opensuse. 
+as opposed to ~110 from Ubuntu or Opensuse. 
 
 **Never use these binaries for anything other than testing**
 
