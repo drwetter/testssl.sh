@@ -714,7 +714,7 @@ run_http_header() {
      wait_kill $! $HEADER_MAXSLEEP
      if [[ $? -eq 0 ]]; then
           # we do the get command again as it terminated within $HEADER_MAXSLEEP. Thus it didn't hang, we do it
-          # again in the foreground ito get an ccurate header time!
+          # again in the foreground to get an accurate header time!
           printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI >$HEADERFILE 2>$ERRFILE
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
@@ -3837,7 +3837,7 @@ tls_time() {
           debugme out "$TLS_TIME"
           outln
      else
-          pr_warning "SSLv3 through TLS 1.2 didn't return a timestamp"
+          pr_warningln "SSLv3 through TLS 1.2 didn't return a timestamp"
           fileout "tls_time" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
      fi
      return 0
