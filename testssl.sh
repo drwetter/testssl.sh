@@ -7840,7 +7840,7 @@ determine_optimal_proto() {
           done
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
-               pr_warningln "$NODEIP:$PORT appears to only support SSLv2."
+               pr_magentaln "$NODEIP:$PORT appears to only support SSLv2."
                ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
                [[ $? -ne 0 ]] && exit -2
           fi
