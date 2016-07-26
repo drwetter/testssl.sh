@@ -50,16 +50,16 @@ foreach my $f ( @$json ) {
 }
 is($found,1,"We had a finding for this in the JSON output"); $tests++;
 
-like($out, qr/Chain of trust.*?NOT ok.*\(self signed\)/,"Chain of trust should fail because of self signed"); $tests++;
-$found = 0;
-foreach my $f ( @$json ) {
-	if ( $f->{id} eq "chain_of_trust" ) {
-		$found = 1;
-		like($f->{finding},qr/^All certificate trust checks failed/,"Finding says certificate cannot be trusted."); $tests++;
-		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
-		last;
-    }
-}
+#like($out, qr/Chain of trust.*?NOT ok.*\(self signed\)/,"Chain of trust should fail because of self signed"); $tests++;
+#$found = 0;
+#foreach my $f ( @$json ) {
+#	if ( $f->{id} eq "chain_of_trust" ) {
+#		$found = 1;
+#		like($f->{finding},qr/^All certificate trust checks failed/,"Finding says certificate cannot be trusted."); $tests++;
+#		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
+#		last;
+#    }
+#}
 is($found,1,"We had a finding for this in the JSON output"); $tests++;
 
 like($okout, qr/Chain of trust[^\n]*?Ok/,"Chain of trust should be ok"); $tests++;
