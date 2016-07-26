@@ -7116,6 +7116,7 @@ check4openssl_oldfarts() {
                *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" ;;
           esac
           ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
+          [[ $? -ne 0 ]] && exit -2
      fi
      outln
 }
