@@ -6880,6 +6880,7 @@ run_rc4() {
      local -i sclient_success
      local hexcode dash rc4_cipher sslvers kx auth enc mac export
      local rc4_ciphers_list="ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:DHE-DSS-RC4-SHA:AECDH-RC4-SHA:ADH-RC4-MD5:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:RC4-MD5:RSA-PSK-RC4-SHA:PSK-RC4-SHA:KRB5-RC4-SHA:KRB5-RC4-MD5:RC4-64-MD5:EXP1024-DHE-DSS-RC4-SHA:EXP1024-RC4-SHA:EXP-ADH-RC4-MD5:EXP-RC4-MD5:EXP-RC4-MD5:EXP-KRB5-RC4-SHA:EXP-KRB5-RC4-MD5"
+     local rc4_ssl2_ciphers_list="RC4-MD5:RC4-64-MD5:EXP-RC4-MD5"
      local rc4_detected=""
      local available=""
 
@@ -6893,7 +6894,14 @@ run_rc4() {
      pr_bold " RC4"; out " (CVE-2013-2566, CVE-2015-2808)        "
 
      $OPENSSL s_client -cipher $rc4_ciphers_list $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
-     if sclient_connect_successful $? $TMPFILE; then
+     sclient_connect_successful $? $TMPFILE
+     sclient_success=$?
+     if $HAS_SSL2 && [[ $sclient_success -ne 0 ]]; then
+          $OPENSSL s_client -cipher $rc4_ssl2_ciphers_list $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
+     fi
+     if [[ $sclient_success -eq  0 ]]; then
           "$WIDE" || pr_svrty_high "VULNERABLE (NOT ok): "
           rc4_offered=1
           if "$WIDE"; then
@@ -6901,7 +6909,11 @@ run_rc4() {
                neat_header
           fi
           while read hexcode dash rc4_cipher sslvers kx auth enc mac; do
-               $OPENSSL s_client -cipher $rc4_cipher $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null >$TMPFILE 2>$ERRFILE
+               if [[ "$sslvers" == "SSLv2" ]]; then
+                    $OPENSSL s_client -cipher $rc4_cipher $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 </dev/null >$TMPFILE 2>$ERRFILE
+               else
+                    $OPENSSL s_client -cipher $rc4_cipher $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null >$TMPFILE 2>$ERRFILE
+               fi
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?            # here we may have a fp with openssl < 1.0, TBC
                if [[ $sclient_success -ne 0 ]] && ! "$SHOW_EACH_C"; then
