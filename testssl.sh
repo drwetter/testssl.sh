@@ -7839,9 +7839,11 @@ determine_optimal_proto() {
                all_failed=0
           done
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
-          pr_warningln "$NODEIP:$PORT appears to only support SSLv2."
-          ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
-          [[ $? -ne 0 ]] && exit -2
+          if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
+               pr_warningln "$NODEIP:$PORT appears to only support SSLv2."
+               ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
+               [[ $? -ne 0 ]] && exit -2
+          fi
      fi
      grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
 
