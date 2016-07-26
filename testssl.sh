@@ -7896,9 +7896,7 @@ determine_optimal_proto() {
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
           for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2 ''; do
-               addcmd=""
-               [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
-               $OPENSSL s_client $OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $addcmd </dev/null >$TMPFILE 2>>$ERRFILE
+               $OPENSSL s_client $OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
                     all_failed=1
                     break
