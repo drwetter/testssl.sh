@@ -1,6 +1,8 @@
 
 
-**Note: new, improved binaries (1.0.2i, compiled from a snapshot from Peter Mosman's fork: https://github.com/drwetter/openssl) will come soon. Have a look @ https://testssl.sh/**
+**Note: Further new improved binaries (1.0.2i, compiled from a snapshot from Peter Mosman's fork: https://github.com/drwetter/openssl) will be uploaded soon. 
+
+Probably we discontinue the rarely used ones at github as it is not very approrpriate. Main site for binaries see https://testssl.sh/**
 
 
 Binaries
