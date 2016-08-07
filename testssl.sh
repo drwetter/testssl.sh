@@ -180,6 +180,7 @@ readonly ROBUST_PFS_CIPHERS="DHE-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-SHA256:DHE
 
 HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
+declare -a CUSTOM_CABUNDLE_FILES        # Custom CA bundle file input from the commandline option --ca
 FNAME=${FNAME:-""}                      # file name to read commands from
 IKNOW_FNAME=false
 
@@ -3717,7 +3718,7 @@ determine_trust() {
 	local -i i=1
 	local -i num_ca_bundles=0
 	local bundle_fname=""
-	local -a certificate_file verify_retcode trust
+	local -a ca_bundle_fpath certificate_file verify_retcode trust
 	local ok_was=""
 	local notok_was=""
 	local all_ok=true
@@ -3737,9 +3738,25 @@ determine_trust() {
           fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
-	for bundle_fname in $ca_bundles; do
-		certificate_file[i]=$(basename ${bundle_fname//.pem})
-          if [[ ! -r $bundle_fname ]]; then
+
+     for bundle_fname in $ca_bundles; do
+          if [[ ! -r "$bundle_fname" ]]; then
+               pr_warningln "\"$bundle_fname\" cannot be found / not readable"
+               return 7
+          fi
+          ca_bundle_fpath[${#ca_bundle_fpath[@]}]=$bundle_fname
+     done
+     for bundle_fname in "${CUSTOM_CABUNDLE_FILES[@]}"; do
+          if [[ ! -r "$bundle_fname" ]]; then
+               pr_warningln "\"$bundle_fname\" cannot be found / not readable in the custom list"
+               return 7
+          fi
+          ca_bundle_fpath[${#ca_bundle_fpath[@]}]=$bundle_fname
+     done
+
+     for bundle_fname in "${ca_bundle_fpath[@]}"; do
+          certificate_file[i]=$(basename "${bundle_fname//.pem}")
+          if [[ ! -r "$bundle_fname" ]]; then
                pr_warningln "\"$bundle_fname\" cannot be found / not readable"
                return 7
           fi
@@ -3747,11 +3764,11 @@ determine_trust() {
 		# set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
 		(export SSL_CERT_DIR="/dev/null; export SSL_CERT_FILE=/dev/null"
 		if [[ $certificates_provided -ge 2 ]]; then
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >"$TEMPDIR/${certificate_file[i]}.1" 2>"$TEMPDIR/${certificate_file[i]}.2"
 		else
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >"$TEMPDIR/${certificate_file[i]}.1" 2>"$TEMPDIR/${certificate_file[i]}.2"
 		fi)
-		verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1)
+		verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' "$TEMPDIR/${certificate_file[i]}.1")
 		[[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
 		if [[ ${verify_retcode[i]} -eq 0 ]]; then
 			trust[i]=true
@@ -7201,6 +7218,7 @@ tuning options (can also be preset via environment variables):
      --proxy <host>:<port>         connect via the specified HTTP proxy
      -6                            use also IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --sneaky                      leave less traces in target logs: user agent, referer
+     --ca <CA bundle file>         Add an additional CA bundle file for the trust determination test, e.g. to test a private CA
 
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
@@ -8468,6 +8486,16 @@ parse_cmd_line() {
                     ;;
                --ssl_native|--ssl-native)
                     SSL_NATIVE=true
+                    ;;
+               --ca|--ca=*)
+                    local bundle_fname=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    if [[ ! -r "$bundle_fname" ]]; then
+                         pr_magentaln "\nProvided CA bundle file does not exist or is not readable"
+                         help 1
+                    fi
+                    # Allow multiple additional bundle files to be set
+                    CUSTOM_CABUNDLE_FILES[${#CUSTOM_CABUNDLE_FILES[@]}]=$bundle_fname
                     ;;
                (--) shift
                     break
