@@ -13,7 +13,7 @@ my (
 	$found,
 );
 # OK
-pass("Running testssl.sh against badssl.com to craete a baseline (may take 2~3 minutes)"); $tests++;
+pass("Running testssl.sh against badssl.com to create a baseline (may take 2~3 minutes)"); $tests++;
 my $okout = `./testssl.sh -S -e -U --jsonfile tmp.json --color 0 badssl.com`;
 my $okjson = json('tmp.json');
 cmp_ok(@$okjson,'>',10,"We have more then 10 findings"); $tests++;
@@ -54,7 +54,7 @@ like($out, qr/Chain of trust.*?NOT ok.*\(self signed\)/,"Chain of trust should f
 $found = 0;
 foreach my $f ( @$json ) {
 	if ( $f->{id} eq "chain_of_trust" ) {
-		$found = 1;
+	$found = 1;
 		like($f->{finding},qr/^All certificate trust checks failed/,"Finding says certificate cannot be trusted."); $tests++;
 		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
 		last;
