@@ -2922,6 +2922,7 @@ run_protocols() {
      local supported_no_ciph2="supported but couldn't detect a cipher"
      local latest_supported=""  # version.major and version.minor of highest version supported by the server.
      local detected_version_string latest_supported_string
+     local lines nr_ciphers_detected
      local extra_spaces="         "
 
      outln; pr_headline " Testing protocols "
@@ -2946,7 +2947,40 @@ run_protocols() {
 
      pr_bold " SSLv2      $extra_spaces";
      if ! "$SSL_NATIVE"; then
-          sslv2_sockets                                                    #FIXME: messages/output need to be moved to this (higher) level
+          sslv2_sockets
+          case $? in
+               7) # strange reply, couldn't convert the cipher spec length to a hex number
+                    pr_cyan "strange v2 reply "
+                    outln " (rerun with DEBUG >=2)"
+                    [[ $DEBUG -ge 3 ]] && hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" | head -1
+                    fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
+                    ;;
+               1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
+                    pr_done_bestln "not offered (OK)"
+                    fileout "sslv2" "OK" "SSLv2 not offered (OK)"
+                    ;;
+               0) # reset
+                    pr_done_bestln "not offered (OK)"
+                    fileout "sslv2" "OK" "SSLv2 not offered (OK)"
+                    ;;
+               3) # everything else
+                    lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
+                    [[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
+                    if [[ "$lines" -gt 1 ]]; then
+                         nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
+                         add_tls_offered "ssl2"
+                         if [[ 0 -eq "$nr_ciphers_detected" ]]; then
+                              pr_svrty_highln "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
+                              fileout "sslv2" "NOT ok" "SSLv2 offered (NOT ok), vulnerable to CVE-2015-3197"
+                         else
+                              pr_svrty_critical "offered (NOT ok), also VULNERABLE to DROWN attack";
+                              outln " -- $nr_ciphers_detected ciphers"
+                              fileout "sslv2" "NOT ok" "SSLv2 offered (NOT ok), vulnerable to DROWN attack.  Detected ciphers: $nr_ciphers_detected"
+                         fi
+                    fi ;;
+          esac
+          pr_off
+          debugme outln
      else
           run_prototest_openssl "-ssl2"
           case $? in
@@ -5607,7 +5641,7 @@ parse_tls_serverhello() {
 
 
 sslv2_sockets() {
-     local nr_ciphers_detected
+     local ret
 
      fd_socket 5 || return 6
      debugme outln "sending client hello... "
@@ -5621,43 +5655,7 @@ sslv2_sockets() {
      fi
 
      parse_sslv2_serverhello "$SOCK_REPLY_FILE"
-     case $? in
-          7) # strange reply, couldn't convert the cipher spec length to a hex number
-               pr_cyan "strange v2 reply "
-               outln " (rerun with DEBUG >=2)"
-               [[ $DEBUG -ge 3 ]] && hexdump -C "$SOCK_REPLY_FILE" | head -1
-               ret=7
-               fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
-               ;;
-          1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
-               pr_done_bestln "not offered (OK)"
-               ret=0
-               fileout "sslv2" "OK" "SSLv2 not offered (OK)"
-               ;;
-          0) # reset
-               pr_done_bestln "not offered (OK)"
-               ret=0
-               fileout "sslv2" "OK" "SSLv2 not offered (OK)"
-               ;;
-          3) # everything else
-               lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null)")
-               [[ "$DEBUG" -ge 2 ]] && out "  ($lines lines)  "
-               if [[ "$lines" -gt 1 ]]; then
-                    nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
-                    add_tls_offered "ssl2"
-                    if [[ 0 -eq "$nr_ciphers_detected" ]]; then
-                         pr_svrty_highln "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
-                         fileout "sslv2" "NOT ok" "SSLv2 offered (NOT ok), vulnerable to CVE-2015-3197"
-                    else
-                         pr_svrty_critical "offered (NOT ok), also VULNERABLE to DROWN attack";
-                         outln " -- $nr_ciphers_detected ciphers"
-                         fileout "sslv2" "NOT ok" "SSLv2 offered (NOT ok), vulnerable to DROWN attack.  Detected ciphers: $nr_ciphers_detected"
-                    fi
-                    ret=1
-               fi ;;
-     esac
-     pr_off
-     debugme outln
+     ret=$?
 
      close_socket
      TMPFILE=$SOCK_REPLY_FILE
@@ -6651,26 +6649,18 @@ run_drown() {
      fi
 # if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
      pr_bold " DROWN"; out " (2016-0800, CVE-2016-0703), exper.  "
-     fd_socket 5 || return 6
-     debugme outln "sending client hello... "
-     socksend_sslv2_clienthello "$SSLv2_CLIENT_HELLO"
-     sockread_serverhello 32768
-     debugme outln "reading server hello... "
-     if [[ "$DEBUG" -ge 4 ]]; then
-          hexdump -C "$SOCK_REPLY_FILE" | head -6
-          outln
-     fi
-     parse_sslv2_serverhello "$SOCK_REPLY_FILE"
+     sslv2_sockets
+
      case $? in
           7) # strange reply, couldn't convert the cipher spec length to a hex number
                fixme "strange v2 reply "
                outln " (rerun with DEBUG >=2)"
-               [[ $DEBUG -ge 3 ]] && hexdump -C "$SOCK_REPLY_FILE" | head -1
+               [[ $DEBUG -ge 3 ]] && hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" | head -1
                ret=7
                fileout "drown" "MINOR_ERROR" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
                ;;
           3)   # vulnerable
-               lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>/dev/null)")
+               lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
                debugme out "  ($lines lines)  "
                if [[ "$lines" -gt 1 ]]; then
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
