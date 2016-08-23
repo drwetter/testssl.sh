@@ -6447,7 +6447,7 @@ run_ssl_poodle() {
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption) " && outln
      pr_bold " POODLE, SSL"; out " (CVE-2014-3566)               "
-     locally_supported "-ssl3" || return 1
+     locally_supported "-ssl3" || return 0
      cbc_ciphers=$(actually_supported_ciphers $cbc_ciphers)
 
      debugme echo $cbc_ciphers
