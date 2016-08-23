@@ -7828,6 +7828,7 @@ determine_optimal_proto() {
                fi
                all_failed=0
           done
+          [[ $all_failed -eq 0 ]] && STARTTLS_OPTIMAL_PROTO=""
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
           for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
@@ -7839,6 +7840,7 @@ determine_optimal_proto() {
                fi
                all_failed=0
           done
+          [[ $all_failed -eq 0 ]] && OPTIMAL_PROTO=""
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
                pr_magentaln "$NODEIP:$PORT appears to only support SSLv2."
