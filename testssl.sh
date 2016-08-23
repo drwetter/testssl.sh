@@ -6742,11 +6742,21 @@ run_beast(){
      done
 
      for proto in ssl3 tls1; do
+          if [[ "$proto" == "ssl3" ]] && ! locally_supported "-$proto"; then
+               continued=true
+               out "                                           "
+               continue
+          fi
           $OPENSSL s_client -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>>$ERRFILE </dev/null
           if ! sclient_connect_successful $? $TMPFILE; then      # protocol supported?
                if "$continued"; then                             # second round: we hit TLS1
-                    pr_done_goodln "no SSL3 or TLS1 (OK)"
-                    fileout "beast" "OK" "BEAST (CVE-2011-3389) : not vulnerable (OK) no SSL3 or TLS1"
+                    if "$HAS_SSL3"; then
+                         pr_done_goodln "no SSL3 or TLS1 (OK)"
+                         fileout "beast" "OK" "BEAST (CVE-2011-3389) : not vulnerable (OK) no SSL3 or TLS1"
+                    else
+                         pr_done_goodln "no TLS1 (OK)"
+                         fileout "beast" "OK" "BEAST (CVE-2011-3389) : not vulnerable (OK) no TLS1"
+                    fi
                     return 0
                else                # protocol not succeeded but it's the first time
                     continued=true
