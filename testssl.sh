@@ -4216,6 +4216,7 @@ certificate_info() {
                *DSA*|*dsa*)             out "DSA ";;
                *ecdsa*|*ecPublicKey)    out "ECDSA ";;
                *GOST*|*gost*)           out "GOST ";;
+               *dh*|*DH*)               out "DH " ;;
                *)                       pr_warning "fixme: $cert_key_algo " ;;
           esac
           # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
@@ -4243,7 +4244,8 @@ certificate_info() {
                     fileout "${json_prefix}key_size" "DEBUG" "Server keys $cert_keysize bits (not expected)"
                fi
                outln " bits"
-          elif [[ $cert_key_algo = *RSA* ]] || [[ $cert_key_algo = *rsa* ]] || [[ $cert_key_algo = *dsa* ]]; then
+          elif [[ $cert_key_algo = *RSA* ]] || [[ $cert_key_algo = *rsa* ]] || [[ $cert_key_algo = *dsa* ]] || \
+               [[ $cert_key_algo =~ dhKeyAgreement ]] || [[ $cert_key_algo =~ "X9.42 DH" ]]; then
                if [[ "$cert_keysize" -le 512 ]]; then
                     pr_svrty_critical "$cert_keysize"
                     outln " bits"
