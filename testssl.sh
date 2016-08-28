@@ -212,6 +212,7 @@ OSSL_VER_APPENDIX="none"
 HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
 HAS_SSL2=false
 HAS_SSL3=false
+HAS_NO_SSL2=false
 HAS_ALPN=false
 HAS_SPDY=false
 ADD_RFC_STR="rfc"                       # display RFC ciphernames
@@ -2798,6 +2799,7 @@ run_client_simulation() {
                     [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
                fi
           else
+               ! "$HAS_NO_SSL2" && protos[i]="$(sed 's/-no_ssl2//' <<< "${protos[i]}")"
                $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
                debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
                sclient_connect_successful $? $TMPFILE
@@ -7097,6 +7099,9 @@ find_openssl_binary() {
      $OPENSSL s_client -ssl3 2>&1 | grep -aq "unknown option" || \
           HAS_SSL3=true
 
+     $OPENSSL s_client -no_ssl2 2>&1 | grep -aq "unknown option" || \
+          HAS_NO_SSL2=true
+
      $OPENSSL s_client -help 2>&1 | grep -qw '\-alpn' && \
           HAS_ALPN=true
 
@@ -7280,6 +7285,7 @@ OPENSSL_CONF: $OPENSSL_CONF
 HAS_IPv6: $HAS_IPv6
 HAS_SSL2: $HAS_SSL2
 HAS_SSL3: $HAS_SSL3
+HAS_NO_SSL2: $HAS_NO_SSL2
 HAS_SPDY: $HAS_SPDY
 HAS_ALPN: $HAS_ALPN
 
