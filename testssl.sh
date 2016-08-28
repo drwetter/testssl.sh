@@ -3492,7 +3492,11 @@ run_server_preference() {
                          out "     (SSLv3: "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"" ; outln ")";
                          continue
                     fi
-                    $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+                    if [[ "$p" =~ ssl ]]; then
+                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
+                    else
+                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+                    fi
                     if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                          cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
@@ -3623,7 +3627,7 @@ check_tls12_pref() {
 
 
 cipher_pref_check() {
-     local p proto protos npn_protos
+     local p proto protos npn_protos sni
      local tested_cipher cipher order
      local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
 
@@ -3640,11 +3644,12 @@ cipher_pref_check() {
                continue
           fi
           # with the supplied binaries SNI works also for SSLv2 (+ SSLv3)
-          $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>$ERRFILE >$TMPFILE
+          [[ "$p" =~ ssl ]] && sni="" || sni=$SNI
+          $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                tested_cipher=""
                proto=$(awk '/Protocol/ { print $3 }' $TMPFILE)
-               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
+               cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
                [[ -z "$proto" ]] && continue                # for early openssl versions sometimes needed
                outln
                printf "    %-10s" "$proto: "
@@ -3667,9 +3672,9 @@ cipher_pref_check() {
                else
                     out " $cipher"  # this is the first cipher for protocol
                     while true; do
-                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
                          sclient_connect_successful $? $TMPFILE || break
-                         cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
+                         cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
                          out " $cipher"
                          order+=" $cipher"
                          tested_cipher="$tested_cipher:-$cipher"
