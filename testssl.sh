@@ -83,7 +83,7 @@ readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
 
-readonly VERSION="2.8rc1"
+readonly VERSION="2.8rc2"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
@@ -3163,7 +3163,6 @@ run_protocols() {
           1)
                pr_svrty_mediumln "not offered"
                if ! "$using_sockets" || ! "$EXPERIMENTAL" || [[ -z $latest_supported ]]; then
-                    outln
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered" # no GCM, penalty
                else
                     pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string"
@@ -6487,7 +6486,7 @@ run_tls_fallback_scsv() {
      local -i ret=0
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for TLS_FALLBACK_SCSV Protection " && outln
-     pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507), experim.    "
+     pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507),             "
      # This isn't a vulnerability check per se, but checks for the existence of
      # the countermeasure to protect against protocol downgrade attacks.
 
@@ -6658,7 +6657,7 @@ run_drown() {
           outln
      fi
 # if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
-     pr_bold " DROWN"; out " (2016-0800, CVE-2016-0703), exper.  "
+     pr_bold " DROWN"; out " (2016-0800, CVE-2016-0703)          "
      sslv2_sockets
 
      case $? in
@@ -6678,8 +6677,8 @@ run_drown() {
                          pr_svrty_highln "CVE-2015-3197: SSLv2 supported but couldn't detect a cipher (NOT ok)";
                          fileout "drown" "NOT ok" "SSLv2 offered (NOT ok), CVE-2015-3197: but could not detect a cipher"
                     else
-                         pr_svrty_criticalln  "vulnerable (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
-                         fileout "drown" "NOT ok" "vulnerable (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers"
+                         pr_svrty_criticalln  "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
+                         fileout "drown" "NOT ok" "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers"
                     fi
                fi
                ret=1
@@ -8356,7 +8355,7 @@ parse_cmd_line() {
                     do_pfs=true
                     ;;
                --devel) ### this development feature will soon disappear
-                    HEX_CIPHER=""
+                    HEX_CIPHER="$TLS12_CIPHER"
                     # DEBUG=3  ./testssl.sh --devel 03 "cc, 13, c0, 13" google.de                              --> TLS 1.2, old CHACHA/POLY
                     # DEBUG=3  ./testssl.sh --devel 03 "cc,a8, cc,a9, cc,aa, cc,ab, cc,ac" blog.cloudflare.com -->          new CHACHA/POLY
                     # DEBUG=3  ./testssl.sh --devel 01 yandex.ru                     --> TLS 1.0
@@ -8671,4 +8670,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.531 2016/07/23 13:12:12 dirkw Exp $
+#  $Id: testssl.sh,v 1.533 2016/08/28 19:41:29 dirkw Exp $
