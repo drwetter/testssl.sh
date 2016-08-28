@@ -8543,9 +8543,8 @@ lets_roll() {
      determine_rdns
      determine_service "$1"        # any starttls service goes here
 
-     $do_tls_sockets && { [[ $TLS_LOW_BYTE -eq 22 ]] && \
-          sslv2_sockets || \
-          tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
+     $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets; echo "$?" ; exit 0; }
+     $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
      $do_test_just_one && test_just_one ${single_cipher}
 
      # all top level functions  now following have the prefix "run_"
