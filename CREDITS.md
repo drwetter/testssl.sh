@@ -20,10 +20,12 @@
  - Detection of insecure redirects
  - JSON and CSV output
  - Client simulations
+ - CI integration, test cases for it
 
 * David Cooper
  - Detection + output of multiple certificates
  - several cleanups of server certificate related stuff
+ - several minor fixes
  - improved parsing of TLS ServerHello messages
  - speed improvements when testing all ciphers
 
