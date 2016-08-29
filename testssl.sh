@@ -6066,7 +6066,7 @@ ok_ids(){
 
 #FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
 run_ccs_injection(){
-     local tls_proto_offered tls_hexcode ccs_message client_hello byte6="0a"
+     local tls_proto_offered tls_hexcode ccs_message client_hello byte6=""
      local -i retval ret lines
 
      # see https://www.openssl.org/news/secadv_20140605.txt
@@ -6169,7 +6169,7 @@ run_ccs_injection(){
           debugme echo "lines: $lines, byte6: $byte6"
      fi
      rm "$SOCK_REPLY_FILE"
-     if [[ "$byte6" == "0a" ]] || [[ "$lines" -gt 1 ]]; then
+     if [[ "$byte6" == "" ]] || [[ "$lines" -gt 1 ]]; then
           pr_done_best "not vulnerable (OK)"
           if [[ $retval -eq 3 ]]; then
                fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
