@@ -3748,6 +3748,7 @@ verify_retcode_helper() {
 
 	case $retcode in
 		# codes from ./doc/apps/verify.pod | verify(1ssl)
+		26) out "(unsupported certificate purpose)" ;; 	# X509_V_ERR_INVALID_PURPOSE
 		24) out "(certificate unreadable)" ;; 	# X509_V_ERR_INVALID_CA
 		23) out "(certificate revoked)" ;; 		# X509_V_ERR_CERT_REVOKED
 		21) out "(chain incomplete, only 1 cert provided)" ;; 	# X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
@@ -3830,8 +3831,8 @@ determine_trust() {
 		if ! $some_ok; then
 		     # all failed (we assume with the same issue), we're displaying the reason
                out " "
-			verify_retcode_helper "${verify_retcode[2]}"
-               fileout "${json_prefix}chain_of_trust" "NOT ok" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[2]}"). $addtl_warning"
+			verify_retcode_helper "${verify_retcode[1]}"
+               fileout "${json_prefix}chain_of_trust" "NOT ok" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[1]}"). $addtl_warning"
 		else
 			# is one ok and the others not ==> display the culprit store
 			if $some_ok ; then
