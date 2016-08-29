@@ -6646,16 +6646,7 @@ run_drown() {
      fi
 # if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
      pr_bold " DROWN"; out " (2016-0800, CVE-2016-0703)          "
-     fd_socket 5 || return 6
-     debugme outln "sending client hello... "
-     socksend_sslv2_clienthello "$SSLv2_CLIENT_HELLO"
-     sockread 32768
-     debugme outln "reading server hello... "
-     if [[ "$DEBUG" -ge 4 ]]; then
-          hexdump -C "$SOCK_REPLY_FILE" | head -6
-          outln
-     fi
-     parse_sslv2_serverhello "$SOCK_REPLY_FILE"
+     sslv2_sockets
 
      case $? in
           7) # strange reply, couldn't convert the cipher spec length to a hex number
