@@ -6066,8 +6066,9 @@ ok_ids(){
 
 #FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
 run_ccs_injection(){
-     local tls_proto_offered tls_hexcode ccs_message client_hello byte6=""
-     local -i retval ret lines
+     local tls_proto_offered tls_hexcode ccs_message close_message client_hello
+     local reply=""
+     local -i retval ret
 
      # see https://www.openssl.org/news/secadv_20140605.txt
      # mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
@@ -6089,6 +6090,7 @@ run_ccs_injection(){
 #FIXME: for SSLv3 only we need to set tls_hexcode and the record layer TLS version correctly
      esac
      ccs_message=", x14, $tls_hexcode ,x00, x01, x01"
+     close_message=", x15, $tls_hexcode ,x00, x02, x01, x00"
 
      client_hello="
      # TLS header (5 bytes)
@@ -6136,58 +6138,63 @@ run_ccs_injection(){
      fi
      rm "$SOCK_REPLY_FILE"
 
-# ... and then send the a change cipher spec message
+# ... and then send a change cipher spec message
      socksend "$ccs_message" 1 || ok_ids
      sockread 2048 $CCS_MAX_WAITSOCK
      if [[ $DEBUG -ge 3 ]]; then
-          outln "\n1st reply: "
-          hexdump -C "$SOCK_REPLY_FILE" | head -20
-# ok:      15 | 0301    |  02 | 02 | 0a
-#       ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
-#    or just timed out
-          outln
-          outln "payload #2 with TLS version $tls_hexcode:"
-     fi
-     rm "$SOCK_REPLY_FILE"
-
-     socksend "$ccs_message" 2 || ok_ids
-     sockread 2048 $CCS_MAX_WAITSOCK
-     retval=$?
-
-     if [[ $DEBUG -ge 3 ]]; then
-          outln "\n2nd reply: "
-          printf -- "$(hexdump -C "$SOCK_REPLY_FILE")"
-# not ok:  15 | 0301    | 02 | 02  | 15
-#       ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
-# ok:  0a or nothing: ==> RST
+          if [[ $retval -eq 3 ]]; then
+               outln "\n1st reply: (timed out)"
+          else
+               outln "\n1st reply: "
+               hexdump -C "$SOCK_REPLY_FILE" | head -20
+          fi
           outln
      fi
 
      if [[ -s "$SOCK_REPLY_FILE" ]]; then
-          byte6=$(hexdump -ve '1/1 "%.2x"' "$SOCK_REPLY_FILE" | sed 's/^..........//')
-          lines=$(hexdump -ve '16/1 "%02x " " \n"' "$SOCK_REPLY_FILE" | count_lines )
-          debugme echo "lines: $lines, byte6: $byte6"
+          reply=$(hexdump -ve '1/1 "%.2x"' "$SOCK_REPLY_FILE")
      fi
-     rm "$SOCK_REPLY_FILE"
-     if [[ "$byte6" == "" ]] || [[ "$lines" -gt 1 ]]; then
+# if the server responded with a fatal alert, then it is not vulnerable
+     if [[ "$reply" =~ 15030[0-9]000202[0-9a0f][0-9a-f] ]]; then
           pr_done_best "not vulnerable (OK)"
-          if [[ $retval -eq 3 ]]; then
-               fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
-          else
-               fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
-          fi
+          fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
           ret=0
      else
-          pr_svrty_critical "VULNERABLE (NOT ok)"
-          if [[ $retval -eq 3 ]]; then
-               fileout "ccs" "NOT ok" "CCS (CVE-2014-0224): VULNERABLE (NOT ok) (timed out)"
-          else
-               fileout "ccs" "NOT ok" "CCS (CVE-2014-0224): VULNERABLE (NOT ok)"
+          if [[ $DEBUG -ge 3 ]]; then
+               outln "payload #2 with TLS version $tls_hexcode:"
           fi
-          ret=1
+          rm "$SOCK_REPLY_FILE"
+
+          # Send a close notify warning message
+          socksend "$close_message" 2 || ok_ids
+          sockread 2048 $CCS_MAX_WAITSOCK
+          retval=$?
+
+          if [[ $DEBUG -ge 3 ]]; then
+               outln "\n2nd reply: "
+               printf -- "$(hexdump -C "$SOCK_REPLY_FILE")"
+               outln
+          fi
+
+          # if the server sends a non-empty response to the close notify,
+          # then it may be vulnerable.
+          if [[ ! -s "$SOCK_REPLY_FILE" ]]; then
+               pr_done_best "not vulnerable (OK)"
+               if [[ $retval -eq 3 ]]; then
+                    fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
+               else
+                    fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
+               fi
+               ret=0
+          else
+               pr_svrty_critical "VULNERABLE (NOT ok)"
+               fileout "ccs" "NOT ok" "CCS (CVE-2014-0224): VULNERABLE (NOT ok)"
+               ret=1
+          fi
+          [[ $retval -eq 3 ]] && out " (timed out)"
      fi
-     [[ $retval -eq 3 ]] && out " (timed out)"
      outln
+     rm "$SOCK_REPLY_FILE"
 
      close_socket
      tmpfile_handle $FUNCNAME.txt
