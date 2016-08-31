@@ -6045,7 +6045,7 @@ run_heartbleed(){
           outln "\nheartbleed reply: "
           hexdump -C "$SOCK_REPLY_FILE" | head -20
           bytes_returned="$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')"
-          [[ $bytes_returned -gt 160 ]] && outln "[...]"
+          [[ $bytes_returned -gt 320 ]] && outln "[...]"
           outln
      fi
 
