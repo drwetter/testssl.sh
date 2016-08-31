@@ -4113,6 +4113,7 @@ certificate_info() {
      local cert_keysize=$4
      local ocsp_response=$5
      local ocsp_response_status=$6
+     local sni_used=$7
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
      local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn
      local issuer_DC issuerfinding cn_nosni=""
@@ -4133,7 +4134,9 @@ certificate_info() {
           [[ $certificate_number -eq 1 ]] && outln
           indent="  "
           out "$indent"
-          pr_headlineln "Server Certificate #$certificate_number"
+          pr_headline "Server Certificate #$certificate_number"
+          [[ -z "$sni_used" ]] && pr_underline " (in response to request w/o SNI)"
+          outln
           json_prefix="Server Certificate #$certificate_number "
           spaces="                                "
      else
@@ -4342,17 +4345,21 @@ certificate_info() {
           cnok="INFO"
      fi
 
-     # no cipher suites specified here. We just want the default vhost subject
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
-     if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
-          cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
-          [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
+     if [[ -n "$sni_used" ]]; then
+          # no cipher suites specified here. We just want the default vhost subject
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+          if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
+               cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
+               [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
+          fi
+          debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
+     else
+          debugme out "\"$NODE\" | \"$cn\""
      fi
 
 #FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
 
-     debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
-     if [[ "$(toupper "$cn_nosni")" == "$(toupper "$cn")" ]]; then
+     if [[ -z "$sni_used" ]] || [[ "$(toupper "$cn_nosni")" == "$(toupper "$cn")" ]]; then
           outln
      elif [[ -z "$cn_nosni" ]]; then
           out " (request w/o SNI didn't succeed";
@@ -4483,7 +4490,9 @@ certificate_info() {
                has_dns_sans=true || has_dns_sans=false
      fi
 
-     if "$has_dns_sans" && [[ $trust_nosni -eq 4 ]]; then
+     if [[ -z "$sni_used" ]]; then
+          trustfinding_nosni=""
+     elif "$has_dns_sans" && [[ $trust_nosni -eq 4 ]]; then
           trustfinding_nosni=" (w/o SNI: Ok via CN, but not SAN)"
      elif "$has_dns_sans" && [[ $trust_nosni -eq 8 ]]; then
           trustfinding_nosni=" (w/o SNI: Ok via CN wildcard, but not SAN)"
@@ -4647,7 +4656,8 @@ run_server_defaults() {
      local -i i n
      local all_tls_extensions=""
      local -i certs_found=0
-     local -a previous_hostcert previous_intermediates keysize cipher ocsp_response ocsp_response_status
+     local -a previous_hostcert previous_intermediates keysize cipher
+     local -a ocsp_response ocsp_response_status sni_used
      local -a ciphers_to_test success
      local cn_nosni cn_sni sans_nosni sans_sni san
 
@@ -4768,6 +4778,7 @@ run_server_defaults() {
                      ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
                      previous_hostcert[certs_found]=$newhostcert
                      previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
+                     [[ $n -ge 8 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                  fi
              fi
          fi
@@ -4825,7 +4836,7 @@ run_server_defaults() {
      while [[ $i -le $certs_found ]]; do
          echo "${previous_hostcert[i]}" > $HOSTCERT
          echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
-         certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}"
+         certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}"
          i=$((i + 1))
      done
 }
