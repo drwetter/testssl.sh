@@ -251,6 +251,10 @@ FIRST_FINDING=true                      # Is this the first finding we are outpu
 TLS_LOW_BYTE=""
 HEX_CIPHER=""
 
+                                             # The various hexdump commands we need to replace xxd (BSD compatibility)
+HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"')   # This is used to analyze the reply
+HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')      # Replaces both xxd -p and tr -cd '[:print:]'
+
 
 
 ###### some hexbytes for bash network sockets follow ######
@@ -1970,7 +1974,7 @@ client_simulation_sockets() {
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
 
-     sockread 32768
+     sockread_serverhello 32768
      TLS_NOW=$(LC_ALL=C date "+%s")
      debugme outln "reading server hello..."
      if [[ "$DEBUG" -ge 4 ]]; then
@@ -5288,7 +5292,8 @@ socksend_sslv2_clienthello() {
      sleep $USLEEP_SND
 }
 
-sockread() {
+# for SSLv2 to TLS 1.2:
+sockread_serverhello() {
      [[ -z "$2" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
 
      SOCK_REPLY_FILE=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
@@ -5643,7 +5648,7 @@ sslv2_sockets() {
      debugme outln "sending client hello... "
      socksend_sslv2_clienthello "$SSLv2_CLIENT_HELLO"
 
-     sockread 32768
+     sockread_serverhello 32768
      debugme outln "reading server hello... "
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -6
@@ -5894,7 +5899,7 @@ tls_sockets() {
 
      # if sending didn't succeed we don't bother
      if [[ $ret -eq 0 ]]; then
-          sockread 32768
+          sockread_serverhello 32768
           TLS_NOW=$(LC_ALL=C date "+%s")
           debugme outln "reading server hello..."
           if [[ "$DEBUG" -ge 4 ]]; then
@@ -5941,7 +5946,7 @@ tls_sockets() {
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 run_heartbleed(){
      local tls_proto_offered tls_hexcode heartbleed_payload client_hello
-     local -i retval ret lines_returned
+     local -i retval ret lines_returned bytes_returned
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
      pr_bold " Heartbleed"; out " (CVE-2014-0160)                "
@@ -6024,7 +6029,7 @@ run_heartbleed(){
      socksend "$client_hello" 1
 
      debugme outln "\nreading server hello"
-     sockread 32768
+     sockread_serverhello 32768
      if [[ $DEBUG -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -20
           outln "[...]"
@@ -6033,12 +6038,14 @@ run_heartbleed(){
      rm "$SOCK_REPLY_FILE"
 
      socksend "$heartbleed_payload" 1
-     sockread 16384 $HEARTBLEED_MAX_WAITSOCK
+     sockread_serverhello 16384 $HEARTBLEED_MAX_WAITSOCK
      retval=$?
 
      if [[ $DEBUG -ge 3 ]]; then
           outln "\nheartbleed reply: "
           hexdump -C "$SOCK_REPLY_FILE" | head -20
+          bytes_returned="$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')"
+          [[ $bytes_returned -gt 160 ]] && outln "[...]"
           outln
      fi
 
@@ -6077,9 +6084,8 @@ ok_ids(){
 
 #FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
 run_ccs_injection(){
-     local tls_proto_offered tls_hexcode ccs_message close_message client_hello
-     local reply=""
-     local -i retval ret
+     local tls_proto_offered tls_hexcode ccs_message client_hello byte6 sockreply
+     local -i retval ret lines
 
      # see https://www.openssl.org/news/secadv_20140605.txt
      # mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
@@ -6101,7 +6107,6 @@ run_ccs_injection(){
 #FIXME: for SSLv3 only we need to set tls_hexcode and the record layer TLS version correctly
      esac
      ccs_message=", x14, $tls_hexcode ,x00, x01, x01"
-     close_message=", x15, $tls_hexcode ,x00, x02, x01, x00"
 
      client_hello="
      # TLS header (5 bytes)
@@ -6141,7 +6146,7 @@ run_ccs_injection(){
      socksend "$client_hello" 1
 
      debugme outln "\nreading server hello"
-     sockread 32768
+     sockread_serverhello 32768
      if [[ $DEBUG -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -20
           outln "[...]"
@@ -6149,63 +6154,58 @@ run_ccs_injection(){
      fi
      rm "$SOCK_REPLY_FILE"
 
-# ... and then send a change cipher spec message
+# ... and then send the a change cipher spec message
      socksend "$ccs_message" 1 || ok_ids
-     sockread 2048 $CCS_MAX_WAITSOCK
+     sockread_serverhello 2048 $CCS_MAX_WAITSOCK
      if [[ $DEBUG -ge 3 ]]; then
-          if [[ $retval -eq 3 ]]; then
-               outln "\n1st reply: (timed out)"
-          else
-               outln "\n1st reply: "
-               hexdump -C "$SOCK_REPLY_FILE" | head -20
-          fi
+          outln "\n1st reply: "
+          hexdump -C "$SOCK_REPLY_FILE" | head -20
+# ok:      15 | 0301    |  02 | 02 | 0a
+#       ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
+#    or just timed out
+          outln
+          outln "payload #2 with TLS version $tls_hexcode:"
+     fi
+     rm "$SOCK_REPLY_FILE"
+
+     socksend "$ccs_message" 2 || ok_ids
+     sockread_serverhello 2048 $CCS_MAX_WAITSOCK
+     retval=$?
+
+     if [[ $DEBUG -ge 3 ]]; then
+          outln "\n2nd reply: "
+          printf -- "$(hexdump -C "$SOCK_REPLY_FILE")"
+# not ok:  15 | 0301    | 02 | 02  | 15
+#       ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
+# ok:  0a or nothing: ==> RST
           outln
      fi
+     sockreply=$(cat "$SOCK_REPLY_FILE" 2>/dev/null)
+     rm "$SOCK_REPLY_FILE"
 
-     if [[ -s "$SOCK_REPLY_FILE" ]]; then
-          reply=$(hexdump -ve '1/1 "%.2x"' "$SOCK_REPLY_FILE")
-     fi
-# if the server responded with a fatal alert, then it is not vulnerable
-     if [[ "$reply" =~ 15030[0-9]000202[0-9a0f][0-9a-f] ]]; then
+     byte6=$(echo "$sockreply" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//')
+     lines=$(echo "$sockreply" | "${HEXDUMP[@]}" | count_lines )
+     debugme echo "lines: $lines, byte6: $byte6"
+
+     if [[ "$byte6" == "0a" ]] || [[ "$lines" -gt 1 ]]; then
           pr_done_best "not vulnerable (OK)"
-          fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
+          if [[ $retval -eq 3 ]]; then
+               fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
+          else
+               fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
+          fi
           ret=0
      else
-          if [[ $DEBUG -ge 3 ]]; then
-               outln "payload #2 with TLS version $tls_hexcode:"
-          fi
-          rm "$SOCK_REPLY_FILE"
-
-          # Send a close notify warning message
-          socksend "$close_message" 2 || ok_ids
-          sockread 2048 $CCS_MAX_WAITSOCK
-          retval=$?
-
-          if [[ $DEBUG -ge 3 ]]; then
-               outln "\n2nd reply: "
-               printf -- "$(hexdump -C "$SOCK_REPLY_FILE")"
-               outln
-          fi
-
-          # if the server sends a non-empty response to the close notify,
-          # then it may be vulnerable.
-          if [[ ! -s "$SOCK_REPLY_FILE" ]]; then
-               pr_done_best "not vulnerable (OK)"
-               if [[ $retval -eq 3 ]]; then
-                    fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
-               else
-                    fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
-               fi
-               ret=0
+          pr_svrty_critical "VULNERABLE (NOT ok)"
+          if [[ $retval -eq 3 ]]; then
+               fileout "ccs" "NOT ok" "CCS (CVE-2014-0224): VULNERABLE (NOT ok) (timed out)"
           else
-               pr_svrty_critical "VULNERABLE (NOT ok)"
                fileout "ccs" "NOT ok" "CCS (CVE-2014-0224): VULNERABLE (NOT ok)"
-               ret=1
           fi
-          [[ $retval -eq 3 ]] && out " (timed out)"
+          ret=1
      fi
+     [[ $retval -eq 3 ]] && out " (timed out)"
      outln
-     rm "$SOCK_REPLY_FILE"
 
      close_socket
      tmpfile_handle $FUNCNAME.txt
