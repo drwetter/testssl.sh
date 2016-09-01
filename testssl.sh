@@ -170,7 +170,9 @@ FAST_STARTTLS=${FAST_STARTTLS:-true}    #at the cost of reliabilty decrease the 
 USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
 HSTS_MIN=${HSTS_MIN:-179}               # >179 days is ok for HSTS
+     HSTS_MIN=$((HSTS_MIN * 86400))     # correct to seconds
 HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, practical hints?
+     HPKP_MIN=$((HPKP_MIN * 86400))     # correct to seconds
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
@@ -923,6 +925,7 @@ run_hsts() {
      if [[ $? -eq 0 ]]; then
           grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" || out "(two HSTS header, using 1st one) "
           hsts_age_sec=$(sed -e 's/[^0-9]*//g' $TMPFILE | head -1)
+          debugme echo "hsts_age_sec: $hsts_age_sec"
           if [[ -n $hsts_age_sec ]]; then
                hsts_age_days=$(( hsts_age_sec / 86400))
           else
@@ -931,15 +934,14 @@ run_hsts() {
           if [[ $hsts_age_days -eq -1 ]]; then
                pr_svrty_medium "HSTS max-age is required but missing. Setting 15552000 s (180 days) or more is recommended"
                fileout "hsts_time" "MEDIUM" "HSTS max-age missing. 15552000 s (180 days) or more recommnded"
-          elif [[ $hsts_age_days -eq 0 ]]; then
+          elif [[ $hsts_age_sec -eq 0 ]]; then
                pr_svrty_medium "HSTS max-age is set to 0. HSTS is disabled"
                fileout "hsts_time" "MEDIUM" "HSTS max-age set to 0. HSTS is disabled"
-          elif [[ $hsts_age_days -gt $HSTS_MIN ]]; then
+          elif [[ $hsts_age_sec -gt $HSTS_MIN ]]; then
                pr_done_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "hsts_time" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN days"
           else
-               out "$hsts_age_sec s = "
-               pr_svrty_medium "$hsts_age_days days, <$HSTS_MIN days is too short"
+               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >=$HSTS_MIN s recommended)"
                fileout "hsts_time" "MEDIUM" "HSTS timeout too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN days"
           fi
           if includeSubDomains "$TMPFILE"; then
@@ -4124,6 +4126,7 @@ certificate_info() {
      local cert_keysize=$4
      local ocsp_response=$5
      local ocsp_response_status=$6
+     local sni_used=$7
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
      local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn
      local issuer_DC issuerfinding cn_nosni=""
@@ -4144,7 +4147,9 @@ certificate_info() {
           [[ $certificate_number -eq 1 ]] && outln
           indent="  "
           out "$indent"
-          pr_headlineln "Server Certificate #$certificate_number"
+          pr_headline "Server Certificate #$certificate_number"
+          [[ -z "$sni_used" ]] && pr_underline " (in response to request w/o SNI)"
+          outln
           json_prefix="Server Certificate #$certificate_number "
           spaces="                                "
      else
@@ -4353,17 +4358,21 @@ certificate_info() {
           cnok="INFO"
      fi
 
-     # no cipher suites specified here. We just want the default vhost subject
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
-     if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
-          cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
-          [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
+     if [[ -n "$sni_used" ]]; then
+          # no cipher suites specified here. We just want the default vhost subject
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+          if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
+               cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
+               [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
+          fi
+          debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
+     else
+          debugme out "\"$NODE\" | \"$cn\""
      fi
 
 #FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
 
-     debugme out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
-     if [[ "$(toupper "$cn_nosni")" == "$(toupper "$cn")" ]]; then
+     if [[ -z "$sni_used" ]] || [[ "$(toupper "$cn_nosni")" == "$(toupper "$cn")" ]]; then
           outln
      elif [[ -z "$cn_nosni" ]]; then
           out " (request w/o SNI didn't succeed";
@@ -4494,7 +4503,9 @@ certificate_info() {
                has_dns_sans=true || has_dns_sans=false
      fi
 
-     if "$has_dns_sans" && [[ $trust_nosni -eq 4 ]]; then
+     if [[ -z "$sni_used" ]]; then
+          trustfinding_nosni=""
+     elif "$has_dns_sans" && [[ $trust_nosni -eq 4 ]]; then
           trustfinding_nosni=" (w/o SNI: Ok via CN, but not SAN)"
      elif "$has_dns_sans" && [[ $trust_nosni -eq 8 ]]; then
           trustfinding_nosni=" (w/o SNI: Ok via CN wildcard, but not SAN)"
@@ -4658,7 +4669,8 @@ run_server_defaults() {
      local -i i n
      local all_tls_extensions=""
      local -i certs_found=0
-     local -a previous_hostcert previous_intermediates keysize cipher ocsp_response ocsp_response_status
+     local -a previous_hostcert previous_intermediates keysize cipher
+     local -a ocsp_response ocsp_response_status sni_used
      local -a ciphers_to_test success
      local cn_nosni cn_sni sans_nosni sans_sni san
 
@@ -4779,6 +4791,7 @@ run_server_defaults() {
                      ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
                      previous_hostcert[certs_found]=$newhostcert
                      previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
+                     [[ $n -ge 8 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                  fi
              fi
          fi
@@ -4836,7 +4849,7 @@ run_server_defaults() {
      while [[ $i -le $certs_found ]]; do
          echo "${previous_hostcert[i]}" > $HOSTCERT
          echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
-         certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}"
+         certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}"
          i=$((i + 1))
      done
 }
@@ -9047,4 +9060,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.533 2016/08/28 19:41:29 dirkw Exp $
+#  $Id: testssl.sh,v 1.535 2016/09/01 10:42:53 dirkw Exp $
