@@ -170,7 +170,9 @@ FAST_STARTTLS=${FAST_STARTTLS:-true}    #at the cost of reliabilty decrease the 
 USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
 HSTS_MIN=${HSTS_MIN:-179}               # >179 days is ok for HSTS
+     HSTS_MIN=$((HSTS_MIN * 86400))     # correct to seconds
 HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, practical hints?
+     HPKP_MIN=$((HPKP_MIN * 86400))     # correct to seconds
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
@@ -910,6 +912,7 @@ run_hsts() {
      if [[ $? -eq 0 ]]; then
           grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" || out "(two HSTS header, using 1st one) "
           hsts_age_sec=$(sed -e 's/[^0-9]*//g' $TMPFILE | head -1)
+          debugme echo "hsts_age_sec: $hsts_age_sec"
           if [[ -n $hsts_age_sec ]]; then
                hsts_age_days=$(( hsts_age_sec / 86400))
           else
@@ -918,15 +921,14 @@ run_hsts() {
           if [[ $hsts_age_days -eq -1 ]]; then
                pr_svrty_medium "HSTS max-age is required but missing. Setting 15552000 s (180 days) or more is recommended"
                fileout "hsts_time" "MEDIUM" "HSTS max-age missing. 15552000 s (180 days) or more recommnded"
-          elif [[ $hsts_age_days -eq 0 ]]; then
+          elif [[ $hsts_age_sec -eq 0 ]]; then
                pr_svrty_medium "HSTS max-age is set to 0. HSTS is disabled"
                fileout "hsts_time" "MEDIUM" "HSTS max-age set to 0. HSTS is disabled"
-          elif [[ $hsts_age_days -gt $HSTS_MIN ]]; then
+          elif [[ $hsts_age_sec -gt $HSTS_MIN ]]; then
                pr_done_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "hsts_time" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN days"
           else
-               out "$hsts_age_sec s = "
-               pr_svrty_medium "$hsts_age_days days, <$HSTS_MIN days is too short"
+               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >=$HSTS_MIN s recommended)"
                fileout "hsts_time" "MEDIUM" "HSTS timeout too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN days"
           fi
           if includeSubDomains "$TMPFILE"; then
@@ -8677,4 +8679,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.533 2016/08/28 19:41:29 dirkw Exp $
+#  $Id: testssl.sh,v 1.535 2016/09/01 10:42:53 dirkw Exp $
