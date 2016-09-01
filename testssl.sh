@@ -172,7 +172,7 @@ USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
 HSTS_MIN=${HSTS_MIN:-179}               # >179 days is ok for HSTS
      HSTS_MIN=$((HSTS_MIN * 86400))     # correct to seconds
 HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, practical hints?
-     HPKP_MIN=$((HPKP_MIN * 86400))     # correct to seconds
+#     HPKP_MIN=$((HPKP_MIN * 86400))     # correct to seconds
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
@@ -8684,4 +8684,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.535 2016/09/01 10:42:53 dirkw Exp $
+#  $Id: testssl.sh,v 1.536 2016/09/01 17:04:46 dirkw Exp $
