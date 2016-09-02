@@ -5747,20 +5747,22 @@ socksend_tls_clienthello() {
                fi
           done
 
-          #formatted example for SNI
-          #00 00    # extension server_name
-          #00 1a    # length                      = the following +2 = server_name length + 5
-          #00 18    # server_name list_length     = server_name length +3
-          #00       # server_name type (hostname)
-          #00 15    # server_name length
-          #66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
-          len_servername=${#NODE}
-          hexdump_format_str="$len_servername/1 \"%02x,\""
-          servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
-          # convert lengths we need to fill in from dec to hex:
-          len_servername_hex=$(printf "%02x\n" $len_servername)
-          len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
-          len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
+          if [[ -n "$SNI" ]]; then
+               #formatted example for SNI
+               #00 00    # extension server_name
+               #00 1a    # length                      = the following +2 = server_name length + 5
+               #00 18    # server_name list_length     = server_name length +3
+               #00       # server_name type (hostname)
+               #00 15    # server_name length
+               #66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
+               len_servername=${#NODE}
+               hexdump_format_str="$len_servername/1 \"%02x,\""
+               servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
+               # convert lengths we need to fill in from dec to hex:
+               len_servername_hex=$(printf "%02x\n" $len_servername)
+               len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
+               len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
+          fi
 
           extension_signature_algorithms="
           00, 0d,                    # Type: signature_algorithms , see RFC 5246
@@ -5790,15 +5792,19 @@ socksend_tls_clienthello() {
           01, 00"
           
           all_extensions="
-           00, 00                  # extension server_name
-          ,00, $len_sni_ext        # length SNI EXT
-          ,00, $len_sni_listlen    # server_name list_length
-          ,00                      # server_name type (hostname)
-          ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
-          ,$servername_hexstr      # server_name target
-          ,$extension_heartbeat
+           $extension_heartbeat
           ,$extension_session_ticket
           ,$extension_next_protocol"
+
+          if [[ -n "$SNI" ]]; then
+               all_extensions="$all_extensions
+               ,00, 00                  # extension server_name
+               ,00, $len_sni_ext        # length SNI EXT
+               ,00, $len_sni_listlen    # server_name list_length
+               ,00                      # server_name type (hostname)
+               ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
+               ,$servername_hexstr"     # server_name target
+          fi
 
           # RFC 5246 says that clients MUST NOT offer the signature algorithms
           # extension if they are offering TLS versions prior to 1.2.
