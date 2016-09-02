@@ -7682,7 +7682,7 @@ get_local_a() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip4=$(grep -wh "$1" $etchosts 2>/dev/null | egrep -v ':|^#' |  egrep  "[[:space:]]$1" | awk '{ print $1 }')
+     ip4=$(grep -wh "$1[^\.]" $etchosts 2>/dev/null | egrep -v ':|^#' |  egrep  "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv4addr "$ip4"; then
           echo "$ip4"
      else
