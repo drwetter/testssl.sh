@@ -4206,7 +4206,11 @@ certificate_info() {
      out "$indent" ; pr_bold " Signature Algorithm          "
      case $cert_sig_algo in
           sha1WithRSAEncryption)
-               pr_svrty_mediumln "SHA1 with RSA"
+               pr_svrty_medium "SHA1 with RSA"
+               if [[ "$SERVICE" == HTTP ]]; then
+                    out " -- besides: users will receive a strong browser warning"
+               fi
+               outln
                fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: SHA1 with RSA (warning)"
                ;;
           sha224WithRSAEncryption)
@@ -8756,4 +8760,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.537 2016/09/01 17:09:11 dirkw Exp $
+#  $Id: testssl.sh,v 1.539 2016/09/05 08:01:45 dirkw Exp $
