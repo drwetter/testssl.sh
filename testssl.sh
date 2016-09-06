@@ -6031,14 +6031,20 @@ tls_sockets() {
 
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 run_heartbleed(){
+     local tls_proto_offered tls_hexcode
+     local heartbleed_payload client_hello 
+     local -i n ret
+     local -i hb_rounds=3
+     local append=""
+
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
      pr_bold " Heartbleed"; out " (CVE-2014-0160)                "
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
           pr_done_best "not vulnerable (OK)"
-          outln " (no heartbeat extension)"
-          fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK) (no heartbeat extension)"
+          outln ", no heartbeat extension"
+          fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK), no heartbeat extension"
           return 0
      fi
 
@@ -6106,52 +6112,76 @@ run_heartbleed(){
      # extension: heartbeat
      x00, x0f, x00, x01, x01"
 
-     fd_socket 5 || return 6
+     for (( n=1; n <= hb_rounds; n++)); do
+          fd_socket 5 || return 6
+          debugme out "\nsending client hello (TLS version $tls_hexcode)"
+          debugme outln " ($n of $hb_rounds)"
+          socksend "$client_hello" 1
 
-     debugme outln "\nsending client hello (TLS version $tls_hexcode)"
-     socksend "$client_hello" 1
-
-     debugme outln "\nreading server hello"
-     sockread 32768
-     if [[ $DEBUG -ge 4 ]]; then
-          echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
-          outln "[...]"
-          outln "\nsending payload with TLS version $tls_hexcode:"
-     fi
-
-     socksend "$heartbleed_payload" 1
-     sockread 16384 $HEARTBLEED_MAX_WAITSOCK
-     retval=$?
-
-     if [[ $DEBUG -ge 3 ]]; then
-          outln "\nheartbleed reply: "
-          echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
-          outln
-     fi
-
-     lines_returned=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l | sed 's/ //g')
-     if [[ $lines_returned -gt 1 ]]; then
-          pr_svrty_critical "VULNERABLE (NOT ok)"
-          if [[ $retval -eq 3 ]]; then
-               fileout "heartbleed" "NOT ok" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok) (timed out)"
-          else
-               fileout "heartbleed" "NOT ok" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok)"
+          debugme outln "\nreading server hello"
+          sockread 32768
+          if [[ $DEBUG -ge 4 ]]; then
+               echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}" | head -20
+               outln "[...]"
+               outln "\nsending payload with TLS version $tls_hexcode:"
           fi
-          ret=1
+
+          socksend "$heartbleed_payload" 1
+          sockread 16384 $HEARTBLEED_MAX_WAITSOCK
+          [[ $? -eq 3 ]] && append=", timed out"
+
+          if [[ $DEBUG -ge 3 ]]; then
+               outln "\nheartbleed reply: "
+               echo "$SOCKREPLY" | "${HEXDUMPVIEW[@]}"
+               outln
+          fi
+          lines_returned=$(echo "$SOCKREPLY" | "${HEXDUMP[@]}" | wc -l | sed 's/ //g')
+
+          if [[ $lines_returned -gt 1 ]]; then
+               if [[ "$STARTTLS_PROTOCOL" == "ftp" ]] || [[ "$STARTTLS_PROTOCOL" == "ftps" ]]; then
+                    # check possibility of weird vsftpd reply, see #426
+                    saved_sockreply[n]=$SOCKREPLY
+                    debugme out "${saved_sockreply[n]}"
+                    #TMPFILE="${saved_sockreply[n]}"
+                    close_socket
+                    tmpfile_handle "$FUNCNAME,$n.txt"
+               else
+                    pr_svrty_critical "VULNERABLE (NOT ok)"
+                    fileout "heartbleed" "NOT ok" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok)$append"
+                    ret=1
+                    break
+               fi
+          else
+               pr_done_best "not vulnerable (OK)"
+               fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK)$append"
+               ret=0
+               break
+          fi
+     done
+
+     if [[ $n -gt 1 ]]; then
+          # more than one round of heartbleed checks --> vsftpd probably.
+          # This is the robust approach. According to a few tests it could also suffice # to check for "500 OOPS" only.
+          # Checking for the same socket reply DOES NOT suffice -- server can be idle and return the same memory
+          if [[ "${saved_sockreply[1]}" == "${saved_sockreply[2]}" ]] && [[ "${saved_sockreply[2]}" == "${saved_sockreply[3]}" ]] \
+               && echo "${saved_sockreply[1]}" | grep -q '500 OOPS'; then
+               pr_done_best "not vulnerable (OK)$append"
+               [[ $DEBUG -ge 1 ]] && out ", successful weeded out vsftpd false positive"
+               fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK)$append"
+          else
+               out "likely "
+               pr_svrty_critical "VULNERABLE (NOT ok)"
+               [[ $DEBUG -ge 1 ]] && out " use debug >=2 to confirm"
+               fileout "heartbleed" "NOT ok" "Heartbleed (CVE-2014-0160): likely VULNERABLE (NOT ok)$append"
+          fi
      else
-          pr_done_best "not vulnerable (OK)"
-          if [[ $retval -eq 3 ]]; then
-               fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK) (timed out)"
-          else
-               fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK)"
-          fi
-          ret=0
+          # for the repeated tries we did that already
+          #TMPFILE="$SOCKREPLY"
+          close_socket 2>/dev/null
+          tmpfile_handle $FUNCNAME.txt
      fi
-     [[ $retval -eq 3 ]] && out " (timed out)"
-     outln
+     outln "$append"
 
-     close_socket
-     tmpfile_handle $FUNCNAME.txt
      return $ret
 }
 
@@ -8760,4 +8790,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.539 2016/09/05 08:01:45 dirkw Exp $
+#  $Id: testssl.sh,v 1.540 2016/09/06 06:32:04 dirkw Exp $
