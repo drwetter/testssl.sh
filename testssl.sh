@@ -4208,7 +4208,7 @@ certificate_info() {
           sha1WithRSAEncryption)
                pr_svrty_medium "SHA1 with RSA"
                if [[ "$SERVICE" == HTTP ]]; then
-                    out " -- besides: users will receive a strong browser warning"
+                    out " -- besides: users will receive a "; pr_svrty_high "strong browser WARNING"
                fi
                outln
                fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: SHA1 with RSA (warning)"
@@ -8790,4 +8790,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.540 2016/09/06 06:32:04 dirkw Exp $
+#  $Id: testssl.sh,v 1.541 2016/09/07 19:34:26 dirkw Exp $
