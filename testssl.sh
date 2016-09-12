@@ -3366,8 +3366,16 @@ run_server_preference() {
      outln
 
      pr_bold " Has server cipher order?     "
-     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO"
-     [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI" && sni="$SNI"
+     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO" 
+     if [[ ! "$OPTIMAL_PROTO" =~ ssl ]]; then 
+          addcmd="$SNI"
+          sni="$SNI"
+          if "$HAS_NO_SSL2" && [[ -z "$SNI" ]]; then
+               # the supplied openssl sends otherwise an sslv2 hello -- e.g. if IP address supplied as target
+               # for STARTTLS this doesn't seem to be needed
+               addcmd="-no_ssl2"
+          fi
+     fi
      $OPENSSL s_client $STARTTLS -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd </dev/null 2>$ERRFILE >$TMPFILE
      if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
           pr_warning "no matching cipher in this list found (pls report this): "
@@ -3380,7 +3388,6 @@ run_server_preference() {
           # workaround is to connect with a protocol
           debugme out "(workaround #188) "
           determine_optimal_proto $STARTTLS_PROTOCOL
-          [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$SNI"
           $OPENSSL s_client $STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2 </dev/null 2>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
                pr_warning "no matching cipher in this list found (pls report this): "
@@ -3398,7 +3405,11 @@ run_server_preference() {
                addcmd2="$STARTTLS_OPTIMAL_PROTO"
                [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$addcmd2 $SNI"
           else
-               [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd2="$OPTIMAL_PROTO"
+               if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
+                    addcmd2="$OPTIMAL_PROTO"
+               elif "$HAS_NO_SSL2"; then
+                    addcmd2="$addcmd2 -no_ssl2"
+               fi
                [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$addcmd2 $SNI"
           fi
           $OPENSSL s_client $STARTTLS -cipher $list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2 </dev/null 2>>$ERRFILE >$TMPFILE
