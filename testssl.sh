@@ -4127,7 +4127,7 @@ compare_server_name_to_cert()
           [[ $(toupper "$san") == "$servername" ]] && ret=1 && break
      done
 
-     if [[ $req -eq 0 ]]; then
+     if [[ $ret -eq 0 ]]; then
           # Check whether any of the IP addresses in the certificate match the servername
           ip_sans=$($OPENSSL x509 -in "$cert" -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
                   tr ',' '\n' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
@@ -4138,7 +4138,7 @@ compare_server_name_to_cert()
 
      # Check whether any of the DNS names in the certificate are wildcard names
      # that match the servername
-     if [[ $req -eq 0 ]]; then
+     if [[ $ret -eq 0 ]]; then
           for san in $dns_sans; do
                wildcard_match "$servername" "$san"
                [[ $? -eq 0 ]] && ret=2 && break
