@@ -4306,7 +4306,7 @@ certificate_info() {
                out "$cert_sig_algo ("
                pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
-               fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $sign_algo"
+               fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $cert_sig_algo"
                ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
