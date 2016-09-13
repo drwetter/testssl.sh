@@ -3983,7 +3983,7 @@ determine_tls_extensions() {
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           addcmd=""
           [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
-          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug -nextprotoneg "$alpn" -status </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0 && break
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
@@ -5132,7 +5132,7 @@ run_spdy() {
           outln
           return 0
      fi
-     $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -nextprotoneg $NPN_PROTOs </dev/null 2>$ERRFILE >$TMPFILE
+     $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -nextprotoneg "$NPN_PROTOs" </dev/null 2>$ERRFILE >$TMPFILE
      tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
      if [[ -z "$tmpstr" ]] || [[ "$tmpstr" == " " ]]; then
           outln "not offered"
