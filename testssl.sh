@@ -1158,7 +1158,7 @@ run_rp_banner() {
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "rp_header" "INFO" "No reverse proxy banner found"
-    else
+     else
           while read line; do
                line=$(strip_lf "$line")
                if ! $first; then
@@ -1167,7 +1167,7 @@ run_rp_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
-               rp_banners="$rp_bannersline"
+               rp_banners="${rp_banners}${line}"
           done < $TMPFILE
           fileout "rp_header" "INFO" "Reverse proxy banner(s) found: $rp_banners"
      fi
@@ -1193,7 +1193,7 @@ run_application_banner() {
           outln "--"
           fileout "app_banner" "INFO" "No Application Banners found"
      else
-          cat $TMPFILE | while read line; do
+          while IFS='' read -r line; do
                line=$(strip_lf "$line")
                if ! $first; then
                     out "$spaces"
@@ -1201,8 +1201,8 @@ run_application_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
-               app_banners="$app_bannersline"
-          done
+               app_banners="${app_banners}${line}"
+          done < "$TMPFILE"
           fileout "app_banner" "WARN" "Application Banners found: $app_banners"
      fi
      tmpfile_handle $FUNCNAME.txt
@@ -3377,8 +3377,16 @@ run_server_preference() {
      outln
 
      pr_bold " Has server cipher order?     "
-     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO"
-     [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI" && sni="$SNI"
+     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO" 
+     if [[ ! "$OPTIMAL_PROTO" =~ ssl ]]; then 
+          addcmd="$SNI"
+          sni="$SNI"
+          if "$HAS_NO_SSL2" && [[ -z "$SNI" ]]; then
+               # the supplied openssl sends otherwise an sslv2 hello -- e.g. if IP address supplied as target
+               # for STARTTLS this doesn't seem to be needed
+               addcmd="-no_ssl2"
+          fi
+     fi
      $OPENSSL s_client $STARTTLS -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd </dev/null 2>$ERRFILE >$TMPFILE
      if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
           pr_warning "no matching cipher in this list found (pls report this): "
@@ -3391,7 +3399,6 @@ run_server_preference() {
           # workaround is to connect with a protocol
           debugme out "(workaround #188) "
           determine_optimal_proto $STARTTLS_PROTOCOL
-          [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$SNI"
           $OPENSSL s_client $STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2 </dev/null 2>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
                pr_warning "no matching cipher in this list found (pls report this): "
@@ -3409,7 +3416,11 @@ run_server_preference() {
                addcmd2="$STARTTLS_OPTIMAL_PROTO"
                [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$addcmd2 $SNI"
           else
-               [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd2="$OPTIMAL_PROTO"
+               if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
+                    addcmd2="$OPTIMAL_PROTO"
+               elif "$HAS_NO_SSL2"; then
+                    addcmd2="$addcmd2 -no_ssl2"
+               fi
                [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$addcmd2 $SNI"
           fi
           $OPENSSL s_client $STARTTLS -cipher $list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2 </dev/null 2>>$ERRFILE >$TMPFILE
@@ -3983,7 +3994,7 @@ determine_tls_extensions() {
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           addcmd=""
           [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
-          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug -nextprotoneg $alpn -status </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug -nextprotoneg "$alpn" -status </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0 && break
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
@@ -4138,7 +4149,7 @@ compare_server_name_to_cert()
           [[ $(toupper "$san") == "$servername" ]] && ret=1 && break
      done
 
-     if [[ $req -eq 0 ]]; then
+     if [[ $ret -eq 0 ]]; then
           # Check whether any of the IP addresses in the certificate match the servername
           ip_sans=$($OPENSSL x509 -in "$cert" -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
                   tr ',' '\n' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
@@ -4149,7 +4160,7 @@ compare_server_name_to_cert()
 
      # Check whether any of the DNS names in the certificate are wildcard names
      # that match the servername
-     if [[ $req -eq 0 ]]; then
+     if [[ $ret -eq 0 ]]; then
           for san in $dns_sans; do
                wildcard_match "$servername" "$san"
                [[ $? -eq 0 ]] && ret=2 && break
@@ -4219,7 +4230,7 @@ certificate_info() {
           sha1WithRSAEncryption)
                pr_svrty_medium "SHA1 with RSA"
                if [[ "$SERVICE" == HTTP ]]; then
-                    out " -- besides: users will receive a strong browser warning"
+                    out " -- besides: users will receive a "; pr_svrty_high "strong browser WARNING"
                fi
                outln
                fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: SHA1 with RSA (warning)"
@@ -4317,7 +4328,7 @@ certificate_info() {
                out "$cert_sig_algo ("
                pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
-               fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $sign_algo"
+               fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $cert_sig_algo"
                ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
@@ -5132,7 +5143,7 @@ run_spdy() {
           outln
           return 0
      fi
-     $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -nextprotoneg $NPN_PROTOs </dev/null 2>$ERRFILE >$TMPFILE
+     $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -nextprotoneg "$NPN_PROTOs" </dev/null 2>$ERRFILE >$TMPFILE
      tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
      if [[ -z "$tmpstr" ]] || [[ "$tmpstr" == " " ]]; then
           outln "not offered"
@@ -9170,4 +9181,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.540 2016/09/06 06:32:04 dirkw Exp $
+#  $Id: testssl.sh,v 1.541 2016/09/07 19:34:26 dirkw Exp $
