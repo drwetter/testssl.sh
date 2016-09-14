@@ -1147,7 +1147,7 @@ run_rp_banner() {
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "rp_header" "INFO" "No reverse proxy banner found"
-    else
+     else
           while read line; do
                line=$(strip_lf "$line")
                if ! $first; then
@@ -1156,7 +1156,7 @@ run_rp_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
-               rp_banners="$rp_bannersline"
+               rp_banners="${rp_banners}${line}"
           done < $TMPFILE
           fileout "rp_header" "INFO" "Reverse proxy banner(s) found: $rp_banners"
      fi
@@ -1182,7 +1182,7 @@ run_application_banner() {
           outln "--"
           fileout "app_banner" "INFO" "No Application Banners found"
      else
-          cat $TMPFILE | while read line; do
+          while IFS='' read -r line; do
                line=$(strip_lf "$line")
                if ! $first; then
                     out "$spaces"
@@ -1190,8 +1190,8 @@ run_application_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
-               app_banners="$app_bannersline"
-          done
+               app_banners="${app_banners}${line}"
+          done < "$TMPFILE"
           fileout "app_banner" "WARN" "Application Banners found: $app_banners"
      fi
      tmpfile_handle $FUNCNAME.txt
