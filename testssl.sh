@@ -1147,7 +1147,7 @@ run_rp_banner() {
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "rp_header" "INFO" "No reverse proxy banner found"
-    else
+     else
           while read line; do
                line=$(strip_lf "$line")
                if ! $first; then
