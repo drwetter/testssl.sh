@@ -1182,7 +1182,7 @@ run_application_banner() {
           outln "--"
           fileout "app_banner" "INFO" "No Application Banners found"
      else
-          cat $TMPFILE | while read line; do
+          while IFS='' read -r line; do
                line=$(strip_lf "$line")
                if ! $first; then
                     out "$spaces"
@@ -1191,7 +1191,7 @@ run_application_banner() {
                fi
                emphasize_stuff_in_headers "$line"
                app_banners="${app_banners}${line}"
-          done
+          done < "$TMPFILE"
           fileout "app_banner" "WARN" "Application Banners found: $app_banners"
      fi
      tmpfile_handle $FUNCNAME.txt
