@@ -1156,7 +1156,7 @@ run_rp_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
-               rp_banners="$rp_bannersline"
+               rp_banners="${rp_banners}${line}"
           done < $TMPFILE
           fileout "rp_header" "INFO" "Reverse proxy banner(s) found: $rp_banners"
      fi
@@ -1190,7 +1190,7 @@ run_application_banner() {
                     first=false
                fi
                emphasize_stuff_in_headers "$line"
-               app_banners="$app_bannersline"
+               app_banners="${app_banners}${line}"
           done
           fileout "app_banner" "WARN" "Application Banners found: $app_banners"
      fi
