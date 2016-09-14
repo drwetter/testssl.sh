@@ -147,7 +147,7 @@ BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for 
 DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ are kept for further debugging purposes
                                         # 2: list more what's going on , also lists some errors of connections
                                         # 3: slight hexdumps + other info,
-                                        # 4: display bytes sent via sockets 
+                                        # 4: display bytes sent via sockets
                                         # 5: display bytes received via sockets
                                         # 6: whole 9 yards
 WIDE=${WIDE:-false}                     # whether to display for some options just ciphers or a table w hexcode/KX,Enc,strength etc.
@@ -156,7 +156,7 @@ JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
-UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
+UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
 
 # tuning vars, can not be set by a cmd line switch
@@ -319,7 +319,7 @@ readonly SSLv2_CLIENT_HELLO="
 
 ###### output functions ######
 # a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
-out(){ 
+out(){
 #     if [[ "$BASH_VERSINFO" -eq 4 ]]; then
           printf -- "%b" "${1//%/%%}"
 #     else
@@ -353,10 +353,10 @@ pr_greyln()     { pr_grey "$1"; outln; }
 
 pr_done_good()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # litegreen (liteblue), This is good
 pr_done_goodln()     { pr_done_good "$1"; outln; }
-pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best 
+pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best
 pr_done_bestln()     { pr_done_best "$1"; outln; }
 
-pr_svrty_minor()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem 
+pr_svrty_minor()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
 pr_svrty_minorln()   { pr_svrty_minor "$1"; outln; }
 pr_svrty_medium()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                   # brown | it is not a bad problem but you shouldn't do this
 pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
@@ -455,12 +455,12 @@ set_color_functions() {
 }
 
 strip_quote() {
-     # remove color codes (see http://www.commandlinefu.com/commands/view/3584/remove-color-codes-special-characters-with-sed) 
+     # remove color codes (see http://www.commandlinefu.com/commands/view/3584/remove-color-codes-special-characters-with-sed)
      #  \', leading and all trailing spaces
      sed -e "s,\x1B\[[0-9;]*[a-zA-Z],,g" \
           -e "s/\"/\\'/g" \
           -e 's/^ *//g' \
-          -e 's/ *$//g' <<< "$1"    
+          -e 's/ *$//g' <<< "$1"
 }
 
 fileout_header() {
@@ -494,7 +494,7 @@ fileout() { # ID, SEVERITY, FINDING
                \"finding\"      : \"$finding\"
           }" >> $JSONFILE
      fi
-     # does the following do any sanitization? 
+     # does the following do any sanitization?
      if "$do_csv"; then
           echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$2"\",\""$finding"\"" >>$CSVFILE
      fi
@@ -630,17 +630,17 @@ wait_kill(){
 
 # parse_date date format input-format
 if "$HAS_GNUDATE"; then  # Linux and NetBSD
-	parse_date() {
-		LC_ALL=C date -d "$1" "$2"
-	}
+     parse_date() {
+          LC_ALL=C date -d "$1" "$2"
+     }
 elif "$HAS_FREEBSDDATE"; then # FreeBSD and OS X
-	parse_date() {
-		LC_ALL=C date -j -f "$3"  "$2" "$1"
-	}
+     parse_date() {
+          LC_ALL=C date -j -f "$3"  "$2" "$1"
+     }
 else
-	parse_date() {
-		LC_ALL=C date -j "$2" "$1"
-	}
+     parse_date() {
+          LC_ALL=C date -j "$2" "$1"
+     }
 fi
 
 ###### check code starts here ######
@@ -740,7 +740,7 @@ run_http_header() {
      # populate vars for HTTP time
 
      debugme echo "$NOW_TIME: $HTTP_TIME"
-     
+
      # delete from pattern til the end. We ignore any leading spaces (e.g. www.amazon.de)
      sed  -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<?XML/,$d' \
           -e '/<xml/,$d' -e '/<?xml/,$d'  -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
@@ -1446,7 +1446,7 @@ std_cipherlists() {
                     fi
                     ;;
                *) # we shouldn't reach this
-                    pr_warning "?: $3 (please report this)" 
+                    pr_warning "?: $3 (please report this)"
                     fileout "std_$4" "WARN" "return condition $3 unclear"
                     ;;
           esac
@@ -1782,7 +1782,7 @@ run_cipher_per_proto() {
           locally_supported "$proto" "$proto_text" || continue
           outln
           has_server_protocol "${proto:1}" || continue
-          
+
           # The OpenSSL ciphers function, prior to version 1.1.0, could only understand -ssl2, -ssl3, and -tls1.
           if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == "-ssl3" ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
                ossl_ciphers_proto="$proto"
@@ -1923,7 +1923,7 @@ create_client_simulation_tls_clienthello() {
      len=2*$(hex2dec "${tls_handshake_ascii:$offset:2}")+2
      tls_compression_methods="${tls_handshake_ascii:$offset:$len}"
      offset=$offset+$len
-     
+
      if [[ $offset -ge $tls_handshake_ascii_len ]]; then
           # No extensions
           out "$tls_handshake_ascii"
@@ -3051,7 +3051,7 @@ run_protocols() {
                pr_svrty_high "$supported_no_ciph2"
                outln "(may need debugging)"
                add_tls_offered "ssl3"
-               ;;       
+               ;;
           7)
                fileout "sslv3" "INFO" "SSLv3 is not tested due to lack of local support"
                ;;                                                            # no local support
@@ -3222,7 +3222,7 @@ run_protocols() {
           pr_bold " Version tolerance   "
           tls_sockets "05" "$TLS12_CIPHER"
           case $? in
-               0) 
+               0)
                     pr_svrty_criticalln "server claims support for non-existent TLSv1.4"
                     fileout "TLS Version Negotiation" "NOT ok" "Server claims support for non-existent TLSv1.4 (NOT ok)"
                     ;;
@@ -3336,7 +3336,7 @@ read_dhbits_from_file() {
           elif [[ "$bits" -le 193 ]]; then   # hmm, according to https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography it should ok
                pr_svrty_minor "$bits $add"   # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
           elif [[ "$bits" -le 224 ]]; then
-               out "$bits $add" 
+               out "$bits $add"
           elif [[ "$bits" -gt 224 ]]; then
                pr_done_good "$bits $add"
           else
@@ -3366,8 +3366,8 @@ run_server_preference() {
      outln
 
      pr_bold " Has server cipher order?     "
-     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO" 
-     if [[ ! "$OPTIMAL_PROTO" =~ ssl ]]; then 
+     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO"
+     if [[ ! "$OPTIMAL_PROTO" =~ ssl ]]; then
           addcmd="$SNI"
           sni="$SNI"
           if "$HAS_NO_SSL2" && [[ -z "$SNI" ]]; then
@@ -3691,7 +3691,7 @@ cipher_pref_check() {
                if [[ $p == tls1_2 ]]; then
                     # for some servers the ClientHello is limited to 128 ciphers or the ClientHello itself has a length restriction.
                     # So far, this was only observed in TLS 1.2, affected are e.g. old Cisco LBs or ASAs, see issue #189
-                    # To check whether a workaround is needed we send a laaarge list of ciphers/big client hello. If connect fails, 
+                    # To check whether a workaround is needed we send a laaarge list of ciphers/big client hello. If connect fails,
                     # we hit the bug and automagically do the workround. Cost: this is for all servers only 1x more connect
                     $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$overflow_probe_cipherlist" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     if ! sclient_connect_successful $? $TMPFILE; then
@@ -3769,41 +3769,41 @@ verify_retcode_helper() {
      local ret=0
      local -i retcode=$1
 
-	case $retcode in
-		# codes from ./doc/apps/verify.pod | verify(1ssl)
-		26) out "(unsupported certificate purpose)" ;; 	# X509_V_ERR_INVALID_PURPOSE
-		24) out "(certificate unreadable)" ;; 	# X509_V_ERR_INVALID_CA
-		23) out "(certificate revoked)" ;; 		# X509_V_ERR_CERT_REVOKED
-		21) out "(chain incomplete, only 1 cert provided)" ;; 	# X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
-		20) out "(chain incomplete)" ;;			# X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
-		19) out "(self signed CA in chain)" ;;	# X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
-		18) out "(self signed)" ;;				# X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
-		10) out "(expired)" ;;				     # X509_V_ERR_CERT_HAS_EXPIRED
-		9)  out "(not yet valid)" ;;		     # X509_V_ERR_CERT_NOT_YET_VALID
-		2)  out "(issuer cert missing)" ;;         # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
-		*) ret=1 ; pr_warning " (unknown, pls report) $1" ;;
-	esac
+     case $retcode in
+          # codes from ./doc/apps/verify.pod | verify(1ssl)
+          26) out "(unsupported certificate purpose)" ;;        # X509_V_ERR_INVALID_PURPOSE
+          24) out "(certificate unreadable)" ;;                 # X509_V_ERR_INVALID_CA
+          23) out "(certificate revoked)" ;;                    # X509_V_ERR_CERT_REVOKED
+          21) out "(chain incomplete, only 1 cert provided)" ;; # X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
+          20) out "(chain incomplete)" ;;                       # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+          19) out "(self signed CA in chain)" ;;                # X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
+          18) out "(self signed)" ;;                            # X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
+          10) out "(expired)" ;;                                # X509_V_ERR_CERT_HAS_EXPIRED
+           9) out "(not yet valid)" ;;                          # X509_V_ERR_CERT_NOT_YET_VALID
+           2) out "(issuer cert missing)" ;;                    # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
+          *) ret=1 ; pr_warning " (unknown, pls report) $1" ;;
+     esac
      return $ret
 }
 
 # arg1: number of certificate if provided >1
 determine_trust() {
-	local json_prefix=$1
-	local -i i=1
-	local -i num_ca_bundles=0
-	local bundle_fname=""
-	local -a certificate_file verify_retcode trust
-	local ok_was=""
-	local notok_was=""
-	local all_ok=true
-	local some_ok=false
+     local json_prefix=$1
+     local -i i=1
+     local -i num_ca_bundles=0
+     local bundle_fname=""
+     local -a certificate_file verify_retcode trust
+     local ok_was=""
+     local notok_was=""
+     local all_ok=true
+     local some_ok=false
      local code
      local ca_bundles="$INSTALL_DIR/etc/*.pem"
      local spaces="                              "
      local -i certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
-     
-     # If $json_prefix is not empty, then there is more than one certificate 
+
+     # If $json_prefix is not empty, then there is more than one certificate
      # and the output should should be indented by two more spaces.
      [[ -n $json_prefix ]] && spaces="                                "
 
@@ -3812,77 +3812,77 @@ determine_trust() {
           fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
-	for bundle_fname in $ca_bundles; do
-		certificate_file[i]=$(basename ${bundle_fname//.pem})
+     for bundle_fname in $ca_bundles; do
+          certificate_file[i]=$(basename ${bundle_fname//.pem})
           if [[ ! -r $bundle_fname ]]; then
                pr_warningln "\"$bundle_fname\" cannot be found / not readable"
                return 7
           fi
-		debugme printf -- " %-12s" "${certificate_file[i]}"
-		# set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
-		(export SSL_CERT_DIR="/dev/null; export SSL_CERT_FILE=/dev/null"
-		if [[ $certificates_provided -ge 2 ]]; then
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
-		else
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
-		fi)
-		verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1)
-		[[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
-		if [[ ${verify_retcode[i]} -eq 0 ]]; then
-			trust[i]=true
-			some_ok=true
-			debugme pr_done_good "Ok   "
-			debugme outln "${verify_retcode[i]}"
-		else
-			trust[i]=false
-			all_ok=false
-			debugme pr_svrty_high "not trusted "
-			debugme outln "${verify_retcode[i]}"
-		fi
-		i=$((i + 1))
-	done
-	num_ca_bundles=$((i - 1))
+          debugme printf -- " %-12s" "${certificate_file[i]}"
+          # set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
+          (export SSL_CERT_DIR="/dev/null; export SSL_CERT_FILE=/dev/null"
+          if [[ $certificates_provided -ge 2 ]]; then
+               $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+          else
+               $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+          fi)
+          verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1)
+          [[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
+          if [[ ${verify_retcode[i]} -eq 0 ]]; then
+               trust[i]=true
+               some_ok=true
+               debugme pr_done_good "Ok   "
+               debugme outln "${verify_retcode[i]}"
+          else
+               trust[i]=false
+               all_ok=false
+               debugme pr_svrty_high "not trusted "
+               debugme outln "${verify_retcode[i]}"
+          fi
+          i=$((i + 1))
+     done
+     num_ca_bundles=$((i - 1))
      debugme out " "
-	if $all_ok; then
-	     # all stores ok
-		pr_done_good "Ok   "; pr_warning "$addtl_warning"
+     if $all_ok; then
+          # all stores ok
+          pr_done_good "Ok   "; pr_warning "$addtl_warning"
           # we did to stdout the warning above already, so we could stay here with INFO:
           fileout "${json_prefix}chain_of_trust" "OK" "All certificate trust checks passed. $addtl_warning"
-	else
-	     # at least one failed
-		pr_svrty_critical "NOT ok"
-		if ! $some_ok; then
-		     # all failed (we assume with the same issue), we're displaying the reason
+     else
+          # at least one failed
+          pr_svrty_critical "NOT ok"
+          if ! $some_ok; then
+               # all failed (we assume with the same issue), we're displaying the reason
                out " "
-			verify_retcode_helper "${verify_retcode[1]}"
+               verify_retcode_helper "${verify_retcode[1]}"
                fileout "${json_prefix}chain_of_trust" "NOT ok" "All certificate trust checks failed: $(verify_retcode_helper "${verify_retcode[1]}"). $addtl_warning"
-		else
-			# is one ok and the others not ==> display the culprit store
-			if $some_ok ; then
-				pr_svrty_critical ":"
-				for ((i=1;i<=num_ca_bundles;i++)); do
-					if ${trust[i]}; then
-						ok_was="${certificate_file[i]} $ok_was"
-					else
+          else
+               # is one ok and the others not ==> display the culprit store
+               if $some_ok ; then
+                    pr_svrty_critical ":"
+                    for ((i=1;i<=num_ca_bundles;i++)); do
+                         if ${trust[i]}; then
+                              ok_was="${certificate_file[i]} $ok_was"
+                         else
                               #code="$(verify_retcode_helper ${verify_retcode[i]})"
                               #notok_was="${certificate_file[i]} $notok_was"
                               pr_svrty_high " ${certificate_file[i]} "
                               verify_retcode_helper "${verify_retcode[i]}"
-			               notok_was="${certificate_file[i]} $(verify_retcode_helper "${verify_retcode[i]}") $notok_was"
-               		fi
-				done
-				#pr_svrty_high "$notok_was "
+                              notok_was="${certificate_file[i]} $(verify_retcode_helper "${verify_retcode[i]}") $notok_was"
+                         fi
+                    done
+                    #pr_svrty_high "$notok_was "
                     #outln "$code"
                     outln
-				# lf + green ones
+                    # lf + green ones
                     [[ "$DEBUG" -eq 0 ]] && out "$spaces"
-				pr_done_good "OK: $ok_was"
+                    pr_done_good "OK: $ok_was"
                fi
                fileout "${json_prefix}chain_of_trust" "NOT ok" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
           fi
           [[ -n "$addtl_warning" ]] && out "\n$spaces" && pr_warning "$addtl_warning"
-	fi
-	outln
+     fi
+     outln
      return 0
 }
 
@@ -3957,7 +3957,7 @@ determine_tls_extensions() {
                savedir=$(pwd); cd $TEMPDIR
                # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
                awk -v n=-1 '/Server certificate/ {start=1}
-                  /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+                  /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
                   inc { print > ("level" n ".crt") }
                   /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
                nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
@@ -4012,7 +4012,7 @@ determine_tls_extensions() {
      savedir=$(pwd); cd $TEMPDIR
      # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
      awk -v n=-1 '/Certificate chain/ {start=1}
-             /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+             /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
              inc { print > ("level" n ".crt") }
              /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
      nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
@@ -4040,7 +4040,7 @@ get_cn_from_cert() {
      local subject
 
      # attention! openssl 1.0.2 doesn't properly handle online output from certifcates from trustwave.com/github.com
-     #FIXME: use -nameopt oid for robustness 
+     #FIXME: use -nameopt oid for robustness
 
      # for e.g. russian sites -esc_msb,utf8 works in an UTF8 terminal -- any way to check platform indepedent?
      # see x509(1ssl):
@@ -4102,7 +4102,7 @@ wildcard_match()
      basename_offset=$len_servername-$len_basename
 
      # Check that initial part of $servername matches initial part of $certname
-     # and that final part of $servername matches final part of $certname. 
+     # and that final part of $servername matches final part of $certname.
      [[ "${servername:0:len_part1}" != "${certname:0:len_part1}" ]] && return 1
      [[ "${servername:basename_offset:len_basename}" != "$basename" ]] && return 1
 
@@ -4210,7 +4210,7 @@ certificate_info() {
      else
           spaces="                              "
      fi
-     
+
      cert_sig_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
      cert_key_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2 }' | sort -u )
 
@@ -4340,7 +4340,7 @@ certificate_info() {
           # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
           # Table 2 @ chapter 5.6.1 (~ p64)
           if [[ $cert_key_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey  ]]; then
-               if [[ "$cert_keysize" -le 110 ]]; then       # a guess 
+               if [[ "$cert_keysize" -le 110 ]]; then       # a guess
                     pr_svrty_critical "$cert_keysize"
                     fileout "${json_prefix}key_size" "NOT ok" "Server keys $cert_keysize EC bits (NOT ok)"
                elif [[ "$cert_keysize" -le 123 ]]; then    # a guess
@@ -4401,7 +4401,7 @@ certificate_info() {
      outln "$spaces$cert_fingerprint_sha2"
      fileout "${json_prefix}fingerprint" "INFO" "Fingerprints / Serial: $cert_fingerprint_sha1 / $cert_fingerprint_serial, $cert_fingerprint_sha2"
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
-          CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" || 
+          CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" ||
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2 $CERT_FINGERPRINT_SHA2"
 
      out "$indent"; pr_bold " Common Name (CN)             "
@@ -4786,7 +4786,7 @@ run_server_defaults() {
                          all_tls_extensions="${all_tls_extensions} \"${line}\""
                      fi
                  done <<<$TLS_EXTENSIONS
-             
+
                  cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
                  >$ERRFILE
                  if [[ -z "$sessticket_str" ]]; then
@@ -4855,7 +4855,7 @@ run_server_defaults() {
              fi
          fi
      done
-     
+
      if [[ $certs_found -eq 0 ]]; then
          [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
          [[ -n "$TLS_EXTENSIONS" ]] && all_tls_extensions=" $TLS_EXTENSIONS"
@@ -4892,7 +4892,7 @@ run_server_defaults() {
           pr_svrty_minorln "(PFS requires session ticket keys to be rotated <= daily)"
           fileout "session_ticket" "INFO" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
      fi
-     
+
      pr_bold " SSL Session ID support       "
      if "$NO_SSL_SESSIONID"; then
           outln "no"
@@ -4901,9 +4901,9 @@ run_server_defaults() {
           outln "yes"
           fileout "session_id" "INFO" "SSL session ID support: yes"
      fi
-     
+
      tls_time
-     
+
      i=1
      while [[ $i -le $certs_found ]]; do
          echo "${previous_hostcert[i]}" > $HOSTCERT
@@ -5857,10 +5857,10 @@ socksend_tls_clienthello() {
           00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
           00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
           00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11,
-          00, 0b,                    # Type: Supported Point Formats , see RFC 4492 
+          00, 0b,                    # Type: Supported Point Formats , see RFC 4492
           00, 02,                    # len
           01, 00"
-          
+
           all_extensions="
            $extension_heartbeat
           ,$extension_session_ticket
@@ -5917,7 +5917,7 @@ socksend_tls_clienthello() {
           all_extensions="
           ,$LEN_STR  # first the len of all extentions.
           ,$all_extensions"
-          
+
      fi
 
      # RFC 3546 doesn't specify SSLv3 to have SNI, openssl just ignores the switch if supplied
@@ -6043,7 +6043,7 @@ tls_sockets() {
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 run_heartbleed(){
      local tls_proto_offered tls_hexcode
-     local heartbleed_payload client_hello 
+     local heartbleed_payload client_hello
      local -i n ret
      local -i hb_rounds=3
      local append=""
@@ -6913,7 +6913,7 @@ run_beast(){
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
                if [[ $sclient_success -eq 0 ]]; then
-                    vuln_beast=true 
+                    vuln_beast=true
                     "$WIDE" && first=false
                fi
                if "$WIDE"; then
@@ -6923,7 +6923,7 @@ run_beast(){
                          neat_list "$HEXC" "$cbc_cipher" "$kx" "$enc"      #why this is needed?
                          if [[ $sclient_success -eq 0 ]]; then
                               if [[ -n "$higher_proto_supported" ]]; then
-                                   pr_svrty_minorln "available" 
+                                   pr_svrty_minorln "available"
                               else
                                    pr_svrty_mediumln "available"
                               fi
@@ -7267,7 +7267,7 @@ check4openssl_oldfarts() {
 
 # FreeBSD needs to have /dev/fd mounted. This is a friendly hint, see #258
 check_bsd_mount() {
-     if [[ "$(uname)" == FreeBSD ]]; then 
+     if [[ "$(uname)" == FreeBSD ]]; then
           if ! mount | grep -q "^devfs"; then
                outln "you seem to run $PROG_NAME= in a jail. Hopefully you're did \"mount -t fdescfs fdesc /dev/fd\""
           elif mount | grep '/dev/fd' | grep -q fdescfs; then
@@ -7333,7 +7333,7 @@ special invocations:
 partly mandatory parameters:
      URI                           host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
      pattern                       an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
-     protocol                      is one of the STARTTLS protocols ftp,smtp,pop3,imap,xmpp,telnet,ldap 
+     protocol                      is one of the STARTTLS protocols ftp,smtp,pop3,imap,xmpp,telnet,ldap
                                    (for the latter two you need e.g. the supplied openssl)
 
 tuning options (can also be preset via environment variables):
@@ -7677,7 +7677,7 @@ prepare_logging() {
      return 0
 }
 
-     
+
 # args: string containing ip addresses
 filter_ip6_address() {
      local a
@@ -8176,7 +8176,7 @@ run_mass_testing_parallel() {
      fi
      pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln
      outln "(output is in ....\n)"
-#FIXME: once this function is being called we need a handler which does the right thing 
+#FIXME: once this function is being called we need a handler which does the right thing
 # ==> not overwrite
      while read cmdline; do
           cmdline=$(filter_input "$cmdline")
