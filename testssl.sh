@@ -196,6 +196,7 @@ CLIENT_AUTH=false
 NO_SSL_SESSIONID=false
 HOSTCERT=""
 HEADERFILE=""
+HTTP_STATUS_CODE=""
 PROTOS_OFFERED=""
 TLS_EXTENSIONS=""
 GOST_STATUS_PROBLEM=false
@@ -748,66 +749,66 @@ run_http_header() {
      mv $HEADERFILE.2  $HEADERFILE  # sed'ing in place doesn't work with BSD and Linux simultaneously
      ret=0
 
-     status_code=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
-     msg_thereafter=$(awk -F"$status_code" '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)   # dirty trick to use the status code as a
+     HTTP_STATUS_CODE=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
+     msg_thereafter=$(awk -F"$HTTP_STATUS_CODE" '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)   # dirty trick to use the status code as a
      msg_thereafter=$(strip_lf "$msg_thereafter")                                    # field separator, otherwise we need a loop with awk
-     debugme echo "Status/MSG: $status_code $msg_thereafter"
+     debugme echo "Status/MSG: $HTTP_STATUS_CODE $msg_thereafter"
 
      pr_bold " HTTP Status Code           "
-     [[ -z "$status_code" ]] && pr_cyan "No status code" && return 3
+     [[ -z "$HTTP_STATUS_CODE" ]] && pr_cyan "No status code" && return 3
 
-     out "  $status_code$msg_thereafter"
-     case $status_code in
+     out "  $HTTP_STATUS_CODE$msg_thereafter"
+     case $HTTP_STATUS_CODE in
           301|302|307|308)
                redirect=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
                out ", redirecting to \"$redirect\""
                if [[ $redirect == "http://"* ]]; then
                     pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
-                    fileout "status_code" "NOT ok" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
+                    fileout "HTTP_STATUS_CODE" "NOT ok" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
                fi
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter, redirecting to \"$redirect\""
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter, redirecting to \"$redirect\""
                ;;
           200)
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
                ;;
           204)
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
                ;;
           206)
                out " -- WTF?"
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter -- WTF?"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter -- WTF?"
                ;;
           400)
                pr_cyan " (Hint: better try another URL)"
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: better try another URL)"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter (Hint: better try another URL)"
                ;;
           401)
                grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
                ;;
           403)
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
                ;;
           404)
-               out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
+               out " (Hint: supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\")"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter (Hint: supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\")"
                ;;
           405)
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
                ;;
           *)
-               pr_warning ". Oh, didn't expect \"$status_code$msg_thereafter\""
-               fileout "status_code" "DEBUG" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter. Oh, didn't expect a $status_code$msg_thereafter"
+               pr_warning ". Oh, didn't expect \"$HTTP_STATUS_CODE$msg_thereafter\""
+               fileout "HTTP_STATUS_CODE" "DEBUG" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter. Oh, didn't expect a $HTTP_STATUS_CODE$msg_thereafter"
                ;;
      esac
      outln
@@ -1202,16 +1203,28 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
      local -i nr_cookies
      local nr_httponly nr_secure
      local negative_word
+     local msg302="" msg302_=""
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
      fi
+
+     if ! grep -q 20 <<< "$HTTP_STATUS_CODE"; then
+          if egrep -q "301|302" <<< "$HTTP_STATUS_CODE"; then
+               msg302=" -- maybe better try target URL of 30x"
+               msg302_=" (30x detected, better try target URL of 30x)"
+          else
+               msg302=" -- HTTP status $HTTP_STATUS_CODE signals you maybe missed the web application"
+               msg302_=" (maybe missed the application)"
+          fi
+     fi
+
      pr_bold " Cookie(s)                    "
      grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
           nr_cookies=$(count_lines "$TMPFILE")
-          out "$nr_cookies issued: "
-          fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\""
+          out "$nr_cookies issued:"
+          fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\"$msg302_"
           if [[ $nr_cookies -gt 1 ]]; then
                negative_word="NONE"
           else
@@ -1235,14 +1248,15 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
           esac
           out " HttpOnly"
           if [[ $nr_cookies == $nr_httponly ]]; then
-               fileout "cookie_httponly" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly"
+               fileout "cookie_httponly" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
           else
-               fileout "cookie_httponly" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly"
+               fileout "cookie_httponly" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
           fi
+          out "$msg302"
      else
-          out "(none issued at \"$1\")"
-          fileout "cookie_count" "INFO" "No cookies issued at \"$1\""
-    fi
+          out "(none issued at \"$1\")$msg302"
+          fileout "cookie_count" "INFO" "No cookies issued at \"$1\"$msg302_"
+     fi
      outln
 
      tmpfile_handle $FUNCNAME.txt
@@ -1395,6 +1409,7 @@ listciphers() {
 # argv[1]: cipher list to test
 # argv[2]: string on console
 # argv[3]: ok to offer? 0: yes, 1: no
+# argv[4]: string for fileout
 std_cipherlists() {
      local -i sclient_success
      local singlespaces proto="" addcmd=""
@@ -1402,8 +1417,8 @@ std_cipherlists() {
 
      [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO" && proto="$OPTIMAL_PROTO"
      [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
-     pr_bold "$2    "         # indent in order to be in the same row as server preferences
-     if listciphers "$1" $proto; then  # is that locally available??
+     pr_bold "$2    "                   # indenting to be in the same row as server preferences
+     if listciphers "$1" $proto; then   # is that locally available??
           $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $addcmd 2>$ERRFILE >$TMPFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
@@ -1411,37 +1426,37 @@ std_cipherlists() {
           case $3 in
                0)   # ok to offer
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_done_bestln "offered (OK)"
+                         pr_done_best "offered (OK)"
                          fileout "std_$4" "OK" "$2 offered (OK)"
                     else
-                         pr_svrty_mediumln "not offered"
+                         pr_svrty_medium "not offered"
                          fileout "std_$4" "MEDIUM" "$2 not offered (WARN)"
                     fi
                     ;;
                1) # the ugly ones
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_svrty_criticalln "offered (NOT ok)"
+                         pr_svrty_critical "offered (NOT ok)"
                          fileout "std_$4" "NOT ok" "$2 offered (NOT ok) - ugly"
                     else
-                         pr_done_bestln "not offered (OK)"
+                         pr_done_best "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
                     fi
                     ;;
                2)   # bad but not worst
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_svrty_highln "offered (NOT ok)"
+                         pr_svrty_high "offered (NOT ok)"
                          fileout "std_$4" "NOT ok" "$2 offered (NOT ok) - bad"
                     else
-                         pr_done_goodln "not offered (OK)"
+                         pr_done_good "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
                     fi
                     ;;
                3) # not totally bad
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_svrty_mediumln "offered"
+                         pr_svrty_medium "offered"
                          fileout "std_$4" "MEDIUM" "$2 offered - not too bad"
                     else
-                         outln "not offered (OK)"
+                         out "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
                     fi
                     ;;
@@ -1451,6 +1466,7 @@ std_cipherlists() {
                     ;;
           esac
           tmpfile_handle $FUNCNAME.$debugname.txt
+          [[ $DEBUG -ge 1 ]] && outln " -- $1" || outln  #FIXME: should be in standard output at some time
      else
           singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
@@ -1460,7 +1476,7 @@ std_cipherlists() {
           fi
           fileout "std_$4" "WARN" "Cipher $2 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
-     # we need 1xlf in those cases:
+     # we need 1 x lf in those cases:
      debugme echo
 }
 
@@ -3269,7 +3285,7 @@ run_std_cipherlists() {
      outln
      pr_headlineln " Testing ~standard cipher lists "
      outln
-# see ciphers(1ssl)
+# see ciphers(1ssl) or run 'openssl ciphers -v'
      std_cipherlists 'NULL:eNULL'                       " Null Ciphers             " 1 "NULL"
      std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   " 1 "aNULL"
      std_cipherlists 'ADH'                              " Anonymous DH Ciphers     " 1 "ADH"
@@ -3278,7 +3294,7 @@ run_std_cipherlists() {
      std_cipherlists 'EXPORT'                           " Export Ciphers (general) " 1 "EXPORT"
      std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1 "LOW"
      std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1 "DES"
-     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2'       " Medium grade encryption  " 2 "MEDIUM"
+     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2:!3DES' " \"Medium\" grade encryption" 2 "MEDIUM"
      std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3 "3DES"
      std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    " 0 "HIGH"
      outln
@@ -8801,4 +8817,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.541 2016/09/07 19:34:26 dirkw Exp $
+#  $Id: testssl.sh,v 1.543 2016/09/10 17:37:58 dirkw Exp $
