@@ -7787,6 +7787,7 @@ check_resolver_bins() {
 # arg1: a host name. Returned will be 0-n IPv4 addresses
 get_a_record() {
      local ip4=""
+     local cname_temp=""
      local saved_openssl_conf="$OPENSSL_CONF"
 
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
@@ -7800,8 +7801,14 @@ get_a_record() {
           fi
      fi
      if [[ -z "$ip4" ]]; then
-          which dig &> /dev/null && \
-               ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | sed '/^;;/d'))
+          if which dig &> /dev/null ; then
+               cname_temp=$(dig +short -t CNAME "$1" 2>/dev/null)
+               if [[ -n "$cname_temp" ]]; then
+                    ip4=$(filter_ip4_address $(dig +short -t a "$cname_temp" 2>/dev/null | sed '/^;;/d'))
+               else
+                    ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | sed '/^;;/d'))
+               fi
+          fi
      fi
      if [[ -z "$ip4" ]]; then
           which host &> /dev/null && \
@@ -8845,4 +8852,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.545 2016/09/21 19:42:44 dirkw Exp $
+#  $Id: testssl.sh,v 1.546 2016/09/21 19:59:48 dirkw Exp $
