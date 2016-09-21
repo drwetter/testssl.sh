@@ -218,6 +218,9 @@ HAS_SSL3=false
 HAS_NO_SSL2=false
 HAS_ALPN=false
 HAS_SPDY=false
+HAS_FALLBACK_SCSV=false
+HAS_PROXY=false
+HAS_XMPP=false
 ADD_RFC_STR="rfc"                       # display RFC ciphernames
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
@@ -1800,7 +1803,8 @@ run_cipher_per_proto() {
           has_server_protocol "${proto:1}" || continue
           
           # The OpenSSL ciphers function, prior to version 1.1.0, could only understand -ssl2, -ssl3, and -tls1.
-          if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == "-ssl3" ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
+          if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == "-ssl3" ]] || \
+               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
                ossl_ciphers_proto="$proto"
           else
                ossl_ciphers_proto="-tls1"
@@ -3823,7 +3827,9 @@ determine_trust() {
      # and the output should should be indented by two more spaces.
      [[ -n $json_prefix ]] && spaces="                                "
 
-     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]]; then
+     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && \
+          [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]] && \
+          [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1" ]]; then
           addtl_warning="(Your openssl <= 1.0.2 might be too unreliable to determine trust)"
           fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
@@ -6499,8 +6505,7 @@ run_crime() {
 #         return $ret
 #    esac
 
-#    $OPENSSL s_client -help 2>&1 | grep -qw nextprotoneg
-#    if [[ $? -eq 0 ]]; then
+#    if "$HAS_NPN"; then
 #         $OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs  $SNI </dev/null 2>/dev/null >$TMPFILE
 #         if [[ $? -eq 0 ]]; then
 #              echo
@@ -6629,7 +6634,7 @@ run_tls_fallback_scsv() {
      # the countermeasure to protect against protocol downgrade attacks.
 
      # First check we have support for TLS_FALLBACK_SCSV in our local OpenSSL
-     if ! $OPENSSL s_client -help 2>&1 | grep -q "\-fallback_scsv"; then
+     if ! "$HAS_FALLBACK_SCSV"; then
           local_problem_ln "$OPENSSL lacks TLS_FALLBACK_SCSV support"
           return 4
      fi
@@ -7195,6 +7200,8 @@ test_openssl_suffix() {
 
 
 find_openssl_binary() {
+     local s_client_has=$TEMPDIR/s_client_has.txt
+
      # 0. check environment variable whether it's executable
      if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
           pr_warningln "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
@@ -7226,7 +7233,7 @@ find_openssl_binary() {
 
      # see #190, reverting logic: unless otherwise proved openssl has no dh bits
      case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
-          1.0.2|1.1.0) HAS_DH_BITS=true ;;
+          1.0.2|1.1.0|1.1.1) HAS_DH_BITS=true ;;
      esac
      # libressl does not have "Server Temp Key" (SSL_get_server_tmp_key)
 
@@ -7234,6 +7241,8 @@ find_openssl_binary() {
           outln
           pr_warning "Please note: LibreSSL is not a good choice for testing INSECURE features!"
      fi
+
+     initialize_engine
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
 
@@ -7246,11 +7255,22 @@ find_openssl_binary() {
      $OPENSSL s_client -no_ssl2 2>&1 | grep -aq "unknown option" || \
           HAS_NO_SSL2=true
 
-     $OPENSSL s_client -help 2>&1 | grep -qw '\-alpn' && \
+     $OPENSSL s_client -help 2>$s_client_has
+
+     grep -qw '\-alpn' $s_client_has && \
           HAS_ALPN=true
 
-     $OPENSSL s_client -help 2>&1 | grep -qw '\-nextprotoneg' && \
+     grep -qw '\-nextprotoneg' $s_client_has && \
           HAS_SPDY=true
+
+     grep -qw '\-fallback_scsv' $s_client_has && \
+          HAS_FALLBACK_SCSV=true
+
+     grep -q '\-proxy' $s_client_has && \
+          HAS_PROXY=true
+
+     grep -q '\-xmpp' $s_client_has && \
+          HAS_XMPP=true
 
      return 0
 }
@@ -7401,9 +7421,12 @@ maketempf() {
           ERRFILE=$TEMPDIR/errorfile.txt || exit -6
      fi
      HOSTCERT=$TEMPDIR/host_certificate.txt
-     initialize_engine
+}
+
+prepare_debug() {
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
+
 
 CVS_REL: $CVS_REL
 GIT_REL: $GIT_REL
@@ -7432,6 +7455,9 @@ HAS_SSL3: $HAS_SSL3
 HAS_NO_SSL2: $HAS_NO_SSL2
 HAS_SPDY: $HAS_SPDY
 HAS_ALPN: $HAS_ALPN
+HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
+HAS_PROXY: $HAS_PROXY
+HAS_XMPP: $HAS_XMPP
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -7468,11 +7494,11 @@ CCS_MAX_WAITSOCK: $CCS_MAX_WAITSOCK
 USLEEP_SND $USLEEP_SND
 USLEEP_REC $USLEEP_REC
 
-
 EOF
           which locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
+     # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
 }
 
 
@@ -7920,8 +7946,8 @@ get_mx_record() {
 #
 check_proxy() {
      if [[ -n "$PROXY" ]]; then
-          if ! $OPENSSL s_client -help 2>&1 | grep -qw proxy; then
-               fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -5
+          if ! "$HAS_PROXY"; then
+               fatal "Your $OPENSSL is too old to support the \"-proxy\" option" -5
           fi
           PROXYNODE=${PROXY%:*}
           PROXYPORT=${PROXY#*:}
@@ -8064,7 +8090,7 @@ determine_service() {
                          # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
                          NODEIP="$NODE"
                          if [[ -n "$XMPP_HOST" ]]; then
-                              if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
+                              if ! "$HAS_XMPP"; then
                                    fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -5
                               fi
                               STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # it's a hack -- instead of changing calls all over the place
@@ -8350,8 +8376,9 @@ parse_cmd_line() {
                     help 0
                     ;;
                -b|--banner|-v|--version)
-                    find_openssl_binary
                     maketempf
+                    find_openssl_binary
+                    prepare_debug
                     mybanner
                     exit 0
                     ;;
@@ -8754,8 +8781,9 @@ get_install_dir
 initialize_globals
 parse_cmd_line "$@"
 set_color_functions
-find_openssl_binary
 maketempf
+find_openssl_binary
+prepare_debug
 mybanner
 check_proxy
 check4openssl_oldfarts
@@ -8817,4 +8845,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.543 2016/09/10 17:37:58 dirkw Exp $
+#  $Id: testssl.sh,v 1.545 2016/09/21 19:42:44 dirkw Exp $
