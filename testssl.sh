@@ -196,6 +196,7 @@ CLIENT_AUTH=false
 NO_SSL_SESSIONID=false
 HOSTCERT=""
 HEADERFILE=""
+HTTP_STATUS_CODE=""
 PROTOS_OFFERED=""
 TLS_EXTENSIONS=""
 GOST_STATUS_PROBLEM=false
@@ -217,6 +218,9 @@ HAS_SSL3=false
 HAS_NO_SSL2=false
 HAS_ALPN=false
 HAS_SPDY=false
+HAS_FALLBACK_SCSV=false
+HAS_PROXY=false
+HAS_XMPP=false
 ADD_RFC_STR="rfc"                       # display RFC ciphernames
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
@@ -759,66 +763,66 @@ run_http_header() {
      mv $HEADERFILE.2  $HEADERFILE  # sed'ing in place doesn't work with BSD and Linux simultaneously
      ret=0
 
-     status_code=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
-     msg_thereafter=$(awk -F"$status_code" '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)   # dirty trick to use the status code as a
+     HTTP_STATUS_CODE=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
+     msg_thereafter=$(awk -F"$HTTP_STATUS_CODE" '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)   # dirty trick to use the status code as a
      msg_thereafter=$(strip_lf "$msg_thereafter")                                    # field separator, otherwise we need a loop with awk
-     debugme echo "Status/MSG: $status_code $msg_thereafter"
+     debugme echo "Status/MSG: $HTTP_STATUS_CODE $msg_thereafter"
 
      pr_bold " HTTP Status Code           "
-     [[ -z "$status_code" ]] && pr_cyan "No status code" && return 3
+     [[ -z "$HTTP_STATUS_CODE" ]] && pr_cyan "No status code" && return 3
 
-     out "  $status_code$msg_thereafter"
-     case $status_code in
+     out "  $HTTP_STATUS_CODE$msg_thereafter"
+     case $HTTP_STATUS_CODE in
           301|302|307|308)
                redirect=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
                out ", redirecting to \"$redirect\""
                if [[ $redirect == "http://"* ]]; then
                     pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
-                    fileout "status_code" "NOT ok" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
+                    fileout "HTTP_STATUS_CODE" "NOT ok" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
                fi
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter, redirecting to \"$redirect\""
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter, redirecting to \"$redirect\""
                ;;
           200)
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
                ;;
           204)
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
                ;;
           206)
                out " -- WTF?"
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter -- WTF?"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter -- WTF?"
                ;;
           400)
                pr_cyan " (Hint: better try another URL)"
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: better try another URL)"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter (Hint: better try another URL)"
                ;;
           401)
                grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
                ;;
           403)
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
                ;;
           404)
-               out " (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter (Hint: supply a path which doesn't give a \"$status_code$msg_thereafter\")"
+               out " (Hint: supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\")"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter (Hint: supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\")"
                ;;
           405)
-               fileout "status_code" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
                ;;
           *)
-               pr_warning ". Oh, didn't expect \"$status_code$msg_thereafter\""
-               fileout "status_code" "DEBUG" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $status_code$msg_thereafter. Oh, didn't expect a $status_code$msg_thereafter"
+               pr_warning ". Oh, didn't expect \"$HTTP_STATUS_CODE$msg_thereafter\""
+               fileout "HTTP_STATUS_CODE" "DEBUG" \
+                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter. Oh, didn't expect a $HTTP_STATUS_CODE$msg_thereafter"
                ;;
      esac
      outln
@@ -1213,16 +1217,28 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
      local -i nr_cookies
      local nr_httponly nr_secure
      local negative_word
+     local msg302="" msg302_=""
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
      fi
+
+     if ! grep -q 20 <<< "$HTTP_STATUS_CODE"; then
+          if egrep -q "301|302" <<< "$HTTP_STATUS_CODE"; then
+               msg302=" -- maybe better try target URL of 30x"
+               msg302_=" (30x detected, better try target URL of 30x)"
+          else
+               msg302=" -- HTTP status $HTTP_STATUS_CODE signals you maybe missed the web application"
+               msg302_=" (maybe missed the application)"
+          fi
+     fi
+
      pr_bold " Cookie(s)                    "
      grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
           nr_cookies=$(count_lines "$TMPFILE")
-          out "$nr_cookies issued: "
-          fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\""
+          out "$nr_cookies issued:"
+          fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\"$msg302_"
           if [[ $nr_cookies -gt 1 ]]; then
                negative_word="NONE"
           else
@@ -1246,14 +1262,15 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
           esac
           out " HttpOnly"
           if [[ $nr_cookies == $nr_httponly ]]; then
-               fileout "cookie_httponly" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly"
+               fileout "cookie_httponly" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
           else
-               fileout "cookie_httponly" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly"
+               fileout "cookie_httponly" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
           fi
+          out "$msg302"
      else
-          out "(none issued at \"$1\")"
-          fileout "cookie_count" "INFO" "No cookies issued at \"$1\""
-    fi
+          out "(none issued at \"$1\")$msg302"
+          fileout "cookie_count" "INFO" "No cookies issued at \"$1\"$msg302_"
+     fi
      outln
 
      tmpfile_handle $FUNCNAME.txt
@@ -1406,6 +1423,7 @@ listciphers() {
 # argv[1]: cipher list to test
 # argv[2]: string on console
 # argv[3]: ok to offer? 0: yes, 1: no
+# argv[4]: string for fileout
 std_cipherlists() {
      local -i sclient_success
      local singlespaces proto="" addcmd=""
@@ -1413,8 +1431,8 @@ std_cipherlists() {
 
      [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO" && proto="$OPTIMAL_PROTO"
      [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
-     pr_bold "$2    "         # indent in order to be in the same row as server preferences
-     if listciphers "$1" $proto; then  # is that locally available??
+     pr_bold "$2    "                   # indenting to be in the same row as server preferences
+     if listciphers "$1" $proto; then   # is that locally available??
           $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $addcmd 2>$ERRFILE >$TMPFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
@@ -1422,37 +1440,37 @@ std_cipherlists() {
           case $3 in
                0)   # ok to offer
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_done_bestln "offered (OK)"
+                         pr_done_best "offered (OK)"
                          fileout "std_$4" "OK" "$2 offered (OK)"
                     else
-                         pr_svrty_mediumln "not offered"
+                         pr_svrty_medium "not offered"
                          fileout "std_$4" "MEDIUM" "$2 not offered (WARN)"
                     fi
                     ;;
                1) # the ugly ones
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_svrty_criticalln "offered (NOT ok)"
+                         pr_svrty_critical "offered (NOT ok)"
                          fileout "std_$4" "NOT ok" "$2 offered (NOT ok) - ugly"
                     else
-                         pr_done_bestln "not offered (OK)"
+                         pr_done_best "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
                     fi
                     ;;
                2)   # bad but not worst
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_svrty_highln "offered (NOT ok)"
+                         pr_svrty_high "offered (NOT ok)"
                          fileout "std_$4" "NOT ok" "$2 offered (NOT ok) - bad"
                     else
-                         pr_done_goodln "not offered (OK)"
+                         pr_done_good "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
                     fi
                     ;;
                3) # not totally bad
                     if [[ $sclient_success -eq 0 ]]; then
-                         pr_svrty_mediumln "offered"
+                         pr_svrty_medium "offered"
                          fileout "std_$4" "MEDIUM" "$2 offered - not too bad"
                     else
-                         outln "not offered (OK)"
+                         out "not offered (OK)"
                          fileout "std_$4" "OK" "$2 not offered (OK)"
                     fi
                     ;;
@@ -1462,6 +1480,7 @@ std_cipherlists() {
                     ;;
           esac
           tmpfile_handle $FUNCNAME.$debugname.txt
+          [[ $DEBUG -ge 1 ]] && outln " -- $1" || outln  #FIXME: should be in standard output at some time
      else
           singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
@@ -1471,7 +1490,7 @@ std_cipherlists() {
           fi
           fileout "std_$4" "WARN" "Cipher $2 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
-     # we need 1xlf in those cases:
+     # we need 1 x lf in those cases:
      debugme echo
 }
 
@@ -1795,7 +1814,8 @@ run_cipher_per_proto() {
           has_server_protocol "${proto:1}" || continue
           
           # The OpenSSL ciphers function, prior to version 1.1.0, could only understand -ssl2, -ssl3, and -tls1.
-          if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == "-ssl3" ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
+          if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == "-ssl3" ]] || \
+               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
                ossl_ciphers_proto="$proto"
           else
                ossl_ciphers_proto="-tls1"
@@ -3280,7 +3300,7 @@ run_std_cipherlists() {
      outln
      pr_headlineln " Testing ~standard cipher lists "
      outln
-# see ciphers(1ssl)
+# see ciphers(1ssl) or run 'openssl ciphers -v'
      std_cipherlists 'NULL:eNULL'                       " Null Ciphers             " 1 "NULL"
      std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   " 1 "aNULL"
      std_cipherlists 'ADH'                              " Anonymous DH Ciphers     " 1 "ADH"
@@ -3289,7 +3309,7 @@ run_std_cipherlists() {
      std_cipherlists 'EXPORT'                           " Export Ciphers (general) " 1 "EXPORT"
      std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1 "LOW"
      std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1 "DES"
-     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2'       " Medium grade encryption  " 2 "MEDIUM"
+     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2:!3DES' " \"Medium\" grade encryption" 2 "MEDIUM"
      std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3 "3DES"
      std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    " 0 "HIGH"
      outln
@@ -3818,7 +3838,9 @@ determine_trust() {
      # and the output should should be indented by two more spaces.
      [[ -n $json_prefix ]] && spaces="                                "
 
-     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]]; then
+     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && \
+          [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]] && \
+          [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1" ]]; then
           addtl_warning="(Your openssl <= 1.0.2 might be too unreliable to determine trust)"
           fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
@@ -6494,8 +6516,7 @@ run_crime() {
 #         return $ret
 #    esac
 
-#    $OPENSSL s_client -help 2>&1 | grep -qw nextprotoneg
-#    if [[ $? -eq 0 ]]; then
+#    if "$HAS_NPN"; then
 #         $OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs  $SNI </dev/null 2>/dev/null >$TMPFILE
 #         if [[ $? -eq 0 ]]; then
 #              echo
@@ -6624,7 +6645,7 @@ run_tls_fallback_scsv() {
      # the countermeasure to protect against protocol downgrade attacks.
 
      # First check we have support for TLS_FALLBACK_SCSV in our local OpenSSL
-     if ! $OPENSSL s_client -help 2>&1 | grep -q "\-fallback_scsv"; then
+     if ! "$HAS_FALLBACK_SCSV"; then
           local_problem_ln "$OPENSSL lacks TLS_FALLBACK_SCSV support"
           return 4
      fi
@@ -7190,6 +7211,8 @@ test_openssl_suffix() {
 
 
 find_openssl_binary() {
+     local s_client_has=$TEMPDIR/s_client_has.txt
+
      # 0. check environment variable whether it's executable
      if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
           pr_warningln "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
@@ -7221,7 +7244,7 @@ find_openssl_binary() {
 
      # see #190, reverting logic: unless otherwise proved openssl has no dh bits
      case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
-          1.0.2|1.1.0) HAS_DH_BITS=true ;;
+          1.0.2|1.1.0|1.1.1) HAS_DH_BITS=true ;;
      esac
      # libressl does not have "Server Temp Key" (SSL_get_server_tmp_key)
 
@@ -7229,6 +7252,8 @@ find_openssl_binary() {
           outln
           pr_warning "Please note: LibreSSL is not a good choice for testing INSECURE features!"
      fi
+
+     initialize_engine
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
 
@@ -7241,11 +7266,22 @@ find_openssl_binary() {
      $OPENSSL s_client -no_ssl2 2>&1 | grep -aq "unknown option" || \
           HAS_NO_SSL2=true
 
-     $OPENSSL s_client -help 2>&1 | grep -qw '\-alpn' && \
+     $OPENSSL s_client -help 2>$s_client_has
+
+     grep -qw '\-alpn' $s_client_has && \
           HAS_ALPN=true
 
-     $OPENSSL s_client -help 2>&1 | grep -qw '\-nextprotoneg' && \
+     grep -qw '\-nextprotoneg' $s_client_has && \
           HAS_SPDY=true
+
+     grep -qw '\-fallback_scsv' $s_client_has && \
+          HAS_FALLBACK_SCSV=true
+
+     grep -q '\-proxy' $s_client_has && \
+          HAS_PROXY=true
+
+     grep -q '\-xmpp' $s_client_has && \
+          HAS_XMPP=true
 
      return 0
 }
@@ -7398,9 +7434,12 @@ maketempf() {
           ERRFILE=$TEMPDIR/errorfile.txt || exit -6
      fi
      HOSTCERT=$TEMPDIR/host_certificate.txt
-     initialize_engine
+}
+
+prepare_debug() {
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
+
 
 CVS_REL: $CVS_REL
 GIT_REL: $GIT_REL
@@ -7429,6 +7468,9 @@ HAS_SSL3: $HAS_SSL3
 HAS_NO_SSL2: $HAS_NO_SSL2
 HAS_SPDY: $HAS_SPDY
 HAS_ALPN: $HAS_ALPN
+HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
+HAS_PROXY: $HAS_PROXY
+HAS_XMPP: $HAS_XMPP
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -7465,11 +7507,11 @@ CCS_MAX_WAITSOCK: $CCS_MAX_WAITSOCK
 USLEEP_SND $USLEEP_SND
 USLEEP_REC $USLEEP_REC
 
-
 EOF
           which locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
+     # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
 
      CIPHERS_BY_STRENGTH_FILE=$(mktemp $TEMPDIR/ciphers_by_strength.XXXXXX)
      cat >$CIPHERS_BY_STRENGTH_FILE << EOF
@@ -8125,6 +8167,7 @@ check_resolver_bins() {
 # arg1: a host name. Returned will be 0-n IPv4 addresses
 get_a_record() {
      local ip4=""
+     local cname_temp=""
      local saved_openssl_conf="$OPENSSL_CONF"
 
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
@@ -8138,8 +8181,14 @@ get_a_record() {
           fi
      fi
      if [[ -z "$ip4" ]]; then
-          which dig &> /dev/null && \
-               ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | sed '/^;;/d'))
+          if which dig &> /dev/null ; then
+               cname_temp=$(dig +short -t CNAME "$1" 2>/dev/null)
+               if [[ -n "$cname_temp" ]]; then
+                    ip4=$(filter_ip4_address $(dig +short -t a "$cname_temp" 2>/dev/null | sed '/^;;/d'))
+               else
+                    ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | sed '/^;;/d'))
+               fi
+          fi
      fi
      if [[ -z "$ip4" ]]; then
           which host &> /dev/null && \
@@ -8284,8 +8333,8 @@ get_mx_record() {
 #
 check_proxy() {
      if [[ -n "$PROXY" ]]; then
-          if ! $OPENSSL s_client -help 2>&1 | grep -qw proxy; then
-               fatal "Your $OPENSSL is too old to support the \"--proxy\" option" -5
+          if ! "$HAS_PROXY"; then
+               fatal "Your $OPENSSL is too old to support the \"-proxy\" option" -5
           fi
           PROXYNODE=${PROXY%:*}
           PROXYPORT=${PROXY#*:}
@@ -8428,7 +8477,7 @@ determine_service() {
                          # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
                          NODEIP="$NODE"
                          if [[ -n "$XMPP_HOST" ]]; then
-                              if ! $OPENSSL s_client --help 2>&1 | grep -q xmpphost; then
+                              if ! "$HAS_XMPP"; then
                                    fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -5
                               fi
                               STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # it's a hack -- instead of changing calls all over the place
@@ -8714,8 +8763,9 @@ parse_cmd_line() {
                     help 0
                     ;;
                -b|--banner|-v|--version)
-                    find_openssl_binary
                     maketempf
+                    find_openssl_binary
+                    prepare_debug
                     mybanner
                     exit 0
                     ;;
@@ -9118,8 +9168,9 @@ get_install_dir
 initialize_globals
 parse_cmd_line "$@"
 set_color_functions
-find_openssl_binary
 maketempf
+find_openssl_binary
+prepare_debug
 mybanner
 check_proxy
 check4openssl_oldfarts
@@ -9181,4 +9232,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.541 2016/09/07 19:34:26 dirkw Exp $
+#  $Id: testssl.sh,v 1.546 2016/09/21 19:59:48 dirkw Exp $
