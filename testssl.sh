@@ -3933,11 +3933,15 @@ sclient_connect_successful() {
 determine_tls_extensions() {
      local proto addcmd
      local success
-     local alpn=""
+     local alpnOrNpnParam=""
      local savedir
      local nrsaved
 
-     "$HAS_ALPN" && alpn="h2-14,h2-15,h2"
+     if "$HAS_ALPN"; then
+          alpnOrNpnParam="-alpn \"http/1.1,spdy/1,spdy/2,spdy/3,stun.turn,stun.nat-discovery,h2,h2c,webrtc,c-webrtc,ftp\""
+     elif "$HAS_SPDY"; then
+          alpnOrNpnParam="-nextprotoneg \"h2-14,h2-15,h2\""
+     fi
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -3983,7 +3987,7 @@ determine_tls_extensions() {
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           addcmd=""
           [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
-          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug -nextprotoneg "$alpn" -status </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $alpnOrNpnParam -status </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0 && break
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
