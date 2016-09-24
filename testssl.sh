@@ -187,8 +187,9 @@ IKNOW_FNAME=false
 
 # further global vars just declared here
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
-# alpn_protos needs to be space-separated, not comma-seperated
-readonly ALPN_PROTOs="h2 h2-17 h2-16 h2-15 h2-14 spdy/3.1 http/1.1"
+# alpn_protos needs to be space-separated, not comma-seperated, including odd ones observerd @ facebook and others, old ones like h2-17 omitted as they could not be found
+readonly ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
+
 TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
@@ -3565,6 +3566,7 @@ run_server_preference() {
                [[ -n "$PROXY" ]] && arg="   SPDY/NPN is"
                [[ -n "$STARTTLS" ]] && arg="    "
                if spdy_pre " $arg" ; then                                       # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
+                                                                                # ALPN needs also some lines here
                     $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg "$NPN_PROTOs" $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
@@ -3955,11 +3957,12 @@ sclient_connect_successful() {
 determine_tls_extensions() {
      local proto addcmd
      local success
-     local npn_params=""
+     local npn_params="" alpn_params=""
      local savedir
      local nrsaved
 
-     $HAS_SPDY && npn_params="-nextprotoneg \"$NPN_PROTO\""
+     $HAS_SPDY && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
+     $HAS_ALPN && [[ -z $STARTTLS ]] && alpn_params="-alpn \"${ALPN_PROTOs// /,}\""  # we need to replace " " by ","
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -8852,4 +8855,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.547 2016/09/24 14:07:22 dirkw Exp $
+#  $Id: testssl.sh,v 1.548 2016/09/24 14:59:26 dirkw Exp $
