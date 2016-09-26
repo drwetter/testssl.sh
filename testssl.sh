@@ -4008,8 +4008,17 @@ determine_tls_extensions() {
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           addcmd=""
           [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
+          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $alpn_params -status </dev/null 2>$ERRFILE >$TMPFILE
+          if sclient_connect_successful $? $TMPFILE; then
+               success=0
+               grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext-alpn.txt 
+          fi
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $npn_params -status </dev/null 2>$ERRFILE >$TMPFILE
-          sclient_connect_successful $? $TMPFILE && success=0 && break
+          if sclient_connect_successful $? $TMPFILE ; then
+               success=0 
+               grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext-npn.txt 
+               break
+          fi
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
@@ -4028,8 +4037,8 @@ determine_tls_extensions() {
      #
      # this is not beautiful (grep+sed)
      # but maybe we should just get the ids and do a private matching, according to
-     # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml <-- ALPN is missing
-     TLS_EXTENSIONS=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+     # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
+     TLS_EXTENSIONS=$(cat $TEMPDIR/tlsext-alpn.txt $TEMPDIR/tlsext-npn.txt | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
      TLS_EXTENSIONS=$(echo $TLS_EXTENSIONS)       # into one line
 
      # Place the server's certificate in $HOSTCERT and any intermediate
@@ -8855,4 +8864,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.548 2016/09/24 14:59:26 dirkw Exp $
+#  $Id: testssl.sh,v 1.549 2016/09/26 19:47:56 dirkw Exp $
