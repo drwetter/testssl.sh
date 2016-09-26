@@ -187,8 +187,9 @@ IKNOW_FNAME=false
 
 # further global vars just declared here
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
-# alpn_protos needs to be space-separated, not comma-seperated
-readonly ALPN_PROTOs="h2 h2-17 h2-16 h2-15 h2-14 spdy/3.1 http/1.1"
+# alpn_protos needs to be space-separated, not comma-seperated, including odd ones observerd @ facebook and others, old ones like h2-17 omitted as they could not be found
+readonly ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
+
 TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
@@ -3576,6 +3577,7 @@ run_server_preference() {
                [[ -n "$PROXY" ]] && arg="   SPDY/NPN is"
                [[ -n "$STARTTLS" ]] && arg="    "
                if spdy_pre " $arg" ; then                                       # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
+                                                                                # ALPN needs also some lines here
                     $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg "$NPN_PROTOs" $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                     if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
@@ -3966,11 +3968,12 @@ sclient_connect_successful() {
 determine_tls_extensions() {
      local proto addcmd
      local success
-     local alpn=""
+     local npn_params="" alpn_params=""
      local savedir
      local nrsaved
 
-     "$HAS_ALPN" && alpn="h2-14,h2-15,h2"
+     $HAS_SPDY && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
+     $HAS_ALPN && [[ -z $STARTTLS ]] && alpn_params="-alpn \"${ALPN_PROTOs// /,}\""  # we need to replace " " by ","
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -4016,7 +4019,7 @@ determine_tls_extensions() {
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           addcmd=""
           [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
-          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug -nextprotoneg "$alpn" -status </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $npn_params -status </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0 && break
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
@@ -8731,7 +8734,7 @@ debug_globals() {
      local gbl
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_rc4 do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
                do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
@@ -9232,4 +9235,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.546 2016/09/21 19:59:48 dirkw Exp $
+#  $Id: testssl.sh,v 1.548 2016/09/24 14:59:26 dirkw Exp $
