@@ -17,9 +17,8 @@ fork (https://github.com/PeterMosmans/openssl). Thx a bunch, Peter!
 Compiled Linux and FreeBSD binaries so far come from Dirk, other
 contributors see ../CREDITS.md .
 
-**We discontinued the not commonly used binaries** (ARM7l, Darwin.i386) **at github as it
-is not very approrpriate to use github especially for those.  Main site for
-binaries see https://testssl.sh/openssl-1.0.2i-chacha.pm.ipv6.contributed/ and
+**I discontinued to upload the not commonly used binaries at github ** (ARM7l, Darwin.i386 and all kerberos compiles) **as it is not very appropriate to use github especially for those. The main site for all 
+binaries is https://testssl.sh/openssl-1.0.2i-chacha.pm.ipv6.contributed/, also see the tarball @
 https://testssl.sh/openssl-1.0.2i-chacha.pm.ipv6.Linux+FreeBSD.tar.gz**
 
 The binaries here have the naming scheme ``openssl.$(uname).$(uname -m)``
