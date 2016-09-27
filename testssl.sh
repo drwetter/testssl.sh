@@ -321,6 +321,17 @@ readonly SSLv2_CLIENT_HELLO="
 # https://idea.popcount.org/2012-06-16-dissecting-ssl-handshake/ (client)
 # FIXME: http://max.euston.net/d/tip_sslciphers.html
 
+###### Cipher suite information #####
+CIPHERS_BY_STRENGTH_FILE=""
+declare -i TLS_NR_CIPHERS=0
+declare TLS_CIPHER_HEXCODE=()
+declare TLS_CIPHER_OSSL_NAME=()
+declare TLS_CIPHER_RFC_NAME=()
+declare TLS_CIPHER_SSLVERS=()
+declare TLS_CIPHER_KX=()
+declare TLS_CIPHER_AUTH=()
+declare TLS_CIPHER_ENC=()
+declare TLS_CIPHER_EXPORT=()
 
 ###### output functions ######
 # a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
@@ -1517,27 +1528,27 @@ sockread() {
      return $ret
 }
 
-#FIXME: fill the following two:
 openssl2rfc() {
-     :
+     local rfcname=""
+     local -i i
+
+     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+          [[ "$1" == "${TLS_CIPHER_OSSL_NAME[i]}" ]] && rfcname="${TLS_CIPHER_RFC_NAME[i]}" && break
+     done
+     [[ "$rfcname" == "-" ]] && rfcname=""
+     [[ -n "$rfcname" ]] && out "$rfcname"
+     return 0
 }
 
 rfc2openssl() {
-     local hexcode ossl_hexcode ossl_name
-     local -i len
+     local ossl_name
+     local -i i
 
-     hexcode=$(grep -iw "$1" "$MAPPING_FILE_RFC" 2>>$ERRFILE | head -1 | awk '{ print $1 }')
-     [[ -z "$hexcode" ]] && return 0
-     len=${#hexcode}
-     case $len in
-          3) ossl_hexcode="0x00,0x${hexcode:1:2}" ;;
-          5) ossl_hexcode="0x${hexcode:1:2},0x${hexcode:3:2}" ;;
-          7) ossl_hexcode="0x${hexcode:1:2},0x${hexcode:3:2},0x${hexcode:5:2}" ;;
-          *) return 0 ;;
-     esac
-    ossl_name="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " $ossl_hexcode " | awk '{ print $3 }')"
-     [[ -z "$ossl_name" ]] && ossl_name="-"
-     out "$ossl_name"
+     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+          [[ "$1" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && ossl_name="${TLS_CIPHER_OSSL_NAME[i]}" && break
+     done
+     [[ "$ossl_name" == "-" ]] && ossl_name=""
+     [[ -n "$ossl_name" ]] && out "$ossl_name"
      return 0
 }
 
@@ -7425,6 +7436,8 @@ EOF
 }
 
 maketempf() {
+     local n
+
      TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
      TMPFILE=$TEMPDIR/tempfile.txt || exit -6
      if [[ "$DEBUG" -eq 0 ]]; then
@@ -7511,6 +7524,373 @@ EOF
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
      # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
+
+     CIPHERS_BY_STRENGTH_FILE=$(mktemp $TEMPDIR/ciphers_by_strength.XXXXXX)
+     cat >$CIPHERS_BY_STRENGTH_FILE << EOF
+      0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305  TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256_OLD  TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0x13 - ECDHE-RSA-CHACHA20-POLY1305    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD    TLSv1.2    Kx=ECDH        Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0x15 - DHE-RSA-CHACHA20-POLY1305      TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD      TLSv1.2    Kx=DH          Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0xC0,0x30 - ECDHE-RSA-AES256-GCM-SHA384    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AESGCM(256)                Mac=AEAD               
+      0xC0,0x2C - ECDHE-ECDSA-AES256-GCM-SHA384  TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384            TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AESGCM(256)                Mac=AEAD               
+      0xC0,0x28 - ECDHE-RSA-AES256-SHA384        TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AES(256)                   Mac=SHA384             
+      0xC0,0x24 - ECDHE-ECDSA-AES256-SHA384      TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384            TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AES(256)                   Mac=SHA384             
+      0xC0,0x14 - ECDHE-RSA-AES256-SHA           TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA                 SSLv3      Kx=ECDH        Au=RSA     Enc=AES(256)                   Mac=SHA1               
+      0xC0,0x0A - ECDHE-ECDSA-AES256-SHA         TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA               SSLv3      Kx=ECDH        Au=ECDSA   Enc=AES(256)                   Mac=SHA1               
+      0xC0,0x22 - SRP-DSS-AES-256-CBC-SHA        TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA               SSLv3      Kx=SRP         Au=DSS     Enc=AES(256)                   Mac=SHA1               
+      0xC0,0x21 - SRP-RSA-AES-256-CBC-SHA        TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA               SSLv3      Kx=SRP         Au=RSA     Enc=AES(256)                   Mac=SHA1               
+      0xC0,0x20 - SRP-AES-256-CBC-SHA            TLS_SRP_SHA_WITH_AES_256_CBC_SHA                   SSLv3      Kx=SRP         Au=SRP     Enc=AES(256)                   Mac=SHA1               
+      0x00,0xB7 - RSA-PSK-AES256-CBC-SHA384      TLS_RSA_PSK_WITH_AES_256_CBC_SHA384                TLSv1      Kx=RSAPSK      Au=RSA     Enc=AES(256)                   Mac=SHA384             
+      0x00,0xB3 - DHE-PSK-AES256-CBC-SHA384      TLS_DHE_PSK_WITH_AES_256_CBC_SHA384                TLSv1      Kx=DHEPSK      Au=PSK     Enc=AES(256)                   Mac=SHA384             
+      0x00,0x91 - DHE-PSK-AES256-CBC-SHA         TLS_DHE_PSK_WITH_AES_256_CBC_SHA                   SSLv3      Kx=DHEPSK      Au=PSK     Enc=AES(256)                   Mac=SHA1               
+      0xC0,0x9B - ECDHE-PSK-CAMELLIA256-SHA384   TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384         TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=Camellia(256)              Mac=SHA384             
+      0xC0,0x99 - RSA-PSK-CAMELLIA256-SHA384     TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384           TLSv1      Kx=RSAPSK      Au=RSA     Enc=Camellia(256)              Mac=SHA384             
+      0xC0,0x97 - DHE-PSK-CAMELLIA256-SHA384     TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384           TLSv1      Kx=DHEPSK      Au=PSK     Enc=Camellia(256)              Mac=SHA384             
+      0x00,0xAF - PSK-AES256-CBC-SHA384          TLS_PSK_WITH_AES_256_CBC_SHA384                    TLSv1      Kx=PSK         Au=PSK     Enc=AES(256)                   Mac=SHA384             
+      0xC0,0x95 - PSK-CAMELLIA256-SHA384         TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384               TLSv1      Kx=PSK         Au=PSK     Enc=Camellia(256)              Mac=SHA384             
+      0x00,0xA5 - DH-DSS-AES256-GCM-SHA384       TLS_DH_DSS_WITH_AES_256_GCM_SHA384                 TLSv1.2    Kx=DH/DSS      Au=DH      Enc=AESGCM(256)                Mac=AEAD               
+      0x00,0xA3 - DHE-DSS-AES256-GCM-SHA384      TLS_DHE_DSS_WITH_AES_256_GCM_SHA384                TLSv1.2    Kx=DH          Au=DSS     Enc=AESGCM(256)                Mac=AEAD               
+      0x00,0xA1 - DH-RSA-AES256-GCM-SHA384       TLS_DH_RSA_WITH_AES_256_GCM_SHA384                 TLSv1.2    Kx=DH/RSA      Au=DH      Enc=AESGCM(256)                Mac=AEAD               
+      0x00,0x9F - DHE-RSA-AES256-GCM-SHA384      TLS_DHE_RSA_WITH_AES_256_GCM_SHA384                TLSv1.2    Kx=DH          Au=RSA     Enc=AESGCM(256)                Mac=AEAD               
+      0xCC,0xA9 - ECDHE-ECDSA-CHACHA20-POLY1305  TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256      TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0xA8 - ECDHE-RSA-CHACHA20-POLY1305    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256        TLSv1.2    Kx=ECDH        Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0xAA - DHE-RSA-CHACHA20-POLY1305      TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256          TLSv1.2    Kx=DH          Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0xC0,0xAF - ECDHE-ECDSA-AES256-CCM8        TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8                 TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AESCCM8(256)               Mac=AEAD               
+      0xC0,0xAD - ECDHE-ECDSA-AES256-CCM         TLS_ECDHE_ECDSA_WITH_AES_256_CCM                   TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AESCCM(256)                Mac=AEAD               
+      0xC0,0xA3 - DHE-RSA-AES256-CCM8            TLS_DHE_RSA_WITH_AES_256_CCM_8                     TLSv1.2    Kx=DH          Au=RSA     Enc=AESCCM8(256)               Mac=AEAD               
+      0xC0,0x9F - DHE-RSA-AES256-CCM             TLS_DHE_RSA_WITH_AES_256_CCM                       TLSv1.2    Kx=DH          Au=RSA     Enc=AESCCM(256)                Mac=AEAD               
+      0x00,0x6B - DHE-RSA-AES256-SHA256          TLS_DHE_RSA_WITH_AES_256_CBC_SHA256                TLSv1.2    Kx=DH          Au=RSA     Enc=AES(256)                   Mac=SHA256             
+      0x00,0x6A - DHE-DSS-AES256-SHA256          TLS_DHE_DSS_WITH_AES_256_CBC_SHA256                TLSv1.2    Kx=DH          Au=DSS     Enc=AES(256)                   Mac=SHA256             
+      0x00,0x69 - DH-RSA-AES256-SHA256           TLS_DH_RSA_WITH_AES_256_CBC_SHA256                 TLSv1.2    Kx=DH/RSA      Au=DH      Enc=AES(256)                   Mac=SHA256             
+      0x00,0x68 - DH-DSS-AES256-SHA256           TLS_DH_DSS_WITH_AES_256_CBC_SHA256                 TLSv1.2    Kx=DH/DSS      Au=DH      Enc=AES(256)                   Mac=SHA256             
+      0x00,0x39 - DHE-RSA-AES256-SHA             TLS_DHE_RSA_WITH_AES_256_CBC_SHA                   SSLv3      Kx=DH          Au=RSA     Enc=AES(256)                   Mac=SHA1               
+      0x00,0x38 - DHE-DSS-AES256-SHA             TLS_DHE_DSS_WITH_AES_256_CBC_SHA                   SSLv3      Kx=DH          Au=DSS     Enc=AES(256)                   Mac=SHA1               
+      0x00,0x37 - DH-RSA-AES256-SHA              TLS_DH_RSA_WITH_AES_256_CBC_SHA                    SSLv3      Kx=DH/RSA      Au=DH      Enc=AES(256)                   Mac=SHA1               
+      0x00,0x36 - DH-DSS-AES256-SHA              TLS_DH_DSS_WITH_AES_256_CBC_SHA                    SSLv3      Kx=DH/DSS      Au=DH      Enc=AES(256)                   Mac=SHA1               
+      0xC0,0x77 - ECDHE-RSA-CAMELLIA256-SHA384   TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384         TLSv1.2    Kx=ECDH        Au=RSA     Enc=Camellia(256)              Mac=SHA384             
+      0xC0,0x73 - ECDHE-ECDSA-CAMELLIA256-SHA384 TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384       TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=Camellia(256)              Mac=SHA384             
+      0x00,0xC4 - DHE-RSA-CAMELLIA256-SHA256     TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256           TLSv1.2    Kx=DH          Au=RSA     Enc=Camellia(256)              Mac=SHA256             
+      0x00,0xC3 - DHE-DSS-CAMELLIA256-SHA256     TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256           TLSv1.2    Kx=DH          Au=DSS     Enc=Camellia(256)              Mac=SHA256             
+      0x00,0xC2 - DH-RSA-CAMELLIA256-SHA256      TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256            TLSv1.2    Kx=DH/RSA      Au=DH      Enc=Camellia(256)              Mac=SHA256             
+      0x00,0xC1 - DH-DSS-CAMELLIA256-SHA256      TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256            TLSv1.2    Kx=DH/DSS      Au=DH      Enc=Camellia(256)              Mac=SHA256             
+      0x00,0x88 - DHE-RSA-CAMELLIA256-SHA        TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA              SSLv3      Kx=DH          Au=RSA     Enc=Camellia(256)              Mac=SHA1               
+      0x00,0x87 - DHE-DSS-CAMELLIA256-SHA        TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA              SSLv3      Kx=DH          Au=DSS     Enc=Camellia(256)              Mac=SHA1               
+      0x00,0x86 - DH-RSA-CAMELLIA256-SHA         TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA               SSLv3      Kx=DH/RSA      Au=DH      Enc=Camellia(256)              Mac=SHA1               
+      0x00,0x85 - DH-DSS-CAMELLIA256-SHA         TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA               SSLv3      Kx=DH/DSS      Au=DH      Enc=Camellia(256)              Mac=SHA1               
+      0xC0,0x19 - AECDH-AES256-SHA               TLS_ECDH_anon_WITH_AES_256_CBC_SHA                 SSLv3      Kx=ECDH        Au=None    Enc=AES(256)                   Mac=SHA1               
+      0x00,0xA7 - ADH-AES256-GCM-SHA384          TLS_DH_anon_WITH_AES_256_GCM_SHA384                TLSv1.2    Kx=DH          Au=None    Enc=AESGCM(256)                Mac=AEAD               
+      0x00,0x6D - ADH-AES256-SHA256              TLS_DH_anon_WITH_AES_256_CBC_SHA256                TLSv1.2    Kx=DH          Au=None    Enc=AES(256)                   Mac=SHA256             
+      0x00,0x3A - ADH-AES256-SHA                 TLS_DH_anon_WITH_AES_256_CBC_SHA                   SSLv3      Kx=DH          Au=None    Enc=AES(256)                   Mac=SHA1               
+      0x00,0xC5 - ADH-CAMELLIA256-SHA256         TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256           TLSv1.2    Kx=DH          Au=None    Enc=Camellia(256)              Mac=SHA256             
+      0x00,0x89 - ADH-CAMELLIA256-SHA            TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA              SSLv3      Kx=DH          Au=None    Enc=Camellia(256)              Mac=SHA1               
+      0x00,0xAD - RSA-PSK-AES256-GCM-SHA384      TLS_RSA_PSK_WITH_AES_256_GCM_SHA384                TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=AESGCM(256)                Mac=AEAD               
+      0x00,0xAB - DHE-PSK-AES256-GCM-SHA384      TLS_DHE_PSK_WITH_AES_256_GCM_SHA384                TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=AESGCM(256)                Mac=AEAD               
+      0xCC,0xAE - RSA-PSK-CHACHA20-POLY1305      TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256          TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0xAD - DHE-PSK-CHACHA20-POLY1305      TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256          TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0xAC - ECDHE-PSK-CHACHA20-POLY1305    TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256        TLSv1.2    Kx=ECDHEPSK    Au=PSK     Enc=ChaCha20(256)              Mac=AEAD               
+      0xC0,0xAB - DHE-PSK-AES256-CCM8            TLS_PSK_DHE_WITH_AES_256_CCM_8                     TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=AESCCM8(256)               Mac=AEAD               
+      0xC0,0xA7 - DHE-PSK-AES256-CCM             TLS_DHE_PSK_WITH_AES_256_CCM                       TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=AESCCM(256)                Mac=AEAD               
+      0xC0,0x32 - ECDH-RSA-AES256-GCM-SHA384     TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384               TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=AESGCM(256)                Mac=AEAD               
+      0xC0,0x2E - ECDH-ECDSA-AES256-GCM-SHA384   TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384             TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=AESGCM(256)                Mac=AEAD               
+      0xC0,0x2A - ECDH-RSA-AES256-SHA384         TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384               TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=AES(256)                   Mac=SHA384             
+      0xC0,0x26 - ECDH-ECDSA-AES256-SHA384       TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384             TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=AES(256)                   Mac=SHA384             
+      0xC0,0x0F - ECDH-RSA-AES256-SHA            TLS_ECDH_RSA_WITH_AES_256_CBC_SHA                  SSLv3      Kx=ECDH/RSA    Au=ECDH    Enc=AES(256)                   Mac=SHA1               
+      0xC0,0x05 - ECDH-ECDSA-AES256-SHA          TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA                SSLv3      Kx=ECDH/ECDSA  Au=ECDH    Enc=AES(256)                   Mac=SHA1               
+      0xC0,0x79 - ECDH-RSA-CAMELLIA256-SHA384    TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384          TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=Camellia(256)              Mac=SHA384             
+      0xC0,0x75 - ECDH-ECDSA-CAMELLIA256-SHA384  TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384        TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=Camellia(256)              Mac=SHA384             
+      0x00,0x9D - AES256-GCM-SHA384              TLS_RSA_WITH_AES_256_GCM_SHA384                    TLSv1.2    Kx=RSA         Au=RSA     Enc=AESGCM(256)                Mac=AEAD               
+      0xC0,0xA1 - AES256-CCM8                    TLS_RSA_WITH_AES_256_CCM_8                         TLSv1.2    Kx=RSA         Au=RSA     Enc=AESCCM8(256)               Mac=AEAD               
+      0xC0,0x9D - AES256-CCM                     TLS_RSA_WITH_AES_256_CCM                           TLSv1.2    Kx=RSA         Au=RSA     Enc=AESCCM(256)                Mac=AEAD               
+      0x00,0xA9 - PSK-AES256-GCM-SHA384          TLS_PSK_WITH_AES_256_GCM_SHA384                    TLSv1.2    Kx=PSK         Au=PSK     Enc=AESGCM(256)                Mac=AEAD               
+      0xCC,0xAB - PSK-CHACHA20-POLY1305          TLS_PSK_WITH_CHACHA20_POLY1305_SHA256              TLSv1.2    Kx=PSK         Au=PSK     Enc=ChaCha20(256)              Mac=AEAD               
+      0xC0,0xA9 - PSK-AES256-CCM8                TLS_PSK_WITH_AES_256_CCM_8                         TLSv1.2    Kx=PSK         Au=PSK     Enc=AESCCM8(256)               Mac=AEAD               
+      0xC0,0xA5 - PSK-AES256-CCM                 TLS_PSK_WITH_AES_256_CCM                           TLSv1.2    Kx=PSK         Au=PSK     Enc=AESCCM(256)                Mac=AEAD               
+      0x00,0x3D - AES256-SHA256                  TLS_RSA_WITH_AES_256_CBC_SHA256                    TLSv1.2    Kx=RSA         Au=RSA     Enc=AES(256)                   Mac=SHA256             
+      0x00,0x35 - AES256-SHA                     TLS_RSA_WITH_AES_256_CBC_SHA                       SSLv3      Kx=RSA         Au=RSA     Enc=AES(256)                   Mac=SHA1               
+      0x00,0xC0 - CAMELLIA256-SHA256             TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256               TLSv1.2    Kx=RSA         Au=RSA     Enc=Camellia(256)              Mac=SHA256             
+      0xC0,0x38 - ECDHE-PSK-AES256-CBC-SHA384    TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384              TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=AES(256)                   Mac=SHA384             
+      0xC0,0x36 - ECDHE-PSK-AES256-CBC-SHA       TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA                 SSLv3      Kx=ECDHEPSK    Au=PSK     Enc=AES(256)                   Mac=SHA1               
+      0x00,0x84 - CAMELLIA256-SHA                TLS_RSA_WITH_CAMELLIA_256_CBC_SHA                  SSLv3      Kx=RSA         Au=RSA     Enc=Camellia(256)              Mac=SHA1               
+      0x00,0x95 - RSA-PSK-AES256-CBC-SHA         TLS_RSA_PSK_WITH_AES_256_CBC_SHA                   SSLv3      Kx=RSAPSK      Au=RSA     Enc=AES(256)                   Mac=SHA1               
+      0x00,0x8D - PSK-AES256-CBC-SHA             TLS_PSK_WITH_AES_256_CBC_SHA                       SSLv3      Kx=PSK         Au=PSK     Enc=AES(256)                   Mac=SHA1    
+      0xC0,0x3D - -                              TLS_RSA_WITH_ARIA_256_CBC_SHA384                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(256)                  Mac=SHA384            
+      0xC0,0x3F - -                              TLS_DH_DSS_WITH_ARIA_256_CBC_SHA384                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x41 - -                              TLS_DH_RSA_WITH_ARIA_256_CBC_SHA384                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x43 - -                              TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x45 - -                              TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x47 - -                              TLS_DH_anon_WITH_ARIA_256_CBC_SHA384               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x49 - -                              TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x4B - -                              TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x4D - -                              TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x4F - -                              TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x51 - -                              TLS_RSA_WITH_ARIA_256_GCM_SHA384                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x53 - -                              TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x55 - -                              TLS_DH_RSA_WITH_ARIA_256_GCM_SHA384                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x57 - -                              TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x59 - -                              TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x5B - -                              TLS_DH_anon_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x5D - -                              TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x5F - -                              TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x61 - -                              TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x63 - -                              TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x65 - -                              TLS_PSK_WITH_ARIA_256_CBC_SHA384                   TLSv1      Kx=PSK         Au=PSK     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x67 - -                              TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384               TLSv1      Kx=DHEPSK      Au=PSK     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x69 - -                              TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384               TLSv1      Kx=RSAPSK      Au=RSA     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x6B - -                              TLS_PSK_WITH_ARIA_256_GCM_SHA384                   TLSv1.2    Kx=PSK         Au=PSK     Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x6D - -                              TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x6F - -                              TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x71 - -                              TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384             TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x7B - -                              TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384               TLSv1.2    Kx=RSA         Au=RSA     Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x7D - -                              TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384           TLSv1.2    Kx=DH          Au=RSA     Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x7F - -                              TLS_DH_RSA_WITH_CAMELLIA_256_GCM_SHA384            TLSv1.2    Kx=DH/RSA      Au=DH      Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x81 - -                              TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384           TLSv1.2    Kx=DH          Au=DSS     Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x83 - -                              TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384            TLSv1.2    Kx=DH/DSS      Au=DH      Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x85 - -                              TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384           TLSv1.2    Kx=DH          Au=None    Enc=CamelliaGCM(256)           Mac=AEAD                
+      0xC0,0x87 - -                              TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384       TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x89 - -                              TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384        TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x8B - -                              TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384         TLSv1.2    Kx=ECDH        Au=RSA     Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x8D - -                              TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384          TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x8F - -                              TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384               TLSv1.2    Kx=PSK         Au=PSK     Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x91 - -                              TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384           TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=CamelliaGCM(256)           Mac=AEAD               
+      0xC0,0x93 - -                              TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384           TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=CamelliaGCM(256)           Mac=AEAD               
+      0x00,0x80 - GOST94-GOST89-GOST89           TLS_GOSTR341094_WITH_28147_CNT_IMIT                TLSv1      Kx=GOST        Au=GOST94  Enc=GOST(256)                  Mac=GOST89IMIT         
+      0x00,0x81 - GOST2001-GOST89-GOST89         TLS_GOSTR341001_WITH_28147_CNT_IMIT                SSLv3      Kx=GOST        Au=GOST01  Enc=GOST(256)                  Mac=GOST89IMIT         
+      0xFF,0x00 - GOST-MD5                       TLS_GOSTR341094_RSA_WITH_28147_CNT_MD5             TLSv1      Kx=RSA         Au=RSA     Enc=GOST(256)                  Mac=MD5                
+      0xFF,0x01 - GOST-GOST94                    TLS_RSA_WITH_28147_CNT_GOST94                      TLSv1      Kx=RSA         Au=RSA     Enc=GOST(256)                  Mac=GOST94             
+      0xFF,0x02 - GOST-GOST89MAC                 -                                                  TLSv1      Kx=RSA         Au=RSA     Enc=GOST(256)                  Mac=GOST89IMIT         
+      0xFF,0x03 - GOST-GOST89STREAM              -                                                  TLSv1      Kx=RSA         Au=RSA     Enc=GOST(256)                  Mac=GOST89IMIT         
+      0xFF,0x85 - GOST2012256-GOST89-GOST89      -                                                  SSLv3      Kx=GOST        Au=GOST01  Enc=GOST(256)                  Mac=GOST89IMIT         
+      0x16,0xB7 - -                              TLS_CECPQ1_RSA_WITH_CHACHA20_POLY1305_SHA256       TLSv1.2    Kx=CECPQ1      Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0x16,0xB8 - -                              TLS_CECPQ1_ECDSA_WITH_CHACHA20_POLY1305_SHA256     TLSv1.2    Kx=CECPQ1      Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
+      0x16,0xB9 - -                              TLS_CECPQ1_RSA_WITH_AES_256_GCM_SHA384             TLSv1.2    Kx=CECPQ1      Au=RSA     Enc=AESGCM(256)                Mac=AEAD               
+      0x16,0xBA - -                              TLS_CECPQ1_ECDSA_WITH_AES_256_GCM_SHA384           TLSv1.2    Kx=CECPQ1      Au=ECDSA   Enc=AESGCM(256)                Mac=AEAD               
+      0xC0,0x2F - ECDHE-RSA-AES128-GCM-SHA256    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AESGCM(128)                Mac=AEAD               
+      0xC0,0x2B - ECDHE-ECDSA-AES128-GCM-SHA256  TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256            TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AESGCM(128)                Mac=AEAD               
+      0xC0,0x27 - ECDHE-RSA-AES128-SHA256        TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AES(128)                   Mac=SHA256             
+      0xC0,0x23 - ECDHE-ECDSA-AES128-SHA256      TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256            TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AES(128)                   Mac=SHA256             
+      0xC0,0x13 - ECDHE-RSA-AES128-SHA           TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA                 SSLv3      Kx=ECDH        Au=RSA     Enc=AES(128)                   Mac=SHA1               
+      0xC0,0x09 - ECDHE-ECDSA-AES128-SHA         TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA               SSLv3      Kx=ECDH        Au=ECDSA   Enc=AES(128)                   Mac=SHA1               
+      0xC0,0x1F - SRP-DSS-AES-128-CBC-SHA        TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA               SSLv3      Kx=SRP         Au=DSS     Enc=AES(128)                   Mac=SHA1               
+      0xC0,0x1E - SRP-RSA-AES-128-CBC-SHA        TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA               SSLv3      Kx=SRP         Au=RSA     Enc=AES(128)                   Mac=SHA1               
+      0xC0,0x1D - SRP-AES-128-CBC-SHA            TLS_SRP_SHA_WITH_AES_128_CBC_SHA                   SSLv3      Kx=SRP         Au=SRP     Enc=AES(128)                   Mac=SHA1               
+      0x00,0xA4 - DH-DSS-AES128-GCM-SHA256       TLS_DH_DSS_WITH_AES_128_GCM_SHA256                 TLSv1.2    Kx=DH/DSS      Au=DH      Enc=AESGCM(128)                Mac=AEAD               
+      0x00,0xA2 - DHE-DSS-AES128-GCM-SHA256      TLS_DHE_DSS_WITH_AES_128_GCM_SHA256                TLSv1.2    Kx=DH          Au=DSS     Enc=AESGCM(128)                Mac=AEAD               
+      0x00,0xA0 - DH-RSA-AES128-GCM-SHA256       TLS_DH_RSA_WITH_AES_128_GCM_SHA256                 TLSv1.2    Kx=DH/RSA      Au=DH      Enc=AESGCM(128)                Mac=AEAD               
+      0x00,0x9E - DHE-RSA-AES128-GCM-SHA256      TLS_DHE_RSA_WITH_AES_128_GCM_SHA256                TLSv1.2    Kx=DH          Au=RSA     Enc=AESGCM(128)                Mac=AEAD               
+      0xC0,0xAE - ECDHE-ECDSA-AES128-CCM8        TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8                 TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AESCCM8(128)               Mac=AEAD               
+      0xC0,0xAC - ECDHE-ECDSA-AES128-CCM         TLS_ECDHE_ECDSA_WITH_AES_128_CCM                   TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AESCCM(128)                Mac=AEAD               
+      0xC0,0xA2 - DHE-RSA-AES128-CCM8            TLS_DHE_RSA_WITH_AES_128_CCM_8                     TLSv1.2    Kx=DH          Au=RSA     Enc=AESCCM8(128)               Mac=AEAD               
+      0xC0,0x9E - DHE-RSA-AES128-CCM             TLS_DHE_RSA_WITH_AES_128_CCM                       TLSv1.2    Kx=DH          Au=RSA     Enc=AESCCM(128)                Mac=AEAD               
+      0x00,0xAC - RSA-PSK-AES128-GCM-SHA256      TLS_RSA_PSK_WITH_AES_128_GCM_SHA256                TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=AESGCM(128)                Mac=AEAD               
+      0x00,0xAA - DHE-PSK-AES128-GCM-SHA256      TLS_DHE_PSK_WITH_AES_128_GCM_SHA256                TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=AESGCM(128)                Mac=AEAD               
+      0xC0,0xAA - DHE-PSK-AES128-CCM8            TLS_PSK_DHE_WITH_AES_128_CCM_8                     TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=AESCCM8(128)               Mac=AEAD               
+      0xC0,0xA6 - DHE-PSK-AES128-CCM             TLS_DHE_PSK_WITH_AES_128_CCM                       TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=AESCCM(128)                Mac=AEAD               
+      0xC0,0xA0 - AES128-CCM8                    TLS_RSA_WITH_AES_128_CCM_8                         TLSv1.2    Kx=RSA         Au=RSA     Enc=AESCCM8(128)               Mac=AEAD               
+      0xC0,0x9C - AES128-CCM                     TLS_RSA_WITH_AES_128_CCM                           TLSv1.2    Kx=RSA         Au=RSA     Enc=AESCCM(128)                Mac=AEAD               
+      0x00,0xA8 - PSK-AES128-GCM-SHA256          TLS_PSK_WITH_AES_128_GCM_SHA256                    TLSv1.2    Kx=PSK         Au=PSK     Enc=AESGCM(128)                Mac=AEAD               
+      0xC0,0xA8 - PSK-AES128-CCM8                TLS_PSK_WITH_AES_128_CCM_8                         TLSv1.2    Kx=PSK         Au=PSK     Enc=AESCCM8(128)               Mac=AEAD               
+      0xC0,0xA4 - PSK-AES128-CCM                 TLS_PSK_WITH_AES_128_CCM                           TLSv1.2    Kx=PSK         Au=PSK     Enc=AESCCM(128)                Mac=AEAD               
+      0x00,0x67 - DHE-RSA-AES128-SHA256          TLS_DHE_RSA_WITH_AES_128_CBC_SHA256                TLSv1.2    Kx=DH          Au=RSA     Enc=AES(128)                   Mac=SHA256             
+      0x00,0x40 - DHE-DSS-AES128-SHA256          TLS_DHE_DSS_WITH_AES_128_CBC_SHA256                TLSv1.2    Kx=DH          Au=DSS     Enc=AES(128)                   Mac=SHA256             
+      0x00,0x3F - DH-RSA-AES128-SHA256           TLS_DH_RSA_WITH_AES_128_CBC_SHA256                 TLSv1.2    Kx=DH/RSA      Au=DH      Enc=AES(128)                   Mac=SHA256             
+      0x00,0x3E - DH-DSS-AES128-SHA256           TLS_DH_DSS_WITH_AES_128_CBC_SHA256                 TLSv1.2    Kx=DH/DSS      Au=DH      Enc=AES(128)                   Mac=SHA256             
+      0x00,0x33 - DHE-RSA-AES128-SHA             TLS_DHE_RSA_WITH_AES_128_CBC_SHA                   SSLv3      Kx=DH          Au=RSA     Enc=AES(128)                   Mac=SHA1               
+      0x00,0x32 - DHE-DSS-AES128-SHA             TLS_DHE_DSS_WITH_AES_128_CBC_SHA                   SSLv3      Kx=DH          Au=DSS     Enc=AES(128)                   Mac=SHA1               
+      0x00,0x31 - DH-RSA-AES128-SHA              TLS_DH_RSA_WITH_AES_128_CBC_SHA                    SSLv3      Kx=DH/RSA      Au=DH      Enc=AES(128)                   Mac=SHA1               
+      0x00,0x30 - DH-DSS-AES128-SHA              TLS_DH_DSS_WITH_AES_128_CBC_SHA                    SSLv3      Kx=DH/DSS      Au=DH      Enc=AES(128)                   Mac=SHA1               
+      0xC0,0x76 - ECDHE-RSA-CAMELLIA128-SHA256   TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256         TLSv1.2    Kx=ECDH        Au=RSA     Enc=Camellia(128)              Mac=SHA256             
+      0xC0,0x72 - ECDHE-ECDSA-CAMELLIA128-SHA256 TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256       TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=Camellia(128)              Mac=SHA256             
+      0x00,0xBE - DHE-RSA-CAMELLIA128-SHA256     TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256           TLSv1.2    Kx=DH          Au=RSA     Enc=Camellia(128)              Mac=SHA256             
+      0x00,0xBD - DHE-DSS-CAMELLIA128-SHA256     TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256           TLSv1.2    Kx=DH          Au=DSS     Enc=Camellia(128)              Mac=SHA256             
+      0x00,0xBC - DH-RSA-CAMELLIA128-SHA256      TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256            TLSv1.2    Kx=DH/RSA      Au=DH      Enc=Camellia(128)              Mac=SHA256             
+      0x00,0xBB - DH-DSS-CAMELLIA128-SHA256      TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256            TLSv1.2    Kx=DH/DSS      Au=DH      Enc=Camellia(128)              Mac=SHA256             
+      0x00,0x9A - DHE-RSA-SEED-SHA               TLS_DHE_RSA_WITH_SEED_CBC_SHA                      SSLv3      Kx=DH          Au=RSA     Enc=SEED(128)                  Mac=SHA1               
+      0x00,0x99 - DHE-DSS-SEED-SHA               TLS_DHE_DSS_WITH_SEED_CBC_SHA                      SSLv3      Kx=DH          Au=DSS     Enc=SEED(128)                  Mac=SHA1               
+      0x00,0x98 - DH-RSA-SEED-SHA                TLS_DH_RSA_WITH_SEED_CBC_SHA                       SSLv3      Kx=DH/RSA      Au=DH      Enc=SEED(128)                  Mac=SHA1               
+      0x00,0x97 - DH-DSS-SEED-SHA                TLS_DH_DSS_WITH_SEED_CBC_SHA                       SSLv3      Kx=DH/DSS      Au=DH      Enc=SEED(128)                  Mac=SHA1               
+      0x00,0x45 - DHE-RSA-CAMELLIA128-SHA        TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA              SSLv3      Kx=DH          Au=RSA     Enc=Camellia(128)              Mac=SHA1               
+      0x00,0x44 - DHE-DSS-CAMELLIA128-SHA        TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA              SSLv3      Kx=DH          Au=DSS     Enc=Camellia(128)              Mac=SHA1               
+      0x00,0x43 - DH-RSA-CAMELLIA128-SHA         TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA               SSLv3      Kx=DH/RSA      Au=DH      Enc=Camellia(128)              Mac=SHA1               
+      0x00,0x42 - DH-DSS-CAMELLIA128-SHA         TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA               SSLv3      Kx=DH/DSS      Au=DH      Enc=Camellia(128)              Mac=SHA1               
+      0xC0,0x18 - AECDH-AES128-SHA               TLS_ECDH_anon_WITH_AES_128_CBC_SHA                 SSLv3      Kx=ECDH        Au=None    Enc=AES(128)                   Mac=SHA1               
+      0x00,0xA6 - ADH-AES128-GCM-SHA256          TLS_DH_anon_WITH_AES_128_GCM_SHA256                TLSv1.2    Kx=DH          Au=None    Enc=AESGCM(128)                Mac=AEAD               
+      0x00,0x6C - ADH-AES128-SHA256              TLS_DH_anon_WITH_AES_128_CBC_SHA256                TLSv1.2    Kx=DH          Au=None    Enc=AES(128)                   Mac=SHA256             
+      0x00,0x34 - ADH-AES128-SHA                 TLS_DH_anon_WITH_AES_128_CBC_SHA                   SSLv3      Kx=DH          Au=None    Enc=AES(128)                   Mac=SHA1               
+      0x00,0xBF - ADH-CAMELLIA128-SHA256         TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256           TLSv1.2    Kx=DH          Au=None    Enc=Camellia(128)              Mac=SHA256             
+      0x00,0x9B - ADH-SEED-SHA                   TLS_DH_anon_WITH_SEED_CBC_SHA                      SSLv3      Kx=DH          Au=None    Enc=SEED(128)                  Mac=SHA1               
+      0x00,0x46 - ADH-CAMELLIA128-SHA            TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA              SSLv3      Kx=DH          Au=None    Enc=Camellia(128)              Mac=SHA1               
+      0xC0,0x31 - ECDH-RSA-AES128-GCM-SHA256     TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256               TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=AESGCM(128)                Mac=AEAD               
+      0xC0,0x2D - ECDH-ECDSA-AES128-GCM-SHA256   TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256             TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=AESGCM(128)                Mac=AEAD               
+      0xC0,0x29 - ECDH-RSA-AES128-SHA256         TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256               TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=AES(128)                   Mac=SHA256             
+      0xC0,0x25 - ECDH-ECDSA-AES128-SHA256       TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256             TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=AES(128)                   Mac=SHA256             
+      0xC0,0x0E - ECDH-RSA-AES128-SHA            TLS_ECDH_RSA_WITH_AES_128_CBC_SHA                  SSLv3      Kx=ECDH/RSA    Au=ECDH    Enc=AES(128)                   Mac=SHA1               
+      0xC0,0x04 - ECDH-ECDSA-AES128-SHA          TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA                SSLv3      Kx=ECDH/ECDSA  Au=ECDH    Enc=AES(128)                   Mac=SHA1               
+      0xC0,0x78 - ECDH-RSA-CAMELLIA128-SHA256    TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256          TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=Camellia(128)              Mac=SHA256             
+      0xC0,0x74 - ECDH-ECDSA-CAMELLIA128-SHA256  TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256        TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=Camellia(128)              Mac=SHA256             
+      0x00,0x9C - AES128-GCM-SHA256              TLS_RSA_WITH_AES_128_GCM_SHA256                    TLSv1.2    Kx=RSA         Au=RSA     Enc=AESGCM(128)                Mac=AEAD               
+      0x00,0x3C - AES128-SHA256                  TLS_RSA_WITH_AES_128_CBC_SHA256                    TLSv1.2    Kx=RSA         Au=RSA     Enc=AES(128)                   Mac=SHA256             
+      0x00,0x2F - AES128-SHA                     TLS_RSA_WITH_AES_128_CBC_SHA                       SSLv3      Kx=RSA         Au=RSA     Enc=AES(128)                   Mac=SHA1               
+      0x00,0xBA - CAMELLIA128-SHA256             TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256               TLSv1.2    Kx=RSA         Au=RSA     Enc=Camellia(128)              Mac=SHA256             
+      0xC0,0x37 - ECDHE-PSK-AES128-CBC-SHA256    TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256              TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=AES(128)                   Mac=SHA256             
+      0xC0,0x35 - ECDHE-PSK-AES128-CBC-SHA       TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA                 SSLv3      Kx=ECDHEPSK    Au=PSK     Enc=AES(128)                   Mac=SHA1               
+      0x00,0xB6 - RSA-PSK-AES128-CBC-SHA256      TLS_RSA_PSK_WITH_AES_128_CBC_SHA256                TLSv1      Kx=RSAPSK      Au=RSA     Enc=AES(128)                   Mac=SHA256             
+      0x00,0xB2 - DHE-PSK-AES128-CBC-SHA256      TLS_DHE_PSK_WITH_AES_128_CBC_SHA256                TLSv1      Kx=DHEPSK      Au=PSK     Enc=AES(128)                   Mac=SHA256             
+      0x00,0x90 - DHE-PSK-AES128-CBC-SHA         TLS_DHE_PSK_WITH_AES_128_CBC_SHA                   SSLv3      Kx=DHEPSK      Au=PSK     Enc=AES(128)                   Mac=SHA1               
+      0x00,0x96 - SEED-SHA                       TLS_RSA_WITH_SEED_CBC_SHA                          SSLv3      Kx=RSA         Au=RSA     Enc=SEED(128)                  Mac=SHA1               
+      0x00,0x41 - CAMELLIA128-SHA                TLS_RSA_WITH_CAMELLIA_128_CBC_SHA                  SSLv3      Kx=RSA         Au=RSA     Enc=Camellia(128)              Mac=SHA1               
+      0xC0,0x9A - ECDHE-PSK-CAMELLIA128-SHA256   TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256         TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=Camellia(128)              Mac=SHA256             
+      0xC0,0x98 - RSA-PSK-CAMELLIA128-SHA256     TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256           TLSv1      Kx=RSAPSK      Au=RSA     Enc=Camellia(128)              Mac=SHA256             
+      0xC0,0x96 - DHE-PSK-CAMELLIA128-SHA256     TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256           TLSv1      Kx=DHEPSK      Au=PSK     Enc=Camellia(128)              Mac=SHA256             
+      0x00,0xAE - PSK-AES128-CBC-SHA256          TLS_PSK_WITH_AES_128_CBC_SHA256                    TLSv1      Kx=PSK         Au=PSK     Enc=AES(128)                   Mac=SHA256             
+      0xC0,0x94 - PSK-CAMELLIA128-SHA256         TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256               TLSv1      Kx=PSK         Au=PSK     Enc=Camellia(128)              Mac=SHA256             
+      0x00,0x07 - IDEA-CBC-SHA                   TLS_RSA_WITH_IDEA_CBC_SHA                          SSLv3      Kx=RSA         Au=RSA     Enc=IDEA(128)                  Mac=SHA1               
+ 0x05,0x00,0x80 - IDEA-CBC-MD5                   SSL_CK_IDEA_128_CBC_WITH_MD5                       SSLv2      Kx=RSA         Au=RSA     Enc=IDEA(128)                  Mac=MD5                
+ 0x03,0x00,0x80 - RC2-CBC-MD5                    SSL_CK_RC2_128_CBC_WITH_MD5                        SSLv2      Kx=RSA         Au=RSA     Enc=RC2(128)                   Mac=MD5                
+      0x00,0x94 - RSA-PSK-AES128-CBC-SHA         TLS_RSA_PSK_WITH_AES_128_CBC_SHA                   SSLv3      Kx=RSAPSK      Au=RSA     Enc=AES(128)                   Mac=SHA1               
+      0x00,0x8C - PSK-AES128-CBC-SHA             TLS_PSK_WITH_AES_128_CBC_SHA                       SSLv3      Kx=PSK         Au=PSK     Enc=AES(128)                   Mac=SHA1               
+      0x00,0x21 - KRB5-IDEA-CBC-SHA              TLS_KRB5_WITH_IDEA_CBC_SHA                         SSLv3      Kx=KRB5        Au=KRB5    Enc=IDEA(128)                  Mac=SHA1               
+      0x00,0x25 - KRB5-IDEA-CBC-MD5              TLS_KRB5_WITH_IDEA_CBC_MD5                         SSLv3      Kx=KRB5        Au=KRB5    Enc=IDEA(128)                  Mac=MD5                
+      0xC0,0x3C - -                              TLS_RSA_WITH_ARIA_128_CBC_SHA256                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x3E - -                              TLS_DH_DSS_WITH_ARIA_128_CBC_SHA256                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x40 - -                              TLS_DH_RSA_WITH_ARIA_128_CBC_SHA256                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x42 - -                              TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x44 - -                              TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x46 - -                              TLS_DH_anon_WITH_ARIA_128_CBC_SHA256               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x48 - -                              TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x4A - -                              TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x4C - -                              TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x4E - -                              TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x50 - -                              TLS_RSA_WITH_ARIA_128_GCM_SHA256                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x52 - -                              TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x54 - -                              TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x56 - -                              TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x58 - -                              TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x5A - -                              TLS_DH_anon_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x5C - -                              TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x5E - -                              TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x60 - -                              TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x62 - -                              TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x64 - -                              TLS_PSK_WITH_ARIA_128_CBC_SHA256                   TLSv1      Kx=PSK         Au=PSK     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x66 - -                              TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256               TLSv1      Kx=DHEPSK      Au=PSK     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x68 - -                              TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256               TLSv1      Kx=RSAPSK      Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x6A - -                              TLS_PSK_WITH_ARIA_128_GCM_SHA256                   TLSv1.2    Kx=PSK         Au=PSK     Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x6C - -                              TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x6E - -                              TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x70 - -                              TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256             TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x7A - -                              TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256               TLSv1.2    Kx=RSA         Au=RSA     Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x7C - -                              TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256           TLSv1.2    Kx=DH          Au=RSA     Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x7E - -                              TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256            TLSv1.2    Kx=DH/RSA      Au=DH      Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x80 - -                              TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256           TLSv1.2    Kx=DH          Au=DSS     Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x82 - -                              TLS_DH_DSS_WITH_CAMELLIA_128_GCM_SHA256            TLSv1.2    Kx=DH/DSS      Au=DH      Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x84 - -                              TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256           TLSv1.2    Kx=DH          Au=None    Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x86 - -                              TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256       TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x88 - -                              TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256        TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x8A - -                              TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256         TLSv1.2    Kx=ECDH        Au=RSA     Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x8C - -                              TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256          TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x8E - -                              TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256               TLSv1.2    Kx=PSK         Au=PSK     Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x90 - -                              TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256           TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x92 - -                              TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256           TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=CamelliaGCM(128)           Mac=AEAD               
+      0xC0,0x11 - ECDHE-RSA-RC4-SHA              TLS_ECDHE_RSA_WITH_RC4_128_SHA                     SSLv3      Kx=ECDH        Au=RSA     Enc=RC4(128)                   Mac=SHA1               
+      0xC0,0x07 - ECDHE-ECDSA-RC4-SHA            TLS_ECDHE_ECDSA_WITH_RC4_128_SHA                   SSLv3      Kx=ECDH        Au=ECDSA   Enc=RC4(128)                   Mac=SHA1               
+      0x00,0x66 - DHE-DSS-RC4-SHA                TLS_DHE_DSS_WITH_RC4_128_SHA                       SSLv3      Kx=DH          Au=DSS     Enc=RC4(128)                   Mac=SHA1               
+      0xC0,0x16 - AECDH-RC4-SHA                  TLS_ECDH_anon_WITH_RC4_128_SHA                     SSLv3      Kx=ECDH        Au=None    Enc=RC4(128)                   Mac=SHA1               
+      0x00,0x18 - ADH-RC4-MD5                    TLS_DH_anon_WITH_RC4_128_MD5                       SSLv3      Kx=DH          Au=None    Enc=RC4(128)                   Mac=MD5                
+      0xC0,0x0C - ECDH-RSA-RC4-SHA               TLS_ECDH_RSA_WITH_RC4_128_SHA                      SSLv3      Kx=ECDH/RSA    Au=ECDH    Enc=RC4(128)                   Mac=SHA1               
+      0xC0,0x02 - ECDH-ECDSA-RC4-SHA             TLS_ECDH_ECDSA_WITH_RC4_128_SHA                    SSLv3      Kx=ECDH/ECDSA  Au=ECDH    Enc=RC4(128)                   Mac=SHA1               
+      0x00,0x05 - RC4-SHA                        TLS_RSA_WITH_RC4_128_SHA                           SSLv3      Kx=RSA         Au=RSA     Enc=RC4(128)                   Mac=SHA1               
+      0x00,0x04 - RC4-MD5                        TLS_RSA_WITH_RC4_128_MD5                           SSLv3      Kx=RSA         Au=RSA     Enc=RC4(128)                   Mac=MD5                
+ 0x01,0x00,0x80 - RC4-MD5                        SSL_CK_RC4_128_WITH_MD5                            SSLv2      Kx=RSA         Au=RSA     Enc=RC4(128)                   Mac=MD5                
+      0x00,0x92 - RSA-PSK-RC4-SHA                TLS_RSA_PSK_WITH_RC4_128_SHA                       SSLv3      Kx=RSAPSK      Au=RSA     Enc=RC4(128)                   Mac=SHA1               
+      0x00,0x8A - PSK-RC4-SHA                    TLS_PSK_WITH_RC4_128_SHA                           SSLv3      Kx=PSK         Au=PSK     Enc=RC4(128)                   Mac=SHA1               
+      0x00,0x20 - KRB5-RC4-SHA                   TLS_KRB5_WITH_RC4_128_SHA                          SSLv3      Kx=KRB5        Au=KRB5    Enc=RC4(128)                   Mac=SHA1               
+      0x00,0x24 - KRB5-RC4-MD5                   TLS_KRB5_WITH_RC4_128_MD5                          SSLv3      Kx=KRB5        Au=KRB5    Enc=RC4(128)                   Mac=MD5                
+      0xC0,0x33 - ECDHE-PSK-RC4-SHA              TLS_ECDHE_PSK_WITH_RC4_128_SHA                     SSLv3      Kx=ECDHEPSK    Au=PSK     Enc=RC4(128)                   Mac=SHA1               
+      0x00,0x8E - DHE-PSK-RC4-SHA                TLS_DHE_PSK_WITH_RC4_128_SHA                       SSLv3      Kx=DHEPSK      Au=PSK     Enc=RC4(128)                   Mac=SHA1               
+      0xC0,0x12 - ECDHE-RSA-DES-CBC3-SHA         TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA                SSLv3      Kx=ECDH        Au=RSA     Enc=3DES(168)                  Mac=SHA1               
+      0xC0,0x08 - ECDHE-ECDSA-DES-CBC3-SHA       TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA              SSLv3      Kx=ECDH        Au=ECDSA   Enc=3DES(168)                  Mac=SHA1               
+      0xC0,0x1C - SRP-DSS-3DES-EDE-CBC-SHA       TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA              SSLv3      Kx=SRP         Au=DSS     Enc=3DES(168)                  Mac=SHA1               
+      0xC0,0x1B - SRP-RSA-3DES-EDE-CBC-SHA       TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA              SSLv3      Kx=SRP         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
+      0xC0,0x1A - SRP-3DES-EDE-CBC-SHA           TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA                  SSLv3      Kx=SRP         Au=SRP     Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x16 - EDH-RSA-DES-CBC3-SHA           TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA                  SSLv3      Kx=DH          Au=RSA     Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x13 - EDH-DSS-DES-CBC3-SHA           TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA                  SSLv3      Kx=DH          Au=DSS     Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x10 - DH-RSA-DES-CBC3-SHA            TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA                   SSLv3      Kx=DH/RSA      Au=DH      Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x0D - DH-DSS-DES-CBC3-SHA            TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA                   SSLv3      Kx=DH/DSS      Au=DH      Enc=3DES(168)                  Mac=SHA1               
+      0xC0,0x17 - AECDH-DES-CBC3-SHA             TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA                SSLv3      Kx=ECDH        Au=None    Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x1B - ADH-DES-CBC3-SHA               TLS_DH_anon_WITH_3DES_EDE_CBC_SHA                  SSLv3      Kx=DH          Au=None    Enc=3DES(168)                  Mac=SHA1               
+      0xC0,0x0D - ECDH-RSA-DES-CBC3-SHA          TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA                 SSLv3      Kx=ECDH/RSA    Au=ECDH    Enc=3DES(168)                  Mac=SHA1               
+      0xC0,0x03 - ECDH-ECDSA-DES-CBC3-SHA        TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA               SSLv3      Kx=ECDH/ECDSA  Au=ECDH    Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x0A - DES-CBC3-SHA                   TLS_RSA_WITH_3DES_EDE_CBC_SHA                      SSLv3      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
+ 0x07,0x00,0xC0 - DES-CBC3-MD5                   SSL_CK_DES_192_EDE3_CBC_WITH_MD5                   SSLv2      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=MD5                
+      0x00,0x93 - RSA-PSK-3DES-EDE-CBC-SHA       TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA                  SSLv3      Kx=RSAPSK      Au=RSA     Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x8B - PSK-3DES-EDE-CBC-SHA           TLS_PSK_WITH_3DES_EDE_CBC_SHA                      SSLv3      Kx=PSK         Au=PSK     Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x1F - KRB5-DES-CBC3-SHA              TLS_KRB5_WITH_3DES_EDE_CBC_SHA                     SSLv3      Kx=KRB5        Au=KRB5    Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x23 - KRB5-DES-CBC3-MD5              TLS_KRB5_WITH_3DES_EDE_CBC_MD5                     SSLv3      Kx=KRB5        Au=KRB5    Enc=3DES(168)                  Mac=MD5                
+      0xC0,0x34 - ECDHE-PSK-3DES-EDE-CBC-SHA     TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA                SSLv3      Kx=ECDHEPSK    Au=PSK     Enc=3DES(168)                  Mac=SHA1               
+      0x00,0x8F - DHE-PSK-3DES-EDE-CBC-SHA       TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA                  SSLv3      Kx=DHEPSK      Au=PSK     Enc=3DES(168)                  Mac=SHA1               
+      0xFE,0xFF - -                              SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA                 SSLv3      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
+      0xFF,0xE0 - -                              SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA                 SSLv3      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
+ 0x08,0x00,0x80 - RC4-64-MD5                     SSL_CK_RC4_64_WITH_MD5                             SSLv2      Kx=RSA         Au=RSA     Enc=RC4(64)                    Mac=MD5                
+      0x00,0x63 - EXP1024-DHE-DSS-DES-CBC-SHA    TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA            SSLv3      Kx=DH(1024)    Au=DSS     Enc=DES(56)                    Mac=SHA1     export    
+      0x00,0x15 - EDH-RSA-DES-CBC-SHA            TLS_DHE_RSA_WITH_DES_CBC_SHA                       SSLv3      Kx=DH          Au=RSA     Enc=DES(56)                    Mac=SHA1               
+      0x00,0x12 - EDH-DSS-DES-CBC-SHA            TLS_DHE_DSS_WITH_DES_CBC_SHA                       SSLv3      Kx=DH          Au=DSS     Enc=DES(56)                    Mac=SHA1               
+      0x00,0x0F - DH-RSA-DES-CBC-SHA             TLS_DH_RSA_WITH_DES_CBC_SHA                        SSLv3      Kx=DH/RSA      Au=DH      Enc=DES(56)                    Mac=SHA1               
+      0x00,0x0C - DH-DSS-DES-CBC-SHA             TLS_DH_DSS_WITH_DES_CBC_SHA                        SSLv3      Kx=DH/DSS      Au=DH      Enc=DES(56)                    Mac=SHA1               
+      0x00,0x1A - ADH-DES-CBC-SHA                TLS_DH_anon_WITH_DES_CBC_SHA                       SSLv3      Kx=DH          Au=None    Enc=DES(56)                    Mac=SHA1               
+      0x00,0x62 - EXP1024-DES-CBC-SHA            TLS_RSA_EXPORT1024_WITH_DES_CBC_SHA                SSLv3      Kx=RSA(1024)   Au=RSA     Enc=DES(56)                    Mac=SHA1     export    
+      0x00,0x09 - DES-CBC-SHA                    TLS_RSA_WITH_DES_CBC_SHA                           SSLv3      Kx=RSA         Au=RSA     Enc=DES(56)                    Mac=SHA1               
+      0x00,0x61 - EXP1024-RC2-CBC-MD5            TLS_RSA_EXPORT1024_WITH_RC2_56_MD5                 SSLv3      Kx=RSA(1024)   Au=RSA     Enc=RC2(56)                    Mac=MD5      export    
+ 0x06,0x00,0x40 - DES-CBC-MD5                    SSL_CK_DES_64_CBC_WITH_MD5                         SSLv2      Kx=RSA         Au=RSA     Enc=DES(56)                    Mac=MD5                
+      0x00,0x1E - KRB5-DES-CBC-SHA               TLS_KRB5_WITH_DES_CBC_SHA                          SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(56)                    Mac=SHA1               
+      0x00,0x22 - KRB5-DES-CBC-MD5               TLS_KRB5_WITH_DES_CBC_MD5                          SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(56)                    Mac=MD5                
+      0xFE,0xFE - -                              SSL_RSA_FIPS_WITH_DES_CBC_SHA                      SSLv3      Kx=RSA         Au=RSA     Enc=DES(56)                    Mac=SHA1               
+      0xFF,0xE1 - -                              SSL_RSA_FIPS_WITH_DES_CBC_SHA                      SSLv3      Kx=RSA         Au=RSA     Enc=DES(56)                    Mac=SHA1               
+      0x00,0x65 - EXP1024-DHE-DSS-RC4-SHA        TLS_DHE_DSS_EXPORT1024_WITH_RC4_56_SHA             SSLv3      Kx=DH(1024)    Au=DSS     Enc=RC4(56)                    Mac=SHA1     export    
+      0x00,0x64 - EXP1024-RC4-SHA                TLS_RSA_EXPORT1024_WITH_RC4_56_SHA                 SSLv3      Kx=RSA(1024)   Au=RSA     Enc=RC4(56)                    Mac=SHA1     export    
+      0x00,0x60 - EXP1024-RC4-MD5                TLS_RSA_EXPORT1024_WITH_RC4_56_MD5                 SSLv3      Kx=RSA(1024)   Au=RSA     Enc=RC4(56)                    Mac=MD5      export    
+      0x00,0x14 - EXP-EDH-RSA-DES-CBC-SHA        TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA              SSLv3      Kx=DH(512)     Au=RSA     Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x11 - EXP-EDH-DSS-DES-CBC-SHA        TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA              SSLv3      Kx=DH(512)     Au=DSS     Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x19 - EXP-ADH-DES-CBC-SHA            TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA              SSLv3      Kx=DH(512)     Au=None    Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x08 - EXP-DES-CBC-SHA                TLS_RSA_EXPORT_WITH_DES40_CBC_SHA                  SSLv3      Kx=RSA(512)    Au=RSA     Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x06 - EXP-RC2-CBC-MD5                TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5                 SSLv3      Kx=RSA(512)    Au=RSA     Enc=RC2(40)                    Mac=MD5      export    
+ 0x04,0x00,0x80 - EXP-RC2-CBC-MD5                SSL_CK_RC2_128_CBC_EXPORT40_WITH_MD5               SSLv2      Kx=RSA(512)    Au=RSA     Enc=RC2(40)                    Mac=MD5      export    
+      0x00,0x27 - EXP-KRB5-RC2-CBC-SHA           TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA                SSLv3      Kx=KRB5        Au=KRB5    Enc=RC2(40)                    Mac=SHA1     export    
+      0x00,0x26 - EXP-KRB5-DES-CBC-SHA           TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA                SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x2A - EXP-KRB5-RC2-CBC-MD5           TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5                SSLv3      Kx=KRB5        Au=KRB5    Enc=RC2(40)                    Mac=MD5      export    
+      0x00,0x29 - EXP-KRB5-DES-CBC-MD5           TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5                SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(40)                    Mac=MD5      export    
+      0x00,0x0B - -                              TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/DSS      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x0E - -                              TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/RSA      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x17 - EXP-ADH-RC4-MD5                TLS_DH_anon_EXPORT_WITH_RC4_40_MD5                 SSLv3      Kx=DH(512)     Au=None    Enc=RC4(40)                    Mac=MD5      export    
+      0x00,0x03 - EXP-RC4-MD5                    TLS_RSA_EXPORT_WITH_RC4_40_MD5                     SSLv3      Kx=RSA(512)    Au=RSA     Enc=RC4(40)                    Mac=MD5      export    
+ 0x02,0x00,0x80 - EXP-RC4-MD5                    SSL_CK_RC4_128_EXPORT40_WITH_MD5                   SSLv2      Kx=RSA(512)    Au=RSA     Enc=RC4(40)                    Mac=MD5      export    
+      0x00,0x28 - EXP-KRB5-RC4-SHA               TLS_KRB5_EXPORT_WITH_RC4_40_SHA                    SSLv3      Kx=KRB5        Au=KRB5    Enc=RC4(40)                    Mac=SHA1     export    
+      0x00,0x2B - EXP-KRB5-RC4-MD5               TLS_KRB5_EXPORT_WITH_RC4_40_MD5                    SSLv3      Kx=KRB5        Au=KRB5    Enc=RC4(40)                    Mac=MD5      export    
+      0xC0,0x10 - ECDHE-RSA-NULL-SHA             TLS_ECDHE_RSA_WITH_NULL_SHA                        SSLv3      Kx=ECDH        Au=RSA     Enc=None                       Mac=SHA1               
+      0xC0,0x06 - ECDHE-ECDSA-NULL-SHA           TLS_ECDHE_ECDSA_WITH_NULL_SHA                      SSLv3      Kx=ECDH        Au=ECDSA   Enc=None                       Mac=SHA1               
+      0xC0,0x15 - AECDH-NULL-SHA                 TLS_ECDH_anon_WITH_NULL_SHA                        SSLv3      Kx=ECDH        Au=None    Enc=None                       Mac=SHA1               
+      0xC0,0x0B - ECDH-RSA-NULL-SHA              TLS_ECDH_RSA_WITH_NULL_SHA                         SSLv3      Kx=ECDH/RSA    Au=ECDH    Enc=None                       Mac=SHA1               
+      0xC0,0x01 - ECDH-ECDSA-NULL-SHA            TLS_ECDH_ECDSA_WITH_NULL_SHA                       SSLv3      Kx=ECDH/ECDSA  Au=ECDH    Enc=None                       Mac=SHA1               
+      0xC0,0x3B - ECDHE-PSK-NULL-SHA384          TLS_ECDHE_PSK_WITH_NULL_SHA384                     TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=None                       Mac=SHA384             
+      0xC0,0x3A - ECDHE-PSK-NULL-SHA256          TLS_ECDHE_PSK_WITH_NULL_SHA256                     TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=None                       Mac=SHA256             
+      0xC0,0x39 - ECDHE-PSK-NULL-SHA             TLS_ECDHE_PSK_WITH_NULL_SHA                        SSLv3      Kx=ECDHEPSK    Au=PSK     Enc=None                       Mac=SHA1               
+      0x00,0xB9 - RSA-PSK-NULL-SHA384            TLS_RSA_PSK_WITH_NULL_SHA384                       TLSv1      Kx=RSAPSK      Au=RSA     Enc=None                       Mac=SHA384             
+      0x00,0xB8 - RSA-PSK-NULL-SHA256            TLS_RSA_PSK_WITH_NULL_SHA256                       TLSv1      Kx=RSAPSK      Au=RSA     Enc=None                       Mac=SHA256             
+      0x00,0xB5 - DHE-PSK-NULL-SHA384            TLS_DHE_PSK_WITH_NULL_SHA384                       TLSv1      Kx=DHEPSK      Au=PSK     Enc=None                       Mac=SHA384             
+      0x00,0xB4 - DHE-PSK-NULL-SHA256            TLS_DHE_PSK_WITH_NULL_SHA256                       TLSv1      Kx=DHEPSK      Au=PSK     Enc=None                       Mac=SHA256             
+      0x00,0x2E - RSA-PSK-NULL-SHA               TLS_RSA_PSK_WITH_NULL_SHA                          SSLv3      Kx=RSAPSK      Au=RSA     Enc=None                       Mac=SHA1               
+      0x00,0x2D - DHE-PSK-NULL-SHA               TLS_DHE_PSK_WITH_NULL_SHA                          SSLv3      Kx=DHEPSK      Au=PSK     Enc=None                       Mac=SHA1               
+      0x00,0xB1 - PSK-NULL-SHA384                TLS_PSK_WITH_NULL_SHA384                           TLSv1      Kx=PSK         Au=PSK     Enc=None                       Mac=SHA384             
+      0x00,0xB0 - PSK-NULL-SHA256                TLS_PSK_WITH_NULL_SHA256                           TLSv1      Kx=PSK         Au=PSK     Enc=None                       Mac=SHA256             
+      0x00,0x2C - PSK-NULL-SHA                   TLS_PSK_WITH_NULL_SHA                              SSLv3      Kx=PSK         Au=PSK     Enc=None                       Mac=SHA1               
+      0x00,0x3B - NULL-SHA256                    TLS_RSA_WITH_NULL_SHA256                           TLSv1.2    Kx=RSA         Au=RSA     Enc=None                       Mac=SHA256             
+      0x00,0x02 - NULL-SHA                       TLS_RSA_WITH_NULL_SHA                              SSLv3      Kx=RSA         Au=RSA     Enc=None                       Mac=SHA1               
+      0x00,0x01 - NULL-MD5                       TLS_RSA_WITH_NULL_MD5                              SSLv3      Kx=RSA         Au=RSA     Enc=None                       Mac=MD5                
+      0x00,0x82 - GOST94-NULL-GOST94             TLS_GOSTR341094_WITH_NULL_GOSTR3411                TLSv1      Kx=GOST        Au=GOST94  Enc=None                       Mac=GOSTR3411          
+      0x00,0x83 - GOST2001-NULL-GOST94           TLS_GOSTR341001_WITH_NULL_GOSTR3411                SSLv3      Kx=GOST        Au=GOST01  Enc=None                       Mac=GOST94             
+      0xFF,0x87 - GOST2012256-NULL-STREEBOG256   -                                                  SSLv3      Kx=GOST        Au=GOST01  Enc=None                       Mac=STREEBOG256        
+EOF
+
+     while read TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS] n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
+          TLS_NR_CIPHERS+=1
+     done < $CIPHERS_BY_STRENGTH_FILE
 }
 
 
