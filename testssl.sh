@@ -7285,7 +7285,19 @@ find_openssl_binary() {
           HAS_XMPP=true
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
-          OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
+          if which timeout >&2 2>/dev/null ; then
+               # there are different "timeout". Check whether --preserve-status is supported
+               if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
+                    OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
+               else
+                    OPENSSL="timeout $OPENSSL_TIMEOUT $OPENSSL"
+               fi
+          else
+               outln
+               ignore_no_or_lame " neccessary binary \"timeout\" not found. Continue without timeout?"
+               [[ $? -ne 0 ]] && exit -2
+               unset OPENSSL_TIMEOUT
+          fi
      fi
 
      return 0
@@ -7693,7 +7705,7 @@ parse_hn_port() {
 prepare_logging() {
      local fname_prefix="$1"
 
-     [[ -z "$fname_prefix" ]] && fname_prefix="$NODE:$PORT"
+     [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"_"$PORT"
 
      if "$do_logging"; then
           if [[ -z "$LOGFILE" ]]; then
