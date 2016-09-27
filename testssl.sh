@@ -7418,6 +7418,7 @@ tuning options (can also be preset via environment variables):
 
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
+     --openssl-timeout <seconds>   useful to avoid hangers. <seconds> to wait before openssl connect will be terminated
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
