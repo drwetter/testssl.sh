@@ -3173,7 +3173,7 @@ run_protocols() {
      esac
 
      pr_bold " TLS 1.2    $extra_spaces";
-     if "$using_sockets" && "$EXPERIMENTAL"; then               #TODO: IIS servers do have a problem here with our handshake
+     if "$using_sockets" 
           tls_sockets "03" "$TLS12_CIPHER"
      else
           run_prototest_openssl "-tls1_2"
