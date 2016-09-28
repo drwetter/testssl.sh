@@ -299,26 +299,6 @@ c0,0d, c0,03, 00,0a, 00,63, 00,15, 00,12, 00,0f, 00,0c,
 00,62, 00,09, 00,65, 00,64, 00,14, 00,11, 00,0e, 00,0b,
 00,08, 00,06, 00,03, 00,ff"
 
-readonly SSLv2_CLIENT_HELLO="
-,80,34    # length (here: 52)
-,01       # Client Hello
-,00,02    # SSLv2
-,00,1b    # cipher spec length (here: 27 )
-,00,00    # session ID length
-,00,10    # challenge length
-,05,00,80 # 1st cipher   9 cipher specs, only classical V2 ciphers are used here, see  FIXME below
-,03,00,80 # 2nd          there are v3 in v2!!! : https://tools.ietf.org/html/rfc6101#appendix-E
-,01,00,80 # 3rd          Cipher specifications introduced in version 3.0 can be included in version 2.0 client hello messages using
-,07,00,c0 # 4th          the syntax below. [..] # V2CipherSpec (see Version 3.0 name) = { 0x00, CipherSuite }; !!!!
-,08,00,80 # 5th
-,06,00,40 # 6th
-,04,00,80 # 7th
-,02,00,80 # 8th
-,00,00,00 # 9th
-,29,22,be,b3,5a,01,8b,04,fe,5f,80,03,a0,13,eb,c4" # Challenge
-# https://idea.popcount.org/2012-06-16-dissecting-ssl-handshake/ (client)
-# FIXME: http://max.euston.net/d/tip_sslciphers.html
-
 ###### Cipher suite information #####
 CIPHERS_BY_STRENGTH_FILE=""
 declare -i TLS_NR_CIPHERS=0
@@ -5759,12 +5739,49 @@ parse_tls_serverhello() {
 }
 
 
+#arg1: list of ciphers suites or empty
 sslv2_sockets() {
      local ret
+     local client_hello cipher_suites len_client_hello
+     local len_ciph_suites_byte len_ciph_suites
+
+     if [[ -n "$1" ]]; then
+          cipher_suites="$1"
+     else
+          cipher_suites="
+          05,00,80, # 1st cipher   9 cipher specs, only classical V2 ciphers are used here, see  FIXME below
+          03,00,80, # 2nd          there are v3 in v2!!! : https://tools.ietf.org/html/rfc6101#appendix-E
+          01,00,80, # 3rd          Cipher specifications introduced in version 3.0 can be included in version 2.0 client hello messages using
+          07,00,c0, # 4th          the syntax below. [..] # V2CipherSpec (see Version 3.0 name) = { 0x00, CipherSuite }; !!!!
+          08,00,80, # 5th
+          06,00,40, # 6th
+          04,00,80, # 7th
+          02,00,80, # 8th
+          00,00,00" # 9th
+          # FIXME: http://max.euston.net/d/tip_sslciphers.html
+     fi
+
+     code2network "$cipher_suites" # convert CIPHER_SUITES
+     cipher_suites="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
+     len_ciph_suites_byte=$(echo ${#cipher_suites})
+     let "len_ciph_suites_byte += 2"
+     len_ciph_suites=$(printf "%02x\n" $(($len_ciph_suites_byte / 4 )))
+     len_client_hello=$(printf "%02x\n" $((0x$len_ciph_suites + 0x19)))
+
+     client_hello="
+     ,80,$len_client_hello         # length
+     ,01                           # Client Hello
+     ,00,02                        # SSLv2
+     ,00,$len_ciph_suites          # cipher spec length
+     ,00,00                        # session ID length
+     ,00,10                        # challenge length
+     ,$cipher_suites
+     ,29,22,be,b3,5a,01,8b,04,fe,5f,80,03,a0,13,eb,c4" # Challenge
+     # https://idea.popcount.org/2012-06-16-dissecting-ssl-handshake/ (client)
 
      fd_socket 5 || return 6
      debugme outln "sending client hello... "
-     socksend_sslv2_clienthello "$SSLv2_CLIENT_HELLO"
+     socksend_sslv2_clienthello "$client_hello"
 
      sockread_serverhello 32768
      debugme outln "reading server hello... "
