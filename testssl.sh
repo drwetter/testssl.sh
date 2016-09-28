@@ -513,6 +513,7 @@ hex2dec() {
 count_lines() {
      wc -l <<<"$1" | sed 's/ //g'
 }
+
 count_words() {
      wc -w <<<"$1" | sed 's/ //g'
 }
@@ -539,6 +540,10 @@ strip_lf() {
 
 strip_spaces() {
      echo "${1// /}"
+}
+
+trim_trailing_space() {
+     echo "${1%%*( )}"
 }
 
 toupper() {
@@ -958,6 +963,7 @@ run_hpkp() {
      local -i hpkp_age_days
      local -i hpkp_nr_keys
      local hpkp_key hpkp_key_hostcert
+     local -a backup_keys
      local spaces="                             "
      local key_found=false
      local i
@@ -968,7 +974,6 @@ run_hpkp() {
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
      fi
-     #pr_bold " HPKP                         "
      pr_bold " Public Key Pinning           "
      egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
@@ -1001,7 +1006,7 @@ run_hpkp() {
           out "# of keys: "
           if [[ $hpkp_nr_keys -eq 1 ]]; then
                pr_svrty_high "1 (NOT ok), "
-               fileout "hpkp_keys" "NOT ok" "Only one key pinned in HPKP header, this means the site may become unavailable if the key is revoked"
+               fileout "hpkp_keys" "HIGH" "Only one key pinned in HPKP header, this means the site may become unavailable if the key is revoked"
           else
                out "$hpkp_nr_keys, "
                fileout "hpkp_keys" "OK" "$hpkp_nr_keys keys pinned in HPKP header, additional keys are available if the current key is revoked"
@@ -1030,8 +1035,8 @@ run_hpkp() {
                fileout "hpkp_preload" "INFO" "HPKP header is NOT marked for browser preloading"
           fi
 
-          # Get the pins first
-          pins=$(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
+          # Get the spki first
+          spki=$(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
 
 
           # Look at the host certificate first
@@ -1069,18 +1074,19 @@ run_hpkp() {
           fi
 
           # This is where the matching magic happens...
-          pins_match=false
-          has_backup_pin=false
-          for hpkp_key in $pins; do
+          spki_match=false
+          has_backup_spki=false
+          i=0
+          for hpkp_key in $spki; do
                key_found=false
-               # compare pin against the host certificate
+               # compare spki against the host certificate
                if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
                     # We have a match
                     key_found=true
-                    pins_match=true
+                    spki_match=true
                     out "\n$spaces Host cert match: "
                     pr_done_good "$hpkp_key"
-                    fileout "hpkp_$hpkp_key" "OK" "PIN $hpkp_key matches the host certificate"
+                    fileout "hpkp_$hpkp_key" "OK" "SPKI $hpkp_key matches the host certificate"
                fi
                debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
 
@@ -1090,66 +1096,78 @@ run_hpkp() {
                     if [[ -n $hpkp_matches ]]; then
                          # We have a match
                          key_found=true
-                         pins_match=true
+                         spki_match=true
                          out "\n$spaces Sub CA match:    "
                          pr_done_good "$hpkp_key"
-                         out "\n$spaces $(echo $hpkp_matches|sed "s/^[a-zA-Z0-9\+\/]*=* *//")"
+                         out "\n$spaces \"$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< $"$hpkp_matches" )\""
                          fileout "hpkp_$hpkp_key" "OK" "Intermediate CA key matches a key pinned in the HPKP header. Key/CA: $hpkp_matches"
                     fi
                fi
 
                if ! $key_found; then
+                    # we compare now against a precompiled list of SPKIs against the ROOT CAs we have!
                     hpkp_matches=$(grep -h "$hpkp_key" $ca_hashes | sort -u)
                     if [[ -n $hpkp_matches ]]; then
-                         # We have a match
                          key_found=true
-                         pins_match=true
+                         spki_match=true
                          if [[ $(count_lines "$hpkp_matches") -eq 1 ]]; then
-                              match_ca=$(echo "$hpkp_matches" | sed "s/[a-zA-Z0-9\+\/]*=* *//")
+                              match_ca=$(sed "s/[a-zA-Z0-9\+\/]*=* *//" <<< "$hpkp_matches")
                          else
                               match_ca=""
                          fi
                          out "\n\n$spaces Root CA match:   "
                          pr_done_good "$hpkp_key"
                          echo "$hpkp_matches"|sort -u|while read line; do
-                              out "\n$spaces $(echo $line |sed "s/^[a-zA-Z0-9\+\/]*=* *//")"
+                              out "\n$spaces \"$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< "$line")\""
                          done
                          if [[ $match_ca == $hpkp_ca ]]; then
                               out " (part of the chain)"
-                              fileout "hpkp_$hpkp_key" "INFO" "Root CA key matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is part of the chain"
+                              fileout "hpkp_$hpkp_key" "INFO" "Root CA matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is part of the chain"
                          else
-                              has_backup_pin=true
-                              out "\n$spaces This CA is not part of the chain and likely a backup PIN"
-                              fileout "hpkp_$hpkp_key" "INFO" "Root CA key matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is not part of the chain, this is a backup PIN"
+                              has_backup_spki=true
+                              out " -- not part of chain, probable backup key"
+                              fileout "hpkp_$hpkp_key" "INFO" "Root CA matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is not part of the chain, this is a backup SPKI"
                          fi
                     fi
                fi
 
                if ! $key_found; then
-                    # Most likely a backup pin
-                    has_backup_pin=true
-                    out "\n\n$spaces Unmatched key:    "
-                    out "$hpkp_key"
-                    out "\n$spaces (This is OK for a backup pin of a host cert)"
-                    fileout "hpkp_$hpkp_key" "INFO" "PIN $hpkp_key doesn't match anything. This could be ok if it is a backup pin for a host certificate"
+                    # Most likely a backup SPKI, unfortunately we can't tell for what it is: host, intermediates
+                    has_backup_spki=true
+                    backup_keys[i]="$hpkp_key"
+                    i=$((i + 1))
+                    fileout "hpkp_$hpkp_key" "INFO" "SPKI $hpkp_key doesn't match anything. This is ok for a backup for any certificate"
+                    # CVS/JSON output here for the sake of simplicity, rest we do en bloc below
                fi
           done 
 
+          if [[ $i -eq 1 ]]; then
+               out "\n$spaces Unmatched SPKI:  "
+               outln "${backup_keys[0]}"
+          else
+               out "\n\n$spaces Unmatched SPKIs: "
+               outln "${backup_keys[0]}"
+               for ((i=1; i <= ${#backup_keys[@]} ;i++ )); do
+                    outln "$spaces                  ${backup_keys[i]}"
+               done
+          fi
+          # OK for SPKI backup of host or different intermediate certificate is ok!
+
           # If all else fails...
-          if ! $pins_match; then
-               pr_svrty_high " No matching key for pins found "
-               fileout "hpkp_keymatch" "NOT ok" "None of the HPKP PINS match your host certificate, intermediate CA or known root CAs. You may have bricked this site"
+          if ! $spki_match; then
+               "$has_backup_spki" && out "$spaces"       # we had a few lines with backup SPKIs already
+               pr_svrty_highln " No matching key for SPKI found "
+               fileout "hpkp_keymatch" "HIGH" "None of the HPKP SPKI match your host certificate, intermediate CA or known root CAs. You may have bricked this site"
           fi
 
-          if ! $has_backup_pin; then
-               pr_svrty_high " No backup pins found. Loss/compromise of the currently pinned key(s) will lead to bricked site. "
-               fileout "hpkp_backup" "NOT ok" "No backup pins found. Loss/compromise of the currently pinned key(s) will lead to bricked site."
+          if ! $has_backup_spki; then
+               pr_svrty_highln " No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site. "
+               fileout "hpkp_backup" "HIGH" "No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site."
           fi               
      else
-          out "--"
+          outln "--"
           fileout "hpkp" "INFO" "No support for HTTP Public Key Pinning"
      fi
-     outln
 
      tmpfile_handle $FUNCNAME.txt
      return $?
