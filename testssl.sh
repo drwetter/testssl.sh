@@ -296,7 +296,7 @@ pr_brownln()  { pr_brown "$1"; outln; }
 
 
 # color=1 functions
-pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m\c"; }
+pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m"; }
 pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off; }
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "\033[4m$1" || out "$1"; pr_off; }
@@ -2912,7 +2912,7 @@ tls_sockets() {
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 run_heartbleed(){
      [ $VULN_COUNT -le $VULN_THRESHLD ]  && outln && pr_blue "--> Testing for heartbleed vulnerability" && outln "\n"
-     pr_bold " Heartbleed\c"; out " (CVE-2014-0160)                "
+     pr_bold " Heartbleed"; out " (CVE-2014-0160)                "
 
      #if [[ -n "$STARTTLS" ]] && [[ $EXPERIMENTAL != "yes" ]]; then
      #    outln "(not yet implemented for STARTTLS)"
@@ -5051,4 +5051,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.396 2015/09/30 21:36:09 dirkw Exp $
+#  $Id: testssl.sh,v 1.396a 2016/09/29 23:12:09 dirkw Exp $
