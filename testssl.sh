@@ -507,10 +507,15 @@ hex2dec() {
 
 # trim spaces for BSD and old sed
 count_lines() {
-     wc -l <<<"$1" | sed 's/ //g'
+     #echo "${$(wc -l <<< "$1")// /}"
+     # ^^ bad substitution under bash, zsh ok. For some reason this does the trick:
+     echo $(wc -l <<< "$1")
 }
+
 count_words() {
-     wc -w <<<"$1" | sed 's/ //g'
+     #echo "${$(wc -w <<< "$1")// /}"
+     # ^^ bad substitution under bash, zsh ok. For some reason this does the trick:
+     echo $(wc -w <<< "$1")
 }
 
 count_ciphers() {
