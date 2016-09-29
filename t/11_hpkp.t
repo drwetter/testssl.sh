@@ -56,7 +56,7 @@ like($out,'/Root CA match\:   5C8kvU039KouVrl52D0eZSGf4Onjo4Khs8tmyTlV3nU/',"The
 ok( exists $findings{"hpkp_MTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTI"},"We have a finding for SPKI MTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTI"); $tests++;
 like($findings{"hpkp_MTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTI"}->{finding},'/doesn\'t match anything/',"It doesn't match indeed"); $tests++;
 is($findings{"hpkp_MTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTI"}->{severity}, "INFO", "The finding is informational"); $tests++;
-like($out,'/Unmatched key\:    MTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTI/',"There is an 'unmatched key' in the text output"); $tests++;
+like($out,'/Unmatched SPKI\:    MTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTIzYmFkMTI/',"There is an 'unmatched key' in the text output"); $tests++;
 
 like($findings{hpkp_keys}->{finding},'/5 keys pinned/',"5 keys pinned in json"); $tests++;
 like($out,'/\# of keys: 5/',"5 keys pinned in text output"); $tests++;
