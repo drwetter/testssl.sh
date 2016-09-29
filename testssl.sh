@@ -1100,7 +1100,7 @@ run_hpkp() {
                          out "\n$spaces Sub CA match:    "
                          pr_done_good "$hpkp_key"
                          out "\n$spaces \"$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< $"$hpkp_matches" )\""
-                         fileout "hpkp_$hpkp_key" "OK" "Intermediate CA key matches a key pinned in the HPKP header. Key/CA: $hpkp_matches"
+                         fileout "hpkp_$hpkp_key" "OK" "Intermediate CA matches a key pinned in the HPKP header. Key/CA: $hpkp_matches"
                     fi
                fi
 
