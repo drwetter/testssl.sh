@@ -92,7 +92,6 @@ egrep -q "dev|rc" <<< "$VERSION" && \
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname "$0")
 INSTALL_DIR=""
-MAPPING_FILE_RFC=""
 OPENSSL_LOCATION=""
 HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
@@ -508,10 +507,15 @@ hex2dec() {
 
 # trim spaces for BSD and old sed
 count_lines() {
-     wc -l <<<"$1" | sed 's/ //g'
+     #echo "${$(wc -l <<< "$1")// /}"
+     # ^^ bad substitution under bash, zsh ok. For some reason this does the trick:
+     echo $(wc -l <<< "$1")
 }
+
 count_words() {
-     wc -w <<<"$1" | sed 's/ //g'
+     #echo "${$(wc -w <<< "$1")// /}"
+     # ^^ bad substitution under bash, zsh ok. For some reason this does the trick:
+     echo $(wc -w <<< "$1")
 }
 
 count_ciphers() {
@@ -1551,8 +1555,19 @@ show_rfc_style(){
      [[ -z "$ADD_RFC_STR" ]] && return 1
      #[[ -z "$1" ]] && return 0
 
-     local rfcname
-     rfcname="$(grep -iw "$1" "$MAPPING_FILE_RFC" | awk '{ print $2 }')"
+     local rfcname="" hexcode
+     local -i i
+     hexcode="$(toupper "$1")"
+     case ${#hexcode} in
+          3) hexcode="0x00,0x${hexcode:1:2}" ;;
+          5) hexcode="0x${hexcode:1:2},0x${hexcode:3:2}" ;;
+          7) hexcode="0x${hexcode:1:2},0x${hexcode:3:2},0x${hexcode:5:2}" ;;
+          *) return 1 ;;
+     esac
+     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+          [[ "$hexcode" == "${TLS_CIPHER_HEXCODE[i]}" ]] && rfcname="${TLS_CIPHER_RFC_NAME[i]}" && break
+     done
+     [[ "$rfcname" == "-" ]] && rfcname=""
      [[ -n "$rfcname" ]] && out "$rfcname"
      return 0
 }
@@ -2876,7 +2891,7 @@ run_client_simulation() {
                fi
                #FiXME: awk
                cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
-               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && [[ -n "$MAPPING_FILE_RFC" ]] && cipher="$(rfc2openssl "$cipher")"
+               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && cipher="$(rfc2openssl "$cipher")"
                outln "$proto $cipher"
                if [[ -n "${warning[i]}" ]]; then
                     out "                            "
@@ -5873,14 +5888,10 @@ parse_tls_serverhello() {
           echo "Protocol  : TLSv1.$((0x$tls_protocol2-0x0301))" >> $TMPFILE
      fi
      echo "===============================================================================" >> $TMPFILE
-     if [[ -n "$MAPPING_FILE_RFC" ]]; then
-          if [[ "${tls_cipher_suite:0:2}" == "00" ]]; then
-               echo "Cipher    : $(strip_spaces $(show_rfc_style "x${tls_cipher_suite:2:2}"))" >> $TMPFILE
-          else
-               echo "Cipher    : $(strip_spaces $(show_rfc_style "x${tls_cipher_suite:0:4}"))" >> $TMPFILE
-          fi
+     if [[ "${tls_cipher_suite:0:2}" == "00" ]]; then
+          echo "Cipher    : $(strip_spaces $(show_rfc_style "x${tls_cipher_suite:2:2}"))" >> $TMPFILE
      else
-          echo "Cipher    : $($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')" >> $TMPFILE
+          echo "Cipher    : $(strip_spaces $(show_rfc_style "x${tls_cipher_suite:0:4}"))" >> $TMPFILE
      fi
      echo "===============================================================================" >> $TMPFILE
 
@@ -7342,42 +7353,43 @@ old_fart() {
      fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -5
 }
 
-# try very hard to determine the install path to get ahold of the mapping file
-# it provides "keycode/ RFC style name", see RFCs, cipher(1), www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
+# try very hard to determine the install path
+# FIXME: mapping-rfc.txt no longer used. Need another method to determine install path
 get_install_dir() {
+     local mapping_file_rfc=""
      #INSTALL_DIR=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
      INSTALL_DIR=$(dirname ${BASH_SOURCE[0]})
 
-     [[ -r "$RUN_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/etc/mapping-rfc.txt"
-     [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
-     if [[ ! -r "$MAPPING_FILE_RFC" ]]; then
+     [[ -r "$RUN_DIR/etc/mapping-rfc.txt" ]] && mapping_file_rfc="$RUN_DIR/etc/mapping-rfc.txt"
+     [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/etc/mapping-rfc.txt"
+     if [[ ! -r "$mapping_file_rfc" ]]; then
 # those will disapper:
-          [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/mapping-rfc.txt"
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && mapping_file_rfc="$RUN_DIR/mapping-rfc.txt"
+          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
      # we haven't found the mapping file yet...
-     if [[ ! -r "$MAPPING_FILE_RFC" ]] && which readlink &>/dev/null ; then
+     if [[ ! -r "$mapping_file_rfc" ]] && which readlink &>/dev/null ; then
           readlink -f ls &>/dev/null && \
                INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
                INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
                # not sure whether Darwin has -f
           INSTALL_DIR=$(dirname $INSTALL_DIR 2>/dev/null)
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
-          [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear:
      fi
 
      # still no mapping file:
-     if [[ ! -r "$MAPPING_FILE_RFC" ]] && which realpath &>/dev/null ; then
+     if [[ ! -r "$mapping_file_rfc" ]] && which realpath &>/dev/null ; then
           INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
-          MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+          mapping_file_rfc="$INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
-     [[ ! -r "$MAPPING_FILE_RFC" ]] && unset MAPPING_FILE_RFC && unset ADD_RFC_STR && pr_warningln "\nNo mapping file found"
-     debugme echo "$MAPPING_FILE_RFC"
+     [[ ! -r "$mapping_file_rfc" ]] && unset mapping_file_rfc && unset ADD_RFC_STR && pr_warningln "\nNo mapping file found"
+     debugme echo "$mapping_file_rfc"
 }
 
 
@@ -7687,7 +7699,6 @@ PATH: $PATH
 PROG_NAME: $PROG_NAME
 INSTALL_DIR: $INSTALL_DIR
 RUN_DIR: $RUN_DIR
-MAPPING_FILE_RFC: $MAPPING_FILE_RFC
 
 CAPATH: $CAPATH
 COLOR: $COLOR
