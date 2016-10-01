@@ -915,6 +915,7 @@ preload() {
 run_hsts() {
      local hsts_age_sec
      local hsts_age_days
+     local spaces="                              "
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -923,7 +924,11 @@ run_hsts() {
      pr_bold " Strict Transport Security    "
      grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
-          grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" || out "(two HSTS header, using 1st one) "
+          if ! grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" ; then
+               pr_svrty_medium "misconfiguration: two HSTS headers"
+               outln " (displaying first one here)."
+               out "$spaces"
+          fi
           hsts_age_sec=$(sed -e 's/[^0-9]*//g' $TMPFILE | head -1)
           debugme echo "hsts_age_sec: $hsts_age_sec"
           if [[ -n $hsts_age_sec ]]; then
@@ -990,7 +995,7 @@ run_hpkp() {
           else
                hpkp_headers=""
                pr_svrty_medium "multiple HPKP headers: "
-               # https://scotthelme.co.uk is a candidate
+               # https://scotthelme.co.uk was a candidate
                #FIXME: should display both Public-Key-Pins+Public-Key-Pins-Report-Only --> egrep -ai -w
                for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
                     pr_italic $i
@@ -8864,4 +8869,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.551 2016/09/29 18:59:12 dirkw Exp $
+#  $Id: testssl.sh,v 1.552 2016/10/01 08:04:32 dirkw Exp $
