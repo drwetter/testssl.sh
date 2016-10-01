@@ -197,6 +197,7 @@ CLIENT_AUTH=false
 NO_SSL_SESSIONID=false
 HOSTCERT=""
 HEADERFILE=""
+HEADERVALUE=""
 HTTP_STATUS_CODE=""
 PROTOS_OFFERED=""
 TLS_EXTENSIONS=""
@@ -892,6 +893,30 @@ run_http_date() {
      detect_ipv4
 }
 
+# HEADERFILE needs to contain the HTTP header (made sure by invoker)
+# arg1: key=word to match
+# arg2: hint for fileout()
+# output: value after ":"
+
+detect_headerdups() {
+     local -i nr=$(grep -Faciw "$1:" $HEADERFILE)
+
+     if [[ $nr -gt 1 ]]; then
+          pr_svrty_medium "misconfiguration: $nr headers "
+          pr_italic "$1"
+          out " -- checking first one "
+          out "\n$spaces"
+          # first awk matches the key, second extracts the from the first line the value, be careful with quotes here!
+          HEADERVALUE=$(awk "/$1:/" $HEADERFILE | head -1 | awk "{ sub(/$1:/,\"\"); print }")
+          [[ $DEBUG -ge 2 ]] && pr_italic "$HEADERVALUE" && out "\n$spaces"
+          fileout "$2""_multiple" "WARN" "Multiple $2 headers. Using first header: $HEADERVALUE"
+          return 1
+     fi
+     HEADERVALUE=$(awk "/$1:/" $HEADERFILE | head -1 | awk "{ sub(/$1:/,\"\"); print }")
+     return 0
+}
+
+
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
           pr_done_good ", includeSubDomains"
@@ -924,12 +949,8 @@ run_hsts() {
      pr_bold " Strict Transport Security    "
      grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
-          if ! grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" ; then
-               pr_svrty_medium "misconfiguration: two HSTS headers"
-               outln " (displaying first one here)."
-               out "$spaces"
-          fi
-          hsts_age_sec=$(sed -e 's/[^0-9]*//g' $TMPFILE | head -1)
+          detect_headerdups "Strict-Transport-Security" "HSTS"
+          hsts_age_sec=$(sed -e 's/[^0-9]*//g' <<< $HEADERVALUE)
           debugme echo "hsts_age_sec: $hsts_age_sec"
           if [[ -n $hsts_age_sec ]]; then
                hsts_age_days=$(( hsts_age_sec / 86400))
@@ -952,7 +973,7 @@ run_hsts() {
           if includeSubDomains "$TMPFILE"; then
                fileout "hsts_subdomains" "OK" "HSTS includes subdomains"
           else
-               fileout "hsts_subdomains" "WARN" "HSTS only for this domain, consider to include subdomains as well"
+               fileout "hsts_subdomains" "INFO" "HSTS only for this domain"
           fi
           if preload "$TMPFILE"; then
                fileout "hsts_preload" "OK" "HSTS domain is marked for preloading"
@@ -980,33 +1001,20 @@ run_hpkp() {
      local spaces="                             "
      local key_found=false
      local i
-     local hpkp_headers
-     local first_hpkp_header
+     local hpkp_headers=""
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
      fi
-     #pr_bold " HPKP                         "
      pr_bold " Public Key Pinning           "
      egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
-          if egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" ; then
-               :
-          else
-               hpkp_headers=""
-               pr_svrty_medium "multiple HPKP headers: "
-               # https://scotthelme.co.uk was a candidate
-               #FIXME: should display both Public-Key-Pins+Public-Key-Pins-Report-Only --> egrep -ai -w
-               for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
-                    pr_italic $i
-                    hpkp_headers="$hpkp_headers$i "
-                    out " "
-               done
-               out "\n$spaces Examining first one: "
-               first_hpkp_header=$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1)
-               pr_italic "$first_hpkp_header, "
-               fileout "hpkp_multiple" "WARN" "Multiple HPKP headershpkp_headers. Using first header: $first_hpkp_header"
-          fi
+          detect_headerdups "Public-Key-Pins" "HPKP"
+          hpkp_header=$HEADERVALUE
+
+          #FIXME: we should treat report_only maybe seperately
+          detect_headerdups "Public-Key-Pins-Report-Only" "HPKP_report_only"
+          hpkp_header+="$HEADERVALUE "
 
           # remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
           sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE | \
@@ -1016,7 +1024,7 @@ run_hpkp() {
           tr ' ' '\n' < $TMPFILE.2 >$TMPFILE
 
           hpkp_nr_keys=$(grep -ac pin-sha $TMPFILE)
-          out "# of keys: "
+          out " # of keys: "
           if [[ $hpkp_nr_keys -eq 1 ]]; then
                pr_svrty_high "1 (NOT ok), "
                fileout "hpkp_keys" "NOT ok" "Only one key pinned in HPKP header, this means the site may become unavailable if the key is revoked"
@@ -1211,7 +1219,7 @@ run_application_banner() {
      return 0
 }
 
-run_cookie_flags() {     # ARG1: Path, ARG2: path
+run_cookie_flags() {     # ARG1: Path
      local -i nr_cookies
      local nr_httponly nr_secure
      local negative_word
@@ -8869,4 +8877,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.552 2016/10/01 08:04:32 dirkw Exp $
+#  $Id: testssl.sh,v 1.553 2016/10/01 20:25:13 dirkw Exp $
