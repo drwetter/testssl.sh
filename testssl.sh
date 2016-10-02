@@ -196,6 +196,7 @@ ERRFILE=""
 CLIENT_AUTH=false
 NO_SSL_SESSIONID=false
 HOSTCERT=""
+CA_BUNDLES=${CA_BUNDLES:-"$INSTALL_DIR/etc/*.pem"}
 HEADERFILE=""
 HEADERVALUE=""
 HTTP_STATUS_CODE=""
@@ -3819,7 +3820,6 @@ determine_trust() {
 	local all_ok=true
 	local some_ok=false
      local code
-     local ca_bundles="$INSTALL_DIR/etc/*.pem"
      local spaces="                              "
      local -i certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
@@ -3835,7 +3835,7 @@ determine_trust() {
           fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
-	for bundle_fname in $ca_bundles; do
+	for bundle_fname in $CA_BUNDLES; do
 		certificate_file[i]=$(basename ${bundle_fname//.pem})
           if [[ ! -r $bundle_fname ]]; then
                pr_warningln "\"$bundle_fname\" cannot be found / not readable"
@@ -7405,6 +7405,8 @@ tuning options (can also be preset via environment variables):
      --proxy <host>:<port>         connect via the specified HTTP proxy
      -6                            use also IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --sneaky                      leave less traces in target logs: user agent, referer
+     --ca-bundles <PATH>           set path to trusted ca certificates for building the chain of trust
+                                   defaults to "$INSTALL_DIR/etc/*.pem"
 
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
@@ -8465,6 +8467,10 @@ parse_cmd_line() {
                     ;;
                -E|--cipher-per-proto|--cipher_per_proto)
                     do_cipher_per_proto=true
+                    ;;
+               --ca-bundles|--ca-bundles=*)
+                    CA_BUNDLES=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
                     ;;
                -p|--protocols)
                     do_protocols=true
