@@ -91,7 +91,8 @@ egrep -q "dev|rc" <<< "$VERSION" && \
 
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname "$0")
-INSTALL_DIR=""
+TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"   # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR 
+CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"           # or CA_BUNDLES_PATH to find the CA BUNDLES. TESTSSL_INSTALL_DIR helps you to find the RFC mapping also
 MAPPING_FILE_RFC=""
 OPENSSL_LOCATION=""
 HNAME="$(hostname)"
@@ -3819,7 +3820,7 @@ determine_trust() {
 	local all_ok=true
 	local some_ok=false
      local code
-     local ca_bundles="$INSTALL_DIR/etc/*.pem"
+     local ca_bundles=""
      local spaces="                              "
      local -i certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
@@ -3835,6 +3836,13 @@ determine_trust() {
           fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
+
+     # if you run testssl.sh from a different path /you can set either TESTSSL_INSTALL_DIR or CA_BUNDLES_PATH to find the CA BUNDLES
+     if [[ -z $CA_BUNDLES_PATH ]]; then
+          ca_bundles="$TESTSSL_INSTALL_DIR/etc/*.pem"
+     else
+          ca_bundles="${CA_BUNDLES_PATH/*.pem}"
+     fi
 	for bundle_fname in $ca_bundles; do
 		certificate_file[i]=$(basename ${bundle_fname//.pem})
           if [[ ! -r $bundle_fname ]]; then
@@ -7162,38 +7170,39 @@ old_fart() {
      fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -5
 }
 
-# try very hard to determine the install path to get ahold of the mapping file
-# it provides "keycode/ RFC style name", see RFCs, cipher(1), www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
+# try very hard to determine the install path to get ahold of the mapping file and the CA bundles
+# TESTSSL_INSTALL_DIR can be supplied via environment so that the RFC mapping and CA bundles can be found
+# (mapping file provides "keycode/ RFC style name", see RFCs, cipher(1), 
+# www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
 get_install_dir() {
-     #INSTALL_DIR=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
-     INSTALL_DIR=$(dirname ${BASH_SOURCE[0]})
+     [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$(dirname ${BASH_SOURCE[0]})"
 
      [[ -r "$RUN_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/etc/mapping-rfc.txt"
-     [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+     [[ -r "$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt"
      if [[ ! -r "$MAPPING_FILE_RFC" ]]; then
 # those will disapper:
           [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/mapping-rfc.txt"
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$TESTSSL_INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/mapping-rfc.txt"
      fi
 
      # we haven't found the mapping file yet...
      if [[ ! -r "$MAPPING_FILE_RFC" ]] && which readlink &>/dev/null ; then
           readlink -f ls &>/dev/null && \
-               INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
-               INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
+               TESTSSL_INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
+               TESTSSL_INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
                # not sure whether Darwin has -f
-          INSTALL_DIR=$(dirname $INSTALL_DIR 2>/dev/null)
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
-          [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+          TESTSSL_INSTALL_DIR=$(dirname $TESTSSL_INSTALL_DIR 2>/dev/null)
+          [[ -r "$TESTSSL_INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear:
      fi
 
      # still no mapping file:
      if [[ ! -r "$MAPPING_FILE_RFC" ]] && which realpath &>/dev/null ; then
-          INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
-          MAPPING_FILE_RFC="$INSTALL_DIR/etc/mapping-rfc.txt"
+          TESTSSL_INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
+          MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$TESTSSL_INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/mapping-rfc.txt"
      fi
 
      [[ ! -r "$MAPPING_FILE_RFC" ]] && unset MAPPING_FILE_RFC && unset ADD_RFC_STR && pr_warningln "\nNo mapping file found"
@@ -7486,7 +7495,7 @@ HAS_XMPP: $HAS_XMPP
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
-INSTALL_DIR: $INSTALL_DIR
+TESTSSL_INSTALL_DIR: $TESTSSL_INSTALL_DIR
 RUN_DIR: $RUN_DIR
 MAPPING_FILE_RFC: $MAPPING_FILE_RFC
 
@@ -8877,4 +8886,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.553 2016/10/01 20:25:13 dirkw Exp $
+#  $Id: testssl.sh,v 1.554 2016/10/02 16:15:12 dirkw Exp $
