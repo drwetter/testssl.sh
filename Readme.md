@@ -28,11 +28,12 @@ cryptographic flaws.
 
 #### General
 
-Here in the master branch you find the development version of the software
--- with new features and maybe some bugs. For the stable version and **a
+Here in the master branch you find the stable version 2.8rc2 of the software, it 
+superseds 2.6. Version 2.8 is currently being finalized. The 2.9dev branch is the developemnet 
+-- with new  features  and maybe some bugs. For the stable version and **a
 more thorough description of the command line options** please see
 [testssl.sh](https://testssl.sh/ "Go to the site with the stable version
-and more documentation").
+and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation. 
 
 testssl.sh is working on every Linux/BSD distribution out of the box with
 some limitations of disabled features from the openssl client -- some
@@ -43,7 +44,7 @@ cygwin) work too. OpenSSL version >= 1 is a must.  OpenSSL version >= 1.0.2
 is needed for better LOGJAM checks and to display bit strengths for key
 exchanges.
 
-#### [Features in 2.8 stable](#28final)
+#### [Features in 2.8 stable](Readme.md#stable)
 
 Done so far:
 
@@ -72,7 +73,7 @@ Done so far:
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
-#### [Features in 2.9dev](#29dev)
+#### [Features in 2.9dev](Readme.md#devel)
 * timeout in OpeenSL connect
 * TLS 1.2 protocol check via socket
 
