@@ -43,7 +43,7 @@ cygwin) work too. OpenSSL version >= 1 is a must.  OpenSSL version >= 1.0.2
 is needed for better LOGJAM checks and to display bit strengths for key
 exchanges.
 
-#### [Features in 2.8 stable](#2.8final)
+#### [Features in 2.8 stable](#28final)
 
 Done so far:
 
@@ -72,7 +72,7 @@ Done so far:
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
-#### [Features in 2.9dev](#2.9dev)
+#### [Features in 2.9dev](#29dev)
 * timeout in OpeenSL connect
 * TLS 1.2 protocol check via socket
 
