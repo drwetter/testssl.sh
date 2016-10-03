@@ -43,11 +43,7 @@ cygwin) work too. OpenSSL version >= 1 is a must.  OpenSSL version >= 1.0.2
 is needed for better LOGJAM checks and to display bit strengths for key
 exchanges.
 
-#### Current Development
-
-Planned features in the release 2.7dev/2.8 are:
-
-https://github.com/drwetter/testssl.sh/milestones/2.7dev%20%282.8%29
+#### [Features in 2.8 stable](#2.8final)
 
 Done so far:
 
@@ -55,22 +51,30 @@ Done so far:
   Microsoft (OS), Mozilla (Firefox Browser), works for openssl >=1.0.1
 * IPv6 (status: 80% working, details see
   https://github.com/drwetter/testssl.sh/issues/11
-* works on servers requiring a x509 certificate for authentication
+* works now on servers requiring a x509 certificate for authentication
+* extensive CN <--> hostname check
 * SSL Session ID check
 * Avahi/mDNS based name resolution
 * HTTP2/ALPN protocol check
 * Logging to a file / dir
-* Logging to JSON + CSV
+* Logging to (flat) JSON + CSV
 * Check for multiple server certificates
-* Browser cipher simulation
+* Browser cipher simulation: what client will connect with which cipher + protocol
+* GOST cipher+certificate improvements
 * Assistance for color-blind users
 * Even more compatibility improvements for FreeBSD, NetBSD, Gentoo, RH-ish, F5 and Cisco systems
 * Considerable speed improvements for each cipher runs (-e/-E)
-* More robust socket interface
+* More robust SSLv2 + TLS socket interface
+* seperate check for curves 
 * OpenSSL 1.1.0 compliant
+* check for DROWN
 * Whole number of bugs squashed
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
+
+#### [Features in 2.9dev](#2.9dev)
+* timeout in OpeenSL connect
+* TLS 1.2 protocol check via socket
 
 #### Contributions
 
