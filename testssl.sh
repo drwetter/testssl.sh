@@ -915,8 +915,9 @@ detect_header() {
           HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://')
           return 1
      else 
-          pr_svrty_medium "misconfiguration: $nr headers "
+          pr_svrty_medium "misconfiguration: "
           pr_italic "$key"
+          pr_svrty_medium " ${nr}x"
           out " -- checking first one "
           out "\n$spaces"
           # first awk matches the key, second extracts the from the first line the value, be careful with quotes here!
@@ -1255,7 +1256,7 @@ run_cookie_flags() {     # ARG1: Path
      grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
           nr_cookies=$(count_lines "$TMPFILE")
-          out "$nr_cookies issued:"
+          out "$nr_cookies issued: "
           fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\"$msg302_"
           if [[ $nr_cookies -gt 1 ]]; then
                negative_word="NONE"
@@ -8891,4 +8892,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.555 2016/10/03 16:52:47 dirkw Exp $
+#  $Id: testssl.sh,v 1.556 2016/10/03 19:17:28 dirkw Exp $
