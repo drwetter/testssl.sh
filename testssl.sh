@@ -894,28 +894,39 @@ run_http_date() {
      detect_ipv4
 }
 
+
+
 # HEADERFILE needs to contain the HTTP header (made sure by invoker)
 # arg1: key=word to match
 # arg2: hint for fileout()
-# output: value after ":"
+# returns:
+#    0 if header not found
+#    1-n nr of headers found, then in HEADERVALUE the first value from key
 
-detect_headerdups() {
-     local -i nr=$(grep -Faciw "$1:" $HEADERFILE)
+detect_header() {
+     local key="$1"
+     local -i nr=0
 
-     if [[ $nr -gt 1 ]]; then
+     nr=$(grep -Faciw "$key:" $HEADERFILE)
+     if [[ $nr -eq 0 ]]; then
+          HEADERVALUE=""
+          return 0
+     elif [[ $nr -eq 1 ]]; then
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://')
+          return 1
+     else 
           pr_svrty_medium "misconfiguration: $nr headers "
-          pr_italic "$1"
+          pr_italic "$key"
           out " -- checking first one "
           out "\n$spaces"
           # first awk matches the key, second extracts the from the first line the value, be careful with quotes here!
-          HEADERVALUE=$(awk "/$1:/" $HEADERFILE | head -1 | awk "{ sub(/$1:/,\"\"); print }")
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://' | head -1)
           [[ $DEBUG -ge 2 ]] && pr_italic "$HEADERVALUE" && out "\n$spaces"
           fileout "$2""_multiple" "WARN" "Multiple $2 headers. Using first header: $HEADERVALUE"
-          return 1
+          return $nr
      fi
-     HEADERVALUE=$(awk "/$1:/" $HEADERFILE | head -1 | awk "{ sub(/$1:/,\"\"); print }")
-     return 0
 }
+# wir brauchen hier eine Funktion, die generell den Header detectiert
 
 
 includeSubDomains() {
@@ -946,11 +957,10 @@ run_hsts() {
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
      fi
-     #pr_bold " HSTS                         "
      pr_bold " Strict Transport Security    "
-     grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
-     if [[ $? -eq 0 ]]; then
-          detect_headerdups "Strict-Transport-Security" "HSTS"
+     detect_header "Strict-Transport-Security" "HSTS"
+     if [[ $? -ne 0 ]]; then
+          echo "$HEADERVALUE" >$TMPFILE
           hsts_age_sec=$(sed -e 's/[^0-9]*//g' <<< $HEADERVALUE)
           debugme echo "hsts_age_sec: $hsts_age_sec"
           if [[ -n $hsts_age_sec ]]; then
@@ -980,9 +990,10 @@ run_hsts() {
                fileout "hsts_preload" "OK" "HSTS domain is marked for preloading"
           else
                fileout "hsts_preload" "INFO" "HSTS domain is NOT marked for preloading"
+               #FIXME: To be checked against preloading lists, 
+               # e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc
+               #      https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
           fi
-          #FIXME: To be checked against e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc
-          #                              and https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
      else
           out "--"
           fileout "hsts" "NOT ok" "No support for HTTP Strict Transport Security"
@@ -1010,11 +1021,11 @@ run_hpkp() {
      pr_bold " Public Key Pinning           "
      egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
-          detect_headerdups "Public-Key-Pins" "HPKP"
+          detect_header "Public-Key-Pins" "HPKP"
           hpkp_header=$HEADERVALUE
 
-          #FIXME: we should treat report_only maybe seperately
-          detect_headerdups "Public-Key-Pins-Report-Only" "HPKP_report_only"
+          #FIXME: we should treat report_only seperately
+          detect_header "Public-Key-Pins-Report-Only" "HPKP_report_only"
           hpkp_header+="$HEADERVALUE "
 
           # remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
@@ -1296,50 +1307,44 @@ run_more_flags() {
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
      fi
+
      pr_bold " Security headers             "
-     # convert spaces to | (for egrep)
-     egrep_pattern=$(echo "$good_flags2test $other_flags2test"| sed -e 's/ /|\^/g' -e 's/^/\^/g')
-     egrep -ai "$egrep_pattern" $HEADERFILE >$TMPFILE
-     if [[ $? -ne 0 ]]; then
-          outln "--"
-          fileout "sec_headers" "WARN" "No security (or other interesting) headers detected"
-          ret=1
-     else
-          ret=0
-          for f2t in $good_flags2test; do
-               debugme echo "---> $f2t"
-               result_str=$(grep -wi "^$f2t" $TMPFILE | grep -vi "$f2t"-)
-               result_str=$(strip_lf "$result_str")
-               [[ -z "$result_str" ]] && continue
+     for f2t in $good_flags2test; do
+          debugme echo "---> $f2t"
+          detect_header $f2t $f2t
+          if [[ $? -ge 1 ]]; then
                if ! "$first"; then
                     out "$spaces"  # output leading spaces if the first header
                else
                     first=false
                fi
-               # extract and print key(=flag) in green:
-               pr_done_good "${result_str%%:*}:"
-               #pr_done_good "$(sed 's/:.*$/:/' <<< "$result_str")"
-               # print value in plain text:
-               outln "${result_str#*:}"
-               fileout "${result_str%%:*}" "OK" "${result_str%%:*}: ${result_str#*:}"
-          done
-          # now the same with other flags
-          for f2t in $other_flags2test; do
-               result_str=$(grep -i "^$f2t" $TMPFILE)
-               [[ -z "$result_str" ]] && continue
-               if ! $first; then
+               pr_done_good "$f2t"; outln "$HEADERVALUE"
+               fileout "$f2t" "OK" "$f2t: $HEADERVALUE"
+          fi
+     done
+
+     for f2t in $other_flags2test; do
+          debugme echo "---> $f2t"
+          detect_header $f2t $f2t
+          if [[ $? -ge 1 ]]; then
+               if ! "$first"; then
                     out "$spaces"  # output leading spaces if the first header
                else
                     first=false
                fi
-               # extract and print key(=flag) underlined
-               pr_litecyan "${result_str%%:*}:"
-               # print value in plain text:
-               outln "${result_str#*:}"
-               fileout "${result_str%%:*}" "WARN" "${result_str%%:*}: ${result_str#*:}"
-          done
+               pr_litecyan "$f2t"; outln "$HEADERVALUE"
+               fileout "$f2t" "WARN" "$f2t: $HEADERVALUE"
+          fi
+     done 
+     #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall" or Access-Control-Allow-Origin: *
+
+     if "$first"; then
+          pr_svrty_mediumln "--"
+          fileout "sec_headers" "MEDIUM" "No security (or other interesting) headers detected"
+          ret=1
+     else
+          ret=0
      fi
-#TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
 
      tmpfile_handle $FUNCNAME.txt
      return $ret
@@ -8886,4 +8891,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.554 2016/10/02 16:15:12 dirkw Exp $
+#  $Id: testssl.sh,v 1.555 2016/10/03 16:52:47 dirkw Exp $
