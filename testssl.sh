@@ -369,6 +369,7 @@ pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m"; }
 pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off; }
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_italic()       { [[ "$COLOR" -ne 0 ]] && out "\033[3m$1" || out "$1"; pr_off; }
+pr_italicln()     { pr_italic "$1" ; outln; }
 pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "\033[4m$1" || out "$1"; pr_off; }
 pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off; }
 pr_reverse_bold() { [[ "$COLOR" -ne 0 ]] && out "\033[7m\033[1m$1" || out "$1"; pr_off; }
@@ -535,7 +536,7 @@ colon_to_spaces() {
 }
 
 strip_lf() {
-     echo "$1" | tr -d '\n' | tr -d '\r'
+     tr -d '\n' <<< "$1" | tr -d '\r'
 }
 
 strip_spaces() {
@@ -962,13 +963,15 @@ run_hpkp() {
      local -i hpkp_age_sec
      local -i hpkp_age_days
      local -i hpkp_nr_keys
-     local hpkp_key hpkp_key_hostcert
-     local -a backup_keys
+     local hpkp_spki hpkp_spki_hostcert
+     local -a backup_spki
      local spaces="                             "
-     local key_found=false
+     local spaces_indented="                  "
+     local certificate_found=false
      local i
      local hpkp_headers
      local first_hpkp_header
+     local spki
      local ca_hashes="$INSTALL_DIR/etc/ca_hashes.txt"
 
      if [[ ! -s $HEADERFILE ]]; then
@@ -992,7 +995,7 @@ run_hpkp() {
                out "\n$spaces Examining first one: "
                first_hpkp_header=$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1)
                pr_italic "$first_hpkp_header, "
-               fileout "hpkp_multiple" "WARN" "Multiple HPKP headershpkp_headers. Using first header: $first_hpkp_header"
+               fileout "hpkp_multiple" "WARN" "Multiple HPKP headers $hpkp_headers. Using first header: $first_hpkp_header"
           fi
 
           # remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
@@ -1003,13 +1006,13 @@ run_hpkp() {
           tr ' ' '\n' < $TMPFILE.2 >$TMPFILE
 
           hpkp_nr_keys=$(grep -ac pin-sha $TMPFILE)
-          out "# of keys: "
           if [[ $hpkp_nr_keys -eq 1 ]]; then
-               pr_svrty_high "1 (NOT ok), "
-               fileout "hpkp_keys" "HIGH" "Only one key pinned in HPKP header, this means the site may become unavailable if the key is revoked"
+               pr_svrty_high "1 key (NOT ok), "
+               fileout "hpkp_spkis" "HIGH" "Only one key pinned in HPKP header, this means the site may become unavailable if the key is revoked"
           else
-               out "$hpkp_nr_keys, "
-               fileout "hpkp_keys" "OK" "$hpkp_nr_keys keys pinned in HPKP header, additional keys are available if the current key is revoked"
+               pr_done_good "$hpkp_nr_keys"
+               out " keys, "
+               fileout "hpkp_spkis" "OK" "$hpkp_nr_keys keys pinned in HPKP header, additional keys are available if the current key is revoked"
           fi
 
           # print key=value pair with awk, then strip non-numbers, to be improved with proper parsing of key-value with awk
@@ -1035,9 +1038,9 @@ run_hpkp() {
                fileout "hpkp_preload" "INFO" "HPKP header is NOT marked for browser preloading"
           fi
 
-          # Get the spki first
+          # Get the SPKIs first
           spki=$(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
-
+          debugme outln "\n$spki"
 
           # Look at the host certificate first
           # get the key fingerprint from the host certificate
@@ -1045,7 +1048,7 @@ run_hpkp() {
                get_host_cert || return 1
           fi
 
-          hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
+          hpkp_spki_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
                $OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
           hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
 
@@ -1061,106 +1064,122 @@ run_hpkp() {
           nrsaved=$(count_words "$(echo $TEMPDIR/level?.crt 2>/dev/null)")
           rm $TEMPDIR/level0.crt 2>/dev/null
 
-          echo -n > "$TEMPDIR/intermediate.hashes"
+          printf ""> "$TEMPDIR/intermediate.hashes"
           if [[ nrsaved -ge 2 ]]; then
                for cert_fname in $TEMPDIR/level?.crt; do
-                    hpkp_key_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | $OPENSSL base64 -d |
+                    hpkp_spki_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | $OPENSSL base64 -d |
                          $OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
                     hpkp_name="$(get_cn_from_cert $cert_fname)"
                     hpkp_ca="$($OPENSSL x509 -in $cert_fname -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
                     [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout | sed 's/^subject= //') 
-                    echo "$hpkp_key_ca $hpkp_name" >> "$TEMPDIR/intermediate.hashes"
+                    echo "$hpkp_spki_ca $hpkp_name" >> "$TEMPDIR/intermediate.hashes"
                done
           fi
 
-          # This is where the matching magic happens...
+          # This is where the matching magic starts, first host certificate, intermediate, then root out of the stores
           spki_match=false
           has_backup_spki=false
           i=0
-          for hpkp_key in $spki; do
-               key_found=false
-               # compare spki against the host certificate
-               if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
-                    # We have a match
-                    key_found=true
+          for hpkp_spki in $spki; do
+               certificate_found=false
+               # compare collected SPKIs against the host certificate
+               if [[ "$hpkp_spki_hostcert" == "$hpkp_spki" ]] || [[ "$hpkp_spki_hostcert" == "$hpkp_spki=" ]]; then
+                    certificate_found=true       # We have a match
                     spki_match=true
-                    out "\n$spaces Host cert match: "
-                    pr_done_good "$hpkp_key"
-                    fileout "hpkp_$hpkp_key" "OK" "SPKI $hpkp_key matches the host certificate"
+                    out "\n$spaces_indented Host cert: "
+                    pr_done_good "$hpkp_spki"
+                    fileout "hpkp_$hpkp_spki" "OK" "SPKI $hpkp_spki matches the host certificate"
                fi
-               debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
+               debugme out "\n  $hpkp_spki | $hpkp_spki_hostcert"
 
                # Check for intermediate match
-               if ! $key_found; then
-                    hpkp_matches=$(grep "$hpkp_key" $TEMPDIR/intermediate.hashes 2>/dev/null)
-                    if [[ -n $hpkp_matches ]]; then
+               if ! "$certificate_found"; then
+                    hpkp_matches=$(grep "$hpkp_spki" $TEMPDIR/intermediate.hashes 2>/dev/null)
+                    if [[ -n $hpkp_matches ]]; then    # hpkp_matches + hpkp_spki + '='
                          # We have a match
-                         key_found=true
+                         certificate_found=true
                          spki_match=true
-                         out "\n$spaces Sub CA match:    "
-                         pr_done_good "$hpkp_key"
-                         out "\n$spaces \"$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< $"$hpkp_matches" )\""
-                         fileout "hpkp_$hpkp_key" "OK" "Intermediate CA matches a key pinned in the HPKP header. Key/CA: $hpkp_matches"
+                         out "\n$spaces_indented Sub CA:    "
+                         pr_done_good "$hpkp_spki"
+                         ca_cn="$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< $"$hpkp_matches" )"
+                         pr_italic " $ca_cn"
+                         fileout "hpkp_$hpkp_spki" "OK" "SPKI $hpkp_spki matches Intermediate CA \"$ca_cn\" pinned in the HPKP header"
                     fi
                fi
 
-               if ! $key_found; then
-                    # we compare now against a precompiled list of SPKIs against the ROOT CAs we have!
-                    hpkp_matches=$(grep -h "$hpkp_key" $ca_hashes | sort -u)
+               # we compare now against a precompiled list of SPKIs against the ROOT CAs we have in $ca_hashes
+               if ! "$certificate_found"; then
+                    hpkp_matches=$(grep -h "$hpkp_spki" $ca_hashes | sort -u)
                     if [[ -n $hpkp_matches ]]; then
-                         key_found=true
+                         certificate_found=true      # root CA found
                          spki_match=true
                          if [[ $(count_lines "$hpkp_matches") -eq 1 ]]; then
+                              # replace by awk 
                               match_ca=$(sed "s/[a-zA-Z0-9\+\/]*=* *//" <<< "$hpkp_matches")
                          else
                               match_ca=""
+
                          fi
-                         out "\n\n$spaces Root CA match:   "
-                         pr_done_good "$hpkp_key"
-                         echo "$hpkp_matches"|sort -u|while read line; do
-                              out "\n$spaces \"$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< "$line")\""
-                         done
-                         if [[ $match_ca == $hpkp_ca ]]; then
-                              out " (part of the chain)"
-                              fileout "hpkp_$hpkp_key" "INFO" "Root CA matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is part of the chain"
-                         else
-                              has_backup_spki=true
-                              out " -- not part of chain, probable backup key"
-                              fileout "hpkp_$hpkp_key" "INFO" "Root CA matches a key pinned in the HPKP header. Key/OS/CA: $hpkp_matches. The CA is not part of the chain, this is a backup SPKI"
+                         ca_cn="$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< $"$hpkp_matches" )"
+                         if [[ "$match_ca" == "$hpkp_ca" ]]; then          # part of the chain
+                              out "\n$spaces_indented Root CA:   "
+                              pr_done_good "$hpkp_spki"
+                              pr_italic " $ca_cn"
+                              fileout "hpkp_$hpkp_spki" "INFO" "SPKI $hpkp_spki matches Root CA \"$ca_cn\" pinned in the HPKP header. (Root CA part of the chain)"
+                         else                                              # not part of chain
+                              match_ca=""
+                              has_backup_spki=true                         # Root CA outside the chain --> we save it for unmatched
+                              fileout "hpkp_$hpkp_spki" "INFO" "SPKI $hpkp_spki matches Root CA \"$ca_cn\" pinned in the HPKP header. (Root backup SPKI)"
+                              backup_spki[i]="$(strip_lf "$hpkp_spki")"    # save it for later
+                              backup_spki_str[i]="$ca_cn"                  # also the name=CN of the root CA
+                              i=$((i + 1))
                          fi
                     fi
                fi
 
-               if ! $key_found; then
+               # still no success --> it's probably a backup SPKI
+               if ! "$certificate_found"; then
                     # Most likely a backup SPKI, unfortunately we can't tell for what it is: host, intermediates
                     has_backup_spki=true
-                    backup_keys[i]="$hpkp_key"
+                    backup_spki[i]="$(strip_lf "$hpkp_spki")"     # save it for later
+                    backup_spki_str[i]=""                        # no root ca 
                     i=$((i + 1))
-                    fileout "hpkp_$hpkp_key" "INFO" "SPKI $hpkp_key doesn't match anything. This is ok for a backup for any certificate"
-                    # CVS/JSON output here for the sake of simplicity, rest we do en bloc below
+                    fileout "hpkp_$hpkp_spki" "INFO" "SPKI $hpkp_spki doesn't match anything. This is ok for a backup for any certificate"
+                    # CSV/JSON output here for the sake of simplicity, rest we do en bloc below
                fi
           done 
 
-          if [[ $i -eq 1 ]]; then
-               out "\n$spaces Unmatched SPKI:  "
-               outln "${backup_keys[0]}"
+          # now print every backup spki out we saved before
+          out "\n$spaces_indented Backups:   "
+
+          # for i=0 manually do the same as below as there's other indentation here
+          if [[ -n "${backup_spki_str[0]}" ]]; then
+               pr_done_good "${backup_spki[0]}"
+               #out " Root CA: "
+               pr_italicln " ${backup_spki_str[0]}"
           else
-               out "\n\n$spaces Unmatched SPKIs: "
-               outln "${backup_keys[0]}"
-               for ((i=1; i <= ${#backup_keys[@]} ;i++ )); do
-                    outln "$spaces                  ${backup_keys[i]}"
-               done
+               outln "${backup_spki[0]}"
           fi
-          # OK for SPKI backup of host or different intermediate certificate is ok!
+          # now for i=1
+          for ((i=1; i < ${#backup_spki[@]} ;i++ )); do
+               if [[ -n "${backup_spki_str[i]}" ]]; then
+                    # it's a Root CA outside the chain
+                    pr_done_good "$spaces_indented            ${backup_spki[i]}"
+                    #out " Root CA: "
+                    pr_italicln " ${backup_spki_str[i]}"
+               else
+                    outln "$spaces_indented            ${backup_spki[i]}"
+               fi
+          done
 
           # If all else fails...
-          if ! $spki_match; then
+          if ! "$spki_match"; then
                "$has_backup_spki" && out "$spaces"       # we had a few lines with backup SPKIs already
                pr_svrty_highln " No matching key for SPKI found "
-               fileout "hpkp_keymatch" "HIGH" "None of the HPKP SPKI match your host certificate, intermediate CA or known root CAs. You may have bricked this site"
+               fileout "hpkp_spkimatch" "HIGH" "None of the SPKI match your host certificate, intermediate CA or known root CAs. You may have bricked this site"
           fi
 
-          if ! $has_backup_spki; then
+          if ! "$has_backup_spki"; then
                pr_svrty_highln " No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site. "
                fileout "hpkp_backup" "HIGH" "No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site."
           fi               
