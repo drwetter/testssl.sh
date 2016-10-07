@@ -641,6 +641,38 @@ else
 	}
 fi
 
+# arg1: An ASCII-HEX string
+# arg2: file name
+# Append $arg1 in binary format to $arg2
+asciihex_to_binary_file(){
+     local string="$1"
+     local file="$2"
+     local -i len
+     local -i i ip2 ip4 ip6 ip8 ip10 ip12 ip14
+     local -i remainder
+
+     len=${#string}
+     [[ $len%2 -ne 0 ]] && return 1
+
+     for (( i=0; i <= len-16 ; i=i+16 )); do
+          ip2=$i+2; ip4=$i+4; ip6=$i+6; ip8=$i+8; ip10=$i+10; ip12=$i+12; ip14=$i+14
+          echo -e -n "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}\x${string:ip14:2}" >> "$file"
+     done
+
+     ip2=$i+2; ip4=$i+4; ip6=$i+6; ip8=$i+8; ip10=$i+10; ip12=$i+12; ip14=$i+14
+     remainder=$len-$i
+     case $remainder in
+           2) echo -e -n "\x${string:i:2}" >> "$file" ;;
+           4) echo -e -n "\x${string:i:2}\x${string:ip2:2}" >> "$file" ;;
+           6) echo -e -n "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}" >> "$file" ;;
+           8) echo -e -n "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}" >> "$file" ;;
+          10) echo -e -n "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}" >> "$file" ;;
+          12) echo -e -n "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}" >> "$file" ;;
+          14) echo -e -n "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}" >> "$file" ;;
+     esac
+     return 0
+}
+
 ###### check code starts here ######
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
@@ -5416,8 +5448,114 @@ sockread_serverhello() {
      return $?
 }
 
+get_pub_key_size() {
+     local pubkey pubkeybits
+     local -i i len1 len
+     local tmppubkeyfile
+
+     # OpenSSL displays the number of bits for RSA and ECC
+     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -text | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
+     if [[ -n $pubkeybits ]]; then
+          echo "Server public key is $pubkeybits" >> $TMPFILE
+     else
+          # This extracts the public key for DSA, DH, and GOST
+          tmppubkeyfile=$(mktemp $TEMPDIR/pubkey.XXXXXX) || return 7
+          $OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -outform DER -out "$tmppubkeyfile"
+          pubkey=$(hexdump -v -e '16/1 "%02X"' "$tmppubkeyfile")
+          rm $tmppubkeyfile
+          # Skip over tag and length of subjectPublicKeyInfo
+          i=2
+          len1="0x${pubkey:i:2}"
+          if [[ $len1 -lt 0x80 ]]; then
+               i=$i+2
+          else
+               len1=$len1-0x80
+               i=$i+2*$len1+2
+          fi
+
+          # Skip over algorithm field
+          i=$i+2
+          len1="0x${pubkey:i:2}"
+          i=$i+2
+          if [[ $len1 -lt 0x80 ]]; then
+               i=$i+2*$len1
+          else
+               case $len1 in
+                    129) len="0x${pubkey:i:2}" ;;
+                    130) len="0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*$len+"0x${pubkey:i:2}"
+                        ;;
+                    131) len="0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*$len+"0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*$len+"0x${pubkey:i:2}"
+                        ;;
+                    132) len="0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*$len+"0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*$len+"0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*$len+"0x${pubkey:i:2}"
+                        ;;
+               esac
+               i=$i+2+2*$len
+          fi
+
+          # Next is the public key BIT STRING. Skip over tag, length, and number of unused bits.
+          i=$i+2
+          len1="0x${pubkey:i:2}"
+          if [[ $len1 -lt 0x80 ]]; then
+               i=$i+4
+          else
+               len1=$len1-0x80
+               i=$i+2*$len1+4
+          fi
+
+          # Now get the length of the public key
+          i=$i+2
+          len1="0x${pubkey:i:2}"
+          i=$i+2
+          if [[ $len1 -lt 0x80 ]]; then
+               len=$len1
+          else
+               case $len1 in
+                    129) len="0x${pubkey:i:2}" ;;
+                    130) len="0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*$len+"0x${pubkey:i:2}"
+                        ;;
+                    131) len="0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*$len+"0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*$len+"0x${pubkey:i:2}"
+                        ;;
+                    132) len="0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*"0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*"0x${pubkey:i:2}"
+                        i=$i+2
+                        len=256*"0x${pubkey:i:2}"
+                        ;;
+               esac
+          fi
+          len=8*$len # convert from bytes to bits
+          pubkeybits="$(printf "%d" $len)"
+          echo "Server public key is $pubkeybits bit" >> $TMPFILE
+     fi
+}
+
 # arg1: name of file with socket reply
+# arg2: true if entire server hello should be parsed
 parse_sslv2_serverhello() {
+     local ret v2_hello_ascii v2_hello_initbyte v2_hello_length
+     local v2_hello_handshake v2_cert_type v2_hello_cert_length
+     local v2_hello_cipherspec_length tmp_der_certfile
+     local -i certificate_len nr_ciphers_detected offset i
      # server hello:                                             in hex representation, see below
      # byte 1+2: length of server hello                          0123
      # 3:        04=Handshake message, server hello              45
@@ -5432,6 +5570,9 @@ parse_sslv2_serverhello() {
      # [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
 
      local ret=3
+     if [[ "$2" == "true" ]]; then
+          echo "======================================" > $TMPFILE
+     fi
 
      v2_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
      [[ "$DEBUG" -ge 5 ]] && echo "$v2_hello_ascii"
@@ -5443,6 +5584,7 @@ parse_sslv2_serverhello() {
           v2_hello_initbyte="${v2_hello_ascii:0:1}"  # normally this belongs to the next, should be 8!
           v2_hello_length="${v2_hello_ascii:1:3}"    # + 0x8000 see above
           v2_hello_handshake="${v2_hello_ascii:4:2}"
+          v2_cert_type="${v2_hello_ascii:8:2}"
           v2_hello_cert_length="${v2_hello_ascii:14:4}"
           v2_hello_cipherspec_length="${v2_hello_ascii:18:4}"
 
@@ -5460,9 +5602,35 @@ parse_sslv2_serverhello() {
 
           if [[ $DEBUG -ge 3 ]]; then
                echo "SSLv2 server hello length: 0x0$v2_hello_length"
+               echo "SSLv2 certificate type:    0x$v2_cert_type"
                echo "SSLv2 certificate length:  0x$v2_hello_cert_length"
                echo "SSLv2 cipher spec length:  0x$v2_hello_cipherspec_length"
           fi
+     fi
+     
+     certificate_len=2*$(hex2dec "$v2_hello_cert_length")
+     [[ -e $HOSTCERT ]] && rm $HOSTCERT
+     [[ -e $TEMPDIR/intermediatecerts.pem ]] && rm $TEMPDIR/intermediatecerts.pem
+     if [[ "$2" == "true" ]] && [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
+          tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return $ret
+          asciihex_to_binary_file "${v2_hello_ascii:26:certificate_len}" "$tmp_der_certfile"
+          $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT
+          rm $tmp_der_certfile
+          get_pub_key_size
+          echo "======================================" >> $TMPFILE
+     fi
+
+     # Output list of supported ciphers
+     if [[ "$2" == "true" ]]; then
+          let offset=26+$certificate_len
+          nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
+          for (( i=0 ; i<nr_ciphers_detected; i++ )); do
+               echo "Supported cipher: x$(echo ${v2_hello_ascii:offset:6} |  tr 'A-Z' 'a-z')" >> $TMPFILE
+               let offset=$offset+6
+          done
+          echo "======================================" >> $TMPFILE
+     
+          tmpfile_handle $FUNCNAME.txt
      fi
      return $ret
 }
@@ -5751,6 +5919,7 @@ parse_tls_serverhello() {
 
 
 #arg1: list of ciphers suites or empty
+#arg2: "true" if full server response should be parsed.
 sslv2_sockets() {
      local ret
      local client_hello cipher_suites len_client_hello
@@ -5801,7 +5970,7 @@ sslv2_sockets() {
           outln
      fi
 
-     parse_sslv2_serverhello "$SOCK_REPLY_FILE"
+     parse_sslv2_serverhello "$SOCK_REPLY_FILE" "$2"
      ret=$?
 
      close_socket
@@ -9160,7 +9329,7 @@ lets_roll() {
      determine_rdns
      determine_service "$1"        # any starttls service goes here
 
-     $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets; echo "$?" ; exit 0; }
+     $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit 0; }
      $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
      $do_test_just_one && test_just_one ${single_cipher}
 
