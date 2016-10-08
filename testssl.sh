@@ -3847,7 +3847,7 @@ determine_trust() {
      if [[ -z $CA_BUNDLES_PATH ]]; then
           ca_bundles="$TESTSSL_INSTALL_DIR/etc/*.pem"
      else
-          ca_bundles="${CA_BUNDLES_PATH/*.pem}"
+          ca_bundles="$CA_BUNDLES_PATH/*.pem"
      fi
 	for bundle_fname in $ca_bundles; do
 		certificate_file[i]=$(basename ${bundle_fname//.pem})
