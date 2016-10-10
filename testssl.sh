@@ -6461,9 +6461,13 @@ run_renego() {
                echo R | $OPENSSL s_client $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $addcmd $PROXY >$TMPFILE 2>>$ERRFILE
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case "$sec_client_renego" in
-                    0)
-                         pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
-                         fileout "sec_client_renego" "NOT ok" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), DoS threat"
+                    0)   if [[ $SERVICE == "HTTP" ]]; then
+                              pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
+                              fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), DoS threat"
+                         else
+                              pr_svrty_medium "VULNERABLE (NOT ok)"; outln ", potential DoS threat"
+                              fileout "sec_client_renego" "MEDIUM" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), potential DoS threat"
+                         fi
                          ;;
                     1)
                          pr_done_goodln "not vulnerable (OK)"
@@ -6471,7 +6475,7 @@ run_renego() {
                          ;;
                     *)
                          pr_warningln "FIXME (bug): $sec_client_renego"
-                         fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report"
+                         fileout "sec_client_renego" "DEBUG" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report"
                          ;;
                esac
           fi
@@ -8892,4 +8896,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.556 2016/10/03 19:17:28 dirkw Exp $
+#  $Id: testssl.sh,v 1.557 2016/10/10 21:27:33 dirkw Exp $
