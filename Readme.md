@@ -108,6 +108,9 @@ respective projects
 #### Cool web frontend
 * https://github.com/TKCERT/testssl.sh-webfrontend
 
+#### mass scanner w parallel scans and elastic searching the results
+* https://github.com/TKCERT/testssl.sh-masscan
+
 #### Ready-to-go docker images are available at:
 * https://quay.io/repository/jumanjiman/testssl
 * https://hub.docker.com/r/mvance/testssl/
