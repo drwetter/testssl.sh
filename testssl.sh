@@ -143,7 +143,7 @@ SHOW_SIGALGO=${SHOW_SIGALGO:-false}     # "secret" switch whether testssl.sh sho
 SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave behind just usual?
 QUIET=${QUIET:-false}                   # don't output the banner. By doing this yiu acknowledge usage term appearing in the banner
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
-ASSUMING_HTTP=${ASSUMING_HTTP:-false}   # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
+ASSUME_HTTP=${ASSUME_HTTP:-false}       # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
 DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ are kept for further debugging purposes
                                         # 2: list more what's going on , also lists some errors of connections
@@ -251,7 +251,6 @@ TLS_NOW=""
 NOW_TIME=""
 HTTP_TIME=""
 GET_REQ11=""
-HEAD_REQ10=""
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
 FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
@@ -657,7 +656,7 @@ fi
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 # arg1 could be the protocol determined as "working". IIS6 needs that
-runs_HTTP() {
+service_detection() {
      local -i ret=0
      local -i was_killed
      local addcmd=""
@@ -693,10 +692,10 @@ runs_HTTP() {
                     fileout "client_auth" "INFO" "certificate based authentication => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
-                    if $ASSUMING_HTTP; then
+                    if "$ASSUME_HTTP"; then
                          SERVICE=HTTP
-                         out " -- ASSUMING_HTTP set though"
-                         fileout "service" "DEBUG" "Couldn't determine service, --ASSUMING_HTTP set"
+                         out " -- ASSUME_HTTP set though"
+                         fileout "service" "DEBUG" "Couldn't determine service, --ASSUME_HTTP set"
                          ret=0
                     else
                          out ", assuming no HTTP service => skipping all HTTP checks"
@@ -5128,7 +5127,7 @@ run_pfs() {
 
 
 spdy_pre(){
-     if [[ -n "$STARTTLS" ]]; then
+     if [[ -n "$STARTTLS" ]] || [[ "$SERVICE" != HTTP ]]; then
           [[ -n "$1" ]] && out "$1"
           out "(SPDY is an HTTP protocol and thus not tested here)"
           fileout "spdy_npn" "INFO" "SPDY/NPN : (SPY is an HTTP protocol and thus not tested here)"
@@ -5149,7 +5148,7 @@ spdy_pre(){
 }
 
 http2_pre(){
-     if [[ -n "$STARTTLS" ]]; then
+     if [[ -n "$STARTTLS" ]] || [[ "$SERVICE" != HTTP ]]; then
           [[ -n "$1" ]] && out "$1"
           outln "(HTTP/2 is a HTTP protocol and thus not tested here)"
           fileout "https_alpn" "INFO" "HTTP2/ALPN : HTTP/2 is and HTTP protocol and thus not tested"
@@ -7418,7 +7417,7 @@ partly mandatory parameters:
 
 tuning options (can also be preset via environment variables):
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
-     --assuming-http               if protocol check fails it assumes HTTP protocol and enforces HTTP checks
+     --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
      --proxy <host>:<port>         connect via the specified HTTP proxy
@@ -7520,7 +7519,7 @@ HAS_SED_E: $HAS_SED_E
 
 SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
-ASSUMING_HTTP $ASSUMING_HTTP
+ASSUME_HTTP $ASSUME_HTTP
 SNEAKY: $SNEAKY
 
 DEBUG: $DEBUG
@@ -8126,10 +8125,10 @@ determine_service() {
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
           GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
-          GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
-          runs_HTTP $OPTIMAL_PROTO
+          #HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+          #GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
+          #HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+          service_detection $OPTIMAL_PROTO
      else
           # STARTTLS
           protocol=${1%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
@@ -8599,7 +8598,7 @@ parse_cmd_line() {
                     WIDE=true
                     ;;
                --assuming[_-]http|--assume[-_]http)
-                    ASSUMING_HTTP=true
+                    ASSUME_HTTP=true
                     ;;
                --sneaky)
                     SNEAKY=true
@@ -8896,4 +8895,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.557 2016/10/10 21:27:33 dirkw Exp $
+#  $Id: testssl.sh,v 1.558 2016/10/11 20:30:29 dirkw Exp $
