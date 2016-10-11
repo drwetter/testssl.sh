@@ -2964,7 +2964,6 @@ run_protocols() {
      local latest_supported=""  # version.major and version.minor of highest version supported by the server.
      local detected_version_string latest_supported_string
      local lines nr_ciphers_detected
-     local extra_spaces="         "
 
      outln; pr_headline " Testing protocols "
 
@@ -2986,7 +2985,7 @@ run_protocols() {
      fi
      outln
 
-     pr_bold " SSLv2      $extra_spaces";
+     pr_bold " SSLv2      ";
      if ! "$SSL_NATIVE"; then
           sslv2_sockets
           case $? in
@@ -3045,7 +3044,7 @@ run_protocols() {
           esac
      fi
 
-     pr_bold " SSLv3      $extra_spaces";
+     pr_bold " SSLv3      ";
      if "$using_sockets"; then
           tls_sockets "00" "$TLS_CIPHER"
      else
@@ -3084,7 +3083,7 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
-     pr_bold " TLS 1      $extra_spaces";
+     pr_bold " TLS 1      ";
      if "$using_sockets"; then
           tls_sockets "01" "$TLS_CIPHER"
      else
@@ -3133,7 +3132,7 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
-     pr_bold " TLS 1.1    $extra_spaces";
+     pr_bold " TLS 1.1    ";
      if "$using_sockets"; then
           tls_sockets "02" "$TLS_CIPHER"
      else
@@ -3185,7 +3184,7 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
-     pr_bold " TLS 1.2    $extra_spaces";
+     pr_bold " TLS 1.2    ";
      if "$using_sockets" && "$EXPERIMENTAL"; then               #TODO: IIS servers do have a problem here with our handshake
           tls_sockets "03" "$TLS12_CIPHER"
      else
@@ -3239,55 +3238,6 @@ run_protocols() {
                fileout "tls1_2" "INFO" "TLSv1.2 is not tested due to lack of local support"
                ;;                                                            # no local support
      esac
-
-     # Testing version negotiation. RFC 5246, Appendix E.1, states:
-     #
-     #    If a TLS server receives a ClientHello containing a version number
-     #    greater than the highest version supported by the server, it MUST
-     #    reply according to the highest version supported by the server.
-     if [[ -n $latest_supported ]] && "$using_sockets"; then
-          pr_bold " Version tolerance   "
-          tls_sockets "05" "$TLS12_CIPHER"
-          case $? in
-               0) 
-                    pr_svrty_criticalln "server claims support for non-existent TLSv1.4"
-                    fileout "TLS Version Negotiation" "NOT ok" "Server claims support for non-existent TLSv1.4 (NOT ok)"
-                    ;;
-               1)
-                    pr_svrty_criticalln "version negotiation did not work -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
-                    fileout "TLS Version Negotiation" "NOT ok" "Version negotiation did not work -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
-                    ;;
-               2)
-                    case $DETECTED_TLS_VERSION in
-                         0304)
-                                 pr_svrty_criticalln "server claims support for TLSv1.3, which is still a working draft (NOT ok)"
-                                 fileout "TLS Version Negotiation" "NOT ok" "Server claims support for TLSv1.3, which is still a working draft (NOT ok)"
-                                 ;;
-                         0303|0302|0301|0300)
-                                 if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
-                                      detected_version_string="SSLv3"
-                                 else
-                                      detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
-                                 fi
-                                 if [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
-                                      pr_svrty_criticalln "server supports $latest_supported_string, but downgraded to $detected_version_string (NOT ok)"
-                                      fileout "TLS Version Negotiation" "NOT ok" "Downgraded to $detected_version_string rather than $latest_supported_string (NOT ok)"
-                                 else
-                                      pr_done_bestln "downgraded to $detected_version_string (OK)"
-                                      fileout "TLS Version Negotiation" "OK" "Downgraded to $detected_version_string"
-                                 fi
-                                 ;;
-                         *)
-                                 pr_svrty_criticalln "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                                 fileout "TLS Version Negotiation" "NOT ok" "TLSv1.4: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                                 ;;
-                    esac ;;
-               5)
-                    pr_svrty_criticalln "server claims support for non-existent TLSv1.4 (NOT ok)"
-                    fileout "TLS Version Negotiation" "NOT ok" "Server claims support for non-existent TLSv1.4 (NOT ok)"
-                    ;;
-          esac
-     fi
      return 0
 }
 
@@ -5172,9 +5122,8 @@ http2_pre(){
 run_spdy() {
      local tmpstr
      local -i ret=0
-     local extra_spaces="         "
 
-     pr_bold " SPDY/NPN   $extra_spaces"
+     pr_bold " SPDY/NPN   "
      if ! spdy_pre ; then
           outln
           return 0
@@ -5211,9 +5160,8 @@ run_http2() {
      local -i ret=0
      local had_alpn_proto=false
      local alpn_finding=""
-     local extra_spaces="         "
 
-     pr_bold " HTTP2/ALPN $extra_spaces"
+     pr_bold " HTTP2/ALPN "
      if ! http2_pre ; then
           outln
           return 0
