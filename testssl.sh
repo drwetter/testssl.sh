@@ -3019,7 +3019,6 @@ run_protocols() {
                          fi
                     fi ;;
           esac
-          pr_off
           debugme outln
      else
           run_prototest_openssl "-ssl2"
