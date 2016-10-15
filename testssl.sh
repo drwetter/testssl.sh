@@ -463,7 +463,15 @@ fileout_header() {
           else
                "$do_json" && printf "[\n" > "$JSONFILE"
           fi
-          "$do_csv" && [[ ! -f "CSVFILE" ]] && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+          if "$do_csv"; then
+               if [[ -f "$CSVFILE" ]]; then
+                    # add lf, just for overview
+                    echo >> "$CSVFILE"
+               else
+                    # create file, with headline
+                    echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+               fi
+          fi
      else
           "$do_json" && printf "[\n" > "$JSONFILE"
           "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
