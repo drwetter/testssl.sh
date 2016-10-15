@@ -474,7 +474,15 @@ fileout_header() {
           else
                "$do_json" && printf "[\n" > "$JSONFILE"
           fi
-          "$do_csv" && [[ ! -f "CSVFILE" ]] && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+          if "$do_csv"; then
+               if [[ -f "$CSVFILE" ]]; then
+                    # add lf, just for overview
+                    echo >> "$CSVFILE"
+               else
+                    # create file, with headline
+                    echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+               fi
+          fi
      else
           "$do_json" && printf "[\n" > "$JSONFILE"
           "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
@@ -8894,4 +8902,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.558 2016/10/11 20:30:29 dirkw Exp $
+#  $Id: testssl.sh,v 1.559 2016/10/15 20:55:22 dirkw Exp $
