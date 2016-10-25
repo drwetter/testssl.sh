@@ -5643,10 +5643,98 @@ parse_sslv2_serverhello() {
      return $ret
 }
 
+# Return 0 if arg1 contains the entire server response, 1 if it does not, and 2 if the response is malformed.
+# Return 3 if the response version is TLS 1.3 and the entire ServerHello has been received, since any remaining
+# portion of the response will be encrypted.
+# arg1: ASCII-HEX encoded reply
+check_tls_serverhellodone() {
+     local tls_hello_ascii="$1"
+     local tls_handshake_ascii="" tls_alert_ascii=""
+     local -i i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len
+     local -i msg_len remaining
+     local tls_content_type tls_protocol tls_handshake_type tls_msg_type
+     local tls_err_level
 
-# arg1: name of file with socket reply
+     DETECTED_TLS_VERSION=""
+
+     if [[ -z "$tls_hello_ascii" ]]; then
+          return 0              # no server hello received
+     fi
+
+     tls_hello_ascii_len=${#tls_hello_ascii}
+     for (( i=0; i<tls_hello_ascii_len; i=i+msg_len )); do
+          remaining=$tls_hello_ascii_len-$i
+          [[ $remaining -lt 10 ]] && return 1
+
+          tls_content_type="${tls_hello_ascii:i:2}"
+          [[ "$tls_content_type" != "15" ]] && [[ "$tls_content_type" != "16" ]] && \
+               [[ "$tls_content_type" != "17" ]] && return 2
+          i=$i+2
+          tls_protocol="${tls_hello_ascii:i:4}"
+          [[ -z "$DETECTED_TLS_VERSION" ]] && DETECTED_TLS_VERSION=$tls_protocol
+          [[ "${tls_protocol:0:2}" != "03" ]] && return 2
+          i=$i+4
+          msg_len=2*$(hex2dec "${tls_hello_ascii:i:4}")
+          i=$i+4
+          remaining=$tls_hello_ascii_len-$i
+          [[ $msg_len -gt $remaining ]] && return 1
+
+          if [[ "$tls_content_type" == "16" ]]; then
+               tls_handshake_ascii+="${tls_hello_ascii:i:msg_len}"
+               tls_handshake_ascii_len=${#tls_handshake_ascii}
+               # the ServerHello MUST be the first handshake message
+               [[ $tls_handshake_ascii_len -ge 2 ]] && [[ "${tls_handshake_ascii:0:2}" != "02" ]] && return 2
+               if [[ $tls_handshake_ascii_len -ge 12 ]]; then
+                    DETECTED_TLS_VERSION="${tls_handshake_ascii:8:4}"
+                    if [[ 0x"$DETECTED_TLS_VERSION" -ge "0x0304" ]]; then
+                         tls_handshake_ascii_len=2*$(hex2dec "${tls_handshake_ascii:2:6}")
+                         if [[ $tls_handshake_ascii_len+8 -gt $remaining ]]; then
+                              return 1 # Not all of the ServerHello message has been received
+                         else
+                              return 3
+                         fi
+                    fi
+               fi
+          elif [[ "$tls_content_type" == "15" ]]; then   # TLS ALERT
+               tls_alert_ascii+="${tls_hello_ascii:i:msg_len}"
+          fi
+     done
+
+     # If there is a fatal alert, then we are done.
+     tls_alert_ascii_len=${#tls_alert_ascii}
+     for (( i=0; i<tls_alert_ascii_len; i=i+4 )); do
+          remaining=$tls_alert_ascii_len-$i
+          [[ $remaining -lt 4 ]] && return 1
+          tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
+          [[ $tls_err_level == "02" ]] && DETECTED_TLS_VERSION="" && return 0
+     done
+
+     # If there is a serverHelloDone or Finished, then we are done.
+     tls_handshake_ascii_len=${#tls_handshake_ascii}
+     for (( i=0; i<tls_handshake_ascii_len; i=i+msg_len )); do
+          remaining=$tls_handshake_ascii_len-$i
+          [[ $remaining -lt 8 ]] && return 1
+          tls_msg_type="${tls_handshake_ascii:i:2}"
+          i=$i+2
+          msg_len=2*$(hex2dec "${tls_handshake_ascii:i:6}")
+          i=$i+6
+          remaining=$tls_handshake_ascii_len-$i
+          [[ $msg_len -gt $remaining ]] && return 1
+
+          # For SSLv3 - TLS1.2 look for a ServerHelloDone message.
+          # For TLS 1.3 look for a Finished message.
+          [[ $tls_msg_type == "0E" ]] && return 0
+          [[ $tls_msg_type == "14" ]] && return 0
+     done
+
+     # If we haven't encoountered a fatal alert or a server hello done,
+     # then there must be more data to retrieve.
+     return 1
+}
+
+# arg1: ASCII-HEX encoded reply
 parse_tls_serverhello() {
-     local tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$1")
+     local tls_hello_ascii="$1"
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
      local tls_serverhello_ascii=""
@@ -6204,12 +6292,18 @@ socksend_tls_clienthello() {
 
 # arg1: TLS version low byte
 #       (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
+# arg2: (optional) list of cipher suites
+# arg3: (optional): "all" - process full response (including Certificate and certificate_status handshake messages)
+#                   "ephemeralkey" - extract the server's ephemeral key (if any)
 tls_sockets() {
      local -i ret=0
      local -i save=0
      local lines
      local tls_low_byte
      local cipher_list_2send
+     local sock_reply_file2 sock_reply_file3
+     local tls_hello_ascii next_packet hello_done=0
+     local process_full="$3"
 
      tls_low_byte="$1"
      if [[ -n "$2" ]]; then             # use supplied string in arg2 if there is one
@@ -6230,14 +6324,67 @@ tls_sockets() {
      if [[ $ret -eq 0 ]]; then
           sockread_serverhello 32768
           TLS_NOW=$(LC_ALL=C date "+%s")
+          
+          tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+          tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
+
+          # The server's response may span more than one packet. So,
+          # check if response appears to be complete, and if it isn't
+          # then try to get another packet from the server.
+          if [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]]; then
+               check_tls_serverhellodone "$tls_hello_ascii"
+               hello_done=$?
+               [[ "$hello_done" -eq 3 ]] && process_full="ephemeralkey"
+          fi
+          for (( 1 ; hello_done==1; 1 )); do
+               sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+               mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+
+               debugme echo "requesting more server hello data..."
+               socksend "" $USLEEP_SND
+               sockread_serverhello 32768
+
+               next_packet=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+               next_packet="${next_packet%%[!0-9A-F]*}"
+               if [[ ${#next_packet} -eq 0 ]]; then
+                    # This shouldn't be necessary. However, it protects against
+                    # getting into an infinite loop if the server has nothing
+                    # left to send and check_tls_serverhellodone doesn't
+                    # correctly catch it.
+                    mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+                    hello_done=0
+               else
+                    tls_hello_ascii+="$next_packet"
+
+                    sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+                    mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
+                    mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+                    cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
+                    rm "$sock_reply_file3"
+
+                    check_tls_serverhellodone "$tls_hello_ascii"
+                    hello_done=$?
+                    [[ "$hello_done" -eq 3 ]] && process_full="ephemeralkey"
+               fi
+          done
+
           debugme outln "reading server hello..."
           if [[ "$DEBUG" -ge 4 ]]; then
                hexdump -C $SOCK_REPLY_FILE | head -6
                echo
           fi
 
-          parse_tls_serverhello "$SOCK_REPLY_FILE"
+          parse_tls_serverhello "$tls_hello_ascii" "$process_full"
           save=$?
+
+          if [[ $save == 0 ]]; then
+               debugme echo "sending close_notify..."
+               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+                    socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+               else
+                    socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+               fi
+          fi
 
           # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
           lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
@@ -9338,7 +9485,7 @@ lets_roll() {
      determine_service "$1"        # any starttls service goes here
 
      $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit 0; }
-     $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER"; echo "$?" ; exit 0; }
+     $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo "$?" ; exit 0; }
      $do_test_just_one && test_just_one ${single_cipher}
 
      # all top level functions  now following have the prefix "run_"
