@@ -1560,11 +1560,9 @@ rfc2openssl() {
 
 
 show_rfc_style(){
-     [[ -z "$ADD_RFC_STR" ]] && return 1
-     #[[ -z "$1" ]] && return 0
-
      local rfcname="" hexcode
      local -i i
+
      hexcode="$(toupper "$1")"
      case ${#hexcode} in
           3) hexcode="0x00,0x${hexcode:1:2}" ;;
@@ -1592,7 +1590,7 @@ neat_header(){
 # arg4: encryption (maybe included "export")
 neat_list(){
      local hexcode="$1"
-     local ossl_cipher="$2"
+     local ossl_cipher="$2" tls_cipher=""
      local kx enc strength
 
      kx="${3//Kx=/}"
@@ -1606,6 +1604,8 @@ neat_list(){
 
      echo "$export" | grep -iq export && strength="$strength,exp"
 
+     [[ -n "$ADD_RFC_STR" ]] && tls_cipher="$(show_rfc_style "$hexcode")"
+
      #printf -- "%q" "$kx" | xxd | head -1
      # length correction for color escape codes (printf counts the escape color codes!!)
      if printf -- "%q" "$kx" | egrep -aq '.;3.m|E\[1m' ; then     # here's a color code which screws up the formatting with printf below
@@ -1618,7 +1618,7 @@ neat_list(){
           done
      fi
      #echo "${#kx}"                            # should be always 20 / 13
-     printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$(show_rfc_style "$hexcode")"
+     printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher"
 }
 
 test_just_one(){
@@ -5897,9 +5897,9 @@ parse_tls_serverhello() {
      fi
      echo "===============================================================================" >> $TMPFILE
      if [[ "${tls_cipher_suite:0:2}" == "00" ]]; then
-          echo "Cipher    : $(strip_spaces $(show_rfc_style "x${tls_cipher_suite:2:2}"))" >> $TMPFILE
+          echo "Cipher    : $(show_rfc_style "x${tls_cipher_suite:2:2}")" >> $TMPFILE
      else
-          echo "Cipher    : $(strip_spaces $(show_rfc_style "x${tls_cipher_suite:0:4}"))" >> $TMPFILE
+          echo "Cipher    : $(show_rfc_style "x${tls_cipher_suite:0:4}")" >> $TMPFILE
      fi
      echo "===============================================================================" >> $TMPFILE
 
@@ -7396,7 +7396,7 @@ get_install_dir() {
           [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/mapping-rfc.txt"
      fi
 
-     [[ ! -r "$mapping_file_rfc" ]] && unset mapping_file_rfc && unset ADD_RFC_STR && pr_warningln "\nNo mapping file found"
+     [[ ! -r "$mapping_file_rfc" ]] && pr_warningln "\nNo mapping file found"
      debugme echo "$mapping_file_rfc"
 }
 
