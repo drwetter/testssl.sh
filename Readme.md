@@ -26,14 +26,16 @@ cryptographic flaws.
   going on and you can change it.
 * Heck, even the development is open (github)
 
-#### General
+#### Status
 
-Here in the master branch you find the stable version 2.8rc2 of the software, it 
-superseds 2.6. Version 2.8 is currently being finalized. The 2.9dev branch is the developemnet 
+_ _Here in the master branch you find the stable version 2.8rc2 of the software, it 
+superseds 2.6. Version 2.8 is currently being finalized_ _. The 2.9dev branch is the developement 
 -- with new  features  and maybe some bugs. For the stable version and **a
 more thorough description of the command line options** please see
 [testssl.sh](https://testssl.sh/ "Go to the site with the stable version
 and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation. 
+
+#### Compatibility
 
 testssl.sh is working on every Linux/BSD distribution out of the box with
 some limitations of disabled features from the openssl client -- some
