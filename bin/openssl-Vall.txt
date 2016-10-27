@@ -1,9 +1,9 @@
-openssl64-1.0.2pm-static ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
-177
-
-          0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305 TLSv1.2 Kx=ECDH     Au=ECDSA Enc=ChaCha20(256) Mac=AEAD
-          0xCC,0x13 - ECDHE-RSA-CHACHA20-POLY1305 TLSv1.2 Kx=ECDH     Au=RSA  Enc=ChaCha20(256) Mac=AEAD
-          0xCC,0x15 - DHE-RSA-CHACHA20-POLY1305 TLSv1.2 Kx=DH       Au=RSA  Enc=ChaCha20(256) Mac=AEAD
+dirks@laptop:~/git.testssl.sh/bin|0% ./openssl.Linux.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l     
+179
+dirks@laptop:~/git.testssl.sh/bin|0% ./openssl.Linux.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL'        
+          0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305-OLD TLSv1.2 Kx=ECDH     Au=ECDSA Enc=ChaCha20(256) Mac=AEAD
+          0xCC,0x13 - ECDHE-RSA-CHACHA20-POLY1305-OLD TLSv1.2 Kx=ECDH     Au=RSA  Enc=ChaCha20(256) Mac=AEAD
+          0xCC,0x15 - DHE-RSA-CHACHA20-POLY1305-OLD TLSv1.2 Kx=DH       Au=RSA  Enc=ChaCha20(256) Mac=AEAD
           0xC0,0x30 - ECDHE-RSA-AES256-GCM-SHA384 TLSv1.2 Kx=ECDH     Au=RSA  Enc=AESGCM(256) Mac=AEAD
           0xC0,0x2C - ECDHE-ECDSA-AES256-GCM-SHA384 TLSv1.2 Kx=ECDH     Au=ECDSA Enc=AESGCM(256) Mac=AEAD
           0xC0,0x28 - ECDHE-RSA-AES256-SHA384 TLSv1.2 Kx=ECDH     Au=RSA  Enc=AES(256)  Mac=SHA384
@@ -155,9 +155,11 @@ openssl64-1.0.2pm-static ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
           0x00,0x1A - ADH-DES-CBC-SHA         SSLv3 Kx=DH       Au=None Enc=DES(56)   Mac=SHA1
           0x00,0x62 - EXP1024-DES-CBC-SHA     SSLv3 Kx=RSA(1024) Au=RSA  Enc=DES(56)   Mac=SHA1 export
           0x00,0x09 - DES-CBC-SHA             SSLv3 Kx=RSA      Au=RSA  Enc=DES(56)   Mac=SHA1
+          0x00,0x61 - EXP1024-RC2-CBC-MD5     SSLv3 Kx=RSA(1024) Au=RSA  Enc=RC2(56)   Mac=MD5  export
      0x06,0x00,0x40 - DES-CBC-MD5             SSLv2 Kx=RSA      Au=RSA  Enc=DES(56)   Mac=MD5 
           0x00,0x65 - EXP1024-DHE-DSS-RC4-SHA SSLv3 Kx=DH(1024) Au=DSS  Enc=RC4(56)   Mac=SHA1 export
           0x00,0x64 - EXP1024-RC4-SHA         SSLv3 Kx=RSA(1024) Au=RSA  Enc=RC4(56)   Mac=SHA1 export
+          0x00,0x60 - EXP1024-RC4-MD5         SSLv3 Kx=RSA(1024) Au=RSA  Enc=RC4(56)   Mac=MD5  export
           0x00,0x14 - EXP-EDH-RSA-DES-CBC-SHA SSLv3 Kx=DH(512)  Au=RSA  Enc=DES(40)   Mac=SHA1 export
           0x00,0x11 - EXP-EDH-DSS-DES-CBC-SHA SSLv3 Kx=DH(512)  Au=DSS  Enc=DES(40)   Mac=SHA1 export
           0x00,0x0E - EXP-DH-RSA-DES-CBC-SHA  SSLv3 Kx=DH/RSA   Au=DH   Enc=DES(40)   Mac=SHA1 export
@@ -178,3 +180,13 @@ openssl64-1.0.2pm-static ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
           0x00,0x02 - NULL-SHA                SSLv3 Kx=RSA      Au=RSA  Enc=None      Mac=SHA1
           0x00,0x01 - NULL-MD5                SSLv3 Kx=RSA      Au=RSA  Enc=None      Mac=MD5 
      0x00,0x00,0x00 - NULL-MD5                SSLv2 Kx=RSA(512) Au=RSA  Enc=None      Mac=MD5  export
+dirks@laptop:~/git.testssl.sh/bin|0% ./openssl.Linux.x86_64 version -a                       
+OpenSSL 1.0.2-chacha (1.0.2i-dev)
+built on: Wed Jun 22 19:32:29 2016
+platform: linux-x86_64
+options:  bn(64,64) md2(int) rc4(16x,int) des(idx,cisc,16,int) idea(int) blowfish(idx) 
+compiler: gcc -I. -I.. -I../include  -DZLIB -DOPENSSL_THREADS -D_REENTRANT -DDSO_DLFCN -DHAVE_DLFCN_H -DOPENSSL_USE_BUILD_DATE -DOPENSSL_USE_IPV6 -static -Wa,--noexecstack -m64 -DL_ENDIAN -O3 -Wall -DOPENSSL_EXPERIMENTAL_JPAKE -DOPENSSL_IA32_SSE2 -DOPENSSL_BN_ASM_MONT -DOPENSSL_BN_ASM_MONT5 -DOPENSSL_BN_ASM_GF2m -DSHA1_ASM -DSHA256_ASM -DSHA512_ASM -DMD5_ASM -DAES_ASM -DVPAES_ASM -DBSAES_ASM -DWHIRLPOOL_ASM -DGHASH_ASM -DECP_NISTZ256_ASM
+OPENSSLDIR: "/etc/ssl"
+dirks@laptop:~/git.testssl.sh/bin|0% file ./openssl.Linux.x86_64      
+./openssl.Linux.x86_64: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, for GNU/Linux 2.6.24, BuildID[sha1]=2ac27c3998817aa9145f19a723e99e8a9191d0da, stripped
+dirks@laptop:~/git.testssl.sh/bin|0% 
