@@ -175,6 +175,7 @@ HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, p
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
+NODNS=${NODNS:-false}                   # always do DNS lookups per default. For some pentests it might save time to set this to true
 readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test for PFS
                                         # generated from 'kEECDH:kEDH:!aNULL:!eNULL:!DES:!3DES:!RC4' with openssl 1.0.2i and openssl 1.1.0
 readonly ROBUST_PFS_CIPHERS="DHE-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA:DHE-DSS-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA:DHE-DSS-SEED-SHA:DHE-RSA-AES128-CCM8:DHE-RSA-AES128-CCM:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-CCM8:DHE-RSA-AES256-CCM:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-RSA-CHACHA20-POLY1305-OLD:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-SEED-SHA:ECDHE-ECDSA-AES128-CCM8:ECDHE-ECDSA-AES128-CCM:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-CCM8:ECDHE-ECDSA-AES256-CCM:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305-OLD:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-RSA-CHACHA20-POLY1305-OLD:ECDHE-RSA-CHACHA20-POLY1305"
@@ -7604,6 +7605,7 @@ special invocations:
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
      --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
+     -n, --nodns                   do not try any DNS lookup
      --file <fname>                mass testing option: Reads command lines from <fname>, one line per instance.
                                    Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch"
 
@@ -8400,6 +8402,7 @@ get_a_record() {
      local cname_temp=""
      local saved_openssl_conf="$OPENSSL_CONF"
 
+     "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if [[ "$NODE" == *.local ]]; then
           if which avahi-resolve &>/dev/null; then
@@ -8442,6 +8445,7 @@ get_aaaa_record() {
      local ip6=""
      local saved_openssl_conf="$OPENSSL_CONF"
 
+     "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if [[ -z "$ip6" ]]; then
           if [[ "$NODE" == *.local ]]; then
@@ -8514,9 +8518,10 @@ determine_ip_addresses() {
 
 determine_rdns() {
      local saved_openssl_conf="$OPENSSL_CONF"
-     OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
      local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
 
+     "$NODNS" && rDNS="--" && return 0
+     OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
      if [[ "$NODE" == *.local ]]; then
           if which avahi-resolve &>/dev/null; then
                rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
@@ -9014,6 +9019,9 @@ parse_cmd_line() {
                --ip|--ip=*)
                     CMDLINE_IP=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
+                    ;;
+               -n|--nodns)
+                    NODNS=true
                     ;;
                -V|-V=*|--local|--local=*)    # attention, this could have a value or not!
                     do_display_only=true
