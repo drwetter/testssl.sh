@@ -19,15 +19,21 @@
 * Frank Breedijk
  - Detection of insecure redirects
  - JSON and CSV output
+ - CA pinning
  - Client simulations
  - CI integration, test cases for it
 
 * David Cooper
  - Detection + output of multiple certificates
  - several cleanups of server certificate related stuff
- - several minor fixes
+ - several fixes
  - improved parsing of TLS ServerHello messages
  - speed improvements when testing all ciphers
+ - extensive CN <--> hostname check
+ - seperate check for curves
+
+- Christoph Badura
+ - NetBSD fixes
 
 * Jean Marsault
  - client auth: ideas, code snipplets
@@ -45,10 +51,10 @@
  - ARM binary support  
 
 * Jeroen Wiert Pluimers
-  - supplied new Darwin binaries
+  - Darwin binaries support
 
 * Julien Vehent
- - supplied Darwin binary
+ - supplied 1st Darwin binary
 
 * Rechi
  - initial MX stuff
@@ -58,6 +64,7 @@
  - avahi/mDNS support
  - HTTP2/ALPN
  - bugfixes
+ - former ARM binary support
 
 * Дилян Палаузов
  - bug fix for 3des report
@@ -92,4 +99,6 @@
 * OpenSSL team for providing openssl.
 
 * Ivan Ristic/Qualys for the liberal license which made it possible to use the client data
+
+* my family for supporting me doing this work
 
