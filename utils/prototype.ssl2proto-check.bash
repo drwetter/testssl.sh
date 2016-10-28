@@ -229,4 +229,4 @@ exit 0
 #                74.116.0.167                           147.237.80.2    85.92.77.27
 
 #  vim:tw=110:ts=5:sw=5
-#  $Id: prototype.ssl2proto-check.bash,v 1.9 2015/01/07 22:56:22 dirkw Exp $ 
+#  $Id: prototype.ssl2proto-check.bash,v 1.10 2015/09/25 19:02:24 dirkw Exp $ 

@@ -8,11 +8,14 @@ The certificate stores were retrieved by
 * Microsoft: For Windows >= 7/2008 Microsoft decided not to provide
   a full certificate store by default or via update as all other OS do. 
   It's being populated with time -- supposed you use e.g. IE while browsing. 
+  Thus this file is smaller as the others.
   This store was destilled from three different windows installations via 
   "certmgr.msc". It's a PKCS7 export of "Trusted Root Certification Authorities"
-  --> "Certificates". 
-  Third Party Root Certificates were for now deliberately omitted. 
+  and the Third Party Store.
   Feedback is welcome, see #317.
+  It's still behind what MS publishes what [should be included](http://social.technet.microsoft.com/wiki/contents/articles/31634.microsoft-trusted-root-certificate-program-participants-v-2016-april.aspx).
+  Unfortunately there doesn't seem to be store to DL. Let me know if
+  you have a pointer
 * Apple: It comes from Apple OS X keychain app.  Open Keychain Access.
   In the Finder window, under Favorites --> "Applications" --> "Utilities"
   --> "Keychain Access" (2 click). In that window --> "Keychains" --> "System"
