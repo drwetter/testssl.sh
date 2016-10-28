@@ -91,7 +91,9 @@ egrep -q "dev|rc" <<< "$VERSION" && \
 
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname "$0")
-INSTALL_DIR=""
+TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"   # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR 
+CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"           # or CA_BUNDLES_PATH to find the CA BUNDLES. TESTSSL_INSTALL_DIR helps you to find the RFC mapping also
+MAPPING_FILE_RFC=""
 OPENSSL_LOCATION=""
 HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
@@ -141,7 +143,7 @@ SHOW_SIGALGO=${SHOW_SIGALGO:-false}     # "secret" switch whether testssl.sh sho
 SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave behind just usual?
 QUIET=${QUIET:-false}                   # don't output the banner. By doing this yiu acknowledge usage term appearing in the banner
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
-ASSUMING_HTTP=${ASSUMING_HTTP:-false}   # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
+ASSUME_HTTP=${ASSUME_HTTP:-false}       # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
 DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ are kept for further debugging purposes
                                         # 2: list more what's going on , also lists some errors of connections
@@ -197,6 +199,7 @@ CLIENT_AUTH=false
 NO_SSL_SESSIONID=false
 HOSTCERT=""
 HEADERFILE=""
+HEADERVALUE=""
 HTTP_STATUS_CODE=""
 PROTOS_OFFERED=""
 TLS_EXTENSIONS=""
@@ -249,7 +252,6 @@ TLS_NOW=""
 NOW_TIME=""
 HTTP_TIME=""
 GET_REQ11=""
-HEAD_REQ10=""
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
 FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
@@ -366,6 +368,7 @@ pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m"; }
 pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off; }
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_italic()       { [[ "$COLOR" -ne 0 ]] && out "\033[3m$1" || out "$1"; pr_off; }
+pr_italicln()     { pr_italic "$1" ; outln; }
 pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "\033[4m$1" || out "$1"; pr_off; }
 pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off; }
 pr_reverse_bold() { [[ "$COLOR" -ne 0 ]] && out "\033[7m\033[1m$1" || out "$1"; pr_off; }
@@ -488,7 +491,7 @@ fileout() { # ID, SEVERITY, FINDING
 
      if "$do_json"; then
           "$FIRST_FINDING" || echo -n "," >> $JSONFILE
-          echo -e "         {
+          echo "         {
                \"id\"           : \"$1\",
                \"ip\"           : \"$NODE/$NODEIP\",
                \"port\"         : \"$PORT\",
@@ -544,11 +547,15 @@ colon_to_spaces() {
 }
 
 strip_lf() {
-     echo "$1" | tr -d '\n' | tr -d '\r'
+     tr -d '\n' <<< "$1" | tr -d '\r'
 }
 
 strip_spaces() {
      echo "${1// /}"
+}
+
+trim_trailing_space() {
+     echo "${1%%*( )}"
 }
 
 toupper() {
@@ -686,7 +693,7 @@ asciihex_to_binary_file(){
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
 # arg1 could be the protocol determined as "working". IIS6 needs that
-runs_HTTP() {
+service_detection() {
      local -i ret=0
      local -i was_killed
      local addcmd=""
@@ -722,10 +729,10 @@ runs_HTTP() {
                     fileout "client_auth" "INFO" "certificate based authentication => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
-                    if $ASSUMING_HTTP; then
+                    if "$ASSUME_HTTP"; then
                          SERVICE=HTTP
-                         out " -- ASSUMING_HTTP set though"
-                         fileout "service" "DEBUG" "Couldn't determine service, --ASSUMING_HTTP set"
+                         out " -- ASSUME_HTTP set though"
+                         fileout "service" "DEBUG" "Couldn't determine service, --ASSUME_HTTP set"
                          ret=0
                     else
                          out ", assuming no HTTP service => skipping all HTTP checks"
@@ -923,6 +930,42 @@ run_http_date() {
      detect_ipv4
 }
 
+
+
+# HEADERFILE needs to contain the HTTP header (made sure by invoker)
+# arg1: key=word to match
+# arg2: hint for fileout()
+# returns:
+#    0 if header not found
+#    1-n nr of headers found, then in HEADERVALUE the first value from key
+
+detect_header() {
+     local key="$1"
+     local -i nr=0
+
+     nr=$(grep -Faciw "$key:" $HEADERFILE)
+     if [[ $nr -eq 0 ]]; then
+          HEADERVALUE=""
+          return 0
+     elif [[ $nr -eq 1 ]]; then
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://')
+          return 1
+     else 
+          pr_svrty_medium "misconfiguration: "
+          pr_italic "$key"
+          pr_svrty_medium " ${nr}x"
+          out " -- checking first one "
+          out "\n$spaces"
+          # first awk matches the key, second extracts the from the first line the value, be careful with quotes here!
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://' | head -1)
+          [[ $DEBUG -ge 2 ]] && pr_italic "$HEADERVALUE" && out "\n$spaces"
+          fileout "$2""_multiple" "WARN" "Multiple $2 headers. Using first header: $HEADERVALUE"
+          return $nr
+     fi
+}
+# wir brauchen hier eine Funktion, die generell den Header detectiert
+
+
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
           pr_done_good ", includeSubDomains"
@@ -946,16 +989,16 @@ preload() {
 run_hsts() {
      local hsts_age_sec
      local hsts_age_days
+     local spaces="                              "
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
      fi
-     #pr_bold " HSTS                         "
      pr_bold " Strict Transport Security    "
-     grep -iaw '^Strict-Transport-Security' $HEADERFILE >$TMPFILE
-     if [[ $? -eq 0 ]]; then
-          grep -aciw '^Strict-Transport-Security' $HEADERFILE | egrep -waq "1" || out "(two HSTS header, using 1st one) "
-          hsts_age_sec=$(sed -e 's/[^0-9]*//g' $TMPFILE | head -1)
+     detect_header "Strict-Transport-Security" "HSTS"
+     if [[ $? -ne 0 ]]; then
+          echo "$HEADERVALUE" >$TMPFILE
+          hsts_age_sec=$(sed -e 's/[^0-9]*//g' <<< $HEADERVALUE)
           debugme echo "hsts_age_sec: $hsts_age_sec"
           if [[ -n $hsts_age_sec ]]; then
                hsts_age_days=$(( hsts_age_sec / 86400))
@@ -978,15 +1021,16 @@ run_hsts() {
           if includeSubDomains "$TMPFILE"; then
                fileout "hsts_subdomains" "OK" "HSTS includes subdomains"
           else
-               fileout "hsts_subdomains" "WARN" "HSTS only for this domain, consider to include subdomains as well"
+               fileout "hsts_subdomains" "INFO" "HSTS only for this domain"
           fi
           if preload "$TMPFILE"; then
                fileout "hsts_preload" "OK" "HSTS domain is marked for preloading"
           else
                fileout "hsts_preload" "INFO" "HSTS domain is NOT marked for preloading"
+               #FIXME: To be checked against preloading lists, 
+               # e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc
+               #      https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
           fi
-          #FIXME: To be checked against e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc
-          #                              and https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
      else
           out "--"
           fileout "hsts" "NOT ok" "No support for HTTP Strict Transport Security"
@@ -1002,17 +1046,20 @@ run_hpkp() {
      local -i hpkp_age_sec
      local -i hpkp_age_days
      local -i hpkp_nr_keys
-     local hpkp_key hpkp_key_hostcert
+     local hpkp_spki hpkp_spki_hostcert
+     local -a backup_spki
      local spaces="                             "
-     local key_found=false
+     local spaces_indented="                  "
+     local certificate_found=false
      local i
      local hpkp_headers
      local first_hpkp_header
+     local spki
+     local ca_hashes="$TESTSSL_INSTALL_DIR/etc/ca_hashes.txt"
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
      fi
-     #pr_bold " HPKP                         "
      pr_bold " Public Key Pinning           "
      egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
@@ -1031,7 +1078,7 @@ run_hpkp() {
                out "\n$spaces Examining first one: "
                first_hpkp_header=$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1)
                pr_italic "$first_hpkp_header, "
-               fileout "hpkp_multiple" "WARN" "Multiple HPKP headershpkp_headers. Using first header: $first_hpkp_header"
+               fileout "hpkp_multiple" "WARN" "Multiple HPKP headers $hpkp_headers. Using first header: $first_hpkp_header"
           fi
 
           # remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
@@ -1042,13 +1089,13 @@ run_hpkp() {
           tr ' ' '\n' < $TMPFILE.2 >$TMPFILE
 
           hpkp_nr_keys=$(grep -ac pin-sha $TMPFILE)
-          out "# of keys: "
           if [[ $hpkp_nr_keys -eq 1 ]]; then
-               pr_svrty_high "1 (NOT ok), "
-               fileout "hpkp_keys" "NOT ok" "Only one key pinned in HPKP header, this means the site may become unavailable if the key is revoked"
+               pr_svrty_high "1 key (NOT ok), "
+               fileout "hpkp_spkis" "HIGH" "Only one key pinned in HPKP header, this means the site may become unavailable if the key is revoked"
           else
-               out "$hpkp_nr_keys, "
-               fileout "hpkp_keys" "OK" "$hpkp_nr_keys keys pinned in HPKP header, additional keys are available if the current key is revoked"
+               pr_done_good "$hpkp_nr_keys"
+               out " keys, "
+               fileout "hpkp_spkis" "OK" "$hpkp_nr_keys keys pinned in HPKP header, additional keys are available if the current key is revoked"
           fi
 
           # print key=value pair with awk, then strip non-numbers, to be improved with proper parsing of key-value with awk
@@ -1074,33 +1121,155 @@ run_hpkp() {
                fileout "hpkp_preload" "INFO" "HPKP header is NOT marked for browser preloading"
           fi
 
+          # Get the SPKIs first
+          spki=$(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
+          debugme outln "\n$spki"
+
+          # Look at the host certificate first
+          # get the key fingerprint from the host certificate
           if [[ ! -s "$HOSTCERT" ]]; then
                get_host_cert || return 1
           fi
-          # get the key fingerprint from the host certificate
-          hpkp_key_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
+
+          hpkp_spki_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
                $OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
-          # compare it with the ones provided in the header
-          while read hpkp_key; do
-               if [[ "$hpkp_key_hostcert" == "$hpkp_key" ]] || [[ "$hpkp_key_hostcert" == "$hpkp_key=" ]]; then
-                    out "\n$spaces matching host key: "
-                    pr_done_good "$hpkp_key"
-                    fileout "hpkp_keymatch" "OK" "Key matches a key pinned in the HPKP header"
-                    key_found=true
-               fi
-               debugme out "\n  $hpkp_key | $hpkp_key_hostcert"
-          done < <(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
-          if ! $key_found ; then
-               out "\n$spaces"
-               pr_svrty_high " No matching key for pins found "
-               out "(CAs pinned? -- not checked for yet)"
-               fileout "hpkp_keymatch" "DEBUG" "The TLS key does not match any key pinned in the HPKP header. If you pinned a CA key you can ignore this"
+          hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
+
+          # Get keys/hashes from intermediate certificates
+          $OPENSSL s_client -showcerts $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+          # Place the server's certificate in $HOSTCERT and any intermediate
+          # certificates that were provided in $TEMPDIR/intermediatecerts.pem
+          # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
+          awk -v n=-1 "/Certificate chain/ {start=1}
+                  /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+                  inc { print > (\"$TEMPDIR/level\" n \".crt\") }
+                  /---END CERTIFICATE-----/{ inc=0 }" $TMPFILE
+          nrsaved=$(count_words "$(echo $TEMPDIR/level?.crt 2>/dev/null)")
+          rm $TEMPDIR/level0.crt 2>/dev/null
+
+          printf ""> "$TEMPDIR/intermediate.hashes"
+          if [[ nrsaved -ge 2 ]]; then
+               for cert_fname in $TEMPDIR/level?.crt; do
+                    hpkp_spki_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | $OPENSSL base64 -d |
+                         $OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
+                    hpkp_name="$(get_cn_from_cert $cert_fname)"
+                    hpkp_ca="$($OPENSSL x509 -in $cert_fname -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
+                    [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout | sed 's/^subject= //') 
+                    echo "$hpkp_spki_ca $hpkp_name" >> "$TEMPDIR/intermediate.hashes"
+               done
           fi
+
+          # This is where the matching magic starts, first host certificate, intermediate, then root out of the stores
+          spki_match=false
+          has_backup_spki=false
+          i=0
+          for hpkp_spki in $spki; do
+               certificate_found=false
+               # compare collected SPKIs against the host certificate
+               if [[ "$hpkp_spki_hostcert" == "$hpkp_spki" ]] || [[ "$hpkp_spki_hostcert" == "$hpkp_spki=" ]]; then
+                    certificate_found=true       # We have a match
+                    spki_match=true
+                    out "\n$spaces_indented Host cert: "
+                    pr_done_good "$hpkp_spki"
+                    fileout "hpkp_$hpkp_spki" "OK" "SPKI $hpkp_spki matches the host certificate"
+               fi
+               debugme out "\n  $hpkp_spki | $hpkp_spki_hostcert"
+
+               # Check for intermediate match
+               if ! "$certificate_found"; then
+                    hpkp_matches=$(grep "$hpkp_spki" $TEMPDIR/intermediate.hashes 2>/dev/null)
+                    if [[ -n $hpkp_matches ]]; then    # hpkp_matches + hpkp_spki + '='
+                         # We have a match
+                         certificate_found=true
+                         spki_match=true
+                         out "\n$spaces_indented Sub CA:    "
+                         pr_done_good "$hpkp_spki"
+                         ca_cn="$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< $"$hpkp_matches" )"
+                         pr_italic " $ca_cn"
+                         fileout "hpkp_$hpkp_spki" "OK" "SPKI $hpkp_spki matches Intermediate CA \"$ca_cn\" pinned in the HPKP header"
+                    fi
+               fi
+
+               # we compare now against a precompiled list of SPKIs against the ROOT CAs we have in $ca_hashes
+               if ! "$certificate_found"; then
+                    hpkp_matches=$(grep -h "$hpkp_spki" $ca_hashes | sort -u)
+                    if [[ -n $hpkp_matches ]]; then
+                         certificate_found=true      # root CA found
+                         spki_match=true
+                         if [[ $(count_lines "$hpkp_matches") -eq 1 ]]; then
+                              # replace by awk 
+                              match_ca=$(sed "s/[a-zA-Z0-9\+\/]*=* *//" <<< "$hpkp_matches")
+                         else
+                              match_ca=""
+
+                         fi
+                         ca_cn="$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< $"$hpkp_matches" )"
+                         if [[ "$match_ca" == "$hpkp_ca" ]]; then          # part of the chain
+                              out "\n$spaces_indented Root CA:   "
+                              pr_done_good "$hpkp_spki"
+                              pr_italic " $ca_cn"
+                              fileout "hpkp_$hpkp_spki" "INFO" "SPKI $hpkp_spki matches Root CA \"$ca_cn\" pinned in the HPKP header. (Root CA part of the chain)"
+                         else                                              # not part of chain
+                              match_ca=""
+                              has_backup_spki=true                         # Root CA outside the chain --> we save it for unmatched
+                              fileout "hpkp_$hpkp_spki" "INFO" "SPKI $hpkp_spki matches Root CA \"$ca_cn\" pinned in the HPKP header. (Root backup SPKI)"
+                              backup_spki[i]="$(strip_lf "$hpkp_spki")"    # save it for later
+                              backup_spki_str[i]="$ca_cn"                  # also the name=CN of the root CA
+                              i=$((i + 1))
+                         fi
+                    fi
+               fi
+
+               # still no success --> it's probably a backup SPKI
+               if ! "$certificate_found"; then
+                    # Most likely a backup SPKI, unfortunately we can't tell for what it is: host, intermediates
+                    has_backup_spki=true
+                    backup_spki[i]="$(strip_lf "$hpkp_spki")"     # save it for later
+                    backup_spki_str[i]=""                        # no root ca 
+                    i=$((i + 1))
+                    fileout "hpkp_$hpkp_spki" "INFO" "SPKI $hpkp_spki doesn't match anything. This is ok for a backup for any certificate"
+                    # CSV/JSON output here for the sake of simplicity, rest we do en bloc below
+               fi
+          done 
+
+          # now print every backup spki out we saved before
+          out "\n$spaces_indented Backups:   "
+
+          # for i=0 manually do the same as below as there's other indentation here
+          if [[ -n "${backup_spki_str[0]}" ]]; then
+               pr_done_good "${backup_spki[0]}"
+               #out " Root CA: "
+               pr_italicln " ${backup_spki_str[0]}"
+          else
+               outln "${backup_spki[0]}"
+          fi
+          # now for i=1
+          for ((i=1; i < ${#backup_spki[@]} ;i++ )); do
+               if [[ -n "${backup_spki_str[i]}" ]]; then
+                    # it's a Root CA outside the chain
+                    pr_done_good "$spaces_indented            ${backup_spki[i]}"
+                    #out " Root CA: "
+                    pr_italicln " ${backup_spki_str[i]}"
+               else
+                    outln "$spaces_indented            ${backup_spki[i]}"
+               fi
+          done
+
+          # If all else fails...
+          if ! "$spki_match"; then
+               "$has_backup_spki" && out "$spaces"       # we had a few lines with backup SPKIs already
+               pr_svrty_highln " No matching key for SPKI found "
+               fileout "hpkp_spkimatch" "HIGH" "None of the SPKI match your host certificate, intermediate CA or known root CAs. You may have bricked this site"
+          fi
+
+          if ! "$has_backup_spki"; then
+               pr_svrty_highln " No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site. "
+               fileout "hpkp_backup" "HIGH" "No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site."
+          fi               
      else
-          out "--"
+          outln "--"
           fileout "hpkp" "INFO" "No support for HTTP Public Key Pinning"
      fi
-     outln
 
      tmpfile_handle $FUNCNAME.txt
      return $?
@@ -1237,7 +1406,7 @@ run_application_banner() {
      return 0
 }
 
-run_cookie_flags() {     # ARG1: Path, ARG2: path
+run_cookie_flags() {     # ARG1: Path
      local -i nr_cookies
      local nr_httponly nr_secure
      local negative_word
@@ -1261,7 +1430,7 @@ run_cookie_flags() {     # ARG1: Path, ARG2: path
      grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
           nr_cookies=$(count_lines "$TMPFILE")
-          out "$nr_cookies issued:"
+          out "$nr_cookies issued: "
           fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\"$msg302_"
           if [[ $nr_cookies -gt 1 ]]; then
                negative_word="NONE"
@@ -1313,50 +1482,44 @@ run_more_flags() {
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
      fi
+
      pr_bold " Security headers             "
-     # convert spaces to | (for egrep)
-     egrep_pattern=$(echo "$good_flags2test $other_flags2test"| sed -e 's/ /|\^/g' -e 's/^/\^/g')
-     egrep -ai "$egrep_pattern" $HEADERFILE >$TMPFILE
-     if [[ $? -ne 0 ]]; then
-          outln "--"
-          fileout "sec_headers" "WARN" "No security (or other interesting) headers detected"
-          ret=1
-     else
-          ret=0
-          for f2t in $good_flags2test; do
-               debugme echo "---> $f2t"
-               result_str=$(grep -wi "^$f2t" $TMPFILE | grep -vi "$f2t"-)
-               result_str=$(strip_lf "$result_str")
-               [[ -z "$result_str" ]] && continue
+     for f2t in $good_flags2test; do
+          debugme echo "---> $f2t"
+          detect_header $f2t $f2t
+          if [[ $? -ge 1 ]]; then
                if ! "$first"; then
                     out "$spaces"  # output leading spaces if the first header
                else
                     first=false
                fi
-               # extract and print key(=flag) in green:
-               pr_done_good "${result_str%%:*}:"
-               #pr_done_good "$(sed 's/:.*$/:/' <<< "$result_str")"
-               # print value in plain text:
-               outln "${result_str#*:}"
-               fileout "${result_str%%:*}" "OK" "${result_str%%:*}: ${result_str#*:}"
-          done
-          # now the same with other flags
-          for f2t in $other_flags2test; do
-               result_str=$(grep -i "^$f2t" $TMPFILE)
-               [[ -z "$result_str" ]] && continue
-               if ! $first; then
+               pr_done_good "$f2t"; outln "$HEADERVALUE"
+               fileout "$f2t" "OK" "$f2t: $HEADERVALUE"
+          fi
+     done
+
+     for f2t in $other_flags2test; do
+          debugme echo "---> $f2t"
+          detect_header $f2t $f2t
+          if [[ $? -ge 1 ]]; then
+               if ! "$first"; then
                     out "$spaces"  # output leading spaces if the first header
                else
                     first=false
                fi
-               # extract and print key(=flag) underlined
-               pr_litecyan "${result_str%%:*}:"
-               # print value in plain text:
-               outln "${result_str#*:}"
-               fileout "${result_str%%:*}" "WARN" "${result_str%%:*}: ${result_str#*:}"
-          done
+               pr_litecyan "$f2t"; outln "$HEADERVALUE"
+               fileout "$f2t" "WARN" "$f2t: $HEADERVALUE"
+          fi
+     done 
+     #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall" or Access-Control-Allow-Origin: *
+
+     if "$first"; then
+          pr_svrty_mediumln "--"
+          fileout "sec_headers" "MEDIUM" "No security (or other interesting) headers detected"
+          ret=1
+     else
+          ret=0
      fi
-#TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall"
 
      tmpfile_handle $FUNCNAME.txt
      return $ret
@@ -2987,7 +3150,6 @@ run_protocols() {
      local latest_supported=""  # version.major and version.minor of highest version supported by the server.
      local detected_version_string latest_supported_string
      local lines nr_ciphers_detected
-     local extra_spaces="         "
 
      outln; pr_headline " Testing protocols "
 
@@ -3009,7 +3171,7 @@ run_protocols() {
      fi
      outln
 
-     pr_bold " SSLv2      $extra_spaces";
+     pr_bold " SSLv2      ";
      if ! "$SSL_NATIVE"; then
           sslv2_sockets
           case $? in
@@ -3043,7 +3205,6 @@ run_protocols() {
                          fi
                     fi ;;
           esac
-          pr_off
           debugme outln
      else
           run_prototest_openssl "-ssl2"
@@ -3068,7 +3229,7 @@ run_protocols() {
           esac
      fi
 
-     pr_bold " SSLv3      $extra_spaces";
+     pr_bold " SSLv3      ";
      if "$using_sockets"; then
           tls_sockets "00" "$TLS_CIPHER"
      else
@@ -3107,7 +3268,7 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
-     pr_bold " TLS 1      $extra_spaces";
+     pr_bold " TLS 1      ";
      if "$using_sockets"; then
           tls_sockets "01" "$TLS_CIPHER"
      else
@@ -3156,7 +3317,7 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
-     pr_bold " TLS 1.1    $extra_spaces";
+     pr_bold " TLS 1.1    ";
      if "$using_sockets"; then
           tls_sockets "02" "$TLS_CIPHER"
      else
@@ -3208,8 +3369,8 @@ run_protocols() {
                ;;                                                            # no local support
      esac
 
-     pr_bold " TLS 1.2    $extra_spaces";
-     if "$using_sockets" ; then
+     pr_bold " TLS 1.2    ";
+     if "$using_sockets" && "$EXPERIMENTAL"; then               #TODO: IIS servers do have a problem here with our handshake
           tls_sockets "03" "$TLS12_CIPHER"
      else
           run_prototest_openssl "-tls1_2"
@@ -3262,55 +3423,6 @@ run_protocols() {
                fileout "tls1_2" "INFO" "TLSv1.2 is not tested due to lack of local support"
                ;;                                                            # no local support
      esac
-
-     # Testing version negotiation. RFC 5246, Appendix E.1, states:
-     #
-     #    If a TLS server receives a ClientHello containing a version number
-     #    greater than the highest version supported by the server, it MUST
-     #    reply according to the highest version supported by the server.
-     if [[ -n $latest_supported ]] && "$using_sockets"; then
-          pr_bold " Version tolerance   "
-          tls_sockets "05" "$TLS12_CIPHER"
-          case $? in
-               0) 
-                    pr_svrty_criticalln "server claims support for non-existent TLSv1.4"
-                    fileout "TLS Version Negotiation" "NOT ok" "Server claims support for non-existent TLSv1.4 (NOT ok)"
-                    ;;
-               1)
-                    pr_svrty_criticalln "version negotiation did not work -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
-                    fileout "TLS Version Negotiation" "NOT ok" "Version negotiation did not work -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
-                    ;;
-               2)
-                    case $DETECTED_TLS_VERSION in
-                         0304)
-                                 pr_svrty_criticalln "server claims support for TLSv1.3, which is still a working draft (NOT ok)"
-                                 fileout "TLS Version Negotiation" "NOT ok" "Server claims support for TLSv1.3, which is still a working draft (NOT ok)"
-                                 ;;
-                         0303|0302|0301|0300)
-                                 if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
-                                      detected_version_string="SSLv3"
-                                 else
-                                      detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
-                                 fi
-                                 if [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
-                                      pr_svrty_criticalln "server supports $latest_supported_string, but downgraded to $detected_version_string (NOT ok)"
-                                      fileout "TLS Version Negotiation" "NOT ok" "Downgraded to $detected_version_string rather than $latest_supported_string (NOT ok)"
-                                 else
-                                      pr_done_bestln "downgraded to $detected_version_string (OK)"
-                                      fileout "TLS Version Negotiation" "OK" "Downgraded to $detected_version_string"
-                                 fi
-                                 ;;
-                         *)
-                                 pr_svrty_criticalln "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                                 fileout "TLS Version Negotiation" "NOT ok" "TLSv1.4: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                                 ;;
-                    esac ;;
-               5)
-                    pr_svrty_criticalln "server claims support for non-existent TLSv1.4 (NOT ok)"
-                    fileout "TLS Version Negotiation" "NOT ok" "Server claims support for non-existent TLSv1.4 (NOT ok)"
-                    ;;
-          esac
-     fi
      return 0
 }
 
@@ -3849,7 +3961,7 @@ determine_trust() {
 	local all_ok=true
 	local some_ok=false
      local code
-     local ca_bundles="$INSTALL_DIR/etc/*.pem"
+     local ca_bundles=""
      local spaces="                              "
      local -i certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
@@ -3865,6 +3977,13 @@ determine_trust() {
           fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln
+
+     # if you run testssl.sh from a different path /you can set either TESTSSL_INSTALL_DIR or CA_BUNDLES_PATH to find the CA BUNDLES
+     if [[ -z $CA_BUNDLES_PATH ]]; then
+          ca_bundles="$TESTSSL_INSTALL_DIR/etc/*.pem"
+     else
+          ca_bundles="$CA_BUNDLES_PATH/*.pem"
+     fi
 	for bundle_fname in $ca_bundles; do
 		certificate_file[i]=$(basename ${bundle_fname//.pem})
           if [[ ! -r $bundle_fname ]]; then
@@ -5144,7 +5263,7 @@ run_pfs() {
 
 
 spdy_pre(){
-     if [[ -n "$STARTTLS" ]]; then
+     if [[ -n "$STARTTLS" ]] || [[ "$SERVICE" != HTTP ]]; then
           [[ -n "$1" ]] && out "$1"
           out "(SPDY is an HTTP protocol and thus not tested here)"
           fileout "spdy_npn" "INFO" "SPDY/NPN : (SPY is an HTTP protocol and thus not tested here)"
@@ -5165,7 +5284,7 @@ spdy_pre(){
 }
 
 http2_pre(){
-     if [[ -n "$STARTTLS" ]]; then
+     if [[ -n "$STARTTLS" ]] || [[ "$SERVICE" != HTTP ]]; then
           [[ -n "$1" ]] && out "$1"
           outln "(HTTP/2 is a HTTP protocol and thus not tested here)"
           fileout "https_alpn" "INFO" "HTTP2/ALPN : HTTP/2 is and HTTP protocol and thus not tested"
@@ -5188,9 +5307,8 @@ http2_pre(){
 run_spdy() {
      local tmpstr
      local -i ret=0
-     local extra_spaces="         "
 
-     pr_bold " SPDY/NPN   $extra_spaces"
+     pr_bold " SPDY/NPN   "
      if ! spdy_pre ; then
           outln
           return 0
@@ -5227,9 +5345,8 @@ run_http2() {
      local -i ret=0
      local had_alpn_proto=false
      local alpn_finding=""
-     local extra_spaces="         "
 
-     pr_bold " HTTP2/ALPN $extra_spaces"
+     pr_bold " HTTP2/ALPN "
      if ! http2_pre ; then
           outln
           return 0
@@ -6647,9 +6764,13 @@ run_renego() {
                echo R | $OPENSSL s_client $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $addcmd $PROXY >$TMPFILE 2>>$ERRFILE
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case "$sec_client_renego" in
-                    0)
-                         pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
-                         fileout "sec_client_renego" "NOT ok" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), DoS threat"
+                    0)   if [[ $SERVICE == "HTTP" ]]; then
+                              pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
+                              fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), DoS threat"
+                         else
+                              pr_svrty_medium "VULNERABLE (NOT ok)"; outln ", potential DoS threat"
+                              fileout "sec_client_renego" "MEDIUM" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), potential DoS threat"
+                         fi
                          ;;
                     1)
                          pr_done_goodln "not vulnerable (OK)"
@@ -6657,7 +6778,7 @@ run_renego() {
                          ;;
                     *)
                          pr_warningln "FIXME (bug): $sec_client_renego"
-                         fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report"
+                         fileout "sec_client_renego" "DEBUG" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report"
                          ;;
                esac
           fi
@@ -7362,39 +7483,39 @@ old_fart() {
      fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -5
 }
 
-# try very hard to determine the install path
-# FIXME: mapping-rfc.txt no longer used. Need another method to determine install path
+# try very hard to determine the install path to get ahold of the mapping file and the CA bundles
+# TESTSSL_INSTALL_DIR can be supplied via environment so that the RFC mapping and CA bundles can be found
+# (mapping file provides "keycode/ RFC style name", see RFCs, cipher(1), 
+# www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
 get_install_dir() {
-     local mapping_file_rfc=""
-     #INSTALL_DIR=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
-     INSTALL_DIR=$(dirname ${BASH_SOURCE[0]})
+     [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$(dirname ${BASH_SOURCE[0]})"
 
-     [[ -r "$RUN_DIR/etc/mapping-rfc.txt" ]] && mapping_file_rfc="$RUN_DIR/etc/mapping-rfc.txt"
-     [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/etc/mapping-rfc.txt"
-     if [[ ! -r "$mapping_file_rfc" ]]; then
+     [[ -r "$RUN_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/etc/mapping-rfc.txt"
+     [[ -r "$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt"
+     if [[ ! -r "$MAPPING_FILE_RFC" ]]; then
 # those will disapper:
-          [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && mapping_file_rfc="$RUN_DIR/mapping-rfc.txt"
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$RUN_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$RUN_DIR/mapping-rfc.txt"
+          [[ -r "$TESTSSL_INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/mapping-rfc.txt"
      fi
 
      # we haven't found the mapping file yet...
      if [[ ! -r "$mapping_file_rfc" ]] && which readlink &>/dev/null ; then
           readlink -f ls &>/dev/null && \
-               INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
-               INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
+               TESTSSL_INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
+               TESTSSL_INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
                # not sure whether Darwin has -f
-          INSTALL_DIR=$(dirname $INSTALL_DIR 2>/dev/null)
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/mapping-rfc.txt"
-          [[ -r "$INSTALL_DIR/etc/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/etc/mapping-rfc.txt"
+          TESTSSL_INSTALL_DIR=$(dirname $TESTSSL_INSTALL_DIR 2>/dev/null)
+          [[ -r "$TESTSSL_INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear:
      fi
 
      # still no mapping file:
-     if [[ ! -r "$mapping_file_rfc" ]] && which realpath &>/dev/null ; then
-          INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
-          mapping_file_rfc="$INSTALL_DIR/etc/mapping-rfc.txt"
+     if [[ ! -r "$MAPPING_FILE_RFC" ]] && which realpath &>/dev/null ; then
+          TESTSSL_INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
+          MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/etc/mapping-rfc.txt"
 # will disappear
-          [[ -r "$INSTALL_DIR/mapping-rfc.txt" ]] && mapping_file_rfc="$INSTALL_DIR/mapping-rfc.txt"
+          [[ -r "$TESTSSL_INSTALL_DIR/mapping-rfc.txt" ]] && MAPPING_FILE_RFC="$TESTSSL_INSTALL_DIR/mapping-rfc.txt"
      fi
 
      [[ ! -r "$mapping_file_rfc" ]] && pr_warningln "\nNo mapping file found"
@@ -7542,7 +7663,6 @@ check4openssl_oldfarts() {
      outln
 }
 
-
 # FreeBSD needs to have /dev/fd mounted. This is a friendly hint, see #258
 check_bsd_mount() {
      if [[ "$(uname)" == FreeBSD ]]; then 
@@ -7555,7 +7675,6 @@ check_bsd_mount() {
           fi
      fi
 }
-
 
 help() {
      cat << EOF
@@ -7617,7 +7736,7 @@ partly mandatory parameters:
 
 tuning options (can also be preset via environment variables):
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
-     --assuming-http               if protocol check fails it assumes HTTP protocol and enforces HTTP checks
+     --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
      --proxy <host>:<port>         connect via the specified HTTP proxy
@@ -7707,7 +7826,7 @@ HAS_XMPP: $HAS_XMPP
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
-INSTALL_DIR: $INSTALL_DIR
+TESTSSL_INSTALL_DIR: $TESTSSL_INSTALL_DIR
 RUN_DIR: $RUN_DIR
 
 CAPATH: $CAPATH
@@ -7721,7 +7840,7 @@ HAS_SED_E: $HAS_SED_E
 
 SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
-ASSUMING_HTTP $ASSUMING_HTTP
+ASSUME_HTTP $ASSUME_HTTP
 SNEAKY: $SNEAKY
 
 DEBUG: $DEBUG
@@ -8697,10 +8816,10 @@ determine_service() {
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
           GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
-          GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
-          runs_HTTP $OPTIMAL_PROTO
+          #HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+          #GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
+          #HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+          service_detection $OPTIMAL_PROTO
      else
           # STARTTLS
           protocol=${1%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
@@ -9173,7 +9292,7 @@ parse_cmd_line() {
                     WIDE=true
                     ;;
                --assuming[_-]http|--assume[-_]http)
-                    ASSUMING_HTTP=true
+                    ASSUME_HTTP=true
                     ;;
                --sneaky)
                     SNEAKY=true
@@ -9474,4 +9593,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.549 2016/09/26 19:47:56 dirkw Exp $
+#  $Id: testssl.sh,v 1.559 2016/10/15 20:55:22 dirkw Exp $
