@@ -5111,7 +5111,7 @@ run_pfs() {
      local curve_found curve_used
 
      outln
-     pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption as well as 3DES and RC4 here "
+     pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption, 3DES, RC4 "
      if ! "$HAS_DH_BITS" && "$WIDE"; then
           pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      fi
