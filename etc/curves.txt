@@ -1,0 +1,31 @@
+# Value, IANA name, openssl serverhello
+1,  sect163k1, K-163
+2,  sect163r1, 
+3,  sect163r2, B-163
+4,  sect193r1, 
+5,  sect193r2, 
+6,  sect233k1, K-233
+7,  sect233r1, B-233
+8,  sect239k1, 
+9,  sect283k1, K-283
+10, sect283r1, B-283
+11, sect409k1, K-409
+12, sect409r1, B-409
+13, sect571k1, K-571
+14, sect571r1, B-571
+15, secp160k1, 
+16, secp160r1, 
+17, secp160r2, 
+18, secp192k1, 
+19, secp192r1, P-192
+20, secp224k1, 
+21, secp224r1, P-224
+22, secp256k1, 
+23, secp256r1, P-256
+24, secp384r1, P-384
+25, secp521r1, P-521
+26, brainpoolP256r1, 
+27, brainpoolP384r1, 
+28, brainpoolP512r1, 
+29, curve25519,
+30, curve448

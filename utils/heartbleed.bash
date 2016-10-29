@@ -23,6 +23,7 @@ MAXSLEEP=10
 SOCKREPLY=""
 COL_WIDTH=32
 DEBUG=${DEBUG:-0}
+HELLO_READBYTES=${HELLO_READBYTES:-65535}
 
 # TLS 1.0=x01  1.1=0x02, 1.2=0x3
 TLSV=${2:-01}
@@ -272,8 +273,8 @@ fd_socket $PORT
 echo "##### sending standard client hello with TLS version 03,$TLSV:"
 socksend "$msg" $TLSV
 
-sockread 16384 
-echo "##### reading server hello:"
+sockread $HELLO_READBYTES
+echo "##### reading server hello ($HELLO_READBYTES bytes):"
 echo "$SOCKREPLY" | xxd -c$COL_WIDTH | head -10
 echo "[...]"
 echo
