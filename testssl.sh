@@ -2965,7 +2965,7 @@ run_client_simulation() {
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
 
-     names+=("Apple ATS 9 iOS 9        ")
+     names+=("Apple ATS 9 iOS 9          ")
      short+=("safari_9_osx1011")
      protos+=("-no_ssl2 -no_ssl3 -no_tls1 -no_tls1_1")
      ciphers+=("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA")
@@ -5143,7 +5143,7 @@ run_pfs() {
      local curve_found curve_used
 
      outln
-     pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption as well as 3DES and RC4 here "
+     pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption, 3DES, RC4 "
      if ! "$HAS_DH_BITS" && "$WIDE"; then
           pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      fi
@@ -9061,4 +9061,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.559 2016/10/15 20:55:22 dirkw Exp $
+#  $Id: testssl.sh,v 1.561 2016/10/29 13:37:29 dirkw Exp $
