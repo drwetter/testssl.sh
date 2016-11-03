@@ -6196,6 +6196,7 @@ sslv2_sockets() {
 
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # ARG2: CIPHER_SUITES string
+# ARG3: (optional) additional request extensions
 socksend_tls_clienthello() {
      local tls_low_byte="$1"
      local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301 -- except: SSLv3
@@ -6208,10 +6209,12 @@ socksend_tls_clienthello() {
      local len_client_hello_word len_all_word
      local ecc_cipher_suite_found=false
      local extension_signature_algorithms extension_heartbeat
-     local extension_session_ticket extension_next_protocol extensions_ecc extension_padding
+     local extension_session_ticket extension_next_protocol extension_padding
+     local extension_supported_groups="" extension_supported_point_formats=""
+     local extra_extensions extra_extensions_list=""
 
-     code2network "$2"             # convert CIPHER_SUITES
-     cipher_suites="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
+     code2network "$(echo "$2" | tr 'A-Z' 'a-z')"   # convert CIPHER_SUITES
+     cipher_suites="$NW_STR"                      # we don't have the leading \x here so string length is two byte less, see next
 
      len_ciph_suites_byte=$(echo ${#cipher_suites})
      let "len_ciph_suites_byte += 2"
@@ -6240,7 +6243,7 @@ socksend_tls_clienthello() {
                     elif [[ "$part2" -ge "0x5c" ]] && [[ "$part2" -le "0x63" ]]; then
                          ecc_cipher_suite_found=true && break
                     elif [[ "$part2" -ge "0x70" ]] && [[ "$part2" -le "0x79" ]]; then
-                    ecc_cipher_suite_found=true && break
+                         ecc_cipher_suite_found=true && break
                     elif [[ "$part2" -ge "0x86" ]] && [[ "$part2" -le "0x8d" ]]; then
                          ecc_cipher_suite_found=true && break
                     elif [[ "$part2" -ge "0x9a" ]] && [[ "$part2" -le "0x9b" ]]; then
@@ -6287,43 +6290,79 @@ socksend_tls_clienthello() {
           extension_next_protocol="
           33, 74, 00, 00"
 
-          # Supported Elliptic Curves Extension and Supported Point Formats Extension.
-          extensions_ecc="
-          00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
-          00, 3e, 00, 3c,            # lengths
-          00, 0e, 00, 0d, 00, 19, 00, 1c, 00, 1e, 00, 0b, 00, 0c, 00, 1b,
-          00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
-          00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
-          00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11,
-          00, 0b,                    # Type: Supported Point Formats , see RFC 4492 
-          00, 02,                    # len
-          01, 00"
-          
-          all_extensions="
-           $extension_heartbeat
-          ,$extension_session_ticket
-          ,$extension_next_protocol"
+          if "$ecc_cipher_suite_found"; then
+               # Supported Groups Extension
+               extension_supported_groups="
+               00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
+               00, 3e, 00, 3c,            # lengths
+               00, 0e, 00, 0d, 00, 19, 00, 1c, 00, 1e, 00, 0b, 00, 0c, 00, 1b,
+               00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
+               00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
+               00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
+               # Supported Point Formats Extension
+               extension_supported_point_formats="
+               00, 0b,                    # Type: Supported Point Formats , see RFC 4492 
+               00, 02,                    # len
+               01, 00"
+          fi
 
-          if [[ -n "$SNI" ]]; then
-               all_extensions="$all_extensions
-               ,00, 00                  # extension server_name
+          # Each extension should appear in the ClientHello at most once. So,
+          # find out what extensions were provided as an argument and only use
+          # the provided values for those extensions.
+          extra_extensions="$(echo "$3" | tr 'A-Z' 'a-z')"
+          code2network "$extra_extensions"
+          len_all=${#extra_extensions}
+          for (( i=0; i < len_all; i=i+16+4*0x$len_extension_hex )); do
+               part2=$i+4
+               extra_extensions_list+=" ${NW_STR:i:2}${NW_STR:part2:2} "
+               j=$i+8
+               part2=$j+4
+               len_extension_hex="${NW_STR:j:2}${NW_STR:part2:2}"
+          done
+
+          if [[ -n "$SNI" ]] && [[ ! "$extra_extensions_list" =~ " 0000 " ]]; then
+               all_extensions="
+                00, 00                  # extension server_name
                ,00, $len_sni_ext        # length SNI EXT
                ,00, $len_sni_listlen    # server_name list_length
                ,00                      # server_name type (hostname)
                ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
                ,$servername_hexstr"     # server_name target
           fi
+          if [[ ! "$extra_extensions_list" =~ " 000f " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_heartbeat"
+          fi
+          if [[ ! "$extra_extensions_list" =~ " 0023 " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_session_ticket"
+          fi
+
+          # If the ClientHello will include the ALPN extension, then don't include the NPN extension.
+          if [[ ! "$extra_extensions_list" =~ " 3374 " ]] && [[ ! "$extra_extensions_list" =~ " 0010 " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_next_protocol"
+          fi
 
           # RFC 5246 says that clients MUST NOT offer the signature algorithms
           # extension if they are offering TLS versions prior to 1.2.
-          if [[ "0x$tls_low_byte" -ge "0x03" ]]; then
-               all_extensions="$all_extensions
-               ,$extension_signature_algorithms"
+          if [[ "0x$tls_low_byte" -ge "0x03" ]] && [[ ! "$extra_extensions_list" =~ " 000d " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_signature_algorithms"
           fi
 
-          if $ecc_cipher_suite_found; then
-               all_extensions="$all_extensions
-               ,$extensions_ecc"
+          if [[ -n "$extension_supported_groups" ]] && [[ ! "$extra_extensions_list" =~ " 000a " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_supported_groups"
+          fi
+          if [[ -n "$extension_supported_point_formats" ]] && [[ ! "$extra_extensions_list" =~ " 000b " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_supported_point_formats"
+          fi
+
+          if [[ -n "$extra_extensions" ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extra_extensions"
           fi
 
           code2network "$all_extensions" # convert extensions
@@ -6336,11 +6375,11 @@ socksend_tls_clienthello() {
           # If the length of the Client Hello would be between 256 and 511 bytes,
           # then add a padding extension (see RFC 7685)
           len_all=$((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2))
-          if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]]; then
+          if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]] && [[ ! "$extra_extensions_list" =~ " 0015 " ]]; then
                if [[ $len_all -gt 508 ]]; then
-                   len_padding_extension=0
+                    len_padding_extension=0
                else
-                   len_padding_extension=$((508 - 0x$len_ciph_suites - 0x2b - 0x$len_extension_hex - 0x2))
+                    len_padding_extension=$((508 - 0x$len_ciph_suites - 0x2b - 0x$len_extension_hex - 0x2))
                fi
                len_padding_extension_hex=$(printf "%02x\n" $len_padding_extension)
                len2twobytes "$len_padding_extension_hex"
@@ -6413,6 +6452,7 @@ socksend_tls_clienthello() {
 # arg2: (optional) list of cipher suites
 # arg3: (optional): "all" - process full response (including Certificate and certificate_status handshake messages)
 #                   "ephemeralkey" - extract the server's ephemeral key (if any)
+# arg4: (optional) additional request extensions
 tls_sockets() {
      local -i ret=0
      local -i save=0
@@ -6435,7 +6475,7 @@ tls_sockets() {
      fi
 
      debugme echo "sending client hello..."
-     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send"
+     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$4"
      ret=$?                             # 6 means opening socket didn't succeed, e.g. timeout
 
      # if sending didn't succeed we don't bother
