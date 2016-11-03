@@ -2200,6 +2200,7 @@ client_simulation_sockets() {
      local -i save=0
      local lines clienthello data=""
      local cipher_list_2send
+     local tls_hello_ascii
 
      if [[ "${1:0:4}" == "1603" ]]; then
           clienthello="$(create_client_simulation_tls_clienthello "$1")"
@@ -2220,13 +2221,17 @@ client_simulation_sockets() {
 
      sockread_serverhello 32768
      TLS_NOW=$(LC_ALL=C date "+%s")
+
+     tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+     tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
+
      debugme outln "reading server hello..."
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C $SOCK_REPLY_FILE | head -6
           echo
      fi
 
-     parse_tls_serverhello "$SOCK_REPLY_FILE"
+     parse_tls_serverhello "$tls_hello_ascii"
      save=$?
 
      # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
