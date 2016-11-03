@@ -49,7 +49,7 @@ exchanges.
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 #### [Features in 2.9dev](Readme.md#devel)
-* timeout in OpeenSSL connect
+* Support of supplying timeout value for ``openssl connect``
 * TLS 1.2 protocol check via socket
 * Further TLS socket improvements (Handshake)
 
