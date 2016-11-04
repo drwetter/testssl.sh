@@ -2002,32 +2002,68 @@ test_just_one(){
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad)
 run_allciphers() {
      local tmpfile
-     local -i nr_ciphers=0
-     local n auth mac export
-     local -a hexcode ciph sslvers kx enc export2
+     local -i nr_ciphers=0 ret
+     local n auth mac export hexc sslv2_ciphers=""
+     local -a normalized_hexcode hexcode ciph sslvers kx enc export2
      local -i i j parent child end_of_bundle round_num bundle_size num_bundles mod_check
      local -a ciphers_found
      local dhlen
      local available
      local ciphers_to_test
      local sslv2_supported=false
+     local has_dh_bits="$HAS_DH_BITS"
+     local using_sockets=true
 
-     # get a list of all the cipher suites to test (only need the hexcode, ciph, sslvers, kx, enc, and export values)
-     while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
-          nr_ciphers=$nr_ciphers+1
-     done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+     if "$SSL_NATIVE" || [[ -n "$STARTTLS" ]]; then
+          using_sockets=false
+     fi
+
+     if "$using_sockets"; then
+          # get a list of all the cipher suites to test (only need the hexcode, ciph, kx, enc, and export values)
+          for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+               hexc=$(echo "${TLS_CIPHER_HEXCODE[i]}" | tr 'A-Z' 'a-z')
+               ciph[i]="${TLS_CIPHER_OSSL_NAME[i]}"
+               sslvers[i]="${TLS_CIPHER_SSLVERS[i]}"
+               kx[i]="${TLS_CIPHER_KX[i]}"
+               enc[i]="${TLS_CIPHER_ENC[i]}"
+               export2[i]="${TLS_CIPHER_EXPORT[i]}"
+               if [[ ${#hexc} -eq 9 ]]; then
+                    hexcode[i]="${hexc:2:2},${hexc:7:2}"
+                    if [[ "${hexc:2:2}" == "00" ]]; then
+                         normalized_hexcode[i]="x${hexc:7:2}"
+                    else
+                         normalized_hexcode[i]="x${hexc:2:2}${hexc:7:2}"
+                    fi
+               else
+                    hexcode[i]="${hexc:2:2},${hexc:7:2},${hexc:12:2}"
+                    normalized_hexcode[i]="x${hexc:2:2}${hexc:7:2}${hexc:12:2}"
+                    sslv2_ciphers="$sslv2_ciphers, ${hexcode[i]}"
+               fi
+          done
+          nr_ciphers=$TLS_NR_CIPHERS
+
+          sslv2_sockets "${sslv2_ciphers:2}" "true"
+          if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+               sslv2_supported=true
+          fi
+     else
+          # get a list of all the cipher suites to test (only need the hexcode, ciph, sslvers, kx, enc, and export values)
+          while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+               nr_ciphers=$nr_ciphers+1
+          done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+
+          if "$HAS_SSL2"; then
+               $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+               sclient_connect_successful "$?" "$TMPFILE"
+               [[ "$?" -eq 0 ]] && sslv2_supported=true
+          fi
+     fi
 
      outln
-     pr_headlineln " Testing all $OPENSSL_NR_CIPHERS locally available ciphers against the server, ordered by encryption strength "
-     "$HAS_DH_BITS" || pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
+     pr_headlineln " Testing all $nr_ciphers locally available ciphers against the server, ordered by encryption strength "
+     "$using_sockets" || "$HAS_DH_BITS" || pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      outln
      neat_header
-
-     if "$HAS_SSL2"; then
-          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-          sclient_connect_successful "$?" "$TMPFILE"
-          [[ "$?" -eq 0 ]] && sslv2_supported=true
-     fi
 
      # Split ciphers into bundles of size 4**n, starting with an "n" that
      # splits the ciphers into 4 bundles, and then reducing "n" by one in each
@@ -2057,7 +2093,7 @@ run_allciphers() {
           num_bundles=$nr_ciphers/$bundle_size
           mod_check=$nr_ciphers%$bundle_size
           [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
-          for ((i=0;i<num_bundles;i++)); do
+          for (( i=0; i<num_bundles; i++ )); do
                # parent=index of bundle from previous round that includes this bundle of ciphers
                parent=4**$round_num+$i/4
                # child=index for this bundle of ciphers
@@ -2066,14 +2102,35 @@ run_allciphers() {
                     ciphers_to_test=""
                     end_of_bundle=$i*$bundle_size+$bundle_size
                     [[ $end_of_bundle -gt $nr_ciphers ]] && end_of_bundle=$nr_ciphers
-                    for ((j=i*bundle_size;j<end_of_bundle;j++)); do
-                         [[ "${sslvers[j]}" != "SSLv2" ]] && ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
-                    done
-                    ciphers_found[child]=false
-                    if [[ -n "${ciphers_to_test:1}" ]]; then
-                         $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
-                         sclient_connect_successful "$?" "$TMPFILE"
-                         [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                    if "$using_sockets"; then
+                         for (( j=i*bundle_size; j<end_of_bundle; j++ )); do
+                              # Exclude the SSLv2 ciphers
+                              hexc="${hexcode[j]}"
+                              [[ ${#hexc} -eq 5 ]] && ciphers_to_test="${ciphers_to_test}, ${hexcode[j]}"
+                         done
+                         ciphers_found[child]=false
+                         if [[ -n "${ciphers_to_test:2}" ]]; then
+                              if [[ $bundle_size -eq 1 ]]; then
+                                   tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+                              else
+                                   tls_sockets "03" "${ciphers_to_test:2}, 00,ff"
+                              fi
+                              ret=$?
+                              if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
+                                   ciphers_found[child]=true
+                                   cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+                              fi
+                         fi
+                    else
+                         for (( j=i*bundle_size; j<end_of_bundle; j++ )); do
+                              [[ "${sslvers[j]}" != "SSLv2" ]] && ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
+                         done
+                         ciphers_found[child]=false
+                         if [[ -n "${ciphers_to_test:1}" ]]; then
+                              $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+                              sclient_connect_successful "$?" "$TMPFILE"
+                              [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                         fi
                     fi
                else
                     # No need to test, since test of parent demonstrated none of these ciphers work.
@@ -2081,21 +2138,31 @@ run_allciphers() {
                fi
 
                if $sslv2_supported && [[ $bundle_size -eq 1 ]] && [[ "${sslvers[i]}" == "SSLv2" ]]; then
-                    $OPENSSL s_client -cipher "${ciph[i]}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-                    sclient_connect_successful "$?" "$TMPFILE"
-                    [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                    if "$using_sockets"; then
+                         if grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt" | grep -q "${normalized_hexcode[i]}"; then
+                              ciphers_found[child]=true
+                              echo "" > $TMPFILE
+                         fi
+                    else
+                         $OPENSSL s_client -cipher "${ciph[i]}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+                         sclient_connect_successful "$?" "$TMPFILE"
+                         [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                    fi
                fi
                # If this is a "leaf" of the test tree, then print out the results.
                if [[ $bundle_size -eq 1 ]] && ( ${ciphers_found[child]} || "$SHOW_EACH_C"); then
                     export=${export2[i]}
-                    normalize_ciphercode "${hexcode[i]}"
+                    if ! "$using_sockets"; then
+                         normalize_ciphercode "${hexcode[i]}"
+                         normalized_hexcode[i]="$HEXC"
+                    fi
                     if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
                          if ${ciphers_found[child]}; then
                               dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                               kx[i]="${kx[i]} $dhlen"
                          fi
                     fi
-                    neat_list "$HEXC" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
                     available=""
                     if "$SHOW_EACH_C"; then
                          if ${ciphers_found[child]}; then
@@ -2111,11 +2178,12 @@ run_allciphers() {
                     else
                          outln
                     fi
-                    fileout "cipher_$HEXC" "INFO" "$(neat_list "$HEXC" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
+                    fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
                fi
           done
           round_num=round_num+1
      done
+     "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
 
      outln
      tmpfile_handle $FUNCNAME.txt
