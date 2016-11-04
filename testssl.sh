@@ -1335,7 +1335,7 @@ run_hpkp() {
 
                # we compare now against a precompiled list of SPKIs against the ROOT CAs we have in $ca_hashes
                if ! "$certificate_found"; then
-                    hpkp_matches=$(grep -h "$hpkp_spki" $ca_hashes | sort -u)
+                    hpkp_matches=$(grep -h "$hpkp_spki" $ca_hashes 2>/dev/null | sort -u)
                     if [[ -n $hpkp_matches ]]; then
                          certificate_found=true      # root CA found
                          spki_match=true
@@ -1397,6 +1397,11 @@ run_hpkp() {
                     outln "$spaces_indented            ${backup_spki[i]}"
                fi
           done
+          if [[ ! -f "$ca_hashes" ]] && "$spki_match"; then
+               out "$spaces "
+               pr_warningln "Attribution of further hashes couldn't be done as $ca_hashes could not be found"
+               fileout "hpkp_spkimatch" "WARN" "Attribution of further hashes couldn't be done as $ca_hashes could not be found"
+          fi
 
           # If all else fails...
           if ! "$spki_match"; then
