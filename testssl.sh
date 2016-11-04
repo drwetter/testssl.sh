@@ -2051,70 +2051,70 @@ run_allciphers() {
      done
 
      for (( bundle_size/=4; bundle_size>=1; bundle_size/=4 )); do
-         # Note that since the number of ciphers isn't a power of 4, the number
-         # of bundles may be may be less than 4**(round_num+1), and the final
-         # bundle may have fewer than bundle_size ciphers.
-         num_bundles=$nr_ciphers/$bundle_size
-         mod_check=$nr_ciphers%$bundle_size
-         [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
-         for ((i=0;i<num_bundles;i++)); do
-             # parent=index of bundle from previous round that includes this bundle of ciphers
-             parent=4**$round_num+$i/4
-             # child=index for this bundle of ciphers
-             child=4*4**$round_num+$i
-             if ${ciphers_found[parent]}; then
-                 ciphers_to_test=""
-                 end_of_bundle=$i*$bundle_size+$bundle_size
-                 [[ $end_of_bundle -gt $nr_ciphers ]] && end_of_bundle=$nr_ciphers
-                 for ((j=i*bundle_size;j<end_of_bundle;j++)); do
-                     [[ "${sslvers[j]}" != "SSLv2" ]] && ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
-                 done
-                 ciphers_found[child]=false
-                 if [[ -n "${ciphers_to_test:1}" ]]; then
-                      $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
-                      sclient_connect_successful "$?" "$TMPFILE"
-                      [[ "$?" -eq 0 ]] && ciphers_found[child]=true
-                 fi
-             else
-                 # No need to test, since test of parent demonstrated none of these ciphers work.
-                 ciphers_found[child]=false
-             fi
+          # Note that since the number of ciphers isn't a power of 4, the number
+          # of bundles may be may be less than 4**(round_num+1), and the final
+          # bundle may have fewer than bundle_size ciphers.
+          num_bundles=$nr_ciphers/$bundle_size
+          mod_check=$nr_ciphers%$bundle_size
+          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+          for ((i=0;i<num_bundles;i++)); do
+               # parent=index of bundle from previous round that includes this bundle of ciphers
+               parent=4**$round_num+$i/4
+               # child=index for this bundle of ciphers
+               child=4*4**$round_num+$i
+               if ${ciphers_found[parent]}; then
+                    ciphers_to_test=""
+                    end_of_bundle=$i*$bundle_size+$bundle_size
+                    [[ $end_of_bundle -gt $nr_ciphers ]] && end_of_bundle=$nr_ciphers
+                    for ((j=i*bundle_size;j<end_of_bundle;j++)); do
+                         [[ "${sslvers[j]}" != "SSLv2" ]] && ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
+                    done
+                    ciphers_found[child]=false
+                    if [[ -n "${ciphers_to_test:1}" ]]; then
+                         $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+                         sclient_connect_successful "$?" "$TMPFILE"
+                         [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                    fi
+               else
+                    # No need to test, since test of parent demonstrated none of these ciphers work.
+                    ciphers_found[child]=false
+               fi
 
-             if $sslv2_supported && [[ $bundle_size -eq 1 ]] && [[ "${sslvers[i]}" == "SSLv2" ]]; then
-                 $OPENSSL s_client -cipher "${ciph[i]}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-                 sclient_connect_successful "$?" "$TMPFILE"
-                 [[ "$?" -eq 0 ]] && ciphers_found[child]=true
-             fi
-             # If this is a "leaf" of the test tree, then print out the results.
-             if [[ $bundle_size -eq 1 ]] && ( ${ciphers_found[child]} || "$SHOW_EACH_C"); then
-                 export=${export2[i]}
-                 normalize_ciphercode "${hexcode[i]}"
-                 if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
-                     if ${ciphers_found[child]}; then
-                         dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                         kx[i]="${kx[i]} $dhlen"
-                     fi
-                 fi
-                 neat_list "$HEXC" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
-                 available=""
-                 if "$SHOW_EACH_C"; then
-                     if ${ciphers_found[child]}; then
-                         available="available"
-                         pr_cyan "$available"
-                     else
-                         available="not a/v"
-                         out "$available"
-                     fi
-                 fi
-                 if "$SHOW_SIGALGO" && ${ciphers_found[child]}; then
-                     $OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1
-                 else
-                     outln
-                 fi
-                 fileout "cipher_$HEXC" "INFO" "$(neat_list "$HEXC" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
-             fi
-         done
-         round_num=round_num+1
+               if $sslv2_supported && [[ $bundle_size -eq 1 ]] && [[ "${sslvers[i]}" == "SSLv2" ]]; then
+                    $OPENSSL s_client -cipher "${ciph[i]}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+                    sclient_connect_successful "$?" "$TMPFILE"
+                    [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+               fi
+               # If this is a "leaf" of the test tree, then print out the results.
+               if [[ $bundle_size -eq 1 ]] && ( ${ciphers_found[child]} || "$SHOW_EACH_C"); then
+                    export=${export2[i]}
+                    normalize_ciphercode "${hexcode[i]}"
+                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                         if ${ciphers_found[child]}; then
+                              dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                              kx[i]="${kx[i]} $dhlen"
+                         fi
+                    fi
+                    neat_list "$HEXC" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+                    available=""
+                    if "$SHOW_EACH_C"; then
+                         if ${ciphers_found[child]}; then
+                              available="available"
+                              pr_cyan "$available"
+                         else
+                              available="not a/v"
+                              out "$available"
+                         fi
+                    fi
+                    if "$SHOW_SIGALGO" && ${ciphers_found[child]}; then
+                         $OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1
+                    else
+                         outln
+                    fi
+                    fileout "cipher_$HEXC" "INFO" "$(neat_list "$HEXC" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
+               fi
+          done
+          round_num=round_num+1
      done
 
      outln
