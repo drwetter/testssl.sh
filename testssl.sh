@@ -6007,13 +6007,17 @@ parse_tls_serverhello() {
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
      local tls_serverhello_ascii=""
+     local tls_serverkeyexchange_ascii=""
      local -i tls_serverhello_ascii_len=0
+     local -i tls_serverkeyexchange_ascii_len=0
      local tls_alert_descrip tls_sid_len_hex
      local -i tls_sid_len offset extns_offset
      local tls_msg_type tls_content_type tls_protocol tls_protocol2 tls_hello_time
-     local tls_err_level tls_err_descr tls_cipher_suite tls_compression_method
-     local tls_extensions="" extension_type
+     local tls_err_level tls_err_descr tls_cipher_suite rfc_cipher_suite tls_compression_method
+     local tls_extensions="" extension_type named_curve_str=""
      local -i i j extension_len tls_extensions_len
+     local -i curve_type named_curve
+     local -i dh_bits=0 msb mask
 
      TLS_TIME=""
      DETECTED_TLS_VERSION=""
@@ -6171,7 +6175,7 @@ parse_tls_serverhello() {
           done
      fi
 
-     # Now extract just the server hello handshake message.
+     # Now extract just the server hello and server key exchange handshake messages.
      tls_handshake_ascii_len=${#tls_handshake_ascii}
      if [[ $DEBUG -ge 2 ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
           echo "TLS handshake messages:"
@@ -6238,6 +6242,13 @@ parse_tls_serverhello() {
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverhello_ascii_len=$msg_len
+          elif ( [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]] ) && [[ "$tls_msg_type" == "0C" ]]; then
+               if [[ -n "$tls_serverkeyexchange_ascii" ]]; then
+                    debugme pr_warningln "Response contained more than one ServerKeyExchange handshake message."
+                    return 1
+               fi
+               tls_serverkeyexchange_ascii="${tls_handshake_ascii:i:msg_len}"
+               tls_serverkeyexchange_ascii_len=$msg_len
           fi
      done
 
@@ -6367,10 +6378,11 @@ parse_tls_serverhello() {
      fi
      echo "===============================================================================" >> $TMPFILE
      if [[ "${tls_cipher_suite:0:2}" == "00" ]]; then
-          echo "Cipher    : $(show_rfc_style "x${tls_cipher_suite:2:2}")" >> $TMPFILE
+          rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:2:2}")"
      else
-          echo "Cipher    : $(show_rfc_style "x${tls_cipher_suite:0:4}")" >> $TMPFILE
+          rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:0:4}")"
      fi
+     echo "Cipher    : $rfc_cipher_suite" >> $TMPFILE
      if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
           case $tls_compression_method in
                00) echo "Compression: NONE" >> $TMPFILE ;;
@@ -6405,6 +6417,92 @@ parse_tls_serverhello() {
                echo "     tls_extensions:         $TLS_EXTENSIONS"
           fi
           outln
+     fi
+
+     # Now parse the server key exchange message
+     if [[ $tls_serverkeyexchange_ascii_len -ne 0 ]]; then
+          if [[ $rfc_cipher_suite =~ "TLS_ECDHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_ECDH_anon" ]]; then
+               if [[ $tls_serverkeyexchange_ascii_len -lt 6 ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               curve_type=$(hex2dec "${tls_serverkeyexchange_ascii:0:2}")
+               if [[ $curve_type -eq 3 ]]; then
+                    # named_curve - the curve is identified by a 2-byte number
+                    named_curve=$(hex2dec "${tls_serverkeyexchange_ascii:2:4}")
+                    # http://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8
+                    case $named_curve in
+                         1) dh_bits=163 ; named_curve_str="K-163" ;;
+                         2) dh_bits=163 ; named_curve_str="sect163r1" ;;
+                         3) dh_bits=163 ; named_curve_str="B-163" ;;
+                         4) dh_bits=193 ; named_curve_str="sect193r1" ;;
+                         5) dh_bits=193 ; named_curve_str="sect193r2" ;;
+                         6) dh_bits=233 ; named_curve_str="K-233" ;;
+                         7) dh_bits=233 ; named_curve_str="B-233" ;;
+                         8) dh_bits=239 ; named_curve_str="sect239k1" ;;
+                         9) dh_bits=283 ; named_curve_str="K-283" ;;
+                         10) dh_bits=283 ; named_curve_str="B-283" ;;
+                         11) dh_bits=409 ; named_curve_str="K-409" ;;
+                         12) dh_bits=409 ; named_curve_str="B-409" ;;
+                         13) dh_bits=571 ; named_curve_str="K-571" ;;
+                         14) dh_bits=571 ; named_curve_str="B-571" ;;
+                         15) dh_bits=160 ; named_curve_str="secp160k1" ;;
+                         16) dh_bits=160 ; named_curve_str="secp160r1" ;;
+                         17) dh_bits=160 ; named_curve_str="secp160r2" ;;
+                         18) dh_bits=192 ; named_curve_str="secp192k1" ;;
+                         19) dh_bits=192 ; named_curve_str="P-192" ;;
+                         20) dh_bits=224 ; named_curve_str="secp224k1" ;;
+                         21) dh_bits=224 ; named_curve_str="P-224" ;;
+                         22) dh_bits=256 ; named_curve_str="secp256k1" ;;
+                         23) dh_bits=256 ; named_curve_str="P-256" ;;
+                         24) dh_bits=384 ; named_curve_str="P-384" ;;
+                         25) dh_bits=521 ; named_curve_str="P-521" ;;
+                         26) dh_bits=256 ; named_curve_str="brainpoolP256r1" ;;
+                         27) dh_bits=384 ; named_curve_str="brainpoolP384r1" ;;
+                         28) dh_bits=512 ; named_curve_str="brainpoolP512r1" ;;
+                         29) dh_bits=256 ; named_curve_str="X25519" ;;
+                         30) dh_bits=448 ; named_curve_str="X448" ;;
+                    esac
+               fi
+               [[ $DEBUG -ge 2 ]] && [[ $dh_bits -ne 0 ]] && echo "dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
+               [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
+          elif [[ $rfc_cipher_suite =~ "TLS_DHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_DH_anon" ]]; then
+               # For DH ephemeral keys the first field is p, and the length of
+               # p is the same as the length of the public key.
+               if [[ $tls_serverkeyexchange_ascii_len -lt 4 ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               dh_bits=$(hex2dec "${tls_serverkeyexchange_ascii:0:4}")
+               offset=4+2*$dh_bits
+               if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+
+               # Subtract any leading 0 bits
+               for (( i=4; i < offset; i=i+2 )); do
+                    [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
+                    dh_bits=$dh_bits-1
+               done
+               if [[ $i -ge $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+
+               dh_bits=8*$dh_bits
+               msb=$(hex2dec "${tls_serverkeyexchange_ascii:i:2}")
+               for (( mask=128; msb < mask; mask/=2 )); do
+                    dh_bits=$dh_bits-1
+               done
+
+               [[ $DEBUG -ge 2 ]] && [[ $dh_bits -ne 0 ]] && echo "dh_bits:                DH,$named_curve_str $dh_bits bits"
+               [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: DH,$named_curve_str $dh_bits bits" >> $TMPFILE
+          fi
      fi
      tmpfile_handle $FUNCNAME.txt
      return 0
