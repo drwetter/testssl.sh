@@ -28,9 +28,8 @@ cryptographic flaws.
 
 #### Status
 
-_ _Here in the master branch you find the stable version 2.8rc2 of the software, it 
-superseds 2.6. Version 2.8 is currently being finalized_ . The 2.9dev branch is the developement 
--- with new  features  and maybe some bugs. For the stable version and **a
+Here in the _2.9dev branch you find the development version_ of the software
+-- with new features and maybe some bugs. For the stable version and **a
 more thorough description of the command line options** please see
 [testssl.sh](https://testssl.sh/ "Go to the site with the stable version
 and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation. 
@@ -48,13 +47,15 @@ exchanges.
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
-#### [Features in 2.9dev](Readme.md#devel)
-* Support of supplying timeout value for ``openssl connect``
+#### Features implemented in [2.9dev](Readme.md#devel)
+* Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
 * TLS 1.2 protocol check via socket
-* Further TLS socket improvements (Handshake)
+* Further TLS socket improvements (Handshake parsing, robustness)
+* non-flat JSON support
+* in file output (CSV, JSON flat, JSON non-flat) support of a minimum severity level (only above supplied level there will be output)
 
 
-#### Planned in 2.9dev
+#### Features planned in 2.9dev
 
 https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A2.9dev
 
