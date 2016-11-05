@@ -28,7 +28,7 @@ cryptographic flaws.
 
 #### Status
 
-_ _Here in the 2.9dev branch you find the development version of the software
+Here in the _2.9dev branch you find the development version_ of the software
 -- with new features and maybe some bugs. For the stable version and **a
 more thorough description of the command line options** please see
 [testssl.sh](https://testssl.sh/ "Go to the site with the stable version
@@ -48,9 +48,11 @@ exchanges.
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 #### Features in [2.9dev](Readme.md#devel)
-* Support of supplying timeout value for ``openssl connect``
+* Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
 * TLS 1.2 protocol check via socket
 * Further TLS socket improvements (Handshake parsing, robustness)
+* non-flat JSON support
+* in file output (CSV, JSON flat, JSON non-flat) support of a minimum severity level (only above supplied level there will be output)
 
 
 #### Planned in 2.9dev
