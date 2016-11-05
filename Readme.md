@@ -28,11 +28,10 @@ cryptographic flaws.
 
 #### Status
 
-_ _Here in the master branch you find the stable version 2.8rc2 of the software, it 
-superseds 2.6. Version 2.8 is currently being finalized_ _. The 2.9dev branch is the developement 
--- with new  features  and maybe some bugs. For the stable version and **a
-more thorough description of the command line options** please see
-[testssl.sh](https://testssl.sh/ "Go to the site with the stable version
+_Here in the master branch you find the stable version 2.8rc3 of the software, it 
+superseds 2.6. Version 2.8 is currently being finalized_ . 2.9dev is the new
+developement branch  For the **a more thorough description of the command line options** 
+please see [testssl.sh](https://testssl.sh/ "Go to the site with the stable version
 and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation. 
 
 #### Compatibility
@@ -46,7 +45,7 @@ cygwin) work too. OpenSSL version >= 1 is a must.  OpenSSL version >= 1.0.2
 is needed for better LOGJAM checks and to display bit strengths for key
 exchanges.
 
-#### [Features in 2.8 stable](Readme.md#stable)
+#### Features in [2.8 stable](Readme.md#stable)
 
 Done so far:
 
@@ -61,6 +60,7 @@ Done so far:
 * HTTP2/ALPN protocol check
 * Logging to a file / dir
 * Logging to (flat) JSON + CSV
+* HPKP checks now also for Root, intermediate SPKIs 
 * Check for multiple server certificates
 * Browser cipher simulation: what client will connect with which cipher + protocol
 * GOST cipher+certificate improvements
@@ -75,9 +75,6 @@ Done so far:
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
-#### [Features in 2.9dev](Readme.md#devel)
-* timeout in OpeenSL connect
-* TLS 1.2 protocol check via socket
 
 #### Contributions
 
