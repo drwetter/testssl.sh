@@ -558,9 +558,13 @@ trim_trailing_space() {
      echo "${1%%*( )}"
 }
 
-toupper() {
-     echo -n "$1" | tr 'a-z' 'A-Z'
-}
+if [[ $(uname) == "Linux" ]] ; then
+     toupper() { echo -n "${1^^}" ;  }
+     tolower() { echo -n "${1,,}" ;  }
+else
+     toupper() { echo -n "$1" | tr 'a-z' 'A-Z'; }
+     tolower() { echo -n "$1" | tr 'A-Z' 'a-z' ; }
+fi
 
 is_number() {
      [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
@@ -1543,7 +1547,7 @@ normalize_ciphercode() {
           HEXC="$part1$part2$part3"
      fi
 #TODO: we should just echo this and avoid the global var HEXC
-     HEXC=$(echo $HEXC | tr 'A-Z' 'a-z' | sed 's/0x/x/') #tolower + strip leading 0
+     HEXC=$(tolower "$HEXC"| sed 's/0x/x/')  # strip leading 0
      return 0
 }
 
