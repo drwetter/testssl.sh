@@ -47,7 +47,7 @@ exchanges.
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
-#### Features in [2.9dev](Readme.md#devel)
+#### Features implemented in [2.9dev](Readme.md#devel)
 * Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
 * TLS 1.2 protocol check via socket
 * Further TLS socket improvements (Handshake parsing, robustness)
@@ -55,7 +55,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * in file output (CSV, JSON flat, JSON non-flat) support of a minimum severity level (only above supplied level there will be output)
 
 
-#### Planned in 2.9dev
+#### Features planned in 2.9dev
 
 https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A2.9dev
 
