@@ -8212,17 +8212,34 @@ check_bsd_mount() {
 help() {
      cat << EOF
 
-$PROG_NAME <options>
+     "$PROG_NAME URI"    or    "$PROG_NAME <options>"    or    "$PROG_NAME <options> URI"
+
+
+"$PROG_NAME URI", where URI is:
+     
+     URI                           host|host:port|URL|URL:port   port 443 is default, URL can only contain HTTPS protocol) 
+
+"$PROG_NAME <options>", where <options> is:
 
      -h, --help                    what you're looking at
      -b, --banner                  displays banner + version of $PROG_NAME
      -v, --version                 same as previous
      -V, --local                   pretty print all local ciphers
-     -V, --local <pattern>         which local ciphers with <pattern> are available?
-                                   (if pattern not a number: word match)
+     -V, --local <pattern>         which local ciphers with <pattern> are available? If pattern is not a number: word match
 
-$PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
+     pattern                       is always an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
 
+
+"$PROG_NAME <options> URI", where <options> is:
+
+     -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol, 
+                                   protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap> (latter two require supplied openssl)
+     --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
+     --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
+     --file <fname>                mass testing option: Reads command lines from <fname>, one line per instance.
+                                   Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch"
+
+single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
      -f, --ciphers                 checks common cipher suites
@@ -8236,7 +8253,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -c, --client-simulation       test client simulations, see which client negotiates with cipher and protocol
      -H, --header, --headers       tests HSTS, HPKP, server/app banner, security headers, cookie, reverse proxy, IPv4 address
 
-     -U, --vulnerable              tests all vulnerabilities
+     -U, --vulnerable              tests all (of the following) vulnerabilities (if applicable)
      -B, --heartbleed              tests for heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -R, --renegotiation           tests for renegotiation vulnerabilities
@@ -8251,29 +8268,16 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -s, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
 
-special invocations:
-     -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol>
-     --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
-     --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
-     --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
-                                   b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
-     -n, --nodns                   do not try any DNS lookup
-     --file <fname>                mass testing option: Reads command lines from <fname>, one line per instance.
-                                   Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch"
-
-partly mandatory parameters:
-     URI                           host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
-     pattern                       an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
-     protocol                      is one of the STARTTLS protocols ftp,smtp,pop3,imap,xmpp,telnet,ldap
-                                   (for the latter two you need e.g. the supplied openssl)
-
-tuning options (can also be preset via environment variables):
+tuning / connect options (most also can be preset via environment variables):
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
      --proxy <host>:<port>         connect via the specified HTTP proxy
      -6                            use also IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
+     --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
+                                   b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
+     -n, --nodns                   do not try any DNS lookup
      --sneaky                      leave less traces in target logs: user agent, referer
 
 output options (can also be preset via environment variables):
@@ -8290,22 +8294,23 @@ output options (can also be preset via environment variables):
 file output options (can also be preset via environment variables):
      --log, --logging              logs stdout to <NODE-YYYYMMDD-HHMM.log> in current working directory
      --logfile <logfile>           logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified log file
-     --json                        additional output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
-     --jsonfile <jsonfile>         additional output to JSON and output JSON to the specified file
-     --json-pretty                 additional pretty structed output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
-     --jsonfile-pretty <jsonfile>  additional pretty structed output to JSON and output JSON to the specified file
-     --csv                         additional output of findings to CSV file  <NODE-YYYYMMDD-HHMM.csv> in cwd
-     --csvfile <csvfile>           set output to CSV and output CSV to the specified file
+     --json                        additional output of findings to flat JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
+     --jsonfile <jsonfile>         additional output to the specified flat JSON file
+     --json-pretty                 additional pretty structured output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
+     --jsonfile-pretty <jsonfile>  additional pretty structured output as JSON to the specified file
+     --csv                         additional output of findings to CSV file <NODE-YYYYMMDD-HHMM.csv> in cwd
+     --csvfile <csvfile>           additional output as CSV to the specified file
+     --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if <csvfile> or <jsonfile> exists rather append then overwrite
-     --severity <severity>         severities with lower level will be filtered
 
-All options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 
-<URI> is always the last parameter.
+Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
+URI always needs to be the last parameter.
 
 Need HTML output? Just pipe through "aha" (ANSI HTML Adapter: github.com/theZiz/aha) like
 
-   "$PROG_NAME <options> <URI> | aha >output.html"
+   "$PROG_NAME <options> <URI> | aha >output.html" or use -log* and convert later
+
 EOF
      #' Fix syntax highlight on sublime
      exit $1
