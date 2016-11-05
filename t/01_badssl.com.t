@@ -28,7 +28,7 @@ foreach my $f ( @$json ) {
 	if ( $f->{id} eq "expiration" ) {
 		$found = 1;
 		like($f->{finding},qr/^Certificate Expiration.*expired\!/,"Finding reads expired."); $tests++;
-		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
+		is($f->{severity}, "CRITICAL", "Severity should be CRITICAL"); $tests++;
 		last;
     }
 }
@@ -56,7 +56,7 @@ foreach my $f ( @$json ) {
 	if ( $f->{id} eq "chain_of_trust" ) {
 	$found = 1;
 		like($f->{finding},qr/^All certificate trust checks failed/,"Finding says certificate cannot be trusted."); $tests++;
-		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
+		is($f->{severity}, "CRITICAL", "Severity should be CRITICAL"); $tests++;
 		last;
     }
 }
@@ -100,7 +100,7 @@ foreach my $f ( @$json ) {
 	if ( $f->{id} eq "chain_of_trust" ) {
 		$found = 1;
 		like($f->{finding},qr/^All certificate trust checks failed.*incomplete/,"Finding says certificate cannot be trusted."); $tests++;
-		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
+		is($f->{severity}, "CRITICAL", "Severity should be CRITICAL"); $tests++;
 		last;
     }
 }
@@ -118,7 +118,7 @@ is($found,1,"We had a finding for this in the JSON output"); $tests++;
 #	if ( $f->{id} eq "chain_of_trust" ) {
 #		$found = 1;
 #		like($f->{finding},qr/^All certificate trust checks failed.*incomplete/,"Finding says certificate cannot be trusted."); $tests++;
-#		is($f->{severity}, "NOT ok", "Severity should be NOT ok"); $tests++;
+#		is($f->{severity}, "CRITICAL", "Severity should be CRITICAL"); $tests++;
 #		last;
 #    }
 #}
