@@ -505,10 +505,13 @@ strip_quote() {
 fileout_pretty_json_header() {
     START_TIME=$(date +%s)
 
-    echo -e "          \"host\"        : \"$NODE\",
+    echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
+          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\"
+          \"openssl\"     : \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\"
+          \"target host\" : \"$NODE\",
           \"port\"        : \"$PORT\",
           \"startTime\"   : \"$START_TIME\",
-          \"version\"     : \"$VERSION\",
           \"scanResult\"  : {
           "
 }
