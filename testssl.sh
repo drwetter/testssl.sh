@@ -6599,7 +6599,7 @@ socksend_tls_clienthello() {
      local extension_supported_groups="" extension_supported_point_formats=""
      local extra_extensions extra_extensions_list=""
 
-     code2network "$(echo "$2" | tr 'A-Z' 'a-z')"   # convert CIPHER_SUITES
+     code2network "$(tolower "$2")"               # convert CIPHER_SUITES
      cipher_suites="$NW_STR"                      # we don't have the leading \x here so string length is two byte less, see next
 
      len_ciph_suites_byte=$(echo ${#cipher_suites})
@@ -8444,8 +8444,9 @@ EOF
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
      # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
-
      CIPHERS_BY_STRENGTH_FILE=$(mktemp $TEMPDIR/ciphers_by_strength.XXXXXX)
+
+-#FIXME: better externally: separation of code and data
      cat >$CIPHERS_BY_STRENGTH_FILE << EOF
       0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305  TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256_OLD  TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
       0xCC,0x13 - ECDHE-RSA-CHACHA20-POLY1305    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD    TLSv1.2    Kx=ECDH        Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
