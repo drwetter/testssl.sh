@@ -2352,7 +2352,8 @@ client_simulation_sockets() {
      local -i save=0
      local lines clienthello data=""
      local cipher_list_2send
-     local tls_hello_ascii
+     local sock_reply_file2 sock_reply_file3
+     local tls_hello_ascii next_packet hello_done=0
 
      if [[ "${1:0:4}" == "1603" ]]; then
           clienthello="$(create_client_simulation_tls_clienthello "$1")"
@@ -2361,7 +2362,7 @@ client_simulation_sockets() {
      fi
      len=${#clienthello}
      for (( i=0; i < len; i=i+2 )); do
-         data+=", ${clienthello:i:2}"
+          data+=", ${clienthello:i:2}"
      done
      debugme echo "sending client hello..."
      code2network "${data}"
@@ -2377,14 +2378,57 @@ client_simulation_sockets() {
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
 
+     check_tls_serverhellodone "$tls_hello_ascii"
+     hello_done=$?
+
+     for(( 1 ; hello_done==1; 1 )); do
+          sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+          mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+
+          debugme echo "requesting more server hello data..."
+          socksend "" $USLEEP_SND
+          sockread_serverhello 32768
+
+          next_packet=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+          next_packet="${next_packet%%[!0-9A-F]*}"
+          if [[ ${#next_packet} -eq 0 ]]; then
+               # This shouldn't be necessary. However, it protects against
+               # getting into an infinite loop if the server has nothing
+               # left to send and check_tls_serverhellodone doesn't
+               # correctly catch it.
+               mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+               hello_done=0
+          else
+               tls_hello_ascii+="$next_packet"
+
+               sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+               mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
+               mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+               cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
+               rm "$sock_reply_file3"
+
+               check_tls_serverhellodone "$tls_hello_ascii"
+               hello_done=$?
+          fi
+     done
+
      debugme outln "reading server hello..."
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C $SOCK_REPLY_FILE | head -6
           echo
      fi
 
-     parse_tls_serverhello "$tls_hello_ascii"
+     parse_tls_serverhello "$tls_hello_ascii" "ephemeralkey"
      save=$?
+
+     if [[ $save -eq 0 ]]; then
+          debugme echo "sending close_notify..."
+          if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+               socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+          else
+               socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+          fi
+     fi
 
      # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
      lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
@@ -2425,7 +2469,7 @@ run_client_simulation() {
      local minEcdsaBits=()
      local requiresSha2=()
      local i=0
-     local name tls proto cipher
+     local name tls proto cipher temp what_dh bits has_dh_bits
      local using_sockets=true
 
      if "$SSL_NATIVE" || [[ -n "$STARTTLS" ]]; then
@@ -3187,6 +3231,18 @@ run_client_simulation() {
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
           fi
+          if [[ $sclient_success -eq 0 ]]; then
+               # If an ephemeral DH key was used, check that the number of bits is within range.
+               temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")        # extract line
+               what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
+               bits=$(awk -F',' '{ print $3 }' <<< $temp)
+               grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
+               bits=$(tr -d ' bits' <<< $bits)
+               if [[ "$what_dh" == "DH" ]]; then
+                    [[ ${minDhBits[i]} -ne -1 ]] && [[ $bits -lt ${minDhBits[i]} ]] && sclient_success=1
+                    [[ ${maxDhBits[i]} -ne -1 ]] && [[ $bits -gt ${maxDhBits[i]} ]] && sclient_success=1
+               fi
+          fi
           if [[ $sclient_success -ne 0 ]]; then
                outln "No connection"
                fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
@@ -3221,7 +3277,12 @@ run_client_simulation() {
                #FiXME: awk
                cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
                "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && cipher="$(rfc2openssl "$cipher")"
-               outln "$proto $cipher"
+               out "$proto $cipher"
+               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
+               "$HAS_DH_BITS" && read_dhbits_from_file $TMPFILE
+               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && HAS_DH_BITS=$has_dh_bits
+               [[ ":${ROBUST_PFS_CIPHERS}:" =~ ":${cipher}:" ]] && out ", " && pr_done_good "FS"
+               outln
                if [[ -n "${warning[i]}" ]]; then
                     out "                            "
                     outln "${warning[i]}"
