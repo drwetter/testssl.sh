@@ -8512,9 +8512,9 @@ EOF
 
 #FIXME: better externally: separation of code and data
      cat >$CIPHERS_BY_STRENGTH_FILE << EOF
-      0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305  TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256_OLD  TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
-      0xCC,0x13 - ECDHE-RSA-CHACHA20-POLY1305    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD    TLSv1.2    Kx=ECDH        Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
-      0xCC,0x15 - DHE-RSA-CHACHA20-POLY1305      TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD      TLSv1.2    Kx=DH          Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305-OLD  TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256_OLD  TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0x13 - ECDHE-RSA-CHACHA20-POLY1305-OLD    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD    TLSv1.2    Kx=ECDH        Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0x15 - DHE-RSA-CHACHA20-POLY1305-OLD      TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD      TLSv1.2    Kx=DH          Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
       0xC0,0x30 - ECDHE-RSA-AES256-GCM-SHA384    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AESGCM(256)                Mac=AEAD               
       0xC0,0x2C - ECDHE-ECDSA-AES256-GCM-SHA384  TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384            TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AESGCM(256)                Mac=AEAD               
       0xC0,0x28 - ECDHE-RSA-AES256-SHA384        TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AES(256)                   Mac=SHA384             
