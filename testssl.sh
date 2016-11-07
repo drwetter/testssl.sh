@@ -8421,8 +8421,6 @@ EOF
 }
 
 maketempf() {
-     local n
-
      TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
      TMPFILE=$TEMPDIR/tempfile.txt || exit -6
      if [[ "$DEBUG" -eq 0 ]]; then
