@@ -505,10 +505,13 @@ strip_quote() {
 fileout_pretty_json_header() {
     START_TIME=$(date +%s)
 
-    echo -e "          \"host\"        : \"$NODE\",
+    echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
+          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\"
+          \"openssl\"     : \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\"
+          \"target host\" : \"$NODE\",
           \"port\"        : \"$PORT\",
           \"startTime\"   : \"$START_TIME\",
-          \"version\"     : \"$VERSION\",
           \"scanResult\"  : {
           "
 }
@@ -701,9 +704,13 @@ trim_trailing_space() {
      echo "${1%%*( )}"
 }
 
-toupper() {
-     echo -n "$1" | tr 'a-z' 'A-Z'
-}
+if [[ $(uname) == "Linux" ]] ; then
+     toupper() { echo -n "${1^^}" ;  }
+     tolower() { echo -n "${1,,}" ;  }
+else
+     toupper() { echo -n "$1" | tr 'a-z' 'A-Z'; }
+     tolower() { echo -n "$1" | tr 'A-Z' 'a-z' ; }
+fi
 
 is_number() {
      [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
@@ -1691,7 +1698,7 @@ normalize_ciphercode() {
           HEXC="$part1$part2$part3"
      fi
 #TODO: we should just echo this and avoid the global var HEXC
-     HEXC=$(echo $HEXC | tr 'A-Z' 'a-z' | sed 's/0x/x/') #tolower + strip leading 0
+     HEXC=$(tolower "$HEXC"| sed 's/0x/x/')  # strip leading 0
      return 0
 }
 
@@ -2416,7 +2423,8 @@ client_simulation_sockets() {
      local -i save=0
      local lines clienthello data=""
      local cipher_list_2send
-     local tls_hello_ascii
+     local sock_reply_file2 sock_reply_file3
+     local tls_hello_ascii next_packet hello_done=0
 
      if [[ "${1:0:4}" == "1603" ]]; then
           clienthello="$(create_client_simulation_tls_clienthello "$1")"
@@ -2425,7 +2433,7 @@ client_simulation_sockets() {
      fi
      len=${#clienthello}
      for (( i=0; i < len; i=i+2 )); do
-         data+=", ${clienthello:i:2}"
+          data+=", ${clienthello:i:2}"
      done
      debugme echo "sending client hello..."
      code2network "${data}"
@@ -2441,14 +2449,57 @@ client_simulation_sockets() {
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
 
+     check_tls_serverhellodone "$tls_hello_ascii"
+     hello_done=$?
+
+     for(( 1 ; hello_done==1; 1 )); do
+          sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+          mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+
+          debugme echo "requesting more server hello data..."
+          socksend "" $USLEEP_SND
+          sockread_serverhello 32768
+
+          next_packet=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+          next_packet="${next_packet%%[!0-9A-F]*}"
+          if [[ ${#next_packet} -eq 0 ]]; then
+               # This shouldn't be necessary. However, it protects against
+               # getting into an infinite loop if the server has nothing
+               # left to send and check_tls_serverhellodone doesn't
+               # correctly catch it.
+               mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+               hello_done=0
+          else
+               tls_hello_ascii+="$next_packet"
+
+               sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+               mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
+               mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+               cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
+               rm "$sock_reply_file3"
+
+               check_tls_serverhellodone "$tls_hello_ascii"
+               hello_done=$?
+          fi
+     done
+
      debugme outln "reading server hello..."
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C $SOCK_REPLY_FILE | head -6
           echo
      fi
 
-     parse_tls_serverhello "$tls_hello_ascii"
+     parse_tls_serverhello "$tls_hello_ascii" "ephemeralkey"
      save=$?
+
+     if [[ $save -eq 0 ]]; then
+          debugme echo "sending close_notify..."
+          if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+               socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+          else
+               socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+          fi
+     fi
 
      # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
      lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
@@ -2489,7 +2540,7 @@ run_client_simulation() {
      local minEcdsaBits=()
      local requiresSha2=()
      local i=0
-     local name tls proto cipher
+     local name tls proto cipher temp what_dh bits has_dh_bits
      local using_sockets=true
 
      if "$SSL_NATIVE" || [[ -n "$STARTTLS" ]]; then
@@ -3251,6 +3302,18 @@ run_client_simulation() {
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
           fi
+          if [[ $sclient_success -eq 0 ]]; then
+               # If an ephemeral DH key was used, check that the number of bits is within range.
+               temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")        # extract line
+               what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
+               bits=$(awk -F',' '{ print $3 }' <<< $temp)
+               grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
+               bits=$(tr -d ' bits' <<< $bits)
+               if [[ "$what_dh" == "DH" ]]; then
+                    [[ ${minDhBits[i]} -ne -1 ]] && [[ $bits -lt ${minDhBits[i]} ]] && sclient_success=1
+                    [[ ${maxDhBits[i]} -ne -1 ]] && [[ $bits -gt ${maxDhBits[i]} ]] && sclient_success=1
+               fi
+          fi
           if [[ $sclient_success -ne 0 ]]; then
                outln "No connection"
                fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
@@ -3285,7 +3348,12 @@ run_client_simulation() {
                #FiXME: awk
                cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
                "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && cipher="$(rfc2openssl "$cipher")"
-               outln "$proto $cipher"
+               out "$proto $cipher"
+               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
+               "$HAS_DH_BITS" && read_dhbits_from_file $TMPFILE
+               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && HAS_DH_BITS=$has_dh_bits
+               [[ ":${ROBUST_PFS_CIPHERS}:" =~ ":${cipher}:" ]] && out ", " && pr_done_good "FS"
+               outln
                if [[ -n "${warning[i]}" ]]; then
                     out "                            "
                     outln "${warning[i]}"
@@ -6646,6 +6714,7 @@ sslv2_sockets() {
 
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # ARG2: CIPHER_SUITES string
+# ARG3: (optional) additional request extensions
 socksend_tls_clienthello() {
      local tls_low_byte="$1"
      local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301 -- except: SSLv3
@@ -6658,10 +6727,12 @@ socksend_tls_clienthello() {
      local len_client_hello_word len_all_word
      local ecc_cipher_suite_found=false
      local extension_signature_algorithms extension_heartbeat
-     local extension_session_ticket extension_next_protocol extensions_ecc extension_padding
+     local extension_session_ticket extension_next_protocol extension_padding
+     local extension_supported_groups="" extension_supported_point_formats=""
+     local extra_extensions extra_extensions_list=""
 
-     code2network "$2"             # convert CIPHER_SUITES
-     cipher_suites="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
+     code2network "$(tolower "$2")"               # convert CIPHER_SUITES
+     cipher_suites="$NW_STR"                      # we don't have the leading \x here so string length is two byte less, see next
 
      len_ciph_suites_byte=$(echo ${#cipher_suites})
      let "len_ciph_suites_byte += 2"
@@ -6690,7 +6761,7 @@ socksend_tls_clienthello() {
                     elif [[ "$part2" -ge "0x5c" ]] && [[ "$part2" -le "0x63" ]]; then
                          ecc_cipher_suite_found=true && break
                     elif [[ "$part2" -ge "0x70" ]] && [[ "$part2" -le "0x79" ]]; then
-                    ecc_cipher_suite_found=true && break
+                         ecc_cipher_suite_found=true && break
                     elif [[ "$part2" -ge "0x86" ]] && [[ "$part2" -le "0x8d" ]]; then
                          ecc_cipher_suite_found=true && break
                     elif [[ "$part2" -ge "0x9a" ]] && [[ "$part2" -le "0x9b" ]]; then
@@ -6737,43 +6808,79 @@ socksend_tls_clienthello() {
           extension_next_protocol="
           33, 74, 00, 00"
 
-          # Supported Elliptic Curves Extension and Supported Point Formats Extension.
-          extensions_ecc="
-          00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
-          00, 3e, 00, 3c,            # lengths
-          00, 0e, 00, 0d, 00, 19, 00, 1c, 00, 1e, 00, 0b, 00, 0c, 00, 1b,
-          00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
-          00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
-          00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11,
-          00, 0b,                    # Type: Supported Point Formats , see RFC 4492
-          00, 02,                    # len
-          01, 00"
+          if "$ecc_cipher_suite_found"; then
+               # Supported Groups Extension
+               extension_supported_groups="
+               00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
+               00, 3e, 00, 3c,            # lengths
+               00, 0e, 00, 0d, 00, 19, 00, 1c, 00, 1e, 00, 0b, 00, 0c, 00, 1b,
+               00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
+               00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
+               00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
+               # Supported Point Formats Extension
+               extension_supported_point_formats="
+               00, 0b,                    # Type: Supported Point Formats , see RFC 4492 
+               00, 02,                    # len
+               01, 00"
+          fi
 
-          all_extensions="
-           $extension_heartbeat
-          ,$extension_session_ticket
-          ,$extension_next_protocol"
+          # Each extension should appear in the ClientHello at most once. So,
+          # find out what extensions were provided as an argument and only use
+          # the provided values for those extensions.
+          extra_extensions="$(echo "$3" | tr 'A-Z' 'a-z')"
+          code2network "$extra_extensions"
+          len_all=${#extra_extensions}
+          for (( i=0; i < len_all; i=i+16+4*0x$len_extension_hex )); do
+               part2=$i+4
+               extra_extensions_list+=" ${NW_STR:i:2}${NW_STR:part2:2} "
+               j=$i+8
+               part2=$j+4
+               len_extension_hex="${NW_STR:j:2}${NW_STR:part2:2}"
+          done
 
-          if [[ -n "$SNI" ]]; then
-               all_extensions="$all_extensions
-               ,00, 00                  # extension server_name
+          if [[ -n "$SNI" ]] && [[ ! "$extra_extensions_list" =~ " 0000 " ]]; then
+               all_extensions="
+                00, 00                  # extension server_name
                ,00, $len_sni_ext        # length SNI EXT
                ,00, $len_sni_listlen    # server_name list_length
                ,00                      # server_name type (hostname)
                ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
                ,$servername_hexstr"     # server_name target
           fi
+          if [[ ! "$extra_extensions_list" =~ " 000f " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_heartbeat"
+          fi
+          if [[ ! "$extra_extensions_list" =~ " 0023 " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_session_ticket"
+          fi
+
+          # If the ClientHello will include the ALPN extension, then don't include the NPN extension.
+          if [[ ! "$extra_extensions_list" =~ " 3374 " ]] && [[ ! "$extra_extensions_list" =~ " 0010 " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_next_protocol"
+          fi
 
           # RFC 5246 says that clients MUST NOT offer the signature algorithms
           # extension if they are offering TLS versions prior to 1.2.
-          if [[ "0x$tls_low_byte" -ge "0x03" ]]; then
-               all_extensions="$all_extensions
-               ,$extension_signature_algorithms"
+          if [[ "0x$tls_low_byte" -ge "0x03" ]] && [[ ! "$extra_extensions_list" =~ " 000d " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_signature_algorithms"
           fi
 
-          if $ecc_cipher_suite_found; then
-               all_extensions="$all_extensions
-               ,$extensions_ecc"
+          if [[ -n "$extension_supported_groups" ]] && [[ ! "$extra_extensions_list" =~ " 000a " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_supported_groups"
+          fi
+          if [[ -n "$extension_supported_point_formats" ]] && [[ ! "$extra_extensions_list" =~ " 000b " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_supported_point_formats"
+          fi
+
+          if [[ -n "$extra_extensions" ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extra_extensions"
           fi
 
           code2network "$all_extensions" # convert extensions
@@ -6786,11 +6893,11 @@ socksend_tls_clienthello() {
           # If the length of the Client Hello would be between 256 and 511 bytes,
           # then add a padding extension (see RFC 7685)
           len_all=$((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2))
-          if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]]; then
+          if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]] && [[ ! "$extra_extensions_list" =~ " 0015 " ]]; then
                if [[ $len_all -gt 508 ]]; then
-                   len_padding_extension=0
+                    len_padding_extension=0
                else
-                   len_padding_extension=$((508 - 0x$len_ciph_suites - 0x2b - 0x$len_extension_hex - 0x2))
+                    len_padding_extension=$((508 - 0x$len_ciph_suites - 0x2b - 0x$len_extension_hex - 0x2))
                fi
                len_padding_extension_hex=$(printf "%02x\n" $len_padding_extension)
                len2twobytes "$len_padding_extension_hex"
@@ -6863,6 +6970,7 @@ socksend_tls_clienthello() {
 # arg2: (optional) list of cipher suites
 # arg3: (optional): "all" - process full response (including Certificate and certificate_status handshake messages)
 #                   "ephemeralkey" - extract the server's ephemeral key (if any)
+# arg4: (optional) additional request extensions
 tls_sockets() {
      local -i ret=0
      local -i save=0
@@ -6885,7 +6993,7 @@ tls_sockets() {
      fi
 
      debugme echo "sending client hello..."
-     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send"
+     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$4"
      ret=$?                             # 6 means opening socket didn't succeed, e.g. timeout
 
      # if sending didn't succeed we don't bother
@@ -8276,17 +8384,34 @@ check_bsd_mount() {
 help() {
      cat << EOF
 
-$PROG_NAME <options>
+     "$PROG_NAME URI"    or    "$PROG_NAME <options>"    or    "$PROG_NAME <options> URI"
+
+
+"$PROG_NAME URI", where URI is:
+     
+     URI                           host|host:port|URL|URL:port   port 443 is default, URL can only contain HTTPS protocol) 
+
+"$PROG_NAME <options>", where <options> is:
 
      -h, --help                    what you're looking at
      -b, --banner                  displays banner + version of $PROG_NAME
      -v, --version                 same as previous
      -V, --local                   pretty print all local ciphers
-     -V, --local <pattern>         which local ciphers with <pattern> are available?
-                                   (if pattern not a number: word match)
+     -V, --local <pattern>         which local ciphers with <pattern> are available? If pattern is not a number: word match
 
-$PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
+     pattern                       is always an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
 
+
+"$PROG_NAME <options> URI", where <options> is:
+
+     -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol, 
+                                   protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap> (latter two require supplied openssl)
+     --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
+     --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
+     --file <fname>                mass testing option: Reads command lines from <fname>, one line per instance.
+                                   Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch"
+
+single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
      -f, --ciphers                 checks common cipher suites
@@ -8300,7 +8425,7 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -c, --client-simulation       test client simulations, see which client negotiates with cipher and protocol
      -H, --header, --headers       tests HSTS, HPKP, server/app banner, security headers, cookie, reverse proxy, IPv4 address
 
-     -U, --vulnerable              tests all vulnerabilities
+     -U, --vulnerable              tests all (of the following) vulnerabilities (if applicable)
      -B, --heartbleed              tests for heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -R, --renegotiation           tests for renegotiation vulnerabilities
@@ -8315,29 +8440,16 @@ $PROG_NAME <options> URI    ("$PROG_NAME URI" does everything except -E)
      -s, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
 
-special invocations:
-     -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol>
-     --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
-     --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
-     --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
-                                   b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
-     -n, --nodns                   do not try any DNS lookup
-     --file <fname>                mass testing option: Reads command lines from <fname>, one line per instance.
-                                   Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch"
-
-partly mandatory parameters:
-     URI                           host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
-     pattern                       an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
-     protocol                      is one of the STARTTLS protocols ftp,smtp,pop3,imap,xmpp,telnet,ldap
-                                   (for the latter two you need e.g. the supplied openssl)
-
-tuning options (can also be preset via environment variables):
+tuning / connect options (most also can be preset via environment variables):
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
      --proxy <host>:<port>         connect via the specified HTTP proxy
      -6                            use also IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
+     --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
+                                   b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
+     -n, --nodns                   do not try any DNS lookup
      --sneaky                      leave less traces in target logs: user agent, referer
 
 output options (can also be preset via environment variables):
@@ -8354,22 +8466,23 @@ output options (can also be preset via environment variables):
 file output options (can also be preset via environment variables):
      --log, --logging              logs stdout to <NODE-YYYYMMDD-HHMM.log> in current working directory
      --logfile <logfile>           logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified log file
-     --json                        additional output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
-     --jsonfile <jsonfile>         additional output to JSON and output JSON to the specified file
-     --json-pretty                 additional pretty structed output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
-     --jsonfile-pretty <jsonfile>  additional pretty structed output to JSON and output JSON to the specified file
-     --csv                         additional output of findings to CSV file  <NODE-YYYYMMDD-HHMM.csv> in cwd
-     --csvfile <csvfile>           set output to CSV and output CSV to the specified file
+     --json                        additional output of findings to flat JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
+     --jsonfile <jsonfile>         additional output to the specified flat JSON file
+     --json-pretty                 additional pretty structured output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
+     --jsonfile-pretty <jsonfile>  additional pretty structured output as JSON to the specified file
+     --csv                         additional output of findings to CSV file <NODE-YYYYMMDD-HHMM.csv> in cwd
+     --csvfile <csvfile>           additional output as CSV to the specified file
+     --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if <csvfile> or <jsonfile> exists rather append then overwrite
-     --severity <severity>         severities with lower level will be filtered
 
-All options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 
-<URI> is always the last parameter.
+Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
+URI always needs to be the last parameter.
 
 Need HTML output? Just pipe through "aha" (ANSI HTML Adapter: github.com/theZiz/aha) like
 
-   "$PROG_NAME <options> <URI> | aha >output.html"
+   "$PROG_NAME <options> <URI> | aha >output.html" or use -log* and convert later
+
 EOF
      #' Fix syntax highlight on sublime
      exit $1
@@ -8463,12 +8576,13 @@ EOF
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
      # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
-
      CIPHERS_BY_STRENGTH_FILE=$(mktemp $TEMPDIR/ciphers_by_strength.XXXXXX)
+
+#FIXME: better externally: separation of code and data
      cat >$CIPHERS_BY_STRENGTH_FILE << EOF
-      0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305  TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256_OLD  TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
-      0xCC,0x13 - ECDHE-RSA-CHACHA20-POLY1305    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD    TLSv1.2    Kx=ECDH        Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
-      0xCC,0x15 - DHE-RSA-CHACHA20-POLY1305      TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD      TLSv1.2    Kx=DH          Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305-OLD  TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256_OLD  TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0x13 - ECDHE-RSA-CHACHA20-POLY1305-OLD    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD    TLSv1.2    Kx=ECDH        Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
+      0xCC,0x15 - DHE-RSA-CHACHA20-POLY1305-OLD      TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD      TLSv1.2    Kx=DH          Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
       0xC0,0x30 - ECDHE-RSA-AES256-GCM-SHA384    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AESGCM(256)                Mac=AEAD               
       0xC0,0x2C - ECDHE-ECDSA-AES256-GCM-SHA384  TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384            TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AESGCM(256)                Mac=AEAD               
       0xC0,0x28 - ECDHE-RSA-AES256-SHA384        TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AES(256)                   Mac=SHA384             
