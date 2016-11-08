@@ -3683,6 +3683,10 @@ read_dhbits_from_file() {
      grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
      bits=$(tr -d ' bits' <<< $bits)
 
+     if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
+          what_dh="ECDH"
+     fi
+
      debugme echo ">$HAS_DH_BITS|$what_dh|$bits<"
 
      [[ -n "$what_dh" ]] && HAS_DH_BITS=true                            # FIX 190
@@ -5415,8 +5419,8 @@ run_pfs() {
           # find out what elliptic curves are supported.
           curves_offered=""
           for curve in "${curves_ossl[@]}"; do
-              $OPENSSL ecparam -list_curves | grep -q $curve
-              [[ $? -eq 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
+               $OPENSSL s_client -curves $curve 2>&1 | egrep -iaq "Error with command|unknown option"
+               [[ $? -ne 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
           done
 
           # OpenSSL limits the number of curves that can be specified in the
@@ -5442,7 +5446,8 @@ run_pfs() {
                     fi
                     if [[ "$sclient_success" -eq 0 ]]; then
                          temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$tmpfile")
-                         curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+                         curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
+                         [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
                          j=0; curve_used=""
                          for curve in "${curves_ossl[@]}"; do
                               [[ "${curves_ossl_output[j]}" == "$curve_found" ]] && curve_used="${curves_ossl[j]}" && break
@@ -6534,12 +6539,17 @@ parse_tls_serverhello() {
                          26) dh_bits=256 ; named_curve_str="brainpoolP256r1" ;;
                          27) dh_bits=384 ; named_curve_str="brainpoolP384r1" ;;
                          28) dh_bits=512 ; named_curve_str="brainpoolP512r1" ;;
-                         29) dh_bits=256 ; named_curve_str="X25519" ;;
+                         29) dh_bits=253 ; named_curve_str="X25519" ;;
                          30) dh_bits=448 ; named_curve_str="X448" ;;
                     esac
                fi
-               [[ $DEBUG -ge 2 ]] && [[ $dh_bits -ne 0 ]] && echo "dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
-               [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
+               if [[ $dh_bits -ne 0 ]] && [[ $named_curve -ne 29 ]] && [[ $named_curve -ne 30 ]]; then
+                    debugme echo "dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
+                    echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
+               elif [[ $dh_bits -ne 0 ]]; then
+                    debugme echo "dh_bits:                $named_curve_str, $dh_bits bits"
+                    echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
+               fi
           elif [[ $rfc_cipher_suite =~ "TLS_DHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_DH_anon" ]]; then
                # For DH ephemeral keys the first field is p, and the length of
                # p is the same as the length of the public key.
