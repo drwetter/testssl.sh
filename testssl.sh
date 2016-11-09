@@ -6079,18 +6079,20 @@ parse_tls_serverhello() {
      local process_full="$2"
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
-     local tls_serverhello_ascii=""
+     local tls_serverhello_ascii="" tls_certificate_ascii="" 
      local tls_serverkeyexchange_ascii=""
-     local -i tls_serverhello_ascii_len=0
+     local -i tls_serverhello_ascii_len=0 tls_certificate_ascii_len=0
      local -i tls_serverkeyexchange_ascii_len=0
-     local tls_alert_descrip tls_sid_len_hex
-     local -i tls_sid_len offset extns_offset
+     local tls_alert_descrip tls_sid_len_hex issuerDN subjectDN CAissuerDN CAsubjectDN
+     local -i tls_sid_len offset extns_offset nr_certs=0
      local tls_msg_type tls_content_type tls_protocol tls_protocol2 tls_hello_time
      local tls_err_level tls_err_descr tls_cipher_suite rfc_cipher_suite tls_compression_method
      local tls_extensions="" extension_type named_curve_str=""
      local -i i j extension_len tls_extensions_len
+     local -i certificate_list_len certificate_len
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
+     local tmp_der_certfile tmp_pem_certfile
 
      TLS_TIME=""
      DETECTED_TLS_VERSION=""
@@ -6248,7 +6250,8 @@ parse_tls_serverhello() {
           done
      fi
 
-     # Now extract just the server hello and server key exchange handshake messages.
+     # Now extract just the server hello, certificate,
+     # and server key exchange handshake messages.
      tls_handshake_ascii_len=${#tls_handshake_ascii}
      if [[ $DEBUG -ge 2 ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
           echo "TLS handshake messages:"
@@ -6315,6 +6318,13 @@ parse_tls_serverhello() {
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverhello_ascii_len=$msg_len
+          elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "0B" ]]; then
+               if [[ -n "$tls_certificate_ascii" ]]; then
+                    debugme pr_warningln "Response contained more than one Certificate handshake message."
+                    return 1
+               fi
+               tls_certificate_ascii="${tls_handshake_ascii:i:msg_len}"
+               tls_certificate_ascii_len=$msg_len
           elif ( [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]] ) && [[ "$tls_msg_type" == "0C" ]]; then
                if [[ -n "$tls_serverkeyexchange_ascii" ]]; then
                     debugme pr_warningln "Response contained more than one ServerKeyExchange handshake message."
@@ -6338,7 +6348,7 @@ parse_tls_serverhello() {
           return 1
      fi
 
-     # Parse the server hello handshake message
+     # First parse the server hello handshake message
      # byte 0+1:    03, TLS version word          see byte 1+2
      # byte 2-5:    TLS timestamp                 for OpenSSL <1.01f
      # byte 6-33:  random, 28 bytes
@@ -6490,6 +6500,94 @@ parse_tls_serverhello() {
                echo "     tls_extensions:         $TLS_EXTENSIONS"
           fi
           outln
+     fi
+
+     # Now parse the Certificate message.
+     if [[ "$process_full" == "all" ]]; then
+          [[ -e "$HOSTCERT" ]] && rm "$HOSTCERT"
+          [[ -e "$TEMPDIR/intermediatecerts.pem" ]] && rm "$TEMPDIR/intermediatecerts.pem"
+     fi
+     if [[ $tls_certificate_ascii_len -ne 0 ]]; then
+          # The first certificate is the server's certificate. If there are anything
+          # subsequent certificates, they are intermediate certificates.
+          if [[ $tls_certificate_ascii_len -lt 12 ]]; then
+               debugme echo "Malformed Certificate Handshake message in ServerHello."
+               tmpfile_handle $FUNCNAME.txt
+               return 1
+          fi
+          certificate_list_len=2*$(hex2dec "${tls_certificate_ascii:0:6}")
+          if [[ $certificate_list_len -ne $tls_certificate_ascii_len-6 ]]; then
+               debugme echo "Malformed Certificate Handshake message in ServerHello."
+               tmpfile_handle $FUNCNAME.txt
+               return 1
+          fi
+
+          # Place server's certificate in $HOSTCERT
+          certificate_len=2*$(hex2dec "${tls_certificate_ascii:6:6}")
+          if [[ $certificate_len -gt $tls_certificate_ascii_len-12 ]]; then
+               debugme echo "Malformed Certificate Handshake message in ServerHello."
+               tmpfile_handle $FUNCNAME.txt
+               return 1
+          fi
+          tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return 1
+          asciihex_to_binary_file "${tls_certificate_ascii:12:certificate_len}" "$tmp_der_certfile"
+          $OPENSSL x509 -inform DER -in "$tmp_der_certfile" -outform PEM -out "$HOSTCERT" 2>$ERRFILE
+          if [[ $? -ne 0 ]]; then
+               debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
+               rm "$tmp_der_certfile"
+               tmpfile_handle $FUNCNAME.txt
+               return 1
+          fi
+          rm "$tmp_der_certfile"
+          get_pub_key_size
+          echo "===============================================================================" >> $TMPFILE
+          echo "---" >> $TMPFILE
+          echo "Certificate chain" >> $TMPFILE
+          subjectDN="$($OPENSSL x509 -in $HOSTCERT -noout -subject)"
+          issuerDN="$($OPENSSL x509 -in $HOSTCERT -noout -issuer)"
+          echo " $nr_certs s:${subjectDN:9}" >> $TMPFILE
+          echo "   i:${issuerDN:8}" >> $TMPFILE
+          cat "$HOSTCERT" >> $TMPFILE
+
+          echo "" > "$TEMPDIR/intermediatecerts.pem"
+          # Place and additional certificates in $TEMPDIR/intermediatecerts.pem
+          for (( i=12+certificate_len; i<tls_certificate_ascii_len; i=i+certificate_len )); do
+               if [[ $tls_certificate_ascii_len-$i -lt 6 ]]; then
+                    debugme echo "Malformed Certificate Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               certificate_len=2*$(hex2dec "${tls_certificate_ascii:i:6}")
+               i+=6
+               if [[ $certificate_len -gt $tls_certificate_ascii_len-$i ]]; then
+                    debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return 1
+               asciihex_to_binary_file "${tls_certificate_ascii:i:certificate_len}" "$tmp_der_certfile"
+               tmp_pem_certfile=$(mktemp $TEMPDIR/pem_cert.XXXXXX) || return 1
+               $OPENSSL x509 -inform DER -in "$tmp_der_certfile" -outform PEM -out "$tmp_pem_certfile" 2>$ERRFILE
+               if [[ $? -ne 0 ]]; then
+                    debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
+                    rm "$tmp_der_certfile" "$tmp_pem_certfile"
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               nr_certs+=1
+               CAsubjectDN="$($OPENSSL x509 -in $tmp_pem_certfile -noout -subject)"
+               CAissuerDN="$($OPENSSL x509 -in $tmp_pem_certfile -noout -issuer)"
+               echo " $nr_certs s:${CAsubjectDN:9}" >> $TMPFILE
+               echo "   i:${CAissuerDN:8}" >> $TMPFILE
+               cat "$tmp_pem_certfile"  >> $TMPFILE
+               cat "$tmp_pem_certfile" >> "$TEMPDIR/intermediatecerts.pem"
+               rm "$tmp_der_certfile" "$tmp_pem_certfile"
+          done
+          echo "---" >> $TMPFILE
+          echo "Server certificate" >> $TMPFILE
+          echo "subject=${subjectDN:9}" >> $TMPFILE
+          echo "issuer=${issuerDN:8}" >> $TMPFILE
+          echo "---" >> $TMPFILE
      fi
 
      # Now parse the server key exchange message
