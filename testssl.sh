@@ -3503,6 +3503,10 @@ read_dhbits_from_file() {
      grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
      bits=$(tr -d ' bits' <<< $bits)
 
+     if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
+          what_dh="ECDH"
+     fi
+
      debugme echo ">$HAS_DH_BITS|$what_dh|$bits<"
 
      [[ -n "$what_dh" ]] && HAS_DH_BITS=true                            # FIX 190
@@ -5235,8 +5239,8 @@ run_pfs() {
           # find out what elliptic curves are supported.
           curves_offered=""
           for curve in "${curves_ossl[@]}"; do
-              $OPENSSL ecparam -list_curves | grep -q $curve
-              [[ $? -eq 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
+               $OPENSSL s_client -curves $curve 2>&1 | egrep -iaq "Error with command|unknown option"
+               [[ $? -ne 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
           done
 
           # OpenSSL limits the number of curves that can be specified in the
@@ -5262,7 +5266,8 @@ run_pfs() {
                     fi
                     if [[ "$sclient_success" -eq 0 ]]; then
                          temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$tmpfile")
-                         curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+                         curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
+                         [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
                          j=0; curve_used=""
                          for curve in "${curves_ossl[@]}"; do
                               [[ "${curves_ossl_output[j]}" == "$curve_found" ]] && curve_used="${curves_ossl[j]}" && break
