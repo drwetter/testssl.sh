@@ -3273,6 +3273,24 @@ run_client_simulation() {
      minEcdsaBits+=(-1)
      requiresSha2+=(false)
 
+     names+=("Apple ATS 9 iOS 9          ")
+     short+=("safari_9_osx1011")
+     protos+=("-no_ssl2 -no_ssl3 -no_tls1 -no_tls1_1")
+     ciphers+=("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA")
+     tlsvers+=("-tls1_2")
+     sni+=("$SNI")
+     warning+=("")
+     handshakebytes+=("16030100b9010000b50303282275d1356ba8ceec8897786197b80f96d83a06d9205200a677f850c4b822f2000018c02cc02bc024c023c00ac009c030c02fc028c027c01300ff0201000073000b000403000102000a003a0038000e000d0019001c000b000c001b00180009000a001a00160017000800060007001400150004000500120013000100020003000f0010001100230000000d0020001e060106020603050105020503040104020403030103020303020102020203000f000101")
+     lowest_protocol+=("0x0303")
+     highest_protocol+=("0x0303")
+     service+=("HTTP")
+     minDhBits+=(768)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(8192)
+     minEcdsaBits+=(-1)
+     requiresSha2+=(false)
+
      outln
      if "$using_sockets"; then
           pr_headlineln " Running browser simulations via sockets (experimental) "
@@ -3750,6 +3768,10 @@ read_dhbits_from_file() {
      # RH's backport has the DH bits in second arg after comma
      grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
      bits=$(tr -d ' bits' <<< $bits)
+
+     if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
+          what_dh="ECDH"
+     fi
 
      debugme echo ">$HAS_DH_BITS|$what_dh|$bits<"
 
@@ -5483,8 +5505,8 @@ run_pfs() {
           # find out what elliptic curves are supported.
           curves_offered=""
           for curve in "${curves_ossl[@]}"; do
-              $OPENSSL ecparam -list_curves | grep -q $curve
-              [[ $? -eq 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
+               $OPENSSL s_client -curves $curve 2>&1 | egrep -iaq "Error with command|unknown option"
+               [[ $? -ne 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
           done
 
           # OpenSSL limits the number of curves that can be specified in the
@@ -5510,7 +5532,8 @@ run_pfs() {
                     fi
                     if [[ "$sclient_success" -eq 0 ]]; then
                          temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$tmpfile")
-                         curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+                         curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
+                         [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
                          j=0; curve_used=""
                          for curve in "${curves_ossl[@]}"; do
                               [[ "${curves_ossl_output[j]}" == "$curve_found" ]] && curve_used="${curves_ossl[j]}" && break
@@ -6602,12 +6625,17 @@ parse_tls_serverhello() {
                          26) dh_bits=256 ; named_curve_str="brainpoolP256r1" ;;
                          27) dh_bits=384 ; named_curve_str="brainpoolP384r1" ;;
                          28) dh_bits=512 ; named_curve_str="brainpoolP512r1" ;;
-                         29) dh_bits=256 ; named_curve_str="X25519" ;;
+                         29) dh_bits=253 ; named_curve_str="X25519" ;;
                          30) dh_bits=448 ; named_curve_str="X448" ;;
                     esac
                fi
-               [[ $DEBUG -ge 2 ]] && [[ $dh_bits -ne 0 ]] && echo "dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
-               [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
+               if [[ $dh_bits -ne 0 ]] && [[ $named_curve -ne 29 ]] && [[ $named_curve -ne 30 ]]; then
+                    debugme echo "dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
+                    echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
+               elif [[ $dh_bits -ne 0 ]]; then
+                    debugme echo "dh_bits:                $named_curve_str, $dh_bits bits"
+                    echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
+               fi
           elif [[ $rfc_cipher_suite =~ "TLS_DHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_DH_anon" ]]; then
                # For DH ephemeral keys the first field is p, and the length of
                # p is the same as the length of the public key.
@@ -10343,4 +10371,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.559 2016/10/15 20:55:22 dirkw Exp $
+#  $Id: testssl.sh,v 1.562 2016/11/05 13:55:29 dirkw Exp $
