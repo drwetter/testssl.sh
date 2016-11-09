@@ -6557,12 +6557,17 @@ parse_tls_serverhello() {
                          26) dh_bits=256 ; named_curve_str="brainpoolP256r1" ;;
                          27) dh_bits=384 ; named_curve_str="brainpoolP384r1" ;;
                          28) dh_bits=512 ; named_curve_str="brainpoolP512r1" ;;
-                         29) dh_bits=256 ; named_curve_str="X25519" ;;
+                         29) dh_bits=253 ; named_curve_str="X25519" ;;
                          30) dh_bits=448 ; named_curve_str="X448" ;;
                     esac
                fi
-               [[ $DEBUG -ge 2 ]] && [[ $dh_bits -ne 0 ]] && echo "dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
-               [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
+               if [[ $dh_bits -ne 0 ]] && [[ $named_curve -ne 29 ]] && [[ $named_curve -ne 30 ]]; then
+                    debugme echo "dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
+                    echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
+               elif [[ $dh_bits -ne 0 ]]; then
+                    debugme echo "dh_bits:                $named_curve_str, $dh_bits bits"
+                    echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
+               fi
           elif [[ $rfc_cipher_suite =~ "TLS_DHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_DH_anon" ]]; then
                # For DH ephemeral keys the first field is p, and the length of
                # p is the same as the length of the public key.
