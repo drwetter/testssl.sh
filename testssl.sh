@@ -3317,13 +3317,10 @@ run_client_simulation() {
      requiresSha2+=(false)
 
      outln
-     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
      if "$using_sockets"; then
           pr_headlineln " Running browser simulations via sockets (experimental) "
      else
           pr_headline " Running browser simulations via openssl (experimental) "
-          [[ $TLS_NR_CIPHERS == 0 ]] && pr_warning ". Cipher mapping not available, Doing a fallback to openssl  "
-          outln
      fi
      outln
 
@@ -3393,7 +3390,7 @@ run_client_simulation() {
                fi
                #FiXME: awk
                cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
-               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && cipher="$(rfc2openssl "$cipher")"
+               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && [[ $TLS_NR_CIPHERS -ne 0 ]] && cipher="$(rfc2openssl "$cipher")"
                out "$proto $cipher"
                "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
                "$HAS_DH_BITS" && read_dhbits_from_file $TMPFILE
@@ -6604,10 +6601,14 @@ parse_tls_serverhello() {
           echo "Protocol  : TLSv1.$((0x$tls_protocol2-0x0301))" >> $TMPFILE
      fi
      echo "===============================================================================" >> $TMPFILE
-     if [[ "${tls_cipher_suite:0:2}" == "00" ]]; then
-          rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:2:2}")"
+     if [[ $TLS_NR_CIPHERS -ne 0 ]]; then
+          if [[ "${tls_cipher_suite:0:2}" == "00" ]]; then
+               rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:2:2}")"
+          else
+               rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:0:4}")"
+          fi
      else
-          rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:0:4}")"
+          rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')"
      fi
      echo "Cipher    : $rfc_cipher_suite" >> $TMPFILE
      if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
@@ -8398,7 +8399,7 @@ get_install_dir() {
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
-     [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && pr_warningln "\nNo cipher mapping file in \$TESTSSL_INSTALL_DIR/etc/ found"
+     [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && unset ADD_RFC_STR && pr_warningln "\nNo cipher mapping file in \$TESTSSL_INSTALL_DIR/etc/ found"
      debugme echo "$CIPHERS_BY_STRENGTH_FILE"
 }
 
