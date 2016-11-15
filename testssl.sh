@@ -2083,8 +2083,12 @@ run_allciphers() {
      fi
 
      outln
-     pr_headlineln " Testing all $nr_ciphers locally available ciphers against the server, ordered by encryption strength "
-     "$using_sockets" || "$HAS_DH_BITS" || pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
+     if "$using_sockets"; then
+          pr_headlineln " Testing $nr_ciphers via sockets against the server, ordered by encryption strength "
+     else
+          pr_headlineln " Testing all $nr_ciphers locally available ciphers against the server, ordered by encryption strength "
+          "$HAS_DH_BITS" || pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
+     fi
      outln
      neat_header
 
