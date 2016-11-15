@@ -354,6 +354,7 @@ declare TLS_CIPHER_KX=()
 declare TLS_CIPHER_AUTH=()
 declare TLS_CIPHER_ENC=()
 declare TLS_CIPHER_EXPORT=()
+declare TLS_CIPHER_OSSL_SUPPORTED=()
 
 ###### output functions ######
 # a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
@@ -2026,31 +2027,34 @@ test_just_one(){
 
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad)
 run_allciphers() {
-     local tmpfile
-     local -i nr_ciphers=0 ret
-     local n auth mac export hexc sslv2_ciphers=""
-     local -a normalized_hexcode hexcode ciph sslvers kx enc export2
-     local -i i j parent child end_of_bundle round_num bundle_size num_bundles mod_check
-     local -a ciphers_found
-     local dhlen
-     local available
-     local ciphers_to_test
-     local sslv2_supported=false
+     local -i nr_ciphers_tested=0 nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 ret
+     local n auth mac export hexc sslv2_ciphers="" s
+     local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
+     local -i i end_of_bundle bundle bundle_size num_bundles mod_check
+     local -a ciphers_found ciphers_found2 hexcode2 ciph2 sslvers2 rfc_ciph2
+     local -i -a index
+     local dhlen available ciphers_to_test supported_sslv2_ciphers addcmd=""
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
 
      "$SSL_NATIVE" && using_sockets=false
      "$FAST" && using_sockets=false
 
-     if "$using_sockets"; then
-          # get a list of all the cipher suites to test (only need the hexcode, ciph, kx, enc, and export values)
+     # get a list of all the cipher suites to test
+     if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-               hexc=$(echo "${TLS_CIPHER_HEXCODE[i]}" | tr 'A-Z' 'a-z')
+               hexc="$(tolower "${TLS_CIPHER_HEXCODE[i]}")"
                ciph[i]="${TLS_CIPHER_OSSL_NAME[i]}"
                sslvers[i]="${TLS_CIPHER_SSLVERS[i]}"
                kx[i]="${TLS_CIPHER_KX[i]}"
                enc[i]="${TLS_CIPHER_ENC[i]}"
                export2[i]="${TLS_CIPHER_EXPORT[i]}"
+               ciphers_found[i]=false
+               sigalg[i]=""
+               ossl_supported[i]=${TLS_CIPHER_OSSL_SUPPORTED[i]}
+               if "$using_sockets" && ! "$HAS_DH_BITS" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                    ossl_supported[i]=false
+               fi
                if [[ ${#hexc} -eq 9 ]]; then
                     hexcode[i]="${hexc:2:2},${hexc:7:2}"
                     if [[ "${hexc:2:2}" == "00" ]]; then
@@ -2063,157 +2067,207 @@ run_allciphers() {
                     normalized_hexcode[i]="x${hexc:2:2}${hexc:7:2}${hexc:12:2}"
                     sslv2_ciphers="$sslv2_ciphers, ${hexcode[i]}"
                fi
+               if "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}"; then
+                    nr_ciphers_tested+=1
+               fi
           done
           nr_ciphers=$TLS_NR_CIPHERS
-          sslv2_sockets "${sslv2_ciphers:2}" "true"
-          if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
-               sslv2_supported=true
-          fi
      else
-          # get a list of all the cipher suites to test (only need the hexcode, ciph, sslvers, kx, enc, and export values)
-          while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+          while read hexc n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+               ciphers_found[nr_ciphers]=false
+               if [[ ${#hexc} -eq 9 ]]; then
+                    if [[ "${hexc:2:2}" == "00" ]]; then
+                         normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:7:2}")"
+                    else
+                         normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:2:2}${hexc:7:2}")"
+                    fi
+               else
+                    normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:2:2}${hexc:7:2}${hexc:12:2}")"
+               fi
+               sigalg[nr_ciphers]=""
+               ossl_supported[nr_ciphers]=true
                nr_ciphers=$nr_ciphers+1
           done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+          nr_ciphers_tested=$nr_ciphers
+     fi
 
-          if "$HAS_SSL2"; then
-               $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-               sclient_connect_successful "$?" "$TMPFILE"
-               [[ "$?" -eq 0 ]] && sslv2_supported=true
+     if "$using_sockets"; then
+          sslv2_sockets "${sslv2_ciphers:2}" "true"
+          if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+               supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+               "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               for (( i=0 ; i<nr_ciphers; i++ )); do
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${normalized_hexcode[i]}" ]]; then
+                         ciphers_found[i]=true
+                         "$SHOW_SIGALGO" && sigalg[i]="$s"
+                    fi
+               done
+          fi
+     elif "$HAS_SSL2"; then
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful "$?" "$TMPFILE"
+          if [[ "$?" -eq 0 ]]; then
+               supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
+               "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               for (( i=0 ; i<nr_ciphers; i++ )); do
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${ciph[i]}" ]]; then
+                         ciphers_found[i]=true
+                         "$SHOW_SIGALGO" && sigalg[i]="$s"
+                    fi
+               done
           fi
      fi
 
      outln
      if "$using_sockets"; then
-          pr_headlineln " Testing $nr_ciphers via sockets against the server, ordered by encryption strength "
+          pr_headlineln " Testing $nr_ciphers_tested via OpenSSL and sockets against the server, ordered by encryption strength "
      else
-          pr_headlineln " Testing all $nr_ciphers locally available ciphers against the server, ordered by encryption strength "
+          pr_headlineln " Testing all $nr_ciphers_tested locally available ciphers against the server, ordered by encryption strength "
           "$HAS_DH_BITS" || pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      fi
      outln
      neat_header
 
-     # Split ciphers into bundles of size 4**n, starting with an "n" that
-     # splits the ciphers into 4 bundles, and then reducing "n" by one in each
-     # round. Only test a bundle of 4**n ciphers against the server if it was
-     # part of a bundle of 4**(n+1) ciphers that included a cipher supported by
-     # the server. Continue until n=0.
-
-     # Determine bundle size that will result in their being exactly four bundles.
-     for (( bundle_size=1; bundle_size < nr_ciphers; bundle_size*=4 )); do
-          :
+     for (( i=0; i < nr_ciphers; i++ )); do
+          if "${ossl_supported[i]}"; then
+               ciphers_found2[nr_ossl_ciphers]=false
+               sslvers2[nr_ossl_ciphers]="${sslvers[i]}"
+               ciph2[nr_ossl_ciphers]="${ciph[i]}"
+               index[nr_ossl_ciphers]=$i
+               nr_ossl_ciphers+=1
+          fi
      done
 
-     # set ciphers_found[1] so that all bundles will be tested in round 0.
-     ciphers_found[1]=true
-     # Some servers can't handle a handshake with >= 128 ciphers.
-     for (( round_num=0; bundle_size/4 >= 128; bundle_size/=4 )); do
-          round_num=$round_num+1
-          for (( i=4**$round_num; i<2*4**$round_num; i++ )); do
-               ciphers_found[i]=true
+     if [[ $nr_ossl_ciphers -eq 0 ]]; then
+          num_bundles=0
+     else
+          # Some servers can't handle a handshake with >= 128 ciphers. So,
+          # test cipher suites in bundles of 128 or less.
+          num_bundles=$nr_ossl_ciphers/128
+          mod_check=$nr_ossl_ciphers%128
+          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+
+          bundle_size=$nr_ossl_ciphers/$num_bundles
+          mod_check=$nr_ossl_ciphers%$num_bundles
+          [[ $mod_check -ne 0 ]] && bundle_size+=1
+     fi
+
+     "$HAS_NO_SSL2" && addcmd="-no_ssl2"
+     for (( bundle=0; bundle < num_bundles; bundle++ )); do
+          end_of_bundle=$bundle*$bundle_size+$bundle_size
+          [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
+          for (( success=0; success==0 ; 1 )); do
+               ciphers_to_test=""
+               for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                    [[ "${sslvers2[i]}" != "SSLv2" ]] && ! "${ciphers_found2[i]}" && ciphers_to_test+=":${ciph2[i]}"
+               done
+               success=1
+               if [[ -n "$ciphers_to_test" ]]; then
+                    $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+                    sclient_connect_successful "$?" "$TMPFILE"
+                    if [[ "$?" -eq 0 ]]; then
+                         cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                         if [[ -n "$cipher" ]]; then
+                              success=0
+                              for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                                   [[ "$cipher" == "${ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                              done
+                              i=${index[i]}
+                              ciphers_found[i]=true
+                              if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                                   dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                                   kx[i]="${kx[i]} $dhlen"
+                              fi
+                              "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                                   sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         fi
+                    fi
+               fi
           done
      done
 
-     for (( bundle_size/=4; bundle_size>=1; bundle_size/=4 )); do
-          # Note that since the number of ciphers isn't a power of 4, the number
-          # of bundles may be may be less than 4**(round_num+1), and the final
-          # bundle may have fewer than bundle_size ciphers.
-          num_bundles=$nr_ciphers/$bundle_size
-          mod_check=$nr_ciphers%$bundle_size
-          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
-          for (( i=0; i<num_bundles; i++ )); do
-               # parent=index of bundle from previous round that includes this bundle of ciphers
-               parent=4**$round_num+$i/4
-               # child=index for this bundle of ciphers
-               child=4*4**$round_num+$i
-               if ${ciphers_found[parent]}; then
-                    ciphers_to_test=""
-                    end_of_bundle=$i*$bundle_size+$bundle_size
-                    [[ $end_of_bundle -gt $nr_ciphers ]] && end_of_bundle=$nr_ciphers
-                    if "$using_sockets"; then
-                         for (( j=i*bundle_size; j<end_of_bundle; j++ )); do
-                              # Exclude the SSLv2 ciphers
-                              hexc="${hexcode[j]}"
-                              [[ ${#hexc} -eq 5 ]] && ciphers_to_test="${ciphers_to_test}, ${hexcode[j]}"
-                         done
-                         ciphers_found[child]=false
-                         if [[ -n "${ciphers_to_test:2}" ]]; then
-                              if [[ $bundle_size -eq 1 ]]; then
-                                   tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
-                              else
-                                   tls_sockets "03" "${ciphers_to_test:2}, 00,ff"
-                              fi
-                              ret=$?
-                              if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
-                                   ciphers_found[child]=true
-                                   cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
-                              fi
-                         fi
-                    else
-                         for (( j=i*bundle_size; j<end_of_bundle; j++ )); do
-                              [[ "${sslvers[j]}" != "SSLv2" ]] && ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
-                         done
-                         ciphers_found[child]=false
-                         if [[ -n "${ciphers_to_test:1}" ]]; then
-                              $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
-                              sclient_connect_successful "$?" "$TMPFILE"
-                              [[ "$?" -eq 0 ]] && ciphers_found[child]=true
-                         fi
-                    fi
-               else
-                    # No need to test, since test of parent demonstrated none of these ciphers work.
-                    ciphers_found[child]=false
+     if "$using_sockets"; then
+          for (( i=0; i < nr_ciphers; i++ )); do
+               if ! "${ciphers_found[i]}"; then
+                    ciphers_found2[nr_nonossl_ciphers]=false
+                    sslvers2[nr_nonossl_ciphers]="${sslvers[i]}"
+                    hexcode2[nr_nonossl_ciphers]="${hexcode[i]}"
+                    rfc_ciph2[nr_nonossl_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
+                    index[nr_nonossl_ciphers]=$i
+                    nr_nonossl_ciphers+=1
                fi
+          done
+     fi
 
-               if $sslv2_supported && [[ $bundle_size -eq 1 ]] && [[ "${sslvers[i]}" == "SSLv2" ]]; then
-                    if "$using_sockets"; then
-                         if grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt" | grep -q "${normalized_hexcode[i]}"; then
-                              ciphers_found[child]=true
-                              echo "" > $TMPFILE
-                         fi
+     if [[ $nr_nonossl_ciphers -eq 0 ]]; then
+          num_bundles=0
+     else
+          # Some servers can't handle a handshake with >= 128 ciphers. So,
+          # test cipher suites in bundles of 128 or less.
+          num_bundles=$nr_nonossl_ciphers/128
+          mod_check=$nr_nonossl_ciphers%128
+          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+
+          bundle_size=$nr_nonossl_ciphers/$num_bundles
+          mod_check=$nr_nonossl_ciphers%$num_bundles
+          [[ $mod_check -ne 0 ]] && bundle_size+=1
+     fi
+
+     for (( bundle=0; bundle < num_bundles; bundle++ )); do
+          end_of_bundle=$bundle*$bundle_size+$bundle_size
+          [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
+          for (( success=0; success==0 ; 1 )); do
+               ciphers_to_test=""
+               for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                    [[ "${sslvers2[i]}" != "SSLv2" ]] && ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode2[i]}"
+               done
+               success=1
+               if [[ -n "$ciphers_to_test" ]]; then
+                    if "$SHOW_SIGALGO"; then
+                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "all"
                     else
-                         $OPENSSL s_client -cipher "${ciph[i]}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-                         sclient_connect_successful "$?" "$TMPFILE"
-                         [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
                     fi
-               fi
-               # If this is a "leaf" of the test tree, then print out the results.
-               if [[ $bundle_size -eq 1 ]] && ( ${ciphers_found[child]} || "$SHOW_EACH_C"); then
-                    export=${export2[i]}
-                    if ! "$using_sockets"; then
-                         normalize_ciphercode "${hexcode[i]}"
-                         normalized_hexcode[i]="$HEXC"
-                    fi
-                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
-                         if ${ciphers_found[child]}; then
-                              dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                    ret=$?
+                    if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
+                         success=0
+                         cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                         for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                              [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                         done
+                         i=${index[i]}
+                         ciphers_found[i]=true
+                         if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                              dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
                               kx[i]="${kx[i]} $dhlen"
                          fi
+                         "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
                     fi
-                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
-                    available=""
-                    if "$SHOW_EACH_C"; then
-                         if ${ciphers_found[child]}; then
-                              available="available"
-                              pr_cyan "$available"
-                         else
-                              available="not a/v"
-                              out "$available"
-                         fi
-                    fi
-                    if "$SHOW_SIGALGO" && ${ciphers_found[child]}; then
-                         $OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1
-                    else
-                         outln
-                    fi
-                    fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
                fi
           done
-          round_num=round_num+1
+     done
+
+     for (( i=0 ; i<nr_ciphers; i++ )); do
+          if "${ciphers_found[i]}" || ( "$SHOW_EACH_C" && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ) ); then
+               export=${export2[i]}
+               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+               available=""
+               if "$SHOW_EACH_C"; then
+                    if ${ciphers_found[i]}; then
+                         available="available"
+                         pr_cyan "$available"
+                    else
+                         available="not a/v"
+                         out "$available"
+                    fi
+               fi
+               outln "${sigalg[i]}"
+               fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
+          fi
      done
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
 
      outln
-     tmpfile_handle $FUNCNAME.txt
      return 0
 }
 
@@ -8673,6 +8727,7 @@ maketempf() {
 }
 
 prepare_debug() {
+     local hexc ossl_ciph ossl_supported_tls="" ossl_supported_sslv2=""
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
 
@@ -9080,8 +9135,8 @@ EOF
       0x00,0x26 - EXP-KRB5-DES-CBC-SHA           TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA                SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(40)                    Mac=SHA1     export    
       0x00,0x2A - EXP-KRB5-RC2-CBC-MD5           TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5                SSLv3      Kx=KRB5        Au=KRB5    Enc=RC2(40)                    Mac=MD5      export    
       0x00,0x29 - EXP-KRB5-DES-CBC-MD5           TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5                SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(40)                    Mac=MD5      export    
-      0x00,0x0B - -                              TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/DSS      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
-      0x00,0x0E - -                              TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/RSA      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x0B - EXP-DH-DSS-DES-CBC-SHA         TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/DSS      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x0E - EXP-DH-RSA-DES-CBC-SHA         TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/RSA      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
       0x00,0x17 - EXP-ADH-RC4-MD5                TLS_DH_anon_EXPORT_WITH_RC4_40_MD5                 SSLv3      Kx=DH(512)     Au=None    Enc=RC4(40)                    Mac=MD5      export    
       0x00,0x03 - EXP-RC4-MD5                    TLS_RSA_EXPORT_WITH_RC4_40_MD5                     SSLv3      Kx=RSA(512)    Au=RSA     Enc=RC4(40)                    Mac=MD5      export    
  0x02,0x00,0x80 - EXP-RC4-MD5                    SSL_CK_RC4_128_EXPORT40_WITH_MD5                   SSLv2      Kx=RSA(512)    Au=RSA     Enc=RC4(40)                    Mac=MD5      export    
@@ -9112,7 +9167,26 @@ EOF
       0xFF,0x87 - GOST2012256-NULL-STREEBOG256   -                                                  SSLv3      Kx=GOST        Au=GOST01  Enc=None                       Mac=STREEBOG256        
 EOF
 
-     while read TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS] n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
+     "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
+     ossl_supported_tls="$($OPENSSL ciphers -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
+     while read hexc n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
+          TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS]="$hexc"
+          TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=false
+          if [[ ${#hexc} -eq 9 ]]; then
+               if [[ $OSSL_VER_MAJOR -lt 1 ]]; then
+                    [[ ":${ossl_supported_tls}:" =~ ":${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+               else
+                    ossl_ciph="$(grep -w "$hexc" <<< "$ossl_supported_tls" | awk '{ print $3 }')"
+                    if [[ -n "$ossl_ciph" ]]; then
+                         TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+                         [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}" ]] && TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]="$ossl_ciph" 
+                    fi
+               fi
+          elif [[ $OSSL_VER_MAJOR -lt 1 ]]; then
+               [[ ":${ossl_supported_sslv2}:" =~ ":${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+          else
+               grep -qw "$hexc" <<< "$ossl_supported_sslv2" && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+          fi
           TLS_NR_CIPHERS+=1
      done < $CIPHERS_BY_STRENGTH_FILE
 }
