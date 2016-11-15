@@ -5945,15 +5945,16 @@ get_pub_key_size() {
      local tmppubkeyfile
 
      # OpenSSL displays the number of bits for RSA and ECC
-     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -text | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
+     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -text 2> $ERRFILE | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
      if [[ -n $pubkeybits ]]; then
           echo "Server public key is $pubkeybits" >> $TMPFILE
      else
           # This extracts the public key for DSA, DH, and GOST
           tmppubkeyfile=$(mktemp $TEMPDIR/pubkey.XXXXXX) || return 7
-          $OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -outform DER -out "$tmppubkeyfile"
+          $OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -outform DER -out "$tmppubkeyfile" 2> $ERRFILE
           pubkey=$(hexdump -v -e '16/1 "%02X"' "$tmppubkeyfile")
           rm $tmppubkeyfile
+          [[ -z "$pubkey" ]] && return 1
           # Skip over tag and length of subjectPublicKeyInfo
           i=2
           len1="0x${pubkey:i:2}"
@@ -6038,6 +6039,7 @@ get_pub_key_size() {
           pubkeybits="$(printf "%d" $len)"
           echo "Server public key is $pubkeybits bit" >> $TMPFILE
      fi
+     return 0
 }
 
 # arg1: name of file with socket reply
