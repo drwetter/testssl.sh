@@ -839,6 +839,23 @@ asciihex_to_binary_file(){
      return 0
 }
 
+# arg1: text string
+# Output a comma-separated ASCII-HEX string resprestation of the input string.
+string_to_asciihex() {
+     local string="$1"
+     local -i i eos
+     local output=""
+
+     eos=${#string}-1
+     for (( i=0; i<eos; i++ )); do
+          output+="$(printf "%02x," "'${string:i:1}")"
+     done
+     [[ -n "$string" ]] && output+="$(printf "%02x" "'${string:eos:1}")"
+     out "$output"
+     return 0
+     
+}
+
 ###### check code starts here ######
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
@@ -5157,6 +5174,8 @@ run_server_defaults() {
      local -a ocsp_response ocsp_response_status sni_used
      local -a ciphers_to_test success
      local cn_nosni cn_sni sans_nosni sans_sni san
+     local alpn_proto alpn="" alpn_list_len_hex alpn_extn_len_hex success
+     local -i alpn_list_len alpn_extn_len
 
      # Try each public key type once:
      # ciphers_to_test[1]: cipher suites using certificates with RSA signature public keys
@@ -5289,6 +5308,25 @@ run_server_defaults() {
          >$ERRFILE
 
          sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+     fi
+
+     # Use TLS sockets to check whether server supports certain extensions that aren't supported by $OPENSSL
+     for alpn_proto in $ALPN_PROTOs; do
+           alpn+=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")"
+     done
+     alpn_list_len=${#alpn}/3
+     alpn_list_len_hex=$(printf "%04x" $alpn_list_len)
+     alpn_extn_len=$alpn_list_len+2
+     alpn_extn_len_hex=$(printf "%04x" $alpn_extn_len)
+     tls_sockets "03" "$TLS12_CIPHER" "all" "00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00, 00,10,${alpn_extn_len_hex:0:2},${alpn_extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
+     success=$?
+     if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
+          # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
+          while read -d "\"" -r line; do
+               if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
+                    all_tls_extensions="${all_tls_extensions} \"${line}\""
+               fi
+          done <<<$TLS_EXTENSIONS
      fi
 
      outln
