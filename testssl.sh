@@ -151,6 +151,7 @@ DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ ar
                                         # 4: display bytes sent via sockets 
                                         # 5: display bytes received via sockets
                                         # 6: whole 9 yards
+FAST=${FAST:-false}                     # preference: show only first cipher, run_allciphers with openssl instead of sockets
 WIDE=${WIDE:-false}                     # whether to display for some options just ciphers or a table w hexcode/KX,Enc,strength etc.
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
@@ -2038,9 +2039,8 @@ run_allciphers() {
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
 
-     if "$SSL_NATIVE" || [[ -n "$STARTTLS" ]]; then
-          using_sockets=false
-     fi
+     "$SSL_NATIVE" && using_sockets=false
+     "$FAST" && using_sockets=false
 
      if "$using_sockets"; then
           # get a list of all the cipher suites to test (only need the hexcode, ciph, kx, enc, and export values)
@@ -2065,7 +2065,6 @@ run_allciphers() {
                fi
           done
           nr_ciphers=$TLS_NR_CIPHERS
-
           sslv2_sockets "${sslv2_ciphers:2}" "true"
           if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
                sslv2_supported=true
@@ -3888,7 +3887,7 @@ run_server_preference() {
           fi
      fi
 
-     if $has_cipher_order; then
+     if "$has_cipher_order"; then
           cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
           addcmd2=""
           if [[ -n "$STARTTLS_OPTIMAL_PROTO" ]]; then
@@ -4195,14 +4194,16 @@ cipher_pref_check() {
                     out "$order"
                else
                     out " $cipher"  # this is the first cipher for protocol
-                    while true; do
-                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
-                         sclient_connect_successful $? $TMPFILE || break
-                         cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
-                         out " $cipher"
-                         order+=" $cipher"
-                         tested_cipher="$tested_cipher:-$cipher"
-                    done
+                    if ! "$FAST"; then
+                         while true; do
+                              $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
+                              sclient_connect_successful $? $TMPFILE || break
+                              cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                              out " $cipher"
+                              order+=" $cipher"
+                              tested_cipher="$tested_cipher:-$cipher"
+                         done
+                    fi
                fi
           fi
           [[ -z "$order" ]] || fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
@@ -4220,14 +4221,16 @@ cipher_pref_check() {
                printf "    %-10s %s " "$p:" "$cipher"
                tested_cipher="-"$cipher
                order="$cipher"
-               while true; do
-                    $OPENSSL s_client -cipher "ALL:$tested_cipher" $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    sclient_connect_successful $? $TMPFILE || break
-                    cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-                    out "$cipher "
-                    tested_cipher="$tested_cipher:-$cipher"
-                    order+=" $cipher"
-               done
+               if ! "$FAST"; then
+                    while true; do
+                         $OPENSSL s_client -cipher "ALL:$tested_cipher" $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+                         sclient_connect_successful $? $TMPFILE || break
+                         cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
+                         out "$cipher "
+                         tested_cipher="$tested_cipher:-$cipher"
+                         order+=" $cipher"
+                    done
+               fi
                outln
                [[ -n $order ]] && fileout "order_spdy_$p" "INFO" "Default cipher order for SPDY protocol $p: $order"
           done
@@ -8605,6 +8608,8 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
 
 tuning / connect options (most also can be preset via environment variables):
+     --fast                        omits some checks: using openssl for all ciphers (-e), show only first
+                                   preferred cipher
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
@@ -10196,6 +10201,9 @@ parse_cmd_line() {
                     ;;
                --show[-_]each)
                     SHOW_EACH_C=true
+                    ;;
+               --fast)
+                    FAST=true
                     ;;
                --bugs)
                     BUGS="-bugs"
