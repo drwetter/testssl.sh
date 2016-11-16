@@ -2975,7 +2975,7 @@ run_client_simulation() {
      requiresSha2+=(false)
 
      names+=("Apple ATS 9 iOS 9          ")
-     short+=("safari_9_osx1011")
+     short+=("apple_ats_9_ios9")
      protos+=("-no_ssl2 -no_ssl3 -no_tls1 -no_tls1_1")
      ciphers+=("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA")
      tlsvers+=("-tls1_2")
