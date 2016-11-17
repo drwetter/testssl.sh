@@ -8259,7 +8259,7 @@ run_beast(){
                          fileout "beast" "OK" "BEAST: not vulnerable, no SSL3 or TLS1" "$cve" "$cwe"
                     else
                          pr_done_goodln "no TLS1 (OK)"
-                         fileout "beast" "OK" "BEAST: not vulnerabl, no TLS1" "$cve" "$cwe"
+                         fileout "beast" "OK" "BEAST: not vulnerable, no TLS1" "$cve" "$cwe"
                     fi
                     return 0
                else                # protocol not succeeded but it's the first time
