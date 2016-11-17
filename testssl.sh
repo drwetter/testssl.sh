@@ -6225,19 +6225,19 @@ parse_tls_serverhello() {
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
      local tls_serverhello_ascii="" tls_certificate_ascii="" 
-     local tls_serverkeyexchange_ascii=""
+     local tls_serverkeyexchange_ascii="" tls_certificate_status_ascii=""
      local -i tls_serverhello_ascii_len=0 tls_certificate_ascii_len=0
-     local -i tls_serverkeyexchange_ascii_len=0
+     local -i tls_serverkeyexchange_ascii_len=0 tls_certificate_status_ascii_len=0
      local tls_alert_descrip tls_sid_len_hex issuerDN subjectDN CAissuerDN CAsubjectDN
      local -i tls_sid_len offset extns_offset nr_certs=0
      local tls_msg_type tls_content_type tls_protocol tls_protocol2 tls_hello_time
      local tls_err_level tls_err_descr tls_cipher_suite rfc_cipher_suite tls_compression_method
      local tls_extensions="" extension_type named_curve_str=""
-     local -i i j extension_len tls_extensions_len
+     local -i i j extension_len tls_extensions_len ocsp_response_len ocsp_response_list_len
      local -i certificate_list_len certificate_len
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
-     local tmp_der_certfile tmp_pem_certfile
+     local tmp_der_certfile tmp_pem_certfile hostcert_issuer="" ocsp_response=""
 
      TLS_TIME=""
      DETECTED_TLS_VERSION=""
@@ -6395,7 +6395,7 @@ parse_tls_serverhello() {
           done
      fi
 
-     # Now extract just the server hello, certificate,
+     # Now extract just the server hello, certificate, certificate status,
      # and server key exchange handshake messages.
      tls_handshake_ascii_len=${#tls_handshake_ascii}
      if [[ $DEBUG -ge 2 ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
@@ -6477,6 +6477,13 @@ parse_tls_serverhello() {
                fi
                tls_serverkeyexchange_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverkeyexchange_ascii_len=$msg_len
+          elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "16" ]]; then
+               if [[ -n "$tls_certificate_status_ascii" ]]; then
+                    debugme pr_warningln "Response contained more than one certificate_status handshake message."
+                    return 1
+               fi
+               tls_certificate_status_ascii="${tls_handshake_ascii:i:msg_len}"
+               tls_certificate_status_ascii_len=$msg_len
           fi
      done
 
@@ -6695,7 +6702,7 @@ parse_tls_serverhello() {
           cat "$HOSTCERT" >> $TMPFILE
 
           echo "" > "$TEMPDIR/intermediatecerts.pem"
-          # Place and additional certificates in $TEMPDIR/intermediatecerts.pem
+          # Place any additional certificates in $TEMPDIR/intermediatecerts.pem
           for (( i=12+certificate_len; i<tls_certificate_ascii_len; i=i+certificate_len )); do
                if [[ $tls_certificate_ascii_len-$i -lt 6 ]]; then
                     debugme echo "Malformed Certificate Handshake message in ServerHello."
@@ -6726,13 +6733,66 @@ parse_tls_serverhello() {
                echo "   i:${CAissuerDN:8}" >> $TMPFILE
                cat "$tmp_pem_certfile"  >> $TMPFILE
                cat "$tmp_pem_certfile" >> "$TEMPDIR/intermediatecerts.pem"
-               rm "$tmp_der_certfile" "$tmp_pem_certfile"
+               rm "$tmp_der_certfile"
+               if [[ -n "$hostcert_issuer" ]] || [[ $tls_certificate_status_ascii_len -eq 0 ]]; then
+                    rm "$tmp_pem_certfile"
+               else
+                    hostcert_issuer="$tmp_pem_certfile"
+               fi
           done
           echo "---" >> $TMPFILE
           echo "Server certificate" >> $TMPFILE
           echo "subject=${subjectDN:9}" >> $TMPFILE
           echo "issuer=${issuerDN:8}" >> $TMPFILE
           echo "---" >> $TMPFILE
+     fi
+
+     # Now parse the certificate status message
+     if [[ $tls_certificate_status_ascii_len -ne 0 ]] && [[ $tls_certificate_status_ascii_len -lt 8 ]]; then
+          debugme echo "Malformed certificate status Handshake message in ServerHello."
+          tmpfile_handle $FUNCNAME.txt
+          return 1
+     elif [[ $tls_certificate_status_ascii_len -ne 0 ]] && [[ "${tls_certificate_status_ascii:0:2}" == "01" ]]; then
+          # This is a certificate status message of type "ocsp"
+          ocsp_response_len=2*$(hex2dec "${tls_certificate_status_ascii:2:6}")
+          if [[ $ocsp_response_len -ne $tls_certificate_status_ascii_len-8 ]]; then
+               debugme echo "Malformed certificate status Handshake message in ServerHello."
+               tmpfile_handle $FUNCNAME.txt
+               return 1
+          fi
+          ocsp_response=$(mktemp $TEMPDIR/ocsp_response.XXXXXX) || return 1
+          asciihex_to_binary_file "${tls_certificate_status_ascii:8:ocsp_response_len}" "$ocsp_response"
+     elif [[ $tls_certificate_status_ascii_len -ne 0 ]] && [[ "${tls_certificate_status_ascii:0:2}" == "02" ]]; then
+          # This is a list of OCSP responses, but only the first one is needed
+          # since the first one corresponds to the server's certificate.
+          ocsp_response_list_len=2*$(hex2dec "${tls_certificate_status_ascii:2:6}")
+          if [[ $ocsp_response_list_len -ne $tls_certificate_status_ascii_len-8 ]] || [[ $ocsp_response_list_len -lt 6 ]]; then
+               debugme echo "Malformed certificate status Handshake message in ServerHello."
+               tmpfile_handle $FUNCNAME.txt
+               return 1
+          fi
+          ocsp_response_len=2*$(hex2dec "${tls_certificate_status_ascii:8:6}")
+          if [[ $ocsp_response_len -gt $ocsp_response_list_len-6 ]]; then
+               debugme echo "Malformed certificate status Handshake message in ServerHello."
+               tmpfile_handle $FUNCNAME.txt
+               return 1
+          fi
+          ocsp_response=$(mktemp $TEMPDIR/ocsp_response.XXXXXX) || return 1
+          asciihex_to_binary_file "${tls_certificate_status_ascii:14:ocsp_response_len}" "$ocsp_response"
+     fi
+     if [[ -n "$ocsp_response" ]]; then
+          echo "OCSP response:" >> $TMPFILE
+          echo "===============================================================================" >> $TMPFILE
+          if [[ -n "$hostcert_issuer" ]]; then
+               $OPENSSL ocsp -no_nonce -CAfile $TEMPDIR/intermediatecerts.pem -issuer $hostcert_issuer -cert $HOSTCERT -respin $ocsp_response -resp_text >> $TMPFILE 2>$ERRFILE
+               rm "$hostcert_issuer"
+          else
+               $OPENSSL ocsp -respin $ocsp_response -resp_text >> $TMPFILE 2>$ERRFILE
+          fi
+          echo "===============================================================================" >> $TMPFILE
+     elif [[ "$process_full" == "all" ]]; then
+          echo "OCSP response: no response sent" >> $TMPFILE
+          echo "===============================================================================" >> $TMPFILE
      fi
 
      # Now parse the server key exchange message
