@@ -1937,6 +1937,7 @@ neat_list(){
 
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
+     enc="${enc/CamelliaGCM/Camellia}"  # "CamelliaGCM" is too long
 
      echo "$export" | grep -iq export && strength="$strength,exp"
 
