@@ -6779,7 +6779,29 @@ parse_tls_serverhello() {
                     000D) tls_extensions+=" \"signature algorithms/#13\"" ;;
                     000E) tls_extensions+=" \"use SRTP/#14\"" ;;
                     000F) tls_extensions+=" \"heartbeat/#15\"" ;;
-                    0010) tls_extensions+=" \"application layer protocol negotiation/#16\"" ;;
+                    0010) tls_extensions+=" \"application layer protocol negotiation/#16\""
+                          if [[ $extension_len -lt 4 ]]; then
+                               debugme echo "Malformed application layer protocol negotiation extension."
+                               return 1
+                          fi
+                          echo -n "ALPN protocol:  " >> $TMPFILE
+                          let offset=$extns_offset+12+$i
+                          j=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
+                          if [[ $extension_len -ne $j+4 ]] || [[ $j -lt 2 ]]; then
+                               debugme echo "Malformed application layer protocol negotiation extension."
+                               return 1
+                          fi
+                          let offset=$offset+4
+                          j=2*$(hex2dec "${tls_serverhello_ascii:offset:2}")
+                          if [[ $extension_len -ne $j+6 ]]; then
+                               debugme echo "Malformed application layer protocol negotiation extension."
+                               return 1
+                          fi
+                          let offset=$offset+2
+                          asciihex_to_binary_file "${tls_serverhello_ascii:offset:j}" "$TMPFILE"
+                          echo "" >> $TMPFILE
+                          echo "===============================================================================" >> $TMPFILE
+                          ;;
                     0011) tls_extensions+=" \"certificate status version 2/#17\"" ;;
                     0012) tls_extensions+=" \"signed certificate timestamps/#18\"" ;;
                     0013) tls_extensions+=" \"client certificate type/#19\"" ;;
@@ -6797,7 +6819,28 @@ parse_tls_serverhello() {
                     002C) tls_extensions+=" \"cookie/#44\"" ;;
                     002D) tls_extensions+=" \"psk key exchange modes/#45\"" ;;
                     002E) tls_extensions+=" \"ticket early data info/#46\"" ;;
-                    3374) tls_extensions+=" \"next protocol/#13172\"" ;;
+                    3374) tls_extensions+=" \"next protocol/#13172\""
+                          local -i protocol_len
+                          echo -n "Protocols advertised by server: " >> $TMPFILE
+                          let offset=$extns_offset+12+$i
+                          for (( j=0; j<extension_len; j=j+protocol_len+2 )); do
+                               if [[ $extension_len -lt $j+2 ]]; then
+                                    debugme echo "Malformed next protocol extension."
+                                    return 1
+                               fi
+                               protocol_len=2*$(hex2dec "${tls_serverhello_ascii:offset:2}")
+                               if [[ $extension_len -lt $j+$protocol_len+2 ]]; then
+                                    debugme echo "Malformed next protocol extension."
+                                    return 1
+                               fi
+                               let offset=$offset+2
+                               asciihex_to_binary_file "${tls_serverhello_ascii:offset:protocol_len}" "$TMPFILE"
+                               let offset=$offset+$protocol_len
+                               [[ $j+$protocol_len+2 -lt $extension_len ]] && echo -n ", " >> $TMPFILE
+                          done
+                          echo "" >> $TMPFILE
+                          echo "===============================================================================" >> $TMPFILE
+                          ;;
                     FF01) tls_extensions+=" \"renegotiation info/#65281\"" ;;
                        *) tls_extensions+=" \"unrecognized extension/#$(printf "%d\n\n" "0x$extension_type")\"" ;;
                esac
@@ -6849,6 +6892,12 @@ parse_tls_serverhello() {
           fi
           if [[ "$process_full" == "all" ]]; then
                echo "     tls_extensions:         $TLS_EXTENSIONS"
+               if [[ "$TLS_EXTENSIONS" =~ "application layer protocol negotiation" ]]; then
+                    echo "     ALPN protocol:          $(grep "ALPN protocol:" "$TMPFILE" | sed 's/ALPN protocol:  //')"
+               fi
+               if [[ "$TLS_EXTENSIONS" =~ "next protocol" ]]; then
+                    echo "     NPN protocols:          $(grep "Protocols advertised by server:" "$TMPFILE" | sed 's/Protocols advertised by server: //')"
+               fi
           fi
           outln
      fi
