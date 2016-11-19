@@ -343,6 +343,202 @@ c0,0d, c0,03, 00,0a, 00,63, 00,15, 00,12, 00,0f, 00,0c,
 00,62, 00,09, 00,65, 00,64, 00,14, 00,11, 00,0e, 00,0b,
 00,08, 00,06, 00,03, 00,ff"
 
+readonly -a TLS13_KEY_SHARES=(
+ "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "a" "b" "c" "d" "e" "f"
+  "10" "11" "12" "13" "14" "15" "16"
+"-----BEGIN EC PARAMETERS-----
+BggqhkjOPQMBBw==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIHEhQsBkqt1i15mG1wluq/zLqDmjqNQegtgxyNBfRbZSoAoGCCqGSM49
+AwEHoUQDQgAEJP3GoZyVYrabOauJMWUZJxM0PEbtjTxW7K8V+JMDhJa+UyRQm8Tf
+2LDnzCAiuwzF8m0KhcloHEoptD2WBUmJlQ==
+-----END EC PRIVATE KEY-----
+"
+"-----BEGIN EC PARAMETERS-----
+BgUrgQQAIg==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MIGkAgEBBDA7MCUdHy2+Kc73fWph++jWo18LHzzm7SKLgycQBNtmeJu3w1y9pK0G
+EXgAWsIePIOgBwYFK4EEACKhZANiAAT/x7tN8plE6gbA6D4Igp3ash5EvZxvNqdG
+Q50fcDrIco91ybaVlg2tdngZgurTzte+jv7kdkYrILUmLnXxAUGg4d86yStfcZaI
+rDEB8Hc9BgJkFFoLSsXMVCKfoEo777k=
+-----END EC PRIVATE KEY-----
+"
+"-----BEGIN EC PARAMETERS-----
+BgUrgQQAIw==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MIHbAgEBBEFjBqkejwKserOf+LoY6xeSUUoLSZQDz/oNLXLB3NQJ3ewDkhbjOvcL
+jG1on33V080fXRTN3eNdfvzcqDw4c0GGCKAHBgUrgQQAI6GBiQOBhgAEAHuBnMpQ
++30lnd/gWrHwjLrXQ+EwtxYzMjSDkfRxr0UQ0YuzDNzsVP0azylC06BUlcAvVgiX
++61BiUapw+37EORuAaHOlob0nobmFND7peN0YglQuBeSdqK3cbdP/u9jffGr2H99
+bONJgO7LSp05PXa79CEi8sydmKYiH1pSLAzRiQnh
+-----END EC PRIVATE KEY-----
+" "1a" "1b" "1c"
+"-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VuBCIEIACiKGKr1nm2eobXvsI3HrWNKR5wEVAIf7KaCmDPxsJR
+-----END PRIVATE KEY-----
+" "1e" "1f"
+ "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "2a" "2b" "2c" "2d" "2e" "2f"
+ "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "3a" "3b" "3c" "3d" "3e" "3f"
+ "40" "41" "42" "43" "44" "45" "46" "47" "48" "49" "4a" "4b" "4c" "4d" "4e" "4f"
+ "50" "51" "52" "53" "54" "55" "56" "57" "58" "59" "5a" "5b" "5c" "5d" "5e" "5f"
+ "60" "61" "62" "63" "64" "65" "66" "67" "68" "69" "6a" "6b" "6c" "6d" "6e" "6f"
+ "70" "71" "72" "73" "74" "75" "76" "77" "78" "79" "7a" "7b" "7c" "7d" "7e" "7f"
+ "80" "81" "82" "83" "84" "85" "86" "87" "88" "89" "8a" "8b" "8c" "8d" "8e" "8f"
+ "90" "91" "92" "93" "94" "95" "96" "97" "98" "99" "9a" "9b" "9c" "9d" "9e" "9f"
+ "a0" "a1" "a2" "a3" "a4" "a5" "a6" "a7" "a8" "a9" "aa" "ab" "ac" "ad" "ae" "af"
+ "b0" "b1" "b2" "b3" "b4" "b5" "b6" "b7" "b8" "b9" "ba" "bb" "bc" "bd" "be" "bf"
+ "c0" "c1" "c2" "c3" "c4" "c5" "c6" "c7" "c8" "c9" "ca" "cb" "cc" "cd" "ce" "cf"
+ "d0" "d1" "d2" "d3" "d4" "d5" "d6" "d7" "d8" "d9" "da" "db" "dc" "dd" "de" "df"
+ "e0" "e1" "e2" "e3" "e4" "e5" "e6" "e7" "e8" "e9" "ea" "eb" "ec" "ed" "ee" "ef"
+ "f0" "f1" "f2" "f3" "f4" "f5" "f6" "f7" "f8" "f9" "fa" "fb" "fc" "fd" "fe" "ff"
+ "-----BEGIN PRIVATE KEY-----
+MIICJgIBADCCARcGCSqGSIb3DQEDATCCAQgCggEBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhKFyX//////////8C
+AQIEggEEAoIBAHxYskjJGeKwSGdAf//JLxPmGRGP6Uylmt12QX5w1FfFXQVJdrsY
+unjdqhTwgV1vTZ1QApd0uZB//q8ZNNM8SZK0elY4ZJsHJAIdJ/ROmvPvkMCkU0fK
+S/uUHroP6tEDyKF+v7ooiBF2KXS5CkOYRTKhiOBaWGsdhiFIkd+O7oY6oyhPxPNT
+2zQEdhIu3ZgFG/ZcscdliMPMmZnKvt/dF4yV8RnCHl3MRDRdL/3McDAb4z89bWqR
+HRexppcgNa9lhOvR+nF/55NCzT3KwkFPQODQmMRH3bzmME+48HZrFcaaom3/DGt+
+EC+vidtEr4YW86tV6jvig5+uNR1mIKpE8N4=
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+MIIDJgIBADCCAZcGCSqGSIb3DQEDATCCAYgCggGBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhH8/c3jVbO2UZA1u8
+NPTe+ZwCOGG0b8nW5skHetkdJpH39+5ZjLD6wYbZHK7+EwmFE5JwtBMMk7xDeUT0
+/URS4tdN02Ty4h5x9Uv/XK6Cq5yd9p7obSvFIjY6DavFIZebDeraHb+aQtXESE4K
+vNBr+lPd7zwbIO4/1Z18JeQdK2bGLjf//////////wIBAgSCAYQCggGAV6hlUz0f
+RwpauhaumL+dFJQcZHgYghHX9JfNDZv1uMzkTiKxgVutrtFmfHoaTaYNgw+HEQSF
+ZRnGzyOXb14/ZoGWo727N4T5usOqINFcHIeAbPiRimo0mwS7ivYKxEFBaw4N7OyE
+zfNKAYWNQe0J+R2FLMKBSbJ+b1nGQ/cUSQDffDpKSUS94+XxwxcvNaCv9Ygtkvnl
+e/t61L/0eQu/nmi0o7PzR4brmyVTXGnj2LujG/KOtIB4pXQ1GqrvsYLB3pCUTDdA
+E0heXfpYGZJK10ByMkWmOuH3pCuI8C+7+Bh7JwQAXUtSpZ+hp1Bz7v1PKwY/3fG1
+2HcPXp85q5N9x9zYZv1vmwFAd0nTdoWdtMbiEJxhCdr6sRpi1+KPg6W3Kqtfcv2f
+ZZC6MwVFtxogjzIlXt68O7HRH7Adz+DGhEeZqdxIQpaQR50p4LF7gqQ/mzXq8oCe
+XKC3XxrfV5h3OrPEL/zNTd2pzh3LLQB349aOHNz1F+3YPyPlvwOsXkeT
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+MIIEJgIBADCCAhcGCSqGSIb3DQEDATCCAggCggIBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhH8/c3jVbO2UZA1u8
+NPTe+ZwCOGG0b8nW5skHetkdJpH39+5ZjLD6wYbZHK7+EwmFE5JwtBMMk7xDeUT0
+/URS4tdN02Ty4h5x9Uv/XK6Cq5yd9p7obSvFIjY6DavFIZebDeraHb+aQtXESE4K
+vNBr+lPd7zwbIO4/1Z18JeQdK2aeHvFub1LDFk30+3kw6eTliFe2rH1fQtafbRh3
+Y88dVQNABIf1W6V+Mcx6cTXIhu+0MYrtah4BLZ5oMqkHYAqRgTDEbcd4+XGtADgJ
+KZmjM8uLehoduT1xQAA8Kk7OqfmNCswKgpHNzsl9z47JtVp/iKRrTbWoUfRBguHG
+igB+XmVfav//////////AgECBIICBAKCAgBKs8VkNMjroMib7Wuw71hVoHiB7lF9
+3FQsDwU3y//RgETN2CEx8gdarvb35ldNEkypxtiaYck+a5qKVkP8uW4/AUoGlH4V
+mIVz8R9e0Cewc4X8229+AgvyguaEhJHozp7EqIYEYlpLyn5GL53l2OYvBB3eH9Yi
+yjYKe5vCe16Jy88oJYrS6+ybYLXHcfJsLHIppMS17KuDdH/DUiCvy5HE5fA5ufD3
+ExQImgsDa3rm8nW6NUCix9Pl4X5OkWieYE7pXBePZ8Yk8BD4JpPbhsh/9husS4XL
+/IpSq+tzgXq44SKQv0o9hbkGaxR6xmTjTwOjRiqW1D/1pS/wHxZbH1qbgJSKq7Fx
+6VZZjH5Hyx9Zh5p3mksa7iZ4DQXVW/8ffz+8UdVRQolVUQxXWihcU5qfdtmDEPI0
+4dRR5mI/Pk1n7lAhdyE4H/Tz0TmqItfScZvNaj6RbPbk6KOapgHFKIX7dmtPxAOv
+oMMudOwsBg7md3CY08zH/XdE6O8lmVgCJQMjfwJ7QMayOKL1NYNMmUDPP0WIxOyz
+5UJj3GzmNrKgYftgr2o8blEwwDbETYN/hpgTPyWl8ieVxK2bn7SX8dFXXEwSdCAt
+Cg5c3H+YOc+ahx7VYXJtBDyAKuygUKnVqZ1ht6/xLUyJUxiSMZLbFKHBLkR3UuQa
+HyRwI92yYN4+Zg==
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+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
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+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
+Y9zPgF69gpA9VpStqLAqHxBvEm4BYFoFyfw=
+-----END PRIVATE KEY-----
+" "105" "106" "107" "108" "109" "10a" "10b" "10c" "10d" "10e" "10f" )
+
 ###### Cipher suite information #####
 declare -i TLS_NR_CIPHERS=0
 declare TLS_CIPHER_HEXCODE=()
@@ -6238,6 +6434,9 @@ parse_tls_serverhello() {
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
      local tmp_der_certfile tmp_pem_certfile hostcert_issuer="" ocsp_response=""
+     local len1 key_bitstring="" tmp_der_key_file
+     local dh_p dh_g dh_y dh_param ephemeral_param rfc7919_param
+     local -i dh_p_len dh_g_len dh_y_len dh_param_len
 
      TLS_TIME=""
      DETECTED_TLS_VERSION=""
@@ -6856,30 +7055,177 @@ parse_tls_serverhello() {
                     tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
-               dh_bits=$(hex2dec "${tls_serverkeyexchange_ascii:0:4}")
-               offset=4+2*$dh_bits
+               dh_p_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:0:4}")
+               offset=4+$dh_p_len
                if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
                     tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
 
-               # Subtract any leading 0 bits
+               # Subtract any leading 0 bytes
                for (( i=4; i < offset; i=i+2 )); do
                     [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
-                    dh_bits=$dh_bits-1
+                    dh_p_len=$dh_p_len-2
                done
                if [[ $i -ge $offset ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
                     tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
+               dh_p="${tls_serverkeyexchange_ascii:i:dh_p_len}"
 
-               dh_bits=8*$dh_bits
+               dh_bits=4*$dh_p_len
                msb=$(hex2dec "${tls_serverkeyexchange_ascii:i:2}")
                for (( mask=128; msb < mask; mask/=2 )); do
                     dh_bits=$dh_bits-1
                done
+
+               dh_g_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+               i=4+$offset
+               offset+=4+$dh_g_len
+               if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               # Subtract any leading 0 bytes
+               for (( 1; i < offset; i=i+2 )); do
+                    [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
+                    dh_g_len=$dh_g_len-2
+               done
+               if [[ $i -ge $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               dh_g="${tls_serverkeyexchange_ascii:i:dh_g_len}"
+
+               dh_y_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+               i=4+$offset
+               offset+=4+$dh_y_len
+               if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               # Subtract any leading 0 bytes
+               for (( 1; i < offset; i=i+2 )); do
+                    [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
+                    dh_y_len=$dh_y_len-2
+               done
+               if [[ $i -ge $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               dh_y="${tls_serverkeyexchange_ascii:i:dh_y_len}"
+
+               # The following code assumes that all lengths can be encoded using at most 2 bytes,
+               # which just means that the encoded length of the public key must be less than
+               # 65,536 bytes. If the length is anywhere close to that, it is almost certainly an
+               # encoding error.
+               if [[ $dh_p_len+$dh_g_len+$dh_y_len -ge 131000 ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               # make ASN.1 INTEGER of p, g, and Y
+               [[ "0x${dh_p:0:1}" -ge 8 ]] && dh_p_len+=2 && dh_p="00$dh_p"
+               if [[ $dh_p_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_p_len/2)))"
+               elif [[ $dh_p_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_p_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_p_len/2)))"
+               fi
+               dh_p="02${len1}$dh_p"
+
+               [[ "0x${dh_g:0:1}" -ge 8 ]] && dh_g_len+=2 && dh_g="00$dh_g"
+               if [[ $dh_g_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_g_len/2)))"
+               elif [[ $dh_g_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_g_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_g_len/2)))"
+               fi
+               dh_g="02${len1}$dh_g"
+
+               [[ "0x${dh_y:0:1}" -ge 8 ]] && dh_y_len+=2 && dh_y="00$dh_y"
+               if [[ $dh_y_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_y_len/2)))"
+               elif [[ $dh_y_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_y_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_y_len/2)))"
+               fi
+               dh_y="02${len1}$dh_y"
+
+               # Make a SEQUENCE of p and g
+               dh_param_len=${#dh_p}+${#dh_g}
+               if [[ $dh_param_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_param_len/2)))"
+               elif [[ $dh_param_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_param_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_param_len/2)))"
+               fi
+               dh_param="30${len1}${dh_p}${dh_g}"
+               
+               # Make a SEQUENCE of the paramters SEQUENCE and the OID
+               dh_param_len=22+${#dh_param}
+               if [[ $dh_param_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_param_len/2)))"
+               elif [[ $dh_param_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_param_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_param_len/2)))"
+               fi
+               dh_param="30${len1}06092A864886F70D010301${dh_param}"
+
+               # Encapsulate public key, y, in a BIT STRING
+               dh_y_len=${#dh_y}+2
+               if [[ $dh_y_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_y_len/2)))"
+               elif [[ $dh_y_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_y_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_y_len/2)))"
+               fi
+               dh_y="03${len1}00$dh_y"
+
+               # Create the public key SEQUENCE
+               i=${#dh_param}+${#dh_y}
+               if [[ $i -lt 256 ]]; then
+                    len1="$(printf "%02x" $((i/2)))"
+               elif [[ $i -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((i/2)))"
+               else
+                    len1="82$(printf "%04x" $((i/2)))"
+               fi
+               key_bitstring="30${len1}${dh_param}${dh_y}"
+               tmp_der_key_file=$(mktemp $TEMPDIR/pub_key_der.XXXXXX) || return 1
+               asciihex_to_binary_file "$key_bitstring" "$tmp_der_key_file"
+               key_bitstring="$($OPENSSL pkey -pubin -in $tmp_der_key_file -inform DER 2> $ERRFILE)"
+               rm $tmp_der_key_file
+               [[ -n "$key_bitstring" ]] && echo "$key_bitstring" >> $TMPFILE
+
+               # Check to see whether the ephemeral public key uses one of the groups from
+               # RFC 7919 for parameters               
+               case $dh_bits in
+                    2048) named_curve=256; named_curve_str=" ffdhe2048," ;;
+                    3072) named_curve=257; named_curve_str=" ffdhe3072," ;;
+                    4096) named_curve=258; named_curve_str=" ffdhe4096," ;;
+                    6144) named_curve=259; named_curve_str=" ffdhe6144," ;;
+                    8192) named_curve=260; named_curve_str=" ffdhe8192," ;;
+                       *) named_curve=0;   named_curve_str="" ;;
+               esac
+               [[ -z "$key_bitstring" ]] && named_curve=0 && named_curve_str=""
+               if [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ "BEGIN" ]]; then
+                    ephemeral_param="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | grep -A 1000 "prime:")"
+                    rfc7919_param="$($OPENSSL pkey -text -noout <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -A 1000 "prime:")"
+                    [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
+               fi
 
                [[ $DEBUG -ge 2 ]] && [[ $dh_bits -ne 0 ]] && echo "dh_bits:                DH,$named_curve_str $dh_bits bits"
                [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: DH,$named_curve_str $dh_bits bits" >> $TMPFILE
