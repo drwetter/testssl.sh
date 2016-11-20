@@ -327,8 +327,8 @@
       0x00,0x26 - EXP-KRB5-DES-CBC-SHA           TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA                SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(40)                    Mac=SHA1     export    
       0x00,0x2A - EXP-KRB5-RC2-CBC-MD5           TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5                SSLv3      Kx=KRB5        Au=KRB5    Enc=RC2(40)                    Mac=MD5      export    
       0x00,0x29 - EXP-KRB5-DES-CBC-MD5           TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5                SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(40)                    Mac=MD5      export    
-      0x00,0x0B - -                              TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/DSS      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
-      0x00,0x0E - -                              TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/RSA      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x0B - EXP-DH-DSS-DES-CBC-SHA         TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/DSS      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
+      0x00,0x0E - EXP-DH-RSA-DES-CBC-SHA         TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA               SSLv3      Kx=DH/RSA      Au=DH      Enc=DES(40)                    Mac=SHA1     export    
       0x00,0x17 - EXP-ADH-RC4-MD5                TLS_DH_anon_EXPORT_WITH_RC4_40_MD5                 SSLv3      Kx=DH(512)     Au=None    Enc=RC4(40)                    Mac=MD5      export    
       0x00,0x03 - EXP-RC4-MD5                    TLS_RSA_EXPORT_WITH_RC4_40_MD5                     SSLv3      Kx=RSA(512)    Au=RSA     Enc=RC4(40)                    Mac=MD5      export    
  0x02,0x00,0x80 - EXP-RC4-MD5                    SSL_CK_RC4_128_EXPORT40_WITH_MD5                   SSLv2      Kx=RSA(512)    Au=RSA     Enc=RC4(40)                    Mac=MD5      export    
