@@ -7102,7 +7102,8 @@ parse_tls_serverhello() {
 
      # Now parse the server key exchange message
      if [[ $tls_serverkeyexchange_ascii_len -ne 0 ]]; then
-          if [[ $rfc_cipher_suite =~ "TLS_ECDHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_ECDH_anon" ]]; then
+          if [[ $rfc_cipher_suite =~ "TLS_ECDHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_ECDH_anon" ]] || \
+             [[ $rfc_cipher_suite == ECDHE* ]] || [[ $rfc_cipher_suite == AECDH* ]]; then
                if [[ $tls_serverkeyexchange_ascii_len -lt 6 ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
                     tmpfile_handle $FUNCNAME.txt
@@ -7153,7 +7154,9 @@ parse_tls_serverhello() {
                     debugme echo "dh_bits:                $named_curve_str, $dh_bits bits"
                     echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
                fi
-          elif [[ $rfc_cipher_suite =~ "TLS_DHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_DH_anon" ]]; then
+          elif [[ $rfc_cipher_suite =~ "TLS_DHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_DH_anon" ]] || \
+               [[ $rfc_cipher_suite == "DHE-"* ]] || [[ $rfc_cipher_suite == "EDH-"* ]] || \
+               [[ $rfc_cipher_suite == "EXP1024-DHE-"* ]]; then
                # For DH ephemeral keys the first field is p, and the length of
                # p is the same as the length of the public key.
                if [[ $tls_serverkeyexchange_ascii_len -lt 4 ]]; then
