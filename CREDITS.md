@@ -30,7 +30,7 @@
  - completing parsing of TLS ServerHello messages
  - testssl.sh -e: testing with a mixture of openssl + sockets
  - finding more TLS extensions via sockets
-- extensive CN <--> hostname check
+ - extensive CN <--> hostname check
  - seperate check for curves
  - RFC 7919, key shares extension
  
