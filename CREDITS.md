@@ -27,10 +27,19 @@
  - Detection + output of multiple certificates
  - several cleanups of server certificate related stuff
  - several fixes
- - improved parsing of TLS ServerHello messages
- - speed improvements when testing all ciphers
- - extensive CN <--> hostname check
+ - completing parsing of TLS ServerHello messages
+ - testssl.sh -e: testing with a mixture of openssl + sockets
+ - finding more TLS extensions via sockets
+- extensive CN <--> hostname check
  - seperate check for curves
+ - RFC 7919, key shares extension
+ 
+* Thomas Patzke:
+  - Support of supplying timeout value for openssl connect 
+ 
+* Oleksandr Nosenko
+  - non-flat JSON support
+  - in file output (CSV, JSON flat, JSON non-flat) support of a minimum severity level 
 
 - Christoph Badura
  - NetBSD fixes
