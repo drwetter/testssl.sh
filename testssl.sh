@@ -1063,7 +1063,6 @@ service_detection() {
      local addcmd=""
 
      if ! $CLIENT_AUTH; then
-          # SNI is nonsense for !HTTPS but fortunately for other protocols s_client doesn't seem to care
           [[ ! "$1" =~ ssl ]] && addcmd="$SNI"
           printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $addcmd >$TMPFILE 2>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
@@ -9886,7 +9885,6 @@ determine_service() {
           case "$protocol" in
                ftp|smtp|pop3|imap|xmpp|telnet|ldap)
                     STARTTLS="-starttls $protocol"
-                    SNI=""
                     if [[ "$protocol" == xmpp ]]; then
                          # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
                          NODEIP="$NODE"
