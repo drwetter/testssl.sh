@@ -4691,17 +4691,89 @@ sclient_connect_successful() {
      return 1
 }
 
+# Note that since, at the moment, this function is only called by run_server_defaults()
+# and run_heartbleed(), this function does not look for the status request or NPN
+# extensions. For run_heartbleed(), only the heartbeat extension needs to be detected.
+# For run_server_defaults(), the status request and NPN would already be detected by
+# get_server_certificate(), if they are supported. In the case of the status extension,
+# since including a status request extension in a ClientHello does not work for GOST
+# only servers. In the case of NPN, since a server will not include both the NPN and
+# ALPN extensions in the same ServerHello.
+determine_tls_extensions() {
+     local addcmd
+     local -i success
+     local line params="" tls_extensions=""
+     local alpn_proto alpn="" alpn_list_len_hex alpn_extn_len_hex
+     local -i alpn_list_len alpn_extn_len
+     local using_sockets=true
+
+     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && return 0
+     "$SSL_NATIVE" && using_sockets=false
+
+     if "$using_sockets"; then
+          if [[ -z $STARTTLS ]]; then
+               for alpn_proto in $ALPN_PROTOs; do
+                    alpn+=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")"
+               done
+               alpn_list_len=${#alpn}/3
+               alpn_list_len_hex=$(printf "%04x" $alpn_list_len)
+               alpn_extn_len=$alpn_list_len+2
+               alpn_extn_len_hex=$(printf "%04x" $alpn_extn_len)
+               tls_sockets "03" "$TLS12_CIPHER" "all" "00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00, 00,10,${alpn_extn_len_hex:0:2},${alpn_extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
+          else
+               tls_sockets "03" "$TLS12_CIPHER" "all" "00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00"
+          fi
+          success=$?
+          [[ $success -eq 2 ]] && success=0
+          [[ $success -eq 0 ]] && tls_extensions="$(grep -a 'TLS Extensions: ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/TLS Extensions: //' )"
+          if [[ -r "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ]]; then
+               cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+               tmpfile_handle $FUNCNAME.txt
+          fi
+     else
+          if "$HAS_ALPN" && [[ -z $STARTTLS ]]; then
+               params="-alpn \"${ALPN_PROTOs// /,}\""  # we need to replace " " by ","
+          elif "$HAS_SPDY" && [[ -z $STARTTLS ]]; then
+               params="-nextprotoneg \"$NPN_PROTOs\""
+          fi
+          success=1
+          addcmd=""
+          if [[ -z "$OPTIMAL_PROTO" ]] && [[ -z "$SNI" ]] && "$HAS_NO_SSL2"; then
+               addcmd="-no_ssl2"
+          elif [[ ! "$OPTIMAL_PROTO" =~ ssl ]]; then
+               addcmd="$SNI"
+          fi
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd $OPTIMAL_PROTO -tlsextdebug $params </dev/null 2>$ERRFILE >$TMPFILE
+          sclient_connect_successful $? $TMPFILE
+          if [[ $? -eq 0 ]]; then
+               success=0
+               tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+               tls_extensions=$(echo $tls_extensions)       # into one line
+          fi
+          tmpfile_handle $FUNCNAME.txt
+     fi
+     if [[ -n "$tls_extensions" ]]; then
+          # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
+          while read -d "\"" -r line; do
+               if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
+                    TLS_EXTENSIONS+=" \"${line}\""
+               fi
+          done <<<$tls_extensions
+          [[ "${TLS_EXTENSIONS:0:1}" == " " ]] && TLS_EXTENSIONS="${TLS_EXTENSIONS:1}"
+     fi
+     return $success
+}
+
 # arg1 is "-cipher <OpenSSL cipher>" or empty
 # arg2 is a list of protocols to try (tls1_2, tls1_1, tls1, ssl3) or empty (if all should be tried)
-determine_tls_extensions() {
-     local proto addcmd
+get_server_certificate() {
+     local protocols_to_try proto addcmd
      local success
-     local npn_params="" alpn_params=""
+     local npn_params="" tls_extensions line
      local savedir
      local nrsaved
 
      $HAS_SPDY && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
-     $HAS_ALPN && [[ -z $STARTTLS ]] && alpn_params="-alpn \"${ALPN_PROTOs// /,}\""  # we need to replace " " by ","
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -4744,20 +4816,10 @@ determine_tls_extensions() {
      fi
 
      for proto in $protocols_to_try; do
-# alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           addcmd=""
           [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
-          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $alpn_params -status </dev/null 2>$ERRFILE >$TMPFILE
-          if sclient_connect_successful $? $TMPFILE; then
-               success=0
-               grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext-alpn.txt
-          fi
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $npn_params -status </dev/null 2>$ERRFILE >$TMPFILE
-          if sclient_connect_successful $? $TMPFILE ; then
-               success=0
-               grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext-npn.txt
-               break
-          fi
+          sclient_connect_successful $? $TMPFILE && success=0 && break
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
@@ -4772,13 +4834,21 @@ determine_tls_extensions() {
                GOST_STATUS_PROBLEM=true
           fi
      fi
-     #TLS_EXTENSIONS=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
+     #tls_extensions=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
      #
      # this is not beautiful (grep+sed)
      # but maybe we should just get the ids and do a private matching, according to
      # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-     TLS_EXTENSIONS=$(cat $TEMPDIR/tlsext-alpn.txt $TEMPDIR/tlsext-npn.txt | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
-     TLS_EXTENSIONS=$(echo $TLS_EXTENSIONS)       # into one line
+     tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+     tls_extensions=$(echo $tls_extensions)       # into one line
+
+     # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
+     while read -d "\"" -r line; do
+          if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
+               TLS_EXTENSIONS+=" \"${line}\""
+          fi
+     done <<<$tls_extensions
+     [[ "${TLS_EXTENSIONS:0:1}" == " " ]] && TLS_EXTENSIONS="${TLS_EXTENSIONS:1}"
 
      # Place the server's certificate in $HOSTCERT and any intermediate
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
@@ -5499,7 +5569,6 @@ run_server_defaults() {
      local lifetime unit
      local line
      local -i i n
-     local all_tls_extensions=""
      local -i certs_found=0
      local -a previous_hostcert previous_intermediates keysize cipher
      local -a ocsp_response ocsp_response_status sni_used
@@ -5547,22 +5616,15 @@ run_server_defaults() {
              if [[ $n -ge 8 ]]; then
                   sni="$SNI"
                   SNI=""
-                  determine_tls_extensions "-cipher ${ciphers_to_test[n]}" "tls1_1"
+                  get_server_certificate "-cipher ${ciphers_to_test[n]}" "tls1_1"
                   success[n]=$?
                   SNI="$sni"
              else
-                  determine_tls_extensions "-cipher ${ciphers_to_test[n]}"
+                  get_server_certificate "-cipher ${ciphers_to_test[n]}"
                   success[n]=$?
              fi
              if [[ ${success[n]} -eq 0 ]]; then
-                 # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
-                 while read -d "\"" -r line; do
-                     if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
-                         all_tls_extensions="${all_tls_extensions} \"${line}\""
-                     fi
-                 done <<<$TLS_EXTENSIONS
-
-                 cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+                 cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
                  >$ERRFILE
                  if [[ -z "$sessticket_str" ]]; then
                      sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
@@ -5631,49 +5693,25 @@ run_server_defaults() {
          fi
      done
 
-     if [[ $certs_found -eq 0 ]]; then
-         [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
-         [[ -n "$TLS_EXTENSIONS" ]] && all_tls_extensions=" $TLS_EXTENSIONS"
+     determine_tls_extensions
 
-         cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
-         >$ERRFILE
+     cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+     >$ERRFILE
 
-         sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
-     fi
-
-     # Use TLS sockets to check whether server supports certain extensions that aren't supported by $OPENSSL
-     for alpn_proto in $ALPN_PROTOs; do
-           alpn+=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")"
-     done
-     alpn_list_len=${#alpn}/3
-     alpn_list_len_hex=$(printf "%04x" $alpn_list_len)
-     alpn_extn_len=$alpn_list_len+2
-     alpn_extn_len_hex=$(printf "%04x" $alpn_extn_len)
-     tls_sockets "03" "$TLS12_CIPHER" "all" "00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00, 00,10,${alpn_extn_len_hex:0:2},${alpn_extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
-     success=$?
-     if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
-          # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
-          while read -d "\"" -r line; do
-               if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
-                    all_tls_extensions="${all_tls_extensions} \"${line}\""
-               fi
-          done <<<$TLS_EXTENSIONS
-     fi
+     [[ -z "$sessticket_str" ]] && sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
 
      outln
      pr_headlineln " Testing server defaults (Server Hello) "
      outln
 
      pr_bold " TLS extensions (standard)    "
-     if [[ -z "$all_tls_extensions" ]]; then
+     if [[ -z "$TLS_EXTENSIONS" ]]; then
          outln "(none)"
          fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
      else
-         all_tls_extensions="${all_tls_extensions:1}"
-         outln "$all_tls_extensions"
-         fileout "tls_extensions" "INFO" "TLS server extensions (std): $all_tls_extensions"
+         outln "$TLS_EXTENSIONS"
+         fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
-     TLS_EXTENSIONS="$all_tls_extensions"
 
      pr_bold " Session Tickets RFC 5077     "
      if [[ -z "$sessticket_str" ]]; then
@@ -6899,7 +6937,6 @@ parse_tls_serverhello() {
                esac
           done
      fi
-     [[ "$process_full" == "all" ]] && TLS_EXTENSIONS="${tls_extensions:1}"
 
      if [[ "$tls_protocol2" == "0300" ]]; then
           echo "Protocol  : SSLv3" >> $TMPFILE
@@ -6926,6 +6963,7 @@ parse_tls_serverhello() {
           esac
           echo "===============================================================================" >> $TMPFILE
      fi
+     [[ -n "$tls_extensions" ]] && echo "TLS Extensions: ${tls_extensions:1}" >> $TMPFILE
 
      if [[ $DEBUG -ge 2 ]]; then
           echo "TLS server hello message:"
@@ -6947,12 +6985,12 @@ parse_tls_serverhello() {
                      *) echo "(unrecognized compression method)" ;;
                esac
           fi
-          if [[ "$process_full" == "all" ]]; then
-               echo "     tls_extensions:         $TLS_EXTENSIONS"
-               if [[ "$TLS_EXTENSIONS" =~ "application layer protocol negotiation" ]]; then
+          if [[ -n "$tls_extensions" ]]; then
+               echo "     tls_extensions:         ${tls_extensions:1}"
+               if [[ "$tls_extensions" =~ "application layer protocol negotiation" ]]; then
                     echo "     ALPN protocol:          $(grep "ALPN protocol:" "$TMPFILE" | sed 's/ALPN protocol:  //')"
                fi
-               if [[ "$TLS_EXTENSIONS" =~ "next protocol" ]]; then
+               if [[ "$tls_extensions" =~ "next protocol" ]]; then
                     echo "     NPN protocols:          $(grep "Protocols advertised by server:" "$TMPFILE" | sed 's/Protocols advertised by server: //')"
                fi
           fi
