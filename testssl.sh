@@ -344,6 +344,202 @@ c0,0d, c0,03, 00,0a, 00,63, 00,15, 00,12, 00,0f, 00,0c,
 00,62, 00,09, 00,65, 00,64, 00,14, 00,11, 00,0e, 00,0b,
 00,08, 00,06, 00,03, 00,ff"
 
+readonly -a TLS13_KEY_SHARES=(
+ "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "a" "b" "c" "d" "e" "f"
+  "10" "11" "12" "13" "14" "15" "16"
+"-----BEGIN EC PARAMETERS-----
+BggqhkjOPQMBBw==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIHEhQsBkqt1i15mG1wluq/zLqDmjqNQegtgxyNBfRbZSoAoGCCqGSM49
+AwEHoUQDQgAEJP3GoZyVYrabOauJMWUZJxM0PEbtjTxW7K8V+JMDhJa+UyRQm8Tf
+2LDnzCAiuwzF8m0KhcloHEoptD2WBUmJlQ==
+-----END EC PRIVATE KEY-----
+"
+"-----BEGIN EC PARAMETERS-----
+BgUrgQQAIg==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MIGkAgEBBDA7MCUdHy2+Kc73fWph++jWo18LHzzm7SKLgycQBNtmeJu3w1y9pK0G
+EXgAWsIePIOgBwYFK4EEACKhZANiAAT/x7tN8plE6gbA6D4Igp3ash5EvZxvNqdG
+Q50fcDrIco91ybaVlg2tdngZgurTzte+jv7kdkYrILUmLnXxAUGg4d86yStfcZaI
+rDEB8Hc9BgJkFFoLSsXMVCKfoEo777k=
+-----END EC PRIVATE KEY-----
+"
+"-----BEGIN EC PARAMETERS-----
+BgUrgQQAIw==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MIHbAgEBBEFjBqkejwKserOf+LoY6xeSUUoLSZQDz/oNLXLB3NQJ3ewDkhbjOvcL
+jG1on33V080fXRTN3eNdfvzcqDw4c0GGCKAHBgUrgQQAI6GBiQOBhgAEAHuBnMpQ
++30lnd/gWrHwjLrXQ+EwtxYzMjSDkfRxr0UQ0YuzDNzsVP0azylC06BUlcAvVgiX
++61BiUapw+37EORuAaHOlob0nobmFND7peN0YglQuBeSdqK3cbdP/u9jffGr2H99
+bONJgO7LSp05PXa79CEi8sydmKYiH1pSLAzRiQnh
+-----END EC PRIVATE KEY-----
+" "1a" "1b" "1c"
+"-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VuBCIEIACiKGKr1nm2eobXvsI3HrWNKR5wEVAIf7KaCmDPxsJR
+-----END PRIVATE KEY-----
+" "1e" "1f"
+ "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "2a" "2b" "2c" "2d" "2e" "2f"
+ "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "3a" "3b" "3c" "3d" "3e" "3f"
+ "40" "41" "42" "43" "44" "45" "46" "47" "48" "49" "4a" "4b" "4c" "4d" "4e" "4f"
+ "50" "51" "52" "53" "54" "55" "56" "57" "58" "59" "5a" "5b" "5c" "5d" "5e" "5f"
+ "60" "61" "62" "63" "64" "65" "66" "67" "68" "69" "6a" "6b" "6c" "6d" "6e" "6f"
+ "70" "71" "72" "73" "74" "75" "76" "77" "78" "79" "7a" "7b" "7c" "7d" "7e" "7f"
+ "80" "81" "82" "83" "84" "85" "86" "87" "88" "89" "8a" "8b" "8c" "8d" "8e" "8f"
+ "90" "91" "92" "93" "94" "95" "96" "97" "98" "99" "9a" "9b" "9c" "9d" "9e" "9f"
+ "a0" "a1" "a2" "a3" "a4" "a5" "a6" "a7" "a8" "a9" "aa" "ab" "ac" "ad" "ae" "af"
+ "b0" "b1" "b2" "b3" "b4" "b5" "b6" "b7" "b8" "b9" "ba" "bb" "bc" "bd" "be" "bf"
+ "c0" "c1" "c2" "c3" "c4" "c5" "c6" "c7" "c8" "c9" "ca" "cb" "cc" "cd" "ce" "cf"
+ "d0" "d1" "d2" "d3" "d4" "d5" "d6" "d7" "d8" "d9" "da" "db" "dc" "dd" "de" "df"
+ "e0" "e1" "e2" "e3" "e4" "e5" "e6" "e7" "e8" "e9" "ea" "eb" "ec" "ed" "ee" "ef"
+ "f0" "f1" "f2" "f3" "f4" "f5" "f6" "f7" "f8" "f9" "fa" "fb" "fc" "fd" "fe" "ff"
+ "-----BEGIN PRIVATE KEY-----
+MIICJgIBADCCARcGCSqGSIb3DQEDATCCAQgCggEBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhKFyX//////////8C
+AQIEggEEAoIBAHxYskjJGeKwSGdAf//JLxPmGRGP6Uylmt12QX5w1FfFXQVJdrsY
+unjdqhTwgV1vTZ1QApd0uZB//q8ZNNM8SZK0elY4ZJsHJAIdJ/ROmvPvkMCkU0fK
+S/uUHroP6tEDyKF+v7ooiBF2KXS5CkOYRTKhiOBaWGsdhiFIkd+O7oY6oyhPxPNT
+2zQEdhIu3ZgFG/ZcscdliMPMmZnKvt/dF4yV8RnCHl3MRDRdL/3McDAb4z89bWqR
+HRexppcgNa9lhOvR+nF/55NCzT3KwkFPQODQmMRH3bzmME+48HZrFcaaom3/DGt+
+EC+vidtEr4YW86tV6jvig5+uNR1mIKpE8N4=
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+MIIDJgIBADCCAZcGCSqGSIb3DQEDATCCAYgCggGBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhH8/c3jVbO2UZA1u8
+NPTe+ZwCOGG0b8nW5skHetkdJpH39+5ZjLD6wYbZHK7+EwmFE5JwtBMMk7xDeUT0
+/URS4tdN02Ty4h5x9Uv/XK6Cq5yd9p7obSvFIjY6DavFIZebDeraHb+aQtXESE4K
+vNBr+lPd7zwbIO4/1Z18JeQdK2bGLjf//////////wIBAgSCAYQCggGAV6hlUz0f
+RwpauhaumL+dFJQcZHgYghHX9JfNDZv1uMzkTiKxgVutrtFmfHoaTaYNgw+HEQSF
+ZRnGzyOXb14/ZoGWo727N4T5usOqINFcHIeAbPiRimo0mwS7ivYKxEFBaw4N7OyE
+zfNKAYWNQe0J+R2FLMKBSbJ+b1nGQ/cUSQDffDpKSUS94+XxwxcvNaCv9Ygtkvnl
+e/t61L/0eQu/nmi0o7PzR4brmyVTXGnj2LujG/KOtIB4pXQ1GqrvsYLB3pCUTDdA
+E0heXfpYGZJK10ByMkWmOuH3pCuI8C+7+Bh7JwQAXUtSpZ+hp1Bz7v1PKwY/3fG1
+2HcPXp85q5N9x9zYZv1vmwFAd0nTdoWdtMbiEJxhCdr6sRpi1+KPg6W3Kqtfcv2f
+ZZC6MwVFtxogjzIlXt68O7HRH7Adz+DGhEeZqdxIQpaQR50p4LF7gqQ/mzXq8oCe
+XKC3XxrfV5h3OrPEL/zNTd2pzh3LLQB349aOHNz1F+3YPyPlvwOsXkeT
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+MIIEJgIBADCCAhcGCSqGSIb3DQEDATCCAggCggIBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhH8/c3jVbO2UZA1u8
+NPTe+ZwCOGG0b8nW5skHetkdJpH39+5ZjLD6wYbZHK7+EwmFE5JwtBMMk7xDeUT0
+/URS4tdN02Ty4h5x9Uv/XK6Cq5yd9p7obSvFIjY6DavFIZebDeraHb+aQtXESE4K
+vNBr+lPd7zwbIO4/1Z18JeQdK2aeHvFub1LDFk30+3kw6eTliFe2rH1fQtafbRh3
+Y88dVQNABIf1W6V+Mcx6cTXIhu+0MYrtah4BLZ5oMqkHYAqRgTDEbcd4+XGtADgJ
+KZmjM8uLehoduT1xQAA8Kk7OqfmNCswKgpHNzsl9z47JtVp/iKRrTbWoUfRBguHG
+igB+XmVfav//////////AgECBIICBAKCAgBKs8VkNMjroMib7Wuw71hVoHiB7lF9
+3FQsDwU3y//RgETN2CEx8gdarvb35ldNEkypxtiaYck+a5qKVkP8uW4/AUoGlH4V
+mIVz8R9e0Cewc4X8229+AgvyguaEhJHozp7EqIYEYlpLyn5GL53l2OYvBB3eH9Yi
+yjYKe5vCe16Jy88oJYrS6+ybYLXHcfJsLHIppMS17KuDdH/DUiCvy5HE5fA5ufD3
+ExQImgsDa3rm8nW6NUCix9Pl4X5OkWieYE7pXBePZ8Yk8BD4JpPbhsh/9husS4XL
+/IpSq+tzgXq44SKQv0o9hbkGaxR6xmTjTwOjRiqW1D/1pS/wHxZbH1qbgJSKq7Fx
+6VZZjH5Hyx9Zh5p3mksa7iZ4DQXVW/8ffz+8UdVRQolVUQxXWihcU5qfdtmDEPI0
+4dRR5mI/Pk1n7lAhdyE4H/Tz0TmqItfScZvNaj6RbPbk6KOapgHFKIX7dmtPxAOv
+oMMudOwsBg7md3CY08zH/XdE6O8lmVgCJQMjfwJ7QMayOKL1NYNMmUDPP0WIxOyz
+5UJj3GzmNrKgYftgr2o8blEwwDbETYN/hpgTPyWl8ieVxK2bn7SX8dFXXEwSdCAt
+Cg5c3H+YOc+ahx7VYXJtBDyAKuygUKnVqZ1ht6/xLUyJUxiSMZLbFKHBLkR3UuQa
+HyRwI92yYN4+Zg==
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+MIIGJgIBADCCAxcGCSqGSIb3DQEDATCCAwgCggMBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhH8/c3jVbO2UZA1u8
+NPTe+ZwCOGG0b8nW5skHetkdJpH39+5ZjLD6wYbZHK7+EwmFE5JwtBMMk7xDeUT0
+/URS4tdN02Ty4h5x9Uv/XK6Cq5yd9p7obSvFIjY6DavFIZebDeraHb+aQtXESE4K
+vNBr+lPd7zwbIO4/1Z18JeQdK2aeHvFub1LDFk30+3kw6eTliFe2rH1fQtafbRh3
+Y88dVQNABIf1W6V+Mcx6cTXIhu+0MYrtah4BLZ5oMqkHYAqRgTDEbcd4+XGtADgJ
+KZmjM8uLehoduT1xQAA8Kk7OqfmNCswKgpHNzsl9z47JtVp/iKRrTbWoUfRBguHG
+igB+Xg3ZAgv9ZLZFA2x6Tmd9LDhTKjojukRCyvU+pju0VDKbdiTIkXvdZLHA/Uyz
+jowzTHAcOs2tBlf8z+xxmx9cPk5GBB84gUf7TP20d6UkcfepqWkQuFUyLttjQNig
+DvCSNQUR4wq+wf/546Juf7KfjBgwI8NYfjjaAHfZtHY+TkuUsrvBlMZlHnfK+ZLu
+qsAjKigb9rOnOcEiYRaCCujbWEemfL75yQkbRi1TjNcrA3Rq539eYiksMRViqEZQ
+XcgtuFQziuSfUjXJW5EXjM8t1crO9APsnRgQxicrBFs7cfnca4DWP91KjprbHmli
+ppUm1DFhwaQdVw15ONrUpA4ynNDkDmX//////////wIBAgSCAwQCggMAVvLSfpPC
+OJVhuOkMtOYtl6vcKtuP0RXXZYBfMFufb5gQJrEypjSIxS+kRyBjNMk3qSt9iBbG
+dpSe5fuu9RtI5O5eD/UXrDNBbI2/ldLNDarV3g+hcYklzKQE6kBSWEt1soktPXEq
+PIcvYFVrOtWrH3Nw0UT/brRLZ+Ea9mnRG6CCICM0K2UxMhyjDheGCVCpmZfYJycP
+mx0H1SA5RI9lP+GkDm096CgAEtXqk1eej8/9F4vsEn5r48HKobXlZEBp+HFcIq7s
+DqrNZkg6jRhMusGjVM7mpFuyt0D5LIshsDBHjwkULJUX9Zd7pcVizbHbst2rpi8u
+n7H908pdRFvdQYfvjBwvewl7DwZoFOsL+qA5Jo1MtfgpgegouKsS3jmyRSmY4wLp
+uOjv6S1//A1sctJNwXlMI7/3IcONT3bmOwNnyvUeFJE4+lnYeClEpAsrCegcljQa
+UNOeSKR1x9ctvzlWaBM5EP2daF0JiYdo3Ug/YISDX5dJFOW4gWz95W8Ii9//6zim
+8LgA2/NP5IJBs0DPQxVbEVUI0wRPYMI4aZBm2n5bQFQKI95FQfv8ncKSul/fuTtY
+du8INZR6ogMpWdDSz5UsIMwjLzXfg30ehcCyy9ebkDtiPDr8++HrwWKGVvuQaa4p
+rPiac3fF1+DCHVKwxRsqM1zgDzNtI59Y9wb85kyPRsHTuG5kR3KUMUUYWmbuuMG6
+3yMm7K3hJhlhfiO8hIWt+ZJJHCIEJOFK7FJbsZWmFbS6ukcl1uwlmQzote2aFfYA
+5fsL7VeUaXKkJPKY3p05rvHJkayUpxn+oamOA1qW4eVYzio/ZiRtaUNLbmOvb0pU
+Z1fyypnlaVzAVynoIF43LfbJ7cdpfnoz6hd//SVA742kuQMA4VeQoXLh6dX1/qZV
+8QF7gNjLxgJoqGssaOUwxdxcXqMl+9JUBL/LtvxYs1xcrzla/tj+26XcPT+/tIWR
+89TyyCWVPBvFLeWfG5+iIXT0X6g8zJP6d9QCL+2F3yStbJngWCZtFDFD
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+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
+Y9zPgF69gpA9VpStqLAqHxBvEm4BYFoFyfw=
+-----END PRIVATE KEY-----
+" "105" "106" "107" "108" "109" "10a" "10b" "10c" "10d" "10e" "10f" )
+
 ###### Cipher suite information #####
 declare -i TLS_NR_CIPHERS=0
 declare TLS_CIPHER_HEXCODE=()
@@ -354,6 +550,7 @@ declare TLS_CIPHER_KX=()
 declare TLS_CIPHER_AUTH=()
 declare TLS_CIPHER_ENC=()
 declare TLS_CIPHER_EXPORT=()
+declare TLS_CIPHER_OSSL_SUPPORTED=()
 
 ###### output functions ######
 # a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
@@ -1966,6 +2163,7 @@ neat_list(){
 
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
+     enc="${enc/CamelliaGCM/Camellia}"  # "CamelliaGCM" is too long
 
      echo "$export" | grep -iq export && strength="$strength,exp"
 
@@ -2054,16 +2252,13 @@ test_just_one(){
 
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad)
 run_allciphers() {
-     local tmpfile
-     local -i nr_ciphers=0 ret
-     local n auth mac export hexc sslv2_ciphers=""
-     local -a normalized_hexcode hexcode ciph sslvers kx enc export2
-     local -i i j parent child end_of_bundle round_num bundle_size num_bundles mod_check
-     local -a ciphers_found
-     local dhlen
-     local available
-     local ciphers_to_test
-     local sslv2_supported=false
+     local -i nr_ciphers_tested=0 nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 ret
+     local n auth mac export hexc sslv2_ciphers="" s
+     local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
+     local -i i end_of_bundle bundle bundle_size num_bundles mod_check
+     local -a ciphers_found ciphers_found2 hexcode2 ciph2 sslvers2 rfc_ciph2
+     local -i -a index
+     local dhlen available ciphers_to_test supported_sslv2_ciphers addcmd=""
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
 
@@ -2071,15 +2266,21 @@ run_allciphers() {
      "$FAST" && using_sockets=false
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
-      if "$using_sockets"; then
-          # get a list of all the cipher suites to test (only need the hexcode, ciph, kx, enc, and export values)
+     # get a list of all the cipher suites to test
+     if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-               hexc=$(echo "${TLS_CIPHER_HEXCODE[i]}" | tr 'A-Z' 'a-z')
+               hexc="$(tolower "${TLS_CIPHER_HEXCODE[i]}")"
                ciph[i]="${TLS_CIPHER_OSSL_NAME[i]}"
                sslvers[i]="${TLS_CIPHER_SSLVERS[i]}"
                kx[i]="${TLS_CIPHER_KX[i]}"
                enc[i]="${TLS_CIPHER_ENC[i]}"
                export2[i]="${TLS_CIPHER_EXPORT[i]}"
+               ciphers_found[i]=false
+               sigalg[i]=""
+               ossl_supported[i]=${TLS_CIPHER_OSSL_SUPPORTED[i]}
+               if "$using_sockets" && ! "$HAS_DH_BITS" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                    ossl_supported[i]=false
+               fi
                if [[ ${#hexc} -eq 9 ]]; then
                     hexcode[i]="${hexc:2:2},${hexc:7:2}"
                     if [[ "${hexc:2:2}" == "00" ]]; then
@@ -2092,30 +2293,62 @@ run_allciphers() {
                     normalized_hexcode[i]="x${hexc:2:2}${hexc:7:2}${hexc:12:2}"
                     sslv2_ciphers="$sslv2_ciphers, ${hexcode[i]}"
                fi
+               if "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}"; then
+                    nr_ciphers_tested+=1
+               fi
           done
           nr_ciphers=$TLS_NR_CIPHERS
-          sslv2_sockets "${sslv2_ciphers:2}" "true"
-          if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
-               sslv2_supported=true
-          fi
      else
-          # get a list of all the cipher suites to test (only need the hexcode, ciph, sslvers, kx, enc, and export values)
-          while read hexcode[nr_ciphers] n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+          while read hexc n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+               ciphers_found[nr_ciphers]=false
+               if [[ ${#hexc} -eq 9 ]]; then
+                    if [[ "${hexc:2:2}" == "00" ]]; then
+                         normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:7:2}")"
+                    else
+                         normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:2:2}${hexc:7:2}")"
+                    fi
+               else
+                    normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:2:2}${hexc:7:2}${hexc:12:2}")"
+               fi
+               sigalg[nr_ciphers]=""
+               ossl_supported[nr_ciphers]=true
                nr_ciphers=$nr_ciphers+1
           done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+          nr_ciphers_tested=$nr_ciphers
+     fi
 
-          if "$HAS_SSL2"; then
-               $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-               sclient_connect_successful "$?" "$TMPFILE"
-               [[ "$?" -eq 0 ]] && sslv2_supported=true
+     if "$using_sockets"; then
+          sslv2_sockets "${sslv2_ciphers:2}" "true"
+          if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+               supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+               "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               for (( i=0 ; i<nr_ciphers; i++ )); do
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${normalized_hexcode[i]}" ]]; then
+                         ciphers_found[i]=true
+                         "$SHOW_SIGALGO" && sigalg[i]="$s"
+                    fi
+               done
+          fi
+     elif "$HAS_SSL2"; then
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful "$?" "$TMPFILE"
+          if [[ "$?" -eq 0 ]]; then
+               supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
+               "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               for (( i=0 ; i<nr_ciphers; i++ )); do
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${ciph[i]}" ]]; then
+                         ciphers_found[i]=true
+                         "$SHOW_SIGALGO" && sigalg[i]="$s"
+                    fi
+               done
           fi
      fi
 
      outln
      if "$using_sockets"; then
-          pr_headlineln " Testing $nr_ciphers ciphers via sockets against the server, ordered by encryption strength "
+          pr_headlineln " Testing $nr_ciphers_tested via OpenSSL and sockets against the server, ordered by encryption strength "
      else
-          pr_headlineln " Testing all $nr_ciphers locally available ciphers against the server, ordered by encryption strength "
+          pr_headlineln " Testing all $nr_ciphers_tested locally available ciphers against the server, ordered by encryption strength "
           outln
           [[ $TLS_NR_CIPHERS == 0 ]] && pr_warning " Cipher mapping not available, doing a fallback to openssl"
           if ! "$HAS_DH_BITS"; then
@@ -2126,128 +2359,146 @@ run_allciphers() {
      outln
      neat_header
 
-     # Split ciphers into bundles of size 4**n, starting with an "n" that
-     # splits the ciphers into 4 bundles, and then reducing "n" by one in each
-     # round. Only test a bundle of 4**n ciphers against the server if it was
-     # part of a bundle of 4**(n+1) ciphers that included a cipher supported by
-     # the server. Continue until n=0.
-
-     # Determine bundle size that will result in their being exactly four bundles.
-     for (( bundle_size=1; bundle_size < nr_ciphers; bundle_size*=4 )); do
-          :
+     for (( i=0; i < nr_ciphers; i++ )); do
+          if "${ossl_supported[i]}"; then
+               ciphers_found2[nr_ossl_ciphers]=false
+               sslvers2[nr_ossl_ciphers]="${sslvers[i]}"
+               ciph2[nr_ossl_ciphers]="${ciph[i]}"
+               index[nr_ossl_ciphers]=$i
+               nr_ossl_ciphers+=1
+          fi
      done
 
-     # set ciphers_found[1] so that all bundles will be tested in round 0.
-     ciphers_found[1]=true
-     # Some servers can't handle a handshake with >= 128 ciphers.
-     for (( round_num=0; bundle_size/4 >= 128; bundle_size/=4 )); do
-          round_num=$round_num+1
-          for (( i=4**$round_num; i<2*4**$round_num; i++ )); do
-               ciphers_found[i]=true
+     if [[ $nr_ossl_ciphers -eq 0 ]]; then
+          num_bundles=0
+     else
+          # Some servers can't handle a handshake with >= 128 ciphers. So,
+          # test cipher suites in bundles of 128 or less.
+          num_bundles=$nr_ossl_ciphers/128
+          mod_check=$nr_ossl_ciphers%128
+          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+
+          bundle_size=$nr_ossl_ciphers/$num_bundles
+          mod_check=$nr_ossl_ciphers%$num_bundles
+          [[ $mod_check -ne 0 ]] && bundle_size+=1
+     fi
+
+     "$HAS_NO_SSL2" && addcmd="-no_ssl2"
+     for (( bundle=0; bundle < num_bundles; bundle++ )); do
+          end_of_bundle=$bundle*$bundle_size+$bundle_size
+          [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
+          for (( success=0; success==0 ; 1 )); do
+               ciphers_to_test=""
+               for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                    [[ "${sslvers2[i]}" != "SSLv2" ]] && ! "${ciphers_found2[i]}" && ciphers_to_test+=":${ciph2[i]}"
+               done
+               success=1
+               if [[ -n "$ciphers_to_test" ]]; then
+                    $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+                    sclient_connect_successful "$?" "$TMPFILE"
+                    if [[ "$?" -eq 0 ]]; then
+                         cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                         if [[ -n "$cipher" ]]; then
+                              success=0
+                              for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                                   [[ "$cipher" == "${ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                              done
+                              i=${index[i]}
+                              ciphers_found[i]=true
+                              if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                                   dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                                   kx[i]="${kx[i]} $dhlen"
+                              fi
+                              "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                                   sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         fi
+                    fi
+               fi
           done
      done
 
-     for (( bundle_size/=4; bundle_size>=1; bundle_size/=4 )); do
-          # Note that since the number of ciphers isn't a power of 4, the number
-          # of bundles may be may be less than 4**(round_num+1), and the final
-          # bundle may have fewer than bundle_size ciphers.
-          num_bundles=$nr_ciphers/$bundle_size
-          mod_check=$nr_ciphers%$bundle_size
-          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
-          for (( i=0; i<num_bundles; i++ )); do
-               # parent=index of bundle from previous round that includes this bundle of ciphers
-               parent=4**$round_num+$i/4
-               # child=index for this bundle of ciphers
-               child=4*4**$round_num+$i
-               if ${ciphers_found[parent]}; then
-                    ciphers_to_test=""
-                    end_of_bundle=$i*$bundle_size+$bundle_size
-                    [[ $end_of_bundle -gt $nr_ciphers ]] && end_of_bundle=$nr_ciphers
-                    if "$using_sockets"; then
-                         for (( j=i*bundle_size; j<end_of_bundle; j++ )); do
-                              # Exclude the SSLv2 ciphers
-                              hexc="${hexcode[j]}"
-                              [[ ${#hexc} -eq 5 ]] && ciphers_to_test="${ciphers_to_test}, ${hexcode[j]}"
-                         done
-                         ciphers_found[child]=false
-                         if [[ -n "${ciphers_to_test:2}" ]]; then
-                              if [[ $bundle_size -eq 1 ]]; then
-                                   tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
-                              else
-                                   tls_sockets "03" "${ciphers_to_test:2}, 00,ff"
-                              fi
-                              ret=$?
-                              if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
-                                   ciphers_found[child]=true
-                                   cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
-                              fi
-                         fi
-                    else
-                         for (( j=i*bundle_size; j<end_of_bundle; j++ )); do
-                              [[ "${sslvers[j]}" != "SSLv2" ]] && ciphers_to_test="${ciphers_to_test}:${ciph[j]}"
-                         done
-                         ciphers_found[child]=false
-                         if [[ -n "${ciphers_to_test:1}" ]]; then
-                              $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
-                              sclient_connect_successful "$?" "$TMPFILE"
-                              [[ "$?" -eq 0 ]] && ciphers_found[child]=true
-                         fi
-                    fi
-               else
-                    # No need to test, since test of parent demonstrated none of these ciphers work.
-                    ciphers_found[child]=false
+     if "$using_sockets"; then
+          for (( i=0; i < nr_ciphers; i++ )); do
+               if ! "${ciphers_found[i]}"; then
+                    ciphers_found2[nr_nonossl_ciphers]=false
+                    sslvers2[nr_nonossl_ciphers]="${sslvers[i]}"
+                    hexcode2[nr_nonossl_ciphers]="${hexcode[i]}"
+                    rfc_ciph2[nr_nonossl_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
+                    index[nr_nonossl_ciphers]=$i
+                    nr_nonossl_ciphers+=1
                fi
+          done
+     fi
 
-               if $sslv2_supported && [[ $bundle_size -eq 1 ]] && [[ "${sslvers[i]}" == "SSLv2" ]]; then
-                    if "$using_sockets"; then
-                         if grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt" | grep -q "${normalized_hexcode[i]}"; then
-                              ciphers_found[child]=true
-                              echo "" > $TMPFILE
-                         fi
+     if [[ $nr_nonossl_ciphers -eq 0 ]]; then
+          num_bundles=0
+     else
+          # Some servers can't handle a handshake with >= 128 ciphers. So,
+          # test cipher suites in bundles of 128 or less.
+          num_bundles=$nr_nonossl_ciphers/128
+          mod_check=$nr_nonossl_ciphers%128
+          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+
+          bundle_size=$nr_nonossl_ciphers/$num_bundles
+          mod_check=$nr_nonossl_ciphers%$num_bundles
+          [[ $mod_check -ne 0 ]] && bundle_size+=1
+     fi
+
+     for (( bundle=0; bundle < num_bundles; bundle++ )); do
+          end_of_bundle=$bundle*$bundle_size+$bundle_size
+          [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
+          for (( success=0; success==0 ; 1 )); do
+               ciphers_to_test=""
+               for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                    [[ "${sslvers2[i]}" != "SSLv2" ]] && ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode2[i]}"
+               done
+               success=1
+               if [[ -n "$ciphers_to_test" ]]; then
+                    if "$SHOW_SIGALGO"; then
+                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "all"
                     else
-                         $OPENSSL s_client -cipher "${ciph[i]}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-                         sclient_connect_successful "$?" "$TMPFILE"
-                         [[ "$?" -eq 0 ]] && ciphers_found[child]=true
+                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
                     fi
-               fi
-               # If this is a "leaf" of the test tree, then print out the results.
-               if [[ $bundle_size -eq 1 ]] && ( ${ciphers_found[child]} || "$SHOW_EACH_C"); then
-                    export=${export2[i]}
-                    if ! "$using_sockets"; then
-                         normalize_ciphercode "${hexcode[i]}"
-                         normalized_hexcode[i]="$HEXC"
-                    fi
-                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
-                         if ${ciphers_found[child]}; then
-                              dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                    ret=$?
+                    if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
+                         success=0
+                         cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                         for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                              [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                         done
+                         i=${index[i]}
+                         ciphers_found[i]=true
+                         if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                              dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
                               kx[i]="${kx[i]} $dhlen"
                          fi
+                         "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
                     fi
-                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
-                    available=""
-                    if "$SHOW_EACH_C"; then
-                         if ${ciphers_found[child]}; then
-                              available="available"
-                              pr_cyan "$available"
-                         else
-                              available="not a/v"
-                              out "$available"
-                         fi
-                    fi
-                    if "$SHOW_SIGALGO" && ${ciphers_found[child]}; then
-                         $OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1
-                    else
-                         outln
-                    fi
-                    fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
                fi
           done
-          round_num=round_num+1
+     done
+
+     for (( i=0 ; i<nr_ciphers; i++ )); do
+          if "${ciphers_found[i]}" || ( "$SHOW_EACH_C" && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ) ); then
+               export=${export2[i]}
+               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+               available=""
+               if "$SHOW_EACH_C"; then
+                    if ${ciphers_found[i]}; then
+                         available="available"
+                         pr_cyan "$available"
+                    else
+                         available="not a/v"
+                         out "$available"
+                    fi
+               fi
+               outln "${sigalg[i]}"
+               fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
+          fi
      done
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
 
      outln
-     tmpfile_handle $FUNCNAME.txt
      return 0
 }
 
@@ -3346,13 +3597,10 @@ run_client_simulation() {
      requiresSha2+=(false)
 
      outln
-     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
      if "$using_sockets"; then
           pr_headlineln " Running browser simulations via sockets (experimental) "
      else
           pr_headline " Running browser simulations via openssl (experimental) "
-          [[ $TLS_NR_CIPHERS == 0 ]] && pr_warning ". Cipher mapping not available, Doing a fallback to openssl  "
-          outln
      fi
      outln
 
@@ -3422,7 +3670,7 @@ run_client_simulation() {
                fi
                #FiXME: awk
                cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
-               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && cipher="$(rfc2openssl "$cipher")"
+               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && [[ $TLS_NR_CIPHERS -ne 0 ]] && cipher="$(rfc2openssl "$cipher")"
                out "$proto $cipher"
                "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
                "$HAS_DH_BITS" && read_dhbits_from_file $TMPFILE
@@ -4472,17 +4720,89 @@ sclient_connect_successful() {
      return 1
 }
 
+# Note that since, at the moment, this function is only called by run_server_defaults()
+# and run_heartbleed(), this function does not look for the status request or NPN
+# extensions. For run_heartbleed(), only the heartbeat extension needs to be detected.
+# For run_server_defaults(), the status request and NPN would already be detected by
+# get_server_certificate(), if they are supported. In the case of the status extension,
+# since including a status request extension in a ClientHello does not work for GOST
+# only servers. In the case of NPN, since a server will not include both the NPN and
+# ALPN extensions in the same ServerHello.
+determine_tls_extensions() {
+     local addcmd
+     local -i success
+     local line params="" tls_extensions=""
+     local alpn_proto alpn="" alpn_list_len_hex alpn_extn_len_hex
+     local -i alpn_list_len alpn_extn_len
+     local using_sockets=true
+
+     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && return 0
+     "$SSL_NATIVE" && using_sockets=false
+
+     if "$using_sockets"; then
+          if [[ -z $STARTTLS ]]; then
+               for alpn_proto in $ALPN_PROTOs; do
+                    alpn+=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")"
+               done
+               alpn_list_len=${#alpn}/3
+               alpn_list_len_hex=$(printf "%04x" $alpn_list_len)
+               alpn_extn_len=$alpn_list_len+2
+               alpn_extn_len_hex=$(printf "%04x" $alpn_extn_len)
+               tls_sockets "03" "$TLS12_CIPHER" "all" "00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00, 00,10,${alpn_extn_len_hex:0:2},${alpn_extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
+          else
+               tls_sockets "03" "$TLS12_CIPHER" "all" "00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00"
+          fi
+          success=$?
+          [[ $success -eq 2 ]] && success=0
+          [[ $success -eq 0 ]] && tls_extensions="$(grep -a 'TLS Extensions: ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/TLS Extensions: //' )"
+          if [[ -r "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ]]; then
+               cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+               tmpfile_handle $FUNCNAME.txt
+          fi
+     else
+          if "$HAS_ALPN" && [[ -z $STARTTLS ]]; then
+               params="-alpn \"${ALPN_PROTOs// /,}\""  # we need to replace " " by ","
+          elif "$HAS_SPDY" && [[ -z $STARTTLS ]]; then
+               params="-nextprotoneg \"$NPN_PROTOs\""
+          fi
+          success=1
+          addcmd=""
+          if [[ -z "$OPTIMAL_PROTO" ]] && [[ -z "$SNI" ]] && "$HAS_NO_SSL2"; then
+               addcmd="-no_ssl2"
+          elif [[ ! "$OPTIMAL_PROTO" =~ ssl ]]; then
+               addcmd="$SNI"
+          fi
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd $OPTIMAL_PROTO -tlsextdebug $params </dev/null 2>$ERRFILE >$TMPFILE
+          sclient_connect_successful $? $TMPFILE
+          if [[ $? -eq 0 ]]; then
+               success=0
+               tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+               tls_extensions=$(echo $tls_extensions)       # into one line
+          fi
+          tmpfile_handle $FUNCNAME.txt
+     fi
+     if [[ -n "$tls_extensions" ]]; then
+          # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
+          while read -d "\"" -r line; do
+               if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
+                    TLS_EXTENSIONS+=" \"${line}\""
+               fi
+          done <<<$tls_extensions
+          [[ "${TLS_EXTENSIONS:0:1}" == " " ]] && TLS_EXTENSIONS="${TLS_EXTENSIONS:1}"
+     fi
+     return $success
+}
+
 # arg1 is "-cipher <OpenSSL cipher>" or empty
 # arg2 is a list of protocols to try (tls1_2, tls1_1, tls1, ssl3) or empty (if all should be tried)
-determine_tls_extensions() {
-     local proto addcmd
+get_server_certificate() {
+     local protocols_to_try proto addcmd
      local success
-     local npn_params="" alpn_params=""
+     local npn_params="" tls_extensions line
      local savedir
      local nrsaved
 
      $HAS_SPDY && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
-     $HAS_ALPN && [[ -z $STARTTLS ]] && alpn_params="-alpn \"${ALPN_PROTOs// /,}\""  # we need to replace " " by ","
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -4525,20 +4845,10 @@ determine_tls_extensions() {
      fi
 
      for proto in $protocols_to_try; do
-# alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           addcmd=""
           [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
-          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $alpn_params -status </dev/null 2>$ERRFILE >$TMPFILE
-          if sclient_connect_successful $? $TMPFILE; then
-               success=0
-               grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext-alpn.txt
-          fi
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $npn_params -status </dev/null 2>$ERRFILE >$TMPFILE
-          if sclient_connect_successful $? $TMPFILE ; then
-               success=0
-               grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext-npn.txt
-               break
-          fi
+          sclient_connect_successful $? $TMPFILE && success=0 && break
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
@@ -4553,13 +4863,21 @@ determine_tls_extensions() {
                GOST_STATUS_PROBLEM=true
           fi
      fi
-     #TLS_EXTENSIONS=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
+     #tls_extensions=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
      #
      # this is not beautiful (grep+sed)
      # but maybe we should just get the ids and do a private matching, according to
      # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-     TLS_EXTENSIONS=$(cat $TEMPDIR/tlsext-alpn.txt $TEMPDIR/tlsext-npn.txt | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
-     TLS_EXTENSIONS=$(echo $TLS_EXTENSIONS)       # into one line
+     tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+     tls_extensions=$(echo $tls_extensions)       # into one line
+
+     # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
+     while read -d "\"" -r line; do
+          if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
+               TLS_EXTENSIONS+=" \"${line}\""
+          fi
+     done <<<$tls_extensions
+     [[ "${TLS_EXTENSIONS:0:1}" == " " ]] && TLS_EXTENSIONS="${TLS_EXTENSIONS:1}"
 
      # Place the server's certificate in $HOSTCERT and any intermediate
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
@@ -5280,7 +5598,6 @@ run_server_defaults() {
      local lifetime unit
      local line
      local -i i n
-     local all_tls_extensions=""
      local -i certs_found=0
      local -a previous_hostcert previous_intermediates keysize cipher
      local -a ocsp_response ocsp_response_status sni_used
@@ -5328,22 +5645,15 @@ run_server_defaults() {
              if [[ $n -ge 8 ]]; then
                   sni="$SNI"
                   SNI=""
-                  determine_tls_extensions "-cipher ${ciphers_to_test[n]}" "tls1_1"
+                  get_server_certificate "-cipher ${ciphers_to_test[n]}" "tls1_1"
                   success[n]=$?
                   SNI="$sni"
              else
-                  determine_tls_extensions "-cipher ${ciphers_to_test[n]}"
+                  get_server_certificate "-cipher ${ciphers_to_test[n]}"
                   success[n]=$?
              fi
              if [[ ${success[n]} -eq 0 ]]; then
-                 # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
-                 while read -d "\"" -r line; do
-                     if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
-                         all_tls_extensions="${all_tls_extensions} \"${line}\""
-                     fi
-                 done <<<$TLS_EXTENSIONS
-
-                 cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+                 cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
                  >$ERRFILE
                  if [[ -z "$sessticket_str" ]]; then
                      sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
@@ -5412,49 +5722,25 @@ run_server_defaults() {
          fi
      done
 
-     if [[ $certs_found -eq 0 ]]; then
-         [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
-         [[ -n "$TLS_EXTENSIONS" ]] && all_tls_extensions=" $TLS_EXTENSIONS"
+     determine_tls_extensions
 
-         cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
-         >$ERRFILE
+     cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+     >$ERRFILE
 
-         sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
-     fi
-
-     # Use TLS sockets to check whether server supports certain extensions that aren't supported by $OPENSSL
-     for alpn_proto in $ALPN_PROTOs; do
-           alpn+=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")"
-     done
-     alpn_list_len=${#alpn}/3
-     alpn_list_len_hex=$(printf "%04x" $alpn_list_len)
-     alpn_extn_len=$alpn_list_len+2
-     alpn_extn_len_hex=$(printf "%04x" $alpn_extn_len)
-     tls_sockets "03" "$TLS12_CIPHER" "all" "00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00, 00,10,${alpn_extn_len_hex:0:2},${alpn_extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
-     success=$?
-     if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
-          # check to see if any new TLS extensions were returned and add any new ones to all_tls_extensions
-          while read -d "\"" -r line; do
-               if [[ $line != "" ]] && ! grep -q "$line" <<< "$all_tls_extensions"; then
-                    all_tls_extensions="${all_tls_extensions} \"${line}\""
-               fi
-          done <<<$TLS_EXTENSIONS
-     fi
+     [[ -z "$sessticket_str" ]] && sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
 
      outln
      pr_headlineln " Testing server defaults (Server Hello) "
      outln
 
      pr_bold " TLS extensions (standard)    "
-     if [[ -z "$all_tls_extensions" ]]; then
+     if [[ -z "$TLS_EXTENSIONS" ]]; then
          outln "(none)"
          fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
      else
-         all_tls_extensions="${all_tls_extensions:1}"
-         outln "$all_tls_extensions"
-         fileout "tls_extensions" "INFO" "TLS server extensions (std): $all_tls_extensions"
+         outln "$TLS_EXTENSIONS"
+         fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
-     TLS_EXTENSIONS="$all_tls_extensions"
 
      pr_bold " Session Tickets RFC 5077     "
      if [[ -z "$sessticket_str" ]]; then
@@ -5974,15 +6260,16 @@ get_pub_key_size() {
      local tmppubkeyfile
 
      # OpenSSL displays the number of bits for RSA and ECC
-     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -text | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
+     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -text 2> $ERRFILE | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
      if [[ -n $pubkeybits ]]; then
           echo "Server public key is $pubkeybits" >> $TMPFILE
      else
           # This extracts the public key for DSA, DH, and GOST
           tmppubkeyfile=$(mktemp $TEMPDIR/pubkey.XXXXXX) || return 7
-          $OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -outform DER -out "$tmppubkeyfile"
+          $OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -outform DER -out "$tmppubkeyfile" 2> $ERRFILE
           pubkey=$(hexdump -v -e '16/1 "%02X"' "$tmppubkeyfile")
           rm $tmppubkeyfile
+          [[ -z "$pubkey" ]] && return 1
           # Skip over tag and length of subjectPublicKeyInfo
           i=2
           len1="0x${pubkey:i:2}"
@@ -6067,6 +6354,7 @@ get_pub_key_size() {
           pubkeybits="$(printf "%d" $len)"
           echo "Server public key is $pubkeybits bit" >> $TMPFILE
      fi
+     return 0
 }
 
 # arg1: name of file with socket reply
@@ -6266,6 +6554,9 @@ parse_tls_serverhello() {
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
      local tmp_der_certfile tmp_pem_certfile hostcert_issuer="" ocsp_response=""
+     local len1 key_bitstring="" tmp_der_key_file
+     local dh_p dh_g dh_y dh_param ephemeral_param rfc7919_param
+     local -i dh_p_len dh_g_len dh_y_len dh_param_len
 
      TLS_TIME=""
      DETECTED_TLS_VERSION=""
@@ -6608,7 +6899,29 @@ parse_tls_serverhello() {
                     000D) tls_extensions+=" \"signature algorithms/#13\"" ;;
                     000E) tls_extensions+=" \"use SRTP/#14\"" ;;
                     000F) tls_extensions+=" \"heartbeat/#15\"" ;;
-                    0010) tls_extensions+=" \"application layer protocol negotiation/#16\"" ;;
+                    0010) tls_extensions+=" \"application layer protocol negotiation/#16\""
+                          if [[ $extension_len -lt 4 ]]; then
+                               debugme echo "Malformed application layer protocol negotiation extension."
+                               return 1
+                          fi
+                          echo -n "ALPN protocol:  " >> $TMPFILE
+                          let offset=$extns_offset+12+$i
+                          j=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
+                          if [[ $extension_len -ne $j+4 ]] || [[ $j -lt 2 ]]; then
+                               debugme echo "Malformed application layer protocol negotiation extension."
+                               return 1
+                          fi
+                          let offset=$offset+4
+                          j=2*$(hex2dec "${tls_serverhello_ascii:offset:2}")
+                          if [[ $extension_len -ne $j+6 ]]; then
+                               debugme echo "Malformed application layer protocol negotiation extension."
+                               return 1
+                          fi
+                          let offset=$offset+2
+                          asciihex_to_binary_file "${tls_serverhello_ascii:offset:j}" "$TMPFILE"
+                          echo "" >> $TMPFILE
+                          echo "===============================================================================" >> $TMPFILE
+                          ;;
                     0011) tls_extensions+=" \"certificate status version 2/#17\"" ;;
                     0012) tls_extensions+=" \"signed certificate timestamps/#18\"" ;;
                     0013) tls_extensions+=" \"client certificate type/#19\"" ;;
@@ -6626,13 +6939,33 @@ parse_tls_serverhello() {
                     002C) tls_extensions+=" \"cookie/#44\"" ;;
                     002D) tls_extensions+=" \"psk key exchange modes/#45\"" ;;
                     002E) tls_extensions+=" \"ticket early data info/#46\"" ;;
-                    3374) tls_extensions+=" \"next protocol/#13172\"" ;;
+                    3374) tls_extensions+=" \"next protocol/#13172\""
+                          local -i protocol_len
+                          echo -n "Protocols advertised by server: " >> $TMPFILE
+                          let offset=$extns_offset+12+$i
+                          for (( j=0; j<extension_len; j=j+protocol_len+2 )); do
+                               if [[ $extension_len -lt $j+2 ]]; then
+                                    debugme echo "Malformed next protocol extension."
+                                    return 1
+                               fi
+                               protocol_len=2*$(hex2dec "${tls_serverhello_ascii:offset:2}")
+                               if [[ $extension_len -lt $j+$protocol_len+2 ]]; then
+                                    debugme echo "Malformed next protocol extension."
+                                    return 1
+                               fi
+                               let offset=$offset+2
+                               asciihex_to_binary_file "${tls_serverhello_ascii:offset:protocol_len}" "$TMPFILE"
+                               let offset=$offset+$protocol_len
+                               [[ $j+$protocol_len+2 -lt $extension_len ]] && echo -n ", " >> $TMPFILE
+                          done
+                          echo "" >> $TMPFILE
+                          echo "===============================================================================" >> $TMPFILE
+                          ;;
                     FF01) tls_extensions+=" \"renegotiation info/#65281\"" ;;
                        *) tls_extensions+=" \"unrecognized extension/#$(printf "%d\n\n" "0x$extension_type")\"" ;;
                esac
           done
      fi
-     [[ "$process_full" == "all" ]] && TLS_EXTENSIONS="${tls_extensions:1}"
 
      if [[ "$tls_protocol2" == "0300" ]]; then
           echo "Protocol  : SSLv3" >> $TMPFILE
@@ -6640,10 +6973,14 @@ parse_tls_serverhello() {
           echo "Protocol  : TLSv1.$((0x$tls_protocol2-0x0301))" >> $TMPFILE
      fi
      echo "===============================================================================" >> $TMPFILE
-     if [[ "${tls_cipher_suite:0:2}" == "00" ]]; then
-          rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:2:2}")"
+     if [[ $TLS_NR_CIPHERS -ne 0 ]]; then
+          if [[ "${tls_cipher_suite:0:2}" == "00" ]]; then
+               rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:2:2}")"
+          else
+               rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:0:4}")"
+          fi
      else
-          rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:0:4}")"
+          rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')"
      fi
      echo "Cipher    : $rfc_cipher_suite" >> $TMPFILE
      if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
@@ -6655,6 +6992,7 @@ parse_tls_serverhello() {
           esac
           echo "===============================================================================" >> $TMPFILE
      fi
+     [[ -n "$tls_extensions" ]] && echo "TLS Extensions: ${tls_extensions:1}" >> $TMPFILE
 
      if [[ $DEBUG -ge 2 ]]; then
           echo "TLS server hello message:"
@@ -6676,8 +7014,14 @@ parse_tls_serverhello() {
                      *) echo "(unrecognized compression method)" ;;
                esac
           fi
-          if [[ "$process_full" == "all" ]]; then
-               echo "     tls_extensions:         $TLS_EXTENSIONS"
+          if [[ -n "$tls_extensions" ]]; then
+               echo "     tls_extensions:         ${tls_extensions:1}"
+               if [[ "$tls_extensions" =~ "application layer protocol negotiation" ]]; then
+                    echo "     ALPN protocol:          $(grep "ALPN protocol:" "$TMPFILE" | sed 's/ALPN protocol:  //')"
+               fi
+               if [[ "$tls_extensions" =~ "next protocol" ]]; then
+                    echo "     NPN protocols:          $(grep "Protocols advertised by server:" "$TMPFILE" | sed 's/Protocols advertised by server: //')"
+               fi
           fi
           outln
      fi
@@ -6825,7 +7169,8 @@ parse_tls_serverhello() {
 
      # Now parse the server key exchange message
      if [[ $tls_serverkeyexchange_ascii_len -ne 0 ]]; then
-          if [[ $rfc_cipher_suite =~ "TLS_ECDHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_ECDH_anon" ]]; then
+          if [[ $rfc_cipher_suite =~ "TLS_ECDHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_ECDH_anon" ]] || \
+             [[ $rfc_cipher_suite == ECDHE* ]] || [[ $rfc_cipher_suite == AECDH* ]]; then
                if [[ $tls_serverkeyexchange_ascii_len -lt 6 ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
                     tmpfile_handle $FUNCNAME.txt
@@ -6876,7 +7221,9 @@ parse_tls_serverhello() {
                     debugme echo "dh_bits:                $named_curve_str, $dh_bits bits"
                     echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
                fi
-          elif [[ $rfc_cipher_suite =~ "TLS_DHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_DH_anon" ]]; then
+          elif [[ $rfc_cipher_suite =~ "TLS_DHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_DH_anon" ]] || \
+               [[ $rfc_cipher_suite == "DHE-"* ]] || [[ $rfc_cipher_suite == "EDH-"* ]] || \
+               [[ $rfc_cipher_suite == "EXP1024-DHE-"* ]]; then
                # For DH ephemeral keys the first field is p, and the length of
                # p is the same as the length of the public key.
                if [[ $tls_serverkeyexchange_ascii_len -lt 4 ]]; then
@@ -6884,30 +7231,177 @@ parse_tls_serverhello() {
                     tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
-               dh_bits=$(hex2dec "${tls_serverkeyexchange_ascii:0:4}")
-               offset=4+2*$dh_bits
+               dh_p_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:0:4}")
+               offset=4+$dh_p_len
                if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
                     tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
 
-               # Subtract any leading 0 bits
+               # Subtract any leading 0 bytes
                for (( i=4; i < offset; i=i+2 )); do
                     [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
-                    dh_bits=$dh_bits-1
+                    dh_p_len=$dh_p_len-2
                done
                if [[ $i -ge $offset ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
                     tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
+               dh_p="${tls_serverkeyexchange_ascii:i:dh_p_len}"
 
-               dh_bits=8*$dh_bits
+               dh_bits=4*$dh_p_len
                msb=$(hex2dec "${tls_serverkeyexchange_ascii:i:2}")
                for (( mask=128; msb < mask; mask/=2 )); do
                     dh_bits=$dh_bits-1
                done
+
+               dh_g_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+               i=4+$offset
+               offset+=4+$dh_g_len
+               if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               # Subtract any leading 0 bytes
+               for (( 1; i < offset; i=i+2 )); do
+                    [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
+                    dh_g_len=$dh_g_len-2
+               done
+               if [[ $i -ge $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               dh_g="${tls_serverkeyexchange_ascii:i:dh_g_len}"
+
+               dh_y_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+               i=4+$offset
+               offset+=4+$dh_y_len
+               if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               # Subtract any leading 0 bytes
+               for (( 1; i < offset; i=i+2 )); do
+                    [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
+                    dh_y_len=$dh_y_len-2
+               done
+               if [[ $i -ge $offset ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               dh_y="${tls_serverkeyexchange_ascii:i:dh_y_len}"
+
+               # The following code assumes that all lengths can be encoded using at most 2 bytes,
+               # which just means that the encoded length of the public key must be less than
+               # 65,536 bytes. If the length is anywhere close to that, it is almost certainly an
+               # encoding error.
+               if [[ $dh_p_len+$dh_g_len+$dh_y_len -ge 131000 ]]; then
+                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                    tmpfile_handle $FUNCNAME.txt
+                    return 1
+               fi
+               # make ASN.1 INTEGER of p, g, and Y
+               [[ "0x${dh_p:0:1}" -ge 8 ]] && dh_p_len+=2 && dh_p="00$dh_p"
+               if [[ $dh_p_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_p_len/2)))"
+               elif [[ $dh_p_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_p_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_p_len/2)))"
+               fi
+               dh_p="02${len1}$dh_p"
+
+               [[ "0x${dh_g:0:1}" -ge 8 ]] && dh_g_len+=2 && dh_g="00$dh_g"
+               if [[ $dh_g_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_g_len/2)))"
+               elif [[ $dh_g_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_g_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_g_len/2)))"
+               fi
+               dh_g="02${len1}$dh_g"
+
+               [[ "0x${dh_y:0:1}" -ge 8 ]] && dh_y_len+=2 && dh_y="00$dh_y"
+               if [[ $dh_y_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_y_len/2)))"
+               elif [[ $dh_y_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_y_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_y_len/2)))"
+               fi
+               dh_y="02${len1}$dh_y"
+
+               # Make a SEQUENCE of p and g
+               dh_param_len=${#dh_p}+${#dh_g}
+               if [[ $dh_param_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_param_len/2)))"
+               elif [[ $dh_param_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_param_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_param_len/2)))"
+               fi
+               dh_param="30${len1}${dh_p}${dh_g}"
+               
+               # Make a SEQUENCE of the paramters SEQUENCE and the OID
+               dh_param_len=22+${#dh_param}
+               if [[ $dh_param_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_param_len/2)))"
+               elif [[ $dh_param_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_param_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_param_len/2)))"
+               fi
+               dh_param="30${len1}06092A864886F70D010301${dh_param}"
+
+               # Encapsulate public key, y, in a BIT STRING
+               dh_y_len=${#dh_y}+2
+               if [[ $dh_y_len -lt 256 ]]; then
+                    len1="$(printf "%02x" $((dh_y_len/2)))"
+               elif [[ $dh_y_len -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((dh_y_len/2)))"
+               else
+                    len1="82$(printf "%04x" $((dh_y_len/2)))"
+               fi
+               dh_y="03${len1}00$dh_y"
+
+               # Create the public key SEQUENCE
+               i=${#dh_param}+${#dh_y}
+               if [[ $i -lt 256 ]]; then
+                    len1="$(printf "%02x" $((i/2)))"
+               elif [[ $i -lt 512 ]]; then
+                    len1="81$(printf "%02x" $((i/2)))"
+               else
+                    len1="82$(printf "%04x" $((i/2)))"
+               fi
+               key_bitstring="30${len1}${dh_param}${dh_y}"
+               tmp_der_key_file=$(mktemp $TEMPDIR/pub_key_der.XXXXXX) || return 1
+               asciihex_to_binary_file "$key_bitstring" "$tmp_der_key_file"
+               key_bitstring="$($OPENSSL pkey -pubin -in $tmp_der_key_file -inform DER 2> $ERRFILE)"
+               rm $tmp_der_key_file
+               [[ -n "$key_bitstring" ]] && echo "$key_bitstring" >> $TMPFILE
+
+               # Check to see whether the ephemeral public key uses one of the groups from
+               # RFC 7919 for parameters               
+               case $dh_bits in
+                    2048) named_curve=256; named_curve_str=" ffdhe2048," ;;
+                    3072) named_curve=257; named_curve_str=" ffdhe3072," ;;
+                    4096) named_curve=258; named_curve_str=" ffdhe4096," ;;
+                    6144) named_curve=259; named_curve_str=" ffdhe6144," ;;
+                    8192) named_curve=260; named_curve_str=" ffdhe8192," ;;
+                       *) named_curve=0;   named_curve_str="" ;;
+               esac
+               [[ -z "$key_bitstring" ]] && named_curve=0 && named_curve_str=""
+               if [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ "BEGIN" ]]; then
+                    ephemeral_param="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | grep -A 1000 "prime:")"
+                    rfc7919_param="$($OPENSSL pkey -text -noout <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -A 1000 "prime:")"
+                    [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
+               fi
 
                [[ $DEBUG -ge 2 ]] && [[ $dh_bits -ne 0 ]] && echo "dh_bits:                DH,$named_curve_str $dh_bits bits"
                [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: DH,$named_curve_str $dh_bits bits" >> $TMPFILE
@@ -8527,7 +9021,7 @@ get_install_dir() {
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
-     [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && pr_warningln "\nNo cipher mapping file in \$TESTSSL_INSTALL_DIR/etc/ found"
+     [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && unset ADD_RFC_STR && pr_warningln "\nNo cipher mapping file in \$TESTSSL_INSTALL_DIR/etc/ found"
      debugme echo "$CIPHERS_BY_STRENGTH_FILE"
 }
 
@@ -8807,6 +9301,7 @@ maketempf() {
 }
 
 prepare_debug() {
+     local hexc ossl_ciph ossl_supported_tls="" ossl_supported_sslv2=""
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
 
@@ -8883,7 +9378,26 @@ EOF
      # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
 
      if [[ -e $CIPHERS_BY_STRENGTH_FILE ]]; then
-          while read TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS] n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
+          "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
+          ossl_supported_tls="$($OPENSSL ciphers -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
+          while read hexc n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
+               TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS]="$hexc"
+               TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=false
+               if [[ ${#hexc} -eq 9 ]]; then
+                    if [[ $OSSL_VER_MAJOR -lt 1 ]]; then
+                         [[ ":${ossl_supported_tls}:" =~ ":${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+                    else
+                         ossl_ciph="$(grep -w "$hexc" <<< "$ossl_supported_tls" | awk '{ print $3 }')"
+                         if [[ -n "$ossl_ciph" ]]; then
+                              TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+                              [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}" ]] && TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]="$ossl_ciph" 
+                         fi
+                    fi
+               elif [[ $OSSL_VER_MAJOR -lt 1 ]]; then
+                    [[ ":${ossl_supported_sslv2}:" =~ ":${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+               else
+                    grep -qw "$hexc" <<< "$ossl_supported_sslv2" && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+               fi
                TLS_NR_CIPHERS+=1
           done < $CIPHERS_BY_STRENGTH_FILE
      fi
