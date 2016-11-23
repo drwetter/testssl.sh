@@ -853,6 +853,7 @@ fileout() { # ID, SEVERITY, FINDING
 
 debugme() {
      [[ "$DEBUG" -ge 2 ]] && "$@"
+     return 0
 }
 
 hex2dec() {
