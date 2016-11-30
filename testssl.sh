@@ -2321,9 +2321,9 @@ run_allciphers() {
      else
           pr_headlineln " Testing all $nr_ciphers_tested locally available ciphers against the server, ordered by encryption strength "
           outln
-          [[ $TLS_NR_CIPHERS == 0 ]] && pr_warning " Cipher mapping not available, doing a fallback to openssl"
+          [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
           if ! "$HAS_DH_BITS"; then
-               [[ $TLS_NR_CIPHERS == 0 ]] && out "."
+               [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
                pr_warningln " Your $OPENSSL cannot show DH/ECDH bits"
           fi
      fi
@@ -2450,7 +2450,7 @@ run_allciphers() {
      done
 
      for (( i=0 ; i<nr_ciphers; i++ )); do
-          if "${ciphers_found[i]}" || ( "$SHOW_EACH_C" && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ) ); then
+          if "${ciphers_found[i]}" || ( "$SHOW_EACH_C" && ( "$using_sockets" || "${ossl_supported[i]}" ) ); then
                export=${export2[i]}
                neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
                available=""
