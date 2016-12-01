@@ -2516,7 +2516,7 @@ run_cipher_per_proto() {
           nr_ciphers=0
           if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
                for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-                    hexc="$(tolower "${TLS_CIPHER_HEXCODE[i]}")"
+                    hexc="${TLS_CIPHER_HEXCODE[i]}"
                     ciph[nr_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
                     rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
                     kx[nr_ciphers]="${TLS_CIPHER_KX[i]}"
@@ -2536,6 +2536,7 @@ run_cipher_per_proto() {
                               normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}"
                          fi
                     else
+                         hexc="$(tolower "$hexc")"
                          hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2},${hexc:12:2}"
                          normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}${hexc:12:2}"
                     fi
@@ -2571,9 +2572,9 @@ run_cipher_per_proto() {
                          ciphers_found[nr_ciphers]=false
                          if [[ ${#hexc} -eq 9 ]]; then
                               if [[ "${hexc:2:2}" == "00" ]]; then
-                                   normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:7:2}")"
+                                   normalized_hexcode[nr_ciphers]="x${hexc:7:2}"
                               else
-                                   normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:2:2}${hexc:7:2}")"
+                                   normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}"
                               fi
                          else
                               normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:2:2}${hexc:7:2}${hexc:12:2}")"
@@ -2739,6 +2740,7 @@ run_cipher_per_proto() {
           for (( i=0 ; i<nr_ciphers; i++ )); do
                if "${ciphers_found[i]}" || "$SHOW_EACH_C"; then
                     export=${export2[i]}
+                    normalized_hexcode[i]="$(tolower "${normalized_hexcode[i]}")"
                     neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
                     available=""
                     if "$SHOW_EACH_C"; then
