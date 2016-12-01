@@ -625,7 +625,7 @@ local_problem() { pr_warning "Local problem: $1"; }
 local_problem_ln() { pr_warningln "Local problem: $1"; }
 
 fixme() { pr_warning "fixme: $1"; }
-fixme() { pr_warningln "fixme: $1"; }
+fixmeln() { pr_warningln "fixme: $1"; }
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
