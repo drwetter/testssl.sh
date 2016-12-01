@@ -626,7 +626,7 @@ local_problem() { pr_warning "Local problem: $1"; }
 local_problem_ln() { pr_warningln "Local problem: $1"; }
 
 fixme() { pr_warning "fixme: $1"; }
-fixme() { pr_warningln "fixme: $1"; }
+fixmeln() { pr_warningln "fixme: $1"; }
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
@@ -882,6 +882,7 @@ fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
 
 debugme() {
      [[ "$DEBUG" -ge 2 ]] && "$@"
+     return 0
 }
 
 hex2dec() {
@@ -2350,9 +2351,9 @@ run_allciphers() {
      else
           pr_headlineln " Testing all $nr_ciphers_tested locally available ciphers against the server, ordered by encryption strength "
           outln
-          [[ $TLS_NR_CIPHERS == 0 ]] && pr_warning " Cipher mapping not available, doing a fallback to openssl"
+          [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
           if ! "$HAS_DH_BITS"; then
-               [[ $TLS_NR_CIPHERS == 0 ]] && out "."
+               [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
                pr_warningln " Your $OPENSSL cannot show DH/ECDH bits"
           fi
      fi
@@ -2479,7 +2480,7 @@ run_allciphers() {
      done
 
      for (( i=0 ; i<nr_ciphers; i++ )); do
-          if "${ciphers_found[i]}" || ( "$SHOW_EACH_C" && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ) ); then
+          if "${ciphers_found[i]}" || ( "$SHOW_EACH_C" && ( "$using_sockets" || "${ossl_supported[i]}" ) ); then
                export=${export2[i]}
                neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
                available=""
@@ -6102,8 +6103,8 @@ starttls_line() {
 }
 
 starttls_just_send(){
-     debugme echo -e "\n=== sending \"$1\" ..."
-     echo -e "$1" >&5
+     debugme echo -e "C: $1"
+     echo -ne "$1\r\n" >&5
 }
 
 starttls_just_read(){
@@ -6119,6 +6120,108 @@ starttls_just_read(){
      return 0
 }
 
+starttls_full_read(){
+     starttls_read_data=()
+     local one_line=""
+     local ret=0
+     local cont_pattern="$1"
+     local end_pattern="$2"
+     local ret_found=0
+     if [[ $# -ge 3 ]]; then
+          debugme echo "=== we have to search for $3 pattern ==="
+          ret_found=3
+     fi
+     debugme echo "=== full read banner ==="
+
+     local oldIFS="$IFS"
+     IFS=''
+     while read -r -t $STARTTLS_SLEEP one_line; do
+          debugme echo "S: ${one_line}"
+          if [[ $# -ge 3 ]]; then
+               if [[ ${one_line} =~ $3 ]]; then
+                    ret_found=0
+                    debugme echo "^^^^^^^ that's what we were looking for ==="
+               fi
+          fi
+          starttls_read_data+=("${one_line}")
+          if [[ ${one_line} =~ ${end_pattern} ]]; then
+               debugme echo "=== full read finished ==="
+               IFS="${oldIFS}"
+               return ${ret_found}
+          fi
+          if [[ ! ${one_line} =~ ${cont_pattern} ]]; then
+               debugme echo "=== full read syntax error, expected regex pattern ${cont_pattern} (cont) or ${end_pattern} (end) ==="
+               IFS="${oldIFS}"
+               return 2
+          fi
+     done <&5
+     ret=$?
+     debugme echo "=== full read error/timeout ==="
+     IFS="${oldIFS}"
+     return $ret
+}
+
+starttls_ftp_dialog(){
+     debugme echo "=== starting ftp STARTTLS dialog ==="
+     local reAUTHTLS='^ AUTH TLS'
+     starttls_full_read '^220-' '^220 '                    && debugme echo "received server greeting" &&
+     starttls_just_send 'FEAT'                             && debugme echo "sent FEAT" &&
+     starttls_full_read '^(211-| )' '^211 ' "${reAUTHTLS}" && debugme echo "received server features and checked STARTTLS availability" &&
+     starttls_just_send 'AUTH TLS'                         && debugme echo "initiated STARTTLS" &&
+     starttls_full_read '^234-' '^234 '                    && debugme echo "received ack for STARTTLS"
+     local ret=$?
+     debugme echo "=== finished ftp STARTTLS dialog with ${ret} ==="
+     return $ret
+}
+
+starttls_smtp_dialog(){
+     debugme echo "=== starting smtp STARTTLS dialog ==="
+     local re250STARTTLS='^250[ -]STARTTLS'
+     starttls_full_read '^220-' '^220 '                    && debugme echo "received server greeting" &&
+     starttls_just_send 'EHLO testssl.sh'                  && debugme echo "sent EHLO" &&
+     starttls_full_read '^250-' '^250 ' "${re250STARTTLS}" && debugme echo "received server capabilities and checked STARTTLS availability" &&
+     starttls_just_send 'STARTTLS'                         && debugme echo "initiated STARTTLS" &&
+     starttls_full_read '^220-' '^220 '                    && debugme echo "received ack for STARTTLS"
+     local ret=$?
+     debugme echo "=== finished smtp STARTTLS dialog with ${ret} ==="
+     return $ret
+}
+
+starttls_pop3_dialog() {
+     debugme echo "=== starting pop3 STARTTLS dialog ==="
+     starttls_full_read '$^' '^+OK'                        && debugme echo "received server greeting" &&
+     starttls_just_send 'STLS'                             && debugme echo "initiated STARTTLS" &&
+     starttls_full_read '$^' '^+OK'                        && debugme echo "received ack for STARTTLS"
+     local ret=$?
+     debugme echo "=== finished pop3 STARTTLS dialog with ${ret} ==="
+     return $ret
+}
+
+starttls_imap_dialog() {
+     debugme echo "=== starting imap STARTTLS dialog ==="
+     local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS( .*)?|( .*)? STARTTLS( .*)? IMAP4rev1( .*)?)$'
+     starttls_full_read '^\* ' '^\* OK '                   && debugme echo "received server greeting" &&
+     starttls_just_send 'a001 CAPABILITY'                  && debugme echo "sent CAPABILITY" &&
+     starttls_full_read '^\* ' '^a001 OK ' "${reSTARTTLS}" && debugme echo "received server capabilities and checked STARTTLS availability" &&
+     starttls_just_send 'a002 STARTTLS'                    && debugme echo "initiated STARTTLS" &&
+     starttls_full_read '^\* ' '^a002 OK '                 && debugme echo "received ack for STARTTLS"
+     local ret=$?
+     debugme echo "=== finished imap STARTTLS dialog with ${ret} ==="
+     return $ret
+}
+
+starttls_nntp_dialog() {
+     debugme echo "=== starting nntp STARTTLS dialog ==="
+     starttls_full_read '$^' '^20[01] '                    && debugme echo "received server greeting" &&
+     starttls_just_send 'CAPABILITIES'                     && debugme echo "sent CAPABILITIES" &&
+     starttls_full_read '$^' '^101 '                       &&
+     starttls_full_read '' '^\.$' "^STARTTLS$"             && debugme echo "received server capabilities and checked STARTTLS availability" &&
+     starttls_just_send 'STARTTLS'                         && debugme echo "initiated STARTTLS" &&
+     starttls_full_read '$^' '^382 '                       && debugme echo "received ack for STARTTLS"
+     local ret=$?
+     debugme echo "=== finished nntp STARTTLS dialog with ${ret} ==="
+     return $ret
+}
 
 # arg for a fd doesn't work here
 fd_socket() {
@@ -6156,29 +6259,20 @@ fd_socket() {
 
      if [[ -n "$STARTTLS" ]]; then
           case "$STARTTLS_PROTOCOL" in # port
-               ftp|ftps)  # https://tools.ietf.org/html/rfc4217
-                    $FAST_STARTTLS || starttls_just_read
-                    $FAST_STARTTLS || starttls_line "FEAT" "211" && starttls_just_send "FEAT"
-                    starttls_line "AUTH TLS" "successful|234"
+               ftp|ftps)  # https://tools.ietf.org/html/rfc4217, https://tools.ietf.org/html/rfc959
+                    starttls_ftp_dialog
                     ;;
-               smtp|smtps)  # SMTP, see https://tools.ietf.org/html/rfc4217
-                    $FAST_STARTTLS || starttls_just_read
-                    $FAST_STARTTLS || starttls_line "EHLO testssl.sh" "220|250" && starttls_just_send "EHLO testssl.sh"
-                    starttls_line "STARTTLS" "220"
+               smtp|smtps)  # SMTP, see https://tools.ietf.org/html/rfc5321, https://tools.ietf.org/html/rfc3207
+                    starttls_smtp_dialog
                     ;;
                pop3|pop3s) # POP, see https://tools.ietf.org/html/rfc2595
-                    $FAST_STARTTLS || starttls_just_read
-                    starttls_line "STLS" "OK"
+                    starttls_pop3_dialog
                     ;;
                nntp|nntps) # NNTP, see https://tools.ietf.org/html/rfc4642
-                    $FAST_STARTTLS || starttls_just_read
-                    $FAST_STARTTLS || starttls_line "CAPABILITIES" "101|200" && starttls_just_send "CAPABILITIES"
-                    starttls_line "STARTTLS" "382"
+                    starttls_nntp_dialog
                     ;;
-               imap|imaps) # IMAP, https://tools.ietf.org/html/rfc2595
-                    $FAST_STARTTLS || starttls_just_read
-                    $FAST_STARTTLS || starttls_line "a001 CAPABILITY" "OK" && starttls_just_send "a001 CAPABILITY"
-                    starttls_line "a002 STARTTLS" "OK"
+               imap|imaps) # IMAP, https://tools.ietf.org/html/rfc2595, https://tools.ietf.org/html/rfc3501
+                    starttls_imap_dialog
                     ;;
                ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
                     fatal "FIXME: LDAP+STARTTLS over sockets not yet supported (try \"--ssl-native\")" -4
