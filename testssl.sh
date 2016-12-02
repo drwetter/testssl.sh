@@ -243,6 +243,7 @@ IPS=""
 SERVICE=""                              # is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
 CERT_FINGERPRINT_SHA2=""
+RSA_CERT_FINGERPRINT_SHA2=""
 SHOW_CENSYS_LINK=${SHOW_CENSYS_LINK:-true}
 STARTTLS_PROTOCOL=""
 OPTIMAL_PROTO=""                        # we need this for IIS6 (sigh) and OpenSSL 1.0.2, otherwise some handshakes
@@ -4503,7 +4504,7 @@ cipher_pref_check() {
 }
 
 
-# arg1 is proto or empty
+# arg1 is OpenSSL s_client parameter or empty
 get_host_cert() {
      local tmpvar=$TEMPDIR/$FUNCNAME.txt     # change later to $TMPFILE
 
@@ -4512,7 +4513,7 @@ get_host_cert() {
           awk '/-----BEGIN/,/-----END/ { print $0 }' $tmpvar >$HOSTCERT
           return 0
      else
-          pr_warningln "could not retrieve host certificate!"
+          [[ -z "$1" ]] && pr_warningln "could not retrieve host certificate!"
           #fileout "host_certificate" "WARN" "Could not retrieve host certificate!"
           return 1
      fi
@@ -5247,6 +5248,9 @@ certificate_info() {
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" ||
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2 $CERT_FINGERPRINT_SHA2"
+     [[ -z $RSA_CERT_FINGERPRINT_SHA2 ]] && \
+          ( [[ $cert_key_algo = *RSA* ]] || [[ $cert_key_algo = *rsa* ]] ) &&
+          RSA_CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2"
 
      out "$indent"; pr_bold " Common Name (CN)             "
      cnfinding="Common Name (CN) : "
@@ -8674,11 +8678,10 @@ run_logjam() {
 
 
 run_drown() {
-     local nr_ciphers_detected
+     local nr_ciphers_detected ret
      local spaces="                                          "
      local cert_fingerprint_sha2=""
 
-#FIXME: test for iexistence of RSA key exchange
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
           pr_headlineln " Testing for DROWN vulnerability "
@@ -8713,22 +8716,29 @@ run_drown() {
                ;;
           *)   pr_done_bestln "not vulnerable on this port (OK)"
                fileout "drown" "OK" "not vulnerable to DROWN"
-               outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
-               if [[ "$DEBUG" -ge 1 ]] || "$SHOW_CENSYS_LINK"; then
-# not advertising it as it after 5 tries and account is needed
-                    if [[ -z "$CERT_FINGERPRINT_SHA2" ]]; then
-                         get_host_cert || return 7
-                         cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed -e 's/^.*Fingerprint=//' -e 's/://g' )"
-                    else
-                         cert_fingerprint_sha2="$CERT_FINGERPRINT_SHA2"
-                    fi
-                    cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
-                    outln "$spaces https://censys.io/ipv4?q=$cert_fingerprint_sha2 could help you to find out"
+               # Any fingerprint that is placed in $RSA_CERT_FINGERPRINT_SHA2 is
+               # also added to $CERT_FINGERPRINT_SHA2, so if $CERT_FINGERPRINT_SHA2
+               # is not empty, but $RSA_CERT_FINGERPRINT_SHA2 is empty, then the server
+               # doesn't have an RSA certificate.
+               if [[ -z "$CERT_FINGERPRINT_SHA2" ]]; then
+                    get_host_cert "-cipher aRSA"
+                    [[ $? -eq 0 ]] && cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed -e 's/^.*Fingerprint=//' -e 's/://g' )"
+               else
+                    cert_fingerprint_sha2="$RSA_CERT_FINGERPRINT_SHA2"
                fi
+               if [[ -n "$cert_fingerprint_sha2" ]]; then
+                    outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
+                    if [[ "$DEBUG" -ge 1 ]] || "$SHOW_CENSYS_LINK"; then
+# not advertising it as it after 5 tries and account is needed
+                         cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
+                         outln "$spaces https://censys.io/ipv4?q=$cert_fingerprint_sha2 could help you to find out"
+                    fi
+               fi
+               ret=0
                ;;
      esac
 
-     return $?
+     return $ret
 }
 
 
