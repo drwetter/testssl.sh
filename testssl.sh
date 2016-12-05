@@ -157,6 +157,7 @@ LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
+GIVE_HINTS=false                   # give an addtional info to findings
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
@@ -705,8 +706,8 @@ fileout_pretty_json_header() {
 
     echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
-          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\"
-          \"openssl\"     : \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\"
+          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
+          \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
           \"target host\" : \"$NODE\",
           \"port\"        : \"$PORT\",
           \"startTime\"   : \"$START_TIME\",
@@ -779,24 +780,50 @@ fileout_section_footer() {
     "$do_pretty_json" && printf "\n                    ]" >> "$JSONFILE"
 }
 
+fileout_json_print_parameter() {
+    local parameter="$1"
+    local filler="$2"
+    local value="$3"
+    local not_last="$4"
+
+    local shift=""
+
+    if "$do_json"; then
+        shift="              "
+    else
+        shift="                                "
+    fi
+
+    if [[ ! -z "$value" ]]; then
+        printf "%s%s%s%s" "$shift" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
+        "$not_last" && printf ",\n" >> "$JSONFILE"
+    fi
+}
+
 fileout_json_finding() {
     if "$do_json"; then
-              "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
-              echo -e "        {
-              \"id\"           : \"$1\",
-              \"ip\"           : \"$NODE/$NODEIP\",
-              \"port\"         : \"$PORT\",
-              \"severity\"     : \"$2\",
-              \"finding\"      : \"$finding\"
-         }" >> "$JSONFILE"
+         "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
+         echo -e "        {"  >> "$JSONFILE"
+         fileout_json_print_parameter "id" "           " "$1" true
+         fileout_json_print_parameter "ip" "           " "$NODE/$NODEIP" true
+         fileout_json_print_parameter "port" "         " "$PORT" true
+         fileout_json_print_parameter "severity" "     " "$2" true
+         fileout_json_print_parameter "cve" "          " "$cve" true
+         fileout_json_print_parameter "cwe" "          " "$cwe" true
+         "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
+         fileout_json_print_parameter "finding" "      " "$finding" false
+         echo -e "\n         }" >> "$JSONFILE"
     fi
     if "$do_pretty_json"; then
          ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
-         echo -e -n "
-                                \"id\"           : \"$1\",
-                                \"severity\"     : \"$2\",
-                                \"finding\"      : \"$finding\"
-                           }" >> "$JSONFILE"
+         echo -e -n "\n"  >> "$JSONFILE"
+         fileout_json_print_parameter "id" "           " "$1" true
+         fileout_json_print_parameter "severity" "     " "$2" true
+         fileout_json_print_parameter "cve" "          " "$cve" true
+         fileout_json_print_parameter "cwe" "          " "$cwe" true
+         "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
+         fileout_json_print_parameter "finding" "      " "$finding" false
+         echo -e -n "\n                           }" >> "$JSONFILE"
     fi
 }
 
@@ -820,12 +847,12 @@ fileout_header() {
                     echo >> "$CSVFILE"
                else
                     # create file, with headline
-                    echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+                    echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
                fi
           fi
      else
           fileout_json_header
-          "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
+          "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
      fi
 }
 
@@ -833,17 +860,19 @@ fileout_footer() {
      is_json_format && fileout_json_footer
 }
 
-fileout() { # ID, SEVERITY, FINDING
+fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
      local severity="$2"
+     local cwe="$5"
+     local hint="$6"
 
      if show_finding "$severity"; then
          local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
 
-         is_json_format && (fileout_json_finding "$1" "$severity" "$finding")
+         is_json_format && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
 
          # does the following do any sanitization?
          if "$do_csv"; then
-              echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\"" >> "$CSVFILE"
+              echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
          fi
          "$FIRST_FINDING" && FIRST_FINDING=false
      fi
@@ -1175,7 +1204,7 @@ run_http_header() {
                out ", redirecting to \"$redirect\""
                if [[ $redirect == "http://"* ]]; then
                     pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
-                    fileout "HTTP_STATUS_CODE" "HIGH" \, "Redirect to insecure URL (NOT ok). Url: \"$redirect\""
+                    fileout "HTTP_STATUS_CODE" "HIGH" \, "Redirect to insecure URL. Url: \"$redirect\""
                fi
                fileout "HTTP_STATUS_CODE" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter, redirecting to \"$redirect\""
@@ -1999,28 +2028,28 @@ std_cipherlists() {
                0)   # ok to offer
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_done_best "offered (OK)"
-                         fileout "std_$4" "OK" "$2 offered (OK)"
+                         fileout "std_$4" "OK" "$2 offered"
                     else
                          pr_svrty_medium "not offered"
-                         fileout "std_$4" "MEDIUM" "$2 not offered (WARN)"
+                         fileout "std_$4" "MEDIUM" "$2 not offered"
                     fi
                     ;;
                1) # the ugly ones
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_svrty_critical "offered (NOT ok)"
-                         fileout "std_$4" "CRITICAL" "$2 offered (NOT ok) - ugly"
+                         fileout "std_$4" "CRITICAL" "$2 offered - ugly"
                     else
                          pr_done_best "not offered (OK)"
-                         fileout "std_$4" "OK" "$2 not offered (OK)"
+                         fileout "std_$4" "OK" "$2 not offered"
                     fi
                     ;;
                2)   # bad but not worst
                     if [[ $sclient_success -eq 0 ]]; then
                          pr_svrty_high "offered (NOT ok)"
-                         fileout "std_$4" "HIGH" "$2 offered (NOT ok) - bad"
+                         fileout "std_$4" "HIGH" "$2 offered - bad"
                     else
                          pr_done_good "not offered (OK)"
-                         fileout "std_$4" "OK" "$2 not offered (OK)"
+                         fileout "std_$4" "OK" "$2 not offered"
                     fi
                     ;;
                3) # not totally bad
@@ -2029,7 +2058,7 @@ std_cipherlists() {
                          fileout "std_$4" "MEDIUM" "$2 offered - not too bad"
                     else
                          out "not offered (OK)"
-                         fileout "std_$4" "OK" "$2 not offered (OK)"
+                         fileout "std_$4" "OK" "$2 not offered"
                     fi
                     ;;
                *) # we shouldn't reach this
@@ -3768,11 +3797,11 @@ run_protocols() {
                     ;;
                1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
                     pr_done_bestln "not offered (OK)"
-                    fileout "sslv2" "OK" "SSLv2 not offered (OK)"
+                    fileout "sslv2" "OK" "SSLv2 is not offered"
                     ;;
                0) # reset
                     pr_done_bestln "not offered (OK)"
-                    fileout "sslv2" "OK" "SSLv2 not offered (OK)"
+                    fileout "sslv2" "OK" "SSLv2 is not offered"
                     ;;
                3) # everything else
                     lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
@@ -3782,11 +3811,11 @@ run_protocols() {
                          add_tls_offered "ssl2"
                          if [[ 0 -eq "$nr_ciphers_detected" ]]; then
                               pr_svrty_highln "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
-                              fileout "sslv2" "HIGH" "SSLv2 offered (NOT ok), vulnerable to CVE-2015-3197"
+                              fileout "sslv2" "HIGH" "SSLv2 is offered, vulnerable to CVE-2015-3197"
                          else
                               pr_svrty_critical "offered (NOT ok), also VULNERABLE to DROWN attack";
                               outln " -- $nr_ciphers_detected ciphers"
-                              fileout "sslv2" "CRITICAL" "SSLv2 offered (NOT ok), vulnerable to DROWN attack.  Detected ciphers: $nr_ciphers_detected"
+                              fileout "sslv2" "CRITICAL" "SSLv2 offered, vulnerable to DROWN attack.  Detected ciphers: $nr_ciphers_detected"
                          fi
                     fi ;;
           esac
@@ -3796,12 +3825,12 @@ run_protocols() {
           case $? in
                0)
                     pr_svrty_criticalln   "offered (NOT ok)"
-                    fileout "sslv2" "CRITICAL" "SSLv2 is offered (NOT ok)"
+                    fileout "sslv2" "CRITICAL" "SSLv2 is offered"
                     add_tls_offered "ssl2"
                     ;;
                1)
                     pr_done_bestln "not offered (OK)"
-                    fileout "sslv2" "OK" "SSLv2 is not offered (OK)"
+                    fileout "sslv2" "OK" "SSLv2 is not offered"
                     ;;
                5)
                     pr_svrty_high "CVE-2015-3197: $supported_no_ciph2";
@@ -3823,23 +3852,23 @@ run_protocols() {
      case $? in
           0)
                pr_svrty_highln "offered (NOT ok)"
-               fileout "sslv3" "HIGH" "SSLv3 is offered (NOT ok)"
+               fileout "sslv3" "HIGH" "SSLv3 is offered"
                latest_supported="0300"
                latest_supported_string="SSLv3"
                add_tls_offered "ssl3"
                ;;
           1)
                pr_done_bestln "not offered (OK)"
-               fileout "sslv3" "OK" "SSLv3 is not offered (OK)"
+               fileout "sslv3" "OK" "SSLv3 is not offered"
                ;;
           2)
                if [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
                     pr_svrty_criticalln "server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
-                    fileout "sslv3" "CRITICAL" "SSLv3: server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+                    fileout "sslv3" "CRITICAL" "SSLv3: server responded with higher version number ($detected_version_string) than requested by client"
                else
                     pr_svrty_criticalln "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                    fileout "sslv3" "CRITICAL" "SSLv3: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    fileout "sslv3" "CRITICAL" "SSLv3: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
           5)
@@ -3874,7 +3903,7 @@ run_protocols() {
                     fileout "tls1" "INFO" "TLSv1.0 is not offered" # neither good or bad
                else
                     pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
-                    fileout "tls1" "CRITICAL" "TLSv1.0: connection failed rather than downgrading to $latest_supported_string (NOT ok)"
+                    fileout "tls1" "CRITICAL" "TLSv1.0: connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
           2)
@@ -3886,10 +3915,10 @@ run_protocols() {
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
                     pr_svrty_criticalln " -- server responded with higher version number ($detected_version_string) than requested by client"
-                    fileout "tls1" "CRITICAL" "TLSv1.0: server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+                    fileout "tls1" "CRITICAL" "TLSv1.0: server responded with higher version number ($detected_version_string) than requested by client"
                else
                     pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
-                    fileout "tls1" "CRITICAL" "TLSv1.0: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    fileout "tls1" "CRITICAL" "TLSv1.0: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
           5)
@@ -3923,7 +3952,7 @@ run_protocols() {
                     fileout "tls1_1" "INFO" "TLSv1.1 is not offered"  # neither good or bad
                else
                     pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string"
-                    fileout "tls1_1" "CRITICAL" "TLSv1.1: connection failed rather than downgrading to $latest_supported_string (NOT ok)"
+                    fileout "tls1_1" "CRITICAL" "TLSv1.1: connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
           2)
@@ -3931,17 +3960,17 @@ run_protocols() {
                if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
                     [[ $DEBUG -eq 1 ]] && out " -- downgraded"
                     outln
-                    fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, and downgraded to a weaker protocol (NOT ok)"
+                    fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, and downgraded to a weaker protocol"
                elif [[ "$DETECTED_TLS_VERSION" == "0300" ]] && [[ "$latest_supported" == "0301" ]]; then
                     pr_svrty_criticalln " -- server supports TLSv1.0, but downgraded to SSLv3 (NOT ok)"
-                    fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, and downgraded to SSLv3 rather than TLSv1.0 (NOT ok)"
+                    fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, and downgraded to SSLv3 rather than TLSv1.0"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0302 ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
                     pr_svrty_criticalln " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
-                    fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+                    fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
                     pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                    fileout "tls1" "CRITICAL" "TLSv1.1: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    fileout "tls1" "CRITICAL" "TLSv1.1: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
           5)
@@ -3963,7 +3992,7 @@ run_protocols() {
      case $? in
           0)
                pr_done_bestln "offered (OK)"
-               fileout "tls1_2" "OK" "TLSv1.2 is offered (OK)"
+               fileout "tls1_2" "OK" "TLSv1.2 is offered"
                latest_supported="0303"
                latest_supported_string="TLSv1.2"
                add_tls_offered "tls1_2"
@@ -3990,13 +4019,13 @@ run_protocols() {
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered and downgraded to a weaker protocol"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
                     pr_svrty_criticalln " -- server supports $latest_supported_string, but downgraded to $detected_version_string"
-                    fileout "tls1_2" "CRITICAL" "TLSv1.2 is not offered, and downgraded to $detected_version_string rather than $latest_supported_string (NOT ok)"
+                    fileout "tls1_2" "CRITICAL" "TLSv1.2 is not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0303 ]]; then
                     pr_svrty_criticalln " -- server responded with higher version number ($detected_version_string) than requested by client"
-                    fileout "tls1_2" "CRITICAL" "TLSv1.2 is not offered, server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+                    fileout "tls1_2" "CRITICAL" "TLSv1.2 is not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
                     pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
-                    fileout "tls1" "CRITICAL" "TLSv1.2: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    fileout "tls1" "CRITICAL" "TLSv1.2: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
           5)
@@ -4170,11 +4199,11 @@ run_server_preference() {
           if [[ "$cipher1" != "$cipher2" ]]; then
                pr_svrty_high "nope (NOT ok)"
                remark4default_cipher=" (limited sense as client will pick)"
-               fileout "order" "HIGH" "Server does NOT set a cipher order (NOT ok)"
+               fileout "order" "HIGH" "Server does NOT set a cipher order"
           else
                pr_done_best "yes (OK)"
                remark4default_cipher=""
-               fileout "order" "OK" "Server sets a cipher order (OK)"
+               fileout "order" "OK" "Server sets a cipher order"
           fi
           debugme out "  $cipher1 | $cipher2"
           outln
@@ -4190,11 +4219,11 @@ run_server_preference() {
           case "$default_proto" in
                *TLSv1.2)
                     pr_done_bestln $default_proto
-                    fileout "order_proto" "OK" "Default protocol TLS1.2 (OK)"
+                    fileout "order_proto" "OK" "Default protocol TLS1.2"
                     ;;
                *TLSv1.1)
                     pr_done_goodln $default_proto
-                    fileout "order_proto" "OK" "Default protocol TLS1.1 (OK)"
+                    fileout "order_proto" "OK" "Default protocol TLS1.1"
                     ;;
                *TLSv1)
                     outln $default_proto
@@ -4228,11 +4257,11 @@ run_server_preference() {
           case "$default_cipher" in
                *NULL*|*EXP*)
                     pr_svrty_critical "$default_cipher"
-                    fileout "order_cipher" "CRITICAL" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  $remark4default_cipher"
+                    fileout "order_cipher" "CRITICAL" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
                     ;;
                *RC4*)
                     pr_svrty_high "$default_cipher"
-                    fileout "order_cipher" "HIGH" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  remark4default_cipher"
+                    fileout "order_cipher" "HIGH" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
                     ;;
                *CBC*)
                     pr_svrty_medium "$default_cipher"
@@ -4240,7 +4269,7 @@ run_server_preference() {
                     ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
                *GCM*|*CHACHA20*)
                     pr_done_best "$default_cipher"
-                    fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (OK)  $remark4default_cipher"
+                    fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
                     ;;   # best ones
                ECDHE*AES*)
                     pr_svrty_minor "$default_cipher"
@@ -4325,7 +4354,7 @@ run_server_preference() {
                              fi
                           fi
                     fi
-                    fileout "order_${proto[i]}_cipher" "INFO" "Default cipher on ${proto[i]}: ${cipher[i]}remark4default_cipher"
+                    fileout "order_${proto[i]}_cipher" "INFO" "Default cipher on ${proto[i]}: ${cipher[i]} $remark4default_cipher"
                done
           fi
      fi
@@ -5067,7 +5096,7 @@ certificate_info() {
                     out " -- besides: users will receive a "; pr_svrty_high "strong browser WARNING"
                fi
                outln
-               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: SHA1 with RSA (warning)"
+               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: SHA1 with RSA"
                ;;
           sha224WithRSAEncryption)
                outln "SHA224 with RSA"
@@ -5075,19 +5104,19 @@ certificate_info() {
                ;;
           sha256WithRSAEncryption)
                pr_done_goodln "SHA256 with RSA"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA256 with RSA (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA256 with RSA"
                ;;
           sha384WithRSAEncryption)
                pr_done_goodln "SHA384 with RSA"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA384 with RSA (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA384 with RSA"
                ;;
           sha512WithRSAEncryption)
                pr_done_goodln "SHA512 with RSA"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA512 with RSA (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA512 with RSA"
                ;;
           ecdsa-with-SHA1)
                pr_svrty_mediumln "ECDSA with SHA1"
-               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: ECDSA with SHA1 (warning)"
+               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: ECDSA with SHA1"
                ;;
           ecdsa-with-SHA224)
                outln "ECDSA with SHA224"
@@ -5095,19 +5124,19 @@ certificate_info() {
                ;;
           ecdsa-with-SHA256)
                pr_done_goodln "ECDSA with SHA256"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA256 (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA256"
                ;;
           ecdsa-with-SHA384)
                pr_done_goodln "ECDSA with SHA384"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA384 (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA384"
                ;;
           ecdsa-with-SHA512)
                pr_done_goodln "ECDSA with SHA512"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA512 (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA512"
                ;;
           dsaWithSHA1)
                pr_svrty_mediumln "DSA with SHA1"
-               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: DSA with SHA1 (warning)"
+               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: DSA with SHA1"
                ;;
           dsa_with_SHA224)
                outln "DSA with SHA224"
@@ -5115,14 +5144,14 @@ certificate_info() {
                ;;
           dsa_with_SHA256)
                pr_done_goodln "DSA with SHA256"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: DSA with SHA256 (OK)"
+               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: DSA with SHA256"
                ;;
           rsassaPss)
                cert_sig_hash_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 1 "Signature Algorithm" | head -2 | tail -1 | sed 's/^.*Hash Algorithm: //')"
                case $cert_sig_hash_algo in
                     sha1)
                          pr_svrty_mediumln "RSASSA-PSS with SHA1"
-                         fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: RSASSA-PSS with SHA1 (warning)"
+                         fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: RSASSA-PSS with SHA1"
                          ;;
                     sha224)
                          outln "RSASSA-PSS with SHA224"
@@ -5130,15 +5159,15 @@ certificate_info() {
                          ;;
                     sha256)
                          pr_done_goodln "RSASSA-PSS with SHA256"
-                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA256 (OK)"
+                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA256"
                          ;;
                     sha384)
                          pr_done_goodln "RSASSA-PSS with SHA384"
-                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA384 (OK)"
+                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA384"
                          ;;
                     sha512)
                          pr_done_goodln "RSASSA-PSS with SHA512"
-                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA512 (OK)"
+                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA512"
                          ;;
                     *)
                          out "RSASSA-PSS with $cert_sig_hash_algo"
@@ -5148,15 +5177,15 @@ certificate_info() {
                     ;;
           md2*)
                pr_svrty_criticalln "MD2"
-               fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD2 (NOT ok)"
+               fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD2"
                ;;
           md4*)
                pr_svrty_criticalln "MD4"
-               fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD4 (NOT ok)"
+               fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD4"
                ;;
           md5*)
                pr_svrty_criticalln "MD5"
-               fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD5 (NOT ok)"
+               fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD5"
                ;;
           *)
                out "$cert_sig_algo ("
@@ -5187,10 +5216,10 @@ certificate_info() {
           if [[ $cert_key_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey  ]]; then
                if [[ "$cert_keysize" -le 110 ]]; then       # a guess
                     pr_svrty_critical "$cert_keysize"
-                    fileout "${json_prefix}key_size" "CRITICAL" "Server keys $cert_keysize EC bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "CRITICAL" "Server keys $cert_keysize EC bits"
                elif [[ "$cert_keysize" -le 123 ]]; then    # a guess
                     pr_svrty_high "$cert_keysize"
-                    fileout "${json_prefix}key_size" "HIGH" "Server keys $cert_keysize EC bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "HIGH" "Server keys $cert_keysize EC bits"
                elif [[ "$cert_keysize" -le 163 ]]; then
                     pr_svrty_medium "$cert_keysize"
                     fileout "${json_prefix}key_size" "MEDIUM" "Server keys $cert_keysize EC bits"
@@ -5199,7 +5228,7 @@ certificate_info() {
                     fileout "${json_prefix}key_size" "INFO" "Server keys $cert_keysize EC bits"
                elif [[ "$cert_keysize" -le 533 ]]; then
                     pr_done_good "$cert_keysize"
-                    fileout "${json_prefix}key_size" "OK" "Server keys $cert_keysize EC bits (OK)"
+                    fileout "${json_prefix}key_size" "OK" "Server keys $cert_keysize EC bits"
                else
                     out "keysize: $cert_keysize (not expected, FIXME)"
                     fileout "${json_prefix}key_size" "DEBUG" "Server keys $cert_keysize bits (not expected)"
@@ -5210,11 +5239,11 @@ certificate_info() {
                if [[ "$cert_keysize" -le 512 ]]; then
                     pr_svrty_critical "$cert_keysize"
                     outln " bits"
-                    fileout "${json_prefix}key_size" "CRITICAL" "Server keys $cert_keysize bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "CRITICAL" "Server keys $cert_keysize bits"
                elif [[ "$cert_keysize" -le 768 ]]; then
                     pr_svrty_high "$cert_keysize"
                     outln " bits"
-                    fileout "${json_prefix}key_size" "HIGH" "Server keys $cert_keysize bits (NOT ok)"
+                    fileout "${json_prefix}key_size" "HIGH" "Server keys $cert_keysize bits"
                elif [[ "$cert_keysize" -le 1024 ]]; then
                     pr_svrty_medium "$cert_keysize"
                     outln " bits"
@@ -5224,7 +5253,7 @@ certificate_info() {
                     fileout "${json_prefix}key_size" "INFO" "Server keys $cert_keysize bits"
                elif [[ "$cert_keysize" -le 4096 ]]; then
                     pr_done_good "$cert_keysize"
-                    fileout "${json_prefix}key_size" "OK" "Server keys $cert_keysize bits (OK)"
+                    fileout "${json_prefix}key_size" "OK" "Server keys $cert_keysize bits"
                     outln " bits"
                else
                     pr_magenta "weird key size: $cert_keysize bits"; outln " (could cause compatibility problems)"
@@ -5327,7 +5356,7 @@ certificate_info() {
 
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$cn" ]]; then
           pr_svrty_criticalln "self-signed (NOT ok)"
-          fileout "${json_prefix}issuer" "CRITICAL" "Issuer: selfsigned (NOT ok)"
+          fileout "${json_prefix}issuer" "CRITICAL" "Issuer: selfsigned"
      else
           issuerfinding="$(pr_dquoted "$issuer_CN")"
           if [[ -z "$issuer_O" ]] && [[ -n "$issuer_DC" ]]; then
@@ -5513,7 +5542,7 @@ certificate_info() {
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
      if [[ -z "$crl" ]]; then
           pr_svrty_highln "--"
-          fileout "${json_prefix}crl" "HIGH" "No CRL provided (NOT ok)"
+          fileout "${json_prefix}crl" "HIGH" "No CRL provided"
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
@@ -5531,7 +5560,7 @@ certificate_info() {
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      if [[ -z "$ocsp_uri" ]]; then
           pr_svrty_highln "--"
-          fileout "${json_prefix}ocsp_uri" "HIGH" "OCSP URI : -- (NOT ok)"
+          fileout "${json_prefix}ocsp_uri" "HIGH" "OCSP URI : --"
      else
           outln "$ocsp_uri"
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
@@ -5792,7 +5821,7 @@ run_pfs() {
           pfs_offered=true
           pfs_ciphers=""
           pr_done_good " PFS is offered (OK)"
-          fileout "pfs" "OK" "(Perfect) Forward Secrecy : PFS is offered (OK)"
+          fileout "pfs" "OK" "(Perfect) Forward Secrecy : PFS is offered"
           if "$WIDE"; then
                outln ", ciphers follow (client/browser support is important here) \n"
                neat_header
@@ -5839,7 +5868,7 @@ run_pfs() {
 
           if ! "$pfs_offered"; then
                pr_svrty_medium "WARN: no PFS ciphers found"
-               fileout "pfs_ciphers" "MEDIUM" "(Perfect) Forward Secrecy Ciphers: no PFS ciphers found (NOT ok)"
+               fileout "pfs_ciphers" "MEDIUM" "(Perfect) Forward Secrecy Ciphers: no PFS ciphers found"
           else
                fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
           fi
@@ -7934,15 +7963,18 @@ run_heartbleed(){
      local -i hb_rounds=3
      local append=""
      local found_500_oops=false
+     local cve="CVE-2014-0160"
+     local cwe="CWE-119"
+     local hint=""
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
-     pr_bold " Heartbleed"; out " (CVE-2014-0160)                "
+     pr_bold " Heartbleed"; out " ($cve)                "
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
           pr_done_best "not vulnerable (OK)"
           outln ", no heartbeat extension"
-          fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK), no heartbeat extension"
+          fileout "heartbleed" "OK" "Heartbleed: not vulnerable, no heartbeat extension" "$cve" "$cwe"
           return 0
      fi
 
@@ -8050,14 +8082,14 @@ run_heartbleed(){
                else
                     rm "$SOCK_REPLY_FILE"
                     pr_svrty_critical "VULNERABLE (NOT ok)"
-                    fileout "heartbleed" "CRITICAL" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok)$append"
+                    fileout "heartbleed" "CRITICAL" "Heartbleed: VULNERABLE $append" "$cve" "$cwe" "$hint"
                     ret=1
                     break
                fi
           else
                rm "$SOCK_REPLY_FILE"
                pr_done_best "not vulnerable (OK)"
-               fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK)$append"
+               fileout "heartbleed" "OK" "Heartbleed: not vulnerable $append" "$cve" "$cwe"
                ret=0
                break
           fi
@@ -8071,12 +8103,12 @@ run_heartbleed(){
                && "$found_500_oops"; then
                pr_done_best "not vulnerable (OK)$append"
                [[ $DEBUG -ge 1 ]] && out ", successful weeded out vsftpd false positive"
-               fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK)$append"
+               fileout "heartbleed" "OK" "Heartbleed: not vulnerable $append" "$cve" "$cwe"
           else
                out "likely "
                pr_svrty_critical "VULNERABLE (NOT ok)"
                [[ $DEBUG -ge 1 ]] && out " use debug >=2 to confirm"
-               fileout "heartbleed" "CRITICAL" "Heartbleed (CVE-2014-0160): likely VULNERABLE (NOT ok)$append"
+               fileout "heartbleed" "CRITICAL" "Heartbleed: likely VULNERABLE $append" "$cve" "$cwe" "$hint"
           fi
      else
           # for the repeated tries we did that already
@@ -8099,11 +8131,14 @@ ok_ids(){
 run_ccs_injection(){
      local tls_proto_offered tls_hexcode ccs_message client_hello byte6 sockreply
      local -i retval ret lines
+     local cve="CVE-2014-0224"
+     local cwe="CWE-310"
+     local hint=""
 
      # see https://www.openssl.org/news/secadv_20140605.txt
      # mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CCS injection vulnerability " && outln
-     pr_bold " CCS"; out " (CVE-2014-0224)                       "
+     pr_bold " CCS"; out " ($cve)                       "
 
      # determine TLS versions offered <-- needs to come from another place
      $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
@@ -8203,17 +8238,17 @@ run_ccs_injection(){
      if [[ "$byte6" == "0a" ]] || [[ "$lines" -gt 1 ]]; then
           pr_done_best "not vulnerable (OK)"
           if [[ $retval -eq 3 ]]; then
-               fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
+               fileout "ccs" "OK" "CCS: not vulnerable (timed out)" "$cve" "$cwe"
           else
-               fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
+               fileout "ccs" "OK" "CCS: not vulnerable" "$cve" "$cwe"
           fi
           ret=0
      else
           pr_svrty_critical "VULNERABLE (NOT ok)"
           if [[ $retval -eq 3 ]]; then
-               fileout "ccs" "CRITICAL" "CCS (CVE-2014-0224): VULNERABLE (NOT ok) (timed out)"
+               fileout "ccs" "CRITICAL" "CCS: VULNERABLE (timed out)" "$cve" "$cwe" "$hint"
           else
-               fileout "ccs" "CRITICAL" "CCS (CVE-2014-0224): VULNERABLE (NOT ok)"
+               fileout "ccs" "CRITICAL" "CCS: VULNERABLE" "$cve" "$cwe" "$hint"
           fi
           ret=1
      fi
@@ -8230,10 +8265,13 @@ run_renego() {
      local legacycmd=""
      local insecure_renogo_str="Secure Renegotiation IS NOT"
      local sec_renego sec_client_renego addcmd=""
+     local cve="CVE-2009-3555"
+     local cwe="CWE-310"
+     local hint=""
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Renegotiation vulnerabilities " && outln
 
-     pr_bold " Secure Renegotiation "; out "(CVE-2009-3555)      "    # and RFC5746, OSVDB 59968-59974
+     pr_bold " Secure Renegotiation "; out "($cve)      "    # and RFC5746, OSVDB 59968-59974
                                                                       # community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
      [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
      $OPENSSL s_client $OPTIMAL_PROTO $STARTTLS $BUGS -connect $NODEIP:$PORT $addcmd $PROXY 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
@@ -8244,20 +8282,20 @@ run_renego() {
           case $sec_renego in
                0)
                     pr_svrty_criticalln "VULNERABLE (NOT ok)"
-                    fileout "secure_renego" "CRITICAL" "Secure Renegotiation (CVE-2009-3555) : VULNERABLE (NOT ok)"
+                    fileout "secure_renego" "CRITICAL" "Secure Renegotiation: VULNERABLE" "$cve" "$cwe" "$hint"
                     ;;
                1)
                     pr_done_bestln "not vulnerable (OK)"
-                    fileout "secure_renego" "OK" "Secure Renegotiation (CVE-2009-3555) : not vulnerable (OK)"
+                    fileout "secure_renego" "OK" "Secure Renegotiation: not vulnerable" "$cve" "$cwe"
                     ;;
                *)
                     pr_warningln "FIXME (bug): $sec_renego"
-                    fileout "secure_renego" "WARN" "Secure Renegotiation (CVE-2009-3555) : FIXME (bug) $sec_renego"
+                    fileout "secure_renego" "WARN" "Secure Renegotiation: FIXME (bug) $sec_renego" "$cve" "$cwe"
                     ;;
           esac
      else
           pr_warningln "handshake didn't succeed"
-          fileout "secure_renego" "WARN" "Secure Renegotiation (CVE-2009-3555) : handshake didn't succeed"
+          fileout "secure_renego" "WARN" "Secure Renegotiation: handshake didn't succeed" "$cve" "$cwe"
      fi
 
      pr_bold " Secure Client-Initiated Renegotiation     "  # RFC 5746
@@ -8268,7 +8306,7 @@ run_renego() {
                case "$OSSL_VER_APPENDIX" in
                     [a-l])
                          local_problem_ln "$OPENSSL cannot test this secure renegotiation vulnerability"
-                         fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : $OPENSSL cannot test this secure renegotiation vulnerability"
+                         fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : $OPENSSL cannot test this secure renegotiation vulnerability" "$cve" "$cwe"
                          return 3
                          ;;
                     [m-z])
@@ -8293,7 +8331,7 @@ run_renego() {
           wait_kill $! $HEADER_MAXSLEEP
           if [[ $? -eq 3 ]]; then
                pr_done_good "likely not vulnerable (OK)"; outln " (timed out)"       # it hung
-               fileout "sec_client_renego" "OK" "Secure Client-Initiated Renegotiation : likely not vulnerable (OK) (timed out)"
+               fileout "sec_client_renego" "OK" "Secure Client-Initiated Renegotiation : likely not vulnerable (timed out)" "$cve" "$cwe"
                sec_client_renego=1
           else
                # second try in the foreground as we are sure now it won't hang
@@ -8302,19 +8340,19 @@ run_renego() {
                case "$sec_client_renego" in
                     0)   if [[ $SERVICE == "HTTP" ]]; then
                               pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
-                              fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), DoS threat"
+                              fileout "sec_client_renego" "HIGH" "Secure Client-Initiated Renegotiation : VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
                          else
                               pr_svrty_medium "VULNERABLE (NOT ok)"; outln ", potential DoS threat"
-                              fileout "sec_client_renego" "MEDIUM" "Secure Client-Initiated Renegotiation : VULNERABLE (NOT ok), potential DoS threat"
+                              fileout "sec_client_renego" "MEDIUM" "Secure Client-Initiated Renegotiation : VULNERABLE, potential DoS threat" "$cve" "$cwe" "$hint"
                          fi
                          ;;
                     1)
                          pr_done_goodln "not vulnerable (OK)"
-                         fileout "sec_client_renego" "OK" "Secure Client-Initiated Renegotiation : not vulnerable (OK)"
+                         fileout "sec_client_renego" "OK" "Secure Client-Initiated Renegotiation : not vulnerable" "$cve" "$cwe"
                          ;;
                     *)
                          pr_warningln "FIXME (bug): $sec_client_renego"
-                         fileout "sec_client_renego" "DEBUG" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report"
+                         fileout "sec_client_renego" "DEBUG" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report" "$cve" "$cwe"
                          ;;
                esac
           fi
@@ -8330,6 +8368,10 @@ run_renego() {
 run_crime() {
      local -i ret=0
      local addcmd=""
+     local cve="CVE-2012-4929"
+     local cwe="CWE-310"
+     local hint=""
+
      # in a nutshell: don't offer TLS/SPDY compression on the server side
      # This tests for CRIME Vulnerability (www.ekoparty.org/2012/juliano-rizzo.php) on HTTPS, not SPDY (yet)
      # Please note that it is an attack where you need client side control, so in regular situations this
@@ -8337,13 +8379,13 @@ run_crime() {
      # www.h-online.com/security/news/item/Vulnerability-in-SSL-encryption-is-barely-exploitable-1708604.html
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CRIME vulnerability " && outln
-     pr_bold " CRIME, TLS " ; out "(CVE-2012-4929)                "
+     pr_bold " CRIME, TLS " ; out "($cve)                "
 
      # first we need to test whether OpenSSL binary has zlib support
      $OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib
      if [[ $? -eq 0 ]]; then
           local_problem_ln "$OPENSSL lacks zlib support"
-          fileout "crime" "WARN" "CRIME, TLS (CVE-2012-4929) : Not tested. $OPENSSL lacks zlib support"
+          fileout "crime" "WARN" "CRIME, TLS: Not tested. $OPENSSL lacks zlib support" "$cve" "$cwe"
           return 7
      fi
 
@@ -8353,18 +8395,18 @@ run_crime() {
           pr_done_good "not vulnerable (OK)"
           if [[ $SERVICE != "HTTP" ]] && ! $CLIENT_AUTH;  then
                out " (not using HTTP anyway)"
-               fileout "crime" "OK" "CRIME, TLS (CVE-2012-4929) : Not vulnerable (OK) (not using HTTP anyway)"
+               fileout "crime" "OK" "CRIME, TLS: Not vulnerable (not using HTTP anyway)" "$cve" "$cwe"
           else
-               fileout "crime" "OK" "CRIME, TLS (CVE-2012-4929) : Not vulnerable (OK)"
+               fileout "crime" "OK" "CRIME, TLS: Not vulnerable" "$cve" "$cwe"
           fi
           ret=0
      else
           if [[ $SERVICE == "HTTP" ]]; then
                pr_svrty_high "VULNERABLE (NOT ok)"
-               fileout "crime" "HIGH" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (NOT ok)"
+               fileout "crime" "HIGH" "CRIME, TLS: VULNERABLE" "$cve" "$cwe" "$hint"
           else
                pr_svrty_medium "VULNERABLE but not using HTTP: probably no exploit known"
-               fileout "crime" "MEDIUM" "CRIME, TLS (CVE-2012-4929) : VULNERABLE (WARN), but not using HTTP: probably no exploit known"
+               fileout "crime" "MEDIUM" "CRIME, TLS: VULNERABLE, but not using HTTP: probably no exploit known" "$cve" "$cwe" "$hint"
           fi
           ret=1
      fi
@@ -8391,7 +8433,7 @@ run_crime() {
 #         $OPENSSL s_client -host $NODE -port $PORT -nextprotoneg $NPN_PROTOs  $SNI </dev/null 2>/dev/null >$TMPFILE
 #         if [[ $? -eq 0 ]]; then
 #              echo
-#              pr_bold "CRIME Vulnerability, SPDY " ; outln "(CVE-2012-4929): "
+#              pr_bold "CRIME Vulnerability, SPDY " ; outln "($cve): "
 
 #              STR=$(grep Compression $TMPFILE )
 #              if echo $STR | grep -q NONE >/dev/null; then
@@ -8420,11 +8462,14 @@ run_breach() {
      local spaces="                                          "
      local disclaimer=""
      local when_makesense=" Can be ignored for static pages or if no secrets in the page"
+     local cve="CVE-2013-3587"
+     local cwe="CWE-310"
+     local hint=""
 
      [[ $SERVICE != "HTTP" ]] && return 7
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
-     pr_bold " BREACH"; out " (CVE-2013-3587)                    "
+     pr_bold " BREACH"; out " ($cve)                    "
 
      url="$1"
      [[ -z "$url" ]] && url="/"
@@ -8447,22 +8492,22 @@ run_breach() {
           pr_warning "failed (HTTP header request stalled"
           if [[ $was_killed -ne 0 ]]; then
                pr_warning " and was terminated"
-               fileout "breach" "WARN" "BREACH (CVE-2013-3587) : Test failed (HTTP request stalled and was terminated)"
+               fileout "breach" "WARN" "BREACH: Test failed (HTTP request stalled and was terminated)" "$cve" "$cwe"
           else
-               fileout "breach" "WARN" "BREACH (CVE-2013-3587) : Test failed (HTTP request stalled)"
+               fileout "breach" "WARN" "BREACH: Test failed (HTTP request stalled)" "$cve" "$cwe"
           fi
           pr_warningln ") "
           ret=3
      elif [[ -z $result ]]; then
           pr_done_best "no HTTP compression (OK) "
           outln "$disclaimer"
-          fileout "breach" "OK" "BREACH (CVE-2013-3587) : no HTTP compression (OK) $disclaimer"
+          fileout "breach" "OK" "BREACH: no HTTP compression $disclaimer" "$cve" "$cwe"
           ret=0
      else
           pr_svrty_high "potentially NOT ok, uses $result HTTP compression."
           outln "$disclaimer"
           outln "$spaces$when_makesense"
-          fileout "breach" "HIGH" "BREACH (CVE-2013-3587) : potentially VULNERABLE, uses $result HTTP compression. $disclaimer ($when_makesense)"
+          fileout "breach" "HIGH" "BREACH: potentially VULNERABLE, uses $result HTTP compression. $disclaimer ($when_makesense)" "$cve" "$cwe" "$hint"
           ret=1
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
@@ -8475,9 +8520,12 @@ run_breach() {
 run_ssl_poodle() {
      local -i sclient_success=0
      local cbc_ciphers="ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:DHE-PSK-AES256-CBC-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:AECDH-AES256-SHA:ADH-AES256-SHA:ADH-CAMELLIA256-SHA:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-SHA:ECDHE-PSK-AES256-CBC-SHA:CAMELLIA256-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:AECDH-AES128-SHA:ADH-AES128-SHA:ADH-SEED-SHA:ADH-CAMELLIA128-SHA:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-SHA:ECDHE-PSK-AES128-CBC-SHA:DHE-PSK-AES128-CBC-SHA:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:DES-CBC-MD5:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5"
+     local cve="CVE-2014-3566"
+     local cwe="CWE-310"
+     local hint=""
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption) " && outln
-     pr_bold " POODLE, SSL"; out " (CVE-2014-3566)               "
+     pr_bold " POODLE, SSL"; out " ($cve)               "
      locally_supported "-ssl3" || return 0
      cbc_ciphers=$(actually_supported_ciphers $cbc_ciphers)
 
@@ -8488,10 +8536,10 @@ run_ssl_poodle() {
      [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if [[ $sclient_success -eq 0 ]]; then
           pr_svrty_high "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
-          fileout "poodle_ssl" "HIGH" "POODLE, SSL (CVE-2014-3566) : VULNERABLE (NOT ok), uses SSLv3+CBC (check if TLS_FALLBACK_SCSV mitigation is used)"
+          fileout "poodle_ssl" "HIGH" "POODLE, SSL: VULNERABLE, uses SSLv3+CBC" "$cve" "$cwe" "$hint"
      else
           pr_done_best "not vulnerable (OK)"
-          fileout "poodle_ssl" "OK" "POODLE, SSL (CVE-2014-3566) : not vulnerable (OK)"
+          fileout "poodle_ssl" "OK" "POODLE, SSL: not vulnerable" "$cve" "$cwe"
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
@@ -8500,10 +8548,13 @@ run_ssl_poodle() {
 
 # for appliance which use padding, no fallback needed
 run_tls_poodle() {
-     pr_bold " POODLE, TLS"; out " (CVE-2014-8730), experimental "
+     local cve="CVE-2014-8730"
+     local cwe="CWE-310"
+
+     pr_bold " POODLE, TLS"; out " ($cve), experimental "
      #FIXME
      echo "#FIXME"
-     fileout "poodle_tls" "WARN" "POODLE, TLS (CVE-2014-8730) : Not tested. Not yet implemented #FIXME"
+     fileout "poodle_tls" "WARN" "POODLE, TLS: Not tested. Not yet implemented #FIXME" "$cve" "$cwe"
      return 7
 }
 
@@ -8545,7 +8596,7 @@ run_tls_fallback_scsv() {
                     ret=1
                elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
                     pr_done_good "Downgrade attack prevention supported (OK)"
-                    fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported (OK)"
+                    fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported"
                     ret=0
                elif grep -qa "alert handshake failure" "$TMPFILE"; then
                     # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
@@ -8581,9 +8632,12 @@ run_freak() {
      # with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
      local exportrsa_cipher_list="EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-RC4-MD5:EXP-RC4-MD5"
      local addcmd="" addtl_warning=""
+     local cve="CVE-2015-0204"
+     local cwe="CWE-310"
+     local hint=""
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for FREAK attack " && outln
-     pr_bold " FREAK"; out " (CVE-2015-0204)                     "
+     pr_bold " FREAK"; out " ($cve)                     "
 
      nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportrsa_cipher_list))
      #echo "========= ${PIPESTATUS[*]}
@@ -8591,7 +8645,7 @@ run_freak() {
      case $nr_supported_ciphers in
           0)
                local_problem_ln "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
-               fileout "freak" "WARN" "FREAK (CVE-2015-0204) : Not tested. $OPENSSL doesn't have any EXPORT RSA ciphers configured"
+               fileout "freak" "WARN" "FREAK: Not tested. $OPENSSL doesn't have any EXPORT RSA ciphers configured" "$cve" "$cwe"
                return 7
                ;;
           1|2|3)
@@ -8609,10 +8663,10 @@ run_freak() {
      [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if [[ $sclient_success -eq 0 ]]; then
           pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
-          fileout "freak" "CRITICAL" "FREAK (CVE-2015-0204) : VULNERABLE (NOT ok), uses EXPORT RSA ciphers"
+          fileout "freak" "CRITICAL" "FREAK: VULNERABLE, uses EXPORT RSA ciphers" "$cve" "$cwe" "$hint"
      else
           pr_done_best "not vulnerable (OK)"; out "$addtl_warning"
-          fileout "freak" "OK" "FREAK (CVE-2015-0204) : not vulnerable (OK) $addtl_warning"
+          fileout "freak" "OK" "FREAK: not vulnerable $addtl_warning" "$cve" "$cwe"
      fi
      outln
 
@@ -8630,16 +8684,19 @@ run_logjam() {
      local exportdhe_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
      local -i nr_supported_ciphers=0
      local addtl_warning=""
+     local cve="CVE-2015-4000"
+     local cwe="CWE-310"
+     local hint=""
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for LOGJAM vulnerability " && outln
-     pr_bold " LOGJAM"; out " (CVE-2015-4000), experimental      "
+     pr_bold " LOGJAM"; out " ($cve), experimental      "
 
      nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdhe_cipher_list))
 
      case $nr_supported_ciphers in
           0)
                local_problem_ln "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
-               fileout "logjam" "WARN" "LOGJAM (CVE-2015-4000) : Not tested. $OPENSSL doesn't have any DHE EXPORT ciphers configured"
+               fileout "logjam" "WARN" "LOGJAM: Not tested. $OPENSSL doesn't have any DHE EXPORT ciphers configured" "$cve" "$cwe"
                return 3
                ;;
           1|2) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
@@ -8661,10 +8718,10 @@ run_logjam() {
 
      if [[ $sclient_success -eq 0 ]]; then
           pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers, common primes not checked."
-          fileout "logjam" "CRITICAL" "LOGJAM (CVE-2015-4000) : VULNERABLE (NOT ok), uses DHE EXPORT ciphers, common primes not checked."
+          fileout "logjam" "CRITICAL" "LOGJAM: VULNERABLE, uses DHE EXPORT ciphers, common primes not checked." "$cve" "$cwe" "$hint"
      else
           pr_done_best "not vulnerable (OK)"; out "$addtl_warning"
-          fileout "logjam" "OK" "LOGJAM (CVE-2015-4000) : not vulnerable (OK) $addtl_warning"
+          fileout "logjam" "OK" "LOGJAM: not vulnerable $addtl_warning" "$cve" "$cwe"
      fi
      outln
 
@@ -8681,6 +8738,9 @@ run_drown() {
      local nr_ciphers_detected ret
      local spaces="                                          "
      local cert_fingerprint_sha2=""
+     local cve="CVE-2016-0800, CVE-2016-0703"
+     local cwe="CWE-310"
+     local hint=""
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
@@ -8688,7 +8748,7 @@ run_drown() {
           outln
      fi
 # if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
-     pr_bold " DROWN"; out " (2016-0800, CVE-2016-0703)          "
+     pr_bold " DROWN"; out " ($cve)          "
      sslv2_sockets
 
      case $? in
@@ -8697,7 +8757,7 @@ run_drown() {
                outln " (rerun with DEBUG >=2)"
                [[ $DEBUG -ge 3 ]] && hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" | head -1
                ret=7
-               fileout "drown" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
+               fileout "drown" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)" "$cve" "$cwe"
                ;;
           3)   # vulnerable
                lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
@@ -8705,17 +8765,17 @@ run_drown() {
                if [[ "$lines" -gt 1 ]]; then
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$nr_ciphers_detected" ]]; then
-                         pr_svrty_highln "CVE-2015-3197: SSLv2 supported but couldn't detect a cipher (NOT ok)";
-                         fileout "drown" "HIGH" "SSLv2 offered (NOT ok), CVE-2015-3197: but could not detect a cipher"
+                         pr_svrty_highln "SSLv2 is supported but couldn't detect a cipher (NOT ok)";
+                         fileout "drown" "HIGH" "SSLv2 is offered, but could not detect a cipher" "$cve" "$cwe" "$hint"
                     else
                          pr_svrty_criticalln  "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
-                         fileout "drown" "CRITICAL" "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers"
+                         fileout "drown" "CRITICAL" "VULNERABLE, SSLv2 offered with $nr_ciphers_detected ciphers" "$cve" "$cwe" "$hint"
                     fi
                fi
                ret=1
                ;;
           *)   pr_done_bestln "not vulnerable on this port (OK)"
-               fileout "drown" "OK" "not vulnerable to DROWN"
+               fileout "drown" "OK" "not vulnerable to DROWN" "$cve" "$cwe"
                # Any fingerprint that is placed in $RSA_CERT_FINGERPRINT_SHA2 is
                # also added to $CERT_FINGERPRINT_SHA2, so if $CERT_FINGERPRINT_SHA2
                # is not empty, but $RSA_CERT_FINGERPRINT_SHA2 is empty, then the server
@@ -8757,6 +8817,9 @@ run_beast(){
      local first=true
      local continued=false
      local cbc_cipher_list="EXP-RC2-CBC-MD5:IDEA-CBC-SHA:EXP-DES-CBC-SHA:DES-CBC-SHA:DES-CBC3-SHA:EXP-DH-DSS-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:DH-DSS-DES-CBC3-SHA:EXP-DH-RSA-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-RSA-DES-CBC3-SHA:EXP-EDH-DSS-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:EDH-DSS-DES-CBC3-SHA:EXP-EDH-RSA-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EXP-ADH-DES-CBC-SHA:ADH-DES-CBC-SHA:ADH-DES-CBC3-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-IDEA-CBC-SHA:KRB5-DES-CBC-MD5:KRB5-DES-CBC3-MD5:KRB5-IDEA-CBC-MD5:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-MD5:EXP-KRB5-RC2-CBC-MD5:AES128-SHA:DH-DSS-AES128-SHA:DH-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DHE-RSA-AES128-SHA:ADH-AES128-SHA:AES256-SHA:DH-DSS-AES256-SHA:DH-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:ADH-AES256-SHA:AES128-SHA256:AES256-SHA256:DH-DSS-AES128-SHA256:DH-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DHE-RSA-CAMELLIA128-SHA:ADH-CAMELLIA128-SHA:EXP1024-DES-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:DHE-RSA-AES128-SHA256:DH-DSS-AES256-SHA256:DH-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES256-SHA256:ADH-AES128-SHA256:ADH-AES256-SHA256:CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DHE-RSA-CAMELLIA256-SHA:ADH-CAMELLIA256-SHA:PSK-3DES-EDE-CBC-SHA:PSK-AES128-CBC-SHA:PSK-AES256-CBC-SHA:SEED-SHA:DH-DSS-SEED-SHA:DH-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DHE-RSA-SEED-SHA:ADH-SEED-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:AECDH-DES-CBC3-SHA:AECDH-AES128-SHA:AECDH-AES256-SHA:SRP-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-DSS-AES-256-CBC-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDH-ECDSA-AES128-SHA256:ECDH-ECDSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDH-RSA-AES128-SHA256:ECDH-RSA-AES256-SHA384:RC2-CBC-MD5:EXP-RC2-CBC-MD5:IDEA-CBC-MD5:DES-CBC-MD5:DES-CBC3-MD5"
+     local cve="CVE-2011-3389"
+     local cwe="CWE-20"
+     local hint=""
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
@@ -8765,7 +8828,7 @@ run_beast(){
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
           outln
      fi
-     pr_bold " BEAST"; out " (CVE-2011-3389)                     "
+     pr_bold " BEAST"; out " ($cve)                     "
 # output in wide mode if cipher doesn't exist is not ok
 
      >$ERRFILE
@@ -8791,10 +8854,10 @@ run_beast(){
                if "$continued"; then                             # second round: we hit TLS1
                     if "$HAS_SSL3"; then
                          pr_done_goodln "no SSL3 or TLS1 (OK)"
-                         fileout "beast" "OK" "BEAST (CVE-2011-3389) : not vulnerable (OK) no SSL3 or TLS1"
+                         fileout "beast" "OK" "BEAST: not vulnerable, no SSL3 or TLS1" "$cve" "$cwe"
                     else
                          pr_done_goodln "no TLS1 (OK)"
-                         fileout "beast" "OK" "BEAST (CVE-2011-3389) : not vulnerable (OK) no TLS1"
+                         fileout "beast" "OK" "BEAST: not vulnerable, no TLS1" "$cve" "$cwe"
                     fi
                     return 0
                else                # protocol not succeeded but it's the first time
@@ -8861,7 +8924,7 @@ run_beast(){
                              -e "s/ /\\${cr}      ${spaces}/9" \
                              -e "s/ /\\${cr}      ${spaces}/6" \
                              -e "s/ /\\${cr}      ${spaces}/3")
-                    fileout "cbc_$proto" "MEDIUM" "BEAST (CVE-2011-3389) : CBC ciphers for $(toupper $proto): $detected_cbc_ciphers"
+                    fileout "cbc_$proto" "MEDIUM" "BEAST: CBC ciphers for $(toupper $proto): $detected_cbc_ciphers" "$cve" "$cwe" "$hint"
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto):"
                     [[ -n "$higher_proto_supported" ]] && \
@@ -8877,7 +8940,7 @@ run_beast(){
           else
                if ! "$vuln_beast" ; then
                     pr_done_goodln " no CBC ciphers for $(toupper $proto) (OK)"
-                    fileout "cbc_$proto" "OK" "BEAST (CVE-2011-3389) : No CBC ciphers for $(toupper $proto) (OK)"
+                    fileout "cbc_$proto" "OK" "BEAST: No CBC ciphers for $(toupper $proto)" "$cve" "$cwe"
                fi
           fi
      done  # for proto in ssl3 tls1
@@ -8894,7 +8957,7 @@ run_beast(){
                     pr_svrty_minor "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                fi
-               fileout "beast" "LOW" "BEAST (CVE-2011-3389) : VULNERABLE -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
+               fileout "beast" "LOW" "BEAST: VULNERABLE -- but also supports higher protocols (possible mitigation):$higher_proto_supported" "$cve" "$cwe" "$hint"
           else
                if "$WIDE"; then
                     outln
@@ -8903,7 +8966,7 @@ run_beast(){
                fi
                pr_svrty_medium "VULNERABLE"
                outln " -- and no higher protocols as mitigation supported"
-               fileout "beast" "MEDIUM" "BEAST (CVE-2011-3389) : VULNERABLE -- and no higher protocols as mitigation supported"
+               fileout "beast" "MEDIUM" "BEAST: VULNERABLE -- and no higher protocols as mitigation supported" "$cve" "$cwe" "$hint"
           fi
      fi
      "$first" && ! "$vuln_beast" && pr_done_goodln "no CBC ciphers found for any protocol (OK)"
@@ -8913,10 +8976,12 @@ run_beast(){
 }
 
 run_lucky13() {
+     local cve="CVE-2013-0169"
+     local cwe="CWE-310"
 #FIXME: to do . CVE-2013-0169
 # in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
      echo "FIXME"
-     fileout "lucky13" "WARN" "LUCKY13 (CVE-2013-0169) : No tested. Not implemented. #FIXME"
+     fileout "lucky13" "WARN" "LUCKY13: Not tested. Not implemented. #FIXME" "$cve" "$cwe"
      return 1
 }
 
@@ -8935,6 +9000,9 @@ run_rc4() {
      local dhlen available="" ciphers_to_test supported_sslv2_ciphers addcmd=""
      local has_dh_bits="$HAS_DH_BITS" rc4_detected=""
      local using_sockets=true
+     local cve="CVE-2013-2566, CVE-2015-2808"
+     local cwe="CWE-310"
+     local hint=""
 
      "$SSL_NATIVE" && using_sockets=false
      "$FAST" && using_sockets=false
@@ -8947,7 +9015,7 @@ run_rc4() {
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
           outln
      fi
-     pr_bold " RC4"; out " (CVE-2013-2566, CVE-2015-2808)        "
+     pr_bold " RC4"; out " ($cve)        "
 
      # get a list of all the cipher suites to test
      if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
@@ -9147,13 +9215,13 @@ run_rc4() {
           done
           outln
           "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
-          fileout "rc4" "HIGH" "RC4 (CVE-2013-2566, CVE-2015-2808) : VULNERABLE (NOT ok) Detected ciphers: $rc4_detected"
+          fileout "rc4" "HIGH" "RC4: VULNERABLE, Detected ciphers: $rc4_detected" "$cve" "$cwe" "$hint"
      elif [[ $nr_ciphers -eq 0 ]]; then
           local_problem_ln "No RC4 Ciphers configured in $OPENSSL"
           fileout "rc4" "WARN" "RC4 ciphers not supported by local OpenSSL ($OPENSSL)"
      else
           pr_done_goodln "no RC4 ciphers detected (OK)"
-          fileout "rc4" "OK" "RC4 (CVE-2013-2566, CVE-2015-2808) : not vulnerable (OK)"
+          fileout "rc4" "OK" "RC4: not vulnerable" "$cve" "$cwe"
      fi
      outln
 
@@ -9164,18 +9232,19 @@ run_rc4() {
 
 
 run_youknowwho() {
-# CVE-2013-2566,
-# NOT FIXME as there's no code: http://www.isg.rhul.ac.uk/tls/
-# http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
-return 0
-# in a nutshell: don't use RC4, really not!
-}
+    local cve="CVE-2013-2566"
+    # CVE-2013-2566,
+    # NOT FIXME as there's no code: http://www.isg.rhul.ac.uk/tls/
+    # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
+    return 0
+    # in a nutshell: don't use RC4, really not!
+    }
 
-# https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
-# https://secure-resumption.com/tlsauth.pdf
-run_tls_truncation() {
-#FIXME: difficult to test, is there any test available: pls let me know
-    :
+    # https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
+    # https://secure-resumption.com/tlsauth.pdf
+    run_tls_truncation() {
+    #FIXME: difficult to test, is there any test available: pls let me know
+        :
 }
 
 
@@ -9467,6 +9536,7 @@ file output options (can also be preset via environment variables):
      --jsonfile-pretty <jsonfile>  additional pretty structured output as JSON to the specified file
      --csv                         additional output of findings to CSV file <NODE-YYYYMMDD-HHMM.csv> in cwd
      --csvfile <csvfile>           additional output as CSV to the specified file
+     --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if <csvfile> or <jsonfile> exists rather append then overwrite
 
@@ -10743,6 +10813,9 @@ parse_cmd_line() {
                --severity|--severity=*)
                     set_severity_level "$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
+                    ;;
+               --hints)
+                    GIVE_HINTS=true
                     ;;
                --csv)
                     do_csv=true
