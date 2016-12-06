@@ -6514,20 +6514,21 @@ parse_sslv2_serverhello() {
           fi
      fi
 
-     certificate_len=2*$(hex2dec "$v2_hello_cert_length")
-     [[ -e $HOSTCERT ]] && rm $HOSTCERT
-     [[ -e $TEMPDIR/intermediatecerts.pem ]] && rm $TEMPDIR/intermediatecerts.pem
-     if [[ "$2" == "true" ]] && [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
-          tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return $ret
-          asciihex_to_binary_file "${v2_hello_ascii:26:certificate_len}" "$tmp_der_certfile"
-          $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT
-          rm $tmp_der_certfile
-          get_pub_key_size
-          echo "======================================" >> $TMPFILE
-     fi
+     [[ "$2" == "true" ]] && [[ -e $HOSTCERT ]] && rm $HOSTCERT
+     [[ "$2" == "true" ]] && [[ -e $TEMPDIR/intermediatecerts.pem ]] && rm $TEMPDIR/intermediatecerts.pem
+     if [[ "$2" == "true" ]] && [[ $ret -eq 3 ]]; then
+          certificate_len=2*$(hex2dec "$v2_hello_cert_length")
+     
+          if [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
+               tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return $ret
+               asciihex_to_binary_file "${v2_hello_ascii:26:certificate_len}" "$tmp_der_certfile"
+               $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT
+               rm $tmp_der_certfile
+               get_pub_key_size
+               echo "======================================" >> $TMPFILE
+          fi
 
-     # Output list of supported ciphers
-     if [[ "$2" == "true" ]]; then
+          # Output list of supported ciphers
           let offset=26+$certificate_len
           nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
           for (( i=0 ; i<nr_ciphers_detected; i++ )); do
