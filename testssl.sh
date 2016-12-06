@@ -8805,21 +8805,28 @@ run_drown() {
 
 # Browser Exploit Against SSL/TLS: don't use CBC Ciphers in SSLv3 TLSv1.0
 run_beast(){
-     local hexcode dash cbc_cipher sslvers kx auth enc mac export addcmd
-     local detected_proto
-     local -i sclient_success=0
-     local detected_cbc_ciphers=""
+     local hexc dash cbc_cipher sslvers auth mac export sni
+     local -a ciph hexcode normalized_hexcode kx enc export2
+     local proto proto_hex
+     local -i i nr_ciphers=0 sclient_success=0
+     local detected_cbc_ciphers="" ciphers_to_test
      local higher_proto_supported=""
-     local -i sclient_success=0
      local vuln_beast=false
      local spaces="                                           "
      local cr=$'\n'
      local first=true
      local continued=false
-     local cbc_cipher_list="EXP-RC2-CBC-MD5:IDEA-CBC-SHA:EXP-DES-CBC-SHA:DES-CBC-SHA:DES-CBC3-SHA:EXP-DH-DSS-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:DH-DSS-DES-CBC3-SHA:EXP-DH-RSA-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-RSA-DES-CBC3-SHA:EXP-EDH-DSS-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:EDH-DSS-DES-CBC3-SHA:EXP-EDH-RSA-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EXP-ADH-DES-CBC-SHA:ADH-DES-CBC-SHA:ADH-DES-CBC3-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-IDEA-CBC-SHA:KRB5-DES-CBC-MD5:KRB5-DES-CBC3-MD5:KRB5-IDEA-CBC-MD5:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-MD5:EXP-KRB5-RC2-CBC-MD5:AES128-SHA:DH-DSS-AES128-SHA:DH-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DHE-RSA-AES128-SHA:ADH-AES128-SHA:AES256-SHA:DH-DSS-AES256-SHA:DH-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:ADH-AES256-SHA:AES128-SHA256:AES256-SHA256:DH-DSS-AES128-SHA256:DH-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DHE-RSA-CAMELLIA128-SHA:ADH-CAMELLIA128-SHA:EXP1024-DES-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:DHE-RSA-AES128-SHA256:DH-DSS-AES256-SHA256:DH-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DHE-RSA-AES256-SHA256:ADH-AES128-SHA256:ADH-AES256-SHA256:CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DHE-RSA-CAMELLIA256-SHA:ADH-CAMELLIA256-SHA:PSK-3DES-EDE-CBC-SHA:PSK-AES128-CBC-SHA:PSK-AES256-CBC-SHA:SEED-SHA:DH-DSS-SEED-SHA:DH-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DHE-RSA-SEED-SHA:ADH-SEED-SHA:ECDH-ECDSA-DES-CBC3-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:AECDH-DES-CBC3-SHA:AECDH-AES128-SHA:AECDH-AES256-SHA:SRP-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-DSS-AES-256-CBC-SHA:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDH-ECDSA-AES128-SHA256:ECDH-ECDSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:ECDH-RSA-AES128-SHA256:ECDH-RSA-AES256-SHA384:RC2-CBC-MD5:EXP-RC2-CBC-MD5:IDEA-CBC-MD5:DES-CBC-MD5:DES-CBC3-MD5"
+     local cbc_cipher_list="ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:DHE-PSK-AES256-CBC-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:AECDH-AES256-SHA:ADH-AES256-SHA:ADH-CAMELLIA256-SHA:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-SHA:ECDHE-PSK-AES256-CBC-SHA:CAMELLIA256-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:AECDH-AES128-SHA:ADH-AES128-SHA:ADH-SEED-SHA:ADH-CAMELLIA128-SHA:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-SHA:ECDHE-PSK-AES128-CBC-SHA:DHE-PSK-AES128-CBC-SHA:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5:EXP-DH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA"
+     cbc_cipher_list_hex=""
+     local has_dh_bits="$HAS_DH_BITS"
+     local using_sockets=true
      local cve="CVE-2011-3389"
      local cwe="CWE-20"
      local hint=""
+
+     "$SSL_NATIVE" && using_sockets=false
+     "$FAST" && using_sockets=false
+     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
@@ -8829,9 +8836,46 @@ run_beast(){
           outln
      fi
      pr_bold " BEAST"; out " ($cve)                     "
-# output in wide mode if cipher doesn't exist is not ok
 
-     >$ERRFILE
+     if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
+          for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+               hexc="${TLS_CIPHER_HEXCODE[i]}"
+               if [[ ${#hexc} -eq 9 ]] && [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ CBC ]] && \
+                  [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA256" ]] && [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA384" ]]; then
+                    cbc_cipher_list_hex+=", ${hexc:2:2},${hexc:7:2}"
+                    ciph[nr_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
+                    hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
+                    rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
+                    kx[nr_ciphers]="${TLS_CIPHER_KX[i]}"
+                    enc[nr_ciphers]="${TLS_CIPHER_ENC[i]}"
+                    export2[nr_ciphers]="${TLS_CIPHER_EXPORT[i]}"
+                    ossl_supported[nr_ciphers]=${TLS_CIPHER_OSSL_SUPPORTED[i]}
+                    if "$using_sockets" && "$WIDE" && ! "$has_dh_bits" && \
+                       ( [[ ${kx[nr_ciphers]} == "Kx=ECDH" ]] || [[ ${kx[nr_ciphers]} == "Kx=DH" ]] || [[ ${kx[nr_ciphers]} == "Kx=EDH" ]] ); then
+                         ossl_supported[nr_ciphers]=false
+                    fi
+                    if [[ "${hexc:2:2}" == "00" ]]; then
+                         normalized_hexcode[nr_ciphers]="x${hexc:7:2}"
+                    else
+                         normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}"
+                    fi
+                    nr_ciphers+=1
+               fi
+          done
+          cbc_cipher_list_hex="${cbc_cipher_list_hex:2}"
+     else
+          while read hexc dash ciph[nr_ciphers] sslvers kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+               if [[ ":${cbc_cipher_list}:" =~ ":${ciph[nr_ciphers]}:" ]]; then
+                    ossl_supported[nr_ciphers]=true
+                    if [[ "${hexc:2:2}" == "00" ]]; then
+                         normalized_hexcode[nr_ciphers]="x${hexc:7:2}"
+                    else
+                         normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}"
+                    fi
+                    nr_ciphers+=1
+               fi
+          done  < <($OPENSSL ciphers -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+     fi
 
      # first determine whether it's mitigated by higher protocols
      for proto in tls1_1 tls1_2; do
@@ -8842,17 +8886,21 @@ run_beast(){
      done
 
      for proto in ssl3 tls1; do
-          if [[ "$proto" == "ssl3" ]] && ! locally_supported "-$proto"; then
+          if [[ "$proto" == "ssl3" ]] && ! "$using_sockets" && ! locally_supported "-$proto"; then
                continued=true
                out "                                           "
                continue
           fi
-          addcmd=""
-          [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
-          $OPENSSL s_client -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd >$TMPFILE 2>>$ERRFILE </dev/null
-          if ! sclient_connect_successful $? $TMPFILE; then      # protocol supported?
+          if [[ "$proto" != "ssl3" ]] || "$HAS_SSL3"; then
+               [[ ! "$proto" =~ ssl ]] && sni="$SNI" || sni=""
+               $OPENSSL s_client -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>>$ERRFILE </dev/null
+               sclient_connect_successful $? $TMPFILE
+          else
+               tls_sockets "00" "$TLS_CIPHER"
+          fi
+          if [[ $? -ne 0 ]]; then                                # protocol supported?
                if "$continued"; then                             # second round: we hit TLS1
-                    if "$HAS_SSL3"; then
+                    if "$HAS_SSL3" || "$using_sockets"; then
                          pr_done_goodln "no SSL3 or TLS1 (OK)"
                          fileout "beast" "OK" "BEAST: not vulnerable, no SSL3 or TLS1" "$cve" "$cwe"
                     else
@@ -8863,59 +8911,108 @@ run_beast(){
                else                # protocol not succeeded but it's the first time
                     continued=true
                     continue       # protocol not supported, so we do not need to check each cipher with that protocol
-                    "$WIDE" && outln
                fi
           fi # protocol succeeded
 
 
           # now we test in one shot with the precompiled ciphers
-          $OPENSSL s_client -"$proto" -cipher "$cbc_cipher_list" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd >$TMPFILE 2>>$ERRFILE </dev/null
-          sclient_connect_successful $? $TMPFILE || continue
+          if "$using_sockets"; then
+               case "$proto" in
+                    "ssl3") proto_hex="00" ;;
+                    "tls1") proto_hex="01" ;;
+               esac
+               tls_sockets "$proto_hex" "$cbc_cipher_list_hex"
+               [[ $? -eq 0 ]] || continue
+          else
+               $OPENSSL s_client -"$proto" -cipher "$cbc_cipher_list" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>>$ERRFILE </dev/null
+               sclient_connect_successful $? $TMPFILE || continue
+          fi
 
-          if "$WIDE"; then
+          detected_cbc_ciphers=""
+          for (( i=0; i < nr_ciphers; i++ )); do
+               ciphers_found[i]=false
+               sigalg[nr_ciphers]=""
+          done
+          while true; do
+               ciphers_to_test=""
+               for (( i=0; i < nr_ciphers; i++ )); do
+                    ! "${ciphers_found[i]}" && "${ossl_supported[i]}" && ciphers_to_test+=":${ciph[i]}"
+               done
+               [[ -z "$ciphers_to_test" ]] && break
+               $OPENSSL s_client -cipher "${ciphers_to_test:1}" -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>>$ERRFILE </dev/null
+               sclient_connect_successful $? $TMPFILE || break
+               cbc_cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+               [[ -z "$cbc_cipher" ]] && break
+               for (( i=0; i < nr_ciphers; i++ )); do
+                    [[ "$cbc_cipher" == "${ciph[i]}" ]] && break
+               done
+               ciphers_found[i]=true
+               detected_cbc_ciphers+=" ${ciph[i]}"
+               vuln_beast=true
+               if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                    dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                    kx[i]="${kx[i]} $dhlen"
+               fi
+               "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                    sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+          done
+          if "$using_sockets"; then
+               while true; do
+                    ciphers_to_test=""
+                    for (( i=0; i < nr_ciphers; i++ )); do
+                         ! "${ciphers_found[i]}" && ciphers_to_test+=", ${hexcode[i]}"
+                    done
+                    [[ -z "$ciphers_to_test" ]] && break
+                    if "$SHOW_SIGALGO"; then
+                         tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "all"
+                    else
+                         tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+                    fi
+                    [[ $? -ne 0 ]] && break
+                    cbc_cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    for (( i=0; i < nr_ciphers; i++ )); do
+                         [[ "$cbc_cipher" == "${rfc_ciph[i]}" ]] && break
+                    done
+                    ciphers_found[i]=true
+                    if [[ "${ciph[i]}" != "-" ]]; then
+                         detected_cbc_ciphers+=" ${ciph[i]}"
+                    else
+                         detected_cbc_ciphers+=" ${rfc_ciph[i]}"
+                    fi
+                    vuln_beast=true
+                    if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                         dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
+                         kx[i]="${kx[i]} $dhlen"
+                    fi
+                    "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
+                         sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               done
+          fi
+
+          if "$WIDE" && [[ -n "$detected_cbc_ciphers" ]]; then
                out "\n "; pr_underline "$(toupper $proto):\n";
                if "$first"; then
-                    neat_header         # NOT_THAT_NICE: we display the header also if in the end no cbc cipher is available on the client side
+                    neat_header
                fi
-          fi
-          for ciph in $(colon_to_spaces "$cbc_cipher_list"); do
-               read hexcode dash cbc_cipher sslvers kx auth enc mac < <($OPENSSL ciphers -V "$ciph" 2>>$ERRFILE)        # -V doesn't work with openssl < 1.0
-               #                                                    ^^^^^ process substitution as shopt will either segfault or doesn't work with old bash versions
-               $OPENSSL s_client -cipher "$cbc_cipher" -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd >$TMPFILE 2>>$ERRFILE </dev/null
-               sclient_connect_successful $? $TMPFILE
-               sclient_success=$?
-               if [[ $sclient_success -eq 0 ]]; then
-                    vuln_beast=true
-                    "$WIDE" && first=false
-               fi
-               if "$WIDE"; then
-                    normalize_ciphercode "$hexcode"
-                    if "$SHOW_EACH_C"; then
-                         [[ -z "$hexcode" ]] && continue
-                         neat_list "$HEXC" "$cbc_cipher" "$kx" "$enc"      #why this is needed?
-                         if [[ $sclient_success -eq 0 ]]; then
-                              if [[ -n "$higher_proto_supported" ]]; then
-                                   pr_svrty_minorln "available"
+               first=false
+               for (( i=0; i < nr_ciphers; i++ )); do
+                    if "${ciphers_found[i]}" || "$SHOW_EACH_C"; then
+                         neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+                         if "$SHOW_EACH_C"; then
+                              if "${ciphers_found[i]}"; then
+                                   if [[ -n "$higher_proto_supported" ]]; then
+                                        pr_svrty_minor "available"
+                                   else
+                                        pr_svrty_medium "available"
+                                   fi
                               else
-                                   pr_svrty_mediumln "available"
+                                   out "not a/v"
                               fi
-
-                         else
-                              outln "not a/v"
                          fi
-                    else
-                         if [[ $sclient_success -eq 0 ]]; then
-                              neat_list "$HEXC" "$cbc_cipher" "$kx" "$enc"
-                              outln
-                         fi
-                    fi
-               else # short display:
-                    if [[ $sclient_success -eq 0 ]]; then
-                         detected_cbc_ciphers="$detected_cbc_ciphers ""$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')"
-                         vuln_beast=true
-                    fi
-               fi
-          done
+                         outln "${sigalg[i]}"
+                    fi 
+               done
+          fi
 
           if ! "$WIDE"; then
                if [[ -n "$detected_cbc_ciphers" ]]; then
@@ -8971,6 +9068,7 @@ run_beast(){
      fi
      "$first" && ! "$vuln_beast" && pr_done_goodln "no CBC ciphers found for any protocol (OK)"
 
+     "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
      tmpfile_handle $FUNCNAME.txt
      return 0
 }
