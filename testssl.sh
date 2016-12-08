@@ -7281,25 +7281,25 @@ parse_tls_serverhello() {
                     # http://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8
                     case $named_curve in
                          1) dh_bits=163 ; named_curve_str="K-163" ;;
-                         2) dh_bits=163 ; named_curve_str="sect163r1" ;;
+                         2) dh_bits=162 ; named_curve_str="sect163r1" ;;
                          3) dh_bits=163 ; named_curve_str="B-163" ;;
                          4) dh_bits=193 ; named_curve_str="sect193r1" ;;
                          5) dh_bits=193 ; named_curve_str="sect193r2" ;;
-                         6) dh_bits=233 ; named_curve_str="K-233" ;;
+                         6) dh_bits=232 ; named_curve_str="K-233" ;;
                          7) dh_bits=233 ; named_curve_str="B-233" ;;
-                         8) dh_bits=239 ; named_curve_str="sect239k1" ;;
-                         9) dh_bits=283 ; named_curve_str="K-283" ;;
-                         10) dh_bits=283 ; named_curve_str="B-283" ;;
-                         11) dh_bits=409 ; named_curve_str="K-409" ;;
+                         8) dh_bits=238 ; named_curve_str="sect239k1" ;;
+                         9) dh_bits=281 ; named_curve_str="K-283" ;;
+                         10) dh_bits=282 ; named_curve_str="B-283" ;;
+                         11) dh_bits=407 ; named_curve_str="K-409" ;;
                          12) dh_bits=409 ; named_curve_str="B-409" ;;
-                         13) dh_bits=571 ; named_curve_str="K-571" ;;
-                         14) dh_bits=571 ; named_curve_str="B-571" ;;
-                         15) dh_bits=160 ; named_curve_str="secp160k1" ;;
-                         16) dh_bits=160 ; named_curve_str="secp160r1" ;;
-                         17) dh_bits=160 ; named_curve_str="secp160r2" ;;
+                         13) dh_bits=570 ; named_curve_str="K-571" ;;
+                         14) dh_bits=570 ; named_curve_str="B-571" ;;
+                         15) dh_bits=161 ; named_curve_str="secp160k1" ;;
+                         16) dh_bits=161 ; named_curve_str="secp160r1" ;;
+                         17) dh_bits=161 ; named_curve_str="secp160r2" ;;
                          18) dh_bits=192 ; named_curve_str="secp192k1" ;;
                          19) dh_bits=192 ; named_curve_str="P-192" ;;
-                         20) dh_bits=224 ; named_curve_str="secp224k1" ;;
+                         20) dh_bits=225 ; named_curve_str="secp224k1" ;;
                          21) dh_bits=224 ; named_curve_str="P-224" ;;
                          22) dh_bits=256 ; named_curve_str="secp256k1" ;;
                          23) dh_bits=256 ; named_curve_str="P-256" ;;
