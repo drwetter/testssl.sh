@@ -6476,6 +6476,7 @@ parse_sslv2_serverhello() {
      # [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
 
      local ret=3
+     local invalid=0
      if [[ "$2" == "true" ]]; then
           echo "======================================" > $TMPFILE
      fi
@@ -6499,6 +6500,7 @@ parse_sslv2_serverhello() {
 
           if [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
                ret=1
+               invalid=1
                if [[ $DEBUG -ge 2 ]]; then
                     echo "no correct server hello"
                     echo "SSLv2 server init byte:    0x0$v2_hello_initbyte"
@@ -6527,7 +6529,7 @@ parse_sslv2_serverhello() {
      fi
 
      # Output list of supported ciphers
-     if [[ "$2" == "true" ]]; then
+     if [[ "$2" == "true" && "$invalid" == 0 ]]; then
           let offset=26+$certificate_len
           nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
           for (( i=0 ; i<nr_ciphers_detected; i++ )); do
