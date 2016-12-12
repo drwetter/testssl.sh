@@ -9157,15 +9157,22 @@ run_lucky13() {
 # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 run_rc4() {
      local -i rc4_offered=0
-     local -i sclient_success
-     local hexcode dash rc4_cipher sslvers kx auth enc mac export
-     local rc4_ciphers_list="ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:DHE-DSS-RC4-SHA:AECDH-RC4-SHA:ADH-RC4-MD5:ECDH-RSA-RC4-SHA:ECDH-ECDSA-RC4-SHA:RC4-SHA:RC4-MD5:RC4-MD5:RSA-PSK-RC4-SHA:PSK-RC4-SHA:KRB5-RC4-SHA:KRB5-RC4-MD5:RC4-64-MD5:EXP1024-DHE-DSS-RC4-SHA:EXP1024-RC4-SHA:EXP-ADH-RC4-MD5:EXP-RC4-MD5:EXP-RC4-MD5:EXP-KRB5-RC4-SHA:EXP-KRB5-RC4-MD5"
-     local rc4_ssl2_ciphers_list="RC4-MD5:RC4-64-MD5:EXP-RC4-MD5"
-     local rc4_detected=""
-     local available=""
+     local -i nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 ret
+     local n auth mac export hexc sslv2_ciphers_hex="" sslv2_ciphers_ossl="" s
+     local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
+     local -i i
+     local -a ciphers_found ciphers_found2 hexcode2 ciph2 sslvers2 rfc_ciph2
+     local -i -a index
+     local dhlen available="" ciphers_to_test supported_sslv2_ciphers addcmd=""
+     local has_dh_bits="$HAS_DH_BITS" rc4_detected=""
+     local using_sockets=true
      local cve="CVE-2013-2566, CVE-2015-2808"
      local cwe="CWE-310"
      local hint=""
+
+     "$SSL_NATIVE" && using_sockets=false
+     "$FAST" && using_sockets=false
+     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
@@ -9176,62 +9183,215 @@ run_rc4() {
      fi
      pr_bold " RC4"; out " ($cve)        "
 
-     $OPENSSL s_client -cipher $rc4_ciphers_list $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
-     sclient_connect_successful $? $TMPFILE
-     sclient_success=$?
-     if $HAS_SSL2 && [[ $sclient_success -ne 0 ]]; then
-          $OPENSSL s_client -cipher $rc4_ssl2_ciphers_list $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-          sclient_connect_successful $? $TMPFILE
-          sclient_success=$?
+     # get a list of all the cipher suites to test
+     if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
+          for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+               if [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ "RC4" ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
+                    hexc="$(tolower "${TLS_CIPHER_HEXCODE[i]}")"
+                    ciph[nr_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
+                    rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
+                    sslvers[nr_ciphers]="${TLS_CIPHER_SSLVERS[i]}"
+                    kx[nr_ciphers]="${TLS_CIPHER_KX[i]}"
+                    enc[nr_ciphers]="${TLS_CIPHER_ENC[i]}"
+                    export2[nr_ciphers]="${TLS_CIPHER_EXPORT[i]}"
+                    ciphers_found[nr_ciphers]=false
+                    sigalg[nr_ciphers]=""
+                    ossl_supported[nr_ciphers]="${TLS_CIPHER_OSSL_SUPPORTED[i]}"
+                    if "$using_sockets" && "$WIDE" && ! "$HAS_DH_BITS" && 
+                       ( [[ ${kx[nr_ciphers]} == "Kx=ECDH" ]] || [[ ${kx[nr_ciphers]} == "Kx=DH" ]] || [[ ${kx[nr_ciphers]} == "Kx=EDH" ]] ); then
+                         ossl_supported[nr_ciphers]=false
+                    fi
+                    if [[ ${#hexc} -eq 9 ]]; then
+                         hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
+                         if [[ "${hexc:2:2}" == "00" ]]; then
+                              normalized_hexcode[nr_ciphers]="x${hexc:7:2}"
+                         else
+                              normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}"
+                         fi
+                    else
+                         hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2},${hexc:12:2}"
+                         normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}${hexc:12:2}"
+                         sslv2_ciphers_hex+=", ${hexcode[nr_ciphers]}"
+                         sslv2_ciphers_ossl+=":${ciph[nr_ciphers]}"
+                    fi
+                    nr_ciphers+=1
+               fi
+          done
+     else
+          while read hexc n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+               if [[ "${ciph[nr_ciphers]}" =~ "RC4" ]]; then
+                    ciphers_found[nr_ciphers]=false
+                    if [[ ${#hexc} -eq 9 ]]; then
+                         if [[ "${hexc:2:2}" == "00" ]]; then
+                              normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:7:2}")"
+                         else
+                              normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:2:2}${hexc:7:2}")"
+                         fi
+                    else
+                         normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:2:2}${hexc:7:2}${hexc:12:2}")"
+                         sslv2_ciphers_ossl+=":${ciph[nr_ciphers]}"
+                    fi
+                    sigalg[nr_ciphers]=""
+                    ossl_supported[nr_ciphers]=true
+                    nr_ciphers+=1
+               fi
+          done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
      fi
-     if [[ $sclient_success -eq  0 ]]; then
+
+     if "$using_sockets" && [[ -n "$sslv2_ciphers_hex" ]]; then
+          sslv2_sockets "${sslv2_ciphers_hex:2}" "true"
+          if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+               supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+               "$WIDE" && "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               for (( i=0 ; i<nr_ciphers; i++ )); do
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${normalized_hexcode[i]}" ]]; then
+                         ciphers_found[i]=true
+                         "$WIDE" && "$SHOW_SIGALGO" && sigalg[i]="$s"
+                         rc4_offered=1
+                    fi
+               done
+          fi
+     elif "$HAS_SSL2" && [[ -n "$sslv2_ciphers_ossl" ]]; then
+          $OPENSSL s_client -cipher "${sslv2_ciphers_ossl:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful "$?" "$TMPFILE"
+          if [[ "$?" -eq 0 ]]; then
+               supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
+               "$WIDE" && "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               for (( i=0 ; i<nr_ciphers; i++ )); do
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${ciph[i]}" ]]; then
+                         ciphers_found[i]=true
+                         "$WIDE" && "$SHOW_SIGALGO" && sigalg[i]="$s"
+                         rc4_offered=1
+                    fi
+               done
+          fi
+     fi
+
+     for (( i=0; i < nr_ciphers; i++ )); do
+          if "${ossl_supported[i]}" && [[ "${sslvers[i]}" != "SSLv2" ]]; then
+               ciphers_found2[nr_ossl_ciphers]=false
+               sslvers2[nr_ossl_ciphers]="${sslvers[i]}"
+               ciph2[nr_ossl_ciphers]="${ciph[i]}"
+               index[nr_ossl_ciphers]=$i
+               nr_ossl_ciphers+=1
+          fi
+     done
+
+     "$HAS_NO_SSL2" && addcmd="-no_ssl2"
+     for (( success=0; success==0 ; 1 )); do
+          ciphers_to_test=""
+          for (( i=0; i < nr_ossl_ciphers; i++ )); do
+               ! "${ciphers_found2[i]}" && ciphers_to_test+=":${ciph2[i]}"
+          done
+          success=1
+          if [[ -n "$ciphers_to_test" ]]; then
+               $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+               sclient_connect_successful "$?" "$TMPFILE"
+               if [[ "$?" -eq 0 ]]; then
+                    cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                    if [[ -n "$cipher" ]]; then
+                         success=0
+                         rc4_offered=1
+                         for (( i=0; i < nr_ossl_ciphers; i++ )); do
+                              [[ "$cipher" == "${ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                         done
+                         i=${index[i]}
+                         ciphers_found[i]=true
+                         if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                              dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                              kx[i]="${kx[i]} $dhlen"
+                         fi
+                         "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                              sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                    fi
+               fi
+          fi
+     done
+
+     if "$using_sockets"; then
+          for (( i=0; i < nr_ciphers; i++ )); do
+               if ! "${ciphers_found[i]}" && [[ "${sslvers[i]}" != "SSLv2" ]]; then
+                    ciphers_found2[nr_nonossl_ciphers]=false
+                    sslvers2[nr_nonossl_ciphers]="${sslvers[i]}"
+                    hexcode2[nr_nonossl_ciphers]="${hexcode[i]}"
+                    rfc_ciph2[nr_nonossl_ciphers]="${rfc_ciph[i]}"
+                    index[nr_nonossl_ciphers]=$i
+                    nr_nonossl_ciphers+=1
+               fi
+          done
+     fi
+
+     for (( success=0; success==0 ; 1 )); do
+          ciphers_to_test=""
+          for (( i=0; i < nr_nonossl_ciphers; i++ )); do
+               ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode2[i]}"
+          done
+          success=1
+          if [[ -n "$ciphers_to_test" ]]; then
+               if "$WIDE" && "$SHOW_SIGALGO"; then
+                    tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "all"
+               else
+                    tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+               fi
+               ret=$?
+               if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
+                    success=0
+                    rc4_offered=1
+                    cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    for (( i=0; i < nr_nonossl_ciphers; i++ )); do
+                         [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                    done
+                    i=${index[i]}
+                    ciphers_found[i]=true
+                    if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                         dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
+                         kx[i]="${kx[i]} $dhlen"
+                    fi
+                    "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
+                         sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               fi
+          fi
+     done
+
+     if [[ $rc4_offered -eq 1 ]]; then
           "$WIDE" || pr_svrty_high "VULNERABLE (NOT ok): "
-          rc4_offered=1
           if "$WIDE"; then
                outln "\n"
                neat_header
           fi
-          while read hexcode dash rc4_cipher sslvers kx auth enc mac; do
-               if [[ "$sslvers" == "SSLv2" ]]; then
-                    $OPENSSL s_client -cipher $rc4_cipher $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 </dev/null >$TMPFILE 2>$ERRFILE
-               else
-                    $OPENSSL s_client -cipher $rc4_cipher $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null >$TMPFILE 2>$ERRFILE
-               fi
-               sclient_connect_successful $? $TMPFILE
-               sclient_success=$?            # here we may have a fp with openssl < 1.0, TBC
-               if [[ $sclient_success -ne 0 ]] && ! "$SHOW_EACH_C"; then
+          for (( i=0 ; i<nr_ciphers; i++ )); do
+               if ! "${ciphers_found[i]}" && ! "$SHOW_EACH_C"; then
                     continue                 # no successful connect AND not verbose displaying each cipher
                fi
                if "$WIDE"; then
                     #FIXME: JSON+CSV in wide mode is missing
-                    normalize_ciphercode "$hexcode"
-                    neat_list "$HEXC" "$rc4_cipher" "$kx" "$enc"
+                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
                     if "$SHOW_EACH_C"; then
-                         if [[ $sclient_success -eq 0 ]]; then
+                         if "${ciphers_found[i]}"; then
                               pr_svrty_high "available"
                          else
                               out "not a/v"
                          fi
-                    else
-                         rc4_offered=1
-                         out
                     fi
-                    outln
-               else
-                    [[ $sclient_success -eq 0 ]] && pr_svrty_high "$rc4_cipher "
+                    outln "${sigalg[i]}"
+               elif "${ciphers_found[i]}"; then
+                    pr_svrty_high "${ciph[i]} "
                fi
-               [[ $sclient_success -eq 0 ]] && rc4_detected+="$rc4_cipher "
-          done < <($OPENSSL ciphers -V $rc4_ciphers_list:@STRENGTH)
+               "${ciphers_found[i]}" && rc4_detected+="${ciph[i]} "
+          done
           outln
           "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
           fileout "rc4" "HIGH" "RC4: VULNERABLE, Detected ciphers: $rc4_detected" "$cve" "$cwe" "$hint"
+     elif [[ $nr_ciphers -eq 0 ]]; then
+          local_problem_ln "No RC4 Ciphers configured in $OPENSSL"
+          fileout "rc4" "WARN" "RC4 ciphers not supported by local OpenSSL ($OPENSSL)"
      else
           pr_done_goodln "no RC4 ciphers detected (OK)"
           fileout "rc4" "OK" "RC4: not vulnerable" "$cve" "$cwe"
-          rc4_offered=0
      fi
      outln
 
+     "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
      tmpfile_handle $FUNCNAME.txt
      return $rc4_offered
 }
@@ -9571,7 +9731,7 @@ maketempf() {
 }
 
 prepare_debug() {
-     local hexc ossl_ciph ossl_supported_tls="" ossl_supported_sslv2=""
+     local hexc mac ossl_ciph ossl_supported_tls="" ossl_supported_sslv2=""
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
 
@@ -9650,7 +9810,7 @@ EOF
      if [[ -e $CIPHERS_BY_STRENGTH_FILE ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
           ossl_supported_tls="$($OPENSSL ciphers -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
-          while read hexc n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
+          while read hexc n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] mac TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
                TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS]="$hexc"
                TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=false
                if [[ ${#hexc} -eq 9 ]]; then
@@ -9928,7 +10088,7 @@ get_local_aaaa() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip6=$(grep -wh "$NODE" $etchosts 2>/dev/null | grep ':' | grep -v '^#' |  egrep  "[[:space:]]$NODE" | awk '{ print $1 }')
+     ip6=$(grep -wh "$1" $etchosts 2>/dev/null | grep ':' | egrep -v '^#|\.local' | egrep "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv6addr "$ip6"; then
           echo "$ip6"
      else
@@ -9941,7 +10101,7 @@ get_local_a() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip4=$(grep -wh "$1[^\.]" $etchosts 2>/dev/null | egrep -v ':|^#' |  egrep  "[[:space:]]$1" | awk '{ print $1 }')
+     ip4=$(grep -wh "$1" $etchosts 2>/dev/null | egrep -v ':|^#|\.local' |  egrep "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv4addr "$ip4"; then
           echo "$ip4"
      else
