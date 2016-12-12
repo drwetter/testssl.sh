@@ -6514,9 +6514,9 @@ parse_sslv2_serverhello() {
           fi
      fi
 
-     [[ "$2" == "true" ]] && [[ -e $HOSTCERT ]] && rm $HOSTCERT
-     [[ "$2" == "true" ]] && [[ -e $TEMPDIR/intermediatecerts.pem ]] && rm $TEMPDIR/intermediatecerts.pem
-     if [[ "$2" == "true" ]] && [[ $ret -eq 3 ]]; then
+     [[ "$2" == "true" ]] || return $ret
+     rm -f $HOSTCERT $TEMPDIR/intermediatecerts.pem
+     if [[ $ret -eq 3 ]]; then
           certificate_len=2*$(hex2dec "$v2_hello_cert_length")
      
           if [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
