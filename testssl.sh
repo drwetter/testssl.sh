@@ -6490,14 +6490,17 @@ parse_sslv2_serverhello() {
      # [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
 
      local ret=3
+     local parse_complete="false"
+
      if [[ "$2" == "true" ]]; then
-          echo "======================================" > $TMPFILE
+          parse_complete=true
      fi
+     "$parse_complete" && echo "======================================" > $TMPFILE
 
      v2_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
      [[ "$DEBUG" -ge 5 ]] && echo "$v2_hello_ascii"
      if [[ -z "$v2_hello_ascii" ]]; then
-          ret=0                                        # 1 line without any blanks: no server hello received
+          ret=0                                      # 1 line without any blanks: no server hello received
           debugme echo "server hello empty"
      else
           # now scrape two bytes out of the reply per byte
@@ -6528,7 +6531,8 @@ parse_sslv2_serverhello() {
           fi
      fi
 
-     [[ "$2" == "true" ]] || return $ret
+     "$parse_complete" || return $ret
+
      rm -f $HOSTCERT $TEMPDIR/intermediatecerts.pem
      if [[ $ret -eq 3 ]]; then
           certificate_len=2*$(hex2dec "$v2_hello_cert_length")
