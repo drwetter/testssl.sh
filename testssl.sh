@@ -226,6 +226,7 @@ HAS_SPDY=false
 HAS_FALLBACK_SCSV=false
 HAS_PROXY=false
 HAS_XMPP=false
+HAS_POSTGRES=false
 ADD_RFC_STR="rfc"                       # display RFC ciphernames
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
@@ -6227,6 +6228,16 @@ starttls_nntp_dialog() {
      return $ret
 }
 
+starttls_postgres_dialog() {
+     debugme echo "=== starting postgres STARTTLS dialog ==="
+     local reINITTLS="\x00\x00\x00\x08\x04\xD2\x16\x2F"
+     starttls_just_send "${reINITTLS}"                     && debugme echo "initiated STARTTLS" &&
+     starttls_full_read '' '' 'S'                          && debugme echo "received ack for STARTTLS"
+     local ret=$?
+     debugme echo "=== finished postgres STARTTLS dialog with ${ret} ==="
+     return $ret
+}
+
 # arg for a fd doesn't work here
 fd_socket() {
      local jabber=""
@@ -6300,6 +6311,9 @@ EOF
                     starttls_line "$jabber"
                     starttls_line "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" "proceed"
                     # BTW: https://xmpp.net !
+                    ;;
+               postgres|postgress) # Postgres SQL, see http://www.postgresql.org/docs/devel/static/protocol-message-formats.html
+                    starttls_postgres_dialog
                     ;;
                *) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
                     fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" -4
@@ -6476,14 +6490,17 @@ parse_sslv2_serverhello() {
      # [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
 
      local ret=3
+     local parse_complete="false"
+
      if [[ "$2" == "true" ]]; then
-          echo "======================================" > $TMPFILE
+          parse_complete=true
      fi
+     "$parse_complete" && echo "======================================" > $TMPFILE
 
      v2_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
      [[ "$DEBUG" -ge 5 ]] && echo "$v2_hello_ascii"
      if [[ -z "$v2_hello_ascii" ]]; then
-          ret=0                                        # 1 line without any blanks: no server hello received
+          ret=0                                      # 1 line without any blanks: no server hello received
           debugme echo "server hello empty"
      else
           # now scrape two bytes out of the reply per byte
@@ -6514,20 +6531,22 @@ parse_sslv2_serverhello() {
           fi
      fi
 
-     certificate_len=2*$(hex2dec "$v2_hello_cert_length")
-     [[ -e $HOSTCERT ]] && rm $HOSTCERT
-     [[ -e $TEMPDIR/intermediatecerts.pem ]] && rm $TEMPDIR/intermediatecerts.pem
-     if [[ "$2" == "true" ]] && [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
-          tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return $ret
-          asciihex_to_binary_file "${v2_hello_ascii:26:certificate_len}" "$tmp_der_certfile"
-          $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT
-          rm $tmp_der_certfile
-          get_pub_key_size
-          echo "======================================" >> $TMPFILE
-     fi
+     "$parse_complete" || return $ret
 
-     # Output list of supported ciphers
-     if [[ "$2" == "true" ]]; then
+     rm -f $HOSTCERT $TEMPDIR/intermediatecerts.pem
+     if [[ $ret -eq 3 ]]; then
+          certificate_len=2*$(hex2dec "$v2_hello_cert_length")
+     
+          if [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
+               tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return $ret
+               asciihex_to_binary_file "${v2_hello_ascii:26:certificate_len}" "$tmp_der_certfile"
+               $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT
+               rm $tmp_der_certfile
+               get_pub_key_size
+               echo "======================================" >> $TMPFILE
+          fi
+
+          # Output list of supported ciphers
           let offset=26+$certificate_len
           nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
           for (( i=0 ; i<nr_ciphers_detected; i++ )); do
@@ -9413,6 +9432,7 @@ test_openssl_suffix() {
 
 find_openssl_binary() {
      local s_client_has=$TEMPDIR/s_client_has.txt
+     local s_client_starttls_has=$TEMPDIR/s_client_starttls_has.txt
 
      # 0. check environment variable whether it's executable
      if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
@@ -9469,6 +9489,8 @@ find_openssl_binary() {
 
      $OPENSSL s_client -help 2>$s_client_has
 
+     $OPENSSL s_client -starttls foo 2>$s_client_starttls_has
+
      grep -qw '\-alpn' $s_client_has && \
           HAS_ALPN=true
 
@@ -9483,6 +9505,9 @@ find_openssl_binary() {
 
      grep -q '\-xmpp' $s_client_has && \
           HAS_XMPP=true
+
+     grep -q 'postgres' $s_client_starttls_has && \
+          HAS_POSTGRES=true
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
           if which timeout >&2 2>/dev/null ; then
@@ -9565,7 +9590,7 @@ help() {
 "$PROG_NAME <options> URI", where <options> is:
 
      -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol, 
-                                   protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap> (latter two require supplied openssl)
+                                   protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres> (latter three require supplied openssl)
      --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
      --file <fname>                mass testing option: Reads command lines from <fname>, one line per instance.
@@ -9698,6 +9723,7 @@ HAS_ALPN: $HAS_ALPN
 HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
 HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
+HAS_POSTGRES: $HAS_POSTGRES
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -10328,7 +10354,7 @@ determine_optimal_proto() {
 }
 
 
-# arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap (maybe with trailing s)
+# arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap, postgres (maybe with trailing s)
 determine_service() {
      local ua
      local protocol
@@ -10355,9 +10381,13 @@ determine_service() {
           service_detection $OPTIMAL_PROTO
      else
           # STARTTLS
-          protocol=${1%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+          if [[ "$1" == postgres ]]; then
+               protocol="postgres"
+          else
+               protocol=${1%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+          fi
           case "$protocol" in
-               ftp|smtp|pop3|imap|xmpp|telnet|ldap)
+               ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres)
                     STARTTLS="-starttls $protocol"
                     SNI=""
                     if [[ "$protocol" == xmpp ]]; then
@@ -10369,6 +10399,12 @@ determine_service() {
                               fi
                               STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # it's a hack -- instead of changing calls all over the place
                               # see http://xmpp.org/rfcs/rfc3920.html
+                         fi
+                    fi
+                    if [[ "$protocol" == postgres ]]; then
+                         # Check if openssl version supports postgres.
+                         if ! "$HAS_POSTGRES"; then
+                              fatal "Your $OPENSSL does not support the \"-starttls postgres\" option" -5
                          fi
                     fi
                     $OPENSSL s_client -connect $NODEIP:$PORT $PROXY $BUGS $STARTTLS 2>$ERRFILE >$TMPFILE </dev/null
@@ -10384,7 +10420,7 @@ determine_service() {
                     outln
                     ;;
                *)   outln
-                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet and ldap allowed" -4
+                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet, ldap and postgres allowed" -4
                     ;;
           esac
      fi
@@ -10696,8 +10732,8 @@ parse_cmd_line() {
                     STARTTLS_PROTOCOL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
-                         ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp) ;;
-                         ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
+                         ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres) ;;
+                         ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps|postgress) ;;
                          *)   pr_magentaln "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
