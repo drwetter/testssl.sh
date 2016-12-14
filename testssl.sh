@@ -695,7 +695,7 @@ set_color_functions() {
 strip_quote() {
      # remove color codes (see http://www.commandlinefu.com/commands/view/3584/remove-color-codes-special-characters-with-sed)
      #  \', leading and all trailing spaces
-     sed -e "s,\x1B\[[0-9;]*[a-zA-Z],,g" \
+     sed -e "s,$(echo -e "\033")\[[0-9;]*[a-zA-Z],,g" \
           -e "s/\"/\\'/g" \
           -e 's/^ *//g' \
           -e 's/ *$//g' <<< "$1"
