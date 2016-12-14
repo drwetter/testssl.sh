@@ -695,7 +695,7 @@ set_color_functions() {
 strip_quote() {
      # remove color codes (see http://www.commandlinefu.com/commands/view/3584/remove-color-codes-special-characters-with-sed)
      #  \', leading and all trailing spaces
-     sed -e "s,\x1B\[[0-9;]*[a-zA-Z],,g" \
+     sed -e "s,$(echo -e "\033")\[[0-9;]*[a-zA-Z],,g" \
           -e "s/\"/\\'/g" \
           -e 's/^ *//g' \
           -e 's/ *$//g' <<< "$1"
@@ -10830,22 +10830,18 @@ parse_cmd_line() {
                     do_logging=true
                     ;;
                --json)
-                    COLOR=0
                     do_json=true
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
                --jsonfile|--jsonfile=*)
-                    COLOR=0
                     JSONFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_json=true
                     ;;
                --json-pretty)
-                    COLOR=0
                     do_pretty_json=true
                     ;;
                --jsonfile-pretty|--jsonfile-pretty=*)
-                    COLOR=0
                     JSONFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_pretty_json=true
@@ -10858,12 +10854,10 @@ parse_cmd_line() {
                     GIVE_HINTS=true
                     ;;
                --csv)
-                    COLOR=0
                     do_csv=true
                     ;;   # DEFINITION of CSVFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
                --csvfile|--csvfile=*)
-                    COLOR=0
                     CSVFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
