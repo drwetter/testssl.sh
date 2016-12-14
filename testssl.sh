@@ -10830,18 +10830,22 @@ parse_cmd_line() {
                     do_logging=true
                     ;;
                --json)
+                    COLOR=0
                     do_json=true
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
                --jsonfile|--jsonfile=*)
+                    COLOR=0
                     JSONFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_json=true
                     ;;
                --json-pretty)
+                    COLOR=0
                     do_pretty_json=true
                     ;;
                --jsonfile-pretty|--jsonfile-pretty=*)
+                    COLOR=0
                     JSONFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_pretty_json=true
@@ -10854,10 +10858,12 @@ parse_cmd_line() {
                     GIVE_HINTS=true
                     ;;
                --csv)
+                    COLOR=0
                     do_csv=true
                     ;;   # DEFINITION of CSVFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
                --csvfile|--csvfile=*)
+                    COLOR=0
                     CSVFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
