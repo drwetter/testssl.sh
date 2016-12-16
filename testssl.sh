@@ -2556,7 +2556,7 @@ run_cipher_per_proto() {
                     ciphers_found[nr_ciphers]=false
                     sigalg[nr_ciphers]=""
                     ossl_supported[nr_ciphers]=${TLS_CIPHER_OSSL_SUPPORTED[i]}
-                    if "$using_sockets" && ! "$has_dh_bits" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                    if "$using_sockets" && ! "$has_dh_bits" && ( [[ ${kx[nr_ciphers]} == "Kx=ECDH" ]] || [[ ${kx[nr_ciphers]} == "Kx=DH" ]] || [[ ${kx[nr_ciphers]} == "Kx=EDH" ]] ); then
                          ossl_supported[nr_ciphers]=false
                     fi
                     if [[ ${#hexc} -eq 9 ]]; then
