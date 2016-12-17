@@ -2229,8 +2229,6 @@ test_just_one(){
                          if [[ $sclient_success -eq 0 ]]; then
                               dhlen=$(read_dhbits_from_file $TMPFILE quiet)
                               kx="$kx $dhlen"
-                         else
-                              kx="$kx$grey TBD $off "
                          fi
                     fi
                     neat_list $HEXC $ciph "$kx" $enc
