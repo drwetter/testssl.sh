@@ -4517,8 +4517,8 @@ run_server_preference() {
                               [[ ${cipher[i]} == "0000" ]] && cipher[i]=""                     # Hack!
                               [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
                          else
-                               proto[i]=""
-                               cipher[i]=""
+                              proto[i]=""
+                              cipher[i]=""
                          fi
                     fi
                     i=$(($i + 1))
