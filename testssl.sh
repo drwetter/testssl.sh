@@ -4499,6 +4499,7 @@ run_server_preference() {
                               tls_sockets "00" "$TLS_CIPHER"
                               if [[ $? -eq 0 ]]; then
                                    proto[i]="SSLv3"
+                                   cipher[i]=""
                                    cipher1=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                                    [[ $TLS_NR_CIPHERS -ne 0 ]] && cipher[i]="$(rfc2openssl "$cipher1")"
                                    [[ -z "${cipher[i]}" ]] && cipher[i]="$cipher1"
