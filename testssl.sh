@@ -9180,6 +9180,7 @@ run_beast(){
                first=false
                for (( i=0; i < nr_ciphers; i++ )); do
                     if "${ciphers_found[i]}" || "$SHOW_EACH_C"; then
+                         export="${export2[i]}"
                          neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
                          if "$SHOW_EACH_C"; then
                               if "${ciphers_found[i]}"; then
