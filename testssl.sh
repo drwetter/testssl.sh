@@ -8557,7 +8557,7 @@ run_ccs_injection(){
           fi
           ret=1
      fi
-     [[ $retval -eq 3 ]] && out " (timed out)"
+     [[ $retval -eq 3 ]] && out ", timed out"
      outln
 
      close_socket
@@ -8635,7 +8635,7 @@ run_renego() {
           echo R | $OPENSSL s_client $OPTIMAL_PROTO $BUGS $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $addcmd $PROXY >$TMPFILE 2>>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
           if [[ $? -eq 3 ]]; then
-               pr_done_good "likely not vulnerable (OK)"; outln " (timed out)"       # it hung
+               pr_done_good "likely not vulnerable (OK)"; outln ", timed out"        # it hung
                fileout "sec_client_renego" "OK" "Secure Client-Initiated Renegotiation : likely not vulnerable (timed out)" "$cve" "$cwe"
                sec_client_renego=1
           else
