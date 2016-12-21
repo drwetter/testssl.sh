@@ -3861,7 +3861,7 @@ run_client_simulation() {
 # generic function whether $1 is supported by s_client ($2: string to display)
 locally_supported() {
      [[ -n "$2" ]] && out "$2 "
-     if $OPENSSL s_client "$1" 2>&1 | grep -aq "unknown option"; then
+     if $OPENSSL s_client "$1" -connect x 2>&1 | grep -aq "unknown option"; then
           local_problem_ln "$OPENSSL doesn't support \"s_client $1\""
           return 7
      fi
@@ -6043,7 +6043,7 @@ run_pfs() {
           # find out what elliptic curves are supported.
           curves_offered=""
           for curve in "${curves_ossl[@]}"; do
-               $OPENSSL s_client -curves $curve 2>&1 | egrep -iaq "Error with command|unknown option"
+               $OPENSSL s_client -curves $curve -connect x 2>&1 | egrep -iaq "Error with command|unknown option"
                [[ $? -ne 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
           done
 
@@ -9544,13 +9544,13 @@ find_openssl_binary() {
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
 
-     $OPENSSL s_client -ssl2 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_SSL2=true
 
-     $OPENSSL s_client -ssl3 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -ssl3 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_SSL3=true
 
-     $OPENSSL s_client -no_ssl2 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -no_ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_NO_SSL2=true
 
      $OPENSSL s_client -help 2>$s_client_has
