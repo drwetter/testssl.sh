@@ -9382,6 +9382,7 @@ run_rc4() {
                fi
                if "$WIDE"; then
                     #FIXME: JSON+CSV in wide mode is missing
+                    export="${export2[i]}"
                     neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
                     if "$SHOW_EACH_C"; then
                          if "${ciphers_found[i]}"; then
