@@ -8811,18 +8811,27 @@ run_tls_fallback_scsv() {
 # Factoring RSA Export Keys: don't use EXPORT RSA ciphers, see https://freakattack.com/
 run_freak() {
      local -i sclient_success=0
-     local -i nr_supported_ciphers=0
-     # with correct build it should list these 7 ciphers (plus the two latter as SSLv2 ciphers):
-     local exportrsa_cipher_list="EXP1024-DES-CBC-SHA:EXP1024-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-RC4-MD5:EXP-RC4-MD5"
-     local addcmd="" addtl_warning=""
+     local -i i nr_supported_ciphers=0
+     # with correct build it should list these 9 ciphers (plus the two latter as SSLv2 ciphers):
+     local exportrsa_cipher_list="EXP1024-DES-CBC-SHA:EXP1024-RC2-CBC-MD5:EXP1024-RC4-SHA:EXP1024-RC4-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5"
+     local exportrsa_tls_cipher_list_hex="00,62, 00,61, 00,64, 00,60, 00,14, 00,0E, 00,08, 00,06, 00,03"
+     local exportrsa_ssl2_cipher_list_hex="04,00,80, 02,00,80"
+     local addcmd="" addtl_warning="" hexc
      local cve="CVE-2015-0204"
      local cwe="CWE-310"
      local hint=""
+     local using_sockets=true
+
+     "$SSL_NATIVE" && using_sockets=false
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for FREAK attack " && outln
      pr_bold " FREAK"; out " ($cve)                     "
 
-     nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportrsa_cipher_list))
+     if "$using_sockets"; then
+          nr_supported_ciphers=$(count_words "$exportrsa_tls_cipher_list_hex")+$(count_words "$exportrsa_ssl2_cipher_list_hex")
+     else
+          nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportrsa_cipher_list))
+     fi
      #echo "========= ${PIPESTATUS[*]}
 
      case $nr_supported_ciphers in
@@ -8838,12 +8847,26 @@ run_freak() {
           4|5|6|7)
                addtl_warning=" (tested with $nr_supported_ciphers/9 ciphers)" ;;
      esac
-     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO"
-     [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
-     $OPENSSL s_client $STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $addcmd >$TMPFILE 2>$ERRFILE </dev/null
-     sclient_connect_successful $? $TMPFILE
-     sclient_success=$?
-     [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     if "$using_sockets"; then
+          tls_sockets "03" "$exportrsa_tls_cipher_list_hex"
+          sclient_success=$?
+          [[ $sclient_success -eq 2 ]] && sclient_success=0
+          if [[ $sclient_success -ne 0 ]]; then
+               sslv2_sockets "$exportrsa_ssl2_cipher_list_hex"
+               [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]] && sclient_success=0
+          fi
+     else
+          "$HAS_NO_SSL2" && addcmd="-no_ssl2" || addcmd=""
+          $OPENSSL s_client $STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI $addcmd >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
+          [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          if [[ $sclient_success -ne 0 ]] && "$HAS_SSL2"; then
+               $OPENSSL s_client $STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+               sclient_connect_successful $? $TMPFILE
+               sclient_success=$?
+          fi
+     fi
      if [[ $sclient_success -eq 0 ]]; then
           pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
           fileout "freak" "CRITICAL" "FREAK: VULNERABLE, uses EXPORT RSA ciphers" "$cve" "$cwe" "$hint"
@@ -8853,7 +8876,24 @@ run_freak() {
      fi
      outln
 
-     debugme echo $(actually_supported_ciphers $exportrsa_cipher_list)
+     if [[ $DEBUG -ge 2 ]]; then
+          if "$using_sockets"; then
+               for hexc in $(sed 's/, / /g' <<< "$exportrsa_tls_cipher_list_hex, $exportrsa_ssl2_cipher_list_hex"); do
+                    if [[ ${#hexc} -eq 5 ]]; then
+                         hexc="0x${hexc:0:2},0x${hexc:3:2}"
+                    else
+                         hexc="0x${hexc:0:2},0x${hexc:3:2},0x${hexc:6:2}"
+                    fi
+                    for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+                         [[ "$hexc" == "${TLS_CIPHER_HEXCODE[i]}" ]] && break
+                    done
+                    [[ $i -eq $TLS_NR_CIPHERS ]] && out "$hexc " || out "${TLS_CIPHER_OSSL_NAME[i]} "
+               done
+               outln
+          else
+               echo $(actually_supported_ciphers $exportrsa_cipher_list)
+          fi
+     fi
      debugme echo $nr_supported_ciphers
 
      tmpfile_handle $FUNCNAME.txt
