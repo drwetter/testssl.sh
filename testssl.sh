@@ -2008,23 +2008,42 @@ listciphers() {
 }
 
 
-# argv[1]: cipher list to test
+# argv[1]: cipher list to test in OpenSSL syntax
 # argv[2]: string on console
 # argv[3]: ok to offer? 0: yes, 1: no
 # argv[4]: string for fileout
+# argv[5]: non-SSLv2 cipher list to test (hexcodes), if using sockets
+# argv[6]: SSLv2 cipher list to test (hexcodes), if using sockets
 std_cipherlists() {
      local -i sclient_success
      local singlespaces proto="" addcmd=""
      local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
 
-     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO" && proto="$OPTIMAL_PROTO"
-     [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
+     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && proto="$OPTIMAL_PROTO"
      pr_bold "$2    "                   # indenting to be in the same row as server preferences
-     if listciphers "$1" $proto; then   # is that locally available??
-          $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $addcmd 2>$ERRFILE >$TMPFILE </dev/null
-          sclient_connect_successful $? $TMPFILE
-          sclient_success=$?
-          debugme cat $ERRFILE
+     if [[ -n "$5" ]] || listciphers "$1" $proto; then
+          if [[ -z "$5" ]] || ( "$FAST" && listciphers "$1" -tls1 ); then
+               "$HAS_NO_SSL2" && addcmd="-no_ssl2"
+               $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $addcmd 2>$ERRFILE >$TMPFILE </dev/null
+               sclient_connect_successful $? $TMPFILE
+               sclient_success=$?
+               debugme cat $ERRFILE
+          else
+               tls_sockets "03" "$5"
+               sclient_success=$?
+               [[ $sclient_success -eq 2 ]] && sclient_success=0
+          fi
+          if [[ $sclient_success -ne 0 ]] && has_server_protocol "ssl2"; then
+               if ( [[ -z "$6" ]] || "$FAST" ) && "$HAS_SSL2" && listciphers "$1" -ssl2; then
+                    $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY -ssl2 2>$ERRFILE >$TMPFILE </dev/null
+                    sclient_connect_successful $? $TMPFILE
+                    sclient_success=$?
+                    debugme cat $ERRFILE
+               elif [[ -n "$6" ]]; then
+                    sslv2_sockets "$6"
+                    [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]] && sclient_success=0
+               fi
+          fi
           case $3 in
                0)   # ok to offer
                     if [[ $sclient_success -eq 0 ]]; then
@@ -4207,21 +4226,124 @@ run_protocols() {
 
 #TODO: work with fixed lists here
 run_std_cipherlists() {
+     local hexc hexcode strength
+     local -i i
+     local null_ciphers="" anon_ciphers="" adh_ciphers="" exp40_ciphers=""
+     local exp56_ciphers="" exp_ciphers="" low_ciphers="" des_ciphers=""
+     local medium_ciphers="" tdes_ciphers="" high_ciphers=""
+     local sslv2_null_ciphers="" sslv2_anon_ciphers="" sslv2_adh_ciphers="" sslv2_exp40_ciphers=""
+     local sslv2_exp56_ciphers="" sslv2_exp_ciphers="" sslv2_low_ciphers="" sslv2_des_ciphers=""
+     local sslv2_medium_ciphers="" sslv2_tdes_ciphers="" sslv2_high_ciphers=""
+     local using_sockets=true
+
+     "$SSL_NATIVE" && using_sockets=false
+     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
+
+     if "$using_sockets"; then
+          for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+               hexc="${TLS_CIPHER_HEXCODE[i]}"
+               strength="${TLS_CIPHER_ENC[i]}"
+               strength="${strength//\)/}"
+               strength="${strength#*\(}"
+
+               if [[ ${#hexc} -eq 9 ]]; then
+                    hexcode="${hexc:2:2},${hexc:7:2}"
+                    [[ "${TLS_CIPHER_ENC[i]}" == "Enc=None" ]] && \
+                         null_ciphers+=", $hexcode"
+                    [[ "${TLS_CIPHER_AUTH[i]}" == "Au=None" ]] && \
+                         anon_ciphers+=", $hexcode"
+                    [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ "TLS_DH_anon_" ]] && \
+                         adh_ciphers+=", $hexcode"
+                    [[ $strength -eq 40 ]] && exp40_ciphers+=", $hexcode"
+#                    [[ $strength -eq 56 ]] && exp56_ciphers+=", $hexcode"
+                    [[ $strength -eq 56 ]] && \
+                         [[ "${TLS_CIPHER_EXPORT[i]}" == "export" ]] && \
+                         exp56_ciphers+=", $hexcode"
+                    [[ "${TLS_CIPHER_EXPORT[i]}" == "export" ]] && \
+                         exp_ciphers+=", $hexcode"
+                    if [[ "${TLS_CIPHER_AUTH[i]}" != "Au=None" ]]; then
+#                         [[ $strength -le 64 ]] && low_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" != "Enc=None" ]] && \
+                              [[ $strength -le 64 ]] && \
+                              [[ "${TLS_CIPHER_EXPORT[i]}" != "export" ]] && \
+                              low_ciphers+=", $hexcode" 
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=DES(56)" ]] && \
+                              [[ "${TLS_CIPHER_EXPORT[i]}" != "export" ]] && \
+                              des_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=SEED(128)" ]] && \
+                              medium_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=RC4(128)" ]] && \
+                              medium_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=IDEA(128)" ]] && \
+                              medium_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=3DES(168)" ]] && \
+                              tdes_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=AES"* ]] && \
+                              high_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=Camellia"* ]] && \
+                              high_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=ChaCha20"* ]] && \
+                              high_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=GOST"* ]] && \
+                              high_ciphers+=", $hexcode"
+                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=ARIA"* ]] && \
+                              high_ciphers+=", $hexcode"
+                    fi
+               else
+                    hexcode="${hexc:2:2},${hexc:7:2},${hexc:12:2}"
+                    [[ $strength -eq 40 ]] && sslv2_exp40_ciphers+=", $hexcode"
+#                    [[ $strength -eq 56 ]] && sslv2_exp56_ciphers+=", $hexcode"
+                    [[ "${TLS_CIPHER_EXPORT[i]}" == "export" ]] && \
+                         sslv2_exp_ciphers+=", $hexcode"
+#                    [[ $strength -le 64 ]] && sslv2_low_ciphers+=", $hexcode"
+                    [[ $strength -le 64 ]] && \
+                         [[ "${TLS_CIPHER_EXPORT[i]}" != "export" ]] && \
+                         sslv2_low_ciphers+=", $hexcode"
+                    [[ "${TLS_CIPHER_ENC[i]}" == "Enc=DES(56)" ]] && \
+                         sslv2_des_ciphers+=", $hexcode"
+                    [[ "${TLS_CIPHER_ENC[i]}" == "Enc=3DES(168)" ]] && \
+                         sslv2_tdes_ciphers+=", $hexcode"
+               fi
+          done
+          [[ -n "$null_ciphers" ]] && null_ciphers="${null_ciphers:2}, 00,ff"
+          [[ -n "$anon_ciphers" ]] && anon_ciphers="${anon_ciphers:2}, 00,ff"
+          [[ -n "$adh_ciphers" ]] && adh_ciphers="${adh_ciphers:2}, 00,ff"
+          [[ -n "$exp40_ciphers" ]] && exp40_ciphers="${exp40_ciphers:2}, 00,ff"
+          [[ -n "$exp56_ciphers" ]] && exp56_ciphers="${exp56_ciphers:2}, 00,ff"
+          [[ -n "$exp_ciphers" ]] && exp_ciphers="${exp_ciphers:2}, 00,ff"
+          [[ -n "$low_ciphers" ]] && low_ciphers="${low_ciphers:2}, 00,ff"
+          [[ -n "$des_ciphers" ]] && des_ciphers="${des_ciphers:2}, 00,ff"
+          [[ -n "$medium_ciphers" ]] && medium_ciphers="${medium_ciphers:2}, 00,ff"
+          [[ -n "$tdes_ciphers" ]] && tdes_ciphers="${tdes_ciphers:2}, 00,ff"
+          [[ -n "$high_ciphers" ]] && high_ciphers="${high_ciphers:2}, 00,ff"
+          [[ -n "$sslv2_null_ciphers" ]] && sslv2_null_ciphers="${sslv2_null_ciphers:2}"
+          [[ -n "$sslv2_anon_ciphers" ]] && sslv2_anon_ciphers="${sslv2_anon_ciphers:2}"
+          [[ -n "$sslv2_adh_ciphers" ]] && sslv2_adh_ciphers="${sslv2_adh_ciphers:2}"
+          [[ -n "$sslv2_exp40_ciphers" ]] && sslv2_exp40_ciphers="${sslv2_exp40_ciphers:2}"
+          [[ -n "$sslv2_exp56_ciphers" ]] && sslv2_exp56_ciphers="${sslv2_exp56_ciphers:2}"
+          [[ -n "$sslv2_exp_ciphers" ]] && sslv2_exp_ciphers="${sslv2_exp_ciphers:2}"
+          [[ -n "$sslv2_low_ciphers" ]] && sslv2_low_ciphers="${sslv2_low_ciphers:2}"
+          [[ -n "$sslv2_des_ciphers" ]] && sslv2_des_ciphers="${sslv2_des_ciphers:2}"
+          [[ -n "$sslv2_medium_ciphers" ]] && sslv2_medium_ciphers="${sslv2_medium_ciphers:2}"
+          [[ -n "$sslv2_tdes_ciphers" ]] && sslv2_tdes_ciphers="${sslv2_tdes_ciphers:2}"
+          [[ -n "$sslv2_high_ciphers" ]] && sslv2_high_ciphers="${sslv2_high_ciphers:2}"
+     fi
+
      outln
      pr_headlineln " Testing ~standard cipher lists "
      outln
 # see ciphers(1ssl) or run 'openssl ciphers -v'
-     std_cipherlists 'NULL:eNULL'                       " Null Ciphers             " 1 "NULL"
-     std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   " 1 "aNULL"
-     std_cipherlists 'ADH'                              " Anonymous DH Ciphers     " 1 "ADH"
-     std_cipherlists 'EXPORT40'                         " 40 Bit encryption        " 1 "EXPORT40"
-     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        " 1 "EXPORT56"
-     std_cipherlists 'EXPORT'                           " Export Ciphers (general) " 1 "EXPORT"
-     std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1 "LOW"
-     std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1 "DES"
-     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2:!3DES' " \"Medium\" grade encryption" 2 "MEDIUM"
-     std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3 "3DES"
-     std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    " 0 "HIGH"
+     std_cipherlists 'NULL:eNULL'                       " Null Ciphers             "   1 "NULL"     "$null_ciphers"   "$sslv2_null_ciphers"
+     std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   "   1 "aNULL"    "$anon_ciphers"   "$sslv2_anon_ciphers"
+     std_cipherlists 'ADH'                              " Anonymous DH Ciphers     "   1 "ADH"      "$adh_ciphers"    "$sslv2_adh_ciphers"
+     std_cipherlists 'EXPORT40'                         " 40 Bit encryption        "   1 "EXPORT40" "$exp40_ciphers"  "$sslv2_exp40_ciphers"
+     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        "   1 "EXPORT56" "$exp56_ciphers"  "$sslv2_exp56_ciphers"
+     std_cipherlists 'EXPORT'                           " Export Ciphers (general) "   1 "EXPORT"   "$exp_ciphers"    "$sslv2_exp_ciphers"
+     std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           "   1 "LOW"      "$low_ciphers"    "$sslv2_low_ciphers"
+     std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              "   1 "DES"      "$des_ciphers"    "$sslv2_des_ciphers"
+     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2:!3DES' " \"Medium\" grade encryption" 2 "MEDIUM"   "$medium_ciphers" "$sslv2_medium_ciphers"
+     std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       "   3 "3DES"     "$tdes_ciphers"   "$sslv2_tdes_ciphers"
+     std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    "   0 "HIGH"     "$high_ciphers"   "$sslv2_high_ciphers"
      outln
      return 0
 }
