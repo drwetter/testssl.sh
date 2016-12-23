@@ -6268,7 +6268,7 @@ http2_pre(){
           fileout "https_alpn" "WARN" "HTTP2/ALPN : HTTP/2 was not tested as proxies do not support proxying it"
           return 1
      fi
-     if ! "$HAS_ALPN"; then
+     if ! "$HAS_ALPN" && "$SSL_NATIVE"; then
           local_problem_ln "$OPENSSL doesn't support HTTP2/ALPN";
           fileout "https_alpn" "WARN" "HTTP2/ALPN : HTTP/2 was not tested as $OPENSSL does not support it"
           return 7
@@ -6313,7 +6313,7 @@ run_spdy() {
 
 
 run_http2() {
-     local tmpstr
+     local tmpstr alpn_extn len
      local -i ret=0
      local had_alpn_proto=false
      local alpn_finding=""
@@ -6325,7 +6325,21 @@ run_http2() {
      fi
      for proto in $ALPN_PROTOs; do
           # for some reason OpenSSL doesn't list the advertised protocols, so instead try common protocols
-          $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -alpn $proto </dev/null 2>$ERRFILE >$TMPFILE
+          if "$HAS_ALPN"; then
+               $OPENSSL s_client -connect $NODEIP:$PORT $BUGS $SNI -alpn $proto </dev/null 2>$ERRFILE >$TMPFILE
+          else
+               alpn_extn="$(printf "%02x" ${#proto}),$(string_to_asciihex "$proto")"
+               len="$(printf "%04x" $((${#proto}+1)))"
+               alpn_extn="${len:0:2},${len:2:2},$alpn_extn"
+               len="$(printf "%04x" $((${#proto}+3)))"
+               alpn_extn="00,10,${len:0:2},${len:2:2},$alpn_extn"
+               tls_sockets "03" "$TLS12_CIPHER" "all" "$alpn_extn"
+               if [[ -r "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ]]; then
+                    cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+               else
+                    echo "" > $TMPFILE
+               fi
+          fi
           #tmpstr=$(grep -a '^ALPN protocol' $TMPFILE | sed 's/ALPN protocol.*: //')
           #tmpstr=$(awk '/^ALPN protocol*:/ { print $2 }' $TMPFILE)
           tmpstr=$(awk -F':' '/^ALPN protocol*:/ { print $2 }' $TMPFILE)
