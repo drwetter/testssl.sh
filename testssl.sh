@@ -2350,8 +2350,8 @@ run_allciphers() {
           pr_headlineln " Testing $nr_ciphers_tested via OpenSSL and sockets against the server, ordered by encryption strength "
      else
           pr_headlineln " Testing all $nr_ciphers_tested locally available ciphers against the server, ordered by encryption strength "
-          outln
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
+          outln
           if ! "$HAS_DH_BITS"; then
                [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
                pr_warningln " Your $OPENSSL cannot show DH/ECDH bits"
@@ -2526,8 +2526,8 @@ run_cipher_per_proto() {
           pr_headlineln " Testing per protocol via OpenSSL and sockets against the server, ordered by encryption strength "
      else
           pr_headlineln " Testing all locally available ciphers per protocol against the server, ordered by encryption strength "
-          outln
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
+          outln
           if ! "$HAS_DH_BITS"; then
                [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
                pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
@@ -9483,8 +9483,11 @@ get_install_dir() {
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
-     [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && unset ADD_RFC_STR && pr_warningln "\nNo cipher mapping file in \$TESTSSL_INSTALL_DIR/etc/ found"
+     [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && unset ADD_RFC_STR && pr_warningln "\nNo cipher mapping file found "
      debugme echo "$CIPHERS_BY_STRENGTH_FILE"
+     pr_warningln "Please note from 2.9dev on testssl.sh needs some files in \$TESTSSL_INSTALL_DIR/etc to function correctly"
+     ignore_no_or_lame "Type \"yes\" to ignore "
+     [[ $? -ne 0 ]] && exit -2
 }
 
 
@@ -9622,13 +9625,15 @@ check4openssl_oldfarts() {
                ;;
      esac
      if [[ $OSSL_VER_MAJOR -lt 1 ]]; then ## mm: Patch for libressl
-          pr_magentaln " Your \"$OPENSSL\" is way too old (<version 1.0) !"
+          pr_warningln " Your \"$OPENSSL\" is way too old (<version 1.0) !"
           case $SYSTEM in
                *BSD|Darwin)
-                    outln " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl" ;;
-               *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" ;;
+                    outln " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl" 
+                    fileout "too_old_openssl" "WARN" "Your $OPENSSL $OSSL_VER version is way too old. Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl ." ;;
+               *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" 
+                    fileout "too_old_openssl" "WARN" "Update openssl binaries or compile from github.com/PeterMosmans/openssl .";;
           esac
-          ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
+          ignore_no_or_lame " Type \"yes\" to accept false negatives or positives "
           [[ $? -ne 0 ]] && exit -2
      fi
      outln
