@@ -9483,11 +9483,14 @@ get_install_dir() {
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
-     [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && unset ADD_RFC_STR && pr_warningln "\nNo cipher mapping file found "
-     debugme echo "$CIPHERS_BY_STRENGTH_FILE"
-     pr_warningln "Please note from 2.9dev on testssl.sh needs some files in \$TESTSSL_INSTALL_DIR/etc to function correctly"
-     ignore_no_or_lame "Type \"yes\" to ignore "
-     [[ $? -ne 0 ]] && exit -2
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] ; then
+          unset ADD_RFC_STR 
+          pr_warningln "\nNo cipher mapping file found "
+          debugme echo "$CIPHERS_BY_STRENGTH_FILE"
+          pr_warningln "Please note from 2.9dev on testssl.sh needs some files in \$TESTSSL_INSTALL_DIR/etc to function correctly"
+          ignore_no_or_lame "Type \"yes\" to ignore "
+          [[ $? -ne 0 ]] && exit -2
+     fi
 }
 
 
