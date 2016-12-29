@@ -9386,7 +9386,7 @@ run_logjam() {
                server_key_exchange="${server_key_exchange%%[!0-9A-F]*}"
                server_key_exchange_len=${#server_key_exchange}
                [[ $server_key_exchange_len -gt 8 ]] && [[ "${server_key_exchange:0:2}" == "0C" ]] && ephemeral_pub_len=$(hex2dec "${server_key_exchange:2:6}")
-               [[ $ephemeral_pub_len -le $server_key_exchange_len ]] && key_bitstring="$(get_dh_ephemeralkey "${server_key_exchange:8}")"
+               [[ $ephemeral_pub_len -ne 0 ]] && [[ $ephemeral_pub_len -le $server_key_exchange_len ]] && key_bitstring="$(get_dh_ephemeralkey "${server_key_exchange:8}")"
           fi
      fi
      if [[ -n "$key_bitstring" ]]; then
