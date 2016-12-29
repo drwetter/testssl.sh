@@ -573,7 +573,7 @@ pr_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;32m$1" 
 pr_blueln()     { pr_blue "$1"; outln; }
 
 pr_warning()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }                                  # some local problem: one test cannot be done
-pr_warningln() { pr_warning "$1"; outln; }                                                                                   # litemagenya
+pr_warningln() { pr_warning "$1"; outln; }                                                                                   # litemagenta
 pr_magenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }                                  # fatal error: quitting because of this!
 pr_magentaln() { pr_magenta "$1"; outln; }
 
@@ -2207,10 +2207,20 @@ neat_list(){
 }
 
 test_just_one(){
-     local hexcode n ciph sslvers kx auth enc mac export
-     local dhlen
-     local sclient_success
+     local hexc n auth export ciphers_to_test supported_sslv2_ciphers s
+     local -a hexcode normalized_hexcode ciph sslvers kx enc export2 sigalg
+     local -a ciphers_found ciphers_found2 ciph2 rfc_ciph rfc_ciph2 ossl_supported
+     local -a -i index
+     local -i nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0
+     local -i num_bundles mod_check bundle_size bundle end_of_bundle
+     local addcmd dhlen has_dh_bits="$HAS_DH_BITS"
+     local -i sclient_success
      local re='^[0-9A-Fa-f]+$'
+     local using_sockets=true
+
+     "$SSL_NATIVE" && using_sockets=false
+     "$FAST" && using_sockets=false
+     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
      pr_headline " Testing single cipher with "
      if [[ $1 =~ $re ]]; then
@@ -2221,46 +2231,240 @@ test_just_one(){
           tjolines="$tjolines word pattern \"$1\" (ignore case)\n\n"
      fi
      outln
-     ! "$HAS_DH_BITS" && pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
+     if ! "$using_sockets"; then
+          [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
+          if ! "$HAS_DH_BITS"; then
+               [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
+               pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
+          fi
+     fi
      outln
      neat_header
      #for arg in $(echo $@ | sed 's/,/ /g'); do
      for arg in ${*//, /}; do
-          # 1st check whether openssl has cipher or not
-          $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | while read hexcode dash ciph sslvers kx auth enc mac export ; do
-          # FIXME: e.g. OpenSSL < 1.0 doesn't understand "-V" --> we can't do anything about it!
-               normalize_ciphercode $hexcode
-               # is argument a number?
-               if [[ $arg =~ $re ]]; then
-                    neat_list $HEXC $ciph $kx $enc | grep -qai "$arg"
-               else
-                    neat_list $HEXC $ciph $kx $enc | grep -qwai "$arg"
-               fi
-               if [[ $? -eq 0 ]]; then    # string matches, so we can ssl to it:
-                    if [[ "$sslvers" == "SSLv2" ]]; then
-                         $OPENSSL s_client -ssl2 -cipher $ciph $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY 2>$ERRFILE >$TMPFILE </dev/null
-                    else
-                         $OPENSSL s_client -cipher $ciph $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>$ERRFILE >$TMPFILE </dev/null
-                    fi
-                    sclient_connect_successful $? $TMPFILE
-                    sclient_success=$?
-                    if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
-                         if [[ $sclient_success -eq 0 ]]; then
-                              dhlen=$(read_dhbits_from_file $TMPFILE quiet)
-                              kx="$kx $dhlen"
+          if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
+               for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+                    hexc="${TLS_CIPHER_HEXCODE[i]}"
+                    if [[ ${#hexc} -eq 9 ]]; then
+                         hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
+                         if [[ "${hexc:2:2}" == "00" ]]; then
+                              normalized_hexcode[nr_ciphers]="x${hexc:7:2}"
+                         else
+                              normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}"
                          fi
-                    fi
-                    neat_list $HEXC $ciph "$kx" $enc
-                    if [[ $sclient_success -eq 0 ]]; then
-                         pr_cyan "  available"
-                         fileout "cipher_$HEXC" "INFO" "$(neat_header)(neat_list $HEXC $ciph "$kx" $enc) available"
                     else
-                         out "  not a/v"
-                         fileout "cipher_$HEXC" "INFO" "$(neat_header)(neat_list $HEXC $ciph "$kx" $enc) not a/v"
+                         hexc="$(tolower "$hexc")"
+                         hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2},${hexc:12:2}"
+                         normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}${hexc:12:2}"
                     fi
-                    outln
+                    if [[ $arg =~ $re ]]; then
+                         neat_list "${normalized_hexcode[nr_ciphers]}" "${TLS_CIPHER_OSSL_NAME[i]}" "${TLS_CIPHER_KX[i]}" "${TLS_CIPHER_ENC[i]}" | grep -qai "$arg"
+                    else
+                         neat_list "${normalized_hexcode[nr_ciphers]}" "${TLS_CIPHER_OSSL_NAME[i]}" "${TLS_CIPHER_KX[i]}" "${TLS_CIPHER_ENC[i]}" | grep -qwai "$arg"
+                    fi
+                    if [[ $? -eq 0 ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then    # string matches, so we can ssl to it:
+                         normalized_hexcode[nr_ciphers]="$(tolower "${normalized_hexcode[nr_ciphers]}")"
+                         ciph[nr_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
+                         rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
+                         kx[nr_ciphers]="${TLS_CIPHER_KX[i]}"
+                         enc[nr_ciphers]="${TLS_CIPHER_ENC[i]}"
+                         sslvers[nr_ciphers]="${TLS_CIPHER_SSLVERS[i]}"
+                         export2[nr_ciphers]="${TLS_CIPHER_EXPORT[i]}"
+                         ciphers_found[nr_ciphers]=false
+                         sigalg[nr_ciphers]=""
+                         ossl_supported[nr_ciphers]="${TLS_CIPHER_OSSL_SUPPORTED[i]}"
+                         if "$using_sockets" && ! "$has_dh_bits" && \
+                            ( [[ ${kx[nr_ciphers]} == "Kx=ECDH" ]] || [[ ${kx[nr_ciphers]} == "Kx=DH" ]] || [[ ${kx[nr_ciphers]} == "Kx=EDH" ]] ); then
+                              ossl_supported[nr_ciphers]=false
+                         fi
+                         nr_ciphers+=1
+                    fi
+               done
+          else
+               while read hexc n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+                    normalize_ciphercode $hexc
+                    # is argument a number?
+                    if [[ $arg =~ $re ]]; then
+                         neat_list "$HEXC" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" | grep -qai "$arg"
+                    else
+                         neat_list "$HEXC" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" | grep -qwai "$arg"
+                    fi
+                    if [[ $? -eq 0 ]]; then    # string matches, so we can ssl to it:
+                         ciphers_found[nr_ciphers]=false
+                         normalized_hexcode[nr_ciphers]="$HEXC"
+                         sigalg[nr_ciphers]=""
+                         ossl_supported[nr_ciphers]=true
+                         nr_ciphers+=1
+                    fi
+               done < <($OPENSSL ciphers $ossl_ciphers_proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+          fi
+
+          # Test the SSLv2 ciphers, if any.
+          if "$using_sockets"; then
+               ciphers_to_test=""
+               for (( i=0; i < nr_ciphers; i++ )); do
+                    if [[ "${sslvers[i]}" == "SSLv2" ]]; then
+                         ciphers_to_test+=", ${hexcode[i]}"
+                    fi
+               done
+               if [[ -n "$ciphers_to_test" ]]; then
+                    sslv2_sockets "${ciphers_to_test:2}" "true"
+                    if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+                         supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+                         "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         for (( i=0 ; i<nr_ciphers; i++ )); do
+                              if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${normalized_hexcode[i]}" ]]; then
+                                   ciphers_found[i]=true
+                                   "$SHOW_SIGALGO" && sigalg[i]="$s"
+                              fi
+                         done
+                    fi
+               fi
+          else
+               ciphers_to_test=""
+               for (( i=0; i < nr_ciphers; i++ )); do
+                    if [[ "${sslvers[i]}" == "SSLv2" ]]; then
+                         ciphers_to_test+=":${ciph[i]}"
+                    fi
+               done
+               if [[ -n "$ciphers_to_test" ]]; then
+                    $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
+                    sclient_connect_successful "$?" "$TMPFILE"
+                    if [[ "$?" -eq 0 ]]; then
+                         supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
+                         "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         for (( i=0 ; i<nr_ciphers; i++ )); do
+                              if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${ciph[i]}" ]]; then
+                                   ciphers_found[i]=true
+                                   "$SHOW_SIGALGO" && sigalg[i]="$s"
+                              fi
+                         done
+                    fi
+               fi
+          fi
+
+          for (( i=0; i < nr_ciphers; i++ )); do
+               if "${ossl_supported[i]}" && [[ "${sslvers[i]}" != "SSLv2" ]]; then
+                    ciphers_found2[nr_ossl_ciphers]=false
+                    ciph2[nr_ossl_ciphers]="${ciph[i]}"
+                    index[nr_ossl_ciphers]=$i
+                    nr_ossl_ciphers+=1
                fi
           done
+          if [[ $nr_ossl_ciphers -eq 0 ]]; then
+               num_bundles=0
+          else
+               # Some servers can't handle a handshake with >= 128 ciphers. So,
+               # test cipher suites in bundles of 128 or less.
+               num_bundles=$nr_ossl_ciphers/128
+               mod_check=$nr_ossl_ciphers%128
+               [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+
+               bundle_size=$nr_ossl_ciphers/$num_bundles
+               mod_check=$nr_ossl_ciphers%$num_bundles
+               [[ $mod_check -ne 0 ]] && bundle_size+=1
+          fi
+
+          "$HAS_NO_SSL2" && addcmd="-no_ssl2" || addcmd=""
+          for (( bundle=0; bundle < num_bundles; bundle++ )); do
+               end_of_bundle=$bundle*$bundle_size+$bundle_size
+               [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
+               while true; do
+                    ciphers_to_test=""
+                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                         ! "${ciphers_found2[i]}" && ciphers_to_test+=":${ciph2[i]}"
+                    done
+                    [[ -z "$ciphers_to_test" ]] && break
+                    $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+                    sclient_connect_successful "$?" "$TMPFILE" || break
+                    cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                    [[ -z "$cipher" ]] && break
+                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                         [[ "$cipher" == "${ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                    done
+                    [[ $i -eq $end_of_bundle ]] && break
+                    i=${index[i]}
+                    ciphers_found[i]=true
+                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                         dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                         kx[i]="${kx[i]} $dhlen"
+                    fi
+                    "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                         sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               done
+          done
+
+          if "$using_sockets"; then
+               for (( i=0; i < nr_ciphers; i++ )); do
+                    if ! "${ciphers_found[i]}" && [[ "${sslvers[i]}" != "SSLv2" ]] && [[ "${hexcode[i]}" != "13"* ]]; then
+                         ciphers_found2[nr_nonossl_ciphers]=false
+                         hexcode2[nr_nonossl_ciphers]="${hexcode[i]}"
+                         rfc_ciph2[nr_nonossl_ciphers]="${rfc_ciph[i]}"
+                         index[nr_nonossl_ciphers]=$i
+                         nr_nonossl_ciphers+=1
+                    fi
+               done
+          fi
+
+          if [[ $nr_nonossl_ciphers -eq 0 ]]; then
+               num_bundles=0
+          else
+               # Some servers can't handle a handshake with >= 128 ciphers. So,
+               # test cipher suites in bundles of 128 or less.
+               num_bundles=$nr_nonossl_ciphers/128
+               mod_check=$nr_nonossl_ciphers%128
+               [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+
+               bundle_size=$nr_nonossl_ciphers/$num_bundles
+               mod_check=$nr_nonossl_ciphers%$num_bundles
+               [[ $mod_check -ne 0 ]] && bundle_size+=1
+          fi
+
+          for (( bundle=0; bundle < num_bundles; bundle++ )); do
+               end_of_bundle=$bundle*$bundle_size+$bundle_size
+               [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
+               while true; do
+                    ciphers_to_test=""
+                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                         ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode2[i]}"
+                    done
+                    [[ -z "$ciphers_to_test" ]] && break
+                    if "$SHOW_SIGALGO"; then
+                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "all"
+                    else
+                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+                    fi
+                    sclient_success=$?
+                    [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
+                    cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                         [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                    done
+                    [[ $i -eq $end_of_bundle ]] && break
+                    i=${index[i]}
+                    ciphers_found[i]=true
+                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                         dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
+                         kx[i]="${kx[i]} $dhlen"
+                    fi
+                    "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
+                          sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               done
+          done
+
+          for (( i=0; i < nr_ciphers; i++ )); do
+               export="${export2[i]}"
+               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+               if "${ciphers_found[i]}"; then
+                    pr_cyan "  available"
+                    fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") available"
+               else
+                    out "  not a/v"
+                    fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") not a/v"
+               fi
+               outln
+          done
+          "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
           exit
      done
      outln
@@ -6068,38 +6272,98 @@ run_server_defaults() {
 
 run_pfs() {
      local -i sclient_success
-     local pfs_offered=false ecdhe_offered=false
-     local tmpfile
-     local dhlen
-     local hexcode dash pfs_cipher sslvers kx auth enc mac curve
-     local pfs_cipher_list="$ROBUST_PFS_CIPHERS"
-     local ecdhe_cipher_list=""
+     local pfs_offered=false ecdhe_offered=false ffdhe_offered=false
+     local hexc dash pfs_cipher sslvers auth mac export curve dhlen
+     local -a hexcode normalized_hexcode ciph rfc_ciph kx enc ciphers_found sigalg ossl_supported
+     local pfs_cipher_list="$ROBUST_PFS_CIPHERS" pfs_hex_cipher_list="" ciphers_to_test
+     local ecdhe_cipher_list="" ecdhe_cipher_list_hex="" ffdhe_cipher_list_hex=""
+     local curves_hex=("00,01" "00,02" "00,03" "00,04" "00,05" "00,06" "00,07" "00,08" "00,09" "00,0a" "00,0b" "00,0c" "00,0d" "00,0e" "00,0f" "00,10" "00,11" "00,12" "00,13" "00,14" "00,15" "00,16" "00,17" "00,18" "00,19" "00,1a" "00,1b" "00,1c" "00,1d" "00,1e")
      local -a curves_ossl=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
      local -a curves_ossl_output=("K-163" "sect163r1" "B-163" "sect193r1" "sect193r2" "K-233" "B-233" "sect239k1" "K-283" "B-283" "K-409" "B-409" "K-571" "B-571" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "P-192" "secp224k1" "P-224" "secp256k1" "P-256" "P-384" "P-521" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
-     local -a supported_curves=()
-     local -i nr_supported_ciphers=0 nr_curves=0 i j low high
-     local pfs_ciphers curves_offered curves_to_test temp
-     local curve_found curve_used
+     local -a ffdhe_groups_hex=("01,00" "01,01" "01,02" "01,03" "01,04")
+     local -a ffdhe_groups_output=("ffdhe2048" "ffdhe3072" "ffdhe4096" "ffdhe6144" "ffdhe8192")
+     local -a supported_curve bits
+     local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
+     local pfs_ciphers curves_offered="" curves_offered_text="" curves_to_test temp
+     local len1 len2 curve_found
+     local has_dh_bits="$HAS_DH_BITS"
+     local using_sockets=true
+
+     "$SSL_NATIVE" && using_sockets=false
+     "$FAST" && using_sockets=false
+     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
      outln
      pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption, 3DES, RC4 "
-     if ! "$HAS_DH_BITS" && "$WIDE"; then
-          pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
-     fi
-
-     nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $pfs_cipher_list))
-     debugme echo $nr_supported_ciphers
-     debugme echo $(actually_supported_ciphers $pfs_cipher_list)
-     if [[ "$nr_supported_ciphers" -le "$CLIENT_MIN_PFS" ]]; then
+     if ! "$using_sockets"; then
+          [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
+          if ! "$HAS_DH_BITS" && "$WIDE"; then
+               [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
+               pr_warning "    (Your $OPENSSL cannot show DH/ECDH bits)"
+          fi
           outln
-          local_problem_ln "You only have $nr_supported_ciphers PFS ciphers on the client side "
-          fileout "pfs" "WARN" "(Perfect) Forward Secrecy tests: Skipped. You only have $nr_supported_ciphers PFS ciphers on the client site. ($CLIENT_MIN_PFS are required)"
-          return 1
      fi
 
-     $OPENSSL s_client -cipher $pfs_cipher_list $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
-     sclient_connect_successful $? $TMPFILE
-     if [[ $? -ne 0 ]] || [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]]; then
+     if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
+          for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+               pfs_cipher="${TLS_CIPHER_RFC_NAME[i]}"
+               if ( [[ "$pfs_cipher" == "TLS_DHE_"* ]] || [[ "$pfs_cipher" == "TLS_ECDHE_"* ]] ) && \
+                  [[ ! "$pfs_cipher" =~ "NULL" ]] && [[ ! "$pfs_cipher" =~ "DES" ]] && [[ ! "$pfs_cipher" =~ "RC4" ]] && \
+                  [[ ! "$pfs_cipher" =~ "PSK" ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
+                    hexc="${TLS_CIPHER_HEXCODE[i]}"
+                    pfs_hex_cipher_list+=", ${hexc:2:2},${hexc:7:2}"
+                    ciph[nr_supported_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
+                    rfc_ciph[nr_supported_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
+                    kx[nr_supported_ciphers]="${TLS_CIPHER_KX[i]}"
+                    enc[nr_supported_ciphers]="${TLS_CIPHER_ENC[i]}"
+                    ciphers_found[nr_supported_ciphers]=false
+                    sigalg[nr_supported_ciphers]=""
+                    ossl_supported[nr_supported_ciphers]="${TLS_CIPHER_OSSL_SUPPORTED[i]}"
+                    hexcode[nr_supported_ciphers]="${hexc:2:2},${hexc:7:2}"
+                    if [[ "${hexc:2:2}" == "00" ]]; then
+                         normalized_hexcode[nr_supported_ciphers]="x${hexc:7:2}"
+                    else
+                         normalized_hexcode[nr_supported_ciphers]="x${hexc:2:2}${hexc:7:2}"
+                    fi
+                    "$using_sockets" && ! "$has_dh_bits" && "$WIDE" && ossl_supported[nr_supported_ciphers]=false
+                    nr_supported_ciphers+=1
+               fi
+          done
+     else
+          while read hexc dash ciph[nr_supported_ciphers] sslvers kx[nr_supported_ciphers] auth enc[nr_supported_ciphers] mac export; do
+               ciphers_found[nr_supported_ciphers]=false
+               if [[ "${hexc:2:2}" == "00" ]]; then
+                    normalized_hexcode[nr_supported_ciphers]="x${hexc:7:2}"
+               else
+                    normalized_hexcode[nr_supported_ciphers]="x${hexc:2:2}${hexc:7:2}"
+               fi
+               sigalg[nr_supported_ciphers]=""
+               ossl_supported[nr_supported_ciphers]=true
+               nr_supported_ciphers+=1
+          done < <($OPENSSL ciphers -V "$pfs_cipher_list" 2>$ERRFILE)
+     fi
+     export=""
+     
+     if "$using_sockets"; then
+          tls_sockets "03" "${pfs_hex_cipher_list:2}"
+          sclient_success=$?
+          [[ $sclient_success -eq 2 ]] && sclient_success=0
+     else
+          debugme echo $nr_supported_ciphers
+          debugme echo $(actually_supported_ciphers $pfs_cipher_list)
+          if [[ "$nr_supported_ciphers" -le "$CLIENT_MIN_PFS" ]]; then
+               outln
+               local_problem_ln "You only have $nr_supported_ciphers PFS ciphers on the client side "
+               fileout "pfs" "WARN" "(Perfect) Forward Secrecy tests: Skipped. You only have $nr_supported_ciphers PFS ciphers on the client site. ($CLIENT_MIN_PFS are required)"
+               return 1
+          fi
+          $OPENSSL s_client -cipher $pfs_cipher_list $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
+          [[ $sclient_success -eq 0 ]] && [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]] && sclient_success=1
+     fi
+
+     if [[ $sclient_success -ne 0 ]]; then
           outln
           pr_svrty_mediumln " No ciphers supporting Forward Secrecy offered"
           fileout "pfs" "MEDIUM" "(Perfect) Forward Secrecy : No ciphers supporting Forward Secrecy offered"
@@ -6115,112 +6379,235 @@ run_pfs() {
           else
                out "          "
           fi
-          while read hexcode dash pfs_cipher sslvers kx auth enc mac; do
-               tmpfile=$TMPFILE.$hexcode
-               $OPENSSL s_client -cipher $pfs_cipher $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$tmpfile </dev/null
-               sclient_connect_successful $? $tmpfile
-               sclient_success=$?
-               if [[ "$sclient_success" -ne 0 ]] && ! "$SHOW_EACH_C"; then
-                    continue                 # no successful connect AND not verbose displaying each cipher
-               fi
-               [[ "$sclient_success" -eq 0 ]] && [[ $pfs_cipher == "ECDHE-"* ]] && ecdhe_offered=true && ecdhe_cipher_list+=":$pfs_cipher"
-
+          while true; do
+               ciphers_to_test=""
+               for (( i=0; i < nr_supported_ciphers; i++ )); do
+                    ! "${ciphers_found[i]}" && "${ossl_supported[i]}" && ciphers_to_test+=":${ciph[i]}"
+               done
+               [[ -z "$ciphers_to_test" ]] && break
+               $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
+               sclient_connect_successful $? $TMPFILE || break
+               pfs_cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+               [[ -z "$pfs_cipher" ]] && break
+               for (( i=0; i < nr_supported_ciphers; i++ )); do
+                    [[ "$pfs_cipher" == "${ciph[i]}" ]] && break
+               done
+               ciphers_found[i]=true
                if "$WIDE"; then
-                    normalize_ciphercode $hexcode
-                    if [[ $kx == "Kx=ECDH" ]] || [[ $kx == "Kx=DH" ]] || [[ $kx == "Kx=EDH" ]]; then
-                         dhlen=$(read_dhbits_from_file "$tmpfile" quiet)
-                         kx="$kx $dhlen"
+                    dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                    kx[i]="${kx[i]} $dhlen"
+               fi
+               "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                    sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+          done
+          if "$using_sockets"; then
+               while true; do
+                    ciphers_to_test=""
+                    for (( i=0; i < nr_supported_ciphers; i++ )); do
+                         ! "${ciphers_found[i]}" && ciphers_to_test+=", ${hexcode[i]}"
+                    done
+                    [[ -z "$ciphers_to_test" ]] && break
+                    if "$WIDE" && "$SHOW_SIGALGO"; then
+                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "all"
+                    else
+                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
                     fi
-                    neat_list $HEXC $pfs_cipher "$kx" $enc $strength
+                    sclient_success=$?
+                    [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
+                    pfs_cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    for (( i=0; i < nr_supported_ciphers; i++ )); do
+                         [[ "$pfs_cipher" == "${rfc_ciph[i]}" ]] && break
+                    done
+                    ciphers_found[i]=true
+                    if "$WIDE"; then
+                         dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
+                         kx[i]="${kx[i]} $dhlen"
+                    fi
+                    "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
+                         sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               done
+          fi
+          for (( i=0; i < nr_supported_ciphers; i++ )); do
+               ! "${ciphers_found[i]}" && ! "$SHOW_EACH_C" && continue
+               if "${ciphers_found[i]}"; then
+                    if [[ "${ciph[i]}" != "-" ]]; then
+                         pfs_cipher="${ciph[i]}"
+                    else
+                         pfs_cipher="${rfc_ciph[i]}"
+                    fi
+                    pfs_ciphers+="$pfs_cipher "
+                    ! "$WIDE" && out "$pfs_cipher "
+
+                    if [[ "${ciph[i]}" == "ECDHE-"* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_ECDHE_"* ]] ); then
+                         ecdhe_offered=true
+                         ecdhe_cipher_list_hex+=", ${hexcode[i]}"
+                         [[ "${ciph[i]}" != "-" ]] && ecdhe_cipher_list+=":$pfs_cipher"
+                    fi
+                    if [[ "${ciph[i]}" == "DHE-"* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_DHE_"* ]] ); then
+                         ffdhe_offered=true
+                         ffdhe_cipher_list_hex+=", ${hexcode[i]}"
+                    fi
+               fi
+               if "$WIDE"; then
+                    neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
                     if "$SHOW_EACH_C"; then
-                         if [[ $sclient_success -eq 0 ]]; then
+                         if ${ciphers_found[i]}; then
                               pr_done_best "available"
                          else
                               out "not a/v"
                          fi
-                    else
-                         pfs_offered=true
                     fi
-                    outln
-               else
-                    if [[ $sclient_success -eq 0 ]]; then
-                         out "$pfs_cipher "
-                    fi
+                    outln "${sigalg[i]}"
                fi
-               [[ $sclient_success -eq 0 ]] && pfs_ciphers+="$pfs_cipher "
-               debugme rm $tmpfile
-          done < <($OPENSSL ciphers -V "$pfs_cipher_list" 2>$ERRFILE)      # -V doesn't work with openssl < 1.0
+          done
+
           debugme echo $pfs_offered
           "$WIDE" || outln
 
-          if ! "$pfs_offered"; then
-               pr_svrty_medium "WARN: no PFS ciphers found"
-               fileout "pfs_ciphers" "MEDIUM" "(Perfect) Forward Secrecy Ciphers: no PFS ciphers found"
-          else
-               fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
-          fi
+          fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
      fi
 
+     # find out what elliptic curves are supported.
      if "$ecdhe_offered"; then
-          # find out what elliptic curves are supported.
-          curves_offered=""
           for curve in "${curves_ossl[@]}"; do
+               ossl_supported[nr_curves]=false
+               supported_curve[nr_curves]=false
                $OPENSSL s_client -curves $curve -connect x 2>&1 | egrep -iaq "Error with command|unknown option"
-               [[ $? -ne 0 ]] && nr_curves+=1 && supported_curves+=("$curve")
+               [[ $? -ne 0 ]] && ossl_supported[nr_curves]=true && nr_ossl_curves+=1
+               nr_curves+=1
           done
 
           # OpenSSL limits the number of curves that can be specified in the
-          # "-curves" option to 28. So, the list is broken in two since there
-          # are currently 30 curves defined.
-          for i in 1 2; do
-               case $i in
-                   1) low=0; high=$nr_curves/2 ;;
-                   2) low=$nr_curves/2; high=$nr_curves ;;
-               esac
-               sclient_success=0
-               while [[ "$sclient_success" -eq 0 ]]; do
-                    curves_to_test=""
-                    for (( j=low; j < high; j++ )); do
-                         [[ ! " $curves_offered " =~ " ${supported_curves[j]} " ]] && curves_to_test+=":${supported_curves[j]}"
-                    done
-                    if [[ -n "$curves_to_test" ]]; then
-                         $OPENSSL s_client -cipher "${ecdhe_cipher_list:1}" -curves "${curves_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$tmpfile </dev/null
-                         sclient_connect_successful $? $tmpfile
-                         sclient_success=$?
+          # "-curves" option to 28. So, break the list in two if there are more
+          # than 28 curves supported by OpenSSL.
+          for j in 1 2; do
+               if [[ $j -eq 1 ]]; then
+                    if [[ $nr_ossl_curves -le 28 ]]; then
+                         low=0; high=$nr_curves
                     else
-                         sclient_success=1
+                         low=0; high=$nr_curves/2
                     fi
-                    if [[ "$sclient_success" -eq 0 ]]; then
-                         temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$tmpfile")
-                         curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
-                         [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
-                         j=0; curve_used=""
-                         for curve in "${curves_ossl[@]}"; do
-                              [[ "${curves_ossl_output[j]}" == "$curve_found" ]] && curve_used="${curves_ossl[j]}" && break
-                              j+=1
-                         done
-                         if [[ -n "$curve_used" ]]; then
-                              curves_offered+="$curve "
-                         else
-                              sclient_success=1
-                         fi
+               else
+                    if [[ $nr_ossl_curves -le 28 ]]; then
+                         continue # all curves tested in first round
+                    else
+                         low=$nr_curves/2; high=$nr_curves
                     fi
+               fi
+               while true; do
+                    curves_to_test=""
+                    for (( i=low; i < high; i++ )); do
+                         "${ossl_supported[i]}" && ! "${supported_curve[i]}" && curves_to_test+=":${curves_ossl[i]}"
+                    done
+                    [[ -z "$curves_to_test" ]] && break
+                    $OPENSSL s_client -cipher "${ecdhe_cipher_list:1}" -curves "${curves_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
+                    sclient_connect_successful $? $TMPFILE || break
+                    temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")
+                    curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
+                    [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+                    for (( i=low; i < high; i++ )); do
+                         ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
+                    done
+                    [[ $i -eq $high ]] && break
+                    supported_curve[i]=true
+                    bits[i]=$(awk -F',' '{ print $3 }' <<< $temp)
+                    grep -q bits <<< ${bits[i]} || bits[i]=$(awk -F',' '{ print $2 }' <<< $temp)
+                    bits[i]=$(tr -d ' bits' <<< ${bits[i]})
                done
           done
-          # Reorder list of curves that were found to match their ordering in NamedCurve
-          curve_found=""
-          for curve in "${curves_ossl[@]}"; do
-               [[ " $curves_offered " =~ " $curve " ]] && curve_found+="$curve "
+     fi
+     if "$ecdhe_offered" && "$using_sockets"; then
+          while true; do
+               curves_to_test=""
+               for (( i=0; i < nr_curves; i++ )); do
+                    ! "${supported_curve[i]}" && curves_to_test+=", ${curves_hex[i]}"
+               done
+               [[ -z "$curves_to_test" ]] && break
+               len1=$(printf "%02x" "$((2*${#curves_to_test}/7))")
+               len2=$(printf "%02x" "$((2*${#curves_to_test}/7+2))")
+               tls_sockets "03" "${ecdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
+               sclient_success=$?
+               [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
+               temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+               curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
+               [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+               for (( i=0; i < nr_curves; i++ )); do
+                    ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
+               done
+               [[ $i -eq $nr_curves ]] && break
+               supported_curve[i]=true
+               bits[i]=$(awk -F',' '{ print $3 }' <<< $temp)
+               grep -q bits <<< ${bits[i]} || bits[i]=$(awk -F',' '{ print $2 }' <<< $temp)
+               bits[i]=$(tr -d ' bits' <<< ${bits[i]})
+          done
+     fi
+     if "$ecdhe_offered"; then
+          for (( i=0; i < nr_curves; i++ )); do
+               if "${supported_curve[i]}"; then
+                    curves_offered+="${curves_ossl[i]} "
+                    if [[ "${bits[i]}" -le 163 ]]; then
+                         curves_offered_text+="$(pr_svrty_medium "${curves_ossl[i]}") "
+                    elif [[ "${bits[i]}" -le 193 ]]; then                              # hmm, according to https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography it should ok
+                         curves_offered_text+="$(pr_svrty_minor "${curves_ossl[i]}") " # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
+                    elif [[ "${bits[i]}" -le 224 ]]; then
+                         curves_offered_text+="${curves_ossl[i]} "
+                    else
+                         curves_offered_text+="$(pr_done_good "${curves_ossl[i]}") "
+                    fi
+               fi
           done
           if [[ -n "$curves_offered" ]]; then
                "$WIDE" && outln
-               pr_bold " Elliptic curves offered:     "; outln "$curves_offered"
+               pr_bold " Elliptic curves offered:     "; outln "$curves_offered_text"
                fileout "ecdhe_curves" "INFO" "Elliptic curves offered $curves_offered"
           fi
      fi
      outln
+     if "$ffdhe_offered" && "$using_sockets" && "$EXPERIMENTAL"; then
+          # Check to see whether RFC 7919 is supported (see Section 4 of RFC 7919)
+          tls_sockets "03" "${ffdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, 04, 00, 02, 01, fb"
+          sclient_success=$?
+          if [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]]; then
+               # find out what groups from RFC 7919 are supported.
+               nr_curves=0
+               for curve in "${ffdhe_groups_output[@]}"; do
+                    supported_curve[nr_curves]=false
+                    nr_curves+=1
+               done
+               while true; do
+                    curves_to_test=""
+                    for (( i=0; i < nr_curves; i++ )); do
+                         ! "${supported_curve[i]}" && curves_to_test+=", ${ffdhe_groups_hex[i]}"
+                    done
+                    [[ -z "$curves_to_test" ]] && break
+                    len1=$(printf "%02x" "$((2*${#curves_to_test}/7))")
+                    len2=$(printf "%02x" "$((2*${#curves_to_test}/7+2))")
+                    tls_sockets "03" "${ffdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
+                    sclient_success=$?
+                    [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
+                    temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+                    [[ ! "$curve_found" =~ "ffdhe" ]] && break
+                    for (( i=0; i < nr_curves; i++ )); do
+                         ! "${supported_curve[i]}" && [[ "${ffdhe_groups_output[i]}" == "$curve_found" ]] && break
+                    done
+                    [[ $i -eq $nr_curves ]] && break
+                    supported_curve[i]=true
+               done
+               curves_offered=""
+               for (( i=0; i < nr_curves; i++ )); do
+                    "${supported_curve[i]}" && curves_offered+="${ffdhe_groups_output[i]} "
+               done
+               if [[ -n "$curves_offered" ]]; then
+                    pr_bold " RFC 7919 DH groups offered:  "
+                    outln "$curves_offered"
+                    fileout "rfc7919_groups" "INFO" "RFC 7919 DH groups offered $curves_offered"
+               fi
+          fi
+     fi
 
      tmpfile_handle $FUNCNAME.txt
+     "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
 #     sub1_curves
      if "$pfs_offered"; then
           return 0
@@ -9633,10 +10020,11 @@ get_install_dir() {
 
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] ; then
           unset ADD_RFC_STR 
-          pr_warningln "\nNo cipher mapping file found "
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
-          pr_warningln "Please note from 2.9dev on testssl.sh needs some files in \$TESTSSL_INSTALL_DIR/etc to function correctly"
-          ignore_no_or_lame "Type \"yes\" to ignore "
+          pr_warningln "\nATTENTION: No cipher mapping file found!"
+          outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
+          outln
+          ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
           [[ $? -ne 0 ]] && exit -2
      fi
 }
@@ -9754,7 +10142,7 @@ find_openssl_binary() {
                fi
           else
                outln
-               ignore_no_or_lame " neccessary binary \"timeout\" not found. Continue without timeout?"
+               ignore_no_or_lame " Neccessary binary \"timeout\" not found. Continue without timeout? " "y"
                [[ $? -ne 0 ]] && exit -2
                unset OPENSSL_TIMEOUT
           fi
@@ -9784,7 +10172,7 @@ check4openssl_oldfarts() {
                *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" 
                     fileout "too_old_openssl" "WARN" "Update openssl binaries or compile from github.com/PeterMosmans/openssl .";;
           esac
-          ignore_no_or_lame " Type \"yes\" to accept false negatives or positives "
+          ignore_no_or_lame " Type \"yes\" to accept false negatives or positives" "yes"
           [[ $? -ne 0 ]] && exit -2
      fi
      outln
@@ -10142,20 +10530,21 @@ EOF
      return 0
 }
 
-
+# arg1: text to display before "-->"
+# arg2: arg needed to accept to continue
 ignore_no_or_lame() {
      local a
 
      [[ "$WARNINGS" == off ]] && return 0
      [[ "$WARNINGS" == false ]] && return 0
      [[ "$WARNINGS" == batch ]] && return 1
-     pr_magenta "$1 "
+     pr_warning "$1 --> "
      read a
-     case $a in
-          Y|y|Yes|YES|yes) return 0;;
-          default)         ;;
-     esac
-     return 1
+     if [[ "$a" == "$(tolower "$2")" ]]; then
+          $ok_arg return 0
+     else
+          return 1
+     fi
 }
 
 # arg1: URI
@@ -10567,7 +10956,7 @@ determine_optimal_proto() {
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
                pr_magentaln "$NODEIP:$PORT appears to only support SSLv2."
-               ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
+               ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
                [[ $? -ne 0 ]] && exit -2
           fi
      fi
@@ -10582,7 +10971,7 @@ determine_optimal_proto() {
           fi
           tmpfile_handle $FUNCNAME.txt
           pr_boldln "doesn't seem to be a TLS/SSL enabled server";
-          ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
+          ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
           [[ $? -ne 0 ]] && exit -2
      fi
 
@@ -11374,10 +11763,10 @@ lets_roll() {
 
 ################# main #################
 
-get_install_dir
 
 initialize_globals
 parse_cmd_line "$@"
+get_install_dir
 set_color_functions
 maketempf
 find_openssl_binary
