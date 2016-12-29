@@ -3347,7 +3347,7 @@ run_protocols() {
                     fileout "tls1_1" "NOT ok" "TLSv1.1 is not offered, server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                else
                     pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                    fileout "tls1" "NOT ok" "TLSv1.1: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    fileout "tls1_1" "NOT ok" "TLSv1.1: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
                fi
                ;;
           5)
@@ -3380,7 +3380,7 @@ run_protocols() {
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered" # no GCM, penalty
                else
                     pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string"
-                    fileout "tls1_1" "NOT ok" "TLSv1.2: connection failed rather than downgrading to $latest_supported_string"
+                    fileout "tls1_2" "NOT ok" "TLSv1.2: connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
           2)
@@ -3402,7 +3402,7 @@ run_protocols() {
                     fileout "tls1_2" "NOT ok" "TLSv1.2 is not offered, server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                else
                     pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
-                    fileout "tls1" "NOT ok" "TLSv1.2: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    fileout "tls1_2" "NOT ok" "TLSv1.2: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
                fi
                ;;
           5)
@@ -3638,7 +3638,7 @@ run_server_preference() {
                     ;;
                *RC4*)
                     pr_svrty_high "$default_cipher"
-                    fileout "order_cipher" "NOT ok" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  remark4default_cipher"
+                    fileout "order_cipher" "NOT ok" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (NOT ok)  $remark4default_cipher"
                     ;;
                *CBC*)
                     pr_svrty_medium "$default_cipher"
@@ -3731,7 +3731,7 @@ run_server_preference() {
                              fi
                           fi
                     fi
-                    fileout "order_${proto[i]}_cipher" "INFO" "Default cipher on ${proto[i]}: ${cipher[i]}remark4default_cipher"
+                    fileout "order_${proto[i]}_cipher" "INFO" "Default cipher on ${proto[i]}: ${cipher[i]} $remark4default_cipher"
                done
           fi
      fi
