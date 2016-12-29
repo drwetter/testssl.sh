@@ -2350,8 +2350,8 @@ run_allciphers() {
           pr_headlineln " Testing $nr_ciphers_tested via OpenSSL and sockets against the server, ordered by encryption strength "
      else
           pr_headlineln " Testing all $nr_ciphers_tested locally available ciphers against the server, ordered by encryption strength "
-          outln
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
+          outln
           if ! "$HAS_DH_BITS"; then
                [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
                pr_warningln " Your $OPENSSL cannot show DH/ECDH bits"
@@ -2526,8 +2526,8 @@ run_cipher_per_proto() {
           pr_headlineln " Testing per protocol via OpenSSL and sockets against the server, ordered by encryption strength "
      else
           pr_headlineln " Testing all locally available ciphers per protocol against the server, ordered by encryption strength "
-          outln
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
+          outln
           if ! "$HAS_DH_BITS"; then
                [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
                pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
@@ -9001,16 +9001,24 @@ run_freak() {
 run_logjam() {
      local -i sclient_success=0
      local exportdhe_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
-     local -i nr_supported_ciphers=0
-     local addtl_warning=""
+     local exportdhe_cipher_list_hex="00,63, 00,65, 00,14, 00,11"
+     local -i i nr_supported_ciphers=0
+     local addtl_warning="" hexc
      local cve="CVE-2015-4000"
      local cwe="CWE-310"
      local hint=""
+     local using_sockets=true
+
+     "$SSL_NATIVE" && using_sockets=false
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for LOGJAM vulnerability " && outln
      pr_bold " LOGJAM"; out " ($cve), experimental      "
 
-     nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdhe_cipher_list))
+     if "$using_sockets"; then
+          nr_supported_ciphers=$(count_words "$exportdhe_cipher_list_hex")
+     else
+          nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdhe_cipher_list))
+     fi
 
      case $nr_supported_ciphers in
           0)
@@ -9022,16 +9030,22 @@ run_logjam() {
           3)   addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers)" ;;
           4)   ;;
      esac
-     $OPENSSL s_client $STARTTLS $BUGS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
-     sclient_connect_successful $? $TMPFILE
-     sclient_success=$?
-     debugme egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     if "$using_sockets"; then
+          tls_sockets "03" "$exportdhe_cipher_list_hex"
+          sclient_success=$?
+          [[ $sclient_success -eq 2 ]] && sclient_success=0
+     else
+          $OPENSSL s_client $STARTTLS $BUGS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
+          debugme egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     fi
      addtl_warning="$addtl_warning, common primes not checked."
-     if "$HAS_DH_BITS"; then
-          if ! "$do_allciphers" && ! "$do_cipher_per_proto" && "$HAS_DH_BITS"; then
+     if "$HAS_DH_BITS" || ( ! "$SSL_NATIVE" && ! "$FAST" && [[ $TLS_NR_CIPHERS -ne 0 ]] ); then
+          if ! "$do_allciphers" && ! "$do_cipher_per_proto"; then
                addtl_warning="$addtl_warning \"$PROG_NAME -E/-e\" spots candidates"
           else
-               "$HAS_DH_BITS" && addtl_warning="$addtl_warning See below for any DH ciphers + bit size"
+               addtl_warning="$addtl_warning See below for any DH ciphers + bit size"
           fi
      fi
 
@@ -9044,13 +9058,25 @@ run_logjam() {
      fi
      outln
 
-     debugme echo $(actually_supported_ciphers $exportdhe_cipher_list)
+     if [[ $DEBUG -ge 2 ]]; then
+          if "$using_sockets"; then
+               for hexc in $(sed 's/, / /g' <<< "$exportdhe_cipher_list_hex"); do
+                    hexc="0x${hexc:0:2},0x${hexc:3:2}"
+                    for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+                         [[ "$hexc" == "${TLS_CIPHER_HEXCODE[i]}" ]] && break
+                    done
+                    [[ $i -eq $TLS_NR_CIPHERS ]] && out "$hexc " || out "${TLS_CIPHER_OSSL_NAME[i]} "
+               done
+               outln
+          else
+               echo $(actually_supported_ciphers $exportdhe_cipher_list)
+          fi
+     fi
      debugme echo $nr_supported_ciphers
 
      tmpfile_handle $FUNCNAME.txt
      return $sclient_success
 }
-# TODO: perfect candidate for replacement by sockets, so is freak
 
 
 run_drown() {
@@ -9605,8 +9631,14 @@ get_install_dir() {
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
-     [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && unset ADD_RFC_STR && pr_warningln "\nNo cipher mapping file in \$TESTSSL_INSTALL_DIR/etc/ found"
-     debugme echo "$CIPHERS_BY_STRENGTH_FILE"
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] ; then
+          unset ADD_RFC_STR 
+          pr_warningln "\nNo cipher mapping file found "
+          debugme echo "$CIPHERS_BY_STRENGTH_FILE"
+          pr_warningln "Please note from 2.9dev on testssl.sh needs some files in \$TESTSSL_INSTALL_DIR/etc to function correctly"
+          ignore_no_or_lame "Type \"yes\" to ignore "
+          [[ $? -ne 0 ]] && exit -2
+     fi
 }
 
 
@@ -9744,13 +9776,15 @@ check4openssl_oldfarts() {
                ;;
      esac
      if [[ $OSSL_VER_MAJOR -lt 1 ]]; then ## mm: Patch for libressl
-          pr_magentaln " Your \"$OPENSSL\" is way too old (<version 1.0) !"
+          pr_warningln " Your \"$OPENSSL\" is way too old (<version 1.0) !"
           case $SYSTEM in
                *BSD|Darwin)
-                    outln " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl" ;;
-               *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" ;;
+                    outln " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl" 
+                    fileout "too_old_openssl" "WARN" "Your $OPENSSL $OSSL_VER version is way too old. Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl ." ;;
+               *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" 
+                    fileout "too_old_openssl" "WARN" "Update openssl binaries or compile from github.com/PeterMosmans/openssl .";;
           esac
-          ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
+          ignore_no_or_lame " Type \"yes\" to accept false negatives or positives "
           [[ $? -ne 0 ]] && exit -2
      fi
      outln
