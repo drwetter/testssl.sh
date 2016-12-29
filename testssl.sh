@@ -573,7 +573,7 @@ pr_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;32m$1" 
 pr_blueln()     { pr_blue "$1"; outln; }
 
 pr_warning()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;35m$1" || pr_underline "$1"; pr_off; }                                  # some local problem: one test cannot be done
-pr_warningln() { pr_warning "$1"; outln; }                                                                                   # litemagenya
+pr_warningln() { pr_warning "$1"; outln; }                                                                                   # litemagenta
 pr_magenta()   { [[ "$COLOR" -eq 2 ]] && out "\033[1;35m$1" || pr_underline "$1"; pr_off; }                                  # fatal error: quitting because of this!
 pr_magentaln() { pr_magenta "$1"; outln; }
 
@@ -9511,10 +9511,11 @@ get_install_dir() {
 
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] ; then
           unset ADD_RFC_STR 
-          pr_warningln "\nNo cipher mapping file found "
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
-          pr_warningln "Please note from 2.9dev on testssl.sh needs some files in \$TESTSSL_INSTALL_DIR/etc to function correctly"
-          ignore_no_or_lame "Type \"yes\" to ignore "
+          pr_warningln "\nATTENTION: No cipher mapping file found!"
+          outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
+          outln
+          ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
           [[ $? -ne 0 ]] && exit -2
      fi
 }
@@ -9632,7 +9633,7 @@ find_openssl_binary() {
                fi
           else
                outln
-               ignore_no_or_lame " neccessary binary \"timeout\" not found. Continue without timeout?"
+               ignore_no_or_lame " Neccessary binary \"timeout\" not found. Continue without timeout? " "y"
                [[ $? -ne 0 ]] && exit -2
                unset OPENSSL_TIMEOUT
           fi
@@ -9662,7 +9663,7 @@ check4openssl_oldfarts() {
                *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" 
                     fileout "too_old_openssl" "WARN" "Update openssl binaries or compile from github.com/PeterMosmans/openssl .";;
           esac
-          ignore_no_or_lame " Type \"yes\" to accept false negatives or positives "
+          ignore_no_or_lame " Type \"yes\" to accept false negatives or positives" "yes"
           [[ $? -ne 0 ]] && exit -2
      fi
      outln
@@ -10020,20 +10021,21 @@ EOF
      return 0
 }
 
-
+# arg1: text to display before "-->"
+# arg2: arg needed to accept to continue
 ignore_no_or_lame() {
      local a
 
      [[ "$WARNINGS" == off ]] && return 0
      [[ "$WARNINGS" == false ]] && return 0
      [[ "$WARNINGS" == batch ]] && return 1
-     pr_magenta "$1 "
+     pr_warning "$1 --> "
      read a
-     case $a in
-          Y|y|Yes|YES|yes) return 0;;
-          default)         ;;
-     esac
-     return 1
+     if [[ "$a" == "$(tolower "$2")" ]]; then
+          $ok_arg return 0
+     else
+          return 1
+     fi
 }
 
 # arg1: URI
@@ -10445,7 +10447,7 @@ determine_optimal_proto() {
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
                pr_magentaln "$NODEIP:$PORT appears to only support SSLv2."
-               ignore_no_or_lame " Type \"yes\" to accept some false negatives or positives "
+               ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
                [[ $? -ne 0 ]] && exit -2
           fi
      fi
@@ -10460,7 +10462,7 @@ determine_optimal_proto() {
           fi
           tmpfile_handle $FUNCNAME.txt
           pr_boldln "doesn't seem to be a TLS/SSL enabled server";
-          ignore_no_or_lame " Note that the results might look ok but they are nonsense. Proceed ? "
+          ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
           [[ $? -ne 0 ]] && exit -2
      fi
 
@@ -11252,10 +11254,10 @@ lets_roll() {
 
 ################# main #################
 
-get_install_dir
 
 initialize_globals
 parse_cmd_line "$@"
+get_install_dir
 set_color_functions
 maketempf
 find_openssl_binary
