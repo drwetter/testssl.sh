@@ -9394,7 +9394,6 @@ run_logjam() {
           dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
           [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
           # At this point the DH key's prime has been extracted into $dh_p. Compare is against known weak primes.
-          echo "dh_p = $dh_p"
      fi
 
      tmpfile_handle $FUNCNAME.txt
