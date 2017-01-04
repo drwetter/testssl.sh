@@ -9212,11 +9212,12 @@ run_tls_fallback_scsv() {
 # Factoring RSA Export Keys: don't use EXPORT RSA ciphers, see https://freakattack.com/
 run_freak() {
      local -i sclient_success=0
-     local -i i nr_supported_ciphers=0
+     local -i i nr_supported_ciphers=0 len
      # with correct build it should list these 9 ciphers (plus the two latter as SSLv2 ciphers):
      local exportrsa_cipher_list="EXP1024-DES-CBC-SHA:EXP1024-RC2-CBC-MD5:EXP1024-RC4-SHA:EXP1024-RC4-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC4-MD5"
      local exportrsa_tls_cipher_list_hex="00,62, 00,61, 00,64, 00,60, 00,14, 00,0E, 00,08, 00,06, 00,03"
      local exportrsa_ssl2_cipher_list_hex="04,00,80, 02,00,80"
+     local detected_ssl2_ciphers
      local addcmd="" addtl_warning="" hexc
      local cve="CVE-2015-0204"
      local cwe="CWE-310"
@@ -9253,8 +9254,15 @@ run_freak() {
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
           if [[ $sclient_success -ne 0 ]]; then
-               sslv2_sockets "$exportrsa_ssl2_cipher_list_hex"
-               [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]] && sclient_success=0
+               sslv2_sockets "$exportrsa_ssl2_cipher_list_hex" "true"
+               if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+                    exportrsa_ssl2_cipher_list_hex="$(strip_spaces "${exportrsa_ssl2_cipher_list_hex//,/}")"
+                    len=${#exportrsa_ssl2_cipher_list_hex}
+                    detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+                    for (( i=0; i<len; i=i+6 )); do
+                         [[ "$detected_ssl2_ciphers" =~ "x${exportrsa_ssl2_cipher_list_hex:i:6}" ]] && sclient_success=0 && break
+                    done
+               fi
           fi
      else
           "$HAS_NO_SSL2" && addcmd="-no_ssl2" || addcmd=""
