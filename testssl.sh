@@ -2015,7 +2015,8 @@ listciphers() {
 # argv[5]: non-SSLv2 cipher list to test (hexcodes), if using sockets
 # argv[6]: SSLv2 cipher list to test (hexcodes), if using sockets
 std_cipherlists() {
-     local -i sclient_success
+     local -i i len sclient_success
+     local sslv2_cipherlist detected_ssl2_ciphers
      local singlespaces proto="" addcmd=""
      local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
 
@@ -2040,8 +2041,15 @@ std_cipherlists() {
                     sclient_success=$?
                     debugme cat $ERRFILE
                elif [[ -n "$6" ]]; then
-                    sslv2_sockets "$6"
-                    [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]] && sclient_success=0
+                    sslv2_sockets "$6" "true"
+                    if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+                         sslv2_cipherlist="$(strip_spaces "${6//,/}")"
+                         len=${#sslv2_cipherlist}
+                         detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+                         for (( i=0; i<len; i=i+6 )); do
+                              [[ "$detected_ssl2_ciphers" =~ "x${sslv2_cipherlist:i:6}" ]] && sclient_success=0 && break
+                         done
+                    fi
                fi
           fi
           case $3 in
