@@ -6097,11 +6097,12 @@ run_server_defaults() {
      done
 
      determine_tls_extensions
+     if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != "-ssl2" ]]; then
+          cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+          >$ERRFILE
 
-     cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
-     >$ERRFILE
-
-     [[ -z "$sessticket_str" ]] && sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+          [[ -z "$sessticket_str" ]] && sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+     fi
 
      outln
      pr_headlineln " Testing server defaults (Server Hello) "
