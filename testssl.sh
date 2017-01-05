@@ -9896,6 +9896,16 @@ get_install_dir() {
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
+     # still no cipher mapping file (and realpath is not present):
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
+         readlink -f ls &>/dev/null && \
+              TESTSSL_INSTALL_DIR=$(dirname $(readlink -f ${BASH_SOURCE[0]})) || \
+              TESTSSL_INSTALL_DIR=$(dirname $(readlink ${BASH_SOURCE[0]}))
+              # not sure whether Darwin has -f
+          CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
+          [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
+     fi
+
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] ; then
           unset ADD_RFC_STR
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
