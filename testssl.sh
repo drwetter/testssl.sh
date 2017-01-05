@@ -8998,6 +8998,9 @@ run_crime() {
           fi
      else
           [[ "$OSSL_VER" == "0.9.8"* ]] && addcmd="-no_ssl2"
+          if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
+               addcmd="-comp"
+          fi
           $OPENSSL s_client $OPTIMAL_PROTO $BUGS $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null &>$TMPFILE
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
