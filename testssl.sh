@@ -7063,6 +7063,7 @@ parse_sslv2_serverhello() {
      "$parse_complete" && echo "======================================" > $TMPFILE
 
      v2_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
+     v2_hello_ascii="${v2_hello_ascii%%[!0-9A-F]*}"
      [[ "$DEBUG" -ge 5 ]] && echo "$v2_hello_ascii"
      if [[ -z "$v2_hello_ascii" ]]; then
           ret=0                                      # 1 line without any blanks: no server hello received
@@ -7094,6 +7095,10 @@ parse_sslv2_serverhello() {
                echo "SSLv2 certificate length:  0x$v2_hello_cert_length"
                echo "SSLv2 cipher spec length:  0x$v2_hello_cipherspec_length"
           fi
+
+          if "$parse_complete" && [[ 2*$(hex2dec "$v2_hello_length") -ne ${#v2_hello_ascii}-4 ]]; then
+               ret=7
+          fi
      fi
 
      "$parse_complete" || return $ret
@@ -7105,7 +7110,11 @@ parse_sslv2_serverhello() {
           if [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
                tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return $ret
                asciihex_to_binary_file "${v2_hello_ascii:26:certificate_len}" "$tmp_der_certfile"
-               $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT
+               $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT 2>$ERRFILE
+               if [[ $? -ne 0 ]]; then
+                    debugme echo "Malformed certificate in ServerHello."
+                    return 1
+               fi
                rm $tmp_der_certfile
                get_pub_key_size
                echo "======================================" >> $TMPFILE
@@ -8100,6 +8109,13 @@ sslv2_sockets() {
      local ret
      local client_hello cipher_suites len_client_hello
      local len_ciph_suites_byte len_ciph_suites
+     local server_hello sock_reply_file2
+     local -i response_len server_hello_len
+     local parse_complete=false
+
+     if [[ "$2" == "true" ]]; then
+          parse_complete=true
+     fi
 
      if [[ -n "$1" ]]; then
           cipher_suites="$1"
@@ -8140,13 +8156,31 @@ sslv2_sockets() {
      socksend_sslv2_clienthello "$client_hello"
 
      sockread_serverhello 32768
+     if "$parse_complete"; then
+          server_hello=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+          server_hello_len=2+$(hex2dec "${server_hello:1:3}")
+          response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
+          for (( 1; response_len < server_hello_len; 1 )); do
+               sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+               mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+
+               debugme echo "requesting more server hello data..."
+               socksend "" $USLEEP_SND
+               sockread_serverhello 32768
+
+               [[ ! -s "$SOCK_REPLY_FILE" ]] && break
+               cat "$SOCK_REPLY_FILE" >> "$sock_reply_file2"
+               mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+               response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
+          done
+     fi
      debugme outln "reading server hello... "
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -6
           outln
      fi
 
-     parse_sslv2_serverhello "$SOCK_REPLY_FILE" "$2"
+     parse_sslv2_serverhello "$SOCK_REPLY_FILE" "$parse_complete"
      ret=$?
 
      close_socket
