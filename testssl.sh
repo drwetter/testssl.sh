@@ -148,7 +148,7 @@ BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for 
 DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ are kept for further debugging purposes
                                         # 2: list more what's going on , also lists some errors of connections
                                         # 3: slight hexdumps + other info,
-                                        # 4: display bytes sent via sockets 
+                                        # 4: display bytes sent via sockets
                                         # 5: display bytes received via sockets
                                         # 6: whole 9 yards
 FAST=${FAST:-false}                     # preference: show only first cipher, run_allciphers with openssl instead of sockets
@@ -159,7 +159,7 @@ CSVFILE=${CSVFILE:-""}                  # csvfile if used
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 GIVE_HINTS=false                   # give an addtional info to findings
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
-UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
+UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
 
 # tuning vars, can not be set by a cmd line switch
@@ -556,7 +556,7 @@ declare TLS_CIPHER_OSSL_SUPPORTED=()
 
 ###### output functions ######
 # a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
-out(){ 
+out(){
 #     if [[ "$BASH_VERSINFO" -eq 4 ]]; then
           printf -- "%b" "${1//%/%%}"
 #     else
@@ -590,10 +590,10 @@ pr_greyln()     { pr_grey "$1"; outln; }
 
 pr_done_good()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # litegreen (liteblue), This is good
 pr_done_goodln()     { pr_done_good "$1"; outln; }
-pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best 
+pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best
 pr_done_bestln()     { pr_done_best "$1"; outln; }
 
-pr_svrty_minor()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem 
+pr_svrty_minor()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
 pr_svrty_minorln()   { pr_svrty_minor "$1"; outln; }
 pr_svrty_medium()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                   # brown | it is not a bad problem but you shouldn't do this
 pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
@@ -1082,7 +1082,7 @@ string_to_asciihex() {
      [[ -n "$string" ]] && output+="$(printf "%02x" "'${string:eos:1}")"
      out "$output"
      return 0
-     
+
 }
 
 ###### check code starts here ######
@@ -6227,11 +6227,12 @@ run_server_defaults() {
      done
 
      determine_tls_extensions
+     if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != "-ssl2" ]]; then
+          cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
+          >$ERRFILE
 
-     cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
-     >$ERRFILE
-
-     [[ -z "$sessticket_str" ]] && sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+          [[ -z "$sessticket_str" ]] && sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+     fi
 
      outln
      pr_headlineln " Testing server defaults (Server Hello) "
@@ -6351,7 +6352,7 @@ run_pfs() {
           done < <($OPENSSL ciphers -V "$pfs_cipher_list" 2>$ERRFILE)
      fi
      export=""
-     
+
      if "$using_sockets"; then
           tls_sockets "03" "${pfs_hex_cipher_list:2}"
           sclient_success=$?
@@ -7193,6 +7194,7 @@ parse_sslv2_serverhello() {
      "$parse_complete" && echo "======================================" > $TMPFILE
 
      v2_hello_ascii=$(hexdump -v -e '16/1 "%02X"' $1)
+     v2_hello_ascii="${v2_hello_ascii%%[!0-9A-F]*}"
      [[ "$DEBUG" -ge 5 ]] && echo "$v2_hello_ascii"
      if [[ -z "$v2_hello_ascii" ]]; then
           ret=0                                      # 1 line without any blanks: no server hello received
@@ -7224,6 +7226,10 @@ parse_sslv2_serverhello() {
                echo "SSLv2 certificate length:  0x$v2_hello_cert_length"
                echo "SSLv2 cipher spec length:  0x$v2_hello_cipherspec_length"
           fi
+
+          if "$parse_complete" && [[ 2*$(hex2dec "$v2_hello_length") -ne ${#v2_hello_ascii}-4 ]]; then
+               ret=7
+          fi
      fi
 
      "$parse_complete" || return $ret
@@ -7231,11 +7237,15 @@ parse_sslv2_serverhello() {
      rm -f $HOSTCERT $TEMPDIR/intermediatecerts.pem
      if [[ $ret -eq 3 ]]; then
           certificate_len=2*$(hex2dec "$v2_hello_cert_length")
-     
+
           if [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
                tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return $ret
                asciihex_to_binary_file "${v2_hello_ascii:26:certificate_len}" "$tmp_der_certfile"
-               $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT
+               $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT 2>$ERRFILE
+               if [[ $? -ne 0 ]]; then
+                    debugme echo "Malformed certificate in ServerHello."
+                    return 1
+               fi
                rm $tmp_der_certfile
                get_pub_key_size
                echo "======================================" >> $TMPFILE
@@ -7352,7 +7362,7 @@ parse_tls_serverhello() {
      local process_full="$2"
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
-     local tls_serverhello_ascii="" tls_certificate_ascii="" 
+     local tls_serverhello_ascii="" tls_certificate_ascii=""
      local tls_serverkeyexchange_ascii="" tls_certificate_status_ascii=""
      local -i tls_serverhello_ascii_len=0 tls_certificate_ascii_len=0
      local -i tls_serverkeyexchange_ascii_len=0 tls_certificate_status_ascii_len=0
@@ -8159,7 +8169,7 @@ parse_tls_serverhello() {
                     len1="82$(printf "%04x" $((dh_param_len/2)))"
                fi
                dh_param="30${len1}${dh_p}${dh_g}"
-               
+
                # Make a SEQUENCE of the paramters SEQUENCE and the OID
                dh_param_len=22+${#dh_param}
                if [[ $dh_param_len -lt 256 ]]; then
@@ -8199,7 +8209,7 @@ parse_tls_serverhello() {
                [[ -n "$key_bitstring" ]] && echo "$key_bitstring" >> $TMPFILE
 
                # Check to see whether the ephemeral public key uses one of the groups from
-               # RFC 7919 for parameters               
+               # RFC 7919 for parameters
                case $dh_bits in
                     2048) named_curve=256; named_curve_str=" ffdhe2048," ;;
                     3072) named_curve=257; named_curve_str=" ffdhe3072," ;;
@@ -8230,6 +8240,13 @@ sslv2_sockets() {
      local ret
      local client_hello cipher_suites len_client_hello
      local len_ciph_suites_byte len_ciph_suites
+     local server_hello sock_reply_file2
+     local -i response_len server_hello_len
+     local parse_complete=false
+
+     if [[ "$2" == "true" ]]; then
+          parse_complete=true
+     fi
 
      if [[ -n "$1" ]]; then
           cipher_suites="$1"
@@ -8270,13 +8287,31 @@ sslv2_sockets() {
      socksend_sslv2_clienthello "$client_hello"
 
      sockread_serverhello 32768
+     if "$parse_complete"; then
+          server_hello=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+          server_hello_len=2+$(hex2dec "${server_hello:1:3}")
+          response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
+          for (( 1; response_len < server_hello_len; 1 )); do
+               sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+               mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+
+               debugme echo "requesting more server hello data..."
+               socksend "" $USLEEP_SND
+               sockread_serverhello 32768
+
+               [[ ! -s "$SOCK_REPLY_FILE" ]] && break
+               cat "$SOCK_REPLY_FILE" >> "$sock_reply_file2"
+               mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+               response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
+          done
+     fi
      debugme outln "reading server hello... "
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -6
           outln
      fi
 
-     parse_sslv2_serverhello "$SOCK_REPLY_FILE" "$2"
+     parse_sslv2_serverhello "$SOCK_REPLY_FILE" "$parse_complete"
      ret=$?
 
      close_socket
@@ -8393,7 +8428,7 @@ socksend_tls_clienthello() {
                00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
                # Supported Point Formats Extension
                extension_supported_point_formats="
-               00, 0b,                    # Type: Supported Point Formats , see RFC 4492 
+               00, 0b,                    # Type: Supported Point Formats , see RFC 4492
                00, 02,                    # len
                01, 00"
           fi
@@ -9771,7 +9806,7 @@ run_rc4() {
                     ciphers_found[nr_ciphers]=false
                     sigalg[nr_ciphers]=""
                     ossl_supported[nr_ciphers]="${TLS_CIPHER_OSSL_SUPPORTED[i]}"
-                    if "$using_sockets" && "$WIDE" && ! "$HAS_DH_BITS" && 
+                    if "$using_sockets" && "$WIDE" && ! "$HAS_DH_BITS" &&
                        ( [[ ${kx[nr_ciphers]} == "Kx=ECDH" ]] || [[ ${kx[nr_ciphers]} == "Kx=DH" ]] || [[ ${kx[nr_ciphers]} == "Kx=EDH" ]] ); then
                          ossl_supported[nr_ciphers]=false
                     fi
@@ -10026,8 +10061,18 @@ get_install_dir() {
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
+     # still no cipher mapping file (and realpath is not present):
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
+         readlink -f ls &>/dev/null && \
+              TESTSSL_INSTALL_DIR=$(dirname $(readlink -f ${BASH_SOURCE[0]})) || \
+              TESTSSL_INSTALL_DIR=$(dirname $(readlink ${BASH_SOURCE[0]}))
+              # not sure whether Darwin has -f
+          CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
+          [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
+     fi
+
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] ; then
-          unset ADD_RFC_STR 
+          unset ADD_RFC_STR
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
           pr_warningln "\nATTENTION: No cipher mapping file found!"
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
@@ -10175,9 +10220,9 @@ check4openssl_oldfarts() {
           pr_warningln " Your \"$OPENSSL\" is way too old (<version 1.0) !"
           case $SYSTEM in
                *BSD|Darwin)
-                    outln " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl" 
+                    outln " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl"
                     fileout "too_old_openssl" "WARN" "Your $OPENSSL $OSSL_VER version is way too old. Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl ." ;;
-               *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl" 
+               *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl"
                     fileout "too_old_openssl" "WARN" "Update openssl binaries or compile from github.com/PeterMosmans/openssl .";;
           esac
           ignore_no_or_lame " Type \"yes\" to accept false negatives or positives" "yes"
@@ -10206,8 +10251,8 @@ help() {
 
 
 "$PROG_NAME URI", where URI is:
-     
-     URI                           host|host:port|URL|URL:port   port 443 is default, URL can only contain HTTPS protocol) 
+
+     URI                           host|host:port|URL|URL:port   port 443 is default, URL can only contain HTTPS protocol)
 
 "$PROG_NAME <options>", where <options> is:
 
@@ -10222,7 +10267,7 @@ help() {
 
 "$PROG_NAME <options> URI", where <options> is:
 
-     -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol, 
+     -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol,
                                    protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres> (latter three require supplied openssl)
      --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
@@ -10411,7 +10456,7 @@ EOF
                          ossl_ciph="$(grep -w "$hexc" <<< "$ossl_supported_tls" | awk '{ print $3 }')"
                          if [[ -n "$ossl_ciph" ]]; then
                               TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
-                              [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}" ]] && TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]="$ossl_ciph" 
+                              [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}" ]] && TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]="$ossl_ciph"
                          fi
                     fi
                elif [[ $OSSL_VER_MAJOR -lt 1 ]]; then
@@ -11838,4 +11883,3 @@ else
 fi
 
 exit $?
-
