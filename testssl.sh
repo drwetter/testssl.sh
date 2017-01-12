@@ -4440,105 +4440,39 @@ run_protocols() {
 run_std_cipherlists() {
      local hexc hexcode strength
      local -i i
-     local null_ciphers="" anon_ciphers="" adh_ciphers="" exp40_ciphers=""
-     local exp56_ciphers="" exp_ciphers="" low_ciphers="" des_ciphers=""
-     local medium_ciphers="" tdes_ciphers="" high_ciphers=""
-     local sslv2_null_ciphers="" sslv2_anon_ciphers="" sslv2_adh_ciphers="" sslv2_exp40_ciphers=""
-     local sslv2_exp56_ciphers="" sslv2_exp_ciphers="" sslv2_low_ciphers="" sslv2_des_ciphers=""
-     local sslv2_medium_ciphers="" sslv2_tdes_ciphers="" sslv2_high_ciphers=""
+     local null_ciphers="c0,10, c0,06, c0,15, c0,0b, c0,01, c0,3b, c0,3a, c0,39, 00,b9, 00,b8, 00,b5, 00,b4, 00,2e, 00,2d, 00,b1, 00,b0, 00,2c, 00,3b, 00,02, 00,01, 00,82, 00,83, ff,87, 00,ff"
+     local sslv2_null_ciphers=""
+     local anon_ciphers="c0,19, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, c0,47, c0,5b, c0,85, c0,18, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,46, c0,5a, c0,84, c0,16, 00,18, c0,17, 00,1b, 00,1a, 00,19, 00,17, c0,15, 00,ff"
+     local sslv2_anon_ciphers=""
+     local adh_ciphers="00,a7, 00,6d, 00,3a, 00,c5, 00,89, c0,47, c0,5b, c0,85, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,46, c0,5a, c0,84, 00,18, 00,1b, 00,1a, 00,19, 00,17, 00,ff"
+     local sslv2_adh_ciphers=""
+     local exp40_ciphers="00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e, 00,17, 00,03, 00,28, 00,2b, 00,ff"
+     local sslv2_exp40_ciphers="04,00,80, 02,00,80"
+     local exp56_ciphers="00,63, 00,62, 00,61, 00,65, 00,64, 00,60, 00,ff"
+     local sslv2_exp56_ciphers=""
+     local exp_ciphers="00,63, 00,62, 00,61, 00,65, 00,64, 00,60, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e, 00,17, 00,03, 00,28, 00,2b, 00,ff"
+     local sslv2_exp_ciphers="04,00,80, 02,00,80"
+     local low_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, 00,ff"
+     local sslv2_low_ciphers="08,00,80, 06,00,40"
+     local des_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, 00,ff"
+     local sslv2_des_ciphers="06,00,40"
+     local medium_ciphers="00,9a, 00,99, 00,98, 00,97, 00,96, 00,07, 00,21, 00,25, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, 00,92, 00,8a, 00,20, 00,24, c0,33, 00,8e, 00,ff"
+     local sslv2_medium_ciphers=""
+     local tdes_ciphers="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,ff"
+     local sslv2_tdes_ciphers="07,00,c0"
+     local high_ciphers="13,02, 13,03, cc,14, cc,13, cc,15, c0,30, c0,2c, c0,28, c0,24, c0,14, c0,0a, c0,22, c0,21, c0,20, 00,b7, 00,b3, 00,91, c0,9b, c0,99, c0,97, 00,af, c0,95, 00,a5, 00,a3, 00,a1, 00,9f, cc,a9, cc,a8, cc,aa, c0,af, c0,ad, c0,a3, c0,9f, 00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87, 00,86, 00,85, 00,ad, 00,ab, cc,ae, cc,ad, cc,ac, c0,ab, c0,a7, c0,32, c0,2e, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, 00,9d, c0,a1, c0,9d, 00,a9, cc,ab, c0,a9, c0,a5, 00,3d, 00,35, 00,c0, c0,38, c0,36, 00,84, 00,95, 00,8d, c0,3d, c0,3f, c0,41, c0,43, c0,45, c0,49, c0,4b, c0,4d, c0,4f, c0,51, c0,53, c0,55, c0,57, c0,59, c0,5d, c0,5f, c0,61, c0,63, c0,65, c0,67, c0,69, c0,6b, c0,6d, c0,6f, c0,71, c0,7b, c0,7d, c0,7f, c0,81, c0,83, c0,87, c0,89, c0,8b, c0,8d, c0,8f, c0,91, c0,93, 00,80, 00,81, ff,00, ff,01, ff,02, ff,03, ff,85, 16,b7, 16,b8, 16,b9, 16,ba, 13,01, 13,04, 13,05, c0,2f, c0,2b, c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,a4, 00,a2, 00,a0, 00,9e, c0,ae, c0,ac, c0,a2, c0,9e, 00,ac, 00,aa, c0,aa, c0,a6, c0,a0, c0,9c, 00,a8, c0,a8, c0,a4, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,45, 00,44, 00,43, 00,42, c0,31, c0,2d, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,9c, 00,3c, 00,2f, 00,ba, c0,37, c0,35, 00,b6, 00,b2, 00,90, 00,41, c0,9a, c0,98, c0,96, 00,ae, c0,94, 00,94, 00,8c, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,48, c0,4a, c0,4c, c0,4e, c0,50, c0,52, c0,54, c0,56, c0,58, c0,5c, c0,5e, c0,60, c0,62, c0,64, c0,66, c0,68, c0,6a, c0,6c, c0,6e, c0,70, c0,7a, c0,7c, c0,7e, c0,80, c0,82, c0,86, c0,88, c0,8a, c0,8c, c0,8e, c0,90, c0,92, 00,ff"
+     local sslv2_high_ciphers=""
      local using_sockets=true
 
      "$SSL_NATIVE" && using_sockets=false
-     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
-     if "$using_sockets"; then
-          for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-               hexc="${TLS_CIPHER_HEXCODE[i]}"
-               strength="${TLS_CIPHER_ENC[i]}"
-               strength="${strength//\)/}"
-               strength="${strength#*\(}"
-
-               if [[ ${#hexc} -eq 9 ]]; then
-                    hexcode="${hexc:2:2},${hexc:7:2}"
-                    [[ "${TLS_CIPHER_ENC[i]}" == "Enc=None" ]] && \
-                         null_ciphers+=", $hexcode"
-                    [[ "${TLS_CIPHER_AUTH[i]}" == "Au=None" ]] && \
-                         anon_ciphers+=", $hexcode"
-                    [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ "TLS_DH_anon_" ]] && \
-                         adh_ciphers+=", $hexcode"
-                    [[ $strength -eq 40 ]] && exp40_ciphers+=", $hexcode"
-#                    [[ $strength -eq 56 ]] && exp56_ciphers+=", $hexcode"
-                    [[ $strength -eq 56 ]] && \
-                         [[ "${TLS_CIPHER_EXPORT[i]}" == "export" ]] && \
-                         exp56_ciphers+=", $hexcode"
-                    [[ "${TLS_CIPHER_EXPORT[i]}" == "export" ]] && \
-                         exp_ciphers+=", $hexcode"
-                    if [[ "${TLS_CIPHER_AUTH[i]}" != "Au=None" ]]; then
-#                         [[ $strength -le 64 ]] && low_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" != "Enc=None" ]] && \
-                              [[ $strength -le 64 ]] && \
-                              [[ "${TLS_CIPHER_EXPORT[i]}" != "export" ]] && \
-                              low_ciphers+=", $hexcode" 
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=DES(56)" ]] && \
-                              [[ "${TLS_CIPHER_EXPORT[i]}" != "export" ]] && \
-                              des_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=SEED(128)" ]] && \
-                              medium_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=RC4(128)" ]] && \
-                              medium_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=IDEA(128)" ]] && \
-                              medium_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=3DES(168)" ]] && \
-                              tdes_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=AES"* ]] && \
-                              high_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=Camellia"* ]] && \
-                              high_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=ChaCha20"* ]] && \
-                              high_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=GOST"* ]] && \
-                              high_ciphers+=", $hexcode"
-                         [[ "${TLS_CIPHER_ENC[i]}" == "Enc=ARIA"* ]] && \
-                              high_ciphers+=", $hexcode"
-                    fi
-               else
-                    hexcode="${hexc:2:2},${hexc:7:2},${hexc:12:2}"
-                    [[ $strength -eq 40 ]] && sslv2_exp40_ciphers+=", $hexcode"
-#                    [[ $strength -eq 56 ]] && sslv2_exp56_ciphers+=", $hexcode"
-                    [[ "${TLS_CIPHER_EXPORT[i]}" == "export" ]] && \
-                         sslv2_exp_ciphers+=", $hexcode"
-#                    [[ $strength -le 64 ]] && sslv2_low_ciphers+=", $hexcode"
-                    [[ $strength -le 64 ]] && \
-                         [[ "${TLS_CIPHER_EXPORT[i]}" != "export" ]] && \
-                         sslv2_low_ciphers+=", $hexcode"
-                    [[ "${TLS_CIPHER_ENC[i]}" == "Enc=DES(56)" ]] && \
-                         sslv2_des_ciphers+=", $hexcode"
-                    [[ "${TLS_CIPHER_ENC[i]}" == "Enc=3DES(168)" ]] && \
-                         sslv2_tdes_ciphers+=", $hexcode"
-               fi
-          done
-          [[ -n "$null_ciphers" ]] && null_ciphers="${null_ciphers:2}, 00,ff"
-          [[ -n "$anon_ciphers" ]] && anon_ciphers="${anon_ciphers:2}, 00,ff"
-          [[ -n "$adh_ciphers" ]] && adh_ciphers="${adh_ciphers:2}, 00,ff"
-          [[ -n "$exp40_ciphers" ]] && exp40_ciphers="${exp40_ciphers:2}, 00,ff"
-          [[ -n "$exp56_ciphers" ]] && exp56_ciphers="${exp56_ciphers:2}, 00,ff"
-          [[ -n "$exp_ciphers" ]] && exp_ciphers="${exp_ciphers:2}, 00,ff"
-          [[ -n "$low_ciphers" ]] && low_ciphers="${low_ciphers:2}, 00,ff"
-          [[ -n "$des_ciphers" ]] && des_ciphers="${des_ciphers:2}, 00,ff"
-          [[ -n "$medium_ciphers" ]] && medium_ciphers="${medium_ciphers:2}, 00,ff"
-          [[ -n "$tdes_ciphers" ]] && tdes_ciphers="${tdes_ciphers:2}, 00,ff"
-          [[ -n "$high_ciphers" ]] && high_ciphers="${high_ciphers:2}, 00,ff"
-          [[ -n "$sslv2_null_ciphers" ]] && sslv2_null_ciphers="${sslv2_null_ciphers:2}"
-          [[ -n "$sslv2_anon_ciphers" ]] && sslv2_anon_ciphers="${sslv2_anon_ciphers:2}"
-          [[ -n "$sslv2_adh_ciphers" ]] && sslv2_adh_ciphers="${sslv2_adh_ciphers:2}"
-          [[ -n "$sslv2_exp40_ciphers" ]] && sslv2_exp40_ciphers="${sslv2_exp40_ciphers:2}"
-          [[ -n "$sslv2_exp56_ciphers" ]] && sslv2_exp56_ciphers="${sslv2_exp56_ciphers:2}"
-          [[ -n "$sslv2_exp_ciphers" ]] && sslv2_exp_ciphers="${sslv2_exp_ciphers:2}"
-          [[ -n "$sslv2_low_ciphers" ]] && sslv2_low_ciphers="${sslv2_low_ciphers:2}"
-          [[ -n "$sslv2_des_ciphers" ]] && sslv2_des_ciphers="${sslv2_des_ciphers:2}"
-          [[ -n "$sslv2_medium_ciphers" ]] && sslv2_medium_ciphers="${sslv2_medium_ciphers:2}"
-          [[ -n "$sslv2_tdes_ciphers" ]] && sslv2_tdes_ciphers="${sslv2_tdes_ciphers:2}"
-          [[ -n "$sslv2_high_ciphers" ]] && sslv2_high_ciphers="${sslv2_high_ciphers:2}"
+     if ! "$using_sockets"; then
+          null_ciphers=""; anon_ciphers=""; adh_ciphers=""; exp40_ciphers=""
+          exp56_ciphers=""; exp_ciphers=""; low_ciphers=""; des_ciphers=""
+          medium_ciphers=""; tdes_ciphers=""; high_ciphers=""
+          sslv2_null_ciphers=""; sslv2_anon_ciphers=""; sslv2_adh_ciphers=""; sslv2_exp40_ciphers=""
+          sslv2_exp56_ciphers=""; sslv2_exp_ciphers=""; sslv2_low_ciphers=""; sslv2_des_ciphers=""
+          sslv2_medium_ciphers=""; sslv2_tdes_ciphers=""; sslv2_high_ciphers=""
      fi
 
      outln
