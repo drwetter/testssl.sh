@@ -5165,16 +5165,19 @@ sclient_connect_successful() {
 # ALPN extensions in the same ServerHello.
 determine_tls_extensions() {
      local addcmd
-     local -i success
+     local -i success=1
      local line params="" tls_extensions=""
      local alpn_proto alpn="" alpn_list_len_hex alpn_extn_len_hex
      local -i alpn_list_len alpn_extn_len
+     local cbc_cipher_list="ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DH-RSA-AES256-SHA256:DH-DSS-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA256-SHA384:DHE-RSA-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA256:DH-RSA-CAMELLIA256-SHA256:DH-DSS-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:ECDH-RSA-AES256-SHA384:ECDH-ECDSA-AES256-SHA384:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:ECDH-RSA-CAMELLIA256-SHA384:ECDH-ECDSA-CAMELLIA256-SHA384:AES256-SHA256:AES256-SHA:CAMELLIA256-SHA256:CAMELLIA256-SHA:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DH-RSA-AES128-SHA256:DH-DSS-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA256:DH-RSA-CAMELLIA128-SHA256:DH-DSS-CAMELLIA128-SHA256:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:ECDH-RSA-CAMELLIA128-SHA256:ECDH-ECDSA-CAMELLIA128-SHA256:AES128-SHA256:AES128-SHA:CAMELLIA128-SHA256:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-DH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA"
+     local cbc_cipher_list_hex="c0,28, c0,24, c0,14, c0,0a, 00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87, 00,86, 00,85, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, 00,3d, 00,35, 00,c0, 00,84, c0,3d, c0,3f, c0,41, c0,43, c0,45, c0,49, c0,4b, c0,4d, c0,4f, c0,27, c0,23, c0,13, c0,09, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44, 00,43, 00,42, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,3c, 00,2f, 00,ba, 00,96, 00,41, 00,07, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,48, c0,4a, c0,4c, c0,4e, c0,12, c0,08, 00,16, 00,13, 00,10, 00,0d, c0,0d, c0,03, 00,0a, fe,ff, ff,e0, 00,63, 00,15, 00,12, 00,0f, 00,0c, 00,62, 00,09, fe,fe, ff,e1, 00,14, 00,11, 00,08, 00,06, 00,0b, 00,0e"
      local using_sockets=true
 
      [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && return 0
      "$SSL_NATIVE" && using_sockets=false
 
      if "$using_sockets"; then
+          tls_extensions="00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00"
           if [[ -z $STARTTLS ]]; then
                for alpn_proto in $ALPN_PROTOs; do
                     alpn+=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")"
@@ -5183,11 +5186,16 @@ determine_tls_extensions() {
                alpn_list_len_hex=$(printf "%04x" $alpn_list_len)
                alpn_extn_len=$alpn_list_len+2
                alpn_extn_len_hex=$(printf "%04x" $alpn_extn_len)
-               tls_sockets "03" "$TLS12_CIPHER" "all" "00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00, 00,10,${alpn_extn_len_hex:0:2},${alpn_extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
-          else
-               tls_sockets "03" "$TLS12_CIPHER" "all" "00,01,00,01,02, 00,02,00,00, 00,04,00,00, 00,12,00,00, 00,16,00,00, 00,17,00,00"
+               tls_extensions+=", 00,10,${alpn_extn_len_hex:0:2},${alpn_extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
           fi
-          success=$?
+          if [[ ! "$TLS_EXTENSIONS" =~ "encrypt-then-mac" ]]; then
+               tls_sockets "03" "$cbc_cipher_list_hex, 00,ff" "all" "$tls_extensions"
+               success=$?
+          fi
+          if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+               tls_sockets "03" "$TLS12_CIPHER" "all" "$tls_extensions"
+               success=$?
+          fi
           [[ $success -eq 2 ]] && success=0
           [[ $success -eq 0 ]] && tls_extensions="$(grep -a 'TLS Extensions: ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/TLS Extensions: //' )"
           if [[ -r "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ]]; then
@@ -5200,16 +5208,23 @@ determine_tls_extensions() {
           elif "$HAS_SPDY" && [[ -z $STARTTLS ]]; then
                params="-nextprotoneg \"$NPN_PROTOs\""
           fi
-          success=1
           addcmd=""
           if [[ -z "$OPTIMAL_PROTO" ]] && [[ -z "$SNI" ]] && "$HAS_NO_SSL2"; then
                addcmd="-no_ssl2"
           elif [[ ! "$OPTIMAL_PROTO" =~ ssl ]]; then
                addcmd="$SNI"
           fi
-          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd $OPTIMAL_PROTO -tlsextdebug $params </dev/null 2>$ERRFILE >$TMPFILE
-          sclient_connect_successful $? $TMPFILE
-          if [[ $? -eq 0 ]]; then
+          if [[ ! "$TLS_EXTENSIONS" =~ "encrypt-then-mac" ]]; then
+               $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd $OPTIMAL_PROTO -tlsextdebug $params -cipher $cbc_cipher_list </dev/null 2>$ERRFILE >$TMPFILE
+               sclient_connect_successful $? $TMPFILE
+               success=$?
+          fi
+          if [[ $success -ne 0 ]]; then
+               $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd $OPTIMAL_PROTO -tlsextdebug $params </dev/null 2>$ERRFILE >$TMPFILE
+               sclient_connect_successful $? $TMPFILE
+               success=$?
+          fi
+          if [[ $success -eq 0 ]]; then
                success=0
                tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
                tls_extensions=$(echo $tls_extensions)       # into one line
