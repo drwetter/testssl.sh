@@ -2008,23 +2008,50 @@ listciphers() {
 }
 
 
-# argv[1]: cipher list to test
+# argv[1]: cipher list to test in OpenSSL syntax
 # argv[2]: string on console
 # argv[3]: ok to offer? 0: yes, 1: no
 # argv[4]: string for fileout
+# argv[5]: non-SSLv2 cipher list to test (hexcodes), if using sockets
+# argv[6]: SSLv2 cipher list to test (hexcodes), if using sockets
 std_cipherlists() {
-     local -i sclient_success
+     local -i i len sclient_success
+     local sslv2_cipherlist detected_ssl2_ciphers
      local singlespaces proto="" addcmd=""
      local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
 
-     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && addcmd="$OPTIMAL_PROTO" && proto="$OPTIMAL_PROTO"
-     [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
+     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && proto="$OPTIMAL_PROTO"
      pr_bold "$2    "                   # indenting to be in the same row as server preferences
-     if listciphers "$1" $proto; then   # is that locally available??
-          $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $addcmd 2>$ERRFILE >$TMPFILE </dev/null
-          sclient_connect_successful $? $TMPFILE
-          sclient_success=$?
-          debugme cat $ERRFILE
+     if [[ -n "$5" ]] || listciphers "$1" $proto; then
+          if [[ -z "$5" ]] || ( "$FAST" && listciphers "$1" -tls1 ); then
+               "$HAS_NO_SSL2" && addcmd="-no_ssl2"
+               $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $addcmd 2>$ERRFILE >$TMPFILE </dev/null
+               sclient_connect_successful $? $TMPFILE
+               sclient_success=$?
+               debugme cat $ERRFILE
+          else
+               tls_sockets "03" "$5"
+               sclient_success=$?
+               [[ $sclient_success -eq 2 ]] && sclient_success=0
+          fi
+          if [[ $sclient_success -ne 0 ]] && has_server_protocol "ssl2"; then
+               if ( [[ -z "$6" ]] || "$FAST" ) && "$HAS_SSL2" && listciphers "$1" -ssl2; then
+                    $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY -ssl2 2>$ERRFILE >$TMPFILE </dev/null
+                    sclient_connect_successful $? $TMPFILE
+                    sclient_success=$?
+                    debugme cat $ERRFILE
+               elif [[ -n "$6" ]]; then
+                    sslv2_sockets "$6" "true"
+                    if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+                         sslv2_cipherlist="$(strip_spaces "${6//,/}")"
+                         len=${#sslv2_cipherlist}
+                         detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+                         for (( i=0; i<len; i=i+6 )); do
+                              [[ "$detected_ssl2_ciphers" =~ "x${sslv2_cipherlist:i:6}" ]] && sclient_success=0 && break
+                         done
+                    fi
+               fi
+          fi
           case $3 in
                0)   # ok to offer
                     if [[ $sclient_success -eq 0 ]]; then
@@ -3991,8 +4018,8 @@ run_client_simulation() {
                fi
           else
                ! "$HAS_NO_SSL2" && protos[i]="$(sed 's/-no_ssl2//' <<< "${protos[i]}")"
-               $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
                debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
+               $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
           fi
@@ -4018,8 +4045,8 @@ run_client_simulation() {
                if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
                     # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                     for tls in ${tlsvers[i]}; do
-                         $OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
                          debugme echo "$OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
+                         $OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
                          sclient_connect_successful $? $TMPFILE
                          sclient_success=$?
                          if [[ $sclient_success -eq 0 ]]; then
@@ -4411,21 +4438,58 @@ run_protocols() {
 
 #TODO: work with fixed lists here
 run_std_cipherlists() {
+     local hexc hexcode strength
+     local -i i
+     local null_ciphers="c0,10, c0,06, c0,15, c0,0b, c0,01, c0,3b, c0,3a, c0,39, 00,b9, 00,b8, 00,b5, 00,b4, 00,2e, 00,2d, 00,b1, 00,b0, 00,2c, 00,3b, 00,02, 00,01, 00,82, 00,83, ff,87, 00,ff"
+     local sslv2_null_ciphers=""
+     local anon_ciphers="c0,19, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, c0,47, c0,5b, c0,85, c0,18, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,46, c0,5a, c0,84, c0,16, 00,18, c0,17, 00,1b, 00,1a, 00,19, 00,17, c0,15, 00,ff"
+     local sslv2_anon_ciphers=""
+     local adh_ciphers="00,a7, 00,6d, 00,3a, 00,c5, 00,89, c0,47, c0,5b, c0,85, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,46, c0,5a, c0,84, 00,18, 00,1b, 00,1a, 00,19, 00,17, 00,ff"
+     local sslv2_adh_ciphers=""
+     local exp40_ciphers="00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e, 00,17, 00,03, 00,28, 00,2b, 00,ff"
+     local sslv2_exp40_ciphers="04,00,80, 02,00,80"
+     local exp56_ciphers="00,63, 00,62, 00,61, 00,65, 00,64, 00,60, 00,ff"
+     local sslv2_exp56_ciphers=""
+     local exp_ciphers="00,63, 00,62, 00,61, 00,65, 00,64, 00,60, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e, 00,17, 00,03, 00,28, 00,2b, 00,ff"
+     local sslv2_exp_ciphers="04,00,80, 02,00,80"
+     local low_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, 00,ff"
+     local sslv2_low_ciphers="08,00,80, 06,00,40"
+     local des_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, 00,ff"
+     local sslv2_des_ciphers="06,00,40"
+     local medium_ciphers="00,9a, 00,99, 00,98, 00,97, 00,96, 00,07, 00,21, 00,25, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, 00,92, 00,8a, 00,20, 00,24, c0,33, 00,8e, 00,ff"
+     local sslv2_medium_ciphers=""
+     local tdes_ciphers="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,ff"
+     local sslv2_tdes_ciphers="07,00,c0"
+     local high_ciphers="13,02, 13,03, cc,14, cc,13, cc,15, c0,30, c0,2c, c0,28, c0,24, c0,14, c0,0a, c0,22, c0,21, c0,20, 00,b7, 00,b3, 00,91, c0,9b, c0,99, c0,97, 00,af, c0,95, 00,a5, 00,a3, 00,a1, 00,9f, cc,a9, cc,a8, cc,aa, c0,af, c0,ad, c0,a3, c0,9f, 00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87, 00,86, 00,85, 00,ad, 00,ab, cc,ae, cc,ad, cc,ac, c0,ab, c0,a7, c0,32, c0,2e, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, 00,9d, c0,a1, c0,9d, 00,a9, cc,ab, c0,a9, c0,a5, 00,3d, 00,35, 00,c0, c0,38, c0,36, 00,84, 00,95, 00,8d, c0,3d, c0,3f, c0,41, c0,43, c0,45, c0,49, c0,4b, c0,4d, c0,4f, c0,51, c0,53, c0,55, c0,57, c0,59, c0,5d, c0,5f, c0,61, c0,63, c0,65, c0,67, c0,69, c0,6b, c0,6d, c0,6f, c0,71, c0,7b, c0,7d, c0,7f, c0,81, c0,83, c0,87, c0,89, c0,8b, c0,8d, c0,8f, c0,91, c0,93, 00,80, 00,81, ff,00, ff,01, ff,02, ff,03, ff,85, 16,b7, 16,b8, 16,b9, 16,ba, 13,01, 13,04, 13,05, c0,2f, c0,2b, c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,a4, 00,a2, 00,a0, 00,9e, c0,ae, c0,ac, c0,a2, c0,9e, 00,ac, 00,aa, c0,aa, c0,a6, c0,a0, c0,9c, 00,a8, c0,a8, c0,a4, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,45, 00,44, 00,43, 00,42, c0,31, c0,2d, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,9c, 00,3c, 00,2f, 00,ba, c0,37, c0,35, 00,b6, 00,b2, 00,90, 00,41, c0,9a, c0,98, c0,96, 00,ae, c0,94, 00,94, 00,8c, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,48, c0,4a, c0,4c, c0,4e, c0,50, c0,52, c0,54, c0,56, c0,58, c0,5c, c0,5e, c0,60, c0,62, c0,64, c0,66, c0,68, c0,6a, c0,6c, c0,6e, c0,70, c0,7a, c0,7c, c0,7e, c0,80, c0,82, c0,86, c0,88, c0,8a, c0,8c, c0,8e, c0,90, c0,92, 00,ff"
+     local sslv2_high_ciphers=""
+     local using_sockets=true
+
+     "$SSL_NATIVE" && using_sockets=false
+
+     if ! "$using_sockets"; then
+          null_ciphers=""; anon_ciphers=""; adh_ciphers=""; exp40_ciphers=""
+          exp56_ciphers=""; exp_ciphers=""; low_ciphers=""; des_ciphers=""
+          medium_ciphers=""; tdes_ciphers=""; high_ciphers=""
+          sslv2_null_ciphers=""; sslv2_anon_ciphers=""; sslv2_adh_ciphers=""; sslv2_exp40_ciphers=""
+          sslv2_exp56_ciphers=""; sslv2_exp_ciphers=""; sslv2_low_ciphers=""; sslv2_des_ciphers=""
+          sslv2_medium_ciphers=""; sslv2_tdes_ciphers=""; sslv2_high_ciphers=""
+     fi
+
      outln
      pr_headlineln " Testing ~standard cipher lists "
      outln
 # see ciphers(1ssl) or run 'openssl ciphers -v'
-     std_cipherlists 'NULL:eNULL'                       " Null Ciphers             " 1 "NULL"
-     std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   " 1 "aNULL"
-     std_cipherlists 'ADH'                              " Anonymous DH Ciphers     " 1 "ADH"
-     std_cipherlists 'EXPORT40'                         " 40 Bit encryption        " 1 "EXPORT40"
-     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        " 1 "EXPORT56"
-     std_cipherlists 'EXPORT'                           " Export Ciphers (general) " 1 "EXPORT"
-     std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           " 1 "LOW"
-     std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              " 1 "DES"
-     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2:!3DES' " \"Medium\" grade encryption" 2 "MEDIUM"
-     std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       " 3 "3DES"
-     std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    " 0 "HIGH"
+     std_cipherlists 'NULL:eNULL'                       " Null Ciphers             "   1 "NULL"     "$null_ciphers"   "$sslv2_null_ciphers"
+     std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   "   1 "aNULL"    "$anon_ciphers"   "$sslv2_anon_ciphers"
+     std_cipherlists 'ADH'                              " Anonymous DH Ciphers     "   1 "ADH"      "$adh_ciphers"    "$sslv2_adh_ciphers"
+     std_cipherlists 'EXPORT40'                         " 40 Bit encryption        "   1 "EXPORT40" "$exp40_ciphers"  "$sslv2_exp40_ciphers"
+     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        "   1 "EXPORT56" "$exp56_ciphers"  "$sslv2_exp56_ciphers"
+     std_cipherlists 'EXPORT'                           " Export Ciphers (general) "   1 "EXPORT"   "$exp_ciphers"    "$sslv2_exp_ciphers"
+     std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           "   1 "LOW"      "$low_ciphers"    "$sslv2_low_ciphers"
+     std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              "   1 "DES"      "$des_ciphers"    "$sslv2_des_ciphers"
+     std_cipherlists 'MEDIUM:!NULL:!aNULL:!SSLv2:!3DES' " \"Medium\" grade encryption" 2 "MEDIUM"   "$medium_ciphers" "$sslv2_medium_ciphers"
+     std_cipherlists '3DES:!ADH:!aNULL'                 " Triple DES Ciphers       "   3 "3DES"     "$tdes_ciphers"   "$sslv2_tdes_ciphers"
+     std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES'     " High grade encryption    "   0 "HIGH"     "$high_ciphers"   "$sslv2_high_ciphers"
      outln
      return 0
 }
