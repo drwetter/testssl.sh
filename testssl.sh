@@ -5225,7 +5225,6 @@ determine_tls_extensions() {
                success=$?
           fi
           if [[ $success -eq 0 ]]; then
-               success=0
                tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
                tls_extensions=$(echo $tls_extensions)       # into one line
           fi
