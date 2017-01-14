@@ -8287,6 +8287,7 @@ sslv2_sockets() {
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # ARG2: CIPHER_SUITES string
 # ARG3: (optional) additional request extensions
+# ARG4: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
 socksend_tls_clienthello() {
      local tls_low_byte="$1"
      local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301 -- except: SSLv3
@@ -8302,6 +8303,10 @@ socksend_tls_clienthello() {
      local extension_session_ticket extension_next_protocol extension_padding
      local extension_supported_groups="" extension_supported_point_formats=""
      local extra_extensions extra_extensions_list=""
+     local offer_compression=false compression_metods
+
+     # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
+     [[ "$4" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
 
      code2network "$(tolower "$2")"               # convert CIPHER_SUITES
      cipher_suites="$NW_STR"                      # we don't have the leading \x here so string length is two byte less, see next
@@ -8465,6 +8470,7 @@ socksend_tls_clienthello() {
           # If the length of the Client Hello would be between 256 and 511 bytes,
           # then add a padding extension (see RFC 7685)
           len_all=$((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2))
+          "$offer_compression" && len_all+=2
           if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]] && [[ ! "$extra_extensions_list" =~ " 0015 " ]]; then
                if [[ $len_all -gt 508 ]]; then
                     len_padding_extension=0
@@ -8489,23 +8495,34 @@ socksend_tls_clienthello() {
 
      # RFC 3546 doesn't specify SSLv3 to have SNI, openssl just ignores the switch if supplied
      if [[ "$tls_low_byte" == "00" ]]; then
-          len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27)))
+          len_all=$((0x$len_ciph_suites + 0x27))
      else
-          len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$len_extension_hex + 0x2)))
+          len_all=$((0x$len_ciph_suites + 0x27 + 0x$len_extension_hex + 0x2))
      fi
+     "$offer_compression" && len_all+=2
+     len2twobytes $(printf "%02x\n" $len_all)
      len_client_hello_word="$LEN_STR"
      #[[ $DEBUG -ge 3 ]] && echo $len_client_hello_word
 
      if [[ "$tls_low_byte" == "00" ]]; then
-          len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b)))
+          len_all=$((0x$len_ciph_suites + 0x2b))
      else
-          len2twobytes $(printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2)))
+          len_all=$((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2))
      fi
+     "$offer_compression" && len_all+=2
+     len2twobytes $(printf "%02x\n" $len_all)
      len_all_word="$LEN_STR"
      #[[ $DEBUG -ge 3 ]] && echo $len_all_word
 
      # if we have SSLv3, the first occurence of TLS protocol -- record layer -- is SSLv3, otherwise TLS 1.0
      [[ $tls_low_byte == "00" ]] && tls_word_reclayer="03, 00"
+
+     if "$offer_compression"; then
+          # See http://www.iana.org/assignments/comp-meth-ids/comp-meth-ids.xhtml#comp-meth-ids-2
+          compression_metods="03,01,40,00" # Offer NULL, DEFLATE, and LZS compression
+     else
+          compression_metods="01,00" # Only offer NULL compression (0x00)
+     fi
 
      TLS_CLIENT_HELLO="
      # TLS header ( 5 bytes)
@@ -8523,8 +8540,7 @@ socksend_tls_clienthello() {
      ,00                      # Session ID length
      ,$len_ciph_suites_word   # Cipher suites length
      ,$cipher_suites
-     ,01                      # Compression methods length
-     ,00"                     # Compression method (x00 for NULL)
+     ,$compression_metods"
 
      fd_socket 5 || return 6
 
@@ -8543,6 +8559,7 @@ socksend_tls_clienthello() {
 # arg3: (optional): "all" - process full response (including Certificate and certificate_status handshake messages)
 #                   "ephemeralkey" - extract the server's ephemeral key (if any)
 # arg4: (optional) additional request extensions
+# arg5: (optional) "true" if ClientHello should advertise compression methods other than "NULL"
 tls_sockets() {
      local -i ret=0
      local -i save=0
@@ -8551,8 +8568,9 @@ tls_sockets() {
      local cipher_list_2send
      local sock_reply_file2 sock_reply_file3
      local tls_hello_ascii next_packet hello_done=0
-     local process_full="$3"
+     local process_full="$3" offer_compression=false
 
+     [[ "$5" == "true" ]] && offer_compression=true
      tls_low_byte="$1"
      if [[ -n "$2" ]]; then             # use supplied string in arg2 if there is one
           cipher_list_2send="$2"
@@ -8565,7 +8583,7 @@ tls_sockets() {
      fi
 
      debugme echo "sending client hello..."
-     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$4"
+     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$4" "$offer_compression"
      ret=$?                             # 6 means opening socket didn't succeed, e.g. timeout
 
      # if sending didn't succeed we don't bother
@@ -9078,7 +9096,7 @@ run_renego() {
 }
 
 run_crime() {
-     local -i ret=0
+     local -i ret=0 sclient_success
      local addcmd=""
      local cve="CVE-2012-4929"
      local cwe="CWE-310"
@@ -9096,14 +9114,30 @@ run_crime() {
      # first we need to test whether OpenSSL binary has zlib support
      $OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib
      if [[ $? -eq 0 ]]; then
-          local_problem_ln "$OPENSSL lacks zlib support"
-          fileout "crime" "WARN" "CRIME, TLS: Not tested. $OPENSSL lacks zlib support" "$cve" "$cwe"
-          return 7
+          if "$SSL_NATIVE"; then
+               local_problem_ln "$OPENSSL lacks zlib support"
+               fileout "crime" "WARN" "CRIME, TLS: Not tested. $OPENSSL lacks zlib support" "$cve" "$cwe"
+               return 7
+          else
+               tls_sockets "03" "$TLS12_CIPHER" "" "" "true"
+               sclient_success=$?
+               [[ $sclient_success -eq 2 ]] && sclient_success=0
+               [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+          fi
+     else
+          [[ "$OSSL_VER" == "0.9.8"* ]] && addcmd="-no_ssl2"
+          if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
+               addcmd="-comp"
+          fi
+          $OPENSSL s_client $OPTIMAL_PROTO $BUGS $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null &>$TMPFILE
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
      fi
-
-     [[ "$OSSL_VER" == "0.9.8"* ]] && addcmd="-no_ssl2"
-     $OPENSSL s_client $OPTIMAL_PROTO $BUGS $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI </dev/null &>$TMPFILE
-     if grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
+     if [[ $sclient_success -ne 0 ]]; then
+          pr_warning "test failed (couldn't connect)"
+          fileout "crime" "WARN" "CRIME, TLS: Check failed. (couldn't connect)" "$cve" "$cwe"
+          ret=7
+     elif grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
           pr_done_good "not vulnerable (OK)"
           if [[ $SERVICE != "HTTP" ]] && ! $CLIENT_AUTH;  then
                out " (not using HTTP anyway)"
