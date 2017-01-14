@@ -7128,6 +7128,159 @@ get_pub_key_size() {
      return 0
 }
 
+# Extract the DH ephemeral key from the ServerKeyExchange message
+get_dh_ephemeralkey() {
+     local tls_serverkeyexchange_ascii="$1"
+     local -i tls_serverkeyexchange_ascii_len offset
+     local dh_p dh_g dh_y dh_param len1 key_bitstring tmp_der_key_file
+     local -i i dh_p_len dh_g_len dh_y_len dh_param_len
+
+     tls_serverkeyexchange_ascii_len=${#tls_serverkeyexchange_ascii}
+     dh_p_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:0:4}")
+     offset=4+$dh_p_len
+     if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
+          debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+          return 1
+     fi
+
+     # Subtract any leading 0 bytes
+     for (( i=4; i < offset; i=i+2 )); do
+          [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
+          dh_p_len=$dh_p_len-2
+     done
+     if [[ $i -ge $offset ]]; then
+          debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+          return 1
+     fi
+     dh_p="${tls_serverkeyexchange_ascii:i:dh_p_len}"
+
+     dh_g_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+     i=4+$offset
+     offset+=4+$dh_g_len
+     if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
+          debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+          return 1
+     fi
+     # Subtract any leading 0 bytes
+     for (( 1; i < offset; i=i+2 )); do
+          [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
+          dh_g_len=$dh_g_len-2
+     done
+     if [[ $i -ge $offset ]]; then
+          debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+          return 1
+     fi
+     dh_g="${tls_serverkeyexchange_ascii:i:dh_g_len}"
+
+     dh_y_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+     i=4+$offset
+     offset+=4+$dh_y_len
+     if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
+          debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+          return 1
+     fi
+     # Subtract any leading 0 bytes
+     for (( 1; i < offset; i=i+2 )); do
+          [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
+          dh_y_len=$dh_y_len-2
+     done
+     if [[ $i -ge $offset ]]; then
+          debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+          return 1
+     fi
+     dh_y="${tls_serverkeyexchange_ascii:i:dh_y_len}"
+
+     # The following code assumes that all lengths can be encoded using at most 2 bytes,
+     # which just means that the encoded length of the public key must be less than
+     # 65,536 bytes. If the length is anywhere close to that, it is almost certainly an
+     # encoding error.
+     if [[ $dh_p_len+$dh_g_len+$dh_y_len -ge 131000 ]]; then
+          debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+          return 1
+     fi
+     # make ASN.1 INTEGER of p, g, and Y
+     [[ "0x${dh_p:0:1}" -ge 8 ]] && dh_p_len+=2 && dh_p="00$dh_p"
+     if [[ $dh_p_len -lt 256 ]]; then
+          len1="$(printf "%02x" $((dh_p_len/2)))"
+     elif [[ $dh_p_len -lt 512 ]]; then
+          len1="81$(printf "%02x" $((dh_p_len/2)))"
+     else
+          len1="82$(printf "%04x" $((dh_p_len/2)))"
+     fi
+     dh_p="02${len1}$dh_p"
+
+     [[ "0x${dh_g:0:1}" -ge 8 ]] && dh_g_len+=2 && dh_g="00$dh_g"
+     if [[ $dh_g_len -lt 256 ]]; then
+          len1="$(printf "%02x" $((dh_g_len/2)))"
+     elif [[ $dh_g_len -lt 512 ]]; then
+          len1="81$(printf "%02x" $((dh_g_len/2)))"
+     else
+          len1="82$(printf "%04x" $((dh_g_len/2)))"
+     fi
+     dh_g="02${len1}$dh_g"
+
+     [[ "0x${dh_y:0:1}" -ge 8 ]] && dh_y_len+=2 && dh_y="00$dh_y"
+     if [[ $dh_y_len -lt 256 ]]; then
+          len1="$(printf "%02x" $((dh_y_len/2)))"
+     elif [[ $dh_y_len -lt 512 ]]; then
+          len1="81$(printf "%02x" $((dh_y_len/2)))"
+     else
+          len1="82$(printf "%04x" $((dh_y_len/2)))"
+     fi
+     dh_y="02${len1}$dh_y"
+
+     # Make a SEQUENCE of p and g
+     dh_param_len=${#dh_p}+${#dh_g}
+     if [[ $dh_param_len -lt 256 ]]; then
+          len1="$(printf "%02x" $((dh_param_len/2)))"
+     elif [[ $dh_param_len -lt 512 ]]; then
+          len1="81$(printf "%02x" $((dh_param_len/2)))"
+     else
+          len1="82$(printf "%04x" $((dh_param_len/2)))"
+     fi
+     dh_param="30${len1}${dh_p}${dh_g}"
+     
+     # Make a SEQUENCE of the paramters SEQUENCE and the OID
+     dh_param_len=22+${#dh_param}
+     if [[ $dh_param_len -lt 256 ]]; then
+          len1="$(printf "%02x" $((dh_param_len/2)))"
+     elif [[ $dh_param_len -lt 512 ]]; then
+          len1="81$(printf "%02x" $((dh_param_len/2)))"
+     else
+          len1="82$(printf "%04x" $((dh_param_len/2)))"
+     fi
+     dh_param="30${len1}06092A864886F70D010301${dh_param}"
+
+     # Encapsulate public key, y, in a BIT STRING
+     dh_y_len=${#dh_y}+2
+     if [[ $dh_y_len -lt 256 ]]; then
+          len1="$(printf "%02x" $((dh_y_len/2)))"
+     elif [[ $dh_y_len -lt 512 ]]; then
+          len1="81$(printf "%02x" $((dh_y_len/2)))"
+     else
+          len1="82$(printf "%04x" $((dh_y_len/2)))"
+     fi
+     dh_y="03${len1}00$dh_y"
+
+     # Create the public key SEQUENCE
+     i=${#dh_param}+${#dh_y}
+     if [[ $i -lt 256 ]]; then
+          len1="$(printf "%02x" $((i/2)))"
+     elif [[ $i -lt 512 ]]; then
+          len1="81$(printf "%02x" $((i/2)))"
+     else
+          len1="82$(printf "%04x" $((i/2)))"
+     fi
+     key_bitstring="30${len1}${dh_param}${dh_y}"
+     tmp_der_key_file=$(mktemp $TEMPDIR/pub_key_der.XXXXXX) || return 1
+     asciihex_to_binary_file "$key_bitstring" "$tmp_der_key_file"
+     key_bitstring="$($OPENSSL pkey -pubin -in $tmp_der_key_file -inform DER 2> $ERRFILE)"
+     rm $tmp_der_key_file
+     [[ -z "$key_bitstring" ]] && return 1
+     out "$key_bitstring"
+     return 0
+}
+
 # arg1: name of file with socket reply
 # arg2: true if entire server hello should be parsed
 parse_sslv2_serverhello() {
@@ -7339,9 +7492,9 @@ parse_tls_serverhello() {
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
      local tmp_der_certfile tmp_pem_certfile hostcert_issuer="" ocsp_response=""
-     local len1 key_bitstring="" tmp_der_key_file
-     local dh_p dh_g dh_y dh_param ephemeral_param rfc7919_param
-     local -i dh_p_len dh_g_len dh_y_len dh_param_len
+     local key_bitstring=""
+     local dh_p ephemeral_param rfc7919_param
+     local -i dh_p_len
 
      TLS_TIME=""
      DETECTED_TLS_VERSION=""
@@ -8042,134 +8195,8 @@ parse_tls_serverhello() {
                     dh_bits=$dh_bits-1
                done
 
-               dh_g_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
-               i=4+$offset
-               offset+=4+$dh_g_len
-               if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
-                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
-                    return 1
-               fi
-               # Subtract any leading 0 bytes
-               for (( 1; i < offset; i=i+2 )); do
-                    [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
-                    dh_g_len=$dh_g_len-2
-               done
-               if [[ $i -ge $offset ]]; then
-                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
-                    return 1
-               fi
-               dh_g="${tls_serverkeyexchange_ascii:i:dh_g_len}"
-
-               dh_y_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
-               i=4+$offset
-               offset+=4+$dh_y_len
-               if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
-                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
-                    return 1
-               fi
-               # Subtract any leading 0 bytes
-               for (( 1; i < offset; i=i+2 )); do
-                    [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
-                    dh_y_len=$dh_y_len-2
-               done
-               if [[ $i -ge $offset ]]; then
-                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
-                    return 1
-               fi
-               dh_y="${tls_serverkeyexchange_ascii:i:dh_y_len}"
-
-               # The following code assumes that all lengths can be encoded using at most 2 bytes,
-               # which just means that the encoded length of the public key must be less than
-               # 65,536 bytes. If the length is anywhere close to that, it is almost certainly an
-               # encoding error.
-               if [[ $dh_p_len+$dh_g_len+$dh_y_len -ge 131000 ]]; then
-                    debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
-                    return 1
-               fi
-               # make ASN.1 INTEGER of p, g, and Y
-               [[ "0x${dh_p:0:1}" -ge 8 ]] && dh_p_len+=2 && dh_p="00$dh_p"
-               if [[ $dh_p_len -lt 256 ]]; then
-                    len1="$(printf "%02x" $((dh_p_len/2)))"
-               elif [[ $dh_p_len -lt 512 ]]; then
-                    len1="81$(printf "%02x" $((dh_p_len/2)))"
-               else
-                    len1="82$(printf "%04x" $((dh_p_len/2)))"
-               fi
-               dh_p="02${len1}$dh_p"
-
-               [[ "0x${dh_g:0:1}" -ge 8 ]] && dh_g_len+=2 && dh_g="00$dh_g"
-               if [[ $dh_g_len -lt 256 ]]; then
-                    len1="$(printf "%02x" $((dh_g_len/2)))"
-               elif [[ $dh_g_len -lt 512 ]]; then
-                    len1="81$(printf "%02x" $((dh_g_len/2)))"
-               else
-                    len1="82$(printf "%04x" $((dh_g_len/2)))"
-               fi
-               dh_g="02${len1}$dh_g"
-
-               [[ "0x${dh_y:0:1}" -ge 8 ]] && dh_y_len+=2 && dh_y="00$dh_y"
-               if [[ $dh_y_len -lt 256 ]]; then
-                    len1="$(printf "%02x" $((dh_y_len/2)))"
-               elif [[ $dh_y_len -lt 512 ]]; then
-                    len1="81$(printf "%02x" $((dh_y_len/2)))"
-               else
-                    len1="82$(printf "%04x" $((dh_y_len/2)))"
-               fi
-               dh_y="02${len1}$dh_y"
-
-               # Make a SEQUENCE of p and g
-               dh_param_len=${#dh_p}+${#dh_g}
-               if [[ $dh_param_len -lt 256 ]]; then
-                    len1="$(printf "%02x" $((dh_param_len/2)))"
-               elif [[ $dh_param_len -lt 512 ]]; then
-                    len1="81$(printf "%02x" $((dh_param_len/2)))"
-               else
-                    len1="82$(printf "%04x" $((dh_param_len/2)))"
-               fi
-               dh_param="30${len1}${dh_p}${dh_g}"
-
-               # Make a SEQUENCE of the paramters SEQUENCE and the OID
-               dh_param_len=22+${#dh_param}
-               if [[ $dh_param_len -lt 256 ]]; then
-                    len1="$(printf "%02x" $((dh_param_len/2)))"
-               elif [[ $dh_param_len -lt 512 ]]; then
-                    len1="81$(printf "%02x" $((dh_param_len/2)))"
-               else
-                    len1="82$(printf "%04x" $((dh_param_len/2)))"
-               fi
-               dh_param="30${len1}06092A864886F70D010301${dh_param}"
-
-               # Encapsulate public key, y, in a BIT STRING
-               dh_y_len=${#dh_y}+2
-               if [[ $dh_y_len -lt 256 ]]; then
-                    len1="$(printf "%02x" $((dh_y_len/2)))"
-               elif [[ $dh_y_len -lt 512 ]]; then
-                    len1="81$(printf "%02x" $((dh_y_len/2)))"
-               else
-                    len1="82$(printf "%04x" $((dh_y_len/2)))"
-               fi
-               dh_y="03${len1}00$dh_y"
-
-               # Create the public key SEQUENCE
-               i=${#dh_param}+${#dh_y}
-               if [[ $i -lt 256 ]]; then
-                    len1="$(printf "%02x" $((i/2)))"
-               elif [[ $i -lt 512 ]]; then
-                    len1="81$(printf "%02x" $((i/2)))"
-               else
-                    len1="82$(printf "%04x" $((i/2)))"
-               fi
-               key_bitstring="30${len1}${dh_param}${dh_y}"
-               tmp_der_key_file=$(mktemp $TEMPDIR/pub_key_der.XXXXXX) || return 1
-               asciihex_to_binary_file "$key_bitstring" "$tmp_der_key_file"
-               key_bitstring="$($OPENSSL pkey -pubin -in $tmp_der_key_file -inform DER 2> $ERRFILE)"
-               rm $tmp_der_key_file
-               [[ -n "$key_bitstring" ]] && echo "$key_bitstring" >> $TMPFILE
+               key_bitstring="$(get_dh_ephemeralkey "$tls_serverkeyexchange_ascii")"
+               [[ $? -eq 0 ]] && echo "$key_bitstring" >> $TMPFILE
 
                # Check to see whether the ephemeral public key uses one of the groups from
                # RFC 7919 for parameters
@@ -9429,11 +9456,12 @@ run_logjam() {
      local -i sclient_success=0
      local exportdhe_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
      local exportdhe_cipher_list_hex="00,63, 00,65, 00,14, 00,11"
-     local -i i nr_supported_ciphers=0
+     local -i i nr_supported_ciphers=0 server_key_exchange_len=0 ephemeral_pub_len=0
      local addtl_warning="" hexc
      local cve="CVE-2015-4000"
      local cwe="CWE-310"
      local hint=""
+     local server_key_exchange ephemeral_pub key_bitstring="" dh_p
      local using_sockets=true
 
      "$SSL_NATIVE" && using_sockets=false
@@ -9500,6 +9528,35 @@ run_logjam() {
           fi
      fi
      debugme echo $nr_supported_ciphers
+
+     # Try all ciphers that use an ephemeral DH key. If successful, check whether the key uses a weak prime.
+     if "$using_sockets"; then
+          tls_sockets "03" "cc,15, 00,b3, 00,91, c0,97, 00,a3, 00,9f, cc,aa, c0,a3, c0,9f, 00,6b, 00,6a, 00,39, 00,38, 00,c4, 00,c3, 00,88, 00,87, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, 00,ab, cc,ad, c0,a7, c0,43, c0,45, c0,47, c0,53, c0,57, c0,5b, c0,67, c0,6d, c0,7d, c0,81, c0,85, c0,91, 00,a2, 00,9e, c0,a2, c0,9e, 00,aa, c0,a6, 00,67, 00,40, 00,33, 00,32, 00,be, 00,bd, 00,9a, 00,99, 00,45, 00,44, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, 00,b2, 00,90, c0,96, c0,42, c0,44, c0,46, c0,52, c0,56, c0,5a, c0,66, c0,6c, c0,7c, c0,80, c0,84, c0,90, 00,66, 00,18, 00,8e, 00,16, 00,13, 00,1b, 00,8f, 00,63, 00,15, 00,12, 00,1a, 00,65, 00,14, 00,11, 00,19, 00,17, 00,b5, 00,b4, 00,2d" "ephemeralkey"
+          sclient_success=$?
+          if [[ $sclient_success -eq 0 ]] || [[ $sclient_success -eq 2 ]]; then
+               cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+               key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TMPFILE)"
+          fi
+     else
+          $OPENSSL s_client $STARTTLS $BUGS -cipher kEDH -msg -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          if [[ $? -eq 0 ]] && grep -q ServerKeyExchange $TMPFILE; then
+               server_key_exchange_len=$(hex2dec "$(grep ServerKeyExchange $TMPFILE | sed -e 's/<<< TLS 1.2 Handshake \[length //g' -e 's/], ServerKeyExchange//g')")
+               server_key_exchange_len=2+$server_key_exchange_len/16
+               server_key_exchange="$(grep -A $server_key_exchange_len ServerKeyExchange $TMPFILE | tail -n +2)"
+               server_key_exchange="$(toupper "$(strip_spaces "$(newline_to_spaces "$server_key_exchange")")")"
+               server_key_exchange="${server_key_exchange%%[!0-9A-F]*}"
+               server_key_exchange_len=${#server_key_exchange}
+               [[ $server_key_exchange_len -gt 8 ]] && [[ "${server_key_exchange:0:2}" == "0C" ]] && ephemeral_pub_len=$(hex2dec "${server_key_exchange:2:6}")
+               [[ $ephemeral_pub_len -ne 0 ]] && [[ $ephemeral_pub_len -le $server_key_exchange_len ]] && key_bitstring="$(get_dh_ephemeralkey "${server_key_exchange:8}")"
+          fi
+     fi
+     if [[ -n "$key_bitstring" ]]; then
+          dh_p="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | awk '/prime:/,/generator:/' | tail -n +2 | head -n -1)"
+          dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
+          [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
+          # At this point the DH key's prime has been extracted into $dh_p. Compare is against known weak primes.
+     fi
 
      tmpfile_handle $FUNCNAME.txt
      return $sclient_success
