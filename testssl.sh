@@ -4498,7 +4498,7 @@ run_std_cipherlists() {
 # arg1: file with input for grepping the bit length for ECDH/DHE
 # arg2: whether to print warning "old fart" or not (empty: no)
 read_dhbits_from_file() {
-     local bits what_dh temp
+     local bits what_dh temp curve=""
      local add=""
      local old_fart=" (openssl cannot show DH bits)"
 
@@ -4506,14 +4506,23 @@ read_dhbits_from_file() {
      what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
      bits=$(awk -F',' '{ print $3 }' <<< $temp)
      # RH's backport has the DH bits in second arg after comma
-     grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
+     if grep -q bits <<< $bits; then
+          curve="$(strip_spaces "$(awk -F',' '{ print $2 }' <<< $temp)")"
+     else
+          bits=$(awk -F',' '{ print $2 }' <<< $temp)
+     fi
      bits=$(tr -d ' bits' <<< $bits)
 
      if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
+          curve="$what_dh"
           what_dh="ECDH"
      fi
 
-     debugme echo ">$HAS_DH_BITS|$what_dh|$bits<"
+     if [[ -n "$curve" ]]; then
+          debugme echo ">$HAS_DH_BITS|$what_dh($curve)|$bits<"
+     else
+          debugme echo ">$HAS_DH_BITS|$what_dh|$bits<"
+     fi
 
      [[ -n "$what_dh" ]] && HAS_DH_BITS=true                            # FIX 190
      if [[ -z "$what_dh" ]] && ! "$HAS_DH_BITS"; then
@@ -4525,7 +4534,10 @@ read_dhbits_from_file() {
 
      [[ -n "$bits" ]] && [[ -z "$2" ]] && out ", "
      if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]]; then
-          [[ -z "$2" ]] && add="bit DH"
+          if [[ -z "$2" ]]; then
+               add="bit DH"
+               [[ -n "$curve" ]] && add+=" ($curve)"
+          fi
           if [[ "$bits" -le 600 ]]; then
                pr_svrty_critical "$bits $add"
           elif [[ "$bits" -le 800 ]]; then
@@ -4539,7 +4551,10 @@ read_dhbits_from_file() {
           fi
      # https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography, http://www.keylength.com/en/compare/
      elif [[ $what_dh == "ECDH" ]]; then
-          [[ -z "$2" ]] && add="bit ECDH"
+          if [[ -z "$2" ]]; then
+               add="bit ECDH"
+               [[ -n "$curve" ]] && add+=" ($curve)"
+          fi
           if [[ "$bits" -le 80 ]]; then      # has that ever existed?
                pr_svrty_critical "$bits $add"
           elif [[ "$bits" -le 108 ]]; then   # has that ever existed?
