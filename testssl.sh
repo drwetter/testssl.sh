@@ -6000,11 +6000,19 @@ certificate_info() {
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
      fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
 
+     # Get both CRL and OCSP URL upfront. If there's none, this is not good. And we need to penalize this in the output
+     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk '/CRL Distribution/,/URI/ { print $0 }' | awk -F'URI:' '/URI/ { print $2 }')"
+     ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
+
      out "$indent"; pr_bold " Certificate Revocation List  "
-     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
-     if [[ -z "$crl" ]]; then
-          pr_svrty_highln "--"
-          fileout "${json_prefix}crl" "HIGH" "No CRL provided"
+     if [[ -z "$crl" ]] ; then
+          if [[ -n "$ocsp_uri" ]]; then
+               outln "--"
+               fileout "${json_prefix}crl" "INFO" "No CRL provided"
+          else
+               pr_svrty_highln "-- (NOT ok)"
+               fileout "${json_prefix}crl" "HIGH" "Neither CRL nor  OCSP URL provided"
+          fi
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
@@ -6019,10 +6027,9 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " OCSP URI                     "
-     ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
-     if [[ -z "$ocsp_uri" ]]; then
-          pr_svrty_highln "--"
-          fileout "${json_prefix}ocsp_uri" "HIGH" "OCSP URI : --"
+     if [[ -z "$ocsp_uri" ]] && [[ -n "$crl" ]]; then
+          outln "--"
+          fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : --"
      else
           outln "$ocsp_uri"
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
