@@ -10951,79 +10951,6 @@ get_aaaa_record() {
      echo "$ip6"
 }
 
-
-# now get all IP addresses
-determine_ip_addresses() {
-     local ip4=""
-     local ip6=""
-
-     if is_ipv4addr "$NODE"; then
-          ip4="$NODE"                        # only an IPv4 address was supplied as an argument, no hostname
-          SNI=""                             # override Server Name Indication as we test the IP only
-     else
-          ip4=$(get_local_a $NODE)           # is there a local host entry?
-          if [[ -z $ip4 ]]; then             # empty: no (LOCAL_A is predefined as false)
-               check_resolver_bins
-               ip4=$(get_a_record $NODE)
-          else
-               LOCAL_A=true                  # we have the ip4 from local host entry and need to signal this to testssl
-          fi
-          # same now for ipv6
-          ip6=$(get_local_aaaa $NODE)
-          if [[ -z $ip6 ]]; then
-               check_resolver_bins
-               ip6=$(get_aaaa_record $NODE)
-          else
-               LOCAL_AAAA=true               # we have a local ipv6 entry and need to signal this to testssl
-          fi
-     fi
-     if [[ -z "$ip4" ]]; then                # IPv6  only address
-          if "$HAS_IPv6"; then
-               IPADDRs=$(newline_to_spaces "$ip6")
-               IP46ADDRs="$IPADDRs"          # IP46ADDRs are the ones to display, IPADDRs the ones to test
-          fi
-     else
-          if "$HAS_IPv6" && [[ -n "$ip6" ]]; then
-               IPADDRs=$(newline_to_spaces "$ip4 $ip6")
-               IP46ADDRs="$IPADDRs"
-          else
-               IPADDRs=$(newline_to_spaces "$ip4")
-               IP46ADDRs=$(newline_to_spaces "$ip4 $ip6")
-          fi
-     fi
-     if [[ -z "$IPADDRs" ]] && [[ -z "$CMDLINE_IP" ]]; then
-          fatal "No IPv4 address for \"$NODE\" available" -1
-     fi
-     return 0                                # IPADDR and IP46ADDR is set now
-}
-
-determine_rdns() {
-     local saved_openssl_conf="$OPENSSL_CONF"
-     local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
-
-     "$NODNS" && rDNS="--" && return 0
-     OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
-     if [[ "$NODE" == *.local ]]; then
-          if which avahi-resolve &>/dev/null; then
-               rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
-          elif which dig &>/dev/null; then
-               rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
-          fi
-     elif which dig &> /dev/null; then
-          rDNS=$(dig -x $nodeip +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
-     elif which host &> /dev/null; then
-          rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
-     elif which drill &> /dev/null; then
-          rDNS=$(drill -x ptr $nodeip 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
-     elif which nslookup &> /dev/null; then
-          rDNS=$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
-     fi
-     OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     rDNS="$(echo $rDNS)"
-     [[ -z "$rDNS" ]] && rDNS="--"
-     return 0
-}
-
 # RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
 # arg1: domain to check for
 get_caa_rr_record() {
@@ -11078,6 +11005,94 @@ get_mx_record() {
      fi
      OPENSSL_CONF="$saved_openssl_conf"
      echo "$mxs"
+}
+
+
+# set IPADDRs and IP46ADDRs
+#
+determine_ip_addresses() {
+     local ip4=""
+     local ip6=""
+
+     if [[ -n "$CMDLINE_IP" ]]; then
+          # command line has supplied an IP address
+          [[ "$CMDLINE_IP" == "one" ]] && \
+               CMDLINE_IP="$(get_a_record $NODE | head -1)"
+               # use first IPv4 address
+          NODEIP="$CMDLINE_IP"
+          if is_ipv4addr "$NODEIP"; then
+               ip4="$NODEIP"
+          elif is_ipv6addr "$NODEIP"; then
+               ip6="$NODEIP"
+          else
+               fatal "couldn't identify supplied \"CMDLINE_IP\"" 2
+          fi
+     elif is_ipv4addr "$NODE"; then
+          ip4="$NODE"                        # only an IPv4 address was supplied as an argument, no hostname
+          SNI=""                             # override Server Name Indication as we test the IP only
+     else
+          ip4=$(get_local_a $NODE)           # is there a local host entry?
+          if [[ -z $ip4 ]]; then             # empty: no (LOCAL_A is predefined as false)
+               check_resolver_bins
+               ip4=$(get_a_record $NODE)
+          else
+               LOCAL_A=true                  # we have the ip4 from local host entry and need to signal this to testssl
+          fi
+          # same now for ipv6
+          ip6=$(get_local_aaaa $NODE)
+          if [[ -z $ip6 ]]; then
+               check_resolver_bins
+               ip6=$(get_aaaa_record $NODE)
+          else
+               LOCAL_AAAA=true               # we have a local ipv6 entry and need to signal this to testssl
+          fi
+     fi
+
+     if [[ -z "$ip4" ]]; then                # IPv6  only address
+          if "$HAS_IPv6"; then
+               IPADDRs=$(newline_to_spaces "$ip6")
+               IP46ADDRs="$IPADDRs"          # IP46ADDRs are the ones to display, IPADDRs the ones to test
+          fi
+     else
+          if "$HAS_IPv6" && [[ -n "$ip6" ]]; then
+               IPADDRs=$(newline_to_spaces "$ip4 $ip6")
+               IP46ADDRs="$IPADDRs"
+          else
+               IPADDRs=$(newline_to_spaces "$ip4")
+               IP46ADDRs=$(newline_to_spaces "$ip4 $ip6")
+          fi
+     fi
+     if [[ -z "$IPADDRs" ]]; then
+          fatal "No IPv4 address for \"$NODE\" available" -1
+     fi
+     return 0                                # IPADDR and IP46ADDR is set now
+}
+
+determine_rdns() {
+     local saved_openssl_conf="$OPENSSL_CONF"
+     local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
+
+     "$NODNS" && rDNS="--" && return 0
+     OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
+     if [[ "$NODE" == *.local ]]; then
+          if which avahi-resolve &>/dev/null; then
+               rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
+          elif which dig &>/dev/null; then
+               rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
+          fi
+     elif which dig &> /dev/null; then
+          rDNS=$(dig -x $nodeip +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
+     elif which host &> /dev/null; then
+          rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
+     elif which drill &> /dev/null; then
+          rDNS=$(drill -x ptr $nodeip 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
+     elif which nslookup &> /dev/null; then
+          rDNS=$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
+     fi
+     OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
+     rDNS="$(echo $rDNS)"
+     [[ -z "$rDNS" ]] && rDNS="--"
+     return 0
 }
 
 # We need to get the IP address of the proxy so we can use it in fd_socket
@@ -12011,13 +12026,11 @@ if $do_mx_all_ips; then
 else
      parse_hn_port "${URI}"                                                     # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
      prepare_logging
-     if ! determine_ip_addresses && [[ -z "$CMDLINE_IP" ]]; then
+     if ! determine_ip_addresses; then
           fatal "No IP address could be determined" 2
      fi
      if [[ -n "$CMDLINE_IP" ]]; then
-          [[ "$CMDLINE_IP" == "one" ]] && \
-               CMDLINE_IP=$(echo -n "$IPADDRs" | awk '{ print $1 }')
-          NODEIP="$CMDLINE_IP"                                                  # specific ip address for NODE was supplied
+          #  we just test the one supplied
           lets_roll "${STARTTLS_PROTOCOL}"
           ret=$?
      else                                                                       # no --ip was supplied
