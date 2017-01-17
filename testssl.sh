@@ -2753,6 +2753,7 @@ run_cipher_per_proto() {
      "$FAST" && using_sockets=false
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
+     outln
      if "$using_sockets"; then
           pr_headlineln " Testing per protocol via OpenSSL and sockets against the server, ordered by encryption strength "
      else
