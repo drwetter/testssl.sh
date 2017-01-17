@@ -1959,6 +1959,7 @@ run_cipher_per_proto() {
      local available
      local id
 
+     outln
      pr_headlineln " Testing all locally available ciphers per protocol against the server, ordered by encryption strength "
      ! "$HAS_DH_BITS" && pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      outln
