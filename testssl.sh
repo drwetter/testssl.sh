@@ -6056,6 +6056,20 @@ certificate_info() {
                fi
           fi
      fi
+     outln
+
+     if "$EXPERIMENTAL"; then
+          out "$indent"; pr_bold " DNS CAA RR record            "
+          caa="$(get_caa_rr_record $NODE)"
+          if [[ -n "$caa" ]]; then
+               pr_done_good "OK ($caa)"
+               fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : offered"
+          else
+               pr_svrty_minor "--"
+               fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
+          fi
+     fi
+
      outln "\n"
 
      return $ret
@@ -10961,6 +10975,41 @@ determine_rdns() {
      return 0
 }
 
+# RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
+# arg1: domain to check for
+get_caa_rr_record() {
+     local caa=""
+     local saved_openssl_conf="$OPENSSL_CONF"
+
+     OPENSSL_CONF=""
+     if which dig &> /dev/null; then
+          caa="$(dig $1 type257 +short | awk '{ print $3 }')"
+          # empty if no CAA record
+     elif which host &> /dev/null; then
+          caa="$(host -t type257 $1)"
+          if grep -wq issue <<< "$caa" && grep -wvq "has no CAA" <<< "$caa"; then
+               caa="$(awk '/issue/ { print $NF }' <<< "$caa")"
+          fi
+     elif which nslookup &> /dev/null; then
+          caa="$(nslookup -type=type257 $1)"
+          if grep -wq issue <<< "$caa" && grep -wvq "No answer" <<< "$caa"; then
+               caa="$(awk '/issue/ { print $NF }' <<< "$caa")" 
+          fi
+     else
+          return 1
+          # No dig, host, or nslookup --> complaint was elsewhere already and except for one which has drill only we don't get here
+     fi
+     OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
+     echo "$caa"
+     return 0
+# to do:
+#    1: check old binaries whether they support this record at all
+#    2: check whether hexstring is returned and deal with it
+#    3: check more than domainname, see https://tools.ietf.org/html/rfc6844#section-3
+#    4: check whether $1 is a CNAME and take this
+#    5: query with drill
+}
+
 get_mx_record() {
      local mx=""
      local saved_openssl_conf="$OPENSSL_CONF"
@@ -10968,13 +11017,13 @@ get_mx_record() {
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
      if which host &> /dev/null; then
-          mxs=$(host -t MX "$1" 2>/dev/null | grep 'handled by' | sed -e 's/^.*by //g' -e 's/\.$//')
+          mxs=$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')
      elif which dig &> /dev/null; then
           mxs=$(dig +short -t MX "$1" 2>/dev/null)
      elif which drill &> /dev/null; then
           mxs=$(drill mx "$1" 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
      elif which nslookup &> /dev/null; then
-          mxs=$(nslookup -type=MX "$1" 2>/dev/null | grep 'mail exchanger = ' | sed 's/^.*mail exchanger = //g')
+          mxs=$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')
      else
           fatal "No dig, host, drill or nslookup" -3
      fi
