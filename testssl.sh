@@ -8381,10 +8381,10 @@ display_rdns_etc() {
           done
           outln
      fi
-     if "$LOCAL_A"; then
-          outln " A record via           $CORRECT_SPACES /etc/hosts "
-     elif  [[ -n "$CMDLINE_IP" ]]; then
+     if  [[ -n "$CMDLINE_IP" ]]; then
           outln " A record via           $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
+     elif "$LOCAL_A"; then
+          outln " A record via           $CORRECT_SPACES /etc/hosts "
      fi
      if [[ -n "$rDNS" ]]; then
           printf " %-23s %s" "rDNS ($nodeip):" "$rDNS"
