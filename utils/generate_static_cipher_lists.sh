@@ -324,6 +324,21 @@ get_weak_dh_ciphers() {
      outln "exportdhe_cipher_list_hex=\"${exportdhe_cipher_list_hex:2}\""
 }
 
+get_dhe_ciphers() {
+     local -i
+     local hexc all_dhe_ciphers=""
+
+     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+          if [[ "${TLS_CIPHER_RFC_NAME[i]}" == "TLS_DHE_"* ]] || [[ "${TLS_CIPHER_RFC_NAME[i]}" == "TLS_DH_anon_"* ]]; then
+               hexc="${TLS_CIPHER_HEXCODE[i]}"
+               all_dhe_ciphers+=", ${hexc:2:2},${hexc:7:2}"
+          fi
+     done
+
+     outln; pr_underline "All DHE ciphers for run_logjam()"; outln
+     outln "all_dhe_ciphers=\"$(tolower "${all_dhe_ciphers:2}")\""
+}
+
 get_mapping_file
 get_robust_pfs_ciphers
 get_std_cipherlists
@@ -331,6 +346,7 @@ get_cbc_ciphers
 get_sslv3_tls1_cbc_ciphers
 get_export_rsa_ciphers
 get_weak_dh_ciphers
+get_dhe_ciphers
 outln
 
 exit $?
