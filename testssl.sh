@@ -9524,8 +9524,8 @@ run_freak() {
 # see https://weakdh.org/logjam.html
 run_logjam() {
      local -i sclient_success=0
-     local exportdhe_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
-     local exportdhe_cipher_list_hex="00,63, 00,65, 00,14, 00,11"
+     local exportdh_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
+     local exportdh_cipher_list_hex="00,63, 00,65, 00,14, 00,11"
      local all_dhe_ciphers="cc,15, 00,b3, 00,91, c0,97, 00,a3, 00,9f, cc,aa, c0,a3, c0,9f, 00,6b, 00,6a, 00,39, 00,38, 00,c4, 00,c3, 00,88, 00,87, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, 00,ab, cc,ad, c0,a7, c0,43, c0,45, c0,47, c0,53, c0,57, c0,5b, c0,67, c0,6d, c0,7d, c0,81, c0,85, c0,91, 00,a2, 00,9e, c0,a2, c0,9e, 00,aa, c0,a6, 00,67, 00,40, 00,33, 00,32, 00,be, 00,bd, 00,9a, 00,99, 00,45, 00,44, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, 00,b2, 00,90, c0,96, c0,42, c0,44, c0,46, c0,52, c0,56, c0,5a, c0,66, c0,6c, c0,7c, c0,80, c0,84, c0,90, 00,66, 00,18, 00,8e, 00,16, 00,13, 00,1b, 00,8f, 00,63, 00,15, 00,12, 00,1a, 00,65, 00,14, 00,11, 00,19, 00,17, 00,b5, 00,b4, 00,2d"
      local -i i nr_supported_ciphers=0 server_key_exchange_len=0 ephemeral_pub_len=0
      local addtl_warning="" hexc
@@ -9535,6 +9535,11 @@ run_logjam() {
      local server_key_exchange ephemeral_pub key_bitstring="" dh_p
      local using_sockets=true
      local spaces="                                           "
+     local vuln_exportdh_ciphers=false
+     local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
+     local comment=""
+     local -i lineno_matched=0
+     local -i ret
 
      "$SSL_NATIVE" && using_sockets=false
 
@@ -9542,42 +9547,40 @@ run_logjam() {
      pr_bold " LOGJAM"; out " ($cve), experimental      "
 
      if "$using_sockets"; then
-          nr_supported_ciphers=$(count_words "$exportdhe_cipher_list_hex")
+          nr_supported_ciphers=$(count_words "$exportdh_cipher_list_hex")
      else
-          nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdhe_cipher_list))
+          nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdh_cipher_list))
      fi
+     debugme echo $nr_supported_ciphers
 
      case $nr_supported_ciphers in
-          0)   local_problem_ln "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
-               fileout "logjam" "WARN" "LOGJAM: Not tested. $OPENSSL doesn't have any DHE EXPORT ciphers configured" "$cve" "$cwe"
-               return 3
+          0)   local_problem_ln "$OPENSSL doesn't have any DH EXPORT ciphers configured"
+               fileout "logjam" "WARN" "LOGJAM: Not tested. $OPENSSL doesn't have any DH EXPORT ciphers configured" "$cve" "$cwe"
+# FIXME: needed to be handled below
                ;;
           1|2) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
           3)   addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers)" ;;
           4)   ;;
      esac
+
+     # test for DH export ciphers first
      if "$using_sockets"; then
-          tls_sockets "03" "$exportdhe_cipher_list_hex"
+          tls_sockets "03" "$exportdh_cipher_list_hex"
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
      else
-          $OPENSSL s_client $STARTTLS $BUGS -cipher $exportdhe_cipher_list -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+          $OPENSSL s_client $STARTTLS $BUGS -cipher $exportdh_cipher_list -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
           debugme egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      fi
-
-     if [[ $sclient_success -eq 0 ]]; then
-          pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DHE EXPORT ciphers"
-          fileout "logjam" "HIGH" "LOGJAM: VULNERABLE, uses DHE EXPORT ciphers" "$cve" "$cwe" "$hint"
-     else
-          pr_done_good "not vulnerable (OK):"; out " no DHE EXPORT ciphers"; out "$addtl_warning"
-          fileout "logjam" "OK" "LOGJAM: not vulnerable (no DHE EXPORT ciphers) $addtl_warning" "$cve" "$cwe"
-     fi
+     [[ $sclient_success -eq 0 ]] && \
+          vuln_exportdh_ciphers=true || \
+          vuln_exportdh_ciphers=false
 
      if [[ $DEBUG -ge 2 ]]; then
           if "$using_sockets"; then
-               for hexc in $(sed 's/, / /g' <<< "$exportdhe_cipher_list_hex"); do
+               for hexc in $(sed 's/, / /g' <<< "$exportdh_cipher_list_hex"); do
                     hexc="0x${hexc:0:2},0x${hexc:3:2}"
                     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                          [[ "$hexc" == "${TLS_CIPHER_HEXCODE[i]}" ]] && break
@@ -9586,10 +9589,9 @@ run_logjam() {
                done
                outln
           else
-               echo $(actually_supported_ciphers $exportdhe_cipher_list)
+               echo $(actually_supported_ciphers $exportdh_cipher_list)
           fi
      fi
-     debugme echo $nr_supported_ciphers
 
      # Try all ciphers that use an ephemeral DH key. If successful, check whether the key uses a weak prime.
      if "$using_sockets"; then
@@ -9613,55 +9615,81 @@ run_logjam() {
                [[ $ephemeral_pub_len -ne 0 ]] && [[ $ephemeral_pub_len -le $server_key_exchange_len ]] && key_bitstring="$(get_dh_ephemeralkey "${server_key_exchange:8}")"
           fi
      fi
+
+     # now the final test for common primes
      if [[ -n "$key_bitstring" ]]; then
           dh_p="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | awk '/prime:/,/generator:/' | tail -n +2 | head -n -1)"
           dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
           [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
           debugme outln "dh_p: $dh_p"
           echo "$dh_p" > $TEMPDIR/dh_p.txt
-# attention: file etc/common-primes.txt is not correct!
-          common_primes_test $dh_p "$spaces"
-     else
-          out ", no DH key detected"
-          fileout "LOGJAM_common primes" "OK" "no DH key detected"
-     fi
-     outln
-
-     tmpfile_handle $FUNCNAME.txt
-     return $sclient_success
-}
-
-# takes one arg and compares against a predefined set in $TESTSSL_INSTALL_DIR
-# spaces to indent
-common_primes_test() {
-     local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
-     local -i lineno_matched=0
-     local comment=""
-     local dhp="$1"
-
-     if [[ ! -s "$common_primes_file" ]]; then
-          outln 
-          pr_warning "${2}couldn't read common primes file $common_primes_file"
-          fileout "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
-          return 1
-     else
-          dh_p="$(toupper "$dh_p")"
-          # the most elegant thing to get the previous line " awk '/regex/ { print x }; { x=$0 }' " doesn't work with GNU grep
-          # this is bascially the hint we want to echo
-          lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
-          if [[ "$lineno_matched" -ne 0 ]]; then
-               # get comment
-               comment="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
-#FiXME: probably the high groups/bit sizes whould get a different rating, see paper
-               out "\n${2}"
-               pr_svrty_high "common prime \"$comment\" detected"
-               fileout "LOGJAM_common primes" "HIGH" "common prime \"$comment\" detected"
+          if [[ ! -s "$common_primes_file" ]]; then
+               local_problem_ln "couldn't read common primes file $common_primes_file"
+               out "${spaces}"
+               fileout "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
+               ret=7
           else
-               out ", "
-               pr_done_good " no common primes detected"
+               dh_p="$(toupper "$dh_p")"
+               # In the previous line of the match is bascially the hint we want to echo
+               # the most elegant thing to get the previous line [ awk '/regex/ { print x }; { x=$0 }' ] doesn't work with GNU grep
+               lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
+               if [[ "$lineno_matched" -ne 0 ]]; then
+                    # get comment
+                    comment="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
+#FiXME: probably the high groups/bit sizes whould get a different rating, see paper
+                    ret=1
+                    # vulnerable: common prime
+               else
+                    ret=0
+                    # not vulnerable: no known common prime
+               fi
+          fi
+     else
+          ret=3
+          # no DH key detected
+     fi
+
+     # now the final verdict
+     # we only use once the color here on the screen, so screen and fileout SEEM to be inconsistent
+     if "$vuln_exportdh_ciphers"; then
+          pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DH EXPORT ciphers"
+          fileout "logjam" "HIGH" "LOGJAM: VULNERABLE, uses DH EXPORT ciphers" "$cve" "$cwe" "$hint"
+          if [[ $ret -eq 3 ]]; then
+               out ", no DH key detected"
+               fileout "LOGJAM_common primes" "OK" "no DH key detected"
+          elif [[ $ret -eq 1 ]]; then
+               out "\n${spaces}"
+               pr_svrty_high "VULNERABLE (NOT ok):"; out "common prime \"$comment\" detected"
+               fileout "LOGJAM_common primes" "HIGH" "common prime \"$comment\" detected"
+          elif [[ $ret -eq 0 ]]; then
+               out " no common primes detected"
+               fileout "LOGJAM_common primes" "INFO" "no common primes detected"
+          elif [[ $ret -eq 7 ]]; then
+               out "FIXME 1"
+          fi
+     else
+          if [[ $ret -eq 1 ]]; then
+               pr_svrty_high "VULNERABLE (NOT ok):" ; out " uses common prime \"$comment\""
+               fileout "LOGJAM_common primes" "HIGH" "common prime \"$comment\" detected"
+               out ", but no DH EXPORT ciphers${addtl_warning}"
+               fileout "logjam" "OK" "LOGJAM: not vulnerable, no DH EXPORT ciphers, $addtl_warning" "$cve" "$cwe"
+          elif [[ $ret -eq 3 ]]; then
+               pr_done_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
+               fileout "logjam" "OK" "LOGJAM: not vulnerable, no DH EXPORT ciphers, $addtl_warning" "$cve" "$cwe"
+               out ", no DH key detected"
+               fileout "LOGJAM_common primes" "OK" "no DH key detected"
+          elif [[ $ret -eq 0 ]]; then
+               pr_done_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${ddtl_warning}"
+               fileout "logjam" "OK" "LOGJAM: not vulnerable, no DH EXPORT ciphers, $addtl_warning" "$cve" "$cwe"
+               out ", no common primes detected"
                fileout "LOGJAM_common primes" "OK" "no common primes detected"
+          elif [[ $ret -eq 7 ]]; then
+               pr_done_good "partly not vulnerable:"; out " no DH EXPORT ciphers${ddtl_warning}"
+               fileout "logjam" "OK" "LOGJAM: not vulnerable, no DH EXPORT ciphers, $addtl_warning" "$cve" "$cwe"
           fi
      fi
+     outln
+     tmpfile_handle $FUNCNAME.txt
      return 0
 }
 
