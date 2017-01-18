@@ -9619,9 +9619,9 @@ run_logjam() {
           [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
           debugme outln "dh_p: $dh_p"
           echo "$dh_p" > $TEMPDIR/dh_p.txt
-          common_primes_test $dh_p 
+          common_primes_test $dh_p "$spaces"
      else
-          outln " no DH key detected"
+          out " no DH key detected"
           fileout "LOGJAM_common primes" "OK" "no DH key detected"
      fi
      outln
@@ -9631,13 +9631,15 @@ run_logjam() {
 }
 
 # takes one arg and compares against a predefined set in $TESTSSL_INSTALL_DIR
+# spaces to indent
 common_primes_test() {
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local -i lineno_matched=0
      local comment=""
 
      if [[ ! -s "$common_primes_file" ]]; then
-          pr_warningln "couldn't read common primes file $common_primes_file"
+          outln 
+          pr_warning "${2}couldn't read common primes file $common_primes_file"
           fileout "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
           return 1
      else
@@ -9671,7 +9673,7 @@ run_drown() {
           outln
      fi
 # if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
-     pr_bold " DROWN"; out " ($cve)          "
+     pr_bold " DROWN"; out " ($cve)      "
      sslv2_sockets
 
      case $? in
@@ -9715,7 +9717,11 @@ run_drown() {
 # not advertising it as it after 5 tries and account is needed
                          cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
                          outln "$spaces https://censys.io/ipv4?q=$cert_fingerprint_sha2 could help you to find out"
+                         fileout "drown" "INFO" "make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2"
                     fi
+               else
+                    outln "$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
+                    fileout "drown" "INFO" "no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
                fi
                ret=0
                ;;
