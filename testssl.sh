@@ -9535,6 +9535,7 @@ run_logjam() {
      local -i sclient_success=0
      local exportdhe_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
      local exportdhe_cipher_list_hex="00,63, 00,65, 00,14, 00,11"
+     local all_dhe_ciphers="cc,15, 00,b3, 00,91, c0,97, 00,a3, 00,9f, cc,aa, c0,a3, c0,9f, 00,6b, 00,6a, 00,39, 00,38, 00,c4, 00,c3, 00,88, 00,87, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, 00,ab, cc,ad, c0,a7, c0,43, c0,45, c0,47, c0,53, c0,57, c0,5b, c0,67, c0,6d, c0,7d, c0,81, c0,85, c0,91, 00,a2, 00,9e, c0,a2, c0,9e, 00,aa, c0,a6, 00,67, 00,40, 00,33, 00,32, 00,be, 00,bd, 00,9a, 00,99, 00,45, 00,44, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, 00,b2, 00,90, c0,96, c0,42, c0,44, c0,46, c0,52, c0,56, c0,5a, c0,66, c0,6c, c0,7c, c0,80, c0,84, c0,90, 00,66, 00,18, 00,8e, 00,16, 00,13, 00,1b, 00,8f, 00,63, 00,15, 00,12, 00,1a, 00,65, 00,14, 00,11, 00,19, 00,17, 00,b5, 00,b4, 00,2d"
      local -i i nr_supported_ciphers=0 server_key_exchange_len=0 ephemeral_pub_len=0
      local addtl_warning="" hexc
      local cve="CVE-2015-4000"
@@ -9542,6 +9543,7 @@ run_logjam() {
      local hint=""
      local server_key_exchange ephemeral_pub key_bitstring="" dh_p
      local using_sockets=true
+     local spaces="                                           "
 
      "$SSL_NATIVE" && using_sockets=false
 
@@ -9555,8 +9557,7 @@ run_logjam() {
      fi
 
      case $nr_supported_ciphers in
-          0)
-               local_problem_ln "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
+          0)   local_problem_ln "$OPENSSL doesn't have any DHE EXPORT ciphers configured"
                fileout "logjam" "WARN" "LOGJAM: Not tested. $OPENSSL doesn't have any DHE EXPORT ciphers configured" "$cve" "$cwe"
                return 3
                ;;
@@ -9574,23 +9575,14 @@ run_logjam() {
           sclient_success=$?
           debugme egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      fi
-     addtl_warning="$addtl_warning, common primes not checked."
-     if "$HAS_DH_BITS" || ( ! "$SSL_NATIVE" && ! "$FAST" && [[ $TLS_NR_CIPHERS -ne 0 ]] ); then
-          if ! "$do_allciphers" && ! "$do_cipher_per_proto"; then
-               addtl_warning="$addtl_warning \"$PROG_NAME -E/-e\" spots candidates"
-          else
-               addtl_warning="$addtl_warning See below for any DH ciphers + bit size"
-          fi
-     fi
 
      if [[ $sclient_success -eq 0 ]]; then
-          pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses DHE EXPORT ciphers, common primes not checked."
-          fileout "logjam" "CRITICAL" "LOGJAM: VULNERABLE, uses DHE EXPORT ciphers, common primes not checked." "$cve" "$cwe" "$hint"
+          pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DHE EXPORT ciphers"
+          fileout "logjam" "HIGH" "LOGJAM: VULNERABLE, uses DHE EXPORT ciphers" "$cve" "$cwe" "$hint"
      else
-          pr_done_best "not vulnerable (OK)"; out "$addtl_warning"
-          fileout "logjam" "OK" "LOGJAM: not vulnerable $addtl_warning" "$cve" "$cwe"
+          pr_done_good "not vulnerable (OK):"; out " no DHE EXPORT ciphers"; out "$addtl_warning"
+          fileout "logjam" "OK" "LOGJAM: not vulnerable (no DHE EXPORT ciphers) $addtl_warning" "$cve" "$cwe"
      fi
-     outln
 
      if [[ $DEBUG -ge 2 ]]; then
           if "$using_sockets"; then
@@ -9610,7 +9602,7 @@ run_logjam() {
 
      # Try all ciphers that use an ephemeral DH key. If successful, check whether the key uses a weak prime.
      if "$using_sockets"; then
-          tls_sockets "03" "cc,15, 00,b3, 00,91, c0,97, 00,a3, 00,9f, cc,aa, c0,a3, c0,9f, 00,6b, 00,6a, 00,39, 00,38, 00,c4, 00,c3, 00,88, 00,87, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, 00,ab, cc,ad, c0,a7, c0,43, c0,45, c0,47, c0,53, c0,57, c0,5b, c0,67, c0,6d, c0,7d, c0,81, c0,85, c0,91, 00,a2, 00,9e, c0,a2, c0,9e, 00,aa, c0,a6, 00,67, 00,40, 00,33, 00,32, 00,be, 00,bd, 00,9a, 00,99, 00,45, 00,44, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, 00,b2, 00,90, c0,96, c0,42, c0,44, c0,46, c0,52, c0,56, c0,5a, c0,66, c0,6c, c0,7c, c0,80, c0,84, c0,90, 00,66, 00,18, 00,8e, 00,16, 00,13, 00,1b, 00,8f, 00,63, 00,15, 00,12, 00,1a, 00,65, 00,14, 00,11, 00,19, 00,17, 00,b5, 00,b4, 00,2d" "ephemeralkey"
+          tls_sockets "03" "$all_dhe_ciphers" "ephemeralkey"
           sclient_success=$?
           if [[ $sclient_success -eq 0 ]] || [[ $sclient_success -eq 2 ]]; then
                cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
@@ -9634,11 +9626,52 @@ run_logjam() {
           dh_p="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | awk '/prime:/,/generator:/' | tail -n +2 | head -n -1)"
           dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
           [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
-          # At this point the DH key's prime has been extracted into $dh_p. Compare is against known weak primes.
+          debugme outln "dh_p: $dh_p"
+          echo "$dh_p" > $TEMPDIR/dh_p.txt
+# attention: file etc/common-primes.txt is not correct!
+          common_primes_test $dh_p "$spaces"
+     else
+          out ", no DH key detected"
+          fileout "LOGJAM_common primes" "OK" "no DH key detected"
      fi
+     outln
 
      tmpfile_handle $FUNCNAME.txt
      return $sclient_success
+}
+
+# takes one arg and compares against a predefined set in $TESTSSL_INSTALL_DIR
+# spaces to indent
+common_primes_test() {
+     local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
+     local -i lineno_matched=0
+     local comment=""
+     local dhp="$1"
+
+     if [[ ! -s "$common_primes_file" ]]; then
+          outln 
+          pr_warning "${2}couldn't read common primes file $common_primes_file"
+          fileout "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
+          return 1
+     else
+          dh_p="$(toupper "$dh_p")"
+          # the most elegant thing to get the previous line " awk '/regex/ { print x }; { x=$0 }' " doesn't work with GNU grep
+          # this is bascially the hint we want to echo
+          lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
+          if [[ "$lineno_matched" -ne 0 ]]; then
+               # get comment
+               comment="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
+#FiXME: probably the high groups/bit sizes whould get a different rating, see paper
+               out "\n${2}"
+               pr_svrty_high "common prime \"$comment\" detected"
+               fileout "LOGJAM_common primes" "HIGH" "common prime \"$comment\" detected"
+          else
+               out ", "
+               pr_done_good " no common primes detected"
+               fileout "LOGJAM_common primes" "OK" "no common primes detected"
+          fi
+     fi
+     return 0
 }
 
 
@@ -9656,7 +9689,7 @@ run_drown() {
           outln
      fi
 # if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
-     pr_bold " DROWN"; out " ($cve)          "
+     pr_bold " DROWN"; out " ($cve)      "
      sslv2_sockets
 
      case $? in
@@ -9700,7 +9733,11 @@ run_drown() {
 # not advertising it as it after 5 tries and account is needed
                          cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
                          outln "$spaces https://censys.io/ipv4?q=$cert_fingerprint_sha2 could help you to find out"
+                         fileout "drown" "INFO" "make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2"
                     fi
+               else
+                    outln "$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
+                    fileout "drown" "INFO" "no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
                fi
                ret=0
                ;;
