@@ -9568,10 +9568,10 @@ run_logjam() {
      fi
 
      if [[ $sclient_success -eq 0 ]]; then
-          pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DHE EXPORT ciphers,"
+          pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DHE EXPORT ciphers"
           fileout "logjam" "HIGH" "LOGJAM: VULNERABLE, uses DHE EXPORT ciphers" "$cve" "$cwe" "$hint"
      else
-          pr_done_good "not vulnerable (OK):"; out " no DHE EXPORT ciphers,"; out "$addtl_warning"
+          pr_done_good "not vulnerable (OK):"; out " no DHE EXPORT ciphers"; out "$addtl_warning"
           fileout "logjam" "OK" "LOGJAM: not vulnerable (no DHE EXPORT ciphers) $addtl_warning" "$cve" "$cwe"
      fi
 
@@ -9620,9 +9620,9 @@ run_logjam() {
           debugme outln "dh_p: $dh_p"
           echo "$dh_p" > $TEMPDIR/dh_p.txt
 # attention: file etc/common-primes.txt is not correct!
-          # common_primes_test $dh_p "$spaces"
+          common_primes_test $dh_p "$spaces"
      else
-          out " no DH key detected"
+          out ", no DH key detected"
           fileout "LOGJAM_common primes" "OK" "no DH key detected"
      fi
      outln
@@ -9637,6 +9637,7 @@ common_primes_test() {
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local -i lineno_matched=0
      local comment=""
+     local dhp="$1"
 
      if [[ ! -s "$common_primes_file" ]]; then
           outln 
@@ -9644,14 +9645,19 @@ common_primes_test() {
           fileout "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
           return 1
      else
-          lineno_matched=$(grep -ni "$dh_p" "$common_primes_file" 2>/dev/null)
+          dh_p="$(toupper "$dh_p")"
+          # the most elegant thing to get the previous line " awk '/regex/ { print x }; { x=$0 }' " doesn't work with GNU grep
+          # this is bascially the hint we want to echo
+          lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
           if [[ "$lineno_matched" -ne 0 ]]; then
                # get comment
                comment="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
 #FiXME: probably the high groups/bit sizes whould get a different rating, see paper
-               pr_svrty_high "common prime $comment detected"
-               fileout "LOGJAM_common primes" "HIGH" "common prime $comment detected"
+               out "\n${2}"
+               pr_svrty_high "common prime \"$comment\" detected"
+               fileout "LOGJAM_common primes" "HIGH" "common prime \"$comment\" detected"
           else
+               out ", "
                pr_done_good " no common primes detected"
                fileout "LOGJAM_common primes" "OK" "no common primes detected"
           fi
