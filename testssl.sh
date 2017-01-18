@@ -9619,7 +9619,8 @@ run_logjam() {
           [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
           debugme outln "dh_p: $dh_p"
           echo "$dh_p" > $TEMPDIR/dh_p.txt
-          common_primes_test $dh_p "$spaces"
+# attention: file etc/common-primes.txt is not correct!
+          # common_primes_test $dh_p "$spaces"
      else
           out " no DH key detected"
           fileout "LOGJAM_common primes" "OK" "no DH key detected"
@@ -9643,7 +9644,7 @@ common_primes_test() {
           fileout "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
           return 1
      else
-          lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null)
+          lineno_matched=$(grep -ni "$dh_p" "$common_primes_file" 2>/dev/null)
           if [[ "$lineno_matched" -ne 0 ]]; then
                # get comment
                comment="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
