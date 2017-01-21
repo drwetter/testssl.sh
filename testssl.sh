@@ -9319,20 +9319,25 @@ run_ssl_poodle() {
      local cve="CVE-2014-3566"
      local cwe="CWE-310"
      local hint=""
+     local -i nr_cbc_ciphers=0
      local using_sockets=true
-
-     "$SSL_NATIVE" && using_sockets=false
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption) " && outln
      pr_bold " POODLE, SSL"; out " ($cve)               "
+
+     "$SSL_NATIVE" && using_sockets=false
+     # The openssl binary distributed has almost everything we need (PSK and KRB5 ciphers are typically missing).
+     # Measurements show that there's little impact whether we use sockets or TLS here, so the default is sockets here
      if "$using_sockets"; then
           tls_sockets "00" "$cbc_ciphers_hex"
           sclient_success=$?
      else
-          locally_supported "-ssl3" || return 0
-          cbc_ciphers=$(actually_supported_ciphers $cbc_ciphers)
-
-          debugme echo $cbc_ciphers
+          if ! "$HAS_SSL3"; then
+               local_problem_ln "Your $OPENSSL doesn't support SSLv3"
+               return 1
+          fi
+          nr_cbc_ciphers=$(count_ciphers $cbc_ciphers)
+          nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $cbc_ciphers))
           $OPENSSL s_client -ssl3 $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
@@ -9342,8 +9347,14 @@ run_ssl_poodle() {
           pr_svrty_high "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
           fileout "poodle_ssl" "HIGH" "POODLE, SSL: VULNERABLE, uses SSLv3+CBC" "$cve" "$cwe" "$hint"
      else
-          pr_done_best "not vulnerable (OK)"
-          fileout "poodle_ssl" "OK" "POODLE, SSL: not vulnerable" "$cve" "$cwe"
+          pr_done_best "not vulnerable (OK)";
+          if [[ "$nr_supported_ciphers" -ge 83 ]]; then
+               # KRB and PSK cipher only missing: display discrepancy but no warning
+               out ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+          else
+               pr_warning ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+          fi
+          fileout "poodle_ssl" "OK" "POODLE, SSL: not vulnerable (using $nr_supported_ciphers of $nr_cbc_ciphers" "$cve" "$cwe"
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
@@ -9444,11 +9455,10 @@ run_freak() {
      local hint=""
      local using_sockets=true
 
-     "$SSL_NATIVE" && using_sockets=false
-
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for FREAK attack " && outln
      pr_bold " FREAK"; out " ($cve)                     "
 
+     "$SSL_NATIVE" && using_sockets=false
      if "$using_sockets"; then
           nr_supported_ciphers=$(count_words "$exportrsa_tls_cipher_list_hex")+$(count_words "$exportrsa_ssl2_cipher_list_hex")
      else
@@ -9457,17 +9467,16 @@ run_freak() {
      #echo "========= ${PIPESTATUS[*]}
 
      case $nr_supported_ciphers in
-          0)
-               local_problem_ln "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
+          0)   local_problem_ln "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
                fileout "freak" "WARN" "FREAK: Not tested. $OPENSSL doesn't have any EXPORT RSA ciphers configured" "$cve" "$cwe"
                return 7
                ;;
           1|2|3)
                addtl_warning=" ($magenta""tested only with $nr_supported_ciphers out of 9 ciphers only!$off)" ;;
-          8|9|10|11)
-               addtl_warning="" ;;
           4|5|6|7)
                addtl_warning=" (tested with $nr_supported_ciphers/9 ciphers)" ;;
+          8|9|10|11)
+               addtl_warning="" ;;
      esac
      if "$using_sockets"; then
           tls_sockets "03" "$exportrsa_tls_cipher_list_hex"
@@ -9530,12 +9539,12 @@ run_freak() {
 }
 
 
-# see https://weakdh.org/logjam.html
+# see https://weakdh.org/upported_ciphers/ogjam.html
 run_logjam() {
      local -i sclient_success=0
      local exportdh_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
      local exportdh_cipher_list_hex="00,63, 00,65, 00,14, 00,11"
-     local all_dh_ciphers="cc,15, 00,b3, 00,91, c0,97, 00,a3, 00,9f, cc,aa, c0,a3, c0,9f, 00,6b, 00,6a, 00,39, 00,38, 00,c4, 00,c3, 00,88, 00,87, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, 00,ab, cc,ad, c0,a7, c0,43, c0,45, c0,47, c0,53, c0,57, c0,5b, c0,67, c0,6d, c0,7d, c0,81, c0,85, c0,91, 00,a2, 00,9e, c0,a2, c0,9e, 00,aa, c0,a6, 00,67, 00,40, 00,33, 00,32, 00,be, 00,bd, 00,9a, 00,99, 00,45, 00,44, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, 00,b2, 00,90, c0,96, c0,42, c0,44, c0,46, c0,52, c0,56, c0,5a, c0,66, c0,6c, c0,7c, c0,80, c0,84, c0,90, 00,66, 00,18, 00,8e, 00,16, 00,13, 00,1b, 00,8f, 00,63, 00,15, 00,12, 00,1a, 00,65, 00,14, 00,11, 00,19, 00,17, 00,b5, 00,b4, 00,2d"
+     local all_dh_ciphers="cc,15, 00,b3, 00,91, c0,97, 00,a3, 00,9f, cc,aa, c0,a3, c0,9f, 00,6b, 00,6a, 00,39, 00,38, 00,c4, 00,c3, 00,88, 00,87, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, 00,ab, cc,ad, c0,a7, c0,43, c0,45, c0,47, c0,53, c0,57, c0,5b, c0,67, c0,6d, c0,7d, c0,81, c0,85, c0,91, 00,a2, 00,9e, c0,a2, c0,9e, 00,aa, c0,a6, 00,67, 00,40, 00,33, 00,32, 00,be, 00,bd, 00,9a, 00,99, 00,45, 00,44, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, 00,b2, 00,90, c0,96, c0,42, c0,44, c0,46, c0,52, c0,56, c0,5a, c0,66, c0,6c, c0,7c, c0,80, c0,84, c0,90, 00,66, 00,18, 00,8e, 00,16, 00,13, 00,1b, 00,8f, 00,63, 00,15, 00,12, 00,1a, 00,65, 00,14, 00,11, 00,19, 00,17, 00,b5, 00,b4, 00,2d" # 93 ciphers
      local -i i nr_supported_ciphers=0 server_key_exchange_len=0 ephemeral_pub_len=0 len_dh_p=0
      local addtl_warning="" hexc
      local cve="CVE-2015-4000"
@@ -9551,24 +9560,21 @@ run_logjam() {
      local -i ret
      local using_sockets=true
 
-     "$SSL_NATIVE" && using_sockets=false
-     # Also as the openssl binary distributed has everything we need measurements show that 
-     # there's no impact whether we use sockets or TLS here, so the default is sockets here
-
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for LOGJAM vulnerability " && outln
      pr_bold " LOGJAM"; out " ($cve), experimental      "
 
+     "$SSL_NATIVE" && using_sockets=false
+     # Also as the openssl binary distributed has everything we need measurements show that 
+     # there's no impact whether we use sockets or TLS here, so the default is sockets here
      if ! "$using_sockets"; then
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdh_cipher_list))
           debugme echo $nr_supported_ciphers
-
           case $nr_supported_ciphers in
                0)   local_problem_ln "$OPENSSL doesn't have any DH EXPORT ciphers configured"
                     fileout "logjam" "WARN" "LOGJAM: Not tested. $OPENSSL doesn't have any DH EXPORT ciphers configured" "$cve" "$cwe"
-# FIXME: needed to be handled below
+                    return 1            # we could continue here testing common primes but the logjam test would be not complete and it's misleading/hard to code+display
                     ;;
-               1|2) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
-               3)   addtl_warning=" (tested w/ $nr_supported_ciphers/4 ciphers)" ;;
+               1|2|3) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
                4)   ;;
           esac
      fi
@@ -9612,6 +9618,7 @@ run_logjam() {
                key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TMPFILE)"
           fi
      else
+          # FIXME: determine # of ciphers supported, 48 only are the shipped binaries
           $OPENSSL s_client $STARTTLS $BUGS -cipher kEDH -msg -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           if [[ $? -eq 0 ]] && grep -q ServerKeyExchange $TMPFILE; then
@@ -9663,8 +9670,10 @@ run_logjam() {
      # now the final verdict
      # we only use once the color here on the screen, so screen and fileout SEEM to be inconsistent
      if "$vuln_exportdh_ciphers"; then
-          pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DH EXPORT ciphers"
-          fileout "logjam" "HIGH" "LOGJAM: VULNERABLE, uses DH EXPORT ciphers" "$cve" "$cwe" "$hint"
+          if [[ "$nr_supported_ciphers" -ne 0 ]]; then
+               pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DH EXPORT ciphers"
+               fileout "logjam" "HIGH" "LOGJAM: VULNERABLE, uses DH EXPORT ciphers" "$cve" "$cwe" "$hint"
+          fi
           if [[ $ret -eq 3 ]]; then
                out ", no DH key detected"
                fileout "LOGJAM_common primes" "OK" "no DH key detected"
