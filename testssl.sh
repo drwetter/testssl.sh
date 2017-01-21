@@ -892,6 +892,13 @@ hex2dec() {
      echo $((16#$1))
 }
 
+# convert 414243 into ABC
+hex2ascii() {
+          for (( i=0; i<${#1}; i+=2 )); do
+               printf "\x${1:$i:2}"
+          done
+}
+
 # trim spaces for BSD and old sed
 count_lines() {
      #echo "${$(wc -l <<< "$1")// /}"
@@ -5748,7 +5755,7 @@ certificate_info() {
      cnfinding="Common Name (CN) : "
      cn="$(get_cn_from_cert $HOSTCERT)"
      if [[ -n "$cn" ]]; then
-          pr_dquoted "$cn"
+          pr_italic "$cn"
           cnfinding="$cn"
      else
           cn="no CN field in subject"
@@ -5786,7 +5793,7 @@ certificate_info() {
           outln ", (request w/o SNI: $cn_nosni)"
           cnfinding+=", (request w/o SNI: $cn_nosni)"
      else
-          out " (CN in response to request w/o SNI: "; pr_dquoted "$cn_nosni"; outln ")"
+          out " (CN in response to request w/o SNI: "; pr_italic "$cn_nosni"; outln ")"
           cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
      fi
      fileout "${json_prefix}cn" "$cnok" "$cnfinding"
@@ -5800,7 +5807,7 @@ certificate_info() {
      out "$indent"; pr_bold " subjectAltName (SAN)         "
      if [[ -n "$sans" ]]; then
           while read san; do
-               [[ -n "$san" ]] && pr_dquoted "$san"
+               [[ -n "$san" ]] && pr_italic "$san"
                out " "
           done <<< "$sans"
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $sans"
@@ -5821,7 +5828,7 @@ certificate_info() {
           pr_svrty_criticalln "self-signed (NOT ok)"
           fileout "${json_prefix}issuer" "CRITICAL" "Issuer: selfsigned"
      else
-          issuerfinding="$(pr_dquoted "$issuer_CN")"
+          issuerfinding="$(pr_italic "$issuer_CN")"
           if [[ -z "$issuer_O" ]] && [[ -n "$issuer_DC" ]]; then
                for san in $issuer_DC; do
                     if [[ -z "$issuer_O" ]]; then
@@ -5833,10 +5840,10 @@ certificate_info() {
           fi
           if [[ -n "$issuer_O" ]]; then
                issuerfinding+=" ("
-               issuerfinding+="$(pr_dquoted "$issuer_O")"
+               issuerfinding+="$(pr_italic "$issuer_O")"
                if [[ -n "$issuer_C" ]]; then
                     issuerfinding+=" from "
-                    issuerfinding+="$(pr_dquoted "$issuer_C")"
+                    issuerfinding+="$(pr_italic "$issuer_C")"
                fi
                issuerfinding+=")"
           fi
@@ -6059,20 +6066,17 @@ certificate_info() {
      fi
      outln
 
-     if "$EXPERIMENTAL"; then
-          out "$indent"; pr_bold " DNS CAA RR record            "
-          caa="$(get_caa_rr_record $NODE)"
-          if [[ -n "$caa" ]]; then
-               pr_done_good "OK ($caa)"
-               fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : offered"
-          else
-               pr_svrty_minor "--"
-               fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
-          fi
+     out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
+     caa="$(get_caa_rr_record $NODE)"
+     if [[ -n "$caa" ]]; then
+          pr_done_good "OK"; out " (" ; pr_italic "$caa"; out ")"
+          fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : offered"
+     else
+          pr_svrty_minor "--"
+          fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
      fi
 
      outln "\n"
-
      return $ret
 }
 # FIXME: revoked, see checkcert.sh
@@ -11185,14 +11189,22 @@ get_caa_rr_record() {
           # No dig, host, or nslookup --> complaint was elsewhere already and except for one which has drill only we don't get here
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
+
+     # try to convert old return values
+     if [[ "$caa" =~ ^[A-F0-9]+$ ]]; then
+          caa=${caa:4:100}                   # ignore the first 4 bytes
+          caa=$(hex2ascii "$caa" | sed 's/^issue//g')
+     else
+          caa=${caa//\"/}                    # strip "
+     fi
      echo "$caa"
-     return 0
 # to do:
 #    1: check old binaries whether they support this record at all
-#    2: check whether hexstring is returned and deal with it
+#    done (2: check whether hexstring is returned and deal with it)
 #    3: check more than domainname, see https://tools.ietf.org/html/rfc6844#section-3
 #    4: check whether $1 is a CNAME and take this
 #    5: query with drill
+     return 0
 }
 
 get_mx_record() {
