@@ -4587,15 +4587,18 @@ read_dhbits_from_file() {
 run_server_preference() {
      local cipher1 cipher2
      local default_cipher default_proto
-     local remark4default_cipher
+     local remark4default_cipher supported_sslv2_ciphers
      local -a cipher proto
      local p i
-     local -i ret=0
+     local -i ret=0 j
      local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256"
      # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
      local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
      local has_cipher_order=true
      local isok addcmd="" addcmd2="" sni=""
+     local using_sockets=true
+
+     "$SSL_NATIVE" && using_sockets=false
 
      outln
      pr_headlineln " Testing server preferences "
@@ -4754,26 +4757,61 @@ run_server_preference() {
                i=1
                for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
                     if [[ $p == ssl2 ]] && ! "$HAS_SSL2"; then
-                         out "     (SSLv2: "; local_problem "$OPENSSL doesn't support \"s_client -ssl2\""; outln ")";
-                         continue
-                    fi
-                    if [[ $p == ssl3 ]] && ! "$HAS_SSL3"; then
-                         out "     (SSLv3: "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"" ; outln ")";
-                         continue
-                    fi
-                    if [[ "$p" =~ ssl ]]; then
-                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY </dev/null 2>>$ERRFILE >$TMPFILE
+                         if ! "$using_sockets" || [[ $TLS_NR_CIPHERS -eq 0 ]]; then
+                              out "     (SSLv2: "; local_problem "$OPENSSL doesn't support \"s_client -ssl2\""; outln ")";
+                              continue
+                         else
+                              sslv2_sockets "" "true"
+                              if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+                                   # Just arbitrarily pick the first cipher in the cipher-mapping.txt list.
+                                   proto[i]="SSLv2"
+                                   supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+                                   for (( j=0; j < TLS_NR_CIPHERS; j++ )); do
+                                        if [[ "${TLS_CIPHER_SSLVERS[j]}" == "SSLv2" ]]; then
+                                             cipher1="${TLS_CIPHER_HEXCODE[j]}"
+                                             cipher1="$(tolower "x${cipher1:2:2}${cipher1:7:2}${cipher1:12:2}")"
+                                             if [[ "$supported_sslv2_ciphers" =~ "$cipher1" ]]; then
+                                                  cipher[i]="${TLS_CIPHER_OSSL_NAME[j]}"
+                                                  break
+                                             fi
+                                        fi
+                                   done
+                                   [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
+                              else
+                                   proto[i]=""
+                                   cipher[i]=""
+                              fi
+                         fi
+                    elif [[ $p == ssl3 ]] && ! "$HAS_SSL3"; then
+                         if ! "$using_sockets"; then
+                              out "     (SSLv3: "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"" ; outln ")";
+                              continue
+                         else
+                              tls_sockets "00" "$TLS_CIPHER"
+                              if [[ $? -eq 0 ]]; then
+                                   proto[i]="SSLv3"
+                                   cipher[i]=""
+                                   cipher1=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                                   [[ $TLS_NR_CIPHERS -ne 0 ]] && cipher[i]="$(rfc2openssl "$cipher1")"
+                                   [[ -z "${cipher[i]}" ]] && cipher[i]="$cipher1"
+                                   [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
+                              else
+                                   proto[i]=""
+                                   cipher[i]=""
+                              fi
+                         fi
                     else
-                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    fi
-                    if sclient_connect_successful $? $TMPFILE; then
-                         proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
-                         cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-                         [[ ${cipher[i]} == "0000" ]] && cipher[i]=""                     # Hack!
-                         [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
-                    else
-                          proto[i]=""
-                          cipher[i]=""
+                         [[ "$p" =~ ssl ]] && sni="" || sni="$SNI"
+                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
+                         if sclient_connect_successful $? $TMPFILE; then
+                              proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
+                              cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                              [[ ${cipher[i]} == "0000" ]] && cipher[i]=""                     # Hack!
+                              [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
+                         else
+                              proto[i]=""
+                              cipher[i]=""
+                         fi
                     fi
                     i=$(($i + 1))
                done
