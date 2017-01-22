@@ -171,16 +171,13 @@ FAST_STARTTLS=${FAST_STARTTLS:-true}    #at the cost of reliabilty decrease the 
 USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
 HSTS_MIN=${HSTS_MIN:-179}               # >179 days is ok for HSTS
-     HSTS_MIN=$((HSTS_MIN * 86400))     # correct to seconds
-HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, practical hints?
-     HPKP_MIN=$((HPKP_MIN * 86400))     # correct to seconds
+     HSTS_MIN=$((HSTS_MIN * 86400))     # finalize unit to seconds
+HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN
+     HPKP_MIN=$((HPKP_MIN * 86400))     # finalize unit to seconds
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
 readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test for PFS
-                                        # generated from 'kEECDH:kEDH:!aNULL:!eNULL:!DES:!3DES:!RC4' with openssl 1.0.2i and openssl 1.1.0
-readonly ROBUST_PFS_CIPHERS="DHE-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA:DHE-DSS-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA:DHE-DSS-SEED-SHA:DHE-RSA-AES128-CCM8:DHE-RSA-AES128-CCM:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-CCM8:DHE-RSA-AES256-CCM:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-RSA-CHACHA20-POLY1305-OLD:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-SEED-SHA:ECDHE-ECDSA-AES128-CCM8:ECDHE-ECDSA-AES128-CCM:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-CCM8:ECDHE-ECDSA-AES256-CCM:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305-OLD:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-RSA-CHACHA20-POLY1305-OLD:ECDHE-RSA-CHACHA20-POLY1305"
-
 HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 declare -a CUSTOM_CABUNDLE_FILES        # Custom CA bundle file input from the commandline option --ca
@@ -996,8 +993,8 @@ run_hsts() {
                pr_done_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "hsts_time" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN days"
           else
-               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >=$HSTS_MIN s recommended)"
-               fileout "hsts_time" "MEDIUM" "HSTS timeout too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN days"
+               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short (>=$(($HSTS_MIN/86400)) days recommended)"
+               fileout "hsts_time" "MEDIUM" "HSTS time is too short. $hsts_age_days days (=$hsts_age_sec seconds) (>=$(($HSTS_MIN/86400)) days recommended)"
           fi
           if includeSubDomains "$TMPFILE"; then
                fileout "hsts_subdomains" "OK" "HSTS includes subdomains"
@@ -1086,9 +1083,8 @@ run_hpkp() {
                pr_done_good "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
                fileout "hpkp_age" "OK" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec)"
           else
-               out "$hpkp_age_sec s = "
-               pr_svrty_medium "$hpkp_age_days days (<$HPKP_MIN days is not good enough)"
-               fileout "hpkp_age" "MEDIUM" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec) < $HPKP_MIN days is not good enough."
+               pr_svrty_medium "$hpkp_age_sec s = $hpkp_age_days days is too short (>=$((HPKP_MIN / 86400)) days recommended)"
+               fileout "hpkp_age" "MEDIUM" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec), too short. >$((HPKP_MIN / 86400)) days recommended)"
           fi
 
           if includeSubDomains "$TMPFILE"; then
@@ -1960,6 +1956,7 @@ run_cipher_per_proto() {
      local available
      local id
 
+     outln
      pr_headlineln " Testing all locally available ciphers per protocol against the server, ordered by encryption strength "
      ! "$HAS_DH_BITS" && pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
      outln
@@ -4890,10 +4887,19 @@ certificate_info() {
      fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
 
      out "$indent"; pr_bold " Certificate Revocation List  "
-     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 4 "CRL Distribution" | grep URI | sed 's/^.*URI://')"
-     if [[ -z "$crl" ]]; then
-          pr_svrty_highln "--"
-          fileout "${json_prefix}crl" "NOT ok" "No CRL provided (NOT ok)"
+
+     # Get both CRL and OCSP URL upfront. If there's none, this is not good. And we need to penalize this in the output
+     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk '/CRL Distribution/,/URI/ { print $0 }' | awk -F'URI:' '/URI/ { print $2 }')"
+     ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
+
+     if [[ -z "$crl" ]] ; then
+          if [[ -n "$ocsp_uri" ]]; then
+               outln "--"
+               fileout "${json_prefix}crl" "INFO" "No CRL provided"
+          else
+               pr_svrty_highln "-- (NOT ok)"
+               fileout "${json_prefix}crl" "HIGH" "Neither CRL nor  OCSP URL provided"
+          fi
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
@@ -4908,10 +4914,10 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " OCSP URI                     "
-     ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
-     if [[ -z "$ocsp_uri" ]]; then
-          pr_svrty_highln "--"
-          fileout "${json_prefix}ocsp_uri" "NOT ok" "OCSP URI : -- (NOT ok)"
+
+     if [[ -z "$ocsp_uri" ]] && [[ -n "$crl" ]]; then
+          outln "--"
+          fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : --"
      else
           outln "$ocsp_uri"
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
@@ -5147,7 +5153,8 @@ run_pfs() {
      local tmpfile
      local dhlen
      local hexcode dash pfs_cipher sslvers kx auth enc mac curve
-     local pfs_cipher_list="$ROBUST_PFS_CIPHERS"
+     # generated from 'kEECDH:kEDH:!aNULL:!eNULL:!DES:!3DES:!RC4' with openssl 1.0.2i and openssl 1.1.0:
+     local pfs_cipher_list="DHE-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA:DHE-DSS-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA:DHE-DSS-SEED-SHA:DHE-RSA-AES128-CCM8:DHE-RSA-AES128-CCM:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-CCM8:DHE-RSA-AES256-CCM:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-RSA-CHACHA20-POLY1305-OLD:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-SEED-SHA:ECDHE-ECDSA-AES128-CCM8:ECDHE-ECDSA-AES128-CCM:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-CCM8:ECDHE-ECDSA-AES256-CCM:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305-OLD:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-RSA-CHACHA20-POLY1305-OLD:ECDHE-RSA-CHACHA20-POLY1305"
      local ecdhe_cipher_list=""
      local -a curves_ossl=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
      local -a curves_ossl_output=("K-163" "sect163r1" "B-163" "sect193r1" "sect193r2" "K-233" "B-233" "sect239k1" "K-283" "B-283" "K-409" "B-409" "K-571" "B-571" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "P-192" "secp224k1" "P-224" "secp256k1" "P-256" "P-384" "P-521" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
@@ -8373,10 +8380,10 @@ display_rdns_etc() {
           done
           outln
      fi
-     if "$LOCAL_A"; then
-          outln " A record via           $CORRECT_SPACES /etc/hosts "
-     elif  [[ -n "$CMDLINE_IP" ]]; then
+     if  [[ -n "$CMDLINE_IP" ]]; then
           outln " A record via           $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
+     elif "$LOCAL_A"; then
+          outln " A record via           $CORRECT_SPACES /etc/hosts "
      fi
      if [[ -n "$rDNS" ]]; then
           printf " %-23s %s" "rDNS ($nodeip):" "$rDNS"
