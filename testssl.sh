@@ -9390,13 +9390,17 @@ run_ssl_poodle() {
           fileout "poodle_ssl" "HIGH" "POODLE, SSL: VULNERABLE, uses SSLv3+CBC" "$cve" "$cwe" "$hint"
      else
           pr_done_best "not vulnerable (OK)";
-          if [[ "$nr_supported_ciphers" -ge 83 ]]; then
-               # Likely only KRB and PSK cipher are missing: display discrepancy but no warning
-               out ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+          if "$using_sockets"; then
+               fileout "poodle_ssl" "OK" "POODLE, SSL: not vulnerable" "$cve" "$cwe"
           else
-               pr_warning ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+               if [[ "$nr_supported_ciphers" -ge 83 ]]; then
+                    # Likely only KRB and PSK cipher are missing: display discrepancy but no warning
+                    out ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+               else
+                    pr_warning ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+               fi
+               fileout "poodle_ssl" "OK" "POODLE, SSL: not vulnerable ($nr_supported_ciphers of $nr_cbc_ciphers local ciphers" "$cve" "$cwe"
           fi
-          fileout "poodle_ssl" "OK" "POODLE, SSL: not vulnerable ($nr_supported_ciphers of $nr_cbc_ciphers local ciphers" "$cve" "$cwe"
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
