@@ -10793,12 +10793,12 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -B, --heartbleed              tests for heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -R, --renegotiation           tests for renegotiation vulnerabilities
-     -C, --compression, --crime    tests for CRIME vulnerability
-     -T, --breach                  tests for BREACH vulnerability
+     -C, --compression, --crime    tests for CRIME vulnerability (TLS compression issue)
+     -A, --beast                   tests for BEAST vulnerability (HTTP compression issue)
      -O, --poodle                  tests for POODLE (SSL) vulnerability
      -Z, --tls-fallback            checks TLS_FALLBACK_SCSV mitigation
+     -T, --breach                  tests for BREACH vulnerability
      -F, --freak                   tests for FREAK vulnerability
-     -A, --beast                   tests for BEAST vulnerability
      -J, --logjam                  tests for LOGJAM vulnerability
      -D, --drown                   tests for DROWN vulnerability
      -s, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
