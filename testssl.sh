@@ -4866,15 +4866,18 @@ run_server_preference() {
 check_tls12_pref() {
      local batchremoved="-CAMELLIA:-IDEA:-KRB5:-PSK:-SRP:-aNULL:-eNULL"
      local batchremoved_success=false
-     local tested_cipher="-$1"
-     local order="$1"
+     local tested_cipher=""
+     local order=""
+     local -i nr_ciphers_found_r1=0 nr_ciphers_found_r2=0
 
      while true; do
-          $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "ALL:$tested_cipher:$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "ALL$tested_cipher:$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                order+=" $cipher"
                tested_cipher="$tested_cipher:-$cipher"
+               nr_ciphers_found_r1+=1
+               "$FAST" && break
           else
                debugme outln "A: $tested_cipher"
                break
@@ -4882,7 +4885,7 @@ check_tls12_pref() {
      done
      batchremoved="${batchremoved//-/}"
      while true; do
-          # no ciphers from "ALL:$tested_cipher:$batchremoved" left
+          # no ciphers from "ALL$tested_cipher:$batchremoved" left
           # now we check $batchremoved, and remove the minus signs first:
           $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
@@ -4890,7 +4893,9 @@ check_tls12_pref() {
                cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                order+=" $cipher"
                batchremoved="$batchremoved:-$cipher"
+               nr_ciphers_found_r1+=1
                debugme outln "B1: $batchremoved"
+               "$FAST" && break
           else
                debugme outln "B2: $batchremoved"
                break
@@ -4900,34 +4905,31 @@ check_tls12_pref() {
 
      if "$batchremoved_success"; then
           # now we combine the two cipher sets from both while loops
+          [[ "${order:0:1}" == " " ]] && order="${order:1}"
           combined_ciphers="${order// /:}"
-          $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-          if sclient_connect_successful $? $TMPFILE ; then
-               # first cipher
-               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-               order="$cipher"
-               tested_cipher="-$cipher"
-          else
-               fixmeln "something weird happened around line $((LINENO - 6))"
-               return 1
-          fi
+          order="" ; tested_cipher=""
           while true; do
-               $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers:$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
+               $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                if sclient_connect_successful $? $TMPFILE ; then
                     cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
                     order+=" $cipher"
                     tested_cipher="$tested_cipher:-$cipher"
+                    nr_ciphers_found_r2+=1
+                    "$FAST" && break
                else
                     # nothing left, we're done
-                    out " $order"
                     break
                fi
           done
-
-     else
-          # second cipher set didn't succeed: we can just output everything
-          out " $order"
+          if "$FAST" && [[ $nr_ciphers_found_r2 -ne 1 ]]; then
+                fixmeln "something weird happened around line $((LINENO - 14))"
+                return 1
+          elif ! "$FAST" && [[ $nr_ciphers_found_r2 -ne $nr_ciphers_found_r1 ]]; then
+                fixmeln "something weird happened around line $((LINENO - 16))"
+                return 1
+          fi
      fi
+     out "$order"
 
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -4935,35 +4937,34 @@ check_tls12_pref() {
 
 
 cipher_pref_check() {
-     local p proto protos npn_protos sni
+     local p proto proto_hex npn_protos sni
      local tested_cipher cipher order
      local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
+     local -i i nr_ciphers nr_nonossl_ciphers num_bundles mod_check bundle_size bundle end_of_bundle success
+     local hexc ciphers_to_test
+     local -a rfc_ciph hexcode ciphers_found ciphers_found2
+     local -a -i index
+     local using_sockets=true ciphers_found_with_sockets
+
+     "$SSL_NATIVE" && using_sockets=false
+     "$FAST" && using_sockets=false
+     [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
      pr_bold " Cipher order"
 
-     for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
-          order=""
-          if [[ $p == ssl2 ]] && ! "$HAS_SSL2"; then
-               out "\n    SSLv2:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl2\"";
-               continue
-          fi
-          if [[ $p == ssl3 ]] && ! "$HAS_SSL3"; then
+     outln " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2"| while read p proto_hex proto; do
+          order=""; ciphers_found_with_sockets=false
+          if [[ $p == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
                out "\n    SSLv3:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
                continue
           fi
-          # with the supplied binaries SNI works also for SSLv2 (+ SSLv3)
-          [[ "$p" =~ ssl ]] && sni="" || sni=$SNI
-          $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>$ERRFILE >$TMPFILE
-          if sclient_connect_successful $? $TMPFILE; then
-               tested_cipher=""
-               proto=$(awk '/Protocol/ { print $3 }' $TMPFILE)
-               cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
-               [[ -z "$proto" ]] && continue                # for early openssl versions sometimes needed
-               outln
-               printf "    %-10s" "$proto: "
-               tested_cipher="-"$cipher
-               order="$cipher"
-               if [[ $p == tls1_2 ]]; then
+          has_server_protocol "$p" || continue
+
+          if [[ $p != ssl3 ]] || "$HAS_SSL3"; then
+               # with the supplied binaries SNI works also for SSLv3
+               [[ "$p" =~ ssl ]] && sni="" || sni=$SNI
+
+               if [[ $p == tls1_2 ]] && ! "$SERVER_SIZE_LIMIT_BUG"; then
                     # for some servers the ClientHello is limited to 128 ciphers or the ClientHello itself has a length restriction.
                     # So far, this was only observed in TLS 1.2, affected are e.g. old Cisco LBs or ASAs, see issue #189
                     # To check whether a workaround is needed we send a laaarge list of ciphers/big client hello. If connect fails,
@@ -4975,23 +4976,144 @@ cipher_pref_check() {
                     fi
                fi
                if [[ $p == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
-                    order=$(check_tls12_pref "$cipher")
-                    out "$order"
+                    order="$(check_tls12_pref)"
                else
-                    out " $cipher"  # this is the first cipher for protocol
-                    if ! "$FAST"; then
-                         while true; do
-                              $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:$tested_cipher" -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
-                              sclient_connect_successful $? $TMPFILE || break
-                              cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
-                              out " $cipher"
-                              order+=" $cipher"
-                              tested_cipher="$tested_cipher:-$cipher"
-                         done
-                    fi
+                    tested_cipher=""
+                    while true; do
+                         $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:COMPLEMENTOFALL$tested_cipher" -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
+                         sclient_connect_successful $? $TMPFILE || break
+                         cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                         [[ -z "$cipher" ]] && break
+                         order+=" $cipher"
+                         tested_cipher+=":-"$cipher
+                         "$FAST" && break
+                    done
                fi
           fi
-          [[ -z "$order" ]] || fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
+
+          nr_nonossl_ciphers=0
+          if "$using_sockets"; then
+               for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+                    ciphers_found[i]=false
+                    hexc="${TLS_CIPHER_HEXCODE[i]}"
+                    if [[ ${#hexc} -eq 9 ]]; then
+                         if [[ " $order " =~ " ${TLS_CIPHER_OSSL_NAME[i]} " ]]; then
+                              ciphers_found[i]=true
+                         else
+                              ciphers_found2[nr_nonossl_ciphers]=false
+                              hexcode[nr_nonossl_ciphers]="${hexc:2:2},${hexc:7:2}"
+                              rfc_ciph[nr_nonossl_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
+                              index[nr_nonossl_ciphers]=$i
+                              # Only test ciphers that are relevant to the protocol.
+                              if [[ "$p" == "tls1_3" ]]; then
+                                   [[ "${hexc:2:2}" == "13" ]] && nr_nonossl_ciphers+=1
+                              elif [[ "$p" == "tls1_2" ]]; then
+                                   [[ "${hexc:2:2}" != "13" ]] && nr_nonossl_ciphers+=1
+                              elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA256" ]] && \
+                                   [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA384" ]] && \
+                                   [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
+                                   [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
+                                   nr_nonossl_ciphers+=1
+                              fi
+                         fi
+                    fi
+               done
+          fi
+
+          if [[ $nr_nonossl_ciphers -eq 0 ]]; then
+               num_bundles=0
+          elif [[ $p != tls1_2 ]] || ! "$SERVER_SIZE_LIMIT_BUG"; then
+               num_bundles=1
+               bundle_size=$nr_nonossl_ciphers
+          else
+               num_bundles=$nr_nonossl_ciphers/128
+               mod_check=$nr_nonossl_ciphers%128
+               [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+
+               bundle_size=$nr_nonossl_ciphers/$num_bundles
+               mod_check=$nr_nonossl_ciphers%$num_bundles
+               [[ $mod_check -ne 0 ]] && bundle_size+=1
+          fi
+
+          for (( bundle=0; bundle < num_bundles; bundle++ )); do
+               end_of_bundle=$bundle*$bundle_size+$bundle_size
+               [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
+               while true; do
+                    ciphers_to_test=""
+                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                         ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode[i]}"
+                    done
+                    [[ -z "$ciphers_to_test" ]] && break
+                    tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+                    [[ $? -ne 0 ]] && break
+                    cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                         [[ "$cipher" == "${rfc_ciph[i]}" ]] && ciphers_found2[i]=true && break
+                    done
+                    i=${index[i]}
+                    ciphers_found[i]=true
+                    ciphers_found_with_sockets=true
+                    if [[ $p != tls1_2 ]] || ! "$SERVER_SIZE_LIMIT_BUG"; then
+                         # Throw out the results found so far and start over using just sockets
+                         bundle=$num_bundles
+                         for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+                              ciphers_found[i]=true
+                         done
+                         break
+                    fi
+               done
+          done
+
+          # If additional ciphers were found using sockets and there is no
+          # SERVER_SIZE_LIMIT_BUG, then just use sockets to find the cipher order.
+          # If there is a SERVER_SIZE_LIMIT_BUG, then use sockets to find the cipher
+          # order, but starting with the list of ciphers supported by the server.
+          if "$ciphers_found_with_sockets"; then
+               order=""
+               nr_ciphers=0
+               for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+                    hexc="${TLS_CIPHER_HEXCODE[i]}"
+                    if "${ciphers_found[i]}" && [[ ${#hexc} -eq 9 ]]; then
+                         ciphers_found2[nr_ciphers]=false
+                         hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
+                         rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
+                         if [[ "$p" == "tls1_3" ]]; then
+                              [[ "${hexc:2:2}" == "13" ]] && nr_ciphers+=1
+                         elif [[ "$p" == "tls1_2" ]]; then
+                              [[ "${hexc:2:2}" != "13" ]] && nr_ciphers+=1
+                         elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA256" ]] && \
+                              [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA384" ]] && \
+                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
+                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
+                              nr_ciphers+=1
+                         fi
+                    fi
+               done
+               while true; do
+                    ciphers_to_test=""
+                    for (( i=0; i < nr_ciphers; i++ )); do
+                         ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode[i]}"
+                    done
+                    [[ -z "$ciphers_to_test" ]] && break
+                    tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+                    [[ $? -ne 0 ]] && break
+                    cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    for (( i=0; i < nr_ciphers; i++ )); do
+                         [[ "$cipher" == "${rfc_ciph[i]}" ]] && ciphers_found2[i]=true && break
+                    done
+                    cipher="$(rfc2openssl "$cipher")"
+                    # If there is no OpenSSL name for the cipher, then use the RFC name
+                    [[ -z "$cipher" ]] && cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    order+=" $cipher"
+               done
+          fi
+
+          if [[ -n "$order" ]]; then
+               outln
+               printf "    %-10s" "$proto: "
+               out "$order"
+               fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
+          fi
      done
      outln
 
