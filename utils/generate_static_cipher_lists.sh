@@ -309,34 +309,34 @@ get_export_rsa_ciphers() {
 
 get_weak_dh_ciphers() {
      local -i
-     local hexc exportdhe_cipher_list="" exportdhe_cipher_list_hex=""
+     local hexc exportdh_cipher_list="" exportdh_cipher_list_hex=""
 
      for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
           if [[ "${TLS_CIPHER_RFC_NAME[i]}" == "TLS_DHE_"* ]] && [[ "${TLS_CIPHER_EXPORT[i]}" == "export" ]]; then
                hexc="${TLS_CIPHER_HEXCODE[i]}"
-               [[ "${TLS_CIPHER_OSSL_NAME[i]}" != "-" ]] && exportdhe_cipher_list+=":${TLS_CIPHER_OSSL_NAME[i]}"
-               exportdhe_cipher_list_hex+=", ${hexc:2:2},${hexc:7:2}"
+               [[ "${TLS_CIPHER_OSSL_NAME[i]}" != "-" ]] && exportdh_cipher_list+=":${TLS_CIPHER_OSSL_NAME[i]}"
+               exportdh_cipher_list_hex+=", ${hexc:2:2},${hexc:7:2}"
           fi
      done
 
-     outln; pr_underline "Weak DH ciphers for run_logjam()"; outln
-     outln "exportdhe_cipher_list=\"${exportdhe_cipher_list:1}\""
-     outln "exportdhe_cipher_list_hex=\"${exportdhe_cipher_list_hex:2}\""
+     outln; pr_underline "Weak ephemeral DH ciphers for run_logjam()"; outln
+     outln "exportdh_cipher_list=\"${exportdh_cipher_list:1}\""
+     outln "exportdh_cipher_list_hex=\"${exportdh_cipher_list_hex:2}\""
 }
 
 get_dhe_ciphers() {
      local -i
-     local hexc all_dhe_ciphers=""
+     local hexc all_dh_ciphers=""
 
      for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
           if [[ "${TLS_CIPHER_RFC_NAME[i]}" == "TLS_DHE_"* ]] || [[ "${TLS_CIPHER_RFC_NAME[i]}" == "TLS_DH_anon_"* ]]; then
                hexc="${TLS_CIPHER_HEXCODE[i]}"
-               all_dhe_ciphers+=", ${hexc:2:2},${hexc:7:2}"
+               all_dh_ciphers+=", ${hexc:2:2},${hexc:7:2}"
           fi
      done
 
-     outln; pr_underline "All DHE ciphers for run_logjam()"; outln
-     outln "all_dhe_ciphers=\"$(tolower "${all_dhe_ciphers:2}")\""
+     outln; pr_underline "All ephemeral DH ciphers for run_logjam()"; outln
+     outln "all_dh_ciphers=\"$(tolower "${all_dh_ciphers:2}")\""
 }
 
 get_mapping_file
