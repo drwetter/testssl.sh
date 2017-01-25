@@ -8882,7 +8882,7 @@ tls_sockets() {
           fi
           debugme outln
      else
-          debugme "stuck on sending: $ret"
+          debugme echo "stuck on sending: $ret"
      fi
 
      close_socket
