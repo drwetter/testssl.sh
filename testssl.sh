@@ -2187,10 +2187,14 @@ neat_header(){
 # arg2: cipher in openssl notation
 # arg3: keyexchange
 # arg4: encryption (maybe included "export")
+# arg5: "true" if the cipher's "quality" should be highlighted
+#       "false" if the line should be printed in light grey
+#       empty if line should be printed in black
 neat_list(){
      local hexcode="$1"
      local ossl_cipher="$2" tls_cipher=""
      local kx enc strength
+     local -i i str_len
 
      kx="${3//Kx=/}"
      enc="${4//Enc=/}"
@@ -2216,6 +2220,46 @@ neat_list(){
           while [[ ${#kx} -lt 13 ]]; do                   # so it'll be filled up ok
                kx="$kx "
           done
+     fi
+     if [[ -n "$5" ]]; then
+          # FIXME: When $5 is true, highlight ciphers based on quality.
+          if [[ "$5" == "false" ]]; then
+               str_len=${#hexcode}
+               hexcode="$(pr_litegrey "$hexcode")"
+               for (( i=str_len; i < 7; i++ )); do
+                    hexcode+=" "
+               done
+
+               str_len=${#kx}
+               kx="$(pr_litegrey "$kx")"
+               for (( i=str_len; i < 10; i++ )); do
+                    kx+=" "
+               done
+
+               str_len=${#enc}
+               enc="$(pr_litegrey "$enc")"
+               for (( i=str_len; i < 10; i++ )); do
+                    enc+=" "
+               done
+
+               str_len=${#strength}
+               strength="$(pr_litegrey "$strength")"
+               for (( i=str_len; i < 8; i++ )); do
+                    strength+=" "
+               done
+
+               str_len=${#tls_cipher}
+               tls_cipher="$(pr_litegrey "$tls_cipher")"
+               for (( i=str_len; i < 49; i++ )); do
+                    tls_cipher+=" "
+               done
+
+               str_len=${#ossl_cipher}
+               ossl_cipher="$(pr_litegrey "$ossl_cipher")"
+               for (( i=str_len; i < 33; i++ )); do
+                    ossl_cipher+=" "
+               done
+          fi
      fi
      #echo "${#kx}"                            # should be always 20 / 13
      printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher"
@@ -2469,12 +2513,12 @@ test_just_one(){
 
           for (( i=0; i < nr_ciphers; i++ )); do
                export="${export2[i]}"
-               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
                if "${ciphers_found[i]}"; then
                     pr_cyan "  available"
                     fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") available"
                else
-                    out "  not a/v"
+                    pr_litegrey "  not a/v"
                     fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") not a/v"
                fi
                outln
@@ -2720,7 +2764,7 @@ run_allciphers() {
      for (( i=0 ; i<nr_ciphers; i++ )); do
           if "${ciphers_found[i]}" || ( "$SHOW_EACH_C" && ( "$using_sockets" || "${ossl_supported[i]}" ) ); then
                export=${export2[i]}
-               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
                available=""
                if "$SHOW_EACH_C"; then
                     if ${ciphers_found[i]}; then
@@ -2728,7 +2772,7 @@ run_allciphers() {
                          pr_cyan "$available"
                     else
                          available="not a/v"
-                         out "$available"
+                         pr_litegrey "$available"
                     fi
                fi
                outln "${sigalg[i]}"
@@ -3009,7 +3053,7 @@ run_cipher_per_proto() {
                if "${ciphers_found[i]}" || "$SHOW_EACH_C"; then
                     export=${export2[i]}
                     normalized_hexcode[i]="$(tolower "${normalized_hexcode[i]}")"
-                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
                     available=""
                     if "$SHOW_EACH_C"; then
                          if "${ciphers_found[i]}"; then
@@ -3017,7 +3061,7 @@ run_cipher_per_proto() {
                               pr_cyan "$available"
                          else
                               available="not a/v"
-                              out "$available"
+                              pr_litegrey "$available"
                          fi
                     fi
                     outln "${sigalg[i]}"
@@ -6607,12 +6651,12 @@ run_pfs() {
                     fi
                fi
                if "$WIDE"; then
-                    neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+                    neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
                     if "$SHOW_EACH_C"; then
                          if ${ciphers_found[i]}; then
                               pr_done_best "available"
                          else
-                              out "not a/v"
+                              pr_litegrey "not a/v"
                          fi
                     fi
                     outln "${sigalg[i]}"
@@ -10175,7 +10219,7 @@ run_beast(){
                for (( i=0; i < nr_ciphers; i++ )); do
                     if "${ciphers_found[i]}" || "$SHOW_EACH_C"; then
                          export="${export2[i]}"
-                         neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+                         neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
                          if "$SHOW_EACH_C"; then
                               if "${ciphers_found[i]}"; then
                                    if [[ -n "$higher_proto_supported" ]]; then
@@ -10184,7 +10228,7 @@ run_beast(){
                                         pr_svrty_medium "available"
                                    fi
                               else
-                                   out "not a/v"
+                                   pr_litegrey "not a/v"
                               fi
                          fi
                          outln "${sigalg[i]}"
@@ -10476,12 +10520,12 @@ run_rc4() {
                if "$WIDE"; then
                     #FIXME: JSON+CSV in wide mode is missing
                     export="${export2[i]}"
-                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}"
+                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
                     if "$SHOW_EACH_C"; then
                          if "${ciphers_found[i]}"; then
                               pr_svrty_high "available"
                          else
-                              out "not a/v"
+                              pr_litegrey "not a/v"
                          fi
                     fi
                     outln "${sigalg[i]}"
