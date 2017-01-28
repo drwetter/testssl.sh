@@ -11660,7 +11660,7 @@ determine_service() {
                     fi
                     grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
                     out " Service set:$CORRECT_SPACES            STARTTLS via "
-                    fileout "service" "INFO" "Service detected: $protocol"
+                    fileout "service" "INFO" "$protocol"
                     toupper "$protocol"
                     [[ -n "$XMPP_HOST" ]] && echo -n " (XMPP domain=\'$XMPP_HOST\')"
                     outln
