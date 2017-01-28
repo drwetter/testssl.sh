@@ -725,7 +725,7 @@ fileout_pretty_json_footer() {
 
 fileout_json_header() {
      "$do_json" && printf "[\n" > "$JSONFILE"
-     "$do_pretty_json" && (printf "{\n%s" "$(fileout_pretty_json_header)") > "$JSONFILE"
+     "$do_pretty_json" && (printf "{\n%s\n" "$(fileout_pretty_json_header)") > "$JSONFILE"
 }
 
 fileout_json_footer() {
