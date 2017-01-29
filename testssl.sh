@@ -271,6 +271,7 @@ HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"')   # This is used to analyze the reply
 HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')      # Replaces both xxd -p and tr -cd '[:print:]'
 
 SERVER_COUNTER=0                             # Counter for multiple servers
+MX_HOSTNAME=""                               # MX hostname
 
 #################### SEVERITY ####################
 INFO=0
@@ -706,12 +707,14 @@ strip_quote() {
 #################### JSON FILE FORMATING ####################
 fileout_pretty_json_header() {
     START_TIME=$(date +%s)
+    target="$NODE"
+    $do_mx_all_ips && target="$URI"
 
     echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
           \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
           \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
-          \"target host\" : \"$NODE\",
+          \"target host\" : \"$target\",
           \"port\"        : \"$PORT\",
           \"startTime\"   : \"$START_TIME\",
           \"scanResult\"  : ["
@@ -736,7 +739,7 @@ fileout_json_footer() {
 fileout_json_section() {
     case $1 in
     1)
-        echo -e "                    \"protocols\"         : ["
+        echo -e    "                    \"protocols\"         : ["
         ;;
     2)
         echo -e ",\n                    \"ciphers\"           : ["
@@ -821,6 +824,7 @@ fileout_json_finding() {
             echo -e "          {
                     \"service\"         : \"$finding\",
                     \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
+            $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$MX_HOSTNAME\","  >> "$JSONFILE"
         else
             ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
             echo -e -n "\n"  >> "$JSONFILE"
@@ -11739,6 +11743,7 @@ run_mx_all_ips() {
                STARTTLS_PROTOCOL=""          # no starttls for Port 465, on all other ports we speak starttls
           pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
           for mx in $mxs; do
+               MX_HOSTNAME=$mx
                draw_line "-" $((TERM_WIDTH * 2 / 3))
                outln
                parse_hn_port "$mx:$mxport"
