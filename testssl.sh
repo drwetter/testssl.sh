@@ -271,7 +271,6 @@ HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"')   # This is used to analyze the reply
 HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')      # Replaces both xxd -p and tr -cd '[:print:]'
 
 SERVER_COUNTER=0                             # Counter for multiple servers
-MX_HOSTNAME=""                               # MX hostname
 
 #################### SEVERITY ####################
 INFO=0
@@ -824,7 +823,7 @@ fileout_json_finding() {
             echo -e "          {
                     \"service\"         : \"$finding\",
                     \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
-            $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$MX_HOSTNAME\","  >> "$JSONFILE"
+            $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
         else
             ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
             echo -e -n "\n"  >> "$JSONFILE"
@@ -11743,7 +11742,6 @@ run_mx_all_ips() {
                STARTTLS_PROTOCOL=""          # no starttls for Port 465, on all other ports we speak starttls
           pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
           for mx in $mxs; do
-               MX_HOSTNAME=$mx
                draw_line "-" $((TERM_WIDTH * 2 / 3))
                outln
                parse_hn_port "$mx:$mxport"
