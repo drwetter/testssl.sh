@@ -270,6 +270,8 @@ HEX_CIPHER=""
 HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"')   # This is used to analyze the reply
 HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')      # Replaces both xxd -p and tr -cd '[:print:]'
 
+SERVER_COUNTER=0                             # Counter for multiple servers
+
 #################### SEVERITY ####################
 INFO=0
 OK=0
@@ -704,65 +706,62 @@ strip_quote() {
 #################### JSON FILE FORMATING ####################
 fileout_pretty_json_header() {
     START_TIME=$(date +%s)
+    target="$NODE"
+    $do_mx_all_ips && target="$URI"
 
     echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
           \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
           \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
-          \"target host\" : \"$NODE\",
+          \"target host\" : \"$target\",
           \"port\"        : \"$PORT\",
           \"startTime\"   : \"$START_TIME\",
-          \"scanResult\"  : {
-          "
+          \"scanResult\"  : ["
 }
 
 fileout_pretty_json_footer() {
     local scan_time=$((END_TIME - START_TIME))
-    echo -e "          },
-          \"ip\"        : \"$NODEIP\",
+    echo -e "          ],
           \"scanTime\"  : \"$scan_time\"\n}"
 }
 
 fileout_json_header() {
      "$do_json" && printf "[\n" > "$JSONFILE"
-     "$do_pretty_json" && (printf "{\n%s" "$(fileout_pretty_json_header)") > "$JSONFILE"
+     "$do_pretty_json" && (printf "{\n%s\n" "$(fileout_pretty_json_header)") > "$JSONFILE"
 }
 
 fileout_json_footer() {
      "$do_json" && printf "]\n" >> "$JSONFILE"
-     "$do_pretty_json" && (printf "\n%s" "$(fileout_pretty_json_footer)") >> "$JSONFILE"
+     "$do_pretty_json" && (printf "$(fileout_pretty_json_footer)") >> "$JSONFILE"
 }
 
 fileout_json_section() {
     case $1 in
     1)
-        echo -e "          \"service\"           : ["
+        echo -e    "                    \"protocols\"         : ["
         ;;
     2)
-        echo -e ",\n                    \"protocols\"         : ["
-        ;;
-    3)
         echo -e ",\n                    \"ciphers\"           : ["
         ;;
-    4)
+    3)
         echo -e ",\n                    \"pfs\"               : ["
         ;;
-    5)
+    4)
         echo -e ",\n                    \"serverPreferences\" : ["
         ;;
-    6)
+    5)
         echo -e ",\n                    \"serverDefaults\"    : ["
         ;;
-    7)
+    6)
         echo -e ",\n                    \"headerResponse\"    : ["
         ;;
-    8)
+    7)
         echo -e ",\n                    \"vulnerabilities\"   : ["
         ;;
-    9)
+    8)
         echo -e ",\n                    \"cipherTests\"       : ["
         ;;
-    10)
+    9)
         echo -e ",\n                    \"browserSimulations\": ["
         ;;
     *)
@@ -773,12 +772,13 @@ fileout_json_section() {
 
 fileout_section_header(){
     local str=""
-    $2 && str="$(fileout_section_footer)"
+    $2 && str="$(fileout_section_footer false)"
     "$do_pretty_json" && FIRST_FINDING=true && (printf "%s%s\n" "$str" "$(fileout_json_section "$1")") >> "$JSONFILE"
 }
 
-fileout_section_footer() {
+fileout_section_footer() { # IS_THE_LAST_ONE
     "$do_pretty_json" && printf "\n                    ]" >> "$JSONFILE"
+    "$do_pretty_json" && $1 && echo -e "\n          }" >> "$JSONFILE"
 }
 
 fileout_json_print_parameter() {
@@ -816,15 +816,25 @@ fileout_json_finding() {
          echo -e "\n         }" >> "$JSONFILE"
     fi
     if "$do_pretty_json"; then
-         ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
-         echo -e -n "\n"  >> "$JSONFILE"
-         fileout_json_print_parameter "id" "           " "$1" true
-         fileout_json_print_parameter "severity" "     " "$2" true
-         fileout_json_print_parameter "cve" "          " "$cve" true
-         fileout_json_print_parameter "cwe" "          " "$cwe" true
-         "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
-         fileout_json_print_parameter "finding" "      " "$finding" false
-         echo -e -n "\n                           }" >> "$JSONFILE"
+        if [[ "$1" == "service" ]]; then
+            if [[ $SERVER_COUNTER -gt 1 ]]; then
+                echo "          ," >> "$JSONFILE"
+            fi
+            echo -e "          {
+                    \"service\"         : \"$finding\",
+                    \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
+            $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
+        else
+            ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
+            echo -e -n "\n"  >> "$JSONFILE"
+            fileout_json_print_parameter "id" "           " "$1" true
+            fileout_json_print_parameter "severity" "     " "$2" true
+            fileout_json_print_parameter "cve" "          " "$cve" true
+            fileout_json_print_parameter "cwe" "          " "$cwe" true
+            "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
+            fileout_json_print_parameter "finding" "      " "$finding" false
+            echo -e -n "\n                           }" >> "$JSONFILE"
+        fi
     fi
 }
 
@@ -11653,6 +11663,7 @@ determine_service() {
                     fi
                     grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
                     out " Service set:$CORRECT_SPACES            STARTTLS via "
+                    fileout "service" "INFO" "$protocol"
                     toupper "$protocol"
                     [[ -n "$XMPP_HOST" ]] && echo -n " (XMPP domain=\'$XMPP_HOST\')"
                     outln
@@ -12292,7 +12303,7 @@ lets_roll() {
 
      START_TIME=$(date +%s)
 
-     fileout_section_header $section_number false && ((section_number++))
+     ((SERVER_COUNTER++))
      determine_service "$1"        # any starttls service goes here
 
      $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit 0; }
@@ -12300,7 +12311,7 @@ lets_roll() {
      $do_test_just_one && test_just_one ${single_cipher}
 
      # all top level functions  now following have the prefix "run_"
-     fileout_section_header $section_number true && ((section_number++))
+     fileout_section_header $section_number false && ((section_number++))
      $do_protocols && { run_protocols; ret=$(($? + ret)); }
      $do_spdy && { run_spdy; ret=$(($? + ret)); }
      $do_http2 && { run_http2; ret=$(($? + ret)); }
@@ -12362,7 +12373,7 @@ lets_roll() {
      fileout_section_header $section_number true && ((section_number++))
      $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); }
 
-     fileout_section_footer
+     fileout_section_footer true
 
      outln
      END_TIME=$(date +%s)
