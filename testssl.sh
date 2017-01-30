@@ -2203,8 +2203,7 @@ neat_header(){
 neat_list(){
      local hexcode="$1"
      local ossl_cipher="$2" tls_cipher=""
-     local kx enc strength
-     local -i i str_len
+     local kx enc strength line
 
      kx="${3//Kx=/}"
      enc="${4//Enc=/}"
@@ -2220,6 +2219,12 @@ neat_list(){
 
      [[ -n "$ADD_RFC_STR" ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
+     if [[ "$5" == "false" ]]; then
+          line="$(printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
+          pr_litegrey "$line"
+          return 0
+     fi
+
      #printf -- "%q" "$kx" | xxd | head -1
      # length correction for color escape codes (printf counts the escape color codes!!)
      if printf -- "%q" "$kx" | egrep -aq '.;3.m|E\[1m' ; then     # here's a color code which screws up the formatting with printf below
@@ -2230,46 +2235,6 @@ neat_list(){
           while [[ ${#kx} -lt 13 ]]; do                   # so it'll be filled up ok
                kx="$kx "
           done
-     fi
-     if [[ -n "$5" ]]; then
-          # FIXME: When $5 is true, highlight ciphers based on quality.
-          if [[ "$5" == "false" ]]; then
-               str_len=${#hexcode}
-               hexcode="$(pr_litegrey "$hexcode")"
-               for (( i=str_len; i < 7; i++ )); do
-                    hexcode+=" "
-               done
-
-               str_len=${#kx}
-               kx="$(pr_litegrey "$kx")"
-               for (( i=str_len; i < 10; i++ )); do
-                    kx+=" "
-               done
-
-               str_len=${#enc}
-               enc="$(pr_litegrey "$enc")"
-               for (( i=str_len; i < 10; i++ )); do
-                    enc+=" "
-               done
-
-               str_len=${#strength}
-               strength="$(pr_litegrey "$strength")"
-               for (( i=str_len; i < 8; i++ )); do
-                    strength+=" "
-               done
-
-               str_len=${#tls_cipher}
-               tls_cipher="$(pr_litegrey "$tls_cipher")"
-               for (( i=str_len; i < 49; i++ )); do
-                    tls_cipher+=" "
-               done
-
-               str_len=${#ossl_cipher}
-               ossl_cipher="$(pr_litegrey "$ossl_cipher")"
-               for (( i=str_len; i < 33; i++ )); do
-                    ossl_cipher+=" "
-               done
-          fi
      fi
      #echo "${#kx}"                            # should be always 20 / 13
      printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher"
