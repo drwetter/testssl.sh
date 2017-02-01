@@ -2188,8 +2188,8 @@ show_rfc_style(){
 }
 
 neat_header(){
-     printf -- "Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.  Encryption Bits${ADD_RFC_STR:+     Cipher Suite Name (RFC)}\n"
-     printf -- "%s------------------------------------------------------------------------${ADD_RFC_STR:+---------------------------------------------------}\n"
+     printf -- "Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.   Encryption  Bits${ADD_RFC_STR:+     Cipher Suite Name (RFC)}\n"
+     printf -- "%s--------------------------------------------------------------------------${ADD_RFC_STR:+---------------------------------------------------}\n"
 }
 
 
@@ -2213,14 +2213,13 @@ neat_list(){
 
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
-     enc="${enc/CamelliaGCM/Camellia}"  # "CamelliaGCM" is too long
 
      echo "$export" | grep -iq export && strength="$strength,exp"
 
      [[ -n "$ADD_RFC_STR" ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
      if [[ "$5" == "false" ]]; then
-          line="$(printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
+          line="$(printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
           pr_litegrey "$line"
           return 0
      fi
@@ -2237,7 +2236,7 @@ neat_list(){
           done
      fi
      #echo "${#kx}"                            # should be always 20 / 13
-     printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher"
+     printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher"
 }
 
 test_just_one(){
