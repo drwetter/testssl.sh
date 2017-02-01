@@ -5427,7 +5427,10 @@ determine_tls_extensions() {
                success=$?
           fi
           if [[ $success -eq 0 ]]; then
-               tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+               tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | \
+                    sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
+                        -e 's/,.*$/,/g' -e 's/),$/\"/g' \
+                        -e 's/elliptic curves\/#10/supported_groups\/#10/g')
                tls_extensions=$(echo $tls_extensions)       # into one line
           fi
           tmpfile_handle $FUNCNAME.txt
@@ -5519,7 +5522,10 @@ get_server_certificate() {
      # this is not beautiful (grep+sed)
      # but maybe we should just get the ids and do a private matching, according to
      # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-     tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+     tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | \
+          sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
+              -e 's/,.*$/,/g' -e 's/),$/\"/g' \
+              -e 's/elliptic curves\/#10/supported_groups\/#10/g')
      tls_extensions=$(echo $tls_extensions)       # into one line
 
      # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
@@ -8036,7 +8042,7 @@ parse_tls_serverhello() {
                     0007) tls_extensions+=" \"client authz/#7\"" ;;
                     0008) tls_extensions+=" \"server authz/#8\"" ;;
                     0009) tls_extensions+=" \"cert type/#9\"" ;;
-                    000A) tls_extensions+=" \"supported groups/#10\"" ;;
+                    000A) tls_extensions+=" \"supported_groups/#10\"" ;;
                     000B) tls_extensions+=" \"EC point formats/#11\"" ;;
                     000C) tls_extensions+=" \"SRP/#12\"" ;;
                     000D) tls_extensions+=" \"signature algorithms/#13\"" ;;
