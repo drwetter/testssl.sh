@@ -6198,7 +6198,7 @@ certificate_info() {
                fileout "${json_prefix}crl" "INFO" "No CRL provided"
           else
                pr_svrty_highln "-- (NOT ok)"
-               fileout "${json_prefix}crl" "HIGH" "Neither CRL nor  OCSP URL provided"
+               fileout "${json_prefix}crl" "HIGH" "Neither CRL nor OCSP URL provided"
           fi
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
@@ -6214,7 +6214,7 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " OCSP URI                     "
-     if [[ -z "$ocsp_uri" ]] && [[ -n "$crl" ]]; then
+     if [[ -z "$ocsp_uri" ]]; then
           outln "--"
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : --"
      else
