@@ -6188,7 +6188,8 @@ certificate_info() {
      fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
 
      # Get both CRL and OCSP URL upfront. If there's none, this is not good. And we need to penalize this in the output
-     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk '/CRL Distribution/,/URI/ { print $0 }' | awk -F'URI:' '/URI/ { print $2 }')"
+     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 50 "X509v3 CRL Distribution Points:" | \
+            tail -n +2 | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
 
      out "$indent"; pr_bold " Certificate Revocation List  "
@@ -6218,7 +6219,11 @@ certificate_info() {
           outln "--"
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : --"
      else
-          outln "$ocsp_uri"
+          if [[ $(count_lines "$ocsp_uri") -eq 1 ]]; then
+               outln "$ocsp_uri"
+          else
+               out_row_aligned "$ocsp_uri" "$spaces"
+          fi
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
      fi
 
