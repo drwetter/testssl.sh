@@ -9500,6 +9500,60 @@ run_breach() {
      return $ret
 }
 
+# SWEET32 (https://sweet32.info/). Birthday attacks on 64-bit block ciphers. In a nutshell: don't use 3DES ciphers anymore (DES, RC2 and IDEA too)
+run_sweet32() {
+     local -i sclient_success=0
+     # DES, RC2 and IDEA are missing
+     local sweet32_ciphers="ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA"
+     local sweet32_ciphers_hex="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,17, 00,1b, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0"
+# proper parsing to be clarified: 07,00,c0
+
+     local cve="CVE-2016-2183, CVE-2016-6329"
+     local cwe="CWE-327"
+     local hint=""
+     local -i nr_sweet32_ciphers=0
+     local using_sockets=true
+
+     [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SWEET32 (Birthday Attacks on 64-bit Block Ciphers)       " && outln
+     pr_bold " SWEET32"; out " ($cve)    "
+
+     "$SSL_NATIVE" && using_sockets=false
+     # The openssl binary distributed has almost everything we need (PSK, KRB5 ciphers and feff, ffe0 are typically missing).
+     # Measurements show that there's little impact whether we use sockets or TLS here, so the default is sockets here
+     if "$using_sockets"; then
+          tls_sockets "03" "${sweet32_ciphers_hex}"
+          sclient_success=$?
+     else
+          nr_sweet32_ciphers=$(count_ciphers $sweet32_ciphers)
+          nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $sweet32_ciphers))
+          $OPENSSL s_client $STARTTLS $BUGS -cipher $sweet32_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE $SNI 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
+          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     fi
+     if [[ $sclient_success -eq 0 ]]; then
+          pr_svrty_minor "VULNERABLE"; out ", uses 64 bit block ciphers"
+          fileout "sweet32" "LOW" "SWEET32, uses 64 bit block ciphers" "$cve" "$cwe" "$hint"
+     else
+          pr_done_best "not vulnerable (OK)";
+          if "$using_sockets"; then
+               fileout "sweet32" "OK" "SWEET32: not vulnerable" "$cve" "$cwe"
+          else
+               if [[ "$nr_supported_ciphers" -ge 17 ]]; then
+                    # Likely only PSK/KRB5 ciphers are missing: display discrepancy but no warning
+                    out ", $nr_supported_ciphers/$nr_sweet32_ciphers local ciphers"
+               else
+                    pr_warning ", $nr_supported_ciphers/$nr_sweet32_ciphers local ciphers"
+               fi
+               fileout "sweet32" "OK" "SWEET32: not vulnerable ($nr_supported_ciphers of $nr_sweet32_ciphers local ciphers" "$cve" "$cwe"
+          fi
+     fi
+     outln
+     tmpfile_handle $FUNCNAME.txt
+     return $sclient_success
+}
+
+
 # Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
 run_ssl_poodle() {
      local -i sclient_success=0
@@ -9527,6 +9581,7 @@ run_ssl_poodle() {
           fi
           nr_cbc_ciphers=$(count_ciphers $cbc_ciphers)
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $cbc_ciphers))
+          # SNI not needed as SSLv3 has none:
           $OPENSSL s_client -ssl3 $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
@@ -10822,6 +10877,7 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -A, --beast                   tests for BEAST vulnerability (HTTP compression issue)
      -O, --poodle                  tests for POODLE (SSL) vulnerability
      -Z, --tls-fallback            checks TLS_FALLBACK_SCSV mitigation
+     -W, --sweet32                 tests 64 bit block ciphers (3DES, RC2 and IDEA): SWEET32 vulnerability
      -T, --breach                  tests for BREACH vulnerability
      -F, --freak                   tests for FREAK vulnerability
      -J, --logjam                  tests for LOGJAM vulnerability
@@ -11865,6 +11921,7 @@ initialize_globals() {
      do_spdy=false
      do_http2=false
      do_ssl_poodle=false
+     do_sweet32=false
      do_tls_fallback_scsv=false
      do_test_just_one=false
      do_tls_sockets=false
@@ -11879,26 +11936,27 @@ set_scanning_defaults() {
      do_vulnerabilities=true
      do_beast=true
      do_breach=true
+     do_heartbleed=true
      do_ccs_injection=true
      do_crime=true
      do_freak=true
      do_logjam=true
      do_drown=true
+     do_ssl_poodle=true
+     do_sweet32=true
      do_header=true
-     do_heartbleed=true
      do_pfs=true
-     do_protocols=true
      do_rc4=true
+     do_protocols=true
      do_renego=true
      do_std_cipherlists=true
      do_server_defaults=true
      do_server_preference=true
      do_spdy=true
      do_http2=true
-     do_ssl_poodle=true
      do_tls_fallback_scsv=true
      do_client_simulation=true
-     VULN_COUNT=10
+     VULN_COUNT=15
 }
 
 query_globals() {
@@ -11908,7 +11966,7 @@ query_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
+               do_sweet32 do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
      done
      return $true_nr
@@ -11921,7 +11979,7 @@ debug_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
+               do_sweet32 do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
      printf "%-22s : %s\n" URI: "$URI"
@@ -12047,6 +12105,7 @@ parse_cmd_line() {
                     do_breach=true
                     do_ssl_poodle=true
                     do_tls_fallback_scsv=true
+                    do_sweet32=true
                     do_freak=true
                     do_drown=true
                     do_logjam=true
@@ -12081,6 +12140,10 @@ parse_cmd_line() {
                     ;;
                -Z|--tls[_-]fallback|tls[_-]fallback[_-]scs)
                     do_tls_fallback_scsv=true
+                    let "VULN_COUNT++"
+                    ;;
+               -W|--sweet32)
+                    do_sweet32=true
                     let "VULN_COUNT++"
                     ;;
                -F|--freak)
@@ -12375,6 +12438,7 @@ lets_roll() {
      $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret)); }
      $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); }
      $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); }
+     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); }
      $do_freak && { run_freak; ret=$(($? + ret)); }
      $do_drown && { run_drown ret=$(($? + ret)); }
      $do_logjam && { run_logjam; ret=$(($? + ret)); }
