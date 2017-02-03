@@ -595,8 +595,8 @@ pr_done_goodln()     { pr_done_good "$1"; outln; }
 pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best
 pr_done_bestln()     { pr_done_best "$1"; outln; }
 
-pr_svrty_minor()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
-pr_svrty_minorln()   { pr_svrty_minor "$1"; outln; }
+pr_svrty_low()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
+pr_svrty_lowln()   { pr_svrty_low "$1"; outln; }
 pr_svrty_medium()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                   # brown | it is not a bad problem but you shouldn't do this
 pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
 
@@ -892,6 +892,14 @@ fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
 
 ###### helper function definitions ######
 
+if [[ $(uname) == "Linux" ]] ; then
+     toupper() { echo -n "${1^^}" ;  }
+     tolower() { echo -n "${1,,}" ;  }
+else
+     toupper() { echo -n "$1" | tr 'a-z' 'A-Z'; }
+     tolower() { echo -n "$1" | tr 'A-Z' 'a-z' ; }
+fi
+
 debugme() {
      [[ "$DEBUG" -ge 2 ]] && "$@"
      return 0
@@ -950,13 +958,17 @@ trim_trailing_space() {
      echo "${1%%*( )}"
 }
 
-if [[ $(uname) == "Linux" ]] ; then
-     toupper() { echo -n "${1^^}" ;  }
-     tolower() { echo -n "${1,,}" ;  }
-else
-     toupper() { echo -n "$1" | tr 'a-z' 'A-Z'; }
-     tolower() { echo -n "$1" | tr 'A-Z' 'a-z' ; }
-fi
+# prints out multiple lines in $1, left aligned by spaces in $2
+out_row_aligned() {
+     local first=true
+
+     echo "$1" | while read line; do
+          "$first" && \
+               first=false || \
+               out "$2"
+          outln "$line"
+     done
+}
 
 is_number() {
      [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
@@ -987,22 +999,6 @@ is_ipv6addr() {
      [[ -n "$(tr -d '0-9:a-fA-F ' <<< "$1" | sed -e '/^$/d')" ]] && \
           return 1
      return 0
-}
-
-
-
-# prints out multiple lines in $1, left aligned by spaces in $2
-out_row_aligned() {
-     local first=true
-
-     echo "$1" | while read line; do
-          if $first; then
-               first=false
-          else
-               out "$2"
-          fi
-          outln "$line"
-     done
 }
 
 
@@ -4589,7 +4585,7 @@ read_dhbits_from_file() {
           elif [[ "$bits" -le 163 ]]; then
                pr_svrty_medium "$bits $add"
           elif [[ "$bits" -le 193 ]]; then   # hmm, according to https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography it should ok
-               pr_svrty_minor "$bits $add"   # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
+               pr_svrty_low "$bits $add"   # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
           elif [[ "$bits" -le 224 ]]; then
                out "$bits $add"
           elif [[ "$bits" -gt 224 ]]; then
@@ -4750,7 +4746,7 @@ run_server_preference() {
                     fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
                     ;;   # best ones
                ECDHE*AES*)
-                    pr_svrty_minor "$default_cipher"
+                    pr_svrty_low "$default_cipher"
                     fileout "order_cipher" "LOW" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (cbc)  $remark4default_cipher"
                     ;;  # it's CBC. --> lucky13
                "")
@@ -5453,7 +5449,7 @@ get_server_certificate() {
      local savedir
      local nrsaved
 
-     $HAS_SPDY && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
+     "$HAS_SPDY" && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -5525,6 +5521,7 @@ get_server_certificate() {
      # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
      while read -d "\"" -r line; do
           if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
+#FIXME: This is a string of quoted strings, so this seems to deterime the output format already. Better e.g. would be an array
                TLS_EXTENSIONS+=" \"${line}\""
           fi
      done <<<$tls_extensions
@@ -6224,7 +6221,7 @@ certificate_info() {
 
      out "$indent"; pr_bold " OCSP stapling                "
      if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
-          pr_svrty_minor "--"
+          pr_svrty_low "--"
           fileout "${json_prefix}ocsp_stapling" "LOW" "OCSP stapling : not offered"
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
@@ -6251,7 +6248,7 @@ certificate_info() {
           pr_done_good "OK"; out " (" ; pr_italic "$caa"; out ")"
           fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : offered"
      else
-          pr_svrty_minor "--"
+          pr_svrty_low "--"
           fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
      fi
 
@@ -6408,11 +6405,12 @@ run_server_defaults() {
 
      pr_bold " TLS extensions (standard)    "
      if [[ -z "$TLS_EXTENSIONS" ]]; then
-         outln "(none)"
-         fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
+          outln "(none)"
+          fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
      else
-         outln "$TLS_EXTENSIONS"
-         fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
+#FIXME: we rather want to have the chance to print each ext in italcs or another format. Atm is a string of quoted strings -- that needs to be fixed at the root
+          outln "$TLS_EXTENSIONS"
+          fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
 
      pr_bold " Session Tickets RFC 5077     "
@@ -6423,7 +6421,7 @@ run_server_defaults() {
           lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
           unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
-          pr_svrty_minorln "(PFS requires session ticket keys to be rotated <= daily)"
+          pr_svrty_lowln "(PFS requires session ticket keys to be rotated <= daily)"
           fileout "session_ticket" "LOW" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
      fi
 
@@ -6725,7 +6723,7 @@ run_pfs() {
                     if [[ "${bits[i]}" -le 163 ]]; then
                          curves_offered_text+="$(pr_svrty_medium "${curves_ossl[i]}") "
                     elif [[ "${bits[i]}" -le 193 ]]; then                              # hmm, according to https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography it should ok
-                         curves_offered_text+="$(pr_svrty_minor "${curves_ossl[i]}") " # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
+                         curves_offered_text+="$(pr_svrty_low "${curves_ossl[i]}") " # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
                     elif [[ "${bits[i]}" -le 224 ]]; then
                          curves_offered_text+="${curves_ossl[i]} "
                     else
@@ -9494,6 +9492,60 @@ run_breach() {
      return $ret
 }
 
+# SWEET32 (https://sweet32.info/). Birthday attacks on 64-bit block ciphers. In a nutshell: don't use 3DES ciphers anymore (DES, RC2 and IDEA too)
+run_sweet32() {
+     local -i sclient_success=0
+     # DES, RC2 and IDEA are missing
+     local sweet32_ciphers="ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA"
+     local sweet32_ciphers_hex="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,17, 00,1b, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0"
+# proper parsing to be clarified: 07,00,c0
+
+     local cve="CVE-2016-2183, CVE-2016-6329"
+     local cwe="CWE-327"
+     local hint=""
+     local -i nr_sweet32_ciphers=0
+     local using_sockets=true
+
+     [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SWEET32 (Birthday Attacks on 64-bit Block Ciphers)       " && outln
+     pr_bold " SWEET32"; out " ($cve)    "
+
+     "$SSL_NATIVE" && using_sockets=false
+     # The openssl binary distributed has almost everything we need (PSK, KRB5 ciphers and feff, ffe0 are typically missing).
+     # Measurements show that there's little impact whether we use sockets or TLS here, so the default is sockets here
+     if "$using_sockets"; then
+          tls_sockets "03" "${sweet32_ciphers_hex}"
+          sclient_success=$?
+     else
+          nr_sweet32_ciphers=$(count_ciphers $sweet32_ciphers)
+          nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $sweet32_ciphers))
+          $OPENSSL s_client $STARTTLS $BUGS -cipher $sweet32_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE $SNI 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
+          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     fi
+     if [[ $sclient_success -eq 0 ]]; then
+          pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers"
+          fileout "sweet32" "LOW" "SWEET32, uses 64 bit block ciphers" "$cve" "$cwe" "$hint"
+     else
+          pr_done_best "not vulnerable (OK)";
+          if "$using_sockets"; then
+               fileout "sweet32" "OK" "SWEET32: not vulnerable" "$cve" "$cwe"
+          else
+               if [[ "$nr_supported_ciphers" -ge 17 ]]; then
+                    # Likely only PSK/KRB5 ciphers are missing: display discrepancy but no warning
+                    out ", $nr_supported_ciphers/$nr_sweet32_ciphers local ciphers"
+               else
+                    pr_warning ", $nr_supported_ciphers/$nr_sweet32_ciphers local ciphers"
+               fi
+               fileout "sweet32" "OK" "SWEET32: not vulnerable ($nr_supported_ciphers of $nr_sweet32_ciphers local ciphers" "$cve" "$cwe"
+          fi
+     fi
+     outln
+     tmpfile_handle $FUNCNAME.txt
+     return $sclient_success
+}
+
+
 # Padding Oracle On Downgraded Legacy Encryption, in a nutshell: don't use CBC Ciphers in SSLv3
 run_ssl_poodle() {
      local -i sclient_success=0
@@ -9521,6 +9573,7 @@ run_ssl_poodle() {
           fi
           nr_cbc_ciphers=$(count_ciphers $cbc_ciphers)
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $cbc_ciphers))
+          # SNI not needed as SSLv3 has none:
           $OPENSSL s_client -ssl3 $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
@@ -9564,7 +9617,7 @@ run_tls_fallback_scsv() {
      local -i ret=0
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for TLS_FALLBACK_SCSV Protection " && outln
-     pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507),             "
+     pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
      # This isn't a vulnerability check per se, but checks for the existence of
      # the countermeasure to protect against protocol downgrade attacks.
 
@@ -9601,9 +9654,12 @@ run_tls_fallback_scsv() {
                     fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported"
                     ret=0
                elif grep -qa "alert handshake failure" "$TMPFILE"; then
+                    pr_done_good "Probably OK. "
+                    fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Probably oK"
                     # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
-                    pr_svrty_medium "\"handshake failure\" instead of \"inappropriate fallback\""
-                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : \"handshake failure\" instead of \"inappropriate fallback\" (likely: warning)"
+                    # other case reported by Nicolas was F5 and at costumer of mine: the same
+                    pr_svrty_medium "But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
+                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
                     ret=2
                elif grep -qa "ssl handshake failure" "$TMPFILE"; then
                     pr_svrty_medium "some unexpected \"handshake failure\" instead of \"inappropriate fallback\""
@@ -9866,19 +9922,19 @@ run_logjam() {
                out "\n${spaces}"
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p -le 512 ]]; then
-                    pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime \"$comment\" detected ($len_dh_p bits)"
+                    pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
                     fileout "LOGJAM_common primes" "CRITICAL" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 1024 ]]; then
-                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime \"$comment\" detected ($len_dh_p bits)"
+                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
                     fileout "LOGJAM_common primes" "HIGH" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 1536 ]]; then
-                    pr_svrty_medium "common prime with $len_dh_p bits detected: \"$comment\""
+                    pr_svrty_medium "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "MEDIUM" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 2048 ]]; then
-                    pr_svrty_minor "common prime with $len_dh_p bits detected: \"$comment\""
+                    pr_svrty_low "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "LOW" "common prime \"$comment\" detected"
                else
-                    out "common prime with $len_dh_p bits detected: \"$comment\""
+                    out "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "INFO" "common prime \"$comment\" detected"
                fi
           elif [[ $ret -eq 0 ]]; then
@@ -9891,22 +9947,23 @@ run_logjam() {
           if [[ $ret -eq 1 ]]; then
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p  -le 512 ]]; then
-                    pr_svrty_critical "VULNERABLE (NOT ok):" ; out " uses common prime \"$comment\" ($len_dh_p bits)"
+                    pr_svrty_critical "VULNERABLE (NOT ok):" ; out " uses common prime "; pr_italic "$comment"; out " ($len_dh_p bits)"
                     fileout "LOGJAM_common primes" "CRITICAL" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 1024 ]]; then
-                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime \"$comment\" detected ($len_dh_p bits)"
+                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
                     fileout "LOGJAM_common primes" "HIGH" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 1536 ]]; then
-                    pr_svrty_medium "Common prime with $len_dh_p bits detected: \"$comment\""
+                    pr_svrty_medium "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "MEDIUM" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 2048 ]]; then
-                    pr_svrty_minor "Common prime with $len_dh_p bits detected: \"$comment\""
+                    pr_svrty_low "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "LOW" "common prime \"$comment\" detected"
                else
-                    out "Common prime with $len_dh_p bits detected: \"$comment\""
+                    out "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "INFO" "common prime \"$comment\" detected"
                fi
-               out ", but no DH EXPORT ciphers${addtl_warning}"
+               outln ","
+               out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
                fileout "logjam" "OK" "LOGJAM: not vulnerable, no DH EXPORT ciphers, $addtl_warning" "$cve" "$cwe"
           elif [[ $ret -eq 3 ]]; then
                pr_done_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
@@ -10198,7 +10255,7 @@ run_beast(){
                          if "$SHOW_EACH_C"; then
                               if "${ciphers_found[i]}"; then
                                    if [[ -n "$higher_proto_supported" ]]; then
-                                        pr_svrty_minor "available"
+                                        pr_svrty_low "available"
                                    else
                                         pr_svrty_medium "available"
                                    fi
@@ -10222,7 +10279,7 @@ run_beast(){
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto):"
                     [[ -n "$higher_proto_supported" ]] && \
-                         pr_svrty_minorln "$detected_cbc_ciphers" || \
+                         pr_svrty_lowln "$detected_cbc_ciphers" || \
                          pr_svrty_mediumln "$detected_cbc_ciphers"
                     detected_cbc_ciphers=""  # empty for next round
                     first=false
@@ -10244,11 +10301,11 @@ run_beast(){
                if "$WIDE"; then
                     outln
                     # NOT ok seems too harsh for me if we have TLS >1.0
-                    pr_svrty_minor "VULNERABLE"
+                    pr_svrty_low "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                else
                     out "$spaces"
-                    pr_svrty_minor "VULNERABLE"
+                    pr_svrty_low "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                fi
                fileout "beast" "LOW" "BEAST: VULNERABLE -- but also supports higher protocols (possible mitigation):$higher_proto_supported" "$cve" "$cwe" "$hint"
@@ -10270,14 +10327,59 @@ run_beast(){
      return 0
 }
 
+
+# http://www.isg.rhul.ac.uk/tls/Lucky13.html
+# in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
 run_lucky13() {
+     local spaces="                                           "
+     local cbc_ciphers="ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:RSA-PSK-AES256-CBC-SHA384:DHE-PSK-AES256-CBC-SHA384:DHE-PSK-AES256-CBC-SHA:ECDHE-PSK-CAMELLIA256-SHA384:RSA-PSK-CAMELLIA256-SHA384:DHE-PSK-CAMELLIA256-SHA384:PSK-AES256-CBC-SHA384:PSK-CAMELLIA256-SHA384:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DH-RSA-AES256-SHA256:DH-DSS-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA256-SHA384:DHE-RSA-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA256:DH-RSA-CAMELLIA256-SHA256:DH-DSS-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:AECDH-AES256-SHA:ADH-AES256-SHA256:ADH-AES256-SHA:ADH-CAMELLIA256-SHA256:ADH-CAMELLIA256-SHA:ECDH-RSA-AES256-SHA384:ECDH-ECDSA-AES256-SHA384:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:ECDH-RSA-CAMELLIA256-SHA384:ECDH-ECDSA-CAMELLIA256-SHA384:AES256-SHA256:AES256-SHA:CAMELLIA256-SHA256:ECDHE-PSK-AES256-CBC-SHA384:ECDHE-PSK-AES256-CBC-SHA:CAMELLIA256-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DH-RSA-AES128-SHA256:DH-DSS-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA256:DH-RSA-CAMELLIA128-SHA256:DH-DSS-CAMELLIA128-SHA256:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:AECDH-AES128-SHA:ADH-AES128-SHA256:ADH-AES128-SHA:ADH-CAMELLIA128-SHA256:ADH-SEED-SHA:ADH-CAMELLIA128-SHA:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:ECDH-RSA-CAMELLIA128-SHA256:ECDH-ECDSA-CAMELLIA128-SHA256:AES128-SHA256:AES128-SHA:CAMELLIA128-SHA256:ECDHE-PSK-AES128-CBC-SHA256:ECDHE-PSK-AES128-CBC-SHA:RSA-PSK-AES128-CBC-SHA256:DHE-PSK-AES128-CBC-SHA256:DHE-PSK-AES128-CBC-SHA:SEED-SHA:CAMELLIA128-SHA:ECDHE-PSK-CAMELLIA128-SHA256:RSA-PSK-CAMELLIA128-SHA256:DHE-PSK-CAMELLIA128-SHA256:PSK-AES128-CBC-SHA256:PSK-CAMELLIA128-SHA256:IDEA-CBC-SHA:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5:EXP-DH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA"
+     cbc_ciphers_hex="c0,28, c0,24, c0,14, c0,0a, c0,22, c0,21, c0,20, 00,b7, 00,b3, 00,91, c0,9b, c0,99, c0,97, 00,af, c0,95, 00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87, 00,86, 00,85, c0,19, 00,6d, 00,3a, 00,c5, 00,89, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, 00,3d, 00,35, 00,c0, c0,38, c0,36, 00,84, 00,95, 00,8d, c0,3d, c0,3f, c0,41, c0,43, c0,45, c0,47, c0,49, c0,4b, c0,4d, c0,4f, c0,65, c0,67, c0,69, c0,71, c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44, 00,43, 00,42, c0,18, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,3c, 00,2f, 00,ba, c0,37, c0,35, 00,b6, 00,b2, 00,90, 00,96, 00,41, c0,9a, c0,98, c0,96, 00,ae, c0,94, 00,07, 00,94, 00,8c, 00,21, 00,25, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,46, c0,48, c0,4a, c0,4c, c0,4e, c0,64, c0,66, c0,68, c0,70, c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,17, 00,1b, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,63, 00,15, 00,12, 00,0f, 00,0c, 00,1a, 00,62, 00,09, 00,1e, 00,22, fe,fe, ff,e1, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e"
+#FIXME: we have 154 ciphers here, some devices can only take 128 ciphers!!
+     local has_dh_bits="$HAS_DH_BITS"
+     local -i nr_supported_ciphers=0
+     local using_sockets=true
      local cve="CVE-2013-0169"
      local cwe="CWE-310"
-#FIXME: to do . CVE-2013-0169
-# in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
-     echo "FIXME"
-     fileout "lucky13" "WARN" "LUCKY13: Not tested. Not implemented. #FIXME" "$cve" "$cwe"
-     return 1
+     local hint=""
+
+     [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for LUCKY13 vulnerability " && outln
+     pr_bold " LUCKY13"; out " ($cve)                   "
+
+     "$SSL_NATIVE" && using_sockets=false
+     # The openssl binary distributed has almost everything we need (PSK, KRB5 ciphers and feff, ffe0 are typically missing).
+     # Measurements show that there's little impact whether we use sockets or TLS here, so the default is sockets here
+
+     if "$using_sockets"; then
+          tls_sockets "03" "${cbc_ciphers_hex}"
+          sclient_success=$?
+     else
+          nr_cbc_ciphers=$(count_ciphers $cbc_ciphers)
+          nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $cbc_ciphers))
+          $OPENSSL s_client $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE $SNI 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
+          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     fi
+     if [[ $sclient_success -eq 0 ]]; then
+          pr_svrty_low "VULNERABLE"; out ", uses cipher block chaining (CBC) ciphers"
+          fileout "lucky13" "LOW" "LUCKY13, uses cipher block chaining (CBC) ciphers" "$cve" "$cwe" "$hint"
+     else
+          pr_done_best "not vulnerable (OK)";
+          if "$using_sockets"; then
+               fileout "lucky13" "OK" "LUCKY13: not vulnerable" "$cve" "$cwe"
+          else
+               if [[ "$nr_supported_ciphers" -ge 133 ]]; then
+                    # Likely only PSK/KRB5 ciphers are missing: display discrepancy but no warning
+                    out ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+               else
+                    pr_warning ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+               fi
+               fileout "lucky13" "OK" "LUCKY13: not vulnerable ($nr_supported_ciphers of $nr_cbc_ciphers local ciphers" "$cve" "$cwe"
+          fi
+     fi
+     outln
+     tmpfile_handle $FUNCNAME.txt
+     return $sclient_success
 }
 
 
@@ -10813,10 +10915,12 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -R, --renegotiation           tests for renegotiation vulnerabilities
      -C, --compression, --crime    tests for CRIME vulnerability (TLS compression issue)
-     -A, --beast                   tests for BEAST vulnerability (HTTP compression issue)
+     -T, --breach                  tests for BREACH vulnerability (HTTP compression issue)
      -O, --poodle                  tests for POODLE (SSL) vulnerability
      -Z, --tls-fallback            checks TLS_FALLBACK_SCSV mitigation
-     -T, --breach                  tests for BREACH vulnerability
+     -W, --sweet32                 tests 64 bit block ciphers (3DES, RC2 and IDEA): SWEET32 vulnerability
+     -A, --beast                   tests for BEAST vulnerability
+     -L, --lucky13                 tests for LUCKY13
      -F, --freak                   tests for FREAK vulnerability
      -J, --logjam                  tests for LOGJAM vulnerability
      -D, --drown                   tests for DROWN vulnerability
@@ -11834,6 +11938,7 @@ initialize_globals() {
      do_allciphers=false
      do_vulnerabilities=false
      do_beast=false
+     do_lucky13=false
      do_breach=false
      do_ccs_injection=false
      do_cipher_per_proto=false
@@ -11859,6 +11964,7 @@ initialize_globals() {
      do_spdy=false
      do_http2=false
      do_ssl_poodle=false
+     do_sweet32=false
      do_tls_fallback_scsv=false
      do_test_just_one=false
      do_tls_sockets=false
@@ -11872,37 +11978,39 @@ set_scanning_defaults() {
      do_allciphers=true
      do_vulnerabilities=true
      do_beast=true
+     do_lucky13=true
      do_breach=true
+     do_heartbleed=true
      do_ccs_injection=true
      do_crime=true
      do_freak=true
      do_logjam=true
      do_drown=true
+     do_ssl_poodle=true
+     do_sweet32=true
      do_header=true
-     do_heartbleed=true
      do_pfs=true
-     do_protocols=true
      do_rc4=true
+     do_protocols=true
      do_renego=true
      do_std_cipherlists=true
      do_server_defaults=true
      do_server_preference=true
      do_spdy=true
      do_http2=true
-     do_ssl_poodle=true
      do_tls_fallback_scsv=true
      do_client_simulation=true
-     VULN_COUNT=10
+     VULN_COUNT=16
 }
 
 query_globals() {
      local gbl
      local true_nr=0
 
-     for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
+     for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
+               do_sweet32 do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
      done
      return $true_nr
@@ -11912,10 +12020,10 @@ query_globals() {
 debug_globals() {
      local gbl
 
-     for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
+     for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
+               do_sweet32 do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
      printf "%-22s : %s\n" URI: "$URI"
@@ -12041,10 +12149,12 @@ parse_cmd_line() {
                     do_breach=true
                     do_ssl_poodle=true
                     do_tls_fallback_scsv=true
+                    do_sweet32=true
                     do_freak=true
                     do_drown=true
                     do_logjam=true
                     do_beast=true
+                    do_lucky13=true
                     do_rc4=true
                     VULN_COUNT=10
                     ;;
@@ -12077,6 +12187,10 @@ parse_cmd_line() {
                     do_tls_fallback_scsv=true
                     let "VULN_COUNT++"
                     ;;
+               -W|--sweet32)
+                    do_sweet32=true
+                    let "VULN_COUNT++"
+                    ;;
                -F|--freak)
                     do_freak=true
                     let "VULN_COUNT++"
@@ -12091,6 +12205,10 @@ parse_cmd_line() {
                     ;;
                -A|--beast)
                     do_beast=true
+                    let "VULN_COUNT++"
+                    ;;
+               -L|--lucky13)
+                    do_lucky13=true
                     let "VULN_COUNT++"
                     ;;
                -4|--rc4|--appelbaum)
@@ -12369,10 +12487,12 @@ lets_roll() {
      $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret)); }
      $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); }
      $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); }
+     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); }
      $do_freak && { run_freak; ret=$(($? + ret)); }
      $do_drown && { run_drown ret=$(($? + ret)); }
      $do_logjam && { run_logjam; ret=$(($? + ret)); }
      $do_beast && { run_beast; ret=$(($? + ret)); }
+     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); }
      $do_rc4 && { run_rc4; ret=$(($? + ret)); }
 
      fileout_section_header $section_number true && ((section_number++))
