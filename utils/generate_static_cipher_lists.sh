@@ -269,6 +269,25 @@ get_cbc_ciphers() {
      outln "cbc_cipher_list_hex=\"$(tolower "${cbc_cipher_list_hex:2}")\""
 }
 
+
+get_all_cbc_ciphers() {
+     local -i
+     local hexc cbc_ciphers="" cbc_ciphers_hex=""
+     
+     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+          if [[ "${TLS_CIPHER_SSLVERS[i]}" != "SSLv2" ]] && [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ CBC ]]; then
+               hexc="${TLS_CIPHER_HEXCODE[i]}"
+               cbc_ciphers_hex+=", ${hexc:2:2},${hexc:7:2}"
+               [[ "${TLS_CIPHER_OSSL_NAME[i]}" != "-" ]] && cbc_ciphers+=":${TLS_CIPHER_OSSL_NAME[i]}"
+          fi
+     done
+     
+     outln ; pr_underline "CBC Ciphers for run_lucky13()"; outln
+     outln "cbc_ciphers=\"${cbc_ciphers:1}\""
+     outln "cbc_ciphers_hex=\"$(tolower "${cbc_ciphers_hex:2}")\""
+}
+
+
 get_sslv3_tls1_cbc_ciphers() {
      local -i
      local hexc cbc_ciphers="" cbc_ciphers_hex=""
@@ -342,6 +361,7 @@ get_dhe_ciphers() {
 get_mapping_file
 get_robust_pfs_ciphers
 get_std_cipherlists
+get_all_cbc_ciphers
 get_cbc_ciphers
 get_sslv3_tls1_cbc_ciphers
 get_export_rsa_ciphers
