@@ -595,8 +595,8 @@ pr_done_goodln()     { pr_done_good "$1"; outln; }
 pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best
 pr_done_bestln()     { pr_done_best "$1"; outln; }
 
-pr_svrty_minor()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
-pr_svrty_minorln()   { pr_svrty_minor "$1"; outln; }
+pr_svrty_low()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
+pr_svrty_lowln()   { pr_svrty_low "$1"; outln; }
 pr_svrty_medium()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                   # brown | it is not a bad problem but you shouldn't do this
 pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
 
@@ -892,6 +892,14 @@ fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
 
 ###### helper function definitions ######
 
+if [[ $(uname) == "Linux" ]] ; then
+     toupper() { echo -n "${1^^}" ;  }
+     tolower() { echo -n "${1,,}" ;  }
+else
+     toupper() { echo -n "$1" | tr 'a-z' 'A-Z'; }
+     tolower() { echo -n "$1" | tr 'A-Z' 'a-z' ; }
+fi
+
 debugme() {
      [[ "$DEBUG" -ge 2 ]] && "$@"
      return 0
@@ -950,13 +958,17 @@ trim_trailing_space() {
      echo "${1%%*( )}"
 }
 
-if [[ $(uname) == "Linux" ]] ; then
-     toupper() { echo -n "${1^^}" ;  }
-     tolower() { echo -n "${1,,}" ;  }
-else
-     toupper() { echo -n "$1" | tr 'a-z' 'A-Z'; }
-     tolower() { echo -n "$1" | tr 'A-Z' 'a-z' ; }
-fi
+# prints out multiple lines in $1, left aligned by spaces in $2
+out_row_aligned() {
+     local first=true
+
+     echo "$1" | while read line; do
+          "$first" && \
+               first=false || \
+               out "$2"
+          outln "$line"
+     done
+}
 
 is_number() {
      [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
@@ -987,22 +999,6 @@ is_ipv6addr() {
      [[ -n "$(tr -d '0-9:a-fA-F ' <<< "$1" | sed -e '/^$/d')" ]] && \
           return 1
      return 0
-}
-
-
-
-# prints out multiple lines in $1, left aligned by spaces in $2
-out_row_aligned() {
-     local first=true
-
-     echo "$1" | while read line; do
-          if $first; then
-               first=false
-          else
-               out "$2"
-          fi
-          outln "$line"
-     done
 }
 
 
@@ -4589,7 +4585,7 @@ read_dhbits_from_file() {
           elif [[ "$bits" -le 163 ]]; then
                pr_svrty_medium "$bits $add"
           elif [[ "$bits" -le 193 ]]; then   # hmm, according to https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography it should ok
-               pr_svrty_minor "$bits $add"   # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
+               pr_svrty_low "$bits $add"   # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
           elif [[ "$bits" -le 224 ]]; then
                out "$bits $add"
           elif [[ "$bits" -gt 224 ]]; then
@@ -4750,7 +4746,7 @@ run_server_preference() {
                     fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
                     ;;   # best ones
                ECDHE*AES*)
-                    pr_svrty_minor "$default_cipher"
+                    pr_svrty_low "$default_cipher"
                     fileout "order_cipher" "LOW" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (cbc)  $remark4default_cipher"
                     ;;  # it's CBC. --> lucky13
                "")
@@ -5453,7 +5449,7 @@ get_server_certificate() {
      local savedir
      local nrsaved
 
-     $HAS_SPDY && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
+     "$HAS_SPDY" && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -5525,6 +5521,7 @@ get_server_certificate() {
      # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
      while read -d "\"" -r line; do
           if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
+#FIXME: This is a string of quoted strings, so this seems to deterime the output format already. Better e.g. would be an array
                TLS_EXTENSIONS+=" \"${line}\""
           fi
      done <<<$tls_extensions
@@ -6224,7 +6221,7 @@ certificate_info() {
 
      out "$indent"; pr_bold " OCSP stapling                "
      if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
-          pr_svrty_minor "--"
+          pr_svrty_low "--"
           fileout "${json_prefix}ocsp_stapling" "LOW" "OCSP stapling : not offered"
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
@@ -6251,7 +6248,7 @@ certificate_info() {
           pr_done_good "OK"; out " (" ; pr_italic "$caa"; out ")"
           fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : offered"
      else
-          pr_svrty_minor "--"
+          pr_svrty_low "--"
           fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
      fi
 
@@ -6408,11 +6405,12 @@ run_server_defaults() {
 
      pr_bold " TLS extensions (standard)    "
      if [[ -z "$TLS_EXTENSIONS" ]]; then
-         outln "(none)"
-         fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
+          outln "(none)"
+          fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
      else
-         outln "$TLS_EXTENSIONS"
-         fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
+#FIXME: we rather want to have the chance to print each ext in italcs or another format. Atm is a string of quoted strings -- that needs to be fixed at the root
+          outln "$TLS_EXTENSIONS"
+          fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
 
      pr_bold " Session Tickets RFC 5077     "
@@ -6423,7 +6421,7 @@ run_server_defaults() {
           lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
           unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
-          pr_svrty_minorln "(PFS requires session ticket keys to be rotated <= daily)"
+          pr_svrty_lowln "(PFS requires session ticket keys to be rotated <= daily)"
           fileout "session_ticket" "LOW" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
      fi
 
@@ -6725,7 +6723,7 @@ run_pfs() {
                     if [[ "${bits[i]}" -le 163 ]]; then
                          curves_offered_text+="$(pr_svrty_medium "${curves_ossl[i]}") "
                     elif [[ "${bits[i]}" -le 193 ]]; then                              # hmm, according to https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography it should ok
-                         curves_offered_text+="$(pr_svrty_minor "${curves_ossl[i]}") " # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
+                         curves_offered_text+="$(pr_svrty_low "${curves_ossl[i]}") " # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
                     elif [[ "${bits[i]}" -le 224 ]]; then
                          curves_offered_text+="${curves_ossl[i]} "
                     else
@@ -9526,7 +9524,7 @@ run_sweet32() {
           [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      fi
      if [[ $sclient_success -eq 0 ]]; then
-          pr_svrty_minor "VULNERABLE"; out ", uses 64 bit block ciphers"
+          pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers"
           fileout "sweet32" "LOW" "SWEET32, uses 64 bit block ciphers" "$cve" "$cwe" "$hint"
      else
           pr_done_best "not vulnerable (OK)";
@@ -9924,19 +9922,19 @@ run_logjam() {
                out "\n${spaces}"
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p -le 512 ]]; then
-                    pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime \"$comment\" detected ($len_dh_p bits)"
+                    pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
                     fileout "LOGJAM_common primes" "CRITICAL" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 1024 ]]; then
-                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime \"$comment\" detected ($len_dh_p bits)"
+                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
                     fileout "LOGJAM_common primes" "HIGH" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 1536 ]]; then
-                    pr_svrty_medium "common prime with $len_dh_p bits detected: \"$comment\""
+                    pr_svrty_medium "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "MEDIUM" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 2048 ]]; then
-                    pr_svrty_minor "common prime with $len_dh_p bits detected: \"$comment\""
+                    pr_svrty_low "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "LOW" "common prime \"$comment\" detected"
                else
-                    out "common prime with $len_dh_p bits detected: \"$comment\""
+                    out "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "INFO" "common prime \"$comment\" detected"
                fi
           elif [[ $ret -eq 0 ]]; then
@@ -9949,22 +9947,23 @@ run_logjam() {
           if [[ $ret -eq 1 ]]; then
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p  -le 512 ]]; then
-                    pr_svrty_critical "VULNERABLE (NOT ok):" ; out " uses common prime \"$comment\" ($len_dh_p bits)"
+                    pr_svrty_critical "VULNERABLE (NOT ok):" ; out " uses common prime "; pr_italic "$comment"; out " ($len_dh_p bits)"
                     fileout "LOGJAM_common primes" "CRITICAL" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 1024 ]]; then
-                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime \"$comment\" detected ($len_dh_p bits)"
+                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
                     fileout "LOGJAM_common primes" "HIGH" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 1536 ]]; then
-                    pr_svrty_medium "Common prime with $len_dh_p bits detected: \"$comment\""
+                    pr_svrty_medium "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "MEDIUM" "common prime \"$comment\" detected"
                elif [[ $len_dh_p -le 2048 ]]; then
-                    pr_svrty_minor "Common prime with $len_dh_p bits detected: \"$comment\""
+                    pr_svrty_low "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "LOW" "common prime \"$comment\" detected"
                else
-                    out "Common prime with $len_dh_p bits detected: \"$comment\""
+                    out "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "LOGJAM_common primes" "INFO" "common prime \"$comment\" detected"
                fi
-               out ", but no DH EXPORT ciphers${addtl_warning}"
+               outln ","
+               out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
                fileout "logjam" "OK" "LOGJAM: not vulnerable, no DH EXPORT ciphers, $addtl_warning" "$cve" "$cwe"
           elif [[ $ret -eq 3 ]]; then
                pr_done_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
@@ -10256,7 +10255,7 @@ run_beast(){
                          if "$SHOW_EACH_C"; then
                               if "${ciphers_found[i]}"; then
                                    if [[ -n "$higher_proto_supported" ]]; then
-                                        pr_svrty_minor "available"
+                                        pr_svrty_low "available"
                                    else
                                         pr_svrty_medium "available"
                                    fi
@@ -10280,7 +10279,7 @@ run_beast(){
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto):"
                     [[ -n "$higher_proto_supported" ]] && \
-                         pr_svrty_minorln "$detected_cbc_ciphers" || \
+                         pr_svrty_lowln "$detected_cbc_ciphers" || \
                          pr_svrty_mediumln "$detected_cbc_ciphers"
                     detected_cbc_ciphers=""  # empty for next round
                     first=false
@@ -10302,11 +10301,11 @@ run_beast(){
                if "$WIDE"; then
                     outln
                     # NOT ok seems too harsh for me if we have TLS >1.0
-                    pr_svrty_minor "VULNERABLE"
+                    pr_svrty_low "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                else
                     out "$spaces"
-                    pr_svrty_minor "VULNERABLE"
+                    pr_svrty_low "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation):$higher_proto_supported"
                fi
                fileout "beast" "LOW" "BEAST: VULNERABLE -- but also supports higher protocols (possible mitigation):$higher_proto_supported" "$cve" "$cwe" "$hint"
