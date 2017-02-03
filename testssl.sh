@@ -9619,7 +9619,7 @@ run_tls_fallback_scsv() {
      local -i ret=0
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for TLS_FALLBACK_SCSV Protection " && outln
-     pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507),             "
+     pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
      # This isn't a vulnerability check per se, but checks for the existence of
      # the countermeasure to protect against protocol downgrade attacks.
 
@@ -9656,9 +9656,12 @@ run_tls_fallback_scsv() {
                     fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported"
                     ret=0
                elif grep -qa "alert handshake failure" "$TMPFILE"; then
+                    pr_done_good "Probably OK. "
+                    fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Probably oK"
                     # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
-                    pr_svrty_medium "\"handshake failure\" instead of \"inappropriate fallback\""
-                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : \"handshake failure\" instead of \"inappropriate fallback\" (likely: warning)"
+                    # other case reported by Nicolas was F5 and at costumer of mine: the same
+                    pr_svrty_medium "But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
+                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
                     ret=2
                elif grep -qa "ssl handshake failure" "$TMPFILE"; then
                     pr_svrty_medium "some unexpected \"handshake failure\" instead of \"inappropriate fallback\""
