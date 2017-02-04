@@ -1013,6 +1013,30 @@ filter_input() {
      echo "$1" | sed -e 's/#.*$//' -e '/^$/d' | tr -d '\n' | tr -d '\t'
 }
 
+# dl's any URL (argv1) via HTTP 1.1 GET from port 80, arg2: file to store http body
+# proxy is not honored (see cmd line switches)
+http_get() {
+     local proto z 
+     local node="" query=""
+     local dl="$2"
+     local useragent="$UA_STD"
+
+     "$SNEAKY" && useragent="$UA_SNEAKY"
+
+	IFS=/ read proto z node query <<< "$1"
+
+	exec 33<>/dev/tcp/$node/80
+	printf "GET /$query HTTP/1.1\r\nHost: $node\r\nUser-Agent: $useragent\r\nConnection: Close\r\nAccept: */*\r\n\r\n" >&33
+	cat <&33 | \
+		tr -d '\r' | sed '1,/^$/d' >$dl
+	# HTTP header stripped now, closing fd:
+     exec 33<&-
+     [[ -s "$2" ]] && return 0 || return 1
+}
+# example usage:
+# myfile=$(mktemp $TEMPDIR/http_get.XXXXXX.txt)
+# http_get "http://crl.startssl.com/sca-server1.crl" "$myfile"
+
 
 wait_kill(){
      local pid=$1             # pid we wait for or kill
