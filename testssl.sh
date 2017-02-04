@@ -2276,7 +2276,7 @@ test_just_one(){
      "$FAST" && using_sockets=false
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
-     pr_headline " Testing single cipher with "
+     pr_headline " Testing ciphers with "
      if [[ $1 =~ $re ]]; then
           pr_headline "matching number pattern \"$1\" "
           tjolines="$tjolines matching number pattern \"$1\"\n\n"
@@ -6209,8 +6209,8 @@ certificate_info() {
      fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
 
      # Get both CRL and OCSP URL upfront. If there's none, this is not good. And we need to penalize this in the output
-     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 50 "X509v3 CRL Distribution Points:" | \
-            tail -n +2 | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
+     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
+           awk '/X509v3 CRL Distribution/{i=14} i&&i--' | awk -F'URI:' '/URI/ { print $2 }')"
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
 
      out "$indent"; pr_bold " Certificate Revocation List  "
