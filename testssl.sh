@@ -584,19 +584,18 @@ pr_litecyanln() { pr_litecyan "$1"; outln; }
 pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"; pr_off; }                                          # additional hint
 pr_cyanln()     { pr_cyan "$1"; outln; }
 
-pr_litegreyln() { pr_litegrey "$1"; outln; }
-pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off; }
+pr_litegreyln() { pr_litegrey "$1"; outln; }                                                                                 # not really usable on a black background, see ..
+pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off; }                                          # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
 pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"; pr_off; }
 pr_greyln()     { pr_grey "$1"; outln; }
 
+pr_done_good()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # litegreen (liteblue), This is good
+pr_done_goodln() { pr_done_good "$1"; outln; }
+pr_done_best()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best
+pr_done_bestln() { pr_done_best "$1"; outln; }
 
-pr_done_good()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # litegreen (liteblue), This is good
-pr_done_goodln()     { pr_done_good "$1"; outln; }
-pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best
-pr_done_bestln()     { pr_done_best "$1"; outln; }
-
-pr_svrty_low()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
-pr_svrty_lowln()   { pr_svrty_low "$1"; outln; }
+pr_svrty_low()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
+pr_svrty_lowln()     { pr_svrty_low "$1"; outln; }
 pr_svrty_medium()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                   # brown | it is not a bad problem but you shouldn't do this
 pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
 
@@ -605,6 +604,8 @@ pr_svrty_highln()    { pr_svrty_high "$1"; outln; }
 pr_svrty_critical()  { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }               # red
 pr_svrty_criticalln(){ pr_svrty_critical "$1"; outln; }
 
+pr_deemphasize()     { out "$1"; }                                                                         # hook for a weakened screen output, see #600
+pr_deemphasizeln()   { outln "$1"; }
 
 # color=1 functions
 pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m"; }
@@ -612,6 +613,8 @@ pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off;
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_italic()       { [[ "$COLOR" -ne 0 ]] && out "\033[3m$1" || out "$1"; pr_off; }
 pr_italicln()     { pr_italic "$1" ; outln; }
+pr_strikethru()   { [[ "$COLOR" -ne 0 ]] && out "\033[9m$1" || out "$1"; pr_off; }                          # ugly!
+pr_strikethruln() { pr_strikethru "$1" ; outln; }
 pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "\033[4m$1" || out "$1"; pr_off; }
 pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off; }
 pr_reverse_bold() { [[ "$COLOR" -ne 0 ]] && out "\033[7m\033[1m$1" || out "$1"; pr_off; }
@@ -1012,6 +1015,30 @@ tmpfile_handle() {
 filter_input() {
      echo "$1" | sed -e 's/#.*$//' -e '/^$/d' | tr -d '\n' | tr -d '\t'
 }
+
+# dl's any URL (argv1) via HTTP 1.1 GET from port 80, arg2: file to store http body
+# proxy is not honored (see cmd line switches)
+http_get() {
+     local proto z 
+     local node="" query=""
+     local dl="$2"
+     local useragent="$UA_STD"
+
+     "$SNEAKY" && useragent="$UA_SNEAKY"
+
+	IFS=/ read proto z node query <<< "$1"
+
+	exec 33<>/dev/tcp/$node/80
+	printf "GET /$query HTTP/1.1\r\nHost: $node\r\nUser-Agent: $useragent\r\nConnection: Close\r\nAccept: */*\r\n\r\n" >&33
+	cat <&33 | \
+		tr -d '\r' | sed '1,/^$/d' >$dl
+	# HTTP header stripped now, closing fd:
+     exec 33<&-
+     [[ -s "$2" ]] && return 0 || return 1
+}
+# example usage:
+# myfile=$(mktemp $TEMPDIR/http_get.XXXXXX.txt)
+# http_get "http://crl.startssl.com/sca-server1.crl" "$myfile"
 
 
 wait_kill(){
@@ -2184,8 +2211,8 @@ show_rfc_style(){
 }
 
 neat_header(){
-     printf -- "Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.  Encryption Bits${ADD_RFC_STR:+     Cipher Suite Name (RFC)}\n"
-     printf -- "%s------------------------------------------------------------------------${ADD_RFC_STR:+---------------------------------------------------}\n"
+     printf -- "Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.   Encryption  Bits${ADD_RFC_STR:+     Cipher Suite Name (RFC)}\n"
+     printf -- "%s--------------------------------------------------------------------------${ADD_RFC_STR:+---------------------------------------------------}\n"
 }
 
 
@@ -2209,15 +2236,14 @@ neat_list(){
 
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
-     enc="${enc/CamelliaGCM/Camellia}"  # "CamelliaGCM" is too long
 
      echo "$export" | grep -iq export && strength="$strength,exp"
 
      [[ -n "$ADD_RFC_STR" ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
      if [[ "$5" == "false" ]]; then
-          line="$(printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
-          pr_litegrey "$line"
+          line="$(printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
+          pr_deemphasize "$line"
           return 0
      fi
 
@@ -2233,7 +2259,7 @@ neat_list(){
           done
      fi
      #echo "${#kx}"                            # should be always 20 / 13
-     printf -- " %-7s %-33s %-10s %-10s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher"
+     printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher"
 }
 
 test_just_one(){
@@ -2252,7 +2278,7 @@ test_just_one(){
      "$FAST" && using_sockets=false
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
-     pr_headline " Testing single cipher with "
+     pr_headline " Testing ciphers with "
      if [[ $1 =~ $re ]]; then
           pr_headline "matching number pattern \"$1\" "
           tjolines="$tjolines matching number pattern \"$1\"\n\n"
@@ -2489,7 +2515,7 @@ test_just_one(){
                     pr_cyan "  available"
                     fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") available"
                else
-                    pr_litegrey "  not a/v"
+                    pr_deemphasize "  not a/v"
                     fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") not a/v"
                fi
                outln
@@ -2743,7 +2769,7 @@ run_allciphers() {
                          pr_cyan "$available"
                     else
                          available="not a/v"
-                         pr_litegrey "$available"
+                         pr_deemphasize "$available"
                     fi
                fi
                outln "${sigalg[i]}"
@@ -3032,7 +3058,7 @@ run_cipher_per_proto() {
                               pr_cyan "$available"
                          else
                               available="not a/v"
-                              pr_litegrey "$available"
+                              pr_deemphasize "$available"
                          fi
                     fi
                     outln "${sigalg[i]}"
@@ -6185,7 +6211,8 @@ certificate_info() {
      fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
 
      # Get both CRL and OCSP URL upfront. If there's none, this is not good. And we need to penalize this in the output
-     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk '/CRL Distribution/,/URI/ { print $0 }' | awk -F'URI:' '/URI/ { print $2 }')"
+     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
+           awk '/X509v3 CRL Distribution/{i=14} i&&i--' | awk -F'URI:' '/URI/ { print $2 }')"
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
 
      out "$indent"; pr_bold " Certificate Revocation List  "
@@ -6195,7 +6222,7 @@ certificate_info() {
                fileout "${json_prefix}crl" "INFO" "No CRL provided"
           else
                pr_svrty_highln "-- (NOT ok)"
-               fileout "${json_prefix}crl" "HIGH" "Neither CRL nor  OCSP URL provided"
+               fileout "${json_prefix}crl" "HIGH" "Neither CRL nor OCSP URL provided"
           fi
      elif grep -q http <<< "$crl"; then
           if [[ $(count_lines "$crl") -eq 1 ]]; then
@@ -6211,11 +6238,15 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " OCSP URI                     "
-     if [[ -z "$ocsp_uri" ]] && [[ -n "$crl" ]]; then
+     if [[ -z "$ocsp_uri" ]]; then
           outln "--"
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : --"
      else
-          outln "$ocsp_uri"
+          if [[ $(count_lines "$ocsp_uri") -eq 1 ]]; then
+               outln "$ocsp_uri"
+          else
+               out_row_aligned "$ocsp_uri" "$spaces"
+          fi
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
      fi
 
@@ -6629,7 +6660,7 @@ run_pfs() {
                          if ${ciphers_found[i]}; then
                               pr_done_best "available"
                          else
-                              pr_litegrey "not a/v"
+                              pr_deemphasize "not a/v"
                          fi
                     fi
                     outln "${sigalg[i]}"
@@ -10260,7 +10291,7 @@ run_beast(){
                                         pr_svrty_medium "available"
                                    fi
                               else
-                                   pr_litegrey "not a/v"
+                                   pr_deemphasize "not a/v"
                               fi
                          fi
                          outln "${sigalg[i]}"
@@ -10327,14 +10358,59 @@ run_beast(){
      return 0
 }
 
+
+# http://www.isg.rhul.ac.uk/tls/Lucky13.html
+# in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
 run_lucky13() {
+     local spaces="                                           "
+     local cbc_ciphers="ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:RSA-PSK-AES256-CBC-SHA384:DHE-PSK-AES256-CBC-SHA384:DHE-PSK-AES256-CBC-SHA:ECDHE-PSK-CAMELLIA256-SHA384:RSA-PSK-CAMELLIA256-SHA384:DHE-PSK-CAMELLIA256-SHA384:PSK-AES256-CBC-SHA384:PSK-CAMELLIA256-SHA384:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA256:DH-RSA-AES256-SHA256:DH-DSS-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CAMELLIA256-SHA384:DHE-RSA-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA256:DH-RSA-CAMELLIA256-SHA256:DH-DSS-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:AECDH-AES256-SHA:ADH-AES256-SHA256:ADH-AES256-SHA:ADH-CAMELLIA256-SHA256:ADH-CAMELLIA256-SHA:ECDH-RSA-AES256-SHA384:ECDH-ECDSA-AES256-SHA384:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:ECDH-RSA-CAMELLIA256-SHA384:ECDH-ECDSA-CAMELLIA256-SHA384:AES256-SHA256:AES256-SHA:CAMELLIA256-SHA256:ECDHE-PSK-AES256-CBC-SHA384:ECDHE-PSK-AES256-CBC-SHA:CAMELLIA256-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:DHE-RSA-AES128-SHA256:DHE-DSS-AES128-SHA256:DH-RSA-AES128-SHA256:DH-DSS-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA256:DH-RSA-CAMELLIA128-SHA256:DH-DSS-CAMELLIA128-SHA256:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:AECDH-AES128-SHA:ADH-AES128-SHA256:ADH-AES128-SHA:ADH-CAMELLIA128-SHA256:ADH-SEED-SHA:ADH-CAMELLIA128-SHA:ECDH-RSA-AES128-SHA256:ECDH-ECDSA-AES128-SHA256:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:ECDH-RSA-CAMELLIA128-SHA256:ECDH-ECDSA-CAMELLIA128-SHA256:AES128-SHA256:AES128-SHA:CAMELLIA128-SHA256:ECDHE-PSK-AES128-CBC-SHA256:ECDHE-PSK-AES128-CBC-SHA:RSA-PSK-AES128-CBC-SHA256:DHE-PSK-AES128-CBC-SHA256:DHE-PSK-AES128-CBC-SHA:SEED-SHA:CAMELLIA128-SHA:ECDHE-PSK-CAMELLIA128-SHA256:RSA-PSK-CAMELLIA128-SHA256:DHE-PSK-CAMELLIA128-SHA256:PSK-AES128-CBC-SHA256:PSK-CAMELLIA128-SHA256:IDEA-CBC-SHA:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5:EXP-DH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA"
+     cbc_ciphers_hex="c0,28, c0,24, c0,14, c0,0a, c0,22, c0,21, c0,20, 00,b7, 00,b3, 00,91, c0,9b, c0,99, c0,97, 00,af, c0,95, 00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87, 00,86, 00,85, c0,19, 00,6d, 00,3a, 00,c5, 00,89, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, 00,3d, 00,35, 00,c0, c0,38, c0,36, 00,84, 00,95, 00,8d, c0,3d, c0,3f, c0,41, c0,43, c0,45, c0,47, c0,49, c0,4b, c0,4d, c0,4f, c0,65, c0,67, c0,69, c0,71, c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44, 00,43, 00,42, c0,18, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,3c, 00,2f, 00,ba, c0,37, c0,35, 00,b6, 00,b2, 00,90, 00,96, 00,41, c0,9a, c0,98, c0,96, 00,ae, c0,94, 00,07, 00,94, 00,8c, 00,21, 00,25, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,46, c0,48, c0,4a, c0,4c, c0,4e, c0,64, c0,66, c0,68, c0,70, c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,17, 00,1b, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,63, 00,15, 00,12, 00,0f, 00,0c, 00,1a, 00,62, 00,09, 00,1e, 00,22, fe,fe, ff,e1, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e"
+#FIXME: we have 154 ciphers here, some devices can only take 128 ciphers!!
+     local has_dh_bits="$HAS_DH_BITS"
+     local -i nr_supported_ciphers=0
+     local using_sockets=true
      local cve="CVE-2013-0169"
      local cwe="CWE-310"
-#FIXME: to do . CVE-2013-0169
-# in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
-     echo "FIXME"
-     fileout "lucky13" "WARN" "LUCKY13: Not tested. Not implemented. #FIXME" "$cve" "$cwe"
-     return 1
+     local hint=""
+
+     [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for LUCKY13 vulnerability " && outln
+     pr_bold " LUCKY13"; out " ($cve)                   "
+
+     "$SSL_NATIVE" && using_sockets=false
+     # The openssl binary distributed has almost everything we need (PSK, KRB5 ciphers and feff, ffe0 are typically missing).
+     # Measurements show that there's little impact whether we use sockets or TLS here, so the default is sockets here
+
+     if "$using_sockets"; then
+          tls_sockets "03" "${cbc_ciphers_hex}"
+          sclient_success=$?
+     else
+          nr_cbc_ciphers=$(count_ciphers $cbc_ciphers)
+          nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $cbc_ciphers))
+          $OPENSSL s_client $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE $SNI 2>$ERRFILE </dev/null
+          sclient_connect_successful $? $TMPFILE
+          sclient_success=$?
+          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     fi
+     if [[ $sclient_success -eq 0 ]]; then
+          pr_svrty_low "VULNERABLE"; out ", uses cipher block chaining (CBC) ciphers"
+          fileout "lucky13" "LOW" "LUCKY13, uses cipher block chaining (CBC) ciphers" "$cve" "$cwe" "$hint"
+     else
+          pr_done_best "not vulnerable (OK)";
+          if "$using_sockets"; then
+               fileout "lucky13" "OK" "LUCKY13: not vulnerable" "$cve" "$cwe"
+          else
+               if [[ "$nr_supported_ciphers" -ge 133 ]]; then
+                    # Likely only PSK/KRB5 ciphers are missing: display discrepancy but no warning
+                    out ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+               else
+                    pr_warning ", $nr_supported_ciphers/$nr_cbc_ciphers local ciphers"
+               fi
+               fileout "lucky13" "OK" "LUCKY13: not vulnerable ($nr_supported_ciphers of $nr_cbc_ciphers local ciphers" "$cve" "$cwe"
+          fi
+     fi
+     outln
+     tmpfile_handle $FUNCNAME.txt
+     return $sclient_success
 }
 
 
@@ -10557,7 +10633,7 @@ run_rc4() {
                          if "${ciphers_found[i]}"; then
                               pr_svrty_high "available"
                          else
-                              pr_litegrey "not a/v"
+                              pr_deemphasize "not a/v"
                          fi
                     fi
                     outln "${sigalg[i]}"
@@ -10870,11 +10946,12 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -R, --renegotiation           tests for renegotiation vulnerabilities
      -C, --compression, --crime    tests for CRIME vulnerability (TLS compression issue)
-     -A, --beast                   tests for BEAST vulnerability (HTTP compression issue)
+     -T, --breach                  tests for BREACH vulnerability (HTTP compression issue)
      -O, --poodle                  tests for POODLE (SSL) vulnerability
      -Z, --tls-fallback            checks TLS_FALLBACK_SCSV mitigation
      -W, --sweet32                 tests 64 bit block ciphers (3DES, RC2 and IDEA): SWEET32 vulnerability
-     -T, --breach                  tests for BREACH vulnerability
+     -A, --beast                   tests for BEAST vulnerability
+     -L, --lucky13                 tests for LUCKY13
      -F, --freak                   tests for FREAK vulnerability
      -J, --logjam                  tests for LOGJAM vulnerability
      -D, --drown                   tests for DROWN vulnerability
@@ -11892,6 +11969,7 @@ initialize_globals() {
      do_allciphers=false
      do_vulnerabilities=false
      do_beast=false
+     do_lucky13=false
      do_breach=false
      do_ccs_injection=false
      do_cipher_per_proto=false
@@ -11931,6 +12009,7 @@ set_scanning_defaults() {
      do_allciphers=true
      do_vulnerabilities=true
      do_beast=true
+     do_lucky13=true
      do_breach=true
      do_heartbleed=true
      do_ccs_injection=true
@@ -11952,14 +12031,14 @@ set_scanning_defaults() {
      do_http2=true
      do_tls_fallback_scsv=true
      do_client_simulation=true
-     VULN_COUNT=15
+     VULN_COUNT=16
 }
 
 query_globals() {
      local gbl
      local true_nr=0
 
-     for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
+     for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
@@ -11972,7 +12051,7 @@ query_globals() {
 debug_globals() {
      local gbl
 
-     for gbl in do_allciphers do_vulnerabilities do_beast do_breach do_ccs_injection do_cipher_per_proto do_crime \
+     for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
@@ -12106,6 +12185,7 @@ parse_cmd_line() {
                     do_drown=true
                     do_logjam=true
                     do_beast=true
+                    do_lucky13=true
                     do_rc4=true
                     VULN_COUNT=10
                     ;;
@@ -12156,6 +12236,10 @@ parse_cmd_line() {
                     ;;
                -A|--beast)
                     do_beast=true
+                    let "VULN_COUNT++"
+                    ;;
+               -L|--lucky13)
+                    do_lucky13=true
                     let "VULN_COUNT++"
                     ;;
                -4|--rc4|--appelbaum)
@@ -12439,6 +12523,7 @@ lets_roll() {
      $do_drown && { run_drown ret=$(($? + ret)); }
      $do_logjam && { run_logjam; ret=$(($? + ret)); }
      $do_beast && { run_beast; ret=$(($? + ret)); }
+     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); }
      $do_rc4 && { run_rc4; ret=$(($? + ret)); }
 
      fileout_section_header $section_number true && ((section_number++))
