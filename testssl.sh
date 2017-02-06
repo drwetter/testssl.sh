@@ -584,19 +584,18 @@ pr_litecyanln() { pr_litecyan "$1"; outln; }
 pr_cyan()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;36m$1" || out "$1"; pr_off; }                                          # additional hint
 pr_cyanln()     { pr_cyan "$1"; outln; }
 
-pr_litegreyln() { pr_litegrey "$1"; outln; }
-pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off; }
+pr_litegreyln() { pr_litegrey "$1"; outln; }                                                                                 # not really usable on a black background, see ..
+pr_litegrey()   { [[ "$COLOR" -eq 2 ]] && out "\033[0;37m$1" || out "$1"; pr_off; }                                          # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
 pr_grey()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m$1" || out "$1"; pr_off; }
 pr_greyln()     { pr_grey "$1"; outln; }
 
+pr_done_good()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # litegreen (liteblue), This is good
+pr_done_goodln() { pr_done_good "$1"; outln; }
+pr_done_best()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best
+pr_done_bestln() { pr_done_best "$1"; outln; }
 
-pr_done_good()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[0;34m$1" || out "\033[0;32m$1" ) || out "$1"; pr_off; }   # litegreen (liteblue), This is good
-pr_done_goodln()     { pr_done_good "$1"; outln; }
-pr_done_best()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out "\033[1;34m$1" || out "\033[1;32m$1" ) ||  out "$1"; pr_off; }  # green (blue), This is the best
-pr_done_bestln()     { pr_done_best "$1"; outln; }
-
-pr_svrty_low()     { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
-pr_svrty_lowln()   { pr_svrty_low "$1"; outln; }
+pr_svrty_low()       { [[ "$COLOR" -eq 2 ]] && out "\033[1;33m$1" || out "$1"; pr_off; }                   # yellow brown | academic or minor problem
+pr_svrty_lowln()     { pr_svrty_low "$1"; outln; }
 pr_svrty_medium()    { [[ "$COLOR" -eq 2 ]] && out "\033[0;33m$1" || out "$1"; pr_off; }                   # brown | it is not a bad problem but you shouldn't do this
 pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
 
@@ -605,6 +604,8 @@ pr_svrty_highln()    { pr_svrty_high "$1"; outln; }
 pr_svrty_critical()  { [[ "$COLOR" -eq 2 ]] && out "\033[1;31m$1" || pr_bold "$1"; pr_off; }               # red
 pr_svrty_criticalln(){ pr_svrty_critical "$1"; outln; }
 
+pr_deemphasize()     { out "$1"; }                                                                         # hook for a weakened screen output, see #600
+pr_deemphasizeln()   { outln "$1"; }
 
 # color=1 functions
 pr_off()          { [[ "$COLOR" -ne 0 ]] && out "\033[m"; }
@@ -612,6 +613,8 @@ pr_bold()         { [[ "$COLOR" -ne 0 ]] && out "\033[1m$1" || out "$1"; pr_off;
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_italic()       { [[ "$COLOR" -ne 0 ]] && out "\033[3m$1" || out "$1"; pr_off; }
 pr_italicln()     { pr_italic "$1" ; outln; }
+pr_strikethru()   { [[ "$COLOR" -ne 0 ]] && out "\033[9m$1" || out "$1"; pr_off; }                          # ugly!
+pr_strikethruln() { pr_strikethru "$1" ; outln; }
 pr_underline()    { [[ "$COLOR" -ne 0 ]] && out "\033[4m$1" || out "$1"; pr_off; }
 pr_reverse()      { [[ "$COLOR" -ne 0 ]] && out "\033[7m$1" || out "$1"; pr_off; }
 pr_reverse_bold() { [[ "$COLOR" -ne 0 ]] && out "\033[7m\033[1m$1" || out "$1"; pr_off; }
@@ -2240,7 +2243,7 @@ neat_list(){
 
      if [[ "$5" == "false" ]]; then
           line="$(printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
-          pr_litegrey "$line"
+          pr_deemphasize "$line"
           return 0
      fi
 
@@ -2512,7 +2515,7 @@ test_just_one(){
                     pr_cyan "  available"
                     fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") available"
                else
-                    pr_litegrey "  not a/v"
+                    pr_deemphasize "  not a/v"
                     fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") not a/v"
                fi
                outln
@@ -2766,7 +2769,7 @@ run_allciphers() {
                          pr_cyan "$available"
                     else
                          available="not a/v"
-                         pr_litegrey "$available"
+                         pr_deemphasize "$available"
                     fi
                fi
                outln "${sigalg[i]}"
@@ -3055,7 +3058,7 @@ run_cipher_per_proto() {
                               pr_cyan "$available"
                          else
                               available="not a/v"
-                              pr_litegrey "$available"
+                              pr_deemphasize "$available"
                          fi
                     fi
                     outln "${sigalg[i]}"
@@ -6657,7 +6660,7 @@ run_pfs() {
                          if ${ciphers_found[i]}; then
                               pr_done_best "available"
                          else
-                              pr_litegrey "not a/v"
+                              pr_deemphasize "not a/v"
                          fi
                     fi
                     outln "${sigalg[i]}"
@@ -10288,7 +10291,7 @@ run_beast(){
                                         pr_svrty_medium "available"
                                    fi
                               else
-                                   pr_litegrey "not a/v"
+                                   pr_deemphasize "not a/v"
                               fi
                          fi
                          outln "${sigalg[i]}"
@@ -10630,7 +10633,7 @@ run_rc4() {
                          if "${ciphers_found[i]}"; then
                               pr_svrty_high "available"
                          else
-                              pr_litegrey "not a/v"
+                              pr_deemphasize "not a/v"
                          fi
                     fi
                     outln "${sigalg[i]}"
