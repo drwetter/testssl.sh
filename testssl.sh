@@ -6218,7 +6218,7 @@ certificate_info() {
 
      # Get both CRL and OCSP URL upfront. If there's none, this is not good. And we need to penalize this in the output
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
-           awk '/X509v3 CRL Distribution/{i=14} i&&i--' | awk -F'URI:' '/URI/ { print $2 }')"
+           awk '/X509v3 CRL Distribution/{i=50} i&&i--' | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
 
      out "$indent"; pr_bold " Certificate Revocation List  "
