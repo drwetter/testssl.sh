@@ -589,7 +589,7 @@ retstring(){
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
 pr_liteblue_term() { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[0;32m$1" || out_term "\033[0;34m$1" ) || out_term "$1"; pr_off; }    # not yet used
-pr_liteblue()      { pr_liteblue_term "$1"; out_html "<span style=\"color:blue;\">$1</span>"; }
+pr_liteblue()      { pr_liteblue_term "$1"; out_html "<span style=\"color:lightblue;\">$1</span>"; }
 pr_liteblueln_term() { pr_liteblue_term "$1"; outln_term; }
 pr_liteblueln() { pr_liteblue "$1"; outln; }
 pr_blue_term()  { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[1;32m$1" || out_term "\033[1;34m$1" ) || out_term "$1"; pr_off; }    # used for head lines of single tests
@@ -598,27 +598,27 @@ pr_blueln_term() { pr_blue_term "$1"; outln_term; }
 pr_blueln()     { pr_blue "$1"; outln; }
 
 pr_warning_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;35m$1" || pr_underline_term "$1"; pr_off; }                     # some local problem: one test cannot be done
-pr_warning()      { pr_warning_term "$1"; out_html "<span style=\"color:purple;\">$1</span>"; }
+pr_warning()      { pr_warning_term "$1"; out_html "<span style=\"color:magenta;\">$1</span>"; }
 pr_warningln_term() { pr_warning_term "$1"; outln_term; }                                                                    # litemagenta
 pr_warningln()      { pr_warning "$1"; outln; }
 pr_magenta_term()   { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;35m$1" || pr_underline_term "$1"; pr_off; }                   # fatal error: quitting because of this!
-pr_magenta()        { pr_magenta_term "$1"; out_html "<span style=\"color:purple;font-weight:bold;\">$1</span>"; }
+pr_magenta()        { pr_magenta_term "$1"; out_html "<span style=\"color:magenta;font-weight:bold;\">$1</span>"; }
 pr_magentaln_term() { pr_magenta_term "$1"; outln_term; }
 pr_magentaln()      { pr_magenta "$1"; outln; }
 
 pr_litecyan_term()   { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;36m$1" || out_term "$1"; pr_off; }                           # not yet used
-pr_litecyan()   { pr_litecyan_term "$1"; out_html "<span style=\"color:teal;\">$1</span>"; }
+pr_litecyan()   { pr_litecyan_term "$1"; out_html "<span style=\"color:lightcyan;\">$1</span>"; }
 pr_litecyanln_term() { pr_litecyan_term "$1"; outln_term; }
 pr_litecyanln() { pr_litecyan "$1"; outln; }
 pr_cyan_term()  { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;36m$1" || out_term "$1"; pr_off; }                                # additional hint
-pr_cyan()       { pr_cyan_term "$1"; out_html "<span style=\"color:teal;font-weight:bold;\">$1</span>"; }
+pr_cyan()       { pr_cyan_term "$1"; out_html "<span style=\"color:cyan;font-weight:bold;\">$1</span>"; }
 pr_cyanln_term() { pr_cyan_term "$1"; outln_term; }
 pr_cyanln()     { pr_cyan "$1"; outln; }
 
 pr_litegreyln_term() { pr_litegrey_term "$1"; outln_term; }                                                                  # not really usable on a black background, see ..
 pr_litegreyln() { pr_litegrey "$1"; outln; }
 pr_litegrey_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;37m$1" || out_term "$1"; pr_off; }                             # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
-pr_litegrey()   { pr_litegrey_term "$1"; out_html "<span style=\"color:gray;\">$1</span>"; }
+pr_litegrey()   { pr_litegrey_term "$1"; out_html "<span style=\"color:darkgray;\">$1</span>"; }
 pr_grey_term()  { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;30m$1" || out_term "$1"; pr_off; }
 pr_grey()       { pr_grey_term "$1"; out_html "<span style=\"color:grey;font-weight:bold;\">$1</span>"; }
 pr_greyln_term() { pr_grey_term "$1"; outln_term; }
@@ -634,11 +634,11 @@ pr_done_bestln_term() { pr_done_best_term "$1"; outln_term; }
 pr_done_bestln()    { pr_done_best "$1"; outln; }
 
 pr_svrty_low_term()  { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;33m$1" || out_term "$1"; pr_off; }         # yellow brown | academic or minor problem
-pr_svrty_low()       { pr_svrty_low_term "$1"; out_html "<span style=\"color:olive;font-weight:bold;\">$1</span>"; }
+pr_svrty_low()       { pr_svrty_low_term "$1"; out_html "<span style=\"color:yellow;font-weight:bold;\">$1</span>"; }
 pr_svrty_lowln_term() { pr_svrty_low_term "$1"; outln_term; }
 pr_svrty_lowln()     { pr_svrty_low "$1"; outln; }
 pr_svrty_medium_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;33m$1" || out_term "$1"; pr_off; }       # brown | it is not a bad problem but you shouldn't do this
-pr_svrty_medium()    { pr_svrty_medium_term "$1"; out_html "<span style=\"color:olive;\">$1</span>"; }
+pr_svrty_medium()    { pr_svrty_medium_term "$1"; out_html "<span style=\"color:chocolate;\">$1</span>"; }
 pr_svrty_mediumln_term() { pr_svrty_medium_term "$1"; outln_term; }
 pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
 
@@ -652,7 +652,7 @@ pr_svrty_criticalln_term() { pr_svrty_critical_term "$1"; outln_term; }
 pr_svrty_criticalln(){ pr_svrty_critical "$1"; outln; }
 
 pr_deemphasize_term() { out_term "$1"; }                                                                   # hook for a weakened screen output, see #600
-pr_deemphasize()      { pr_deemphasize_term "$1"; out_html "<span style=\"color:gray;\">$1</span>"; }
+pr_deemphasize()      { pr_deemphasize_term "$1"; out_html "<span style=\"color:darkgray;\">$1</span>"; }
 pr_deemphasizeln_term() { pr_deemphasize_term "$1"; outln_term; }
 pr_deemphasizeln()    { pr_deemphasize "$1"; outln; }
 
@@ -673,9 +673,9 @@ pr_strikethruln() { pr_strikethru "$1" ; outln; }
 pr_underline_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[4m$1" || out_term "$1"; pr_off; }
 pr_underline()    { pr_underline_term "$1"; out_html "<u>$1</u>"; }
 pr_reverse_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[7m$1" || out_term "$1"; pr_off; }
-pr_reverse()      { pr_reverse_term "$1"; out_html "<span style=\"color:gray;background-color:black;\">$1</span>"; }
+pr_reverse()      { pr_reverse_term "$1"; out_html "<span style=\"color:white;background-color:black;\">$1</span>"; }
 pr_reverse_bold_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[7m\033[1m$1" || out_term "$1"; pr_off; }
-pr_reverse_bold() { pr_reverse_bold_term "$1"; out_html "<span style=\"color:gray;background-color:black;font-weight:bold;\">$1</span>"; }
+pr_reverse_bold() { pr_reverse_bold_term "$1"; out_html "<span style=\"color:white;background-color:black;font-weight:bold;\">$1</span>"; }
 
 #pr_headline() { pr_blue "$1"; }
 #http://misc.flogisoft.com/bash/tip_colors_and_formatting
