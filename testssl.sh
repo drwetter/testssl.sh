@@ -110,6 +110,7 @@ else
      readonly REL_DATE=$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')
 fi
 readonly SYSTEM=$(uname -s)
+SYSTEM2=""                                             # currently only being used for WSL = bash on windows
 date -d @735275209 >/dev/null 2>&1 && \
      readonly HAS_GNUDATE=true || \
      readonly HAS_GNUDATE=false
@@ -672,6 +673,8 @@ pr_strikethruln_term() { pr_strikethru_term "$1"; outln_term; }
 pr_strikethruln() { pr_strikethru "$1" ; outln; }
 pr_underline_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[4m$1" || out_term "$1"; pr_off; }
 pr_underline()    { pr_underline_term "$1"; out_html "<u>$1</u>"; }
+pr_underlineln_term() { pr_underline_term "$1"; outln_term; }
+pr_underlineln()  { pr_underline "$1"; outln; }
 pr_reverse_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[7m$1" || out_term "$1"; pr_off; }
 pr_reverse()      { pr_reverse_term "$1"; out_html "<span style=\"color:white;background-color:black;\">$1</span>"; }
 pr_reverse_bold_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[7m\033[1m$1" || out_term "$1"; pr_off; }
@@ -2716,7 +2719,7 @@ run_allciphers() {
 
      outln
      if "$using_sockets"; then
-          pr_headlineln " Testing $nr_ciphers_tested via OpenSSL and sockets against the server, ordered by encryption strength "
+          pr_headlineln " Testing $nr_ciphers_tested ciphers via OpenSSL plus sockets against the server, ordered by encryption strength "
      else
           pr_headlineln " Testing all $nr_ciphers_tested locally available ciphers against the server, ordered by encryption strength "
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
@@ -2893,7 +2896,7 @@ run_cipher_per_proto() {
 
      outln
      if "$using_sockets"; then
-          pr_headlineln " Testing per protocol via OpenSSL and sockets against the server, ordered by encryption strength "
+          pr_headlineln " Testing ciphers per protocol via OpenSSL plus sockets against the server, ordered by encryption strength "
      else
           pr_headlineln " Testing all locally available ciphers per protocol against the server, ordered by encryption strength "
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
@@ -4304,18 +4307,13 @@ run_protocols() {
 
      if "$SSL_NATIVE"; then
           using_sockets=false
-          pr_headlineln "(via native openssl)"
+          pr_underlineln "via native openssl"
      else
+          using_sockets=true
           if [[ -n "$STARTTLS" ]]; then
-               pr_headlineln "(via openssl, SSLv2 via sockets) "
-               using_sockets=false
+               pr_underlineln "via sockets "
           else
-               using_sockets=true
-               if "$EXPERIMENTAL"; then
-                    pr_headlineln "(via sockets except SPDY+HTTP2) "
-               else
-                    pr_headlineln "(via sockets except TLS 1.2, SPDY+HTTP2) "
-               fi
+               pr_underlineln "via sockets except SPDY+HTTP2 "
           fi
      fi
      outln
@@ -4519,7 +4517,7 @@ run_protocols() {
      esac
 
      pr_bold " TLS 1.2    ";
-     if "$using_sockets" && "$EXPERIMENTAL"; then               #TODO: IIS servers do have a problem here with our handshake
+     if "$using_sockets"; then
           tls_sockets "03" "$TLS12_CIPHER"
      else
           run_prototest_openssl "-tls1_2"
@@ -4677,7 +4675,7 @@ pr_ecdh_quality() {
 read_dhbits_from_file() {
      local bits what_dh temp curve=""
      local add=""
-     local old_fart=" (openssl cannot show DH bits)"
+     local old_fart=" (your $OPENSSL cannot show DH bits)"
 
      temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")        # extract line
      what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
@@ -5369,7 +5367,7 @@ determine_trust() {
      if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && \
           [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]] && \
           [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1" ]]; then
-          addtl_warning="(Your openssl <= 1.0.2 might be too unreliable to determine trust)"
+          addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
           fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme outln_term
@@ -5576,7 +5574,10 @@ determine_tls_extensions() {
                success=$?
           fi
           if [[ $success -eq 0 ]]; then
-               tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+               tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | \
+                    sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
+                        -e 's/,.*$/,/g' -e 's/),$/\"/g' \
+                        -e 's/elliptic curves\/#10/supported_groups\/#10/g')
                tls_extensions=$(echo $tls_extensions)       # into one line
           fi
           tmpfile_handle $FUNCNAME.txt
@@ -5668,7 +5669,10 @@ get_server_certificate() {
      # this is not beautiful (grep+sed)
      # but maybe we should just get the ids and do a private matching, according to
      # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-     tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+     tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | \
+          sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
+              -e 's/,.*$/,/g' -e 's/),$/\"/g' \
+              -e 's/elliptic curves\/#10/supported_groups\/#10/g')
      tls_extensions=$(echo $tls_extensions)       # into one line
 
      # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
@@ -6633,7 +6637,7 @@ run_pfs() {
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
      outln
-     pr_headlineln " Testing robust (perfect) forward secrecy, (P)FS -- omitting Null Authentication/Encryption, 3DES, RC4 "
+     pr_headline " Testing robust (perfect) forward secrecy"; pr_underlineln ", (P)FS -- omitting Null Authentication/Encryption, 3DES, RC4 "
      if ! "$using_sockets"; then
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
           if ! "$HAS_DH_BITS" && "$WIDE"; then
@@ -8190,7 +8194,7 @@ parse_tls_serverhello() {
                     0007) tls_extensions+=" \"client authz/#7\"" ;;
                     0008) tls_extensions+=" \"server authz/#8\"" ;;
                     0009) tls_extensions+=" \"cert type/#9\"" ;;
-                    000A) tls_extensions+=" \"supported groups/#10\"" ;;
+                    000A) tls_extensions+=" \"supported_groups/#10\"" ;;
                     000B) tls_extensions+=" \"EC point formats/#11\"" ;;
                     000C) tls_extensions+=" \"SRP/#12\"" ;;
                     000D) tls_extensions+=" \"signature algorithms/#13\"" ;;
@@ -10894,10 +10898,13 @@ find_openssl_binary() {
           outln " Looking some place else ..."
      elif [[ -x "$OPENSSL" ]]; then
           :    # 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
+     elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
+          # 2. otherwise, only if on Bash on Windows, use system binaries only.
+          SYSTEM2="WSL"
      elif test_openssl_suffix $RUN_DIR; then
-          :    # 2. otherwise try openssl in path of testssl.sh
+          :    # 3. otherwise try openssl in path of testssl.sh
      elif test_openssl_suffix $RUN_DIR/bin; then
-          :    # 3. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
+          :    # 4. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
      elif test_openssl_suffix "$(dirname "$(which openssl)")"; then
           :    # 5. we tried hard and failed, so now we use the system binaries
      fi
@@ -11161,6 +11168,7 @@ bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}
 status: ${BASH_VERSINFO[4]}
 machine: ${BASH_VERSINFO[5]}
 operating system: $SYSTEM
+os constraint: $SYSTEM2
 shellopts: $SHELLOPTS
 
 $($OPENSSL version -a)
