@@ -10771,7 +10771,7 @@ find_openssl_binary() {
           outln " Looking some place else ..."
      elif [[ -x "$OPENSSL" ]]; then
           :    # 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
-     elif [ -e "/mnt/c/Windows/System32/bash.exe" ] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
+     elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
           :    # 2. otherwise, only if on Bash on Windows, use system binaries only.
      elif test_openssl_suffix $RUN_DIR; then
           :    # 3. otherwise try openssl in path of testssl.sh
