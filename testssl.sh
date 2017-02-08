@@ -110,6 +110,7 @@ else
      readonly REL_DATE=$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')
 fi
 readonly SYSTEM=$(uname -s)
+SYSTEM2=""                                             # currently only being used for WSL = bash on windows
 date -d @735275209 >/dev/null 2>&1 && \
      readonly HAS_GNUDATE=true || \
      readonly HAS_GNUDATE=false
@@ -10772,7 +10773,8 @@ find_openssl_binary() {
      elif [[ -x "$OPENSSL" ]]; then
           :    # 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
      elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
-          :    # 2. otherwise, only if on Bash on Windows, use system binaries only.
+          # 2. otherwise, only if on Bash on Windows, use system binaries only.
+          SYSTEM2="WSL"
      elif test_openssl_suffix $RUN_DIR; then
           :    # 3. otherwise try openssl in path of testssl.sh
      elif test_openssl_suffix $RUN_DIR/bin; then
@@ -11039,6 +11041,7 @@ bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}
 status: ${BASH_VERSINFO[4]}
 machine: ${BASH_VERSINFO[5]}
 operating system: $SYSTEM
+os constraint: $SYSTEM2
 shellopts: $SHELLOPTS
 
 $($OPENSSL version -a)
