@@ -6125,7 +6125,7 @@ certificate_info() {
           while read san; do
                [[ -n "$san" ]] && all_san+="$san "
           done <<< "$sans"
-          out_row_aligned_max_width "$all_san" "                                " 120 pr_italic
+          out_row_aligned_max_width "$all_san" "$indent                              " 120 pr_italic
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
           out "-- "
