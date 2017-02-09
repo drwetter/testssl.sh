@@ -975,6 +975,64 @@ out_row_aligned() {
      done
 }
 
+# prints text over multiple lines, trying to make no line longer than $max_width.
+# Each line is indented with $spaces and each word in $text is printed using
+# $print_function.
+out_row_aligned_max_width() {
+     local text="$1"
+     local spaces="$2"
+     local -i max_width="$3"
+     local print_function="$4"
+     local -i i len cut_point
+     local cr=$'\n'
+     local line entry first=true last=false
+
+     max_width=$max_width-${#spaces}
+     len=${#text}
+     while true; do
+          i=$max_width
+          if [[ $i -ge $len ]]; then
+               i=$len
+          else
+               while true; do
+                    [[ "${text:i:1}" == " " ]] && break
+                    [[ $i -eq 0 ]] && break
+                    i=$i-1
+               done
+               if [[ $i -eq 0 ]]; then
+                    i=$max_width+1
+                    while true; do
+                         [[ "${text:i:1}" == " " ]] && break
+                         [[ $i -eq $len ]] && break
+                         i+=1
+                    done
+               fi
+          fi
+          if [[ $i -eq $len ]]; then
+               line="$text"
+               if ! "$first"; then
+                    out "${cr}${spaces}"
+               fi
+               last=true
+          else
+               line="${text:0:i}"
+               if ! "$first"; then
+                    out "${cr}${spaces}"
+               fi
+               len=$len-$i-1
+               i=$i+1
+               text="${text:i:len}"
+               first=false
+               [[ $len -eq 0 ]] && last=true
+          fi
+          while read entry; do
+              $print_function "$entry" ; out " "
+          done <<< "$(echo "$line" | tr ' ' '\n')"
+          "$last" && break
+     done
+     return 0
+}
+
 is_number() {
      [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
           return 0 || \
@@ -4540,6 +4598,59 @@ run_std_cipherlists() {
      return 0
 }
 
+pr_ecdh_curve_quality() {
+     curve="$1"
+     local -i bits=0
+     
+     case "$curve" in
+          "sect163k1") bits=163  ;; 
+          "sect163r1") bits=162  ;; 
+          "sect163r2") bits=163  ;; 
+          "sect193r1") bits=193  ;; 
+          "sect193r2") bits=193  ;; 
+          "sect233k1") bits=232  ;; 
+          "sect233r1") bits=233  ;; 
+          "sect239k1") bits=238  ;; 
+          "sect283k1") bits=281  ;; 
+          "sect283r1") bits=282  ;; 
+          "sect409k1") bits=407 ;; 
+          "sect409r1") bits=409  ;; 
+          "sect571k1") bits=570  ;; 
+          "sect571r1") bits=570  ;; 
+          "secp160k1") bits=161  ;; 
+          "secp160r1") bits=161  ;; 
+          "secp160r2") bits=161  ;; 
+          "secp192k1") bits=192  ;; 
+          "prime192v1") bits=192  ;; 
+          "secp224k1") bits=225  ;; 
+          "secp224r1") bits=224  ;; 
+          "secp256k1") bits=256  ;; 
+          "prime256v1") bits=256  ;; 
+          "secp384r1") bits=384  ;; 
+          "secp521r1") bits=521  ;; 
+          "brainpoolP256r1") bits=256  ;; 
+          "brainpoolP384r1") bits=384  ;; 
+          "brainpoolP512r1") bits=512  ;; 
+          "X25519") bits=253  ;; 
+          "X448") bits=448  ;; 
+     esac
+     
+     if [[ "$bits" -le 80 ]]; then      # has that ever existed?
+          pr_svrty_critical "$curve"
+     elif [[ "$bits" -le 108 ]]; then   # has that ever existed?
+          pr_svrty_high "$curve"
+     elif [[ "$bits" -le 163 ]]; then
+          pr_svrty_medium "$curve"
+     elif [[ "$bits" -le 193 ]]; then   # hmm, according to https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography it should ok
+          pr_svrty_low "$curve"         # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
+     elif [[ "$bits" -le 224 ]]; then
+          out "$curve"
+     elif [[ "$bits" -gt 224 ]]; then
+          pr_done_good "$curve"
+     else
+          out "$curve"
+     fi
+}
 
 # arg1: file with input for grepping the bit length for ECDH/DHE
 # arg2: whether to print warning "old fart" or not (empty: no)
@@ -5149,7 +5260,7 @@ cipher_pref_check() {
           if [[ -n "$order" ]]; then
                outln
                printf "    %-10s" "$proto: "
-               out "$order"
+               out_row_aligned_max_width "$order" "               " 120 out
                fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
           fi
      done
@@ -5163,7 +5274,7 @@ cipher_pref_check() {
                order=""
                $OPENSSL s_client $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-               printf "    %-10s %s " "$p:" "$cipher"
+               printf "    %-10s " "$p:"
                tested_cipher="-"$cipher
                order="$cipher"
                if ! "$FAST"; then
@@ -5171,11 +5282,11 @@ cipher_pref_check() {
                          $OPENSSL s_client -cipher "ALL:$tested_cipher" $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                          sclient_connect_successful $? $TMPFILE || break
                          cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-                         out "$cipher "
                          tested_cipher="$tested_cipher:-$cipher"
                          order+=" $cipher"
                     done
                fi
+               out_row_aligned_max_width "$order" "               " 120 out
                outln
                [[ -n $order ]] && fileout "order_spdy_$p" "INFO" "Default cipher order for SPDY protocol $p: $order"
           done
@@ -5732,7 +5843,7 @@ certificate_info() {
      local ocsp_response_status=$6
      local sni_used=$7
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
-     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn
+     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
@@ -6012,10 +6123,10 @@ certificate_info() {
      out "$indent"; pr_bold " subjectAltName (SAN)         "
      if [[ -n "$sans" ]]; then
           while read san; do
-               [[ -n "$san" ]] && pr_italic "$san"
-               out " "
+               [[ -n "$san" ]] && all_san+="$san "
           done <<< "$sans"
-          fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $sans"
+          out_row_aligned_max_width "$all_san" "                                " 120 pr_italic
+          fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
           out "-- "
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : --"
@@ -6443,7 +6554,7 @@ run_server_defaults() {
           fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
      else
 #FIXME: we rather want to have the chance to print each ext in italcs or another format. Atm is a string of quoted strings -- that needs to be fixed at the root
-          outln "$TLS_EXTENSIONS"
+          out_row_aligned_max_width "$TLS_EXTENSIONS" "                              " 120 out; outln
           fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
 
@@ -6493,7 +6604,7 @@ run_pfs() {
      local -a ffdhe_groups_output=("ffdhe2048" "ffdhe3072" "ffdhe4096" "ffdhe6144" "ffdhe8192")
      local -a supported_curve bits
      local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
-     local pfs_ciphers curves_offered="" curves_offered_text="" curves_to_test temp
+     local pfs_ciphers curves_offered="" curves_to_test temp
      local len1 len2 curve_found
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
@@ -6645,7 +6756,6 @@ run_pfs() {
                          pfs_cipher="${rfc_ciph[i]}"
                     fi
                     pfs_ciphers+="$pfs_cipher "
-                    ! "$WIDE" && out "$pfs_cipher "
 
                     if [[ "${ciph[i]}" == "ECDHE-"* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_ECDHE_"* ]] ); then
                          ecdhe_offered=true
@@ -6669,10 +6779,9 @@ run_pfs() {
                     outln "${sigalg[i]}"
                fi
           done
-
+          ! "$WIDE" && out_row_aligned_max_width "$pfs_ciphers" "                              " 120 out
           debugme echo $pfs_offered
           "$WIDE" || outln
-
           fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
      fi
 
@@ -6752,22 +6861,13 @@ run_pfs() {
      fi
      if "$ecdhe_offered"; then
           for (( i=0; i < nr_curves; i++ )); do
-               if "${supported_curve[i]}"; then
-                    curves_offered+="${curves_ossl[i]} "
-                    if [[ "${bits[i]}" -le 163 ]]; then
-                         curves_offered_text+="$(pr_svrty_medium "${curves_ossl[i]}") "
-                    elif [[ "${bits[i]}" -le 193 ]]; then                              # hmm, according to https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography it should ok
-                         curves_offered_text+="$(pr_svrty_low "${curves_ossl[i]}") " # but openssl removed it https://github.com/drwetter/testssl.sh/issues/299#issuecomment-220905416
-                    elif [[ "${bits[i]}" -le 224 ]]; then
-                         curves_offered_text+="${curves_ossl[i]} "
-                    else
-                         curves_offered_text+="$(pr_done_good "${curves_ossl[i]}") "
-                    fi
-               fi
+               "${supported_curve[i]}" && curves_offered+="${curves_ossl[i]} "
           done
           if [[ -n "$curves_offered" ]]; then
                "$WIDE" && outln
-               pr_bold " Elliptic curves offered:     "; outln "$curves_offered_text"
+               pr_bold " Elliptic curves offered:     "
+               out_row_aligned_max_width "$curves_offered" "                              " 120 pr_ecdh_curve_quality
+               outln
                fileout "ecdhe_curves" "INFO" "Elliptic curves offered $curves_offered"
           fi
      fi
@@ -10304,17 +10404,13 @@ run_beast(){
 
           if ! "$WIDE"; then
                if [[ -n "$detected_cbc_ciphers" ]]; then
-                    detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | \
-                         sed -e "s/ /\\${cr}      ${spaces}/12" \
-                             -e "s/ /\\${cr}      ${spaces}/9" \
-                             -e "s/ /\\${cr}      ${spaces}/6" \
-                             -e "s/ /\\${cr}      ${spaces}/3")
                     fileout "cbc_$proto" "MEDIUM" "BEAST: CBC ciphers for $(toupper $proto): $detected_cbc_ciphers" "$cve" "$cwe" "$hint"
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto):"
                     [[ -n "$higher_proto_supported" ]] && \
-                         pr_svrty_lowln "$detected_cbc_ciphers" || \
-                         pr_svrty_mediumln "$detected_cbc_ciphers"
+                         out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " 120 pr_svrty_low || \
+                         out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " 120 pr_svrty_medium
+                    outln
                     detected_cbc_ciphers=""  # empty for next round
                     first=false
                else
@@ -10640,11 +10736,10 @@ run_rc4() {
                          fi
                     fi
                     outln "${sigalg[i]}"
-               elif "${ciphers_found[i]}"; then
-                    pr_svrty_high "${ciph[i]} "
                fi
                "${ciphers_found[i]}" && rc4_detected+="${ciph[i]} "
           done
+          ! "$WIDE" && out_row_aligned_max_width "$rc4_detected" "                                                                " 120 pr_svrty_high
           outln
           "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
           fileout "rc4" "HIGH" "RC4: VULNERABLE, Detected ciphers: $rc4_detected" "$cve" "$cwe" "$hint"
