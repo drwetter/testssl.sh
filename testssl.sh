@@ -6602,7 +6602,7 @@ run_pfs() {
      local -a curves_ossl_output=("K-163" "sect163r1" "B-163" "sect193r1" "sect193r2" "K-233" "B-233" "sect239k1" "K-283" "B-283" "K-409" "B-409" "K-571" "B-571" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "P-192" "secp224k1" "P-224" "secp256k1" "P-256" "P-384" "P-521" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
      local -a ffdhe_groups_hex=("01,00" "01,01" "01,02" "01,03" "01,04")
      local -a ffdhe_groups_output=("ffdhe2048" "ffdhe3072" "ffdhe4096" "ffdhe6144" "ffdhe8192")
-     local -a supported_curve bits
+     local -a supported_curve
      local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
      local pfs_ciphers curves_offered="" curves_to_test temp
      local len1 len2 curve_found
@@ -6828,9 +6828,6 @@ run_pfs() {
                     done
                     [[ $i -eq $high ]] && break
                     supported_curve[i]=true
-                    bits[i]=$(awk -F',' '{ print $3 }' <<< $temp)
-                    grep -q bits <<< ${bits[i]} || bits[i]=$(awk -F',' '{ print $2 }' <<< $temp)
-                    bits[i]=$(tr -d ' bits' <<< ${bits[i]})
                done
           done
      fi
@@ -6854,9 +6851,6 @@ run_pfs() {
                done
                [[ $i -eq $nr_curves ]] && break
                supported_curve[i]=true
-               bits[i]=$(awk -F',' '{ print $3 }' <<< $temp)
-               grep -q bits <<< ${bits[i]} || bits[i]=$(awk -F',' '{ print $2 }' <<< $temp)
-               bits[i]=$(tr -d ' bits' <<< ${bits[i]})
           done
      fi
      if "$ecdhe_offered"; then
