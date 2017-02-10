@@ -560,6 +560,12 @@ declare TLS_CIPHER_EXPORT=()
 declare TLS_CIPHER_OSSL_SUPPORTED=()
 
 ###### output functions ######
+
+# For HTML output, replace any HTML reserved characters with the entity name
+html_reserved(){
+    echo "$1" | sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"
+}
+
 # a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
 out_html() {
      "$do_html" && printf -- "%b" "${1//%/%%}" >> "$HTMLFILE"
@@ -588,10 +594,6 @@ retstring(){
           printf -- "%b" "${1//%/%%}"
 }
 
-# For HTML output, replace any HTML reserved characters with the entity name
-html_reserved(){
-    echo "$1" | sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&quot;/g"
-}
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
@@ -973,6 +975,7 @@ html_header() {
           rm -f "$HTMLFILE"
           out_html "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
           out_html "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
+          out_html "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
           out_html "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
           out_html "<head>\n"
           out_html "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
@@ -1369,7 +1372,7 @@ run_http_header() {
                     "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter (Hint: better try another URL)"
                ;;
           401)
-               grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)"
+               grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; out "$(strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)")"
                fileout "HTTP_STATUS_CODE" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
                ;;
@@ -1817,36 +1820,102 @@ run_hpkp() {
 }
 
 emphasize_stuff_in_headers(){
-# see http://www.grymoire.com/Unix/Sed.html#uh-3
-#    outln "$1" | sed "s/[0-9]*/$brown&$off/g"
-     outln "$1" | sed -e "s/\([0-9]\)/$brown\1$off/g" \
-          -e "s/Debian/"$yellow"\Debian$off/g" \
-          -e "s/Win32/"$yellow"\Win32$off/g" \
-          -e "s/Win64/"$yellow"\Win64$off/g" \
-          -e "s/Ubuntu/"$yellow"Ubuntu$off/g" \
-          -e "s/ubuntu/"$yellow"ubuntu$off/g" \
-          -e "s/jessie/"$yellow"jessie$off/g" \
-          -e "s/squeeze/"$yellow"squeeze$off/g" \
-          -e "s/wheezy/"$yellow"wheezy$off/g" \
-          -e "s/lenny/"$yellow"lenny$off/g" \
-          -e "s/SUSE/"$yellow"SUSE$off/g" \
-          -e "s/Red Hat Enterprise Linux/"$yellow"Red Hat Enterprise Linux$off/g" \
-          -e "s/Red Hat/"$yellow"Red Hat$off/g" \
-          -e "s/CentOS/"$yellow"CentOS$off/g" \
-          -e "s/Via/"$yellow"Via$off/g" \
-          -e "s/X-Forwarded/"$yellow"X-Forwarded$off/g" \
-          -e "s/Liferay-Portal/"$yellow"Liferay-Portal$off/g" \
-          -e "s/X-Cache-Lookup/"$yellow"X-Cache-Lookup$off/g" \
-          -e "s/X-Cache/"$yellow"X-Cache$off/g" \
-          -e "s/X-Squid/"$yellow"X-Squid$off/g" \
-          -e "s/X-Server/"$yellow"X-Server$off/g" \
-          -e "s/X-Varnish/"$yellow"X-Varnish$off/g" \
-          -e "s/X-OWA-Version/"$yellow"X-OWA-Version$off/g" \
-          -e "s/MicrosoftSharePointTeamServices/"$yellow"MicrosoftSharePointTeamServices$off/g" \
-          -e "s/X-Version/"$yellow"X-Version$off/g" \
-          -e "s/X-Powered-By/"$yellow"X-Powered-By$off/g" \
-          -e "s/X-UA-Compatible/"$yellow"X-UA-Compatible$off/g" \
-          -e "s/X-AspNet-Version/"$yellow"X-AspNet-Version$off/g"
+     local text="$1"
+     local -i len
+
+     len=${#text}
+     while [[ $len -gt 0 ]]; do
+          if [[ -z "$(tr -d '0-9' <<< "${text:0:1}")" ]]; then
+               out_term "$brown${text:0:1}$off"
+               out_html "<span style=\"color:chocolate;\">${text:0:1}</span>"
+               text="${text:1}"
+               len=$len-1
+          elif [[ $len -ge 31 ]] && [[ "${text:0:31}" == "MicrosoftSharePointTeamServices" ]]; then
+               out_term "$yellow${text:0:31}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:31}</span>"
+               text="${text:31}"
+               len=$len-31
+          elif [[ $len -ge 24 ]] && [[ "${text:0:24}" == "Red Hat Enterprise Linux" ]]; then
+               out_term "$yellow${text:0:24}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:24}</span>"
+               text="${text:24}"
+               len=$len-24
+          elif [[ $len -ge 16 ]] && [[ "${text:0:16}" == "X-AspNet-Version" ]]; then
+               out_term "$yellow${text:0:16}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:16}</span>"
+               text="${text:16}"
+               len=$len-16
+          elif [[ $len -ge 15 ]] && [[ "${text:0:15}" == "X-UA-Compatible" ]]; then
+               out_term "$yellow${text:0:15}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:15}</span>"
+               text="${text:15}"
+               len=$len-15
+          elif [[ $len -ge 14 ]] && ( [[ "${text:0:14}" == "Liferay-Portal" ]] || [[ "${text:0:14}" == "X-Cache-Lookup" ]] || \
+                                      [[ "${text:0:14}" == "X-Cache-Status" ]] ) ; then
+               out_term "$yellow${text:0:14}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:14}</span>"
+               text="${text:14}"
+               len=$len-14
+          elif [[ $len -ge 13 ]] && [[ "${text:0:13}" == "X-OWA-Version" ]]; then
+               out_term "$yellow${text:0:13}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:13}</span>"
+               text="${text:13}"
+               len=$len-13
+          elif [[ $len -ge 12 ]] && [[ "${text:0:12}" == "X-Powered-By" ]]; then
+               out_term "$yellow${text:0:12}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:12}</span>"
+               text="${text:12}"
+               len=$len-12
+          elif [[ $len -ge 11 ]] && [[ "${text:0:11}" == "X-Forwarded" ]]; then
+               out_term "$yellow${text:0:11}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:11}</span>"
+               text="${text:11}"
+               len=$len-11
+          elif [[ $len -ge 9 ]] && ( [[ "${text:0:9}" == "X-Varnish" ]] || [[ "${text:0:9}" == "X-Version" ]] ); then
+               out_term "$yellow${text:0:9}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:9}</span>"
+               text="${text:9}"
+               len=$len-9
+          elif [[ $len -ge 8 ]] && [[ "${text:0:8}" == "X-Server" ]]; then
+               out_term "$yellow${text:0:8}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:8}</span>"
+               text="${text:8}"
+               len=$len-8
+          elif [[ $len -ge 7 ]] && ( [[ "${text:0:7}" == "squeeze" ]] || [[ "${text:0:7}" == "Red Hat" ]] || \
+                                     [[ "${text:0:7}" == "X-Cache" ]] || [[ "${text:0:7}" == "X-Squid" ]] ) ; then
+               out_term "$yellow${text:0:7}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:7}</span>"
+               text="${text:7}"
+               len=$len-7
+          elif [[ $len -ge 6 ]] && ( [[ "${text:0:6}" == "Debian" ]] || [[ "${text:0:6}" == "Ubuntu" ]] || \
+                                     [[ "${text:0:6}" == "ubuntu" ]] || [[ "${text:0:6}" == "jessie" ]] || \
+                                     [[ "${text:0:6}" == "wheezy" ]] || [[ "${text:0:6}" == "CentOS" ]] ) ; then
+               out_term "$yellow${text:0:6}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:6}</span>"
+               text="${text:6}"
+               len=$len-6
+          elif [[ $len -ge 5 ]] && ( [[ "${text:0:5}" == "Win32" ]] || [[ "${text:0:5}" == "Win64" ]] || [[ "${text:0:5}" == "lenny" ]] ); then
+               out_term "$yellow${text:0:5}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:5}</span>"
+               text="${text:5}"
+               len=$len-5
+          elif [[ $len -ge 4 ]] && [[ "${text:0:4}" == "SUSE" ]]; then
+               out_term "$yellow${text:0:4}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:4}</span>"
+               text="${text:4}"
+               len=$len-4
+          elif [[ $len -ge 3 ]] && [[ "${text:0:3}" == "Via" ]]; then
+               out_term "$yellow${text:0:3}$off"
+               out_html "<span style=\"color:yellow;\">${text:0:3}</span>"
+               text="${text:3}"
+               len=$len-3
+          else
+               out "${text:0:1}"
+               text="${text:1}"
+               len=$len-1
+          fi
+     done
+     outln
 }
 
 run_server_banner() {
