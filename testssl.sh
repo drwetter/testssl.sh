@@ -712,6 +712,9 @@ fixme() { pr_warning "fixme: $1"; }
 fixmeln_term() { pr_warningln_term "fixme: $1"; }
 fixmeln() { pr_warningln "fixme: $1"; }
 
+pr_url() { out_term "$1"; out_html "<a href="$1" style=\"color:black;text-decoration:none;\">$1</a>"; }
+pr_boldurl() { pr_bold_term "$1"; out_html "<a href="$1" style=\"font-weight:bold;color:black;text-decoration:none;\">$1</a>"; }
+
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 set_color_functions() {
@@ -2343,7 +2346,7 @@ openssl2rfc() {
           [[ "$1" == "${TLS_CIPHER_OSSL_NAME[i]}" ]] && rfcname="${TLS_CIPHER_RFC_NAME[i]}" && break
      done
      [[ "$rfcname" == "-" ]] && rfcname=""
-     [[ -n "$rfcname" ]] && out "$rfcname"
+     [[ -n "$rfcname" ]] && retstring "$rfcname"
      return 0
 }
 
@@ -2355,7 +2358,7 @@ rfc2openssl() {
           [[ "$1" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && ossl_name="${TLS_CIPHER_OSSL_NAME[i]}" && break
      done
      [[ "$ossl_name" == "-" ]] && ossl_name=""
-     [[ -n "$ossl_name" ]] && out "$ossl_name"
+     [[ -n "$ossl_name" ]] && retstring "$ossl_name"
      return 0
 }
 
@@ -2990,7 +2993,7 @@ run_cipher_per_proto() {
      fi
      outln
      neat_header
-     outln " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2"| while read proto proto_hex proto_text; do
+     retstring " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2\n" | while read proto proto_hex proto_text; do
           "$using_sockets" || locally_supported "$proto" "$proto_text" || continue
           "$using_sockets" && out "$proto_text "
           outln
@@ -3289,7 +3292,7 @@ create_client_simulation_tls_clienthello() {
 
      if [[ $offset -ge $tls_handshake_ascii_len ]]; then
           # No extensions
-          out "$tls_handshake_ascii"
+          retstring "$tls_handshake_ascii"
           return 0
      fi
 
@@ -4363,7 +4366,7 @@ run_prototest_openssl() {
 # idempotent function to add SSL/TLS protocols. It should ease testing
 # PROTOS_OFFERED's content is in openssl terminology
 add_tls_offered() {
-     grep -w "$1" <<< "$PROTOS_OFFERED" || PROTOS_OFFERED+="$1 "
+     grep -qw "$1" <<< "$PROTOS_OFFERED" || PROTOS_OFFERED+="$1 "
 }
 
 # function which checks whether SSLv2 - TLS 1.2 is being offereed
@@ -5190,7 +5193,7 @@ cipher_pref_check() {
 
      pr_bold " Cipher order"
 
-     retstring " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n"| while read p proto_hex proto; do
+     retstring " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n" | while read p proto_hex proto; do
           order=""; ciphers_found_with_sockets=false
           if [[ $p == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
                out "\n    SSLv3:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
@@ -5363,7 +5366,7 @@ cipher_pref_check() {
                order=""
                $OPENSSL s_client $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-               printf "    %-10s %s " "$p:" "$cipher"
+               out "$(printf "    %-10s %s " "$p:" "$cipher")"
                tested_cipher="-"$cipher
                order="$cipher"
                if ! "$FAST"; then
@@ -6583,7 +6586,7 @@ run_server_defaults() {
                  i=1
                  newhostcert=$(cat $HOSTCERT)
                  while [[ $i -le $certs_found ]]; do
-                     if [ "$newhostcert" == "${previous_hostcert[i]}" ]; then
+                     if [[ "$newhostcert" == "${previous_hostcert[i]}" ]]; then
                         match_found=true
                         break;
                      fi
@@ -9304,12 +9307,12 @@ run_heartbleed(){
           if [[ "${saved_sockreply[1]}" == "${saved_sockreply[2]}" ]] && [[ "${saved_sockreply[2]}" == "${saved_sockreply[3]}" ]] \
                && "$found_500_oops"; then
                pr_done_best "not vulnerable (OK)$append"
-               [[ $DEBUG -ge 1 ]] && out_term ", successful weeded out vsftpd false positive"
+               [[ $DEBUG -ge 1 ]] && out ", successful weeded out vsftpd false positive"
                fileout "heartbleed" "OK" "Heartbleed: not vulnerable $append" "$cve" "$cwe"
           else
                out "likely "
                pr_svrty_critical "VULNERABLE (NOT ok)"
-               [[ $DEBUG -ge 1 ]] && out_term " use debug >=2 to confirm"
+               [[ $DEBUG -ge 1 ]] && out " use debug >=2 to confirm"
                fileout "heartbleed" "CRITICAL" "Heartbleed: likely VULNERABLE $append" "$cve" "$cwe" "$hint"
           fi
      else
@@ -9850,7 +9853,7 @@ run_tls_poodle() {
 
      pr_bold " POODLE, TLS"; out " ($cve), experimental "
      #FIXME
-     echo "#FIXME"
+     pr_warningln "#FIXME"
      fileout "poodle_tls" "WARN" "POODLE, TLS: Not tested. Not yet implemented #FIXME" "$cve" "$cwe"
      return 7
 }
@@ -10285,7 +10288,9 @@ run_drown() {
                     if [[ "$DEBUG" -ge 1 ]] || "$SHOW_CENSYS_LINK"; then
 # not advertising it as it after 5 tries and account is needed
                          cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
-                         outln "$spaces https://censys.io/ipv4?q=$cert_fingerprint_sha2 could help you to find out"
+                         out "$spaces "
+                         pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
+                         outln " could help you to find out"
                          fileout "drown" "INFO" "make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2"
                     fi
                else
@@ -10889,9 +10894,11 @@ run_youknowwho() {
 
 
 old_fart() {
-     outln "Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
+     out "Get precompiled bins or compile "
+     pr_url "https://github.com/PeterMosmans/openssl"
+     outln "."
      fileout "old_fart" "WARN" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed. Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
-     fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed." -5
+     fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn't make much sense to proceed." -5
 }
 
 # try very hard to determine the install path to get ahold of the mapping file and the CA bundles
@@ -10977,7 +10984,7 @@ find_openssl_binary() {
      # 0. check environment variable whether it's executable
      if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
           pr_warningln "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
-          outln " Looking some place else ..."
+          outln_term " Looking some place else ..."
      elif [[ -x "$OPENSSL" ]]; then
           :    # 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
      elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
@@ -11087,10 +11094,12 @@ check4openssl_oldfarts() {
           pr_warningln " Your \"$OPENSSL\" is way too old (<version 1.0) !"
           case $SYSTEM in
                *BSD|Darwin)
-                    outln " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl"
+                    out " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from "
+                    pr_url "github.com/PeterMosmans/openssl"; outln "."
                     fileout "too_old_openssl" "WARN" "Your $OPENSSL $OSSL_VER version is way too old. Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl ." ;;
-               *)   outln " Update openssl binaries or compile from github.com/PeterMosmans/openssl"
-                    fileout "too_old_openssl" "WARN" "Update openssl binaries or compile from github.com/PeterMosmans/openssl .";;
+               *)   out " Update openssl binaries or compile from "
+                    pr_url "https://github.com/PeterMosmans/openssl"; outln "."
+                    fileout "too_old_openssl" "WARN" "Update openssl binaries or compile from https://github.com/PeterMosmans/openssl .";;
           esac
           ignore_no_or_lame " Type \"yes\" to accept false negatives or positives" "yes"
           [[ $? -ne 0 ]] && exit -2
@@ -11214,10 +11223,6 @@ file output options (can also be preset via environment variables):
 
 Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
 URI always needs to be the last parameter.
-
-Need HTML output? Just pipe through "aha" (ANSI HTML Adapter: github.com/theZiz/aha) like
-
-   "$PROG_NAME <options> <URI> | aha >output.html" or use -log* and convert later
 
 EOF
      #' Fix syntax highlight on sublime
@@ -11343,7 +11348,7 @@ EOF
 
 mybanner() {
      local idtag
-     local bb1 bb2
+     local bb1 bb2 bb3
      local openssl_location="$(which $OPENSSL)"
      local cwd=""
 
@@ -11355,26 +11360,31 @@ mybanner() {
      bb1=$(cat <<EOF
 
 ###########################################################
-    $PROG_NAME       $VERSION from $SWURL
+    $PROG_NAME       $VERSION from 
 EOF
 )
-#    ($idtag)
      bb2=$(cat <<EOF
 
       This program is free software. Distribution and
              modification under GPLv2 permitted.
       USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @ https://testssl.sh/bugs/
+       Please file bugs @ 
+EOF
+)
+     bb3=$(cat <<EOF
 
 ###########################################################
 EOF
 )
-     pr_boldln "$bb1"
+     pr_bold "$bb1"
+     pr_boldurl "$SWURL"; outln
      pr_bold "    ("
      [[ "$COLOR" -ne 0 ]] && pr_grey "$idtag" || out "$idtag"
      pr_boldln ")"
      pr_bold "$bb2"
+     pr_boldurl "https://testssl.sh/bugs/"; outln
+     pr_bold "$bb3"
      outln "\n"
      outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$OPENSSL_NR_CIPHERS ciphers]"
      out " on $HNAME:"
@@ -11536,10 +11546,10 @@ prepare_logging() {
                : # just for clarity: a log file was specified, no need to do anything else
           fi
           >$LOGFILE
-          outln "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-          outln "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
-          outln "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
-          outln "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
+          outln_term "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
+          outln_term "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
+          outln_term "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
+          outln_term "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
           exec > >(tee -a ${LOGFILE})
           # not decided yet. Maybe good to have a separate file or none at all
           #exec 2> >(tee -a ${LOGFILE} >&2)
@@ -12031,8 +12041,8 @@ determine_service() {
                     grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
                     out " Service set:$CORRECT_SPACES            STARTTLS via "
                     fileout "service" "INFO" "$protocol"
-                    toupper "$protocol"
-                    [[ -n "$XMPP_HOST" ]] && echo -n " (XMPP domain=\'$XMPP_HOST\')"
+                    out "$(toupper "$protocol")"
+                    [[ -n "$XMPP_HOST" ]] && out " (XMPP domain=\'$XMPP_HOST\')"
                     outln
                     ;;
                *)   outln
@@ -12355,7 +12365,7 @@ parse_cmd_line() {
                     case $STARTTLS_PROTOCOL in
                          ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres) ;;
                          ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps|postgress) ;;
-                         *)   pr_magentaln "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
+                         *)   pr_magentaln_term "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
                     ;;
@@ -12514,7 +12524,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case "$WARNINGS" in
                          batch|off|false) ;;
-                         *)   pr_magentaln "\nwarnings can be either \"batch\", \"off\" or \"false\""
+                         *)   pr_magentaln_term "\nwarnings can be either \"batch\", \"off\" or \"false\""
                               help 1
                     esac
                     ;;
@@ -12532,7 +12542,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case $DEBUG in
                          [0-6]) ;;
-                         *)   pr_magentaln_term "\nunrecognized debug value \"$1\", must be between 0..6" 1>&2
+                         *)   pr_magentaln_term_term "\nunrecognized debug value \"$1\", must be between 0..6" 1>&2
                               help 1
                     esac
                     ;;
@@ -12542,7 +12552,7 @@ parse_cmd_line() {
                     case $COLOR in
                          [0-2]) ;;
                          *)   COLOR=2
-                              pr_magentaln "\nunrecognized color: \"$1\", must be between 0..2" 1>&2
+                              pr_magentaln_term "\nunrecognized color: \"$1\", must be between 0..2" 1>&2
                               help 1
                     esac
                     ;;
@@ -12595,7 +12605,7 @@ parse_cmd_line() {
                     HTMLFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     if [[ -d "$HTMLFILE" ]]; then
-                         pr_warningln_term "$HTMLFILE exists and is a directory"
+                         pr_warningln_term_term "$HTMLFILE exists and is a directory"
                          exit -6
                     fi
                     do_html=true
@@ -12620,7 +12630,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case "$cipher_mapping" in
                          no-rfc) unset ADD_RFC_STR;;
-                         *)   pr_magentaln "\nmapping can only be \"no-rfc\""
+                         *)   pr_magentaln_term "\nmapping can only be \"no-rfc\""
                               help 1 ;;
                     esac
                     ;;
@@ -12640,7 +12650,7 @@ parse_cmd_line() {
                (--) shift
                     break
                     ;;
-               (-*) pr_magentaln "0: unrecognized option \"$1\"" 1>&2;
+               (-*) pr_magentaln_term "0: unrecognized option \"$1\"" 1>&2;
                     help 1
                     ;;
                (*)  break
@@ -12672,7 +12682,7 @@ nodeip_to_proper_ip6() {
      if is_ipv6addr $NODEIP; then
           ${UNBRACKTD_IPV6} || NODEIP="[$NODEIP]"
           len_nodeip=${#NODEIP}
-          CORRECT_SPACES="$(draw_line " " "$((len_nodeip - 17))" )"
+          CORRECT_SPACES="$(printf -- " "'%.s' $(eval "echo {1.."$((len_nodeip - 17))"}"))"
           # IPv6 addresses are longer, this varaible takes care that "further IP" and "Service" is properly aligned
      fi
 }
