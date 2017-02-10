@@ -598,65 +598,65 @@ retstring(){
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
 pr_liteblue_term() { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[0;32m$1" || out_term "\033[0;34m$1" ) || out_term "$1"; pr_off; }    # not yet used
-pr_liteblue()      { pr_liteblue_term "$1"; "$COLORBLIND" && out_html "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>"; }
+pr_liteblue()      { pr_liteblue_term "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_html "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" ) || out_html "$(html_reserved "$1")"; }
 pr_liteblueln_term() { pr_liteblue_term "$1"; outln_term; }
 pr_liteblueln() { pr_liteblue "$1"; outln; }
 pr_blue_term()  { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[1;32m$1" || out_term "\033[1;34m$1" ) || out_term "$1"; pr_off; }    # used for head lines of single tests
-pr_blue()       { pr_blue_term "$1"; "$COLORBLIND" && out_html "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_blue()       { pr_blue_term "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_html "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" ) || out_html "$(html_reserved "$1")"; }
 pr_blueln_term() { pr_blue_term "$1"; outln_term; }
 pr_blueln()     { pr_blue "$1"; outln; }
 
 pr_warning_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;35m$1" || pr_underline_term "$1"; pr_off; }                     # some local problem: one test cannot be done
-pr_warning()      { pr_warning_term "$1"; out_html "<span style=\"color:#cd00cd;\">$(html_reserved "$1")</span>"; }
+pr_warning()      { pr_warning_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#cd00cd;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && out_html "<u>$(html_reserved "$1")</u>" || out_html "$(html_reserved "$1")" ); }
 pr_warningln_term() { pr_warning_term "$1"; outln_term; }                                                                    # litemagenta
 pr_warningln()      { pr_warning "$1"; outln; }
 pr_magenta_term()   { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;35m$1" || pr_underline_term "$1"; pr_off; }                   # fatal error: quitting because of this!
-pr_magenta()        { pr_magenta_term "$1"; out_html "<span style=\"color:magenta;font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_magenta()        { pr_magenta_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:magenta;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && out_html "<u>$(html_reserved "$1")</u>" || out_html "$(html_reserved "$1")" ); }
 pr_magentaln_term() { pr_magenta_term "$1"; outln_term; }
 pr_magentaln()      { pr_magenta "$1"; outln; }
 
 pr_litecyan_term()   { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;36m$1" || out_term "$1"; pr_off; }                           # not yet used
-pr_litecyan()   { pr_litecyan_term "$1"; out_html "<span style=\"color:#00cdcd;\">$(html_reserved "$1")</span>"; }
+pr_litecyan()   { pr_litecyan_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#00cdcd;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 pr_litecyanln_term() { pr_litecyan_term "$1"; outln_term; }
 pr_litecyanln() { pr_litecyan "$1"; outln; }
 pr_cyan_term()  { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;36m$1" || out_term "$1"; pr_off; }                                # additional hint
-pr_cyan()       { pr_cyan_term "$1"; out_html "<span style=\"color:cyan;font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_cyan()       { pr_cyan_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:cyan;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 pr_cyanln_term() { pr_cyan_term "$1"; outln_term; }
 pr_cyanln()     { pr_cyan "$1"; outln; }
 
 pr_litegreyln_term() { pr_litegrey_term "$1"; outln_term; }                                                                  # not really usable on a black background, see ..
 pr_litegreyln() { pr_litegrey "$1"; outln; }
 pr_litegrey_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[0;37m$1" || out_term "$1"; pr_off; }                             # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
-pr_litegrey()   { pr_litegrey_term "$1"; out_html "<span style=\"color:darkgray;\">$(html_reserved "$1")</span>"; }
+pr_litegrey()   { pr_litegrey_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"color:darkgray;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 pr_grey_term()  { [[ "$COLOR" -ne 0 ]] && out_term "\033[1;30m$1" || out_term "$1"; pr_off; }
-pr_grey()       { pr_grey_term "$1"; out_html "<span style=\"color:#7f7f7f;font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_grey()       { pr_grey_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"color:#7f7f7f;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 pr_greyln_term() { pr_grey_term "$1"; outln_term; }
 pr_greyln()     { pr_grey "$1"; outln; }
 
 pr_done_good_term() { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[0;34m$1" || out_term "\033[0;32m$1" ) || out_term "$1"; pr_off; }   # litegreen (liteblue), This is good
-pr_done_good()      { pr_done_good_term "$1"; "$COLORBLIND" && out_html "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>"; }
+pr_done_good()      { pr_done_good_term "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_html "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" ) || out_html "$(html_reserved "$1")"; }
 pr_done_goodln_term() { pr_done_good_term "$1"; outln_term; }
 pr_done_goodln()    { pr_done_good "$1"; outln; }
 pr_done_best_term() { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[1;34m$1" || out_term "\033[1;32m$1" ) ||  out_term "$1"; pr_off; }  # green (blue), This is the best
-pr_done_best()      { pr_done_best_term "$1"; "$COLORBLIND" && out_html "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_done_best()      { pr_done_best_term "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_html "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" ) || out_html "$(html_reserved "$1")"; }
 pr_done_bestln_term() { pr_done_best_term "$1"; outln_term; }
 pr_done_bestln()    { pr_done_best "$1"; outln; }
 
 pr_svrty_low_term()  { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;33m$1" || out_term "$1"; pr_off; }         # yellow brown | academic or minor problem
-pr_svrty_low()       { pr_svrty_low_term "$1"; out_html "<span style=\"color:#cdcd00;font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_svrty_low()       { pr_svrty_low_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#cdcd00;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 pr_svrty_lowln_term() { pr_svrty_low_term "$1"; outln_term; }
 pr_svrty_lowln()     { pr_svrty_low "$1"; outln; }
 pr_svrty_medium_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;33m$1" || out_term "$1"; pr_off; }       # brown | it is not a bad problem but you shouldn't do this
-pr_svrty_medium()    { pr_svrty_medium_term "$1"; out_html "<span style=\"color:#cd8000;\">$(html_reserved "$1")</span>"; }
+pr_svrty_medium()    { pr_svrty_medium_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#cd8000;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 pr_svrty_mediumln_term() { pr_svrty_medium_term "$1"; outln_term; }
 pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
 
 pr_svrty_high_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;31m$1" || pr_bold_term "$1"; pr_off; }               # litered
-pr_svrty_high()      { pr_svrty_high_term "$1"; out_html "<span style=\"color:#cd0000;\">$(html_reserved "$1")</span>"; }
+pr_svrty_high()      { pr_svrty_high_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#cd0000;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && out_html "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")" ); }
 pr_svrty_highln_term() { pr_svrty_high_term "$1"; outln_term; }
 pr_svrty_highln()    { pr_svrty_high "$1"; outln; }
 pr_svrty_critical_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;31m$1" || pr_bold_term "$1"; pr_off; }           # red
-pr_svrty_critical()  { pr_svrty_critical_term "$1"; out_html "<span style=\"color:red;font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_svrty_critical()  { pr_svrty_critical_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:red;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && out_html "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")" ); }
 pr_svrty_criticalln_term() { pr_svrty_critical_term "$1"; outln_term; }
 pr_svrty_criticalln(){ pr_svrty_critical "$1"; outln; }
 
@@ -668,32 +668,32 @@ pr_deemphasizeln()    { pr_deemphasize "$1"; outln; }
 # color=1 functions
 pr_off()          { [[ "$COLOR" -ne 0 ]] && out_term "\033[m"; }
 pr_bold_term()    { [[ "$COLOR" -ne 0 ]] && out_term "\033[1m$1" || out_term "$1"; pr_off; }
-pr_bold()         { pr_bold_term "$1"; out_html "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_bold()         { pr_bold_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 pr_boldln_term()  { pr_bold_term "$1"; outln_term; }
 pr_boldln()       { pr_bold "$1" ; outln; }
 pr_italic_term()  { [[ "$COLOR" -ne 0 ]] && out_term "\033[3m$1" || out_term "$1"; pr_off; }
-pr_italic()       { pr_italic_term "$1"; out_html "<i>$(html_reserved "$1")</i>"; }
+pr_italic()       { pr_italic_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<i>$(html_reserved "$1")</i>" || out_html "$(html_reserved "$1")"; }
 pr_italicln_term() { pr_italic_term "$1"; outln_term; }
 pr_italicln()     { pr_italic "$1" ; outln; }
-pr_strikethru_term() { [[ "$COLOR" -ne 0 ]] && out "\033[9m$1" || out "$1"; pr_off; }                          # ugly!
-pr_strikethru()   { pr_strikethru_term "$1"; out_html "<strike>$(html_reserved "$1")</strike>"; }
+pr_strikethru_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[9m$1" || out_term "$1"; pr_off; }                          # ugly!
+pr_strikethru()   { pr_strikethru_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<strike>$(html_reserved "$1")</strike>" || out_html "$(html_reserved "$1")"; }
 pr_strikethruln_term() { pr_strikethru_term "$1"; outln_term; }
 pr_strikethruln() { pr_strikethru "$1" ; outln; }
 pr_underline_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[4m$1" || out_term "$1"; pr_off; }
-pr_underline()    { pr_underline_term "$1"; out_html "<u>$(html_reserved "$1")</u>"; }
+pr_underline()    { pr_underline_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<u>$(html_reserved "$1")</u>" || out_html "$(html_reserved "$1")"; }
 pr_underlineln_term() { pr_underline_term "$1"; outln_term; }
 pr_underlineln()  { pr_underline "$1"; outln; }
 pr_reverse_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[7m$1" || out_term "$1"; pr_off; }
-pr_reverse()      { pr_reverse_term "$1"; out_html "<span style=\"color:white;background-color:black;\">$(html_reserved "$1")</span>"; }
+pr_reverse()      { pr_reverse_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"color:white;background-color:black;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 pr_reverse_bold_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[7m\033[1m$1" || out_term "$1"; pr_off; }
-pr_reverse_bold() { pr_reverse_bold_term "$1"; out_html "<span style=\"color:white;background-color:black;font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_reverse_bold() { pr_reverse_bold_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"color:white;background-color:black;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 
 #pr_headline() { pr_blue "$1"; }
 #http://misc.flogisoft.com/bash/tip_colors_and_formatting
 
 #pr_headline() { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m\033[47m$1" || out "$1"; pr_off; }
 pr_headline_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[1m\033[4m$1" || out_term "$1"; pr_off; }
-pr_headline() { pr_headline_term "$1"; out_html "<span style=\"text-decoration:underline;font-weight:bold;\">$(html_reserved "$1")</span>"; }
+pr_headline() { pr_headline_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"text-decoration:underline;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
 pr_headlineln_term() { pr_headline_term "$1"; outln_term; }
 pr_headlineln() { pr_headline "$1" ; outln; }
 
@@ -1826,6 +1826,10 @@ emphasize_stuff_in_headers(){
      local text="$1"
      local -i len
 
+     if [[ $COLOR -ne 2 ]]; then
+          out "$text"
+          text=""
+     fi
      len=${#text}
      while [[ $len -gt 0 ]]; do
           if [[ -z "$(tr -d '0-9' <<< "${text:0:1}")" ]]; then
