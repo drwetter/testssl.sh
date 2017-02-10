@@ -626,9 +626,9 @@ pr_cyanln()     { pr_cyan "$1"; outln; }
 
 pr_litegreyln_term() { pr_litegrey_term "$1"; outln_term; }                                                                  # not really usable on a black background, see ..
 pr_litegreyln() { pr_litegrey "$1"; outln; }
-pr_litegrey_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;37m$1" || out_term "$1"; pr_off; }                             # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
+pr_litegrey_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[0;37m$1" || out_term "$1"; pr_off; }                             # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
 pr_litegrey()   { pr_litegrey_term "$1"; out_html "<span style=\"color:darkgray;\">$(html_reserved "$1")</span>"; }
-pr_grey_term()  { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;30m$1" || out_term "$1"; pr_off; }
+pr_grey_term()  { [[ "$COLOR" -ne 0 ]] && out_term "\033[1;30m$1" || out_term "$1"; pr_off; }
 pr_grey()       { pr_grey_term "$1"; out_html "<span style=\"color:#7f7f7f;font-weight:bold;\">$(html_reserved "$1")</span>"; }
 pr_greyln_term() { pr_grey_term "$1"; outln_term; }
 pr_greyln()     { pr_grey "$1"; outln; }
@@ -11380,7 +11380,7 @@ EOF
      pr_bold "$bb1"
      pr_boldurl "$SWURL"; outln
      pr_bold "    ("
-     [[ "$COLOR" -ne 0 ]] && pr_grey "$idtag" || out "$idtag"
+     pr_grey "$idtag"
      pr_boldln ")"
      pr_bold "$bb2"
      pr_boldurl "https://testssl.sh/bugs/"; outln
