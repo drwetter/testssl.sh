@@ -11492,41 +11492,64 @@ get_aaaa_record() {
 # RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
 # arg1: domain to check for
 get_caa_rr_record() {
-     local caa=""
+     local raw_caa="" 
+     local caa_flag
+     local -i len_caa_property
+     local caa_property_name
+     local caa_property_value
      local saved_openssl_conf="$OPENSSL_CONF"
 
+     # if there's a type257 record there are two output formats here, mostly depending on age of distribution
+     # rougly that's the difference between text and binary format
+     # 1) 'google.com has CAA record 0 issue "symantec.com"' 
+     # 2) 'google.com has TYPE257 record \# 19 0005697373756573796D616E7465632E636F6D'
+     # for dig +short the output always starts with '0 issue [..]' or '\# 19 [..]' so we normalize thereto to keep caa_flag, caa_property
+     # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
      if which dig &> /dev/null; then
-          caa="$(dig $1 type257 +short | awk '{ print $3 }')"
+          raw_caa="$(dig $1 type257 +short)"
           # empty if no CAA record
      elif which host &> /dev/null; then
-          caa="$(host -t type257 $1)"
-          if grep -wq issue <<< "$caa" && grep -wvq "has no CAA" <<< "$caa"; then
-               caa="$(awk '/issue/ { print $NF }' <<< "$caa")"
+          raw_caa="$(host -t type257 $1)"
+          if egrep -wvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
+               raw_caa="$(sed -e 's/^.*has CAA record //' -e 's/^.*has TYPE257 record //' <<< "$raw_caa")"
           fi
      elif which nslookup &> /dev/null; then
-          caa="$(nslookup -type=type257 $1)"
-          if grep -wq issue <<< "$caa" && grep -wvq "No answer" <<< "$caa"; then
-               caa="$(awk '/issue/ { print $NF }' <<< "$caa")" 
+          raw_caa="$(nslookup -type=type257 $1 | grep -w rdata_257)"
+          if [[ -n "$raw_caa" ]]; then
+               raw_caa="$(sed 's/^.*rdata_257 = //' <<< "$raw_caa")" 
           fi
      else
           return 1
           # No dig, host, or nslookup --> complaint was elsewhere already and except for one which has drill only we don't get here
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
+     debugme echo $raw_caa 
 
-     # try to convert old return values
-     if [[ "$caa" =~ ^[A-F0-9]+$ ]]; then
-          caa=${caa:4:100}                   # ignore the first 4 bytes
-          caa=$(hex2ascii "$caa" | sed 's/^issue//g')
+     # '# 19' for google.com is the tag length probably --> we use this also to identify the binary format
+     if [[ "$raw_caa" =~ \#\ [0-9][0-9]\ [A-F0-9]+$ ]]; then
+          raw_caa=$(awk '{ print $NF }' <<< $raw_caa)       # caa_length would be awk '{ print $(NF-1) }' but we don't need it
+          if [[ "${raw_caa:0:2}" == "00" ]]; then           # probably the flag
+               caa_flag="0"
+               len_caa_property=${raw_caa:2:2}              # implicit type casting, for google we have 05 here as a string
+               len_caa_property=$((len_caa_property*2))     # =>word! Now get name from 4th and value from 4th+len position...
+               caa_property_name=$(hex2ascii ${raw_caa:4:$len_caa_property})
+               caa_property_value=$(hex2ascii ${raw_caa:$((4+len_caa_property)):100})
+          else
+               outln "please report unknown CAA flag $caa_flag @ $NODE"
+          fi
+     elif grep -q '"' <<< $raw_caa; then
+          raw_caa=${raw_caa//\"/}                           # strip " first. Now we should have flag, name, value
+          caa_flag=$(awk '{ print $1 }' <<< $raw_caa)
+          caa_property_name=$(awk '{ print $2 }' <<< $raw_caa)
+          caa_property_value=$(awk '{ print $3 }' <<< $raw_caa)
      else
-          caa=${caa//\"/}                    # strip "
+          # no caa record
+          return 1
      fi
-     echo "$caa"
+     echo "$caa_property_name: $caa_property_value"
+
 # to do:
-#    1: check old binaries whether they support this record at all
-#    done (2: check whether hexstring is returned and deal with it)
-#    3: check more than domainname, see https://tools.ietf.org/html/rfc6844#section-3
 #    4: check whether $1 is a CNAME and take this
 #    5: query with drill
      return 0
