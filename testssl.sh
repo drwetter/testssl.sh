@@ -6280,7 +6280,7 @@ certificate_info() {
      caa="$(get_caa_rr_record $NODE)"
      if [[ -n "$caa" ]]; then
           pr_done_good "OK"; out " (" ; pr_italic "$caa"; out ")"
-          fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : offered"
+          fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : \"$caa\" "
      else
           pr_svrty_low "--"
           fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
