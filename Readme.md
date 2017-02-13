@@ -36,14 +36,13 @@ and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Do
 
 #### Compatibility
 
-testssl.sh is working on every Linux/BSD distribution out of the box with
-some limitations of disabled features from the openssl client -- some
-workarounds are done with bash-socket-based checks. It also works on other
-unixoid system out of the box, supposed they have `/bin/bash` and standard
-tools like sed and awk installed. MacOS X and Windows (using MSYS2 or
-cygwin) work too. OpenSSL version >= 1 is a must.  OpenSSL version >= 1.0.2
-is needed for better LOGJAM checks and to display bit strengths for key
-exchanges.
+testssl.sh is working on every Linux/BSD distribution out of the box. In 2.9dev most
+of the limitations of disabled features from the openssl client are gone due to bash-socket-based 
+checks. testssl.sh also works on otherunixoid system out of the box, supposed they have 
+`/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU versions 
+of grep and sed installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL version 
+>= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to 
+display bit strengths for key exchanges.
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
@@ -56,6 +55,11 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * testing 359 default ciphers (``testssl.sh -e``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * finding more TLS extensions via sockets
 * TLS Supported Groups Registry (RFC 7919), key shares extension
+* using bash sockets where ever possible
+* LUCKY13 and SWEET32 checks
+* LOGJAM: now checking also for known DH parameters
+* Check for CAA RR
+* better formatting of output
 
 
 #### Features planned in 2.9dev
