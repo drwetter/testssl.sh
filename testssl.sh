@@ -1079,6 +1079,65 @@ out_row_aligned() {
      done
 }
 
+# prints text over multiple lines, trying to make no line longer than $max_width.
+# Each line is indented with $spaces and each word in $text is printed using
+# $print_function.
+out_row_aligned_max_width() {
+     local text="$1"
+     local spaces="$2"
+     local -i max_width="$3"
+     local print_function="$4"
+     local -i i len cut_point
+     local cr=$'\n'
+     local line entry first=true last=false
+
+     max_width=$max_width-1                  # at the moment we align to terminal width. This makes sure we don't wrap too late
+     max_width=$max_width-${#spaces}
+     len=${#text}
+     while true; do
+          i=$max_width
+          if [[ $i -ge $len ]]; then
+               i=$len
+          else
+               while true; do
+                    [[ "${text:i:1}" == " " ]] && break
+                    [[ $i -eq 0 ]] && break
+                    i=$i-1
+               done
+               if [[ $i -eq 0 ]]; then
+                    i=$max_width+1
+                    while true; do
+                         [[ "${text:i:1}" == " " ]] && break
+                         [[ $i -eq $len ]] && break
+                         i+=1
+                    done
+               fi
+          fi
+          if [[ $i -eq $len ]]; then
+               line="$text"
+               if ! "$first"; then
+                    out "${cr}${spaces}"
+               fi
+               last=true
+          else
+               line="${text:0:i}"
+               if ! "$first"; then
+                    out "${cr}${spaces}"
+               fi
+               len=$len-$i-1
+               i=$i+1
+               text="${text:i:len}"
+               first=false
+               [[ $len -eq 0 ]] && last=true
+          fi
+          while read entry; do
+              $print_function "$entry" ; out " "
+          done <<< "$(tr ' ' '\n' <<< "$line")"
+          "$last" && break
+     done
+     return 0
+}
+
 is_number() {
      [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
           return 0 || \
@@ -4758,6 +4817,44 @@ pr_ecdh_quality() {
      fi
 }
 
+pr_ecdh_curve_quality() {
+     curve="$1"
+     local -i bits=0
+     
+     case "$curve" in
+          "sect163k1") bits=163  ;; 
+          "sect163r1") bits=162  ;; 
+          "sect163r2") bits=163  ;; 
+          "sect193r1") bits=193  ;; 
+          "sect193r2") bits=193  ;; 
+          "sect233k1") bits=232  ;; 
+          "sect233r1") bits=233  ;; 
+          "sect239k1") bits=238  ;; 
+          "sect283k1") bits=281  ;; 
+          "sect283r1") bits=282  ;; 
+          "sect409k1") bits=407 ;; 
+          "sect409r1") bits=409  ;; 
+          "sect571k1") bits=570  ;; 
+          "sect571r1") bits=570  ;; 
+          "secp160k1") bits=161  ;; 
+          "secp160r1") bits=161  ;; 
+          "secp160r2") bits=161  ;; 
+          "secp192k1") bits=192  ;; 
+          "prime192v1") bits=192  ;; 
+          "secp224k1") bits=225  ;; 
+          "secp224r1") bits=224  ;; 
+          "secp256k1") bits=256  ;; 
+          "prime256v1") bits=256  ;; 
+          "secp384r1") bits=384  ;; 
+          "secp521r1") bits=521  ;; 
+          "brainpoolP256r1") bits=256  ;; 
+          "brainpoolP384r1") bits=384  ;; 
+          "brainpoolP512r1") bits=512  ;; 
+          "X25519") bits=253  ;; 
+          "X448") bits=448  ;; 
+     esac
+     pr_ecdh_quality "$bits" "$curve"
+}
 
 # arg1: file with input for grepping the bit length for ECDH/DHE
 # arg2: whether to print warning "old fart" or not (empty: no)
@@ -5356,7 +5453,7 @@ cipher_pref_check() {
           if [[ -n "$order" ]]; then
                outln
                out "$(printf "    %-10s" "$proto: ")"
-               out "$order"
+               out_row_aligned_max_width "$order" "               " $TERM_WIDTH out
                fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
           fi
      done
@@ -5370,7 +5467,7 @@ cipher_pref_check() {
                order=""
                $OPENSSL s_client $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-               out "$(printf "    %-10s %s " "$p:" "$cipher")"
+               out "$(printf "    %-10s " "$p:")"
                tested_cipher="-"$cipher
                order="$cipher"
                if ! "$FAST"; then
@@ -5378,11 +5475,11 @@ cipher_pref_check() {
                          $OPENSSL s_client -cipher "ALL:$tested_cipher" $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                          sclient_connect_successful $? $TMPFILE || break
                          cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-                         out "$cipher "
                          tested_cipher="$tested_cipher:-$cipher"
                          order+=" $cipher"
                     done
                fi
+               out_row_aligned_max_width "$order" "               " $TERM_WIDTH out
                outln
                [[ -n $order ]] && fileout "order_spdy_$p" "INFO" "Default cipher order for SPDY protocol $p: $order"
           done
@@ -5949,7 +6046,7 @@ certificate_info() {
      local ocsp_response_status=$6
      local sni_used=$7
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
-     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san cn
+     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
@@ -6229,10 +6326,10 @@ certificate_info() {
      out "$indent"; pr_bold " subjectAltName (SAN)         "
      if [[ -n "$sans" ]]; then
           while read san; do
-               [[ -n "$san" ]] && pr_italic "$san"
-               out " "
+               [[ -n "$san" ]] && all_san+="$san "
           done <<< "$sans"
-          fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $sans"
+          out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH pr_italic
+          fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
           out "-- "
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : --"
@@ -6503,7 +6600,7 @@ certificate_info() {
      caa="$(get_caa_rr_record $NODE)"
      if [[ -n "$caa" ]]; then
           pr_done_good "OK"; out " (" ; pr_italic "$caa"; out ")"
-          fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : offered"
+          fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : \"$caa\" "
      else
           pr_svrty_low "--"
           fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
@@ -6666,7 +6763,7 @@ run_server_defaults() {
           fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
      else
 #FIXME: we rather want to have the chance to print each ext in italcs or another format. Atm is a string of quoted strings -- that needs to be fixed at the root
-          outln "$TLS_EXTENSIONS"
+          out_row_aligned_max_width "$TLS_EXTENSIONS" "                              " $TERM_WIDTH out; outln
           fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
 
@@ -6714,9 +6811,9 @@ run_pfs() {
      local -a curves_ossl_output=("K-163" "sect163r1" "B-163" "sect193r1" "sect193r2" "K-233" "B-233" "sect239k1" "K-283" "B-283" "K-409" "B-409" "K-571" "B-571" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "P-192" "secp224k1" "P-224" "secp256k1" "P-256" "P-384" "P-521" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
      local -a ffdhe_groups_hex=("01,00" "01,01" "01,02" "01,03" "01,04")
      local -a ffdhe_groups_output=("ffdhe2048" "ffdhe3072" "ffdhe4096" "ffdhe6144" "ffdhe8192")
-     local -a supported_curve bits
+     local -a supported_curve
      local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
-     local pfs_ciphers curves_offered="" curves_offered_text="" curves_to_test temp
+     local pfs_ciphers curves_offered="" curves_to_test temp
      local len1 len2 curve_found
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
@@ -6868,7 +6965,6 @@ run_pfs() {
                          pfs_cipher="${rfc_ciph[i]}"
                     fi
                     pfs_ciphers+="$pfs_cipher "
-                    ! "$WIDE" && out "$pfs_cipher "
 
                     if [[ "${ciph[i]}" == "ECDHE-"* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_ECDHE_"* ]] ); then
                          ecdhe_offered=true
@@ -6892,10 +6988,9 @@ run_pfs() {
                     outln "${sigalg[i]}"
                fi
           done
-
+          ! "$WIDE" && out_row_aligned_max_width "$pfs_ciphers" "                              " $TERM_WIDTH out
           debugme echo $pfs_offered
           "$WIDE" || outln
-
           fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
      fi
 
@@ -6942,9 +7037,6 @@ run_pfs() {
                     done
                     [[ $i -eq $high ]] && break
                     supported_curve[i]=true
-                    bits[i]=$(awk -F',' '{ print $3 }' <<< $temp)
-                    grep -q bits <<< ${bits[i]} || bits[i]=$(awk -F',' '{ print $2 }' <<< $temp)
-                    bits[i]=$(tr -d ' bits' <<< ${bits[i]})
                done
           done
      fi
@@ -6968,9 +7060,6 @@ run_pfs() {
                done
                [[ $i -eq $nr_curves ]] && break
                supported_curve[i]=true
-               bits[i]=$(awk -F',' '{ print $3 }' <<< $temp)
-               grep -q bits <<< ${bits[i]} || bits[i]=$(awk -F',' '{ print $2 }' <<< $temp)
-               bits[i]=$(tr -d ' bits' <<< ${bits[i]})
           done
      fi
      if "$ecdhe_offered"; then
@@ -6980,9 +7069,8 @@ run_pfs() {
           if [[ -n "$curves_offered" ]]; then
                "$WIDE" && outln
                pr_bold " Elliptic curves offered:     "
-               for (( i=0; i < nr_curves; i++ )); do
-                    "${supported_curve[i]}" && pr_ecdh_quality "${bits[i]}" "${curves_ossl[i]} "
-               done
+               out_row_aligned_max_width "$curves_offered" "                              " $TERM_WIDTH pr_ecdh_curve_quality
+               outln
                fileout "ecdhe_curves" "INFO" "Elliptic curves offered $curves_offered"
           fi
      fi
@@ -10521,17 +10609,13 @@ run_beast(){
 
           if ! "$WIDE"; then
                if [[ -n "$detected_cbc_ciphers" ]]; then
-                    detected_cbc_ciphers=$(echo "$detected_cbc_ciphers" | \
-                         sed -e "s/ /\\${cr}      ${spaces}/12" \
-                             -e "s/ /\\${cr}      ${spaces}/9" \
-                             -e "s/ /\\${cr}      ${spaces}/6" \
-                             -e "s/ /\\${cr}      ${spaces}/3")
                     fileout "cbc_$proto" "MEDIUM" "BEAST: CBC ciphers for $(toupper $proto): $detected_cbc_ciphers" "$cve" "$cwe" "$hint"
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto):"
                     [[ -n "$higher_proto_supported" ]] && \
-                         pr_svrty_lowln "$detected_cbc_ciphers" || \
-                         pr_svrty_mediumln "$detected_cbc_ciphers"
+                         out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH pr_svrty_low || \
+                         out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH pr_svrty_medium
+                    outln
                     detected_cbc_ciphers=""  # empty for next round
                     first=false
                else
@@ -10857,11 +10941,10 @@ run_rc4() {
                          fi
                     fi
                     outln "${sigalg[i]}"
-               elif "${ciphers_found[i]}"; then
-                    pr_svrty_high "${ciph[i]} "
                fi
                "${ciphers_found[i]}" && rc4_detected+="${ciph[i]} "
           done
+          ! "$WIDE" && out_row_aligned_max_width "$rc4_detected" "                                                                " $TERM_WIDTH pr_svrty_high
           outln
           "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
           fileout "rc4" "HIGH" "RC4: VULNERABLE, Detected ciphers: $rc4_detected" "$cve" "$cwe" "$hint"
@@ -11722,41 +11805,64 @@ get_aaaa_record() {
 # RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
 # arg1: domain to check for
 get_caa_rr_record() {
-     local caa=""
+     local raw_caa="" 
+     local caa_flag
+     local -i len_caa_property
+     local caa_property_name
+     local caa_property_value
      local saved_openssl_conf="$OPENSSL_CONF"
 
+     # if there's a type257 record there are two output formats here, mostly depending on age of distribution
+     # rougly that's the difference between text and binary format
+     # 1) 'google.com has CAA record 0 issue "symantec.com"' 
+     # 2) 'google.com has TYPE257 record \# 19 0005697373756573796D616E7465632E636F6D'
+     # for dig +short the output always starts with '0 issue [..]' or '\# 19 [..]' so we normalize thereto to keep caa_flag, caa_property
+     # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
      if which dig &> /dev/null; then
-          caa="$(dig $1 type257 +short | awk '{ print $3 }')"
+          raw_caa="$(dig $1 type257 +short)"
           # empty if no CAA record
      elif which host &> /dev/null; then
-          caa="$(host -t type257 $1)"
-          if grep -wq issue <<< "$caa" && grep -wvq "has no CAA" <<< "$caa"; then
-               caa="$(awk '/issue/ { print $NF }' <<< "$caa")"
+          raw_caa="$(host -t type257 $1)"
+          if egrep -wvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
+               raw_caa="$(sed -e 's/^.*has CAA record //' -e 's/^.*has TYPE257 record //' <<< "$raw_caa")"
           fi
      elif which nslookup &> /dev/null; then
-          caa="$(nslookup -type=type257 $1)"
-          if grep -wq issue <<< "$caa" && grep -wvq "No answer" <<< "$caa"; then
-               caa="$(awk '/issue/ { print $NF }' <<< "$caa")" 
+          raw_caa="$(nslookup -type=type257 $1 | grep -w rdata_257)"
+          if [[ -n "$raw_caa" ]]; then
+               raw_caa="$(sed 's/^.*rdata_257 = //' <<< "$raw_caa")" 
           fi
      else
           return 1
           # No dig, host, or nslookup --> complaint was elsewhere already and except for one which has drill only we don't get here
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
+     debugme echo $raw_caa 
 
-     # try to convert old return values
-     if [[ "$caa" =~ ^[A-F0-9]+$ ]]; then
-          caa=${caa:4:100}                   # ignore the first 4 bytes
-          caa=$(hex2ascii "$caa" | sed 's/^issue//g')
+     # '# 19' for google.com is the tag length probably --> we use this also to identify the binary format
+     if [[ "$raw_caa" =~ \#\ [0-9][0-9]\ [A-F0-9]+$ ]]; then
+          raw_caa=$(awk '{ print $NF }' <<< $raw_caa)       # caa_length would be awk '{ print $(NF-1) }' but we don't need it
+          if [[ "${raw_caa:0:2}" == "00" ]]; then           # probably the flag
+               caa_flag="0"
+               len_caa_property=${raw_caa:2:2}              # implicit type casting, for google we have 05 here as a string
+               len_caa_property=$((len_caa_property*2))     # =>word! Now get name from 4th and value from 4th+len position...
+               caa_property_name=$(hex2ascii ${raw_caa:4:$len_caa_property})
+               caa_property_value=$(hex2ascii ${raw_caa:$((4+len_caa_property)):100})
+          else
+               outln "please report unknown CAA flag $caa_flag @ $NODE"
+          fi
+     elif grep -q '"' <<< $raw_caa; then
+          raw_caa=${raw_caa//\"/}                           # strip " first. Now we should have flag, name, value
+          caa_flag=$(awk '{ print $1 }' <<< $raw_caa)
+          caa_property_name=$(awk '{ print $2 }' <<< $raw_caa)
+          caa_property_value=$(awk '{ print $3 }' <<< $raw_caa)
      else
-          caa=${caa//\"/}                    # strip "
+          # no caa record
+          return 1
      fi
-     echo "$caa"
+     echo "$caa_property_name: $caa_property_value"
+
 # to do:
-#    1: check old binaries whether they support this record at all
-#    done (2: check whether hexstring is returned and deal with it)
-#    3: check more than domainname, see https://tools.ietf.org/html/rfc6844#section-3
 #    4: check whether $1 is a CNAME and take this
 #    5: query with drill
      return 0
