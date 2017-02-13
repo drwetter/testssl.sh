@@ -40,8 +40,8 @@ testssl.sh is working on every Linux/BSD distribution out of the box. In 2.9dev 
 of the limitations of disabled features from the openssl client are gone due to bash-socket-based 
 checks. testssl.sh also works on otherunixoid system out of the box, supposed they have 
 `/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU versions 
-of grep and sed installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL version 
->= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to 
+of grep and sed installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL 
+version  >= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to 
 display bit strengths for key exchanges.
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
