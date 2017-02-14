@@ -977,26 +977,24 @@ fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
 html_header() {
      local fname_prefix="$1"
 
-     if "$HTMLHEADER"; then
-          [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"_"$PORT"
-          if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
-               rm -f "$HTMLFILE"
-          elif [[ -z "$HTMLFILE" ]]; then
-               HTMLFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".html)
-          else
-               HTMLFILE=$HTMLFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".html)
-          fi
-          out_html "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
-          out_html "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
-          out_html "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
-          out_html "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
-          out_html "<head>\n"
-          out_html "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
-          out_html "<title>testssl.sh</title>\n"
-          out_html "</head>\n"
-          out_html "<body>\n"
-          out_html "<pre>\n"
+     [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"_"$PORT"
+     if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
+          rm -f "$HTMLFILE"
+     elif [[ -z "$HTMLFILE" ]]; then
+          HTMLFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".html)
+     else
+          HTMLFILE=$HTMLFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".html)
      fi
+     out_html "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
+     out_html "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
+     out_html "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
+     out_html "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
+     out_html "<head>\n"
+     out_html "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
+     out_html "<title>testssl.sh</title>\n"
+     out_html "</head>\n"
+     out_html "<body>\n"
+     out_html "<pre>\n"
      return 0
 }
 
@@ -12999,7 +12997,8 @@ lets_roll() {
 
 initialize_globals
 parse_cmd_line "$@"
-if ! "$do_mass_testing" || ( [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ); then
+! "$do_html" && HTMLHEADER=false
+if "$HTMLHEADER" && ( ! "$do_mass_testing" || ( [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ) ); then
      if "$do_display_only"; then
           html_header "local-ciphers"
      elif "$do_mass_testing"; then
@@ -13007,7 +13006,7 @@ if ! "$do_mass_testing" || ( [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ); t
      elif "$do_mx_all_ips"; then
           html_header "mx-$URI"
      else
-          parse_hn_port "${URI}"    # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
+          ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) && parse_hn_port "${URI}"    # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
           html_header
      fi
 fi
@@ -13043,6 +13042,7 @@ if $do_mx_all_ips; then
      run_mx_all_ips "${URI}" $PORT # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
      ret=$?
 else
+     [[ -z "$NODE" ]] && parse_hn_port "${URI}"                                 # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
      prepare_logging
      if ! determine_ip_addresses; then
           fatal "No IP address could be determined" 2
