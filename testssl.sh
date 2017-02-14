@@ -1081,7 +1081,7 @@ filter_input() {
 # dl's any URL (argv1) via HTTP 1.1 GET from port 80, arg2: file to store http body
 # proxy is not honored (see cmd line switches)
 http_get() {
-     local proto z 
+     local proto z
      local node="" query=""
      local dl="$2"
      local useragent="$UA_STD"
@@ -4609,40 +4609,40 @@ run_std_cipherlists() {
 pr_ecdh_curve_quality() {
      curve="$1"
      local -i bits=0
-     
+
      case "$curve" in
-          "sect163k1") bits=163  ;; 
-          "sect163r1") bits=162  ;; 
-          "sect163r2") bits=163  ;; 
-          "sect193r1") bits=193  ;; 
-          "sect193r2") bits=193  ;; 
-          "sect233k1") bits=232  ;; 
-          "sect233r1") bits=233  ;; 
-          "sect239k1") bits=238  ;; 
-          "sect283k1") bits=281  ;; 
-          "sect283r1") bits=282  ;; 
-          "sect409k1") bits=407 ;; 
-          "sect409r1") bits=409  ;; 
-          "sect571k1") bits=570  ;; 
-          "sect571r1") bits=570  ;; 
-          "secp160k1") bits=161  ;; 
-          "secp160r1") bits=161  ;; 
-          "secp160r2") bits=161  ;; 
-          "secp192k1") bits=192  ;; 
-          "prime192v1") bits=192  ;; 
-          "secp224k1") bits=225  ;; 
-          "secp224r1") bits=224  ;; 
-          "secp256k1") bits=256  ;; 
-          "prime256v1") bits=256  ;; 
-          "secp384r1") bits=384  ;; 
-          "secp521r1") bits=521  ;; 
-          "brainpoolP256r1") bits=256  ;; 
-          "brainpoolP384r1") bits=384  ;; 
-          "brainpoolP512r1") bits=512  ;; 
-          "X25519") bits=253  ;; 
-          "X448") bits=448  ;; 
+          "sect163k1") bits=163  ;;
+          "sect163r1") bits=162  ;;
+          "sect163r2") bits=163  ;;
+          "sect193r1") bits=193  ;;
+          "sect193r2") bits=193  ;;
+          "sect233k1") bits=232  ;;
+          "sect233r1") bits=233  ;;
+          "sect239k1") bits=238  ;;
+          "sect283k1") bits=281  ;;
+          "sect283r1") bits=282  ;;
+          "sect409k1") bits=407 ;;
+          "sect409r1") bits=409  ;;
+          "sect571k1") bits=570  ;;
+          "sect571r1") bits=570  ;;
+          "secp160k1") bits=161  ;;
+          "secp160r1") bits=161  ;;
+          "secp160r2") bits=161  ;;
+          "secp192k1") bits=192  ;;
+          "prime192v1") bits=192  ;;
+          "secp224k1") bits=225  ;;
+          "secp224r1") bits=224  ;;
+          "secp256k1") bits=256  ;;
+          "prime256v1") bits=256  ;;
+          "secp384r1") bits=384  ;;
+          "secp521r1") bits=521  ;;
+          "brainpoolP256r1") bits=256  ;;
+          "brainpoolP384r1") bits=384  ;;
+          "brainpoolP512r1") bits=512  ;;
+          "X25519") bits=253  ;;
+          "X448") bits=448  ;;
      esac
-     
+
      if [[ "$bits" -le 80 ]]; then      # has that ever existed?
           pr_svrty_critical "$curve"
      elif [[ "$bits" -le 108 ]]; then   # has that ever existed?
@@ -7631,7 +7631,7 @@ get_dh_ephemeralkey() {
           len1="82$(printf "%04x" $((dh_param_len/2)))"
      fi
      dh_param="30${len1}${dh_p}${dh_g}"
-     
+
      # Make a SEQUENCE of the paramters SEQUENCE and the OID
      dh_param_len=22+${#dh_param}
      if [[ $dh_param_len -lt 256 ]]; then
@@ -9982,7 +9982,7 @@ run_logjam() {
      local cve="CVE-2015-4000"
      local cwe="CWE-310"
      local hint=""
-     local server_key_exchange ephemeral_pub key_bitstring="" 
+     local server_key_exchange ephemeral_pub key_bitstring=""
      local dh_p=""
      local spaces="                                           "
      local vuln_exportdh_ciphers=false
@@ -10457,7 +10457,7 @@ run_beast(){
                               fi
                          fi
                          outln "${sigalg[i]}"
-                    fi 
+                    fi
                done
           fi
 
@@ -11654,7 +11654,7 @@ get_aaaa_record() {
 # RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
 # arg1: domain to check for
 get_caa_rr_record() {
-     local raw_caa="" 
+     local raw_caa=""
      local caa_flag
      local -i len_caa_property
      local caa_property_name
@@ -11663,7 +11663,7 @@ get_caa_rr_record() {
 
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
      # rougly that's the difference between text and binary format
-     # 1) 'google.com has CAA record 0 issue "symantec.com"' 
+     # 1) 'google.com has CAA record 0 issue "symantec.com"'
      # 2) 'google.com has TYPE257 record \# 19 0005697373756573796D616E7465632E636F6D'
      # for dig +short the output always starts with '0 issue [..]' or '\# 19 [..]' so we normalize thereto to keep caa_flag, caa_property
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
@@ -11671,6 +11671,9 @@ get_caa_rr_record() {
      if which dig &> /dev/null; then
           raw_caa="$(dig $1 type257 +short)"
           # empty if no CAA record
+     elif which drill &> /dev/null; then
+          a="$1"
+          raw_caa="$(drill $a type257 | awk '/'"^${a}"'.*CAA/ { print $5,$6,$7 }')"
      elif which host &> /dev/null; then
           raw_caa="$(host -t type257 $1)"
           if egrep -wvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
@@ -11679,14 +11682,14 @@ get_caa_rr_record() {
      elif which nslookup &> /dev/null; then
           raw_caa="$(nslookup -type=type257 $1 | grep -w rdata_257)"
           if [[ -n "$raw_caa" ]]; then
-               raw_caa="$(sed 's/^.*rdata_257 = //' <<< "$raw_caa")" 
+               raw_caa="$(sed 's/^.*rdata_257 = //' <<< "$raw_caa")"
           fi
      else
           return 1
-          # No dig, host, or nslookup --> complaint was elsewhere already and except for one which has drill only we don't get here
+          # No dig, drill, host, or nslookup --> complaint was elsewhere already
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     debugme echo $raw_caa 
+     debugme echo $raw_caa
 
      # '# 19' for google.com is the tag length probably --> we use this also to identify the binary format
      if [[ "$raw_caa" =~ \#\ [0-9][0-9]\ [A-F0-9]+$ ]]; then
@@ -11713,7 +11716,6 @@ get_caa_rr_record() {
 
 # to do:
 #    4: check whether $1 is a CNAME and take this
-#    5: query with drill
      return 0
 }
 
