@@ -4742,7 +4742,7 @@ read_dhbits_from_file() {
 
 
 run_server_preference() {
-     local cipher1 cipher2
+     local cipher1 cipher2 prev_cipher=""
      local default_cipher default_cipher_ossl default_proto
      local remark4default_cipher supported_sslv2_ciphers
      local -a cipher proto
@@ -5013,7 +5013,7 @@ run_server_preference() {
 
                for i in 1 2 3 4 5 6; do
                     if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
-                          if [[ -z "${cipher[i-1]}" ]]; then                              # previous one empty
+                          if [[ -z "$prev_cipher" ]]; then                                # previous one empty
                               #outln
                               if [[ -z "$SHOW_RFC" ]]; then
                                    printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"     # print out both
@@ -5021,7 +5021,7 @@ run_server_preference() {
                                    printf -- "     %-51s %s" "${cipher[i]}:" "${proto[i]}"     # print out both
                               fi
                           else                                                            # previous NOT empty
-                              if [[ "${cipher[i-1]}" == "${cipher[i]}" ]]; then           # and previous protocol same cipher
+                              if [[ "$prev_cipher" == "${cipher[i]}" ]]; then             # and previous protocol same cipher
                                    out ", ${proto[i]}"                                    # same cipher --> only print out protocol behind it
                               else
                                    outln
@@ -5032,6 +5032,7 @@ run_server_preference() {
                                    fi
                              fi
                           fi
+                          prev_cipher="${cipher[i]}"
                     fi
                     fileout "order_${proto[i]}_cipher" "INFO" "Default cipher on ${proto[i]}: ${cipher[i]} $remark4default_cipher"
                done
