@@ -5013,24 +5013,15 @@ run_server_preference() {
 
                for i in 1 2 3 4 5 6; do
                     if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
-                          if [[ -z "$prev_cipher" ]]; then                                # previous one empty
-                              #outln
+                          if [[ -z "$prev_cipher" ]] || [[ "$prev_cipher" != "${cipher[i]}" ]]; then
+                              [[ -n "$prev_cipher" ]] && outln
                               if [[ -z "$SHOW_RFC" ]]; then
                                    printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"     # print out both
                               else
                                    printf -- "     %-51s %s" "${cipher[i]}:" "${proto[i]}"     # print out both
                               fi
-                          else                                                            # previous NOT empty
-                              if [[ "$prev_cipher" == "${cipher[i]}" ]]; then             # and previous protocol same cipher
-                                   out ", ${proto[i]}"                                    # same cipher --> only print out protocol behind it
-                              else
-                                   outln
-                                   if [[ -z "$SHOW_RFC" ]]; then
-                                        printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}"     # print out both
-                                   else
-                                        printf -- "     %-51s %s" "${cipher[i]}:" "${proto[i]}"     # print out both
-                                   fi
-                             fi
+                          else
+                              out ", ${proto[i]}"           # same cipher --> only print out protocol behind it
                           fi
                           prev_cipher="${cipher[i]}"
                     fi
