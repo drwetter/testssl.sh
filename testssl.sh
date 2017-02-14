@@ -9273,7 +9273,7 @@ ok_ids(){
 #FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
 run_ccs_injection(){
      local tls_proto_offered tls_hexcode ccs_message client_hello byte6 sockreply
-     local -i retval ret lines_returned
+     local -i retval ret
      local tls_hello_ascii=""
      local cve="CVE-2014-0224"
      local cwe="CWE-310"
@@ -9342,13 +9342,12 @@ run_ccs_injection(){
      if [[ $DEBUG -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -20
           outln "[...]"
-          outln "\npayload #1 with TLS version $tls_hexcode:"
+          out "\nsending payload #1 with TLS version $tls_hexcode:  "
      fi
      rm "$SOCK_REPLY_FILE"
-
 # ... and then send the a change cipher spec message
      socksend "$ccs_message" 1 || ok_ids
-     sockread_serverhello 2048 $CCS_MAX_WAITSOCK
+     sockread_serverhello 4096 $CCS_MAX_WAITSOCK
      if [[ $DEBUG -ge 3 ]]; then
           outln "\n1st reply: "
           hexdump -C "$SOCK_REPLY_FILE" | head -20
@@ -9356,43 +9355,40 @@ run_ccs_injection(){
 #       ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
 #    or just timed out
           outln
-          outln "payload #2 with TLS version $tls_hexcode:"
+          out "sending payload #2 with TLS version $tls_hexcode:  "
      fi
      rm "$SOCK_REPLY_FILE"
 
      socksend "$ccs_message" 2 || ok_ids
-     sockread_serverhello 2048 $CCS_MAX_WAITSOCK
+     sockread_serverhello 4096 $CCS_MAX_WAITSOCK
      retval=$?
 
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
-     debugme echo "tls_content_type: ${tls_hello_ascii:0:2}"
-     debugme echo "tls_protocol: ${tls_hello_ascii:2:4}"
-     lines_returned=$(count_lines "$(hexdump -ve '16/1 "%02x " " \n"' "$SOCK_REPLY_FILE")")
-     debugme echo "lines new: $lines_returned, byte6: ${tls_hello_ascii:12:2}"
+     byte6="${tls_hello_ascii:12:2}"
+     debugme echo "tls_content_type: ${tls_hello_ascii:0:2} | tls_protocol: ${tls_hello_ascii:2:4} | byte6: $byte6"
 
      if [[ $DEBUG -ge 3 ]]; then
           outln "\n2nd reply: "
           hexdump -C "$SOCK_REPLY_FILE"
           outln
      fi
-     sockreply=$(cat "$SOCK_REPLY_FILE" 2>/dev/null)
 
-     byte6=$(echo "$sockreply" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//')
-     debugme echo "lines: $lines_returned, byte6: $byte6"
 # not ok:  15 | 0301    | 02 | 02  | 15
 #       ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
 #
 # ok:  0a or nothing: ==> RST
 
-     if [[ "$byte6" == "0a" ]] || [[ "$lines_returned" -gt 1 ]]; then
+     if [[ -z "${tls_hello_ascii:0:12}" ]]; then
+          # empty reply
           pr_done_best "not vulnerable (OK)"
           if [[ $retval -eq 3 ]]; then
+### what?
                fileout "ccs" "OK" "CCS: not vulnerable (timed out)" "$cve" "$cwe"
           else
                fileout "ccs" "OK" "CCS: not vulnerable" "$cve" "$cwe"
           fi
           ret=0
-     else
+     elif [[ "$byte6" == "15" ]] && [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
           pr_svrty_critical "VULNERABLE (NOT ok)"
           if [[ $retval -eq 3 ]]; then
                fileout "ccs" "CRITICAL" "CCS: VULNERABLE (timed out)" "$cve" "$cwe" "$hint"
@@ -9400,8 +9396,17 @@ run_ccs_injection(){
                fileout "ccs" "CRITICAL" "CCS: VULNERABLE" "$cve" "$cwe" "$hint"
           fi
           ret=1
+     elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != "03" ]]; then
+          pr_warning "test failed"
+          out ", probably read buffer too small (${tls_hello_ascii:0:14})"
+          fileout "ccs" "WARN" "CCS: test failed, probably read buffer too small (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
+          ret=7
+     else
+          pr_warning "test failed "
+          out "around line $LINENO (debug info: ${tls_hello_ascii:0:14})"
+          fileout "ccs" "WARN" "CCS: test failed, around line $LINENO, debug info (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
+          ret=7
      fi
-     [[ $retval -eq 3 ]] && out ", timed out"
      outln
 
      TMPFILE="$SOCK_REPLY_FILE"
