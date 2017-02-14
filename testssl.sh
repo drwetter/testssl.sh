@@ -4506,7 +4506,7 @@ run_protocols() {
                ;;                                  # GCM cipher in TLS 1.2: very good!
           1)
                pr_svrty_mediumln "not offered"
-               if ! "$using_sockets" || ! "$EXPERIMENTAL" || [[ -z $latest_supported ]]; then
+               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered" # no GCM, penalty
                else
                     pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string"
