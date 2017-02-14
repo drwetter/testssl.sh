@@ -569,7 +569,7 @@ html_reserved(){
 
 # a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
 out_html() {
-     "$do_html" && printf -- "%b" "${1//%/%%}" >> "$HTMLFILE"
+     "$do_html" && [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "${1//%/%%}" >> "$HTMLFILE"
 }
 
 out() {
@@ -975,8 +975,17 @@ fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
 ################### FILE FORMATING END #########################
 
 html_header() {
+     local fname_prefix="$1"
+
      if "$HTMLHEADER"; then
-          rm -f "$HTMLFILE"
+          [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"_"$PORT"
+          if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
+               rm -f "$HTMLFILE"
+          elif [[ -z "$HTMLFILE" ]]; then
+               HTMLFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".html)
+          else
+               HTMLFILE=$HTMLFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".html)
+          fi
           out_html "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
           out_html "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
           out_html "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
@@ -989,6 +998,15 @@ html_header() {
           out_html "<pre>\n"
      fi
      return 0
+}
+
+html_banner() {
+     if "$QUIET" && "$HTMLHEADER"; then
+          out_html "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
+          out_html "## at $HNAME:$OPENSSL_LOCATION\n"
+          out_html "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
+          out_html "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n\n"
+     fi
 }
 
 html_footer() {
@@ -11374,6 +11392,7 @@ file output options (can also be preset via environment variables):
      --jsonfile-pretty <jsonfile>  additional pretty structured output as JSON to the specified file
      --csv                         additional output of findings to CSV file <NODE-YYYYMMDD-HHMM.csv> in cwd
      --csvfile <csvfile>           additional output as CSV to the specified file
+     --html                        additional output as HTML to file <NODE-YYYYMMDD-HHMM.html>
      --htmlfile <htmlfile>         additional output as HTML to the specifed file
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
@@ -12356,10 +12375,12 @@ run_mass_testing_parallel() {
 run_mass_testing() {
      local cmdline=""
      local global_cmdline=${CMDLINE%%--file*}
+     local html_header=""
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
+     [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && html_header="--no-html-header"
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
      APPEND=false # Make sure we close out our files
@@ -12367,7 +12388,7 @@ run_mass_testing() {
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q --no-html-header --append $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch -q $html_header --append $cmdline"
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$cmdline"
           $cmdline
@@ -12783,13 +12804,13 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
                     ;;
+               --html)
+                    do_html=true
+                    ;;  # DEFINITION of HTMLFILE is not arg specified: automagically in parse_hn_port()
+                    # following does the same but we can specify a file location additionally
                --htmlfile)
                     HTMLFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
-                    if [[ -d "$HTMLFILE" ]]; then
-                         pr_warningln_term_term "$HTMLFILE exists and is a directory"
-                         exit -6
-                    fi
                     do_html=true
                     ;;
                --no-html-header)
@@ -12978,7 +12999,18 @@ lets_roll() {
 
 initialize_globals
 parse_cmd_line "$@"
-html_header
+if ! "$do_mass_testing" || ( [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ); then
+     if "$do_display_only"; then
+          html_header "local-ciphers"
+     elif "$do_mass_testing"; then
+          html_header
+     elif "$do_mx_all_ips"; then
+          html_header "mx-$URI"
+     else
+          parse_hn_port "${URI}"    # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
+          html_header
+     fi
+fi
 get_install_dir
 set_color_functions
 maketempf
@@ -13003,6 +13035,7 @@ if $do_mass_testing; then
      exit $?
 fi
 
+html_banner
 #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
 if $do_mx_all_ips; then
      query_globals                 # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
@@ -13010,7 +13043,6 @@ if $do_mx_all_ips; then
      run_mx_all_ips "${URI}" $PORT # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
      ret=$?
 else
-     parse_hn_port "${URI}"                                                     # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
      prepare_logging
      if ! determine_ip_addresses; then
           fatal "No IP address could be determined" 2
