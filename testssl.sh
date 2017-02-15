@@ -4701,8 +4701,9 @@ run_protocols() {
                add_tls_offered "tls1_2"
                ;;                                  # GCM cipher in TLS 1.2: very good!
           1)
-               pr_svrty_mediumln "not offered"
-               if ! "$using_sockets" || ! "$EXPERIMENTAL" || [[ -z $latest_supported ]]; then
+               pr_svrty_medium "not offered"
+               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
+                    outln
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered" # no GCM, penalty
                else
                     pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string"
@@ -7218,7 +7219,7 @@ spdy_pre(){
           return 1
      fi
      if [[ -n "$PROXY" ]]; then
-          [[ -n "$1" ]] && pr_warning " $1 "
+          [[ -n "$1" ]] && pr_warning "$1"
           pr_warning "not tested as proxies do not support proxying it"
           fileout "spdy_npn" "WARN" "SPDY/NPN : not tested as proxies do not support proxying it"
           return 1
@@ -7257,7 +7258,7 @@ run_spdy() {
      local -i ret=0
 
      pr_bold " SPDY/NPN   "
-     if ! spdy_pre ; then
+     if ! spdy_pre; then
           outln
           return 0
      fi
@@ -7295,7 +7296,7 @@ run_http2() {
      local alpn_finding=""
 
      pr_bold " HTTP2/ALPN "
-     if ! http2_pre ; then
+     if ! http2_pre; then
           outln
           return 0
      fi
@@ -11368,8 +11369,8 @@ tuning / connect options (most also can be preset via environment variables):
      --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
-     --proxy <host>:<port>         connect via the specified HTTP proxy
-     -6                            use also IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
+     --proxy <host:port|auto>      connect via the specified HTTP proxy, auto: autodetermination from \$env (\$http(s)_proxy)
+     -6                            also use IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
      -n, --nodns                   do not try any DNS lookup
@@ -11824,9 +11825,9 @@ check_resolver_bins() {
 }
 
 # arg1: a host name. Returned will be 0-n IPv4 addresses
+# watch out: $1 can also be a cname! --> all checked
 get_a_record() {
      local ip4=""
-     local cname_temp=""
      local saved_openssl_conf="$OPENSSL_CONF"
 
      "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
@@ -11842,25 +11843,20 @@ get_a_record() {
      fi
      if [[ -z "$ip4" ]]; then
           if which dig &> /dev/null ; then
-               cname_temp=$(dig +short -t CNAME "$1" 2>/dev/null)
-               if [[ -n "$cname_temp" ]]; then
-                    ip4=$(filter_ip4_address $(dig +short -t a "$cname_temp" 2>/dev/null | sed '/^;;/d'))
-               else
-                    ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | sed '/^;;/d'))
-               fi
+               ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | awk '/^[0-9]/'))
           fi
      fi
      if [[ -z "$ip4" ]]; then
           which host &> /dev/null && \
-               ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | grep -v alias | sed 's/^.*address //'))
+               ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | awk '/address/ { print $NF }'))
      fi
      if [[ -z "$ip4" ]]; then
           which drill &> /dev/null && \
-               ip4=$(filter_ip4_address $(drill a "$1" 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d'))
+               ip4=$(filter_ip4_address $(drill a "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
      fi
      if [[ -z "$ip4" ]]; then
           if which nslookup &>/dev/null; then
-               ip4=$(filter_ip4_address $(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name))
+               ip4=$(filter_ip4_address $(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/ { getline; print $NF }'))
           fi
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
@@ -11868,6 +11864,7 @@ get_a_record() {
 }
 
 # arg1: a host name. Returned will be 0-n IPv6 addresses
+# watch out: $1 can also be a cname! --> all checked
 get_aaaa_record() {
      local ip6=""
      local saved_openssl_conf="$OPENSSL_CONF"
@@ -11877,20 +11874,20 @@ get_aaaa_record() {
      if [[ -z "$ip6" ]]; then
           if [[ "$NODE" == *.local ]]; then
                if which avahi-resolve &>/dev/null; then
-                    ip6=$(filter_ip6_address $(avahi-resolve -6 -n "$NODE" 2>/dev/null | awk '{ print $2 }'))
+                    ip6=$(filter_ip6_address $(avahi-resolve -6 -n "$1" 2>/dev/null | awk '{ print $2 }'))
                elif which dig &>/dev/null; then
                     ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
                else
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable." -3
                fi
           elif which host &> /dev/null ; then
-               ip6=$(filter_ip6_address $(host -t aaaa "$NODE" | grep -v alias | grep -v "no AAAA record" | sed 's/^.*address //'))
+               ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
           elif which dig &> /dev/null; then
-               ip6=$(filter_ip6_address $(dig +short -t aaaa "$NODE" 2>/dev/null))
+               ip6=$(filter_ip6_address $(dig +short -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/'))
           elif which drill &> /dev/null; then
-               ip6=$(filter_ip6_address $(drill aaaa "$NODE" 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/^\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d'))
+               ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
           elif which nslookup &>/dev/null; then
-               ip6=$(filter_ip6_address $(nslookup -type=aaaa "$NODE" 2>/dev/null | grep -A10 Name | grep -v Name))
+               ip6=$(filter_ip6_address $(nslookup -type=aaaa "$1" 2>/dev/null | awk '/'"^${a}"'.*AAAA/ { print $NF }'))
           fi
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
@@ -11918,8 +11915,7 @@ get_caa_rr_record() {
           raw_caa="$(dig $1 type257 +short)"
           # empty if no CAA record
      elif which drill &> /dev/null; then
-          a="$1"
-          raw_caa="$(drill $a type257 | awk '/'"^${a}"'.*CAA/ { print $5,$6,$7 }')"
+          raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
      elif which host &> /dev/null; then
           raw_caa="$(host -t type257 $1)"
           if egrep -wvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
@@ -11965,18 +11961,20 @@ get_caa_rr_record() {
      return 0
 }
 
+# watch out: $1 can also be a cname! --> all checked
 get_mx_record() {
      local mx=""
      local saved_openssl_conf="$OPENSSL_CONF"
 
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
+     # we need tha last two columns here!
      if which host &> /dev/null; then
           mxs=$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')
      elif which dig &> /dev/null; then
-          mxs=$(dig +short -t MX "$1" 2>/dev/null)
+          mxs=$(dig +short -t MX "$1" 2>/dev/null | awk '/^[0-9]/')
      elif which drill &> /dev/null; then
-          mxs=$(drill mx "$1" 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
+          mxs=$(drill mx $1 | | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')
      elif which nslookup &> /dev/null; then
           mxs=$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')
      else
@@ -12064,7 +12062,7 @@ determine_rdns() {
      elif which host &> /dev/null; then
           rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
      elif which drill &> /dev/null; then
-          rDNS=$(drill -x ptr $nodeip 2>/dev/null | awk '/^\;\;\sANSWER\sSECTION\:$/,/\;\;\sAUTHORITY\sSECTION\:$/ { print $5,$6 }' | sed '/^\s$/d')
+          rDNS=$(drill -x ptr $nodeip 2>/dev/null | awk '/ANSWER SECTION/ { getline; print $NF }')
      elif which nslookup &> /dev/null; then
           rDNS=$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
      fi
@@ -12081,18 +12079,23 @@ check_proxy() {
           if ! "$HAS_PROXY"; then
                fatal "Your $OPENSSL is too old to support the \"-proxy\" option" -5
           fi
+          if [[ "$PROXY" == "auto" ]]; then
+               # get $ENV 
+               PROXY=${https_proxy#*\/\/}
+               [[ -z "$PROXY" ]] && PROXY=${http_proxy#*\/\/}
+               [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" 2
+          fi
           PROXYNODE=${PROXY%:*}
           PROXYPORT=${PROXY#*:}
-          is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" "2"
+          is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" 2
 
           #if is_ipv4addr "$PROXYNODE" || is_ipv6addr "$PROXYNODE" ; then
           # IPv6 via openssl -proxy: that doesn't work. Sockets does
-#FIXME: to finish this with LibreSSL which supports an IPv6 proxy
+#FIXME: finish this with LibreSSL which supports an IPv6 proxy
           if is_ipv4addr "$PROXYNODE"; then
                PROXYIP="$PROXYNODE"
           else
-               check_resolver_bins
-               PROXYIP=$(get_a_record $PROXYNODE 2>/dev/null | grep -v alias | sed 's/^.*address //')
+               PROXYIP=$(get_a_record "$PROXYNODE" 2>/dev/null | grep -v alias | sed 's/^.*address //')
                [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "2"
           fi
           PROXY="-proxy $PROXYIP:$PROXYPORT"
@@ -12517,6 +12520,8 @@ parse_opt_equal_sign() {
 
 
 parse_cmd_line() {
+     # Show usage if no options were specified
+     [[ -z "$1" ]] && help 0
      # Set defaults if only an URI was specified, maybe ToDo: use "="-option, then: ${i#*=} i.e. substring removal
      [[ "$#" -eq 1 ]] && set_scanning_defaults
 
@@ -12859,7 +12864,7 @@ parse_cmd_line() {
                (--) shift
                     break
                     ;;
-               (-*) pr_magentaln_term "0: unrecognized option \"$1\"" 1>&2;
+               (-*) pr_warningln_term "0: unrecognized option \"$1\"" 1>&2;
                     help 1
                     ;;
                (*)  break
@@ -12868,7 +12873,7 @@ parse_cmd_line() {
           shift
      done
 
-     # Show usage if no options were specified
+     # Show usage if no further options were specified
      if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! $do_display_only; then
           echo && fatal "URI missing" "1"
      else
