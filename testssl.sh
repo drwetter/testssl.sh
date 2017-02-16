@@ -6385,7 +6385,7 @@ certificate_info() {
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
      fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
 
-     # Get both CRL and OCSP URL upfront. If there's none, this is not good. And we need to penalize this in the output
+     # Get both CRL and OCSP URI upfront. If there's none, this is not good. And we need to penalize this in the output
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
            awk '/X509v3 CRL Distribution/{i=50} i&&i--' | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
@@ -6396,10 +6396,11 @@ certificate_info() {
                outln "--"
                fileout "${json_prefix}crl" "INFO" "No CRL provided"
           else
-               pr_svrty_highln "-- (NOT ok)"
-               fileout "${json_prefix}crl" "HIGH" "Neither CRL nor OCSP URL provided"
+               pr_svrty_high "NOT ok --"
+               outln " neither CRL nor OCSP URI provided"
+               fileout "${json_prefix}crl" "HIGH" "Neither CRL nor OCSP URI provided"
           fi
-     elif grep -q http <<< "$crl"; then
+     else
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
                fileout "${json_prefix}crl" "INFO" "Certificate Revocation List : $crl"
@@ -6407,9 +6408,6 @@ certificate_info() {
                out_row_aligned "$crl" "$spaces"
                fileout "${json_prefix}crl" "INFO" "Certificate Revocation List : $crl"
           fi
-     else
-          pr_warningln "no parsable output \"$crl\", pls report"
-          fileout "${json_prefix}crl" "WARN" "Certificate Revocation List : no parsable output \"$crl\", pls report"
      fi
 
      out "$indent"; pr_bold " OCSP URI                     "
@@ -11443,12 +11441,16 @@ parse_hn_port() {
      NODE=$(echo "$NODE" | sed -e 's/\/.*$//')
 
      # if there's a trailing ':' probably a starttls/application protocol was specified
-     if grep -q ':$' <<< $NODE ; then
-          fatal "\"$1\" is not a valid URI" 1
+     if grep -q ':$' <<< $NODE; then
+          if grep -wq http <<< $NODE; then
+               fatal "\"http\" is not what you meant probably" 1
+          else
+               fatal "\"$1\" is not a valid URI" 1
+          fi
      fi
 
      # was the address supplied like [AA:BB:CC::]:port ?
-     if echo "$NODE" | grep -q ']' ; then
+     if grep -q ']' <<< "$NODE"; then
           tmp_port=$(printf "$NODE" | sed 's/\[.*\]//' | sed 's/://')
           # determine v6 port, supposed it was supplied additionally
           if [[ -n "$tmp_port" ]]; then
