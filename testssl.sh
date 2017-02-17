@@ -1423,7 +1423,7 @@ run_http_header() {
      case $HTTP_STATUS_CODE in
           301|302|307|308)
                redirect=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
-               out ", redirecting to \"$redirect\""
+               out ", redirecting to \""; pr_url "$redirect"; out "\""
                if [[ $redirect == "http://"* ]]; then
                     pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
                     fileout "HTTP_STATUS_CODE" "HIGH" \, "Redirect to insecure URL. Url: \"$redirect\""
