@@ -4660,6 +4660,80 @@ pr_ecdh_curve_quality() {
      fi
 }
 
+# Print $2 based on the quality of the cipher in $1. If $2 is empty, print $1.
+# The return value is an indicator of the quality of the cipher in $1:
+#   0 = $1 is empty
+#   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
+#   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best 
+pr_cipher_quality() {
+     local cipher="$1"
+     local text="$2"
+
+     [[ -z "$1" ]] && return 0
+     [[ -z "$text" ]] && text="$cipher"
+     
+     if [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
+          # This must be the OpenSSL name for a cipher
+          if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
+               # We have the OpenSSL name and can't convert it to the RFC name
+               case "$cipher" in
+                    *NULL*|*EXP*)
+                         pr_svrty_critical "$text"
+                         return 1
+                         ;;
+                    *RC4*)
+                         pr_svrty_high "$text"
+                         return 2
+                         ;;
+                    *CBC*)
+                         pr_svrty_medium "$text"
+                         return 3
+                         ;; # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
+                    *GCM*|*CHACHA20*)
+                         pr_done_best "$text"
+                         return 7
+                         ;; #best ones
+                    ECDHE*AES*)
+                         pr_svrty_low "$text"
+                         return 4
+                         ;; # it's CBC. --> lucky13
+                    *)
+                         out "$text"
+                         return 5
+                         ;;
+               esac
+          fi
+          cipher="$(openssl2rfc "$cipher")"
+     fi
+
+     case "$cipher" in
+          *NULL*|*EXP*|*RC2*|*_DES_*|*_DES40_*)
+               pr_svrty_critical "$text"
+               return 1
+               ;;
+          *RC4*)
+               pr_svrty_high "$text"
+               return 2
+               ;;
+          *ECDHE*AES*CBC*)
+               pr_svrty_low "$text"
+               return 4
+               ;;
+          *CBC*)
+               pr_svrty_medium "$text"
+               return 3
+               ;;
+          *GCM*|*CHACHA20*)
+               pr_done_best "$text"
+               return 7
+               ;;
+          *)
+               out "$text"
+               return 5
+               ;;
+     esac
+}
+
 # arg1: file with input for grepping the bit length for ECDH/DHE
 # arg2: whether to print warning "old fart" or not (empty: no)
 read_dhbits_from_file() {
@@ -4876,28 +4950,24 @@ run_server_preference() {
                default_cipher="$(openssl2rfc "$default_cipher_ossl")"
                [[ -z "$default_cipher" ]] && default_cipher="$default_cipher_ossl"
           fi
-          case "$default_cipher_ossl" in
-               *NULL*|*EXP*)
-                    pr_svrty_critical "$default_cipher"
+          pr_cipher_quality "$default_cipher"
+          case $? in
+               1)
                     fileout "order_cipher" "CRITICAL" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
                     ;;
-               *RC4*)
-                    pr_svrty_high "$default_cipher"
+               2)
                     fileout "order_cipher" "HIGH" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
                     ;;
-               *CBC*)
-                    pr_svrty_medium "$default_cipher"
+               3)
                     fileout "order_cipher" "MEDIUM" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
-                    ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
-               *GCM*|*CHACHA20*)
-                    pr_done_best "$default_cipher"
+                    ;;
+               6|7)
                     fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") $remark4default_cipher"
                     ;;   # best ones
-               ECDHE*AES*)
-                    pr_svrty_low "$default_cipher"
+               4)
                     fileout "order_cipher" "LOW" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE") (cbc)  $remark4default_cipher"
                     ;;  # it's CBC. --> lucky13
-               "")
+               0)
                     pr_warning "default cipher empty" ;
                     if [[ $OSSL_VER == 1.0.2* ]]; then
                          out " (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
@@ -4907,7 +4977,6 @@ run_server_preference() {
                     fi
                     ;;
                *)
-                    out "$default_cipher"
                     fileout "order_cipher" "INFO" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE")  $remark4default_cipher"
                     ;;
           esac
