@@ -10835,11 +10835,11 @@ run_youknowwho() {
     # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
     return 0
     # in a nutshell: don't use RC4, really not!
-    }
+}
 
     # https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
     # https://secure-resumption.com/tlsauth.pdf
-    run_tls_truncation() {
+run_tls_truncation() {
     #FIXME: difficult to test, is there any test available: pls let me know
         :
 }
@@ -10857,7 +10857,11 @@ old_fart() {
 get_install_dir() {
      [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$(dirname ${BASH_SOURCE[0]})"
 
-     [[ -r "$RUN_DIR/etc/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/etc/cipher-mapping.txt"
+     if [[ -r "$RUN_DIR/etc/cipher-mapping.txt" ]]; then
+          CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/etc/cipher-mapping.txt"
+          [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$RUN_DIR"          # probably TESTSSL_INSTALL_DIR
+     fi
+     
      [[ -r "$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           [[ -r "$RUN_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/cipher-mapping.txt"
@@ -10865,7 +10869,7 @@ get_install_dir() {
      fi
 
      # we haven't found the cipher file yet...
-     if [[ ! -r "$mapping_file_rfc" ]] && which readlink &>/dev/null ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
           readlink -f ls &>/dev/null && \
                TESTSSL_INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
                TESTSSL_INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
@@ -10892,7 +10896,7 @@ get_install_dir() {
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
-     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           unset ADD_RFC_STR
           unset SHOW_RFC
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
@@ -11236,6 +11240,7 @@ PATH: $PATH
 PROG_NAME: $PROG_NAME
 TESTSSL_INSTALL_DIR: $TESTSSL_INSTALL_DIR
 RUN_DIR: $RUN_DIR
+CIPHERS_BY_STRENGTH_FILE: $CIPHERS_BY_STRENGTH_FILE
 
 CAPATH: $CAPATH
 COLOR: $COLOR
