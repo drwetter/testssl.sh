@@ -9350,9 +9350,6 @@ run_ccs_injection(){
      if [[ $DEBUG -ge 3 ]]; then
           outln "\n1st reply: "
           hexdump -C "$SOCK_REPLY_FILE" | head -20
-# ok:      15 | 0301    |  02 | 02 | 0a
-#       ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
-#    or just timed out
           outln
           out "sending payload #2 with TLS version $tls_hexcode:  "
      fi
@@ -9372,29 +9369,38 @@ run_ccs_injection(){
           outln
      fi
 
-# not ok:  15 | 0301    | 02 | 02  | 15
-#       ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
+# in general, see https://en.wikipedia.org/wiki/Transport_Layer_Security#Alert_protocol
+#                 https://tools.ietf.org/html/rfc5246#section-7.2
 #
-# ok:  0a or nothing: ==> RST
-
+# not ok fo CCSI:  15 | 0301    | 00 02    | 02 15
+#               ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
+#
+# ok:   nothing: ==> RST
+#
+# 0A:      Unexpected message
+# 28:      Handshake failure
      if [[ -z "${tls_hello_ascii:0:12}" ]]; then
           # empty reply
           pr_done_best "not vulnerable (OK)"
           if [[ $retval -eq 3 ]]; then
-### what?
                fileout "ccs" "OK" "CCS: not vulnerable (timed out)" "$cve" "$cwe"
           else
                fileout "ccs" "OK" "CCS: not vulnerable" "$cve" "$cwe"
           fi
           ret=0
      elif [[ "$byte6" == "15" ]] && [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
+          # decyption failed received
           pr_svrty_critical "VULNERABLE (NOT ok)"
-          if [[ $retval -eq 3 ]]; then
-               fileout "ccs" "CRITICAL" "CCS: VULNERABLE (timed out)" "$cve" "$cwe" "$hint"
-          else
-               fileout "ccs" "CRITICAL" "CCS: VULNERABLE" "$cve" "$cwe" "$hint"
-          fi
+          fileout "ccs" "CRITICAL" "CCS: VULNERABLE" "$cve" "$cwe" "$hint"
           ret=1
+     elif [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
+          if [[ "$byte6" == "0A" ]] || [[ "$byte6" == "28" ]]; then
+               # Unexpected message / Handshake failure  received
+               pr_warning "likely "
+               out "not vulnerable (OK)"
+               out " - alert description type: $byte6"
+               fileout "ccs" "WARN" "CCS: probably not vulnerable but received 0x${byte6} instead of 0x15" "$cve" "$cwe" "$hint"
+          fi
      elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != "03" ]]; then
           pr_warning "test failed"
           out ", probably read buffer too small (${tls_hello_ascii:0:14})"
@@ -9402,8 +9408,8 @@ run_ccs_injection(){
           ret=7
      else
           pr_warning "test failed "
-          out "around line $LINENO (debug info: ${tls_hello_ascii:0:14})"
-          fileout "ccs" "WARN" "CCS: test failed, around line $LINENO, debug info (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
+          out "around line $LINENO (debug info: ${tls_hello_ascii:0:12},$byte6)"
+          fileout "ccs" "WARN" "CCS: test failed, around line $LINENO, debug info (${tls_hello_ascii:0:12},$byte6)" "$cve" "$cwe" "$hint"
           ret=7
      fi
      outln
