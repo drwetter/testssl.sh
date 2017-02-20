@@ -5963,6 +5963,50 @@ compare_server_name_to_cert()
      return $ret
 }
 
+must_staple() {
+     local json_prefix="$2"
+     local cert extn
+     local -i extn_len
+     local supported=false
+     
+     # Note this function is only looking for status_request (5) and not
+     # status_request_v2 (17), since OpenSSL seems to only include status_request (5)
+     # in its ClientHello when the "-status" option is used.
+     
+     # OpenSSL 1.1.0 supports pretty-printing the "TLS Feature extension." For any
+     # previous versions of OpenSSL, OpenSSL can only show if the extension OID is present.
+     if $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE | grep -A 1 "TLS Feature:" | grep -q "status_request"; then
+          # FIXME: This will indicate that must staple is supported if the
+          # certificate indicates status_request or status_request_v2. This is
+          # probably okay, since it seems likely that any TLS Feature extension
+          # that includes status_request_v2 will also include status_request.
+          supported=true
+     elif $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE | grep -q "1.3.6.1.5.5.7.1.24:"; then
+          cert="$($OPENSSL x509 -in "$HOSTCERT" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
+          extn="${cert##*06082B06010505070118}"
+          # Check for critical bit, and skip over it if present.
+          [[ "${extn:0:6}" == "0101FF" ]] && extn="${extn:6}"
+          # Next is tag and length of extnValue OCTET STRING. Assume it is less than 128 bytes.
+          extn="${extn:4}"
+          # The TLS Feature is a SEQUENCE of INTEGER. Get the length of the SEQUENCE
+          extn_len=2*$(hex2dec "${extn:2:2}")
+          # If the extension include the status_request (5), then it supports must staple.
+          if [[ "${extn:4:extn_len}" =~ "020105" ]]; then
+               supported=true
+          fi
+     fi
+
+     if "$supported"; then
+          pr_done_bestln "Supported"
+          fileout "${json_prefix}ocsp_must_staple" "OK" "OCSP must staple : supported"
+          return 0
+     else
+          outln "No"
+          fileout "${json_prefix}ocsp_must_staple" "INFO" "OCSP must staple : no"
+          return 1
+     fi
+}
+
 certificate_info() {
      local proto
      local -i certificate_number=$1
@@ -5973,7 +6017,8 @@ certificate_info() {
      local ocsp_response_status=$6
      local sni_used=$7
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
-     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
+     local expire days2expire secs2warn ocsp_uri ocsp_must_staple crl
+     local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
@@ -6492,10 +6537,22 @@ certificate_info() {
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
      fi
 
+     out "$indent"; pr_bold " OCSP must staple             ";
+     must_staple "$json_prefix"
+     [[ $? -eq 0 ]] && ocsp_must_staple=true || ocsp_must_staple=false
+
      out "$indent"; pr_bold " OCSP stapling                "
      if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
-          pr_svrty_low "--"
-          fileout "${json_prefix}ocsp_stapling" "LOW" "OCSP stapling : not offered"
+          if "$ocsp_must_staple"; then
+               pr_svrty_critical "--"
+               fileout "${json_prefix}ocsp_stapling" "CRITICAL" "OCSP stapling : not offered"
+          elif [[ -n "$ocsp_uri" ]]; then
+               pr_svrty_low "--"
+               fileout "${json_prefix}ocsp_stapling" "LOW" "OCSP stapling : not offered"
+          else
+               out "--"
+               fileout "${json_prefix}ocsp_stapling" "INFO" "OCSP stapling : not offered"
+          fi
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
                pr_done_good "offered"
