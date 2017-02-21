@@ -3218,7 +3218,7 @@ run_protocols() {
      fi
 
      pr_bold " SSLv3      ";
-     if "$using_sockets" && ! "$HAS_SSL3"; then
+     if "$using_sockets"; then
           tls_sockets "00" "$TLS_CIPHER"
      else
           run_prototest_openssl "-ssl3"
@@ -9054,4 +9054,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.567 2017/02/21 10:21:33 dirkw Exp $
+#  $Id: testssl.sh,v 1.568 2017/02/21 16:46:08 dirkw Exp $
