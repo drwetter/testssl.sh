@@ -4195,7 +4195,8 @@ determine_tls_extensions() {
           return $success
      fi
 
-     # first shot w/o any protocol, then we collect in turn all extensions
+     >$TEMPDIR/tlsext.txt
+     # first shot w/o any protocol, then in turn we collect all extensions (if it succeeds)
      $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
      sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext.txt
      for proto in $protocols_to_try; do
@@ -4205,12 +4206,12 @@ determine_tls_extensions() {
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $alpn_params -status </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                success=0
-               grep -a 'TLS server extension' $TMPFILE  >>$TEMPDIR/tlsext.txt
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
           fi
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $npn_params -status </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                success=0 
-               grep -a 'TLS server extension' $TMPFILE  >>$TEMPDIR/tlsext.txt
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
                break
           fi
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
@@ -4224,6 +4225,7 @@ determine_tls_extensions() {
                tmpfile_handle $FUNCNAME.txt
                return 7  # this is ugly, I know
           else
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
                GOST_STATUS_PROBLEM=true
           fi
      fi
@@ -9104,4 +9106,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.566 2017/02/21 09:39:54 dirkw Exp $
+#  $Id: testssl.sh,v 1.567 2017/02/21 10:21:33 dirkw Exp $
