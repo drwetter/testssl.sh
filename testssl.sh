@@ -5716,7 +5716,7 @@ get_server_certificate() {
      local savedir
      local nrsaved
 
-     "$HAS_SPDY" && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
+     "$HAS_SPDY" && [[ -z "$STARTTLS" ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -5758,11 +5758,21 @@ get_server_certificate() {
           return $success
      fi
 
+     # this all needs to be moved into determine_tls_extensions()
+     >$TEMPDIR/tlsext.txt
+     # first shot w/o any protocol, then in turn we collect all extensions
+     $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
+     sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE >$TEMPDIR/tlsext.txt
      for proto in $protocols_to_try; do
+          # we could know here which protcols are supported
           addcmd=""
           [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $npn_params -status </dev/null 2>$ERRFILE >$TMPFILE
-          sclient_connect_successful $? $TMPFILE && success=0 && break
+          if sclient_connect_successful $? $TMPFILE; then
+               success=0
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
+               break               # now we have the certificate
+          fi
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
@@ -5774,6 +5784,7 @@ get_server_certificate() {
                tmpfile_handle $FUNCNAME.txt
                return 7  # this is ugly, I know
           else
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
                GOST_STATUS_PROBLEM=true
           fi
      fi
@@ -5782,7 +5793,7 @@ get_server_certificate() {
      # this is not beautiful (grep+sed)
      # but maybe we should just get the ids and do a private matching, according to
      # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-     tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | \
+     tls_extensions=$(grep -a 'TLS server extension ' $TEMPDIR/tlsext.txt | \
           sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
               -e 's/,.*$/,/g' -e 's/),$/\"/g' \
               -e 's/elliptic curves\/#10/supported_groups\/#10/g')
@@ -6587,8 +6598,6 @@ certificate_info() {
 }
 # FIXME: revoked, see checkcert.sh
 # FIXME: Trust (only CN)
-
-
 
 
 run_server_defaults() {
