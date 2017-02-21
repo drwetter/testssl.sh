@@ -10218,7 +10218,7 @@ run_logjam() {
 
      # now the final test for common primes
      if [[ -n "$key_bitstring" ]]; then
-          dh_p="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | awk '/prime:/,/generator:/' | tail -n +2 | head -n -1)"
+          dh_p="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | awk '/prime:/,/generator:/' | tail -n +2 | sed -e 's/generator: .*//')"
           dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
           [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
           len_dh_p="$((4*${#dh_p}))"
