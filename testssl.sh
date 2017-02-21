@@ -12193,7 +12193,7 @@ display_rdns_etc() {
                     further_ip_addrs+="$ip "
                fi
           done
-          out_row_aligned_max_width "$further_ip_addrs" "                         " $TERM_WIDTH out
+          out_row_aligned_max_width "$further_ip_addrs" "                         $CORRECT_SPACES" $TERM_WIDTH out
           outln
      fi
      if "$LOCAL_A"; then
@@ -12203,7 +12203,7 @@ display_rdns_etc() {
      fi
      if [[ -n "$rDNS" ]]; then
           printf " %-23s %s" "rDNS ($nodeip):"
-          out_row_aligned_max_width "$rDNS" "                         " $TERM_WIDTH out
+          out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH out
      fi
 }
 
