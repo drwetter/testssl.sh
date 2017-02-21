@@ -12176,7 +12176,7 @@ determine_service() {
 
 
 display_rdns_etc() {
-     local ip
+     local ip further_ip_addrs=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for displaying IPv6 addresses we don't need []
 
 
@@ -12185,14 +12185,15 @@ display_rdns_etc() {
           outln "$PROXYIP:$PROXYPORT "
      fi
      if [[ $(count_words "$IP46ADDRs") -gt 1 ]]; then
-          out " further IP addresses:  $CORRECT_SPACES"
+          out " further IP addresses:   $CORRECT_SPACES"
           for ip in $IP46ADDRs; do
                if [[ "$ip" == "$NODEIP" ]] || [[ "[$ip]" == "$NODEIP" ]]; then
                     continue
                else
-                    out " $ip"
+                    further_ip_addrs+="$ip "
                fi
           done
+          out_row_aligned_max_width "$further_ip_addrs" "                         " $TERM_WIDTH out
           outln
      fi
      if "$LOCAL_A"; then
@@ -12201,7 +12202,8 @@ display_rdns_etc() {
           outln " A record via           $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
      fi
      if [[ -n "$rDNS" ]]; then
-          printf " %-23s %s" "rDNS ($nodeip):" "$rDNS"
+          printf " %-23s %s" "rDNS ($nodeip):"
+          out_row_aligned_max_width "$rDNS" "                         " $TERM_WIDTH out
      fi
 }
 
