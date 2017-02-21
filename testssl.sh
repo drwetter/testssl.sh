@@ -83,7 +83,7 @@ readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
 
-readonly VERSION="2.8rc3"
+readonly VERSION="2.8rc4"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
@@ -3218,7 +3218,7 @@ run_protocols() {
      fi
 
      pr_bold " SSLv3      ";
-     if "$using_sockets"; then
+     if "$using_sockets" && ! "$HAS_SSL3"; then
           tls_sockets "00" "$TLS_CIPHER"
      else
           run_prototest_openssl "-ssl3"
@@ -4095,14 +4095,15 @@ sclient_connect_successful() {
 # arg1 is "-cipher <OpenSSL cipher>" or empty
 # arg2 is a list of protocols to try (tls1_2, tls1_1, tls1, ssl3) or empty (if all should be tried)
 determine_tls_extensions() {
-     local proto addcmd
+     local protocols_to_try proto addcmd
      local success
-     local npn_params="" alpn_params=""
+     local npn_params="" tls_extensions line
+     local alpn_params=""
      local savedir
      local nrsaved
 
-     $HAS_SPDY && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
-     $HAS_ALPN && [[ -z $STARTTLS ]] && alpn_params="-alpn \"${ALPN_PROTOs// /,}\""  # we need to replace " " by ","
+     "$HAS_SPDY" && [[ -z "$STARTTLS" ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
+     "$HAS_ALPN" && [[ -z "$STARTTLS" ]] && alpn_params="-alpn \"${ALPN_PROTOs// /,}\""  # we need to replace " " by ","
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -4122,7 +4123,7 @@ determine_tls_extensions() {
                savedir=$(pwd); cd $TEMPDIR
                # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
                awk -v n=-1 '/Server certificate/ {start=1}
-                  /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+                  /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
                   inc { print > ("level" n ".crt") }
                   /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
                nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
@@ -4144,6 +4145,10 @@ determine_tls_extensions() {
           return $success
      fi
 
+     >$TEMPDIR/tlsext.txt
+     # first shot w/o any protocol, then in turn we collect all extensions (if it succeeds)
+     $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
+     sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext.txt
      for proto in $protocols_to_try; do
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
           addcmd=""
@@ -4151,12 +4156,12 @@ determine_tls_extensions() {
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $alpn_params -status </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                success=0
-               grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext-alpn.txt 
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
           fi
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $npn_params -status </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                success=0 
-               grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext-npn.txt 
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
                break
           fi
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
@@ -4164,29 +4169,39 @@ determine_tls_extensions() {
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
-               if [ -z "$1" ]; then
+               if [[ -z "$1" ]]; then
                    pr_warningln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
                fi
                tmpfile_handle $FUNCNAME.txt
                return 7  # this is ugly, I know
           else
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
                GOST_STATUS_PROBLEM=true
           fi
      fi
-     #TLS_EXTENSIONS=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
+     #tls_extensions=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
      #
      # this is not beautiful (grep+sed)
      # but maybe we should just get the ids and do a private matching, according to
      # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-     TLS_EXTENSIONS=$(cat $TEMPDIR/tlsext-alpn.txt $TEMPDIR/tlsext-npn.txt | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
-     TLS_EXTENSIONS=$(echo $TLS_EXTENSIONS)       # into one line
+     tls_extensions=$(grep -a 'TLS server extension ' $TEMPDIR/tlsext.txt | sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' -e 's/,.*$/,/g' -e 's/),$/\"/g')
+     tls_extensions=$(echo $tls_extensions)       # into one line
+
+     # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
+     while read -d "\"" -r line; do
+          if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
+#FIXME: This is a string of quoted strings, so this seems to deterime the output format already. Better e.g. would be an array
+               TLS_EXTENSIONS+=" \"${line}\""
+          fi
+     done <<< $tls_extensions
+     [[ "${TLS_EXTENSIONS:0:1}" == " " ]] && TLS_EXTENSIONS="${TLS_EXTENSIONS:1}"
 
      # Place the server's certificate in $HOSTCERT and any intermediate
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
      savedir=$(pwd); cd $TEMPDIR
      # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
      awk -v n=-1 '/Certificate chain/ {start=1}
-             /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+             /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
              inc { print > ("level" n ".crt") }
              /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
      nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
@@ -4214,7 +4229,7 @@ get_cn_from_cert() {
      local subject
 
      # attention! openssl 1.0.2 doesn't properly handle online output from certifcates from trustwave.com/github.com
-     #FIXME: use -nameopt oid for robustness 
+     #FIXME: use -nameopt oid for robustness
 
      # for e.g. russian sites -esc_msb,utf8 works in an UTF8 terminal -- any way to check platform indepedent?
      # see x509(1ssl):
@@ -6230,7 +6245,7 @@ run_heartbleed(){
      local -i n ret lines_returned
      local -i hb_rounds=3
      local append=""
-     local found_500_oops=false
+     local tls_hello_ascii=""
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
      pr_bold " Heartbleed"; out " (CVE-2014-0160)                "
@@ -6307,26 +6322,36 @@ run_heartbleed(){
      # extension: heartbeat
      x00, x0f, x00, x01, x01"
 
-     for (( n=1; n <= hb_rounds; n++)); do
-          fd_socket 5 || return 6
-          debugme out "\nsending client hello (TLS version $tls_hexcode)"
-          debugme outln " ($n of $hb_rounds)"
-          socksend "$client_hello" 1
+     fd_socket 5 || return 6
+     debugme out "\nsending client hello (TLS version $tls_hexcode)"
+     debugme outln " ($n of $hb_rounds)"
+     socksend "$client_hello" 1
 
-          debugme outln "\nreading server hello"
-          sockread_serverhello 32768
-          if [[ $DEBUG -ge 4 ]]; then
-               hexdump -C "$SOCK_REPLY_FILE" | head -20
-               outln "[...]"
-               outln "\nsending payload with TLS version $tls_hexcode:"
-          fi
-          rm "$SOCK_REPLY_FILE"
+     debugme outln "\nreading server hello"
+     sockread_serverhello 32768
+     if [[ $DEBUG -ge 4 ]]; then
+          hexdump -C "$SOCK_REPLY_FILE" | head -20
+          outln "[...]"
+          outln "\nsending payload with TLS version $tls_hexcode:"
+     fi
+     rm "$SOCK_REPLY_FILE"
 
-          socksend "$heartbleed_payload" 1
-          sockread_serverhello 16384 $HEARTBLEED_MAX_WAITSOCK
-          [[ $? -eq 3 ]] && append=", timed out"
+     socksend "$heartbleed_payload" 1
+     sockread_serverhello 16384 $HEARTBLEED_MAX_WAITSOCK
+     if [[ $? -eq 3 ]]; then
+          append=", timed out"
+          pr_done_best "not vulnerable (OK)"; out "$append"
+          fileout "heartbleed" "OK" "Heartbleed: not vulnerable $append"
+          ret=0
+     else
+          # server reply should be (>=SSLv3): 18030x in case of a heartBEAT reply -- which we take as a positive result
+          tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+          debugme echo "tls_content_type: ${tls_hello_ascii:0:2}"
+          debugme echo "tls_protocol: ${tls_hello_ascii:2:4}"
 
-          lines_returned=$(hexdump -ve '16/1 "%02x " " \n"' "$SOCK_REPLY_FILE" | wc -l | sed 's/ //g')
+          lines_returned=$(count_lines "$(hexdump -ve '16/1 "%02x " " \n"' "$SOCK_REPLY_FILE")")
+          debugme echo "lines HB reply: $lines_returned"
+
           if [[ $DEBUG -ge 3 ]]; then
                outln "\nheartbleed reply: "
                hexdump -C "$SOCK_REPLY_FILE" | head -20
@@ -6334,55 +6359,37 @@ run_heartbleed(){
                outln
           fi
 
-          if [[ $lines_returned -gt 1 ]]; then
+          if [[ $lines_returned -gt 1 ]]  && [[ "${tls_hello_ascii:0:4}" == "1803" ]]; then
                if [[ "$STARTTLS_PROTOCOL" == "ftp" ]] || [[ "$STARTTLS_PROTOCOL" == "ftps" ]]; then
-                    # check possibility of weird vsftpd reply, see #426
-                    saved_sockreply[n]="$(hexdump -ve '1/1 "%.2x"' "$SOCK_REPLY_FILE")"
-                    [[ $n -eq 1 ]] && grep -q '500 OOPS' "$SOCK_REPLY_FILE" && found_500_oops=true
-                    rm "$SOCK_REPLY_FILE"
-                    #debugme out "${saved_sockreply[n]}"
-                    #TMPFILE="${saved_sockreply[n]}"
-                    close_socket
-                    #tmpfile_handle "$FUNCNAME,$n.txt"
+                    # check possibility of weird vsftpd reply, see #426, despite "1803" seems very unlikely...
+                    if grep -q '500 OOPS' "$SOCK_REPLY_FILE" ; then
+                         append=", successful weeded out vsftpd false positive"
+                         pr_done_best "not vulnerable (OK)"; out "$append"
+                         fileout "heartbleed" "OK" "Heartbleed: not vulnerable $append" 
+                         ret=0
+                    else
+                         out "likely "
+                         pr_svrty_critical "VULNERABLE (NOT ok)"
+                         [[ $DEBUG -lt 3 ]] && out ", use debug >=3 to confirm"
+                         fileout "heartbleed" "CRITICAL" "Heartbleed: VULNERABLE"
+                         ret=1
+                    fi
                else
-                    rm "$SOCK_REPLY_FILE"
                     pr_svrty_critical "VULNERABLE (NOT ok)"
-                    fileout "heartbleed" "NOT ok" "Heartbleed (CVE-2014-0160): VULNERABLE (NOT ok)$append"
+                    fileout "heartbleed" "CRITICAL" "Heartbleed: VULNERABLE $cve" "$cwe" "$hint"
                     ret=1
-                    break
                fi
           else
-               rm "$SOCK_REPLY_FILE"
                pr_done_best "not vulnerable (OK)"
                fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK)$append"
                ret=0
-               break
           fi
-     done
-
-     if [[ $n -gt 1 ]]; then
-          # more than one round of heartbleed checks --> vsftpd probably.
-          # This is the robust approach. According to a few tests it could also suffice # to check for "500 OOPS" only.
-          # Checking for the same socket reply DOES NOT suffice -- server can be idle and return the same memory
-          if [[ "${saved_sockreply[1]}" == "${saved_sockreply[2]}" ]] && [[ "${saved_sockreply[2]}" == "${saved_sockreply[3]}" ]] \
-               && "$found_500_oops"; then
-               pr_done_best "not vulnerable (OK)$append"
-               [[ $DEBUG -ge 1 ]] && out ", successful weeded out vsftpd false positive"
-               fileout "heartbleed" "OK" "Heartbleed (CVE-2014-0160): not vulnerable (OK)$append"
-          else
-               out "likely "
-               pr_svrty_critical "VULNERABLE (NOT ok)"
-               [[ $DEBUG -ge 1 ]] && out " use debug >=2 to confirm"
-               fileout "heartbleed" "NOT ok" "Heartbleed (CVE-2014-0160): likely VULNERABLE (NOT ok)$append"
-          fi
-     else
-          # for the repeated tries we did that already
-          #TMPFILE="$SOCKREPLY"
-          close_socket 2>/dev/null
-          #tmpfile_handle $FUNCNAME.txt
      fi
-     outln "$append"
 
+     outln
+     TMPFILE="$SOCK_REPLY_FILE"
+     close_socket
+     tmpfile_handle $FUNCNAME.dd
      return $ret
 }
 
@@ -6460,44 +6467,46 @@ run_ccs_injection(){
      if [[ $DEBUG -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -20
           outln "[...]"
-          outln "\npayload #1 with TLS version $tls_hexcode:"
+          out "\nsending payload #1 with TLS version $tls_hexcode:  "
      fi
      rm "$SOCK_REPLY_FILE"
-
 # ... and then send the a change cipher spec message
      socksend "$ccs_message" 1 || ok_ids
-     sockread_serverhello 2048 $CCS_MAX_WAITSOCK
+     sockread_serverhello 4096 $CCS_MAX_WAITSOCK
      if [[ $DEBUG -ge 3 ]]; then
           outln "\n1st reply: "
           hexdump -C "$SOCK_REPLY_FILE" | head -20
-# ok:      15 | 0301    |  02 | 02 | 0a
-#       ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
-#    or just timed out
           outln
-          outln "payload #2 with TLS version $tls_hexcode:"
+          out "sending payload #2 with TLS version $tls_hexcode:  "
      fi
      rm "$SOCK_REPLY_FILE"
 
      socksend "$ccs_message" 2 || ok_ids
-     sockread_serverhello 2048 $CCS_MAX_WAITSOCK
+     sockread_serverhello 4096 $CCS_MAX_WAITSOCK
      retval=$?
+
+     tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+     byte6="${tls_hello_ascii:12:2}"
+     debugme echo "tls_content_type: ${tls_hello_ascii:0:2} | tls_protocol: ${tls_hello_ascii:2:4} | byte6: $byte6"
 
      if [[ $DEBUG -ge 3 ]]; then
           outln "\n2nd reply: "
-          printf -- "$(hexdump -C "$SOCK_REPLY_FILE")"
-# not ok:  15 | 0301    | 02 | 02  | 15
-#       ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
-# ok:  0a or nothing: ==> RST
+          hexdump -C "$SOCK_REPLY_FILE"
           outln
      fi
-     sockreply=$(cat "$SOCK_REPLY_FILE" 2>/dev/null)
-     rm "$SOCK_REPLY_FILE"
 
-     byte6=$(echo "$sockreply" | "${HEXDUMPPLAIN[@]}" | sed 's/^..........//')
-     lines=$(echo "$sockreply" | "${HEXDUMP[@]}" | count_lines )
-     debugme echo "lines: $lines, byte6: $byte6"
-
-     if [[ "$byte6" == "0a" ]] || [[ "$lines" -gt 1 ]]; then
+# in general, see https://en.wikipedia.org/wiki/Transport_Layer_Security#Alert_protocol
+#                 https://tools.ietf.org/html/rfc5246#section-7.2
+#
+# not ok for CCSI:  15 | 0301    | 00 02    | 02 15
+#            TLS alert | TLS 1.0 | Length=2 | Decryption failed (21)
+#
+# ok:   nothing: ==> RST
+#
+# 0A:      Unexpected message
+# 28:      Handshake failure
+     if [[ -z "${tls_hello_ascii:0:12}" ]]; then
+          # empty reply
           pr_done_best "not vulnerable (OK)"
           if [[ $retval -eq 3 ]]; then
                fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK) (timed out)"
@@ -6505,20 +6514,35 @@ run_ccs_injection(){
                fileout "ccs" "OK" "CCS (CVE-2014-0224): not vulnerable (OK)"
           fi
           ret=0
-     else
+     elif [[ "$byte6" == "15" ]] && [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
+          # decyption failed received
           pr_svrty_critical "VULNERABLE (NOT ok)"
-          if [[ $retval -eq 3 ]]; then
-               fileout "ccs" "NOT ok" "CCS (CVE-2014-0224): VULNERABLE (NOT ok) (timed out)"
-          else
-               fileout "ccs" "NOT ok" "CCS (CVE-2014-0224): VULNERABLE (NOT ok)"
-          fi
+          fileout "ccs" "CRITICAL" "CCS: VULNERABLE"
           ret=1
+     elif [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
+          if [[ "$byte6" == "0A" ]] || [[ "$byte6" == "28" ]]; then
+               # Unexpected message / Handshake failure  received
+               pr_warning "likely "
+               out "not vulnerable (OK)"
+               out " - alert description type: 0x${byte6}"
+               fileout "ccs" "WARN" "CCS: probably not vulnerable but received 0x${byte6} instead of 0x15"
+          fi
+     elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != "03" ]]; then
+          pr_warning "test failed"
+          out ", probably read buffer too small (${tls_hello_ascii:0:14})"
+          fileout "ccs" "WARN" "CCS: test failed, probably read buffer too small (${tls_hello_ascii:0:14})"
+          ret=7
+     else
+          pr_warning "test failed "
+          out "around line $LINENO (debug info: ${tls_hello_ascii:0:12},$byte6)"
+          fileout "ccs" "WARN" "CCS: test failed, around line $LINENO, debug info (${tls_hello_ascii:0:12},$byte6)"
+          ret=7
      fi
-     [[ $retval -eq 3 ]] && out ", timed out"
      outln
 
+     TMPFILE="$SOCK_REPLY_FILE"
      close_socket
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle $FUNCNAME.dd
      return $ret
 }
 
@@ -9030,4 +9054,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.565 2016/12/20 13:26:11 dirkw Exp $
+#  $Id: testssl.sh,v 1.567 2017/02/21 10:21:33 dirkw Exp $
