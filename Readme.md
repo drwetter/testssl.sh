@@ -60,6 +60,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * LOGJAM: now checking also for known DH parameters
 * Check for CAA RR
 * better formatting of output
+* choice showing the RFC naming scheme only
 
 
 #### Features planned in 2.9dev

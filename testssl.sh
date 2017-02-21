@@ -4879,6 +4879,80 @@ pr_ecdh_curve_quality() {
      pr_ecdh_quality "$bits" "$curve"
 }
 
+# Print $2 based on the quality of the cipher in $1. If $2 is empty, print $1.
+# The return value is an indicator of the quality of the cipher in $1:
+#   0 = $1 is empty
+#   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
+#   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best 
+pr_cipher_quality() {
+     local cipher="$1"
+     local text="$2"
+
+     [[ -z "$1" ]] && return 0
+     [[ -z "$text" ]] && text="$cipher"
+     
+     if [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
+          # This must be the OpenSSL name for a cipher
+          if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
+               # We have the OpenSSL name and can't convert it to the RFC name
+               case "$cipher" in
+                    *NULL*|*EXP*)
+                         pr_svrty_critical "$text"
+                         return 1
+                         ;;
+                    *RC4*)
+                         pr_svrty_high "$text"
+                         return 2
+                         ;;
+                    *CBC*)
+                         pr_svrty_medium "$text"
+                         return 3
+                         ;; # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
+                    *GCM*|*CHACHA20*)
+                         pr_done_best "$text"
+                         return 7
+                         ;; #best ones
+                    ECDHE*AES*)
+                         pr_svrty_low "$text"
+                         return 4
+                         ;; # it's CBC. --> lucky13
+                    *)
+                         out "$text"
+                         return 5
+                         ;;
+               esac
+          fi
+          cipher="$(openssl2rfc "$cipher")"
+     fi
+
+     case "$cipher" in
+          *NULL*|*EXP*|*RC2*|*_DES_*|*_DES40_*)
+               pr_svrty_critical "$text"
+               return 1
+               ;;
+          *RC4*)
+               pr_svrty_high "$text"
+               return 2
+               ;;
+          *ECDHE*AES*CBC*)
+               pr_svrty_low "$text"
+               return 4
+               ;;
+          *CBC*)
+               pr_svrty_medium "$text"
+               return 3
+               ;;
+          *GCM*|*CHACHA20*)
+               pr_done_best "$text"
+               return 7
+               ;;
+          *)
+               out "$text"
+               return 5
+               ;;
+     esac
+}
+
 # arg1: file with input for grepping the bit length for ECDH/DHE
 # arg2: whether to print warning "old fart" or not (empty: no)
 read_dhbits_from_file() {
@@ -5084,28 +5158,24 @@ run_server_preference() {
                default_cipher="$(openssl2rfc "$default_cipher_ossl")"
                [[ -z "$default_cipher" ]] && default_cipher="$default_cipher_ossl"
           fi
-          case "$default_cipher_ossl" in
-               *NULL*|*EXP*)
-                    pr_svrty_critical "$default_cipher"
+          pr_cipher_quality "$default_cipher"
+          case $? in
+               1)
                     fileout "order_cipher" "CRITICAL" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
                     ;;
-               *RC4*)
-                    pr_svrty_high "$default_cipher"
+               2)
                     fileout "order_cipher" "HIGH" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
                     ;;
-               *CBC*)
-                    pr_svrty_medium "$default_cipher"
+               3)
                     fileout "order_cipher" "MEDIUM" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
-                    ;;   # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
-               *GCM*|*CHACHA20*)
-                    pr_done_best "$default_cipher"
+                    ;;
+               6|7)
                     fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
                     ;;   # best ones
-               ECDHE*AES*)
-                    pr_svrty_low "$default_cipher"
+               4)
                     fileout "order_cipher" "LOW" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") (cbc)  $remark4default_cipher"
                     ;;  # it's CBC. --> lucky13
-               "")
+               0)
                     pr_warning "default cipher empty" ;
                     if [[ $OSSL_VER == 1.0.2* ]]; then
                          out " (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
@@ -5115,7 +5185,6 @@ run_server_preference() {
                     fi
                     ;;
                *)
-                    out "$default_cipher"
                     fileout "order_cipher" "INFO" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string")  $remark4default_cipher"
                     ;;
           esac
@@ -5865,7 +5934,7 @@ get_server_certificate() {
      local savedir
      local nrsaved
 
-     "$HAS_SPDY" && [[ -z $STARTTLS ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
+     "$HAS_SPDY" && [[ -z "$STARTTLS" ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -5907,11 +5976,21 @@ get_server_certificate() {
           return $success
      fi
 
+     # this all needs to be moved into determine_tls_extensions()
+     >$TEMPDIR/tlsext.txt
+     # first shot w/o any protocol, then in turn we collect all extensions
+     $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
+     sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE >$TEMPDIR/tlsext.txt
      for proto in $protocols_to_try; do
+          # we could know here which protcols are supported
           addcmd=""
           [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $npn_params -status </dev/null 2>$ERRFILE >$TMPFILE
-          sclient_connect_successful $? $TMPFILE && success=0 && break
+          if sclient_connect_successful $? $TMPFILE; then
+               success=0
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
+               break               # now we have the certificate
+          fi
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
@@ -5923,6 +6002,7 @@ get_server_certificate() {
                tmpfile_handle $FUNCNAME.txt
                return 7  # this is ugly, I know
           else
+               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
                GOST_STATUS_PROBLEM=true
           fi
      fi
@@ -5931,7 +6011,7 @@ get_server_certificate() {
      # this is not beautiful (grep+sed)
      # but maybe we should just get the ids and do a private matching, according to
      # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-     tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | \
+     tls_extensions=$(grep -a 'TLS server extension ' $TEMPDIR/tlsext.txt | \
           sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
               -e 's/,.*$/,/g' -e 's/),$/\"/g' \
               -e 's/elliptic curves\/#10/supported_groups\/#10/g')
@@ -6112,6 +6192,50 @@ compare_server_name_to_cert()
      return $ret
 }
 
+must_staple() {
+     local json_prefix="$2"
+     local cert extn
+     local -i extn_len
+     local supported=false
+     
+     # Note this function is only looking for status_request (5) and not
+     # status_request_v2 (17), since OpenSSL seems to only include status_request (5)
+     # in its ClientHello when the "-status" option is used.
+     
+     # OpenSSL 1.1.0 supports pretty-printing the "TLS Feature extension." For any
+     # previous versions of OpenSSL, OpenSSL can only show if the extension OID is present.
+     if $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE | grep -A 1 "TLS Feature:" | grep -q "status_request"; then
+          # FIXME: This will indicate that must staple is supported if the
+          # certificate indicates status_request or status_request_v2. This is
+          # probably okay, since it seems likely that any TLS Feature extension
+          # that includes status_request_v2 will also include status_request.
+          supported=true
+     elif $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE | grep -q "1.3.6.1.5.5.7.1.24:"; then
+          cert="$($OPENSSL x509 -in "$HOSTCERT" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
+          extn="${cert##*06082B06010505070118}"
+          # Check for critical bit, and skip over it if present.
+          [[ "${extn:0:6}" == "0101FF" ]] && extn="${extn:6}"
+          # Next is tag and length of extnValue OCTET STRING. Assume it is less than 128 bytes.
+          extn="${extn:4}"
+          # The TLS Feature is a SEQUENCE of INTEGER. Get the length of the SEQUENCE
+          extn_len=2*$(hex2dec "${extn:2:2}")
+          # If the extension include the status_request (5), then it supports must staple.
+          if [[ "${extn:4:extn_len}" =~ "020105" ]]; then
+               supported=true
+          fi
+     fi
+
+     if "$supported"; then
+          pr_done_bestln "Supported"
+          fileout "${json_prefix}ocsp_must_staple" "OK" "OCSP must staple : supported"
+          return 0
+     else
+          outln "No"
+          fileout "${json_prefix}ocsp_must_staple" "INFO" "OCSP must staple : no"
+          return 1
+     fi
+}
+
 certificate_info() {
      local proto
      local -i certificate_number=$1
@@ -6122,7 +6246,8 @@ certificate_info() {
      local ocsp_response_status=$6
      local sni_used=$7
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
-     local expire days2expire secs2warn ocsp_uri crl startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
+     local expire days2expire secs2warn ocsp_uri ocsp_must_staple crl
+     local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
@@ -6647,10 +6772,22 @@ certificate_info() {
           fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
      fi
 
+     out "$indent"; pr_bold " OCSP must staple             ";
+     must_staple "$json_prefix"
+     [[ $? -eq 0 ]] && ocsp_must_staple=true || ocsp_must_staple=false
+
      out "$indent"; pr_bold " OCSP stapling                "
      if grep -a "OCSP response" <<<"$ocsp_response" | grep -q "no response sent" ; then
-          pr_svrty_low "--"
-          fileout "${json_prefix}ocsp_stapling" "LOW" "OCSP stapling : not offered"
+          if "$ocsp_must_staple"; then
+               pr_svrty_critical "--"
+               fileout "${json_prefix}ocsp_stapling" "CRITICAL" "OCSP stapling : not offered"
+          elif [[ -n "$ocsp_uri" ]]; then
+               pr_svrty_low "--"
+               fileout "${json_prefix}ocsp_stapling" "LOW" "OCSP stapling : not offered"
+          else
+               out "--"
+               fileout "${json_prefix}ocsp_stapling" "INFO" "OCSP stapling : not offered"
+          fi
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
                pr_done_good "offered"
@@ -6685,8 +6822,6 @@ certificate_info() {
 }
 # FIXME: revoked, see checkcert.sh
 # FIXME: Trust (only CN)
-
-
 
 
 run_server_defaults() {
@@ -9574,9 +9709,6 @@ run_ccs_injection(){
      if [[ $DEBUG -ge 3 ]]; then
           outln_term "\n1st reply: "
           hexdump -C "$SOCK_REPLY_FILE" | head -20
-# ok:      15 | 0301    |  02 | 02 | 0a
-#       ALERT | TLS 1.0 | Length=2 | Unexpected Message (0a)
-#    or just timed out
           outln_term
           out_term "sending payload #2 with TLS version $tls_hexcode:  "
      fi
@@ -9596,29 +9728,38 @@ run_ccs_injection(){
           outln_term
      fi
 
-# not ok:  15 | 0301    | 02 | 02  | 15
-#       ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
+# in general, see https://en.wikipedia.org/wiki/Transport_Layer_Security#Alert_protocol
+#                 https://tools.ietf.org/html/rfc5246#section-7.2
 #
-# ok:  0a or nothing: ==> RST
-
+# not ok fo CCSI:  15 | 0301    | 00 02    | 02 15
+#               ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
+#
+# ok:   nothing: ==> RST
+#
+# 0A:      Unexpected message
+# 28:      Handshake failure
      if [[ -z "${tls_hello_ascii:0:12}" ]]; then
           # empty reply
           pr_done_best "not vulnerable (OK)"
           if [[ $retval -eq 3 ]]; then
-### what?
                fileout "ccs" "OK" "CCS: not vulnerable (timed out)" "$cve" "$cwe"
           else
                fileout "ccs" "OK" "CCS: not vulnerable" "$cve" "$cwe"
           fi
           ret=0
      elif [[ "$byte6" == "15" ]] && [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
+          # decyption failed received
           pr_svrty_critical "VULNERABLE (NOT ok)"
-          if [[ $retval -eq 3 ]]; then
-               fileout "ccs" "CRITICAL" "CCS: VULNERABLE (timed out)" "$cve" "$cwe" "$hint"
-          else
-               fileout "ccs" "CRITICAL" "CCS: VULNERABLE" "$cve" "$cwe" "$hint"
-          fi
+          fileout "ccs" "CRITICAL" "CCS: VULNERABLE" "$cve" "$cwe" "$hint"
           ret=1
+     elif [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
+          if [[ "$byte6" == "0A" ]] || [[ "$byte6" == "28" ]]; then
+               # Unexpected message / Handshake failure  received
+               pr_warning "likely "
+               out "not vulnerable (OK)"
+               out " - alert description type: $byte6"
+               fileout "ccs" "WARN" "CCS: probably not vulnerable but received 0x${byte6} instead of 0x15" "$cve" "$cwe" "$hint"
+          fi
      elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != "03" ]]; then
           pr_warning "test failed"
           out ", probably read buffer too small (${tls_hello_ascii:0:14})"
@@ -9626,8 +9767,8 @@ run_ccs_injection(){
           ret=7
      else
           pr_warning "test failed "
-          out "around line $LINENO (debug info: ${tls_hello_ascii:0:14})"
-          fileout "ccs" "WARN" "CCS: test failed, around line $LINENO, debug info (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
+          out "around line $LINENO (debug info: ${tls_hello_ascii:0:12},$byte6)"
+          fileout "ccs" "WARN" "CCS: test failed, around line $LINENO, debug info (${tls_hello_ascii:0:12},$byte6)" "$cve" "$cwe" "$hint"
           ret=7
      fi
      outln
@@ -11061,11 +11202,11 @@ run_youknowwho() {
     # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
     return 0
     # in a nutshell: don't use RC4, really not!
-    }
+}
 
     # https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
     # https://secure-resumption.com/tlsauth.pdf
-    run_tls_truncation() {
+run_tls_truncation() {
     #FIXME: difficult to test, is there any test available: pls let me know
         :
 }
@@ -11085,7 +11226,11 @@ old_fart() {
 get_install_dir() {
      [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$(dirname ${BASH_SOURCE[0]})"
 
-     [[ -r "$RUN_DIR/etc/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/etc/cipher-mapping.txt"
+     if [[ -r "$RUN_DIR/etc/cipher-mapping.txt" ]]; then
+          CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/etc/cipher-mapping.txt"
+          [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$RUN_DIR"          # probably TESTSSL_INSTALL_DIR
+     fi
+     
      [[ -r "$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           [[ -r "$RUN_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/cipher-mapping.txt"
@@ -11093,7 +11238,7 @@ get_install_dir() {
      fi
 
      # we haven't found the cipher file yet...
-     if [[ ! -r "$mapping_file_rfc" ]] && which readlink &>/dev/null ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
           readlink -f ls &>/dev/null && \
                TESTSSL_INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
                TESTSSL_INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
@@ -11120,7 +11265,7 @@ get_install_dir() {
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
-     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           unset ADD_RFC_STR
           unset SHOW_RFC
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
@@ -11464,6 +11609,7 @@ PATH: $PATH
 PROG_NAME: $PROG_NAME
 TESTSSL_INSTALL_DIR: $TESTSSL_INSTALL_DIR
 RUN_DIR: $RUN_DIR
+CIPHERS_BY_STRENGTH_FILE: $CIPHERS_BY_STRENGTH_FILE
 
 CAPATH: $CAPATH
 COLOR: $COLOR
