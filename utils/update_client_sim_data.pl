@@ -6,10 +6,9 @@ use JSON;
 
 my $namelength = 30;
 
-# Get all ciphers first (sorry only works on 64 bit mac atm)
 my @spec;
 my %ciphers;
-foreach my $line ( split /\n/, `bin/openssl.Darwin.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'`) {
+foreach my $line ( split /\n/, `../bin/openssl.Linux.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'`) {
 	my @fields = split /\s+/, $line;
 	my $hex = "";
 	foreach my $byte ( split /,/, $fields[1] ) {
@@ -28,6 +27,7 @@ my $ssllabs = decode_json($json);
 my %sims;
 foreach my $client ( @$ssllabs ) {
 	# Shorts
+	my $has_matched = 1;
 	my $shortname = "$client->{name}_$client->{version}";
 	$shortname =~ s/ /_/g;
 	$shortname =~ s/\.//g;
@@ -51,8 +51,38 @@ foreach my $client ( @$ssllabs ) {
 		# Ciphers
 		my @ciphers = ();
 		foreach my $suite ( @{$client->{suiteIds}} ) {
-			push @ciphers, $ciphers{$suite} if exists $ciphers{$suite};
+			if ( exists $ciphers{$suite} ) {
+				push @ciphers, $ciphers{$suite}; }
+			elsif ( $suite == "255" ) {
+				# no openssl name for this:
+				if ( $has_matched ) {
+					print "Ignored: \"$shortname\" has" ;
+					$has_matched = 0;
+				}
+				print " \"0xFF\""; }
+			elsif ( $suite == "65279" ) {
+				# SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA
+				if ( $has_matched ) {
+					print "Ignored: \"$shortname\" has" ;
+					$has_matched = 0;
+				}
+				print " \"0xFEFF\""; }
+			elsif ( $suite == "52392" ) {
+				push @ciphers, "ECDHE-RSA-CHACHA20-POLY1305"; }
+			elsif ( $suite == "52393" ) {
+				push @ciphers, "ECDHE-ECDSA-CHACHA20-POLY1305"; }
+			elsif ( $suite == "52394" ) {
+				push @ciphers, "DHE-RSA-CHACHA20-POLY1305"; }
+			else { 
+				print "ALERT: ";
+				if ( $has_matched ) {
+					print " \"$shortname\" has ";
+					$has_matched = 0;
+				}
+				print "$suite. Please FIXME "; 
+			}
 		}
+		print "\n" if ! $has_matched ;
 		$sim->{ciphers} = "ciphers+=(\"" . (join ":", @ciphers) . "\")";
 
 		# SNI
@@ -251,14 +281,15 @@ foreach my $shortname ( reverse sort keys %sims ) {
 	}
 }
 
-open OUT, ">client-simulation-data.sh" or die "Unable to open client-simulation-data.sh";
-print OUT "#!/bin/bash
+open OUT, ">client-simulation-data.inc" or die "Unable to open client-simulation-data.inc";
+print OUT "
 
 # This file contains client handshake data used in the run_client_simulation function
 # Don't update this file by hand, but run util/update_client_sim_data.pl instead
 
 # Most clients are taken from Qualys SSL Labs --- From: https://api.dev.ssllabs.com/api/v3/getClients 
 ";
+
 foreach my $shortname ( sort keys %sims ) {
 	foreach my $k ( qw(name shortname ciphers sni warning handshakebytes protos lowestProtocol highestProtocol service
 		minDhBits maxDhBits minRsaBits maxRsaBits minEcdsaBits requiresSha2 current) ) {
