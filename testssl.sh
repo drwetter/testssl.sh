@@ -9338,6 +9338,8 @@ socksend_tls_clienthello() {
 #                   "ephemeralkey" - extract the server's ephemeral key (if any)
 # arg4: (optional) additional request extensions
 # arg5: (optional) "true" if ClientHello should advertise compression methods other than "NULL"
+# return: 0: successful connect   | 1: protocol or cipher not available | 2: as (0) but downgraded
+#         6: couldn't open socket | 7: couldn't open temp file
 tls_sockets() {
      local -i ret=0
      local -i save=0
@@ -10074,6 +10076,7 @@ run_sweet32() {
      if "$using_sockets"; then
           tls_sockets "03" "${sweet32_ciphers_hex}"
           sclient_success=$?
+          [[ "$sclient_success" -eq 2 ]] && sclient_success=0
      else
           nr_sweet32_ciphers=$(count_ciphers $sweet32_ciphers)
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $sweet32_ciphers))
@@ -10913,6 +10916,7 @@ run_lucky13() {
      if "$using_sockets"; then
           tls_sockets "03" "${cbc_ciphers_hex}"
           sclient_success=$?
+          [[ "$sclient_success" -eq 2 ]] && sclient_success=0
      else
           nr_cbc_ciphers=$(count_ciphers $cbc_ciphers)
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $cbc_ciphers))
