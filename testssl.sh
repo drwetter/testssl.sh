@@ -4658,14 +4658,14 @@ pr_ecdh_curve_quality() {
 # The return value is an indicator of the quality of the cipher in $1:
 #   0 = $1 is empty
 #   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
-#   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best 
+#   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best
 pr_cipher_quality() {
      local cipher="$1"
      local text="$2"
 
      [[ -z "$1" ]] && return 0
      [[ -z "$text" ]] && text="$cipher"
-     
+
      if [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
           # This must be the OpenSSL name for a cipher
           if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
@@ -5973,11 +5973,11 @@ must_staple() {
      local cert extn
      local -i extn_len
      local supported=false
-     
+
      # Note this function is only looking for status_request (5) and not
      # status_request_v2 (17), since OpenSSL seems to only include status_request (5)
      # in its ClientHello when the "-status" option is used.
-     
+
      # OpenSSL 1.1.0 supports pretty-printing the "TLS Feature extension." For any
      # previous versions of OpenSSL, OpenSSL can only show if the extension OID is present.
      if $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE | grep -A 1 "TLS Feature:" | grep -q "status_request"; then
@@ -11000,7 +11000,7 @@ get_install_dir() {
           CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/etc/cipher-mapping.txt"
           [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$RUN_DIR"          # probably TESTSSL_INSTALL_DIR
      fi
-     
+
      [[ -r "$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           [[ -r "$RUN_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/cipher-mapping.txt"
@@ -11102,7 +11102,7 @@ find_openssl_binary() {
      OSSL_VER=$($OPENSSL version 2>/dev/null | awk -F' ' '{ print $2 }')
      OSSL_VER_MAJOR=$(sed 's/\..*$//' <<< "$OSSL_VER")
      OSSL_VER_MINOR=$(sed -e 's/^.\.//' <<< "$OSSL_VER" | tr -d '[a-zA-Z]-')
-     OSSL_VER_APPENDIX=$(tr -d '0-9.' "$OSSL_VER")
+     OSSL_VER_APPENDIX=$(tr -d '0-9.' <<< "$OSSL_VER")
      OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
      OSSL_BUILD_DATE=$($OPENSSL version -a  2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
      grep -q "not available" <<< "$OSSL_BUILD_DATE" && OSSL_BUILD_DATE=""
@@ -11986,7 +11986,7 @@ check_proxy() {
                fatal "Your $OPENSSL is too old to support the \"-proxy\" option" -5
           fi
           if [[ "$PROXY" == "auto" ]]; then
-               # get $ENV 
+               # get $ENV
                PROXY=${https_proxy#*\/\/}
                [[ -z "$PROXY" ]] && PROXY=${http_proxy#*\/\/}
                [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" 2
