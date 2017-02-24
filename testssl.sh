@@ -4589,7 +4589,7 @@ run_std_cipherlists() {
      std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   "   1 "aNULL"    "$anon_ciphers"   "$sslv2_anon_ciphers"
      std_cipherlists 'ADH'                              " Anonymous DH Ciphers     "   1 "ADH"      "$adh_ciphers"    "$sslv2_adh_ciphers"
      std_cipherlists 'EXPORT40'                         " 40 Bit encryption        "   1 "EXPORT40" "$exp40_ciphers"  "$sslv2_exp40_ciphers"
-     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        "   1 "EXPORT56" "$exp56_ciphers"  "$sslv2_exp56_ciphers"
+     std_cipherlists 'EXPORT56'                         " 56 Bit export ciphers    "   1 "EXPORT56" "$exp56_ciphers"  "$sslv2_exp56_ciphers"
      std_cipherlists 'EXPORT'                           " Export Ciphers (general) "   1 "EXPORT"   "$exp_ciphers"    "$sslv2_exp_ciphers"
      std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           "   1 "LOW"      "$low_ciphers"    "$sslv2_low_ciphers"
      std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              "   1 "DES"      "$des_ciphers"    "$sslv2_des_ciphers"
