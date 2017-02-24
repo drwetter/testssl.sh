@@ -11102,7 +11102,7 @@ find_openssl_binary() {
      OSSL_VER=$($OPENSSL version 2>/dev/null | awk -F' ' '{ print $2 }')
      OSSL_VER_MAJOR=$(sed 's/\..*$//' <<< "$OSSL_VER")
      OSSL_VER_MINOR=$(sed -e 's/^.\.//' <<< "$OSSL_VER" | tr -d '[a-zA-Z]-')
-     OSSL_VER_APPENDIX=$(tr -d '0-9.' "$OSSL_VER")
+     OSSL_VER_APPENDIX=$(tr -d '0-9.' <<< "$OSSL_VER")
      OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
      OSSL_BUILD_DATE=$($OPENSSL version -a  2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
      grep -q "not available" <<< "$OSSL_BUILD_DATE" && OSSL_BUILD_DATE=""
