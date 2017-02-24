@@ -241,7 +241,6 @@ PROXY=""
 PROXYIP=""
 PROXYPORT=""
 VULN_COUNT=0
-IPS=""
 SERVICE=""                              # is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
 CERT_FINGERPRINT_SHA2=""
@@ -265,10 +264,6 @@ END_TIME=0
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
 HEX_CIPHER=""
-
-                                             # The various hexdump commands we need to replace xxd (BSD compatibility)
-HEXDUMP=(hexdump -ve '16/1 "%02x " " \n"')   # This is used to analyze the reply
-HEXDUMPPLAIN=(hexdump -ve '1/1 "%.2x"')      # Replaces both xxd -p and tr -cd '[:print:]'
 
 SERVER_COUNTER=0                             # Counter for multiple servers
 
@@ -982,7 +977,7 @@ out_row_aligned_max_width() {
      local spaces="$2"
      local -i max_width="$3"
      local print_function="$4"
-     local -i i len cut_point
+     local -i i len
      local cr=$'\n'
      local line entry first=true last=false
 
@@ -1778,35 +1773,35 @@ run_hpkp() {
 
 emphasize_stuff_in_headers(){
 # see http://www.grymoire.com/Unix/Sed.html#uh-3
-#    outln "$1" | sed "s/[0-9]*/$brown&$off/g"
-     outln "$1" | sed -e "s/\([0-9]\)/$brown\1$off/g" \
-          -e "s/Debian/"$yellow"\Debian$off/g" \
-          -e "s/Win32/"$yellow"\Win32$off/g" \
-          -e "s/Win64/"$yellow"\Win64$off/g" \
-          -e "s/Ubuntu/"$yellow"Ubuntu$off/g" \
-          -e "s/ubuntu/"$yellow"ubuntu$off/g" \
-          -e "s/jessie/"$yellow"jessie$off/g" \
-          -e "s/squeeze/"$yellow"squeeze$off/g" \
-          -e "s/wheezy/"$yellow"wheezy$off/g" \
-          -e "s/lenny/"$yellow"lenny$off/g" \
-          -e "s/SUSE/"$yellow"SUSE$off/g" \
-          -e "s/Red Hat Enterprise Linux/"$yellow"Red Hat Enterprise Linux$off/g" \
-          -e "s/Red Hat/"$yellow"Red Hat$off/g" \
-          -e "s/CentOS/"$yellow"CentOS$off/g" \
-          -e "s/Via/"$yellow"Via$off/g" \
-          -e "s/X-Forwarded/"$yellow"X-Forwarded$off/g" \
-          -e "s/Liferay-Portal/"$yellow"Liferay-Portal$off/g" \
-          -e "s/X-Cache-Lookup/"$yellow"X-Cache-Lookup$off/g" \
-          -e "s/X-Cache/"$yellow"X-Cache$off/g" \
-          -e "s/X-Squid/"$yellow"X-Squid$off/g" \
-          -e "s/X-Server/"$yellow"X-Server$off/g" \
-          -e "s/X-Varnish/"$yellow"X-Varnish$off/g" \
-          -e "s/X-OWA-Version/"$yellow"X-OWA-Version$off/g" \
-          -e "s/MicrosoftSharePointTeamServices/"$yellow"MicrosoftSharePointTeamServices$off/g" \
-          -e "s/X-Version/"$yellow"X-Version$off/g" \
-          -e "s/X-Powered-By/"$yellow"X-Powered-By$off/g" \
-          -e "s/X-UA-Compatible/"$yellow"X-UA-Compatible$off/g" \
-          -e "s/X-AspNet-Version/"$yellow"X-AspNet-Version$off/g"
+#    outln "$1" | sed "s/[0-9]*/$brown&${off}/g"
+     outln "$1" | sed -e "s/\([0-9]\)/${brown}\1${off}/g" \
+          -e "s/Debian/${yellow}\Debian${off}/g" \
+          -e "s/Win32/${yellow}\Win32${off}/g" \
+          -e "s/Win64/${yellow}\Win64${off}/g" \
+          -e "s/Ubuntu/${yellow}Ubuntu${off}/g" \
+          -e "s/ubuntu/${yellow}ubuntu${off}/g" \
+          -e "s/jessie/${yellow}jessie${off}/g" \
+          -e "s/squeeze/${yellow}squeeze${off}/g" \
+          -e "s/wheezy/${yellow}wheezy${off}/g" \
+          -e "s/lenny/${yellow}lenny${off}/g" \
+          -e "s/SUSE/${yellow}SUSE${off}/g" \
+          -e "s/Red Hat Enterprise Linux/${yellow}Red Hat Enterprise Linux${off}/g" \
+          -e "s/Red Hat/${yellow}Red Hat${off}/g" \
+          -e "s/CentOS/${yellow}CentOS${off}/g" \
+          -e "s/Via/${yellow}Via${off}/g" \
+          -e "s/X-Forwarded/${yellow}X-Forwarded${off}/g" \
+          -e "s/Liferay-Portal/${yellow}Liferay-Portal${off}/g" \
+          -e "s/X-Cache-Lookup/${yellow}X-Cache-Lookup${off}/g" \
+          -e "s/X-Cache/${yellow}X-Cache${off}/g" \
+          -e "s/X-Squid/${yellow}X-Squid${off}/g" \
+          -e "s/X-Server/${yellow}X-Server${off}/g" \
+          -e "s/X-Varnish/${yellow}X-Varnish${off}/g" \
+          -e "s/X-OWA-Version/${yellow}X-OWA-Version${off}/g" \
+          -e "s/MicrosoftSharePointTeamServices/${yellow}MicrosoftSharePointTeamServices${off}/g" \
+          -e "s/X-Version/${yellow}X-Version${off}/g" \
+          -e "s/X-Powered-By/${yellow}X-Powered-By${off}/g" \
+          -e "s/X-UA-Compatible/${yellow}X-UA-Compatible${off}/g" \
+          -e "s/X-AspNet-Version/${yellow}X-AspNet-Version${off}/g"
 }
 
 run_server_banner() {
@@ -1909,7 +1904,7 @@ run_application_banner() {
 
 run_cookie_flags() {     # ARG1: Path
      local -i nr_cookies
-     local nr_httponly nr_secure
+     local -i nr_httponly nr_secure
      local negative_word
      local msg302="" msg302_=""
 
@@ -1944,7 +1939,7 @@ run_cookie_flags() {     # ARG1: Path
                [123456789]) pr_done_good "$nr_secure/$nr_cookies";;
           esac
           out " secure, "
-          if [[ $nr_cookies == $nr_secure ]]; then
+          if [[ $nr_cookies -eq $nr_secure ]]; then
                fileout "cookie_secure" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as secure"
           else
                fileout "cookie_secure" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as secure"
@@ -1955,7 +1950,7 @@ run_cookie_flags() {     # ARG1: Path
                [123456789]) pr_done_good "$nr_httponly/$nr_cookies";;
           esac
           out " HttpOnly"
-          if [[ $nr_cookies == $nr_httponly ]]; then
+          if [[ $nr_cookies -eq $nr_httponly ]]; then
                fileout "cookie_httponly" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
           else
                fileout "cookie_httponly" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
@@ -1975,8 +1970,7 @@ run_cookie_flags() {     # ARG1: Path
 run_more_flags() {
      local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
      local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible"
-     local egrep_pattern=""
-     local f2t result_str
+     local f2t
      local first=true
      local spaces="                              "
 
@@ -2454,7 +2448,7 @@ test_just_one(){
                          supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
                          "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
                          for (( i=0 ; i<nr_ciphers; i++ )); do
-                              if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${normalized_hexcode[i]}" ]]; then
+                              if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
                                    ciphers_found[i]=true
                                    "$SHOW_SIGALGO" && sigalg[i]="$s"
                               fi
@@ -2475,7 +2469,7 @@ test_just_one(){
                          supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
                          "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
                          for (( i=0 ; i<nr_ciphers; i++ )); do
-                              if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${ciph[i]}" ]]; then
+                              if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${ciph[i]} ]]; then
                                    ciphers_found[i]=true
                                    "$SHOW_SIGALGO" && sigalg[i]="$s"
                               fi
@@ -2688,7 +2682,7 @@ run_allciphers() {
                supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
                "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
                for (( i=0 ; i<nr_ciphers; i++ )); do
-                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${normalized_hexcode[i]}" ]]; then
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
                          ciphers_found[i]=true
                          "$SHOW_SIGALGO" && sigalg[i]="$s"
                     fi
@@ -2701,7 +2695,7 @@ run_allciphers() {
                supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
                "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
                for (( i=0 ; i<nr_ciphers; i++ )); do
-                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${ciph[i]}" ]]; then
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${ciph[i]} ]]; then
                          ciphers_found[i]=true
                          "$SHOW_SIGALGO" && sigalg[i]="$s"
                     fi
@@ -2940,7 +2934,7 @@ run_cipher_per_proto() {
                                    [[ "${hexc:2:2}" == "13" ]] && nr_ciphers+=1
                               elif [[ "$proto_text" == "TLS 1.2" ]]; then
                                    [[ "${hexc:2:2}" != "13" ]] && nr_ciphers+=1
-                              elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA256" ]] && [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA384" ]] && \
+                              elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
                                    [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
                                    nr_ciphers+=1
                               fi
@@ -2962,7 +2956,7 @@ run_cipher_per_proto() {
                     if [[ "$proto_text" == "TLS 1.2" ]] || \
                        ( [[ "${ciph[nr_ciphers]}" != *"-SHA256" ]] && [[ "${ciph[nr_ciphers]}" != *"-SHA384" ]] && \
                          [[ "${ciph[nr_ciphers]}" != *"-CCM" ]] && [[ "${ciph[nr_ciphers]}" != *"-CCM8" ]] && \
-                         [[ ! "${ciph[nr_ciphers]}" =~ "-CHACHA20-POLY1305" ]] ); then
+                         [[ ! "${ciph[nr_ciphers]}" =~ -CHACHA20-POLY1305 ]] ); then
                          ciphers_found[nr_ciphers]=false
                          if [[ ${#hexc} -eq 9 ]]; then
                               if [[ "${hexc:2:2}" == "00" ]]; then
@@ -2986,7 +2980,7 @@ run_cipher_per_proto() {
                     supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
                     "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
                     for (( i=0 ; i<nr_ciphers; i++ )); do
-                         if [[ "$supported_sslv2_ciphers" =~ "${normalized_hexcode[i]}" ]]; then
+                         if [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
                               ciphers_found[i]=true
                               "$SHOW_SIGALGO" && sigalg[i]="$s"
                          fi
@@ -2999,7 +2993,7 @@ run_cipher_per_proto() {
                     supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
                     "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
                     for (( i=0 ; i<nr_ciphers; i++ )); do
-                         if [[ "$supported_sslv2_ciphers" =~ "${ciph[i]}" ]]; then
+                         if [[ "$supported_sslv2_ciphers" =~ ${ciph[i]} ]]; then
                               ciphers_found[i]=true
                               "$SHOW_SIGALGO" && sigalg[i]="$s"
                          fi
@@ -3275,7 +3269,7 @@ client_simulation_sockets() {
      debugme echo "sending client hello..."
      code2network "${data}"
      fd_socket 5 || return 6
-     data=$(echo $NW_STR)
+     data="$NW_STR"
      [[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
@@ -4619,7 +4613,7 @@ run_std_cipherlists() {
      std_cipherlists 'aNULL'                            " Anonymous NULL Ciphers   "   1 "aNULL"    "$anon_ciphers"   "$sslv2_anon_ciphers"
      std_cipherlists 'ADH'                              " Anonymous DH Ciphers     "   1 "ADH"      "$adh_ciphers"    "$sslv2_adh_ciphers"
      std_cipherlists 'EXPORT40'                         " 40 Bit encryption        "   1 "EXPORT40" "$exp40_ciphers"  "$sslv2_exp40_ciphers"
-     std_cipherlists 'EXPORT56'                         " 56 Bit encryption        "   1 "EXPORT56" "$exp56_ciphers"  "$sslv2_exp56_ciphers"
+     std_cipherlists 'EXPORT56'                         " 56 Bit export ciphers    "   1 "EXPORT56" "$exp56_ciphers"  "$sslv2_exp56_ciphers"
      std_cipherlists 'EXPORT'                           " Export Ciphers (general) "   1 "EXPORT"   "$exp_ciphers"    "$sslv2_exp_ciphers"
      std_cipherlists 'LOW:!ADH'                         " Low (<=64 Bit)           "   1 "LOW"      "$low_ciphers"    "$sslv2_low_ciphers"
      std_cipherlists 'DES:!ADH:!EXPORT:!aNULL'          " DES Ciphers              "   1 "DES"      "$des_ciphers"    "$sslv2_des_ciphers"
@@ -4850,7 +4844,7 @@ run_server_preference() {
      # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
      local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
      local has_cipher_order=true
-     local isok addcmd="" addcmd2="" sni=""
+     local addcmd="" addcmd2="" sni=""
      local using_sockets=true
 
      "$SSL_NATIVE" && using_sockets=false
@@ -5287,8 +5281,8 @@ cipher_pref_check() {
                                    [[ "${hexc:2:2}" == "13" ]] && nr_nonossl_ciphers+=1
                               elif [[ "$p" == "tls1_2" ]]; then
                                    [[ "${hexc:2:2}" != "13" ]] && nr_nonossl_ciphers+=1
-                              elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA256" ]] && \
-                                   [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA384" ]] && \
+                              elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
+                                   [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
                                    [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
                                    [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
                                    nr_nonossl_ciphers+=1
@@ -5359,8 +5353,8 @@ cipher_pref_check() {
                               [[ "${hexc:2:2}" == "13" ]] && nr_ciphers+=1
                          elif [[ "$p" == "tls1_2" ]]; then
                               [[ "${hexc:2:2}" != "13" ]] && nr_ciphers+=1
-                         elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA256" ]] && \
-                              [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA384" ]] && \
+                         elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
+                              [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
                               [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
                               [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
                               nr_ciphers+=1
@@ -5674,7 +5668,7 @@ determine_tls_extensions() {
                alpn_extn_len_hex=$(printf "%04x" $alpn_extn_len)
                tls_extensions+=", 00,10,${alpn_extn_len_hex:0:2},${alpn_extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
           fi
-          if [[ ! "$TLS_EXTENSIONS" =~ "encrypt-then-mac" ]]; then
+          if [[ ! "$TLS_EXTENSIONS" =~ encrypt-then-mac ]]; then
                tls_sockets "03" "$cbc_cipher_list_hex, 00,ff" "all" "$tls_extensions"
                success=$?
           fi
@@ -5700,7 +5694,7 @@ determine_tls_extensions() {
           elif [[ ! "$OPTIMAL_PROTO" =~ ssl ]]; then
                addcmd="$SNI"
           fi
-          if [[ ! "$TLS_EXTENSIONS" =~ "encrypt-then-mac" ]]; then
+          if [[ ! "$TLS_EXTENSIONS" =~ encrypt-then-mac ]]; then
                $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd $OPTIMAL_PROTO -tlsextdebug $params -cipher $cbc_cipher_list </dev/null 2>$ERRFILE >$TMPFILE
                sclient_connect_successful $? $TMPFILE
                success=$?
@@ -6026,7 +6020,7 @@ must_staple() {
           # The TLS Feature is a SEQUENCE of INTEGER. Get the length of the SEQUENCE
           extn_len=2*$(hex2dec "${extn:2:2}")
           # If the extension include the status_request (5), then it supports must staple.
-          if [[ "${extn:4:extn_len}" =~ "020105" ]]; then
+          if [[ "${extn:4:extn_len}" =~ 020105 ]]; then
                supported=true
           fi
      fi
@@ -6848,8 +6842,8 @@ run_pfs() {
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                pfs_cipher="${TLS_CIPHER_RFC_NAME[i]}"
                if ( [[ "$pfs_cipher" == "TLS_DHE_"* ]] || [[ "$pfs_cipher" == "TLS_ECDHE_"* ]] ) && \
-                  [[ ! "$pfs_cipher" =~ "NULL" ]] && [[ ! "$pfs_cipher" =~ "DES" ]] && [[ ! "$pfs_cipher" =~ "RC4" ]] && \
-                  [[ ! "$pfs_cipher" =~ "PSK" ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
+                  [[ ! "$pfs_cipher" =~ NULL ]] && [[ ! "$pfs_cipher" =~ DES ]] && [[ ! "$pfs_cipher" =~ RC4 ]] && \
+                  [[ ! "$pfs_cipher" =~ PSK ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
                     hexc="${TLS_CIPHER_HEXCODE[i]}"
                     pfs_hex_cipher_list+=", ${hexc:2:2},${hexc:7:2}"
                     ciph[nr_supported_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
@@ -7110,7 +7104,7 @@ run_pfs() {
                     [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
                     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
-                    [[ ! "$curve_found" =~ "ffdhe" ]] && break
+                    [[ ! "$curve_found" =~ ffdhe ]] && break
                     for (( i=0; i < nr_curves; i++ )); do
                          ! "${supported_curve[i]}" && [[ "${ffdhe_groups_output[i]}" == "$curve_found" ]] && break
                     done
@@ -7544,7 +7538,7 @@ close_socket(){
 # first: helper function for protocol checks
 code2network() {
      # arg1: formatted string here in the code
-     NW_STR=$(echo "$1" | sed -e 's/,/\\\x/g' | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
+     NW_STR=$(sed -e 's/,/\\\x/g' <<< "$1" | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
      #TODO: just echo, no additional global var
 }
 
@@ -8658,7 +8652,7 @@ parse_tls_serverhello() {
 
      # Now parse the server key exchange message
      if [[ $tls_serverkeyexchange_ascii_len -ne 0 ]]; then
-          if [[ $rfc_cipher_suite =~ "TLS_ECDHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_ECDH_anon" ]] || \
+          if [[ $rfc_cipher_suite =~ TLS_ECDHE_ ]] || [[ $rfc_cipher_suite =~ TLS_ECDH_anon ]] || \
              [[ $rfc_cipher_suite == ECDHE* ]] || [[ $rfc_cipher_suite == AECDH* ]]; then
                if [[ $tls_serverkeyexchange_ascii_len -lt 6 ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
@@ -8710,7 +8704,7 @@ parse_tls_serverhello() {
                     debugme echo "dh_bits:                $named_curve_str, $dh_bits bits"
                     echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
                fi
-          elif [[ $rfc_cipher_suite =~ "TLS_DHE_" ]] || [[ $rfc_cipher_suite =~ "TLS_DH_anon" ]] || \
+          elif [[ $rfc_cipher_suite =~ TLS_DHE_ ]] || [[ $rfc_cipher_suite =~ TLS_DH_anon ]] || \
                [[ $rfc_cipher_suite == "DHE-"* ]] || [[ $rfc_cipher_suite == "EDH-"* ]] || \
                [[ $rfc_cipher_suite == "EXP1024-DHE-"* ]]; then
                # For DH ephemeral keys the first field is p, and the length of
@@ -8760,7 +8754,7 @@ parse_tls_serverhello() {
                        *) named_curve=0;   named_curve_str="" ;;
                esac
                [[ -z "$key_bitstring" ]] && named_curve=0 && named_curve_str=""
-               if [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ "BEGIN" ]]; then
+               if [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ BEGIN ]]; then
                     ephemeral_param="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | grep -A 1000 "prime:")"
                     rfc7919_param="$($OPENSSL pkey -text -noout <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -A 1000 "prime:")"
                     [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
@@ -8807,7 +8801,8 @@ sslv2_sockets() {
 
      code2network "$cipher_suites" # convert CIPHER_SUITES
      cipher_suites="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
-     len_ciph_suites_byte=$(echo ${#cipher_suites})
+     len_ciph_suites_byte=${#cipher_suites}
+
      let "len_ciph_suites_byte += 2"
      len_ciph_suites=$(printf "%02x\n" $(($len_ciph_suites_byte / 4 )))
      len_client_hello=$(printf "%02x\n" $((0x$len_ciph_suites + 0x19)))
@@ -8888,8 +8883,7 @@ socksend_tls_clienthello() {
 
      code2network "$(tolower "$2")"               # convert CIPHER_SUITES
      cipher_suites="$NW_STR"                      # we don't have the leading \x here so string length is two byte less, see next
-
-     len_ciph_suites_byte=$(echo ${#cipher_suites})
+     len_ciph_suites_byte=${#cipher_suites}
      let "len_ciph_suites_byte += 2"
 
      # we have additional 2 chars \x in each 2 byte string and 2 byte ciphers, so we need to divide by 4:
@@ -9123,7 +9117,7 @@ socksend_tls_clienthello() {
      fd_socket 5 || return 6
 
      code2network "$TLS_CLIENT_HELLO$all_extensions"
-     data=$(echo $NW_STR)
+     data="$NW_STR"
      [[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
@@ -10457,7 +10451,7 @@ run_beast(){
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                hexc="${TLS_CIPHER_HEXCODE[i]}"
                if [[ ${#hexc} -eq 9 ]] && [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ CBC ]] && \
-                  [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA256" ]] && [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ "SHA384" ]]; then
+                  [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]]; then
                     cbc_cipher_list_hex+=", ${hexc:2:2},${hexc:7:2}"
                     ciph[nr_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
                     hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
@@ -10780,7 +10774,7 @@ run_rc4() {
      # get a list of all the cipher suites to test
      if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-               if [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ "RC4" ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
+               if [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ RC4 ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
                     hexc="$(tolower "${TLS_CIPHER_HEXCODE[i]}")"
                     ciph[nr_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
                     rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
@@ -10813,7 +10807,7 @@ run_rc4() {
           done
      else
           while read hexc n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
-               if [[ "${ciph[nr_ciphers]}" =~ "RC4" ]]; then
+               if [[ "${ciph[nr_ciphers]}" =~ RC4 ]]; then
                     ciphers_found[nr_ciphers]=false
                     if [[ ${#hexc} -eq 9 ]]; then
                          if [[ "${hexc:2:2}" == "00" ]]; then
@@ -11129,12 +11123,12 @@ find_openssl_binary() {
 
      # http://www.openssl.org/news/openssl-notes.html
      OSSL_VER=$($OPENSSL version 2>/dev/null | awk -F' ' '{ print $2 }')
-     OSSL_VER_MAJOR=$(echo "$OSSL_VER" | sed 's/\..*$//')
-     OSSL_VER_MINOR=$(echo "$OSSL_VER" | sed -e 's/^.\.//' | tr -d '[a-zA-Z]-')
-     OSSL_VER_APPENDIX=$(echo "$OSSL_VER" | tr -d '0-9.')
+     OSSL_VER_MAJOR=$(sed 's/\..*$//' <<< "$OSSL_VER")
+     OSSL_VER_MINOR=$(sed -e 's/^.\.//' <<< "$OSSL_VER" | tr -d '[a-zA-Z]-')
+     OSSL_VER_APPENDIX=$(tr -d '0-9.' "$OSSL_VER")
      OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
      OSSL_BUILD_DATE=$($OPENSSL version -a  2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
-     echo $OSSL_BUILD_DATE | grep -q "not available" && OSSL_BUILD_DATE=""
+     grep -q "not available" <<< "$OSSL_BUILD_DATE" && OSSL_BUILD_DATE=""
 
      # see #190, reverting logic: unless otherwise proved openssl has no dh bits
      case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
@@ -11598,7 +11592,7 @@ ignore_no_or_lame() {
      pr_warning "$1 --> "
      read a
      if [[ "$a" == "$(tolower "$2")" ]]; then
-          $ok_arg return 0
+          return 0
      else
           return 1
      fi
@@ -11907,13 +11901,13 @@ get_mx_record() {
      check_resolver_bins
      # we need tha last two columns here!
      if which host &> /dev/null; then
-          mxs=$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')
+          mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif which dig &> /dev/null; then
-          mxs=$(dig +short -t MX "$1" 2>/dev/null | awk '/^[0-9]/')
+          mxs="$(dig +short -t MX "$1" 2>/dev/null | awk '/^[0-9]/')"
      elif which drill &> /dev/null; then
-          mxs=$(drill mx $1 | | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')
+          mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
      elif which nslookup &> /dev/null; then
-          mxs=$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')
+          mxs="$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')"
      else
           fatal "No dig, host, drill or nslookup" -3
      fi
