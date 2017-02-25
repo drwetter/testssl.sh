@@ -628,8 +628,8 @@ pr_done_good()   { tm_done_good "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" &&
 prln_done_good() { pr_done_good "$1"; outln; }
 
 tm_done_best()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;34m$1" || tm_out "\033[1;32m$1" ) ||  tm_out "$1"; tm_off; }  # green (blue), This is the best
+tmln_done_best() { tm_done_best "$1"; tmln_out; }
 pr_done_best()   { tm_done_best "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
-tm_done_best()   { tm_done_best "$1"; tmln_out; }
 prln_done_best() { pr_done_best "$1"; outln; } 
 
 tm_svrty_low()     { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;33m$1" || tm_out "$1"; tm_off; }         # yellow brown | academic or minor problem
@@ -666,9 +666,9 @@ pr_bold()       { tm_bold "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"
 prln_bold()     { pr_bold "$1" ; outln; }
 
 tm_italic()     { [[ "$COLOR" -ne 0 ]] && tm_out "\033[3m$1" || tm_out "$1"; tm_off; }
-tm_italic()     { pr_italic "$1" ; outln; }
+tmln_italic()   { tm_italic "$1" ; outln; }
 pr_italic()     { tm_italic "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<i>$(html_reserved "$1")</i>" || html_out "$(html_reserved "$1")"; }
-tmln_italic()   { tm_italic "$1"; tmln_out; }
+prln_italic()   { pr_italic "$1"; tmln_out; }
 
 tm_strikethru()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[9m$1" || tm_out "$1"; tm_off; }                          # ugly!
 tmln_strikethru() { tm_strikethru "$1"; tmln_out; }
