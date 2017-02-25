@@ -144,7 +144,7 @@ COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the ou
 SHOW_EACH_C=${SHOW_EACH_C:-false}       # where individual ciphers are tested show just the positively ones tested
 SHOW_SIGALGO=${SHOW_SIGALGO:-false}     # "secret" switch whether testssl.sh shows the signature algorithm for -E / -e
 SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave behind just usual?
-QUIET=${QUIET:-false}                   # don't output the banner. By doing this yiu acknowledge usage term appearing in the banner
+QUIET=${QUIET:-false}                   # don't output the banner. By doing this you acknowledge usage term appearing in the banner
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
 ASSUME_HTTP=${ASSUME_HTTP:-false}       # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
@@ -159,8 +159,7 @@ WIDE=${WIDE:-false}                     # whether to display for some options ju
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
-HTMLFILE=${CSVFILE:-""}                 # HTML if used
-HTMLHEADER=true                         # include HTML headers and footers in HTML file, if one is being created
+HTMLFILE=${HTMLFILE:-""}                # HTML if used
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 GIVE_HINTS=false                        # give an addtional info to findings
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
@@ -558,157 +557,160 @@ declare TLS_CIPHER_OSSL_SUPPORTED=()
 
 # For HTML output, replace any HTML reserved characters with the entity name
 html_reserved(){
-    echo "$1" | sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g"
+    sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" <<< "$1"
 }
 
-# a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
-out_html() {
-     "$do_html" && [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "${1//%/%%}" >> "$HTMLFILE"
+html_out() {
+     "$do_html" || return
+     [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "${1//%/%%}" >> "$HTMLFILE"
+     # here and other printf's: a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%'. '--' and %b do the rest.
 }
 
 out() {
-#     if [[ "$BASH_VERSINFO" -eq 4 ]]; then
-          printf -- "%b" "${1//%/%%}"
-          out_html "$1"
-#     else
-#          /usr/bin/printf -- "${1//%/%%}"
-#     fi
+     printf -- "%b" "${1//%/%%}"
+     html_out "$1"
 }
 outln() { out "$1\n"; }
 
-out_term(){
-#     if [[ "$BASH_VERSINFO" -eq 4 ]]; then
-          printf -- "%b" "${1//%/%%}"
-#     else
-#          /usr/bin/printf -- "${1//%/%%}"
-#     fi
+tm_out(){
+     printf -- "%b" "${1//%/%%}"
 }
-outln_term() { out_term "$1\n"; }
-
-retstring(){
-          printf -- "%b" "${1//%/%%}"
-}
+tmln_out() { tm_out "$1\n"; }
 
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
-pr_liteblue_term() { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[0;32m$1" || out_term "\033[0;34m$1" ) || out_term "$1"; pr_off; }    # not yet used
-pr_liteblue()      { pr_liteblue_term "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_html "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" ) || out_html "$(html_reserved "$1")"; }
-pr_liteblueln_term() { pr_liteblue_term "$1"; outln_term; }
-pr_liteblueln() { pr_liteblue "$1"; outln; }
-pr_blue_term()  { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[1;32m$1" || out_term "\033[1;34m$1" ) || out_term "$1"; pr_off; }    # used for head lines of single tests
-pr_blue()       { pr_blue_term "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_html "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" ) || out_html "$(html_reserved "$1")"; }
-pr_blueln_term() { pr_blue_term "$1"; outln_term; }
-pr_blueln()     { pr_blue "$1"; outln; }
+tm_liteblue()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;32m$1" || tm_out "\033[0;34m$1" ) || tm_out "$1"; tm_off; }    # not yet used
+pr_liteblue()   { tm_liteblue "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+tmln_liteblue() { tm_liteblue "$1"; tmln_out; }
+prln_liteblue() { pr_liteblue "$1"; outln; }
 
-pr_warning_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;35m$1" || pr_underline_term "$1"; pr_off; }                     # some local problem: one test cannot be done
-pr_warning()      { pr_warning_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#cd00cd;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && out_html "<u>$(html_reserved "$1")</u>" || out_html "$(html_reserved "$1")" ); }
-pr_warningln_term() { pr_warning_term "$1"; outln_term; }                                                                    # litemagenta
-pr_warningln()      { pr_warning "$1"; outln; }
-pr_magenta_term()   { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;35m$1" || pr_underline_term "$1"; pr_off; }                   # fatal error: quitting because of this!
-pr_magenta()        { pr_magenta_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:magenta;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && out_html "<u>$(html_reserved "$1")</u>" || out_html "$(html_reserved "$1")" ); }
-pr_magentaln_term() { pr_magenta_term "$1"; outln_term; }
-pr_magentaln()      { pr_magenta "$1"; outln; }
+tm_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;32m$1" || tm_out "\033[1;34m$1" ) || tm_out "$1"; tm_off; }    # used for head lines of single tests
+pr_blue()       { tm_blue "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+tmln_blue()     { tm_blue "$1"; tmln_out; }
+prln_blue()     { pr_blue "$1"; outln; }
 
-pr_litecyan_term()   { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;36m$1" || out_term "$1"; pr_off; }                           # not yet used
-pr_litecyan()   { pr_litecyan_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#00cdcd;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
-pr_litecyanln_term() { pr_litecyan_term "$1"; outln_term; }
-pr_litecyanln() { pr_litecyan "$1"; outln; }
-pr_cyan_term()  { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;36m$1" || out_term "$1"; pr_off; }                                # additional hint
-pr_cyan()       { pr_cyan_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:cyan;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
-pr_cyanln_term() { pr_cyan_term "$1"; outln_term; }
-pr_cyanln()     { pr_cyan "$1"; outln; }
+# we should be able to use aliases here
+tm_warning()    { [[ "$COLOR" -eq 2 ]] && tm_out "\033[0;35m$1" || tm_underline "$1"; tm_off; }                   # some local problem: one test cannot be done
+tmln_warning()  { tm_warning "$1"; tmln_out; }                                                                    # litemagenta
+pr_warning()    { tm_warning "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#cd00cd;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<u>$(html_reserved "$1")</u>" || html_out "$(html_reserved "$1")" ); }
+prln_warning()  { pr_warning "$1"; outln; }
 
-pr_litegreyln_term() { pr_litegrey_term "$1"; outln_term; }                                                                  # not really usable on a black background, see ..
-pr_litegreyln() { pr_litegrey "$1"; outln; }
-pr_litegrey_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[0;37m$1" || out_term "$1"; pr_off; }                             # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
-pr_litegrey()   { pr_litegrey_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"color:darkgray;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
-pr_grey_term()  { [[ "$COLOR" -ne 0 ]] && out_term "\033[1;30m$1" || out_term "$1"; pr_off; }
-pr_grey()       { pr_grey_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"color:#7f7f7f;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
-pr_greyln_term() { pr_grey_term "$1"; outln_term; }
-pr_greyln()     { pr_grey "$1"; outln; }
+tm_magenta()    { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;35m$1" || tm_underline "$1"; tm_off; }                   # fatal error: quitting because of this!
+tmln_magenta()  { tm_magenta "$1"; tmln_out; }
+# different as warning above?
+pr_magenta()    { tm_magenta "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:magenta;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<u>$(html_reserved "$1")</u>" || html_out "$(html_reserved "$1")" ); }
+prln_magenta()  { pr_magenta "$1"; outln; }
 
-pr_done_good_term() { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[0;34m$1" || out_term "\033[0;32m$1" ) || out_term "$1"; pr_off; }   # litegreen (liteblue), This is good
-pr_done_good()      { pr_done_good_term "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_html "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" ) || out_html "$(html_reserved "$1")"; }
-pr_done_goodln_term() { pr_done_good_term "$1"; outln_term; }
-pr_done_goodln()    { pr_done_good "$1"; outln; }
-pr_done_best_term() { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_term "\033[1;34m$1" || out_term "\033[1;32m$1" ) ||  out_term "$1"; pr_off; }  # green (blue), This is the best
-pr_done_best()      { pr_done_best_term "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && out_html "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" ) || out_html "$(html_reserved "$1")"; }
-pr_done_bestln_term() { pr_done_best_term "$1"; outln_term; }
-pr_done_bestln()    { pr_done_best "$1"; outln; }
+tm_litecyan()   { [[ "$COLOR" -eq 2 ]] && tm_out "\033[0;36m$1" || tm_out "$1"; tm_off; }                         # not yet used
+tmln_litecyan() { tm_litecyan "$1"; tmln_out; }
+pr_litecyan()   { tm_litecyan "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#00cdcd;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+prln_litecyan() { pr_litecyan "$1"; outln; }
 
-pr_svrty_low_term()  { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;33m$1" || out_term "$1"; pr_off; }         # yellow brown | academic or minor problem
-pr_svrty_low()       { pr_svrty_low_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#cdcd00;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
-pr_svrty_lowln_term() { pr_svrty_low_term "$1"; outln_term; }
-pr_svrty_lowln()     { pr_svrty_low "$1"; outln; }
-pr_svrty_medium_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;33m$1" || out_term "$1"; pr_off; }       # brown | it is not a bad problem but you shouldn't do this
-pr_svrty_medium()    { pr_svrty_medium_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#cd8000;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
-pr_svrty_mediumln_term() { pr_svrty_medium_term "$1"; outln_term; }
-pr_svrty_mediumln()  { pr_svrty_medium "$1"; outln; }
+tm_cyan()       { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;36m$1" || tm_out "$1"; tm_off; }                         # additional hint
+tmln_cyan()     { tm_cyan "$1"; tmln_out; }
+pr_cyan()       { tm_cyan "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:cyan;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+prln_cyan()     { pr_cyan "$1"; outln; }
 
-pr_svrty_high_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[0;31m$1" || pr_bold_term "$1"; pr_off; }               # litered
-pr_svrty_high()      { pr_svrty_high_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:#cd0000;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && out_html "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")" ); }
-pr_svrty_highln_term() { pr_svrty_high_term "$1"; outln_term; }
-pr_svrty_highln()    { pr_svrty_high "$1"; outln; }
-pr_svrty_critical_term() { [[ "$COLOR" -eq 2 ]] && out_term "\033[1;31m$1" || pr_bold_term "$1"; pr_off; }           # red
-pr_svrty_critical()  { pr_svrty_critical_term "$1"; [[ "$COLOR" -eq 2 ]] && out_html "<span style=\"color:red;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && out_html "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")" ); }
-pr_svrty_criticalln_term() { pr_svrty_critical_term "$1"; outln_term; }
-pr_svrty_criticalln(){ pr_svrty_critical "$1"; outln; }
+tm_litegrey()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[0;37m$1" || tm_out "$1"; tm_off; }                        # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
+tmln_litegrey() { tm_litegrey "$1"; tmln_out; }                                                                  # not really usable on a black background, see ..
+prln_litegrey() { pr_litegrey "$1"; outln; }
+pr_litegrey()   { tm_litegrey "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"color:darkgray;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 
-pr_deemphasize_term() { out_term "$1"; }                                                                   # hook for a weakened screen output, see #600
-pr_deemphasize()      { pr_deemphasize_term "$1"; out_html "<span style=\"color:darkgray;\">$(html_reserved "$1")</span>"; }
-pr_deemphasizeln_term() { pr_deemphasize_term "$1"; outln_term; }
-pr_deemphasizeln()    { pr_deemphasize "$1"; outln; }
+tm_grey()       { [[ "$COLOR" -ne 0 ]] && tm_out "\033[1;30m$1" || tm_out "$1"; tm_off; }
+pr_grey()       { tm_grey "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"color:#7f7f7f;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+tmln_grey()     { tm_grey "$1"; tmln_out; }
+prln_grey()     { pr_grey "$1"; outln; }
+
+tm_done_good()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;34m$1" || tm_out "\033[0;32m$1" ) || tm_out "$1"; tm_off; }   # litegreen (liteblue), This is good
+tmln_done_good() { tm_done_good "$1"; tmln_out; }
+pr_done_good()   { tm_done_good "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+prln_done_good() { pr_done_good "$1"; outln; }
+
+tm_done_best()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;34m$1" || tm_out "\033[1;32m$1" ) ||  tm_out "$1"; tm_off; }  # green (blue), This is the best
+pr_done_best()   { tm_done_best "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+tm_done_best()   { tm_done_best "$1"; tmln_out; }
+prln_done_best() { pr_done_best "$1"; outln; } 
+
+tm_svrty_low()     { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;33m$1" || tm_out "$1"; tm_off; }         # yellow brown | academic or minor problem
+tmln_svrty_low()   { tm_svrty_low "$1"; tmln_out; }
+pr_svrty_low()     { tm_svrty_low "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#cdcd00;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+prln_svrty_low()   { pr_svrty_low "$1"; outln; }
+
+tm_svrty_medium()  { [[ "$COLOR" -eq 2 ]] && tm_out "\033[0;33m$1" || tm_out "$1"; tm_off; }       # brown | it is not a bad problem but you shouldn't do this
+pr_svrty_medium()  { tm_svrty_medium "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#cd8000;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+tmln_svrty_medium(){ tm_svrty_medium "$1"; tmln_out; }
+prln_svrty_medium(){ pr_svrty_medium "$1"; outln; }
+
+tm_svrty_high()    { [[ "$COLOR" -eq 2 ]] && tm_out "\033[0;31m$1" || tm_bold "$1"; tm_off; }               # litered
+pr_svrty_high()    { tm_svrty_high "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#cd0000;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")" ); }
+tmln_svrty_high()  { tm_svrty_high "$1"; tmln_out; }
+prln_svrty_high()  { pr_svrty_high "$1"; outln; }
+
+tm_svrty_critical()   { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;31m$1" || tm_bold "$1"; tm_off; }           # red
+pr_svrty_critical()   { tm_svrty_critical "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:red;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")" ); }
+tmln_svrty_critical() { tm_svrty_critical "$1"; tmln_out; }
+prln_svrty_critical() { pr_svrty_critical "$1"; outln; }
+
+tm_deemphasize()      { tm_out "$1"; }                                                                   # hook for a weakened screen output, see #600
+pr_deemphasize()      { tm_deemphasize "$1"; html_out "<span style=\"color:darkgray;\">$(html_reserved "$1")</span>"; }
+tmln_deemphasize()    { tm_deemphasize "$1"; tmln_out; }
+prln_deemphasize()    { pr_deemphasize "$1"; outln; }
 
 # color=1 functions
-pr_off()          { [[ "$COLOR" -ne 0 ]] && out_term "\033[m"; }
-pr_bold_term()    { [[ "$COLOR" -ne 0 ]] && out_term "\033[1m$1" || out_term "$1"; pr_off; }
-pr_bold()         { pr_bold_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
-pr_boldln_term()  { pr_bold_term "$1"; outln_term; }
-pr_boldln()       { pr_bold "$1" ; outln; }
-pr_italic_term()  { [[ "$COLOR" -ne 0 ]] && out_term "\033[3m$1" || out_term "$1"; pr_off; }
-pr_italic()       { pr_italic_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<i>$(html_reserved "$1")</i>" || out_html "$(html_reserved "$1")"; }
-pr_italicln_term() { pr_italic_term "$1"; outln_term; }
-pr_italicln()     { pr_italic "$1" ; outln; }
-pr_strikethru_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[9m$1" || out_term "$1"; pr_off; }                          # ugly!
-pr_strikethru()   { pr_strikethru_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<strike>$(html_reserved "$1")</strike>" || out_html "$(html_reserved "$1")"; }
-pr_strikethruln_term() { pr_strikethru_term "$1"; outln_term; }
-pr_strikethruln() { pr_strikethru "$1" ; outln; }
-pr_underline_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[4m$1" || out_term "$1"; pr_off; }
-pr_underline()    { pr_underline_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<u>$(html_reserved "$1")</u>" || out_html "$(html_reserved "$1")"; }
-pr_underlineln_term() { pr_underline_term "$1"; outln_term; }
-pr_underlineln()  { pr_underline "$1"; outln; }
-pr_reverse_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[7m$1" || out_term "$1"; pr_off; }
-pr_reverse()      { pr_reverse_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"color:white;background-color:black;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
-pr_reverse_bold_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[7m\033[1m$1" || out_term "$1"; pr_off; }
-pr_reverse_bold() { pr_reverse_bold_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"color:white;background-color:black;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
+tm_off()        { [[ "$COLOR" -ne 0 ]] && tm_out "\033[m"; }
+
+tm_bold()       { [[ "$COLOR" -ne 0 ]] && tm_out "\033[1m$1" || tm_out "$1"; tm_off; }
+tmln_bold()     { tm_bold "$1"; tmln_out; }
+pr_bold()       { tm_bold "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+prln_bold()     { pr_bold "$1" ; outln; }
+
+tm_italic()     { [[ "$COLOR" -ne 0 ]] && tm_out "\033[3m$1" || tm_out "$1"; tm_off; }
+tm_italic()     { pr_italic "$1" ; outln; }
+pr_italic()     { tm_italic "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<i>$(html_reserved "$1")</i>" || html_out "$(html_reserved "$1")"; }
+tmln_italic()   { tm_italic "$1"; tmln_out; }
+
+tm_strikethru()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[9m$1" || tm_out "$1"; tm_off; }                          # ugly!
+tmln_strikethru() { tm_strikethru "$1"; tmln_out; }
+pr_strikethru()   { tm_strikethru "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<strike>$(html_reserved "$1")</strike>" || html_out "$(html_reserved "$1")"; }
+prln_strikethru() { pr_strikethru "$1" ; outln; }
+
+tm_underline()    { [[ "$COLOR" -ne 0 ]] && tm_out "\033[4m$1" || tm_out "$1"; tm_off; }
+tmln_underline()  { tm_underline "$1"; tmln_out; }
+pr_underline()    { tm_underline "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<u>$(html_reserved "$1")</u>" || html_out "$(html_reserved "$1")"; }
+prln_underline()  { pr_underline "$1"; outln; }
+
+tm_reverse()      { [[ "$COLOR" -ne 0 ]] && tm_out "\033[7m$1" || tm_out "$1"; tm_off; }
+tm_reverse_bold() { [[ "$COLOR" -ne 0 ]] && tm_out "\033[7m\033[1m$1" || tm_out "$1"; tm_off; }
+pr_reverse()      { tm_reverse "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"color:white;background-color:black;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+pr_reverse_bold() { tm_reverse_bold "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"color:white;background-color:black;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 
 #pr_headline() { pr_blue "$1"; }
 #http://misc.flogisoft.com/bash/tip_colors_and_formatting
 
-#pr_headline() { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m\033[47m$1" || out "$1"; pr_off; }
-pr_headline_term() { [[ "$COLOR" -ne 0 ]] && out_term "\033[1m\033[4m$1" || out_term "$1"; pr_off; }
-pr_headline() { pr_headline_term "$1"; [[ "$COLOR" -ne 0 ]] && out_html "<span style=\"text-decoration:underline;font-weight:bold;\">$(html_reserved "$1")</span>" || out_html "$(html_reserved "$1")"; }
-pr_headlineln_term() { pr_headline_term "$1"; outln_term; }
+#pr_headline() { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m\033[47m$1" || out "$1"; tm_off; }
+tm_headline()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[1m\033[4m$1" || tm_out "$1"; tm_off; }
+tmln_headline() { tm_headline "$1"; tmln_out; }
+pr_headline()   { tm_headline "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"text-decoration:underline;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 pr_headlineln() { pr_headline "$1" ; outln; }
 
-pr_squoted_term() { out_term "'$1'"; }
+tm_squoted() { tm_out "'$1'"; }
 pr_squoted() { out "'$1'"; }
-pr_dquoted_term() { out_term "\"$1\""; }
+tm_dquoted() { tm_out "\"$1\""; }
 pr_dquoted() { out "\"$1\""; }
 
-local_problem_term() { pr_warning_term "Local problem: $1"; }
-local_problem() { pr_warning "Local problem: $1"; }
-local_problem_ln_term() { pr_warningln_term "Local problem: $1"; }
-local_problem_ln() { pr_warningln "Local problem: $1"; }
+tm_local_problem()   { tm_warning "Local problem: $1"; }
+tmln_local_problem() { tmln_warning "Local problem: $1"; }
+pr_local_problem()   { pr_warning "Local problem: $1"; }
+prln_local_problem() { prln_warning "Local problem: $1"; }
 
-fixme_term() { pr_warning_term "fixme: $1"; }
-fixme() { pr_warning "fixme: $1"; }
-fixmeln_term() { pr_warningln_term "fixme: $1"; }
-fixmeln() { pr_warningln "fixme: $1"; }
+tm_fixme()   { tm_warning "pr_fixme: $1"; }
+tmln_fixme() { tmln_warning "pr_fixme: $1"; }
+pr_fixme()   { pr_warning "pr_fixme: $1"; }
+prln_fixme() { prln_warning "pr_fixme: $1"; }
 
-pr_url() { out_term "$1"; out_html "<a href="$1" style=\"color:black;text-decoration:none;\">$1</a>"; }
-pr_boldurl() { pr_bold_term "$1"; out_html "<a href="$1" style=\"font-weight:bold;color:black;text-decoration:none;\">$1</a>"; }
+pr_url()     { tm_out "$1"; html_out "<a href="$1" style=\"color:black;text-decoration:none;\">$1</a>"; }
+pr_boldurl() { tm_bold "$1"; html_out "<a href="$1" style=\"font-weight:bold;color:black;text-decoration:none;\">$1</a>"; }
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
@@ -979,34 +981,30 @@ html_header() {
      else
           HTMLFILE=$HTMLFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".html)
      fi
-     out_html "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
-     out_html "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
-     out_html "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
-     out_html "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
-     out_html "<head>\n"
-     out_html "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
-     out_html "<title>testssl.sh</title>\n"
-     out_html "</head>\n"
-     out_html "<body>\n"
-     out_html "<pre>\n"
+     html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
+     html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
+     html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
+     html_out "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
+     html_out "<head>\n"
+     html_out "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
+     html_out "<title>testssl.sh</title>\n"
+     html_out "</head>\n"
+     html_out "<body>\n"
+     html_out "<pre>\n"
      return 0
 }
 
 html_banner() {
-     if "$QUIET" && "$HTMLHEADER"; then
-          out_html "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
-          out_html "## at $HNAME:$OPENSSL_LOCATION\n"
-          out_html "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
-          out_html "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n\n"
-     fi
+     html_out "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
+     html_out "## at $HNAME:$OPENSSL_LOCATION\n"
+     html_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
+     html_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n\n"
 }
 
 html_footer() {
-     if "$HTMLHEADER"; then
-          out_html "</pre>\n"
-          out_html "</body>\n"
-          out_html "</html>\n"
-     fi
+     html_out "</pre>\n"
+     html_out "</body>\n"
+     html_out "</html>\n"
      return 0
 }
 
@@ -1296,7 +1294,7 @@ string_to_asciihex() {
           output+="$(printf "%02x," "'${string:i:1}")"
      done
      [[ -n "$string" ]] && output+="$(printf "%02x" "'${string:eos:1}")"
-     retstring "$output"
+     tm_out "$output"
      return 0
 
 }
@@ -1536,7 +1534,7 @@ run_http_date() {
                out "Got no HTTP time, maybe try different URL?";
                fileout "http_clock_skew" "INFO" "HTTP clock skew not measured. Got no HTTP time, maybe try different URL?"
           fi
-          debugme out_term ", epoch: $HTTP_TIME"
+          debugme tm_out ", epoch: $HTTP_TIME"
      fi
      outln
      detect_ipv4
@@ -1570,7 +1568,7 @@ detect_header() {
           out "\n$spaces"
           # first awk matches the key, second extracts the from the first line the value, be careful with quotes here!
           HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://' | head -1)
-          [[ $DEBUG -ge 2 ]] && pr_italic_term "$HEADERVALUE" && out_term "\n$spaces"
+          [[ $DEBUG -ge 2 ]] && tm_italic "$HEADERVALUE" && tm_out "\n$spaces"
           fileout "$2""_multiple" "WARN" "Multiple $2 headers. Using first header: $HEADERVALUE"
           return $nr
      fi
@@ -1735,7 +1733,7 @@ run_hpkp() {
 
           # Get the SPKIs first
           spki=$(tr ';' '\n' < $TMPFILE | tr -d ' ' | tr -d '\"' | awk -F'=' '/pin.*=/ { print $2 }')
-          debugme outln_term "\n$spki"
+          debugme tmln_out "\n$spki"
 
           # Look at the host certificate first
           # get the key fingerprint from the host certificate
@@ -1785,7 +1783,7 @@ run_hpkp() {
                     pr_done_good "$hpkp_spki"
                     fileout "hpkp_$hpkp_spki" "OK" "SPKI $hpkp_spki matches the host certificate"
                fi
-               debugme out_term "\n  $hpkp_spki | $hpkp_spki_hostcert"
+               debugme tm_out "\n  $hpkp_spki | $hpkp_spki_hostcert"
 
                # Check for intermediate match
                if ! "$certificate_found"; then
@@ -1851,7 +1849,7 @@ run_hpkp() {
           if [[ -n "${backup_spki_str[0]}" ]]; then
                pr_done_good "${backup_spki[0]}"
                #out " Root CA: "
-               pr_italicln " ${backup_spki_str[0]}"
+               tm_italic " ${backup_spki_str[0]}"
           else
                outln "${backup_spki[0]}"
           fi
@@ -1861,26 +1859,26 @@ run_hpkp() {
                     # it's a Root CA outside the chain
                     pr_done_good "$spaces_indented            ${backup_spki[i]}"
                     #out " Root CA: "
-                    pr_italicln " ${backup_spki_str[i]}"
+                    tm_italic " ${backup_spki_str[i]}"
                else
                     outln "$spaces_indented            ${backup_spki[i]}"
                fi
           done
           if [[ ! -f "$ca_hashes" ]] && "$spki_match"; then
                out "$spaces "
-               pr_warningln "Attribution of further hashes couldn't be done as $ca_hashes could not be found"
+               prln_warning "Attribution of further hashes couldn't be done as $ca_hashes could not be found"
                fileout "hpkp_spkimatch" "WARN" "Attribution of further hashes couldn't be done as $ca_hashes could not be found"
           fi
 
           # If all else fails...
           if ! "$spki_match"; then
                "$has_backup_spki" && out "$spaces"       # we had a few lines with backup SPKIs already
-               pr_svrty_highln " No matching key for SPKI found "
+               prln_svrty_high " No matching key for SPKI found "
                fileout "hpkp_spkimatch" "HIGH" "None of the SPKI match your host certificate, intermediate CA or known root CAs. You may have bricked this site"
           fi
 
           if ! "$has_backup_spki"; then
-               pr_svrty_highln " No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site. "
+               prln_svrty_high " No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site. "
                fileout "hpkp_backup" "HIGH" "No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site."
           fi
      else
@@ -1903,87 +1901,87 @@ emphasize_stuff_in_headers(){
      len=${#text}
      while [[ $len -gt 0 ]]; do
           if [[ -z "$(tr -d '0-9' <<< "${text:0:1}")" ]]; then
-               out_term "${brown}${text:0:1}${off}"
-               out_html "<span style=\"color:olive;\">${text:0:1}</span>"
+               tm_out "${brown}${text:0:1}${off}"
+               html_out "<span style=\"color:olive;\">${text:0:1}</span>"
                text="${text:1}"
                len=$len-1
           elif [[ $len -ge 31 ]] && [[ "${text:0:31}" == "MicrosoftSharePointTeamServices" ]]; then
-               out_term "${yellow}${text:0:31}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:31}</span>"
+               tm_out "${yellow}${text:0:31}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:31}</span>"
                text="${text:31}"
                len=$len-31
           elif [[ $len -ge 24 ]] && [[ "${text:0:24}" == "Red Hat Enterprise Linux" ]]; then
-               out_term "${yellow}${text:0:24}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:24}</span>"
+               tm_out "${yellow}${text:0:24}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:24}</span>"
                text="${text:24}"
                len=$len-24
           elif [[ $len -ge 16 ]] && [[ "${text:0:16}" == "X-AspNet-Version" ]]; then
-               out_term "${yellow}${text:0:16}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:16}</span>"
+               tm_out "${yellow}${text:0:16}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:16}</span>"
                text="${text:16}"
                len=$len-16
           elif [[ $len -ge 15 ]] && [[ "${text:0:15}" == "X-UA-Compatible" ]]; then
-               out_term "${yellow}${text:0:15}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:15}</span>"
+               tm_out "${yellow}${text:0:15}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:15}</span>"
                text="${text:15}"
                len=$len-15
           elif [[ $len -ge 14 ]] && ( [[ "${text:0:14}" == "Liferay-Portal" ]] || [[ "${text:0:14}" == "X-Cache-Lookup" ]] || \
                                       [[ "${text:0:14}" == "X-Cache-Status" ]] ) ; then
-               out_term "${yellow}${text:0:14}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:14}</span>"
+               tm_out "${yellow}${text:0:14}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:14}</span>"
                text="${text:14}"
                len=$len-14
           elif [[ $len -ge 13 ]] && [[ "${text:0:13}" == "X-OWA-Version" ]]; then
-               out_term "${yellow}${text:0:13}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:13}</span>"
+               tm_out "${yellow}${text:0:13}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:13}</span>"
                text="${text:13}"
                len=$len-13
           elif [[ $len -ge 12 ]] && [[ "${text:0:12}" == "X-Powered-By" ]]; then
-               out_term "${yellow}${text:0:12}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:12}</span>"
+               tm_out "${yellow}${text:0:12}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:12}</span>"
                text="${text:12}"
                len=$len-12
           elif [[ $len -ge 11 ]] && [[ "${text:0:11}" == "X-Forwarded" ]]; then
-               out_term "${yellow}${text:0:11}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:11}</span>"
+               tm_out "${yellow}${text:0:11}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:11}</span>"
                text="${text:11}"
                len=$len-11
           elif [[ $len -ge 9 ]] && ( [[ "${text:0:9}" == "X-Varnish" ]] || [[ "${text:0:9}" == "X-Version" ]] ); then
-               out_term "${yellow}${text:0:9}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:9}</span>"
+               tm_out "${yellow}${text:0:9}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:9}</span>"
                text="${text:9}"
                len=$len-9
           elif [[ $len -ge 8 ]] && [[ "${text:0:8}" == "X-Server" ]]; then
-               out_term "${yellow}${text:0:8}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:8}</span>"
+               tm_out "${yellow}${text:0:8}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:8}</span>"
                text="${text:8}"
                len=$len-8
           elif [[ $len -ge 7 ]] && ( [[ "${text:0:7}" == "squeeze" ]] || [[ "${text:0:7}" == "Red Hat" ]] || \
                                      [[ "${text:0:7}" == "X-Cache" ]] || [[ "${text:0:7}" == "X-Squid" ]] ) ; then
-               out_term "${yellow}${text:0:7}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:7}</span>"
+               tm_out "${yellow}${text:0:7}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:7}</span>"
                text="${text:7}"
                len=$len-7
           elif [[ $len -ge 6 ]] && ( [[ "${text:0:6}" == "Debian" ]] || [[ "${text:0:6}" == "Ubuntu" ]] || \
                                      [[ "${text:0:6}" == "ubuntu" ]] || [[ "${text:0:6}" == "jessie" ]] || \
                                      [[ "${text:0:6}" == "wheezy" ]] || [[ "${text:0:6}" == "CentOS" ]] ) ; then
-               out_term "${yellow}${text:0:6}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:6}</span>"
+               tm_out "${yellow}${text:0:6}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:6}</span>"
                text="${text:6}"
                len=$len-6
           elif [[ $len -ge 5 ]] && ( [[ "${text:0:5}" == "Win32" ]] || [[ "${text:0:5}" == "Win64" ]] || [[ "${text:0:5}" == "lenny" ]] ); then
-               out_term "${yellow}${text:0:5}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:5}</span>"
+               tm_out "${yellow}${text:0:5}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:5}</span>"
                text="${text:5}"
                len=$len-5
           elif [[ $len -ge 4 ]] && [[ "${text:0:4}" == "SUSE" ]]; then
-               out_term "${yellow}${text:0:4}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:4}</span>"
+               tm_out "${yellow}${text:0:4}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:4}</span>"
                text="${text:4}"
                len=$len-4
           elif [[ $len -ge 3 ]] && [[ "${text:0:3}" == "Via" ]]; then
-               out_term "${yellow}${text:0:3}${off}"
-               out_html "<span style=\"color:olive;font-weight:bold;\">${text:0:3}</span>"
+               tm_out "${yellow}${text:0:3}${off}"
+               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:3}</span>"
                text="${text:3}"
                len=$len-3
           else
@@ -2012,7 +2010,7 @@ run_server_banner() {
                emphasize_stuff_in_headers "$serverbanner"
                fileout "serverbanner" "INFO" "Server banner identified: $serverbanner"
                if [[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
-                    pr_warningln "                              It's recommended to run another test w/ OpenSSL 1.0.1 !"
+                    prln_warning "                              It's recommended to run another test w/ OpenSSL 1.0.1 !"
                     # see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
                     fileout "IIS6_openssl_mismatch" "WARN" "It is recommended to rerun this test w/ OpenSSL 1.0.1. See https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
                fi
@@ -2200,7 +2198,7 @@ run_more_flags() {
      #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall" or Access-Control-Allow-Origin: *
 
      if "$first"; then
-          pr_svrty_mediumln "--"
+          prln_svrty_medium "--"
           fileout "sec_headers" "MEDIUM" "No security (or other interesting) headers detected"
           ret=1
      else
@@ -2384,9 +2382,9 @@ std_cipherlists() {
      else
           singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
-               local_problem_ln "No $singlespaces for SSLv2 configured in $OPENSSL"
+               prln_local_problem "No $singlespaces for SSLv2 configured in $OPENSSL"
           else
-               local_problem_ln "No $singlespaces configured in $OPENSSL"
+               prln_local_problem "No $singlespaces configured in $OPENSSL"
           fi
           fileout "std_$4" "WARN" "Cipher $2 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
@@ -2419,7 +2417,7 @@ openssl2rfc() {
           [[ "$1" == "${TLS_CIPHER_OSSL_NAME[i]}" ]] && rfcname="${TLS_CIPHER_RFC_NAME[i]}" && break
      done
      [[ "$rfcname" == "-" ]] && rfcname=""
-     [[ -n "$rfcname" ]] && retstring "$rfcname"
+     [[ -n "$rfcname" ]] && tm_out "$rfcname"
      return 0
 }
 
@@ -2431,7 +2429,7 @@ rfc2openssl() {
           [[ "$1" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && ossl_name="${TLS_CIPHER_OSSL_NAME[i]}" && break
      done
      [[ "$ossl_name" == "-" ]] && ossl_name=""
-     [[ -n "$ossl_name" ]] && retstring "$ossl_name"
+     [[ -n "$ossl_name" ]] && tm_out "$ossl_name"
      return 0
 }
 
@@ -2451,7 +2449,7 @@ show_rfc_style(){
           [[ "$hexcode" == "${TLS_CIPHER_HEXCODE[i]}" ]] && rfcname="${TLS_CIPHER_RFC_NAME[i]}" && break
      done
      [[ "$rfcname" == "-" ]] && rfcname=""
-     [[ -n "$rfcname" ]] && retstring "$rfcname"
+     [[ -n "$rfcname" ]] && tm_out "$rfcname"
      return 0
 }
 
@@ -2488,7 +2486,7 @@ neat_list(){
      [[ -n "$ADD_RFC_STR" ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
      if [[ -z "$5" ]]; then
-          retstring "$(printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
+          tm_out "$(printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
           return 0
      elif [[ "$5" == "false" ]]; then
           line="$(printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
@@ -2542,7 +2540,7 @@ test_just_one(){
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
           if ! "$HAS_DH_BITS"; then
                [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
-               pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
+               prln_warning "    (Your $OPENSSL cannot show DH/ECDH bits)"
           fi
      fi
      outln
@@ -2884,7 +2882,7 @@ run_allciphers() {
           outln
           if ! "$HAS_DH_BITS"; then
                [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
-               pr_warningln " Your $OPENSSL cannot show DH/ECDH bits"
+               prln_warning " Your $OPENSSL cannot show DH/ECDH bits"
           fi
      fi
      outln
@@ -3061,12 +3059,12 @@ run_cipher_per_proto() {
           outln
           if ! "$HAS_DH_BITS"; then
                [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && out "."
-               pr_warningln "    (Your $OPENSSL cannot show DH/ECDH bits)"
+               prln_warning "    (Your $OPENSSL cannot show DH/ECDH bits)"
           fi
      fi
      outln
      neat_header
-     retstring " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2\n" | while read proto proto_hex proto_text; do
+     tm_out " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2\n" | while read proto proto_hex proto_text; do
           "$using_sockets" || locally_supported "$proto" "$proto_text" || continue
           "$using_sockets" && out "$proto_text "
           outln
@@ -3365,7 +3363,7 @@ create_client_simulation_tls_clienthello() {
 
      if [[ $offset -ge $tls_handshake_ascii_len ]]; then
           # No extensions
-          retstring "$tls_handshake_ascii"
+          tm_out "$tls_handshake_ascii"
           return 0
      fi
 
@@ -3398,7 +3396,7 @@ create_client_simulation_tls_clienthello() {
      done
 
      if ! $sni_extension_found; then
-          retstring "$tls_handshake_ascii"
+          tm_out "$tls_handshake_ascii"
           return 0
      fi
 
@@ -3417,7 +3415,7 @@ create_client_simulation_tls_clienthello() {
      tls_handshake_ascii_len_hex=$(printf "%02x\n" $tls_handshake_ascii_len)
      len2twobytes "$tls_handshake_ascii_len_hex"
      tls_handshake_ascii="${tls_content_type}${tls_version_reclayer}${LEN_STR:0:2}${LEN_STR:4:2}${tls_handshake_ascii}"
-     retstring "$tls_handshake_ascii"
+     tm_out "$tls_handshake_ascii"
      return 0
 }
 
@@ -3486,7 +3484,7 @@ client_simulation_sockets() {
           fi
      done
 
-     debugme outln_term "reading server hello..."
+     debugme tmln_out "reading server hello..."
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C $SOCK_REPLY_FILE | head -6
           echo
@@ -3506,7 +3504,7 @@ client_simulation_sockets() {
 
      # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
      lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
-     debugme out_term "  (returned $lines lines)  "
+     debugme tm_out "  (returned $lines lines)  "
 
      # determine the return value for higher level, so that they can tell what the result is
      if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
@@ -3514,7 +3512,7 @@ client_simulation_sockets() {
      else
           ret=0
      fi
-     debugme outln_term
+     debugme tmln_out
 
      close_socket
      TMPFILE=$SOCK_REPLY_FILE
@@ -4302,7 +4300,7 @@ run_client_simulation() {
      fi
      outln
 
-     debugme outln_term
+     debugme tmln_out
      for name in "${short[@]}"; do
           #FIXME: printf formatting would look better, especially if we want a wide option here
           out " ${names[i]}   "
@@ -4399,7 +4397,7 @@ run_client_simulation() {
 locally_supported() {
      [[ -n "$2" ]] && out "$2 "
      if $OPENSSL s_client "$1" -connect x 2>&1 | grep -aq "unknown option"; then
-          local_problem_ln "$OPENSSL doesn't support \"s_client $1\""
+          prln_local_problem "$OPENSSL doesn't support \"s_client $1\""
           return 7
      fi
      return 0
@@ -4471,13 +4469,13 @@ run_protocols() {
 
      if "$SSL_NATIVE"; then
           using_sockets=false
-          pr_underlineln "via native openssl"
+          prln_underline "via native openssl"
      else
           using_sockets=true
           if [[ -n "$STARTTLS" ]]; then
-               pr_underlineln "via sockets "
+               prln_underline "via sockets "
           else
-               pr_underlineln "via sockets except SPDY+HTTP2 "
+               prln_underline "via sockets except SPDY+HTTP2 "
           fi
      fi
      outln
@@ -4493,21 +4491,21 @@ run_protocols() {
                     fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
                     ;;
                1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
-                    pr_done_bestln "not offered (OK)"
+                    prln_done_best "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered"
                     ;;
                0) # reset
-                    pr_done_bestln "not offered (OK)"
+                    prln_done_best "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered"
                     ;;
                3) # everything else
                     lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
-                    [[ "$DEBUG" -ge 2 ]] && out_term "  ($lines lines)  "
+                    [[ "$DEBUG" -ge 2 ]] && tm_out "  ($lines lines)  "
                     if [[ "$lines" -gt 1 ]]; then
                          nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                          add_tls_offered "ssl2"
                          if [[ 0 -eq "$nr_ciphers_detected" ]]; then
-                              pr_svrty_highln "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
+                              prln_svrty_high "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
                               fileout "sslv2" "HIGH" "SSLv2 is offered, vulnerable to CVE-2015-3197"
                          else
                               pr_svrty_critical "offered (NOT ok), also VULNERABLE to DROWN attack";
@@ -4516,17 +4514,17 @@ run_protocols() {
                          fi
                     fi ;;
           esac
-          debugme outln_term
+          debugme tmln_out
      else
           run_prototest_openssl "-ssl2"
           case $? in
                0)
-                    pr_svrty_criticalln   "offered (NOT ok)"
+                    prln_svrty_critical   "offered (NOT ok)"
                     fileout "sslv2" "CRITICAL" "SSLv2 is offered"
                     add_tls_offered "ssl2"
                     ;;
                1)
-                    pr_done_bestln "not offered (OK)"
+                    prln_done_best "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered"
                     ;;
                5)
@@ -4548,23 +4546,23 @@ run_protocols() {
      fi
      case $? in
           0)
-               pr_svrty_highln "offered (NOT ok)"
+               prln_svrty_high "offered (NOT ok)"
                fileout "sslv3" "HIGH" "SSLv3 is offered"
                latest_supported="0300"
                latest_supported_string="SSLv3"
                add_tls_offered "ssl3"
                ;;
           1)
-               pr_done_bestln "not offered (OK)"
+               prln_done_best "not offered (OK)"
                fileout "sslv3" "OK" "SSLv3 is not offered"
                ;;
           2)
                if [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
-                    pr_svrty_criticalln "server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+                    prln_svrty_critical "server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "sslv3" "CRITICAL" "SSLv3: server responded with higher version number ($detected_version_string) than requested by client"
                else
-                    pr_svrty_criticalln "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    prln_svrty_critical "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
                     fileout "sslv3" "CRITICAL" "SSLv3: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
@@ -4599,22 +4597,22 @@ run_protocols() {
                     outln
                     fileout "tls1" "INFO" "TLSv1.0 is not offered" # neither good or bad
                else
-                    pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
+                    prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
                     fileout "tls1" "CRITICAL" "TLSv1.0: connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
           2)
                pr_svrty_medium "not offered"
                if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
-                    [[ $DEBUG -eq 1 ]] && out_term " -- downgraded"
+                    [[ $DEBUG -eq 1 ]] && tm_out " -- downgraded"
                     outln
                     fileout "tls1" "MEDIUM" "TLSv1.0 is not offered, and downgraded to SSL"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
-                    pr_svrty_criticalln " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
                     fileout "tls1" "CRITICAL" "TLSv1.0: server responded with higher version number ($detected_version_string) than requested by client"
                else
-                    pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    prln_svrty_critical " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                     fileout "tls1" "CRITICAL" "TLSv1.0: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
@@ -4648,25 +4646,25 @@ run_protocols() {
                     outln
                     fileout "tls1_1" "INFO" "TLSv1.1 is not offered"  # neither good or bad
                else
-                    pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string"
+                    prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string"
                     fileout "tls1_1" "CRITICAL" "TLSv1.1: connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
           2)
                out "not offered"
                if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
-                    [[ $DEBUG -eq 1 ]] && out_term " -- downgraded"
+                    [[ $DEBUG -eq 1 ]] && tm_out " -- downgraded"
                     outln
                     fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, and downgraded to a weaker protocol"
                elif [[ "$DETECTED_TLS_VERSION" == "0300" ]] && [[ "$latest_supported" == "0301" ]]; then
-                    pr_svrty_criticalln " -- server supports TLSv1.0, but downgraded to SSLv3 (NOT ok)"
+                    prln_svrty_critical " -- server supports TLSv1.0, but downgraded to SSLv3 (NOT ok)"
                     fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, and downgraded to SSLv3 rather than TLSv1.0"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0302 ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
-                    pr_svrty_criticalln " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
-                    pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                    prln_svrty_critical " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
                     fileout "tls1_1" "CRITICAL" "TLSv1.1: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
@@ -4688,7 +4686,7 @@ run_protocols() {
      fi
      case $? in
           0)
-               pr_done_bestln "offered (OK)"
+               prln_done_best "offered (OK)"
                fileout "tls1_2" "OK" "TLSv1.2 is offered"
                latest_supported="0303"
                latest_supported_string="TLSv1.2"
@@ -4700,7 +4698,7 @@ run_protocols() {
                     outln
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered" # no GCM, penalty
                else
-                    pr_svrty_criticalln " -- connection failed rather than downgrading to $latest_supported_string"
+                    prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string"
                     fileout "tls1_2" "CRITICAL" "TLSv1.2: connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
@@ -4712,17 +4710,17 @@ run_protocols() {
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
                fi
                if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
-                    [[ $DEBUG -eq 1 ]] && out_term " -- downgraded"
+                    [[ $DEBUG -eq 1 ]] && tm_out " -- downgraded"
                     outln
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered and downgraded to a weaker protocol"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
-                    pr_svrty_criticalln " -- server supports $latest_supported_string, but downgraded to $detected_version_string"
+                    prln_svrty_critical " -- server supports $latest_supported_string, but downgraded to $detected_version_string"
                     fileout "tls1_2" "CRITICAL" "TLSv1.2 is not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0303 ]]; then
-                    pr_svrty_criticalln " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
                     fileout "tls1_2" "CRITICAL" "TLSv1.2 is not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
-                    pr_svrty_criticalln " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    prln_svrty_critical " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                     fileout "tls1_2" "CRITICAL" "TLSv1.2: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
@@ -4877,14 +4875,14 @@ pr_ecdh_curve_quality() {
 # The return value is an indicator of the quality of the cipher in $1:
 #   0 = $1 is empty
 #   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
-#   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best
+#   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best 
 pr_cipher_quality() {
      local cipher="$1"
      local text="$2"
 
      [[ -z "$1" ]] && return 0
      [[ -z "$text" ]] && text="$cipher"
-
+     
      if [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
           # This must be the OpenSSL name for a cipher
           if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
@@ -4981,7 +4979,7 @@ read_dhbits_from_file() {
      [[ -n "$what_dh" ]] && HAS_DH_BITS=true                            # FIX 190
      if [[ -z "$what_dh" ]] && ! "$HAS_DH_BITS"; then
           if [[ "$2" == "string" ]]; then
-               retstring "$old_fart"
+               tm_out "$old_fart"
           elif [[ -z "$2" ]]; then
                pr_warning "$old_fart"
           fi
@@ -4989,7 +4987,7 @@ read_dhbits_from_file() {
      fi
 
      if [[ "$2" == "quiet" ]]; then
-          retstring "$bits"
+          tm_out "$bits"
           return 0
      fi
 
@@ -4998,7 +4996,7 @@ read_dhbits_from_file() {
           add="bit DH"
           [[ -n "$curve" ]] && add+=" ($curve)"
           if [[ "$2" == "string" ]]; then
-               retstring ", $bits $add"
+               tm_out ", $bits $add"
           else
                pr_dh_quality "$bits" "$bits $add"
           fi
@@ -5007,7 +5005,7 @@ read_dhbits_from_file() {
           add="bit ECDH"
           [[ -n "$curve" ]] && add+=" ($curve)"
           if [[ "$2" == "string" ]]; then
-               retstring ", $bits $add"
+               tm_out ", $bits $add"
           else
                pr_ecdh_quality "$bits" "$bits $add"
           fi
@@ -5058,7 +5056,7 @@ run_server_preference() {
      elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
           # now it still could be that we hit this bug: https://github.com/drwetter/testssl.sh/issues/188
           # workaround is to connect with a protocol
-          debugme out_term "(workaround #188) "
+          debugme tm_out "(workaround #188) "
           determine_optimal_proto $STARTTLS_PROTOCOL
           $OPENSSL s_client $STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2 </dev/null 2>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
@@ -5097,7 +5095,7 @@ run_server_preference() {
                remark4default_cipher=""
                fileout "order" "OK" "Server sets a cipher order"
           fi
-          debugme out_term "  $cipher1 | $cipher2"
+          debugme tm_out "  $cipher1 | $cipher2"
           outln
 
           pr_bold " Negotiated protocol          "
@@ -5110,11 +5108,11 @@ run_server_preference() {
           default_proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
           case "$default_proto" in
                *TLSv1.2)
-                    pr_done_bestln $default_proto
+                    prln_done_best $default_proto
                     fileout "order_proto" "OK" "Default protocol TLS1.2"
                     ;;
                *TLSv1.1)
-                    pr_done_goodln $default_proto
+                    prln_done_good $default_proto
                     fileout "order_proto" "OK" "Default protocol TLS1.1"
                     ;;
                *TLSv1)
@@ -5122,11 +5120,11 @@ run_server_preference() {
                     fileout "order_proto" "INFO" "Default protocol TLS1.0"
                     ;;
                *SSLv2)
-                    pr_svrty_criticalln $default_proto
+                    prln_svrty_critical $default_proto
                     fileout "order_proto" "CRITICAL" "Default protocol SSLv2"
                     ;;
                *SSLv3)
-                    pr_svrty_criticalln $default_proto
+                    prln_svrty_critical $default_proto
                     fileout "order_proto" "CRITICAL" "Default protocol SSLv3"
                     ;;
                "")
@@ -5192,7 +5190,7 @@ run_server_preference() {
                for p in ssl2 ssl3 tls1 tls1_1 tls1_2; do
                     if [[ $p == ssl2 ]] && ! "$HAS_SSL2"; then
                          if ! "$using_sockets" || [[ $TLS_NR_CIPHERS -eq 0 ]]; then
-                              out "     (SSLv2: "; local_problem "$OPENSSL doesn't support \"s_client -ssl2\""; outln ")";
+                              out "     (SSLv2: "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl2\""; outln ")";
                               continue
                          else
                               sslv2_sockets "" "true"
@@ -5214,7 +5212,7 @@ run_server_preference() {
                                              fi
                                         fi
                                    done
-                                   [[ $DEBUG -ge 2 ]] && outln_term "Default cipher for ${proto[i]}: ${cipher[i]}"
+                                   [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
                               else
                                    proto[i]=""
                                    cipher[i]=""
@@ -5222,7 +5220,7 @@ run_server_preference() {
                          fi
                     elif [[ $p == ssl3 ]] && ! "$HAS_SSL3"; then
                          if ! "$using_sockets"; then
-                              out "     (SSLv3: "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"" ; outln ")";
+                              out "     (SSLv3: "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"" ; outln ")";
                               continue
                          else
                               tls_sockets "00" "$TLS_CIPHER"
@@ -5234,7 +5232,7 @@ run_server_preference() {
                                         cipher[i]="$(rfc2openssl "$cipher1")"
                                         [[ -z "${cipher[i]}" ]] && cipher[i]="$cipher1"
                                    fi
-                                   [[ $DEBUG -ge 2 ]] && outln_term "Default cipher for ${proto[i]}: ${cipher[i]}"
+                                   [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
                               else
                                    proto[i]=""
                                    cipher[i]=""
@@ -5251,7 +5249,7 @@ run_server_preference() {
                                    cipher[i]="$(openssl2rfc "${cipher[i]}")"
                                    [[ -z "${cipher[i]}" ]] && cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                               fi
-                              [[ $DEBUG -ge 2 ]] && outln_term "Default cipher for ${proto[i]}: ${cipher[i]}"
+                              [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
                          else
                               proto[i]=""
                               cipher[i]=""
@@ -5275,7 +5273,7 @@ run_server_preference() {
                                    cipher[i]="$(openssl2rfc "${cipher[i]}")"
                                    [[ -z "${cipher[i]}" ]] && cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                               fi
-                              [[ $DEBUG -ge 2 ]] && outln_term "Default cipher for ${proto[i]}: ${cipher[i]}"
+                              [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
                          fi
                     fi
                else
@@ -5335,7 +5333,7 @@ check_tls12_pref() {
                nr_ciphers_found_r1+=1
                "$FAST" && break
           else
-               debugme outln_term "A: $tested_cipher"
+               debugme tmln_out "A: $tested_cipher"
                break
           fi
      done
@@ -5350,10 +5348,10 @@ check_tls12_pref() {
                order+=" $cipher"
                batchremoved="$batchremoved:-$cipher"
                nr_ciphers_found_r1+=1
-               debugme outln_term "B1: $batchremoved"
+               debugme tmln_out "B1: $batchremoved"
                "$FAST" && break
           else
-               debugme outln_term "B2: $batchremoved"
+               debugme tmln_out "B2: $batchremoved"
                break
                # nothing left with batchremoved ciphers, we need to put everything together
           fi
@@ -5378,14 +5376,14 @@ check_tls12_pref() {
                fi
           done
           if "$FAST" && [[ $nr_ciphers_found_r2 -ne 1 ]]; then
-                fixmeln "something weird happened around line $((LINENO - 14))"
+                prln_fixme "something weird happened around line $((LINENO - 14))"
                 return 1
           elif ! "$FAST" && [[ $nr_ciphers_found_r2 -ne $nr_ciphers_found_r1 ]]; then
-                fixmeln "something weird happened around line $((LINENO - 16))"
+                prln_fixme "something weird happened around line $((LINENO - 16))"
                 return 1
           fi
      fi
-     retstring "$order"
+     tm_out "$order"
 
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -5408,10 +5406,10 @@ cipher_pref_check() {
 
      pr_bold " Cipher order"
 
-     retstring " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n" | while read p proto_hex proto; do
+     tm_out " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n" | while read p proto_hex proto; do
           order=""; ciphers_found_with_sockets=false
           if [[ $p == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
-               out "\n    SSLv3:     "; local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
+               out "\n    SSLv3:     "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
                continue
           fi
           has_server_protocol "$p" || continue
@@ -5639,7 +5637,7 @@ get_host_cert() {
           awk '/-----BEGIN/,/-----END/ { print $0 }' $tmpvar >$HOSTCERT
           return 0
      else
-          [[ -z "$1" ]] && pr_warningln "could not retrieve host certificate!"
+          [[ -z "$1" ]] && prln_warning "could not retrieve host certificate!"
           #fileout "host_certificate" "WARN" "Could not retrieve host certificate!"
           return 1
      fi
@@ -5653,17 +5651,17 @@ verify_retcode_helper() {
 
 	case $retcode in
 		# codes from ./doc/apps/verify.pod | verify(1ssl)
-		26) retstring "(unsupported certificate purpose)" ;; 	# X509_V_ERR_INVALID_PURPOSE
-		24) retstring "(certificate unreadable)" ;; 	# X509_V_ERR_INVALID_CA
-		23) retstring "(certificate revoked)" ;; 		# X509_V_ERR_CERT_REVOKED
-		21) retstring "(chain incomplete, only 1 cert provided)" ;; 	# X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
-		20) retstring "(chain incomplete)" ;;			# X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
-		19) retstring "(self signed CA in chain)" ;;	# X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
-		18) retstring "(self signed)" ;;				# X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
-		10) retstring "(expired)" ;;				     # X509_V_ERR_CERT_HAS_EXPIRED
-		9)  retstring "(not yet valid)" ;;		     # X509_V_ERR_CERT_NOT_YET_VALID
-		2)  retstring "(issuer cert missing)" ;;         # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
-		*) ret=1 ; retstring " (unknown, pls report) $1" ;;
+		26) tm_out "(unsupported certificate purpose)" ;; 	# X509_V_ERR_INVALID_PURPOSE
+		24) tm_out "(certificate unreadable)" ;;          	# X509_V_ERR_INVALID_CA
+		23) tm_out "(certificate revoked)" ;; 		          # X509_V_ERR_CERT_REVOKED
+		21) tm_out "(chain incomplete, only 1 cert provided)" ;; 	# X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
+		20) tm_out "(chain incomplete)" ;;			          # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+		19) tm_out "(self signed CA in chain)" ;;	          # X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
+		18) tm_out "(self signed)" ;;				          # X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
+		10) tm_out "(expired)" ;;				          # X509_V_ERR_CERT_HAS_EXPIRED
+		9)  tm_out "(not yet valid)" ;;		               # X509_V_ERR_CERT_NOT_YET_VALID
+		2)  tm_out "(issuer cert missing)" ;;                  # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
+		*) ret=1 ; tm_out " (unknown, pls report) $1" ;;
 	esac
      return $ret
 }
@@ -5695,7 +5693,7 @@ determine_trust() {
           addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
           fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
-     debugme outln_term
+     debugme tmln_out
 
      # if you run testssl.sh from a different path /you can set either TESTSSL_INSTALL_DIR or CA_BUNDLES_PATH to find the CA BUNDLES
      if [[ -z $CA_BUNDLES_PATH ]]; then
@@ -5706,7 +5704,7 @@ determine_trust() {
 	for bundle_fname in $ca_bundles; do
 		certificate_file[i]=$(basename ${bundle_fname//.pem})
           if [[ ! -r $bundle_fname ]]; then
-               pr_warningln "\"$bundle_fname\" cannot be found / not readable"
+               prln_warning "\"$bundle_fname\" cannot be found / not readable"
                return 7
           fi
 		debugme printf -- " %-12s" "${certificate_file[i]}"
@@ -5722,18 +5720,18 @@ determine_trust() {
 		if [[ ${verify_retcode[i]} -eq 0 ]]; then
 			trust[i]=true
 			some_ok=true
-			debugme pr_done_good_term "Ok   "
-			debugme outln_term "${verify_retcode[i]}"
+			debugme tm_done_good "Ok   "
+			debugme tmln_out "${verify_retcode[i]}"
 		else
 			trust[i]=false
 			all_ok=false
-			debugme pr_svrty_high_term "not trusted "
-			debugme outln_term "${verify_retcode[i]}"
+			debugme tm_svrty_high "not trusted "
+			debugme tmln_out "${verify_retcode[i]}"
 		fi
 		i=$((i + 1))
 	done
 	num_ca_bundles=$((i - 1))
-     debugme out_term " "
+     debugme tm_out " "
 	if $all_ok; then
 	     # all stores ok
 		pr_done_good "Ok   "; pr_warning "$addtl_warning"
@@ -5776,7 +5774,7 @@ determine_trust() {
                     #outln "$code"
                     outln
 				# lf + green ones
-                    [[ "$DEBUG" -eq 0 ]] && out_term "$spaces"
+                    [[ "$DEBUG" -eq 0 ]] && tm_out "$spaces"
 				pr_done_good "OK: $ok_was"
                fi
                fileout "${json_prefix}chain_of_trust" "CRITICAL" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
@@ -5810,10 +5808,10 @@ tls_time() {
                out "$difftime"; out " sec from localtime";
                fileout "tls_time" "INFO" "Your TLS time is skewed from your localtime by $difftime seconds"
           fi
-          debugme out_term "$TLS_TIME"
+          debugme tm_out "$TLS_TIME"
           outln
      else
-          pr_warningln "SSLv3 through TLS 1.2 didn't return a timestamp"
+          prln_warning "SSLv3 through TLS 1.2 didn't return a timestamp"
           fileout "tls_time" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
      fi
      return 0
@@ -5991,7 +5989,7 @@ get_server_certificate() {
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
                if [ -z "$1" ]; then
-                   pr_warningln "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+                   prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
                fi
                tmpfile_handle $FUNCNAME.txt
                return 7  # this is ugly, I know
@@ -6191,11 +6189,11 @@ must_staple() {
      local cert extn
      local -i extn_len
      local supported=false
-
+     
      # Note this function is only looking for status_request (5) and not
      # status_request_v2 (17), since OpenSSL seems to only include status_request (5)
      # in its ClientHello when the "-status" option is used.
-
+     
      # OpenSSL 1.1.0 supports pretty-printing the "TLS Feature extension." For any
      # previous versions of OpenSSL, OpenSSL can only show if the extension OID is present.
      if $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE | grep -A 1 "TLS Feature:" | grep -q "status_request"; then
@@ -6220,7 +6218,7 @@ must_staple() {
      fi
 
      if "$supported"; then
-          pr_done_bestln "Supported"
+          prln_done_best "Supported"
           fileout "${json_prefix}ocsp_must_staple" "OK" "OCSP must staple : supported"
           return 0
      else
@@ -6287,19 +6285,19 @@ certificate_info() {
                fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: SHA224 with RSA"
                ;;
           sha256WithRSAEncryption)
-               pr_done_goodln "SHA256 with RSA"
+               prln_done_good "SHA256 with RSA"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA256 with RSA"
                ;;
           sha384WithRSAEncryption)
-               pr_done_goodln "SHA384 with RSA"
+               prln_done_good "SHA384 with RSA"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA384 with RSA"
                ;;
           sha512WithRSAEncryption)
-               pr_done_goodln "SHA512 with RSA"
+               prln_done_good "SHA512 with RSA"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA512 with RSA"
                ;;
           ecdsa-with-SHA1)
-               pr_svrty_mediumln "ECDSA with SHA1"
+               prln_svrty_medium "ECDSA with SHA1"
                fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: ECDSA with SHA1"
                ;;
           ecdsa-with-SHA224)
@@ -6307,19 +6305,19 @@ certificate_info() {
                fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: ECDSA with SHA224"
                ;;
           ecdsa-with-SHA256)
-               pr_done_goodln "ECDSA with SHA256"
+               prln_done_good "ECDSA with SHA256"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA256"
                ;;
           ecdsa-with-SHA384)
-               pr_done_goodln "ECDSA with SHA384"
+               prln_done_good "ECDSA with SHA384"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA384"
                ;;
           ecdsa-with-SHA512)
-               pr_done_goodln "ECDSA with SHA512"
+               prln_done_good "ECDSA with SHA512"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA512"
                ;;
           dsaWithSHA1)
-               pr_svrty_mediumln "DSA with SHA1"
+               prln_svrty_medium "DSA with SHA1"
                fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: DSA with SHA1"
                ;;
           dsa_with_SHA224)
@@ -6327,14 +6325,14 @@ certificate_info() {
                fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: DSA with SHA224"
                ;;
           dsa_with_SHA256)
-               pr_done_goodln "DSA with SHA256"
+               prln_done_good "DSA with SHA256"
                fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: DSA with SHA256"
                ;;
           rsassaPss)
                cert_sig_hash_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 1 "Signature Algorithm" | head -2 | tail -1 | sed 's/^.*Hash Algorithm: //')"
                case $cert_sig_hash_algo in
                     sha1)
-                         pr_svrty_mediumln "RSASSA-PSS with SHA1"
+                         prln_svrty_medium "RSASSA-PSS with SHA1"
                          fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: RSASSA-PSS with SHA1"
                          ;;
                     sha224)
@@ -6342,33 +6340,33 @@ certificate_info() {
                          fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: RSASSA-PSS with SHA224"
                          ;;
                     sha256)
-                         pr_done_goodln "RSASSA-PSS with SHA256"
+                         prln_done_good "RSASSA-PSS with SHA256"
                          fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA256"
                          ;;
                     sha384)
-                         pr_done_goodln "RSASSA-PSS with SHA384"
+                         prln_done_good "RSASSA-PSS with SHA384"
                          fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA384"
                          ;;
                     sha512)
-                         pr_done_goodln "RSASSA-PSS with SHA512"
+                         prln_done_good "RSASSA-PSS with SHA512"
                          fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA512"
                          ;;
                     *)
                          out "RSASSA-PSS with $cert_sig_hash_algo"
-                         pr_warningln " (Unknown hash algorithm)"
+                         prln_warning " (Unknown hash algorithm)"
                          fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: RSASSA-PSS with $cert_sig_hash_algo"
                     esac
                     ;;
           md2*)
-               pr_svrty_criticalln "MD2"
+               prln_svrty_critical "MD2"
                fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD2"
                ;;
           md4*)
-               pr_svrty_criticalln "MD4"
+               prln_svrty_critical "MD4"
                fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD4"
                ;;
           md5*)
-               pr_svrty_criticalln "MD5"
+               prln_svrty_critical "MD5"
                fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD5"
                ;;
           *)
@@ -6391,7 +6389,7 @@ certificate_info() {
                *ecdsa*|*ecPublicKey)    out "ECDSA ";;
                *GOST*|*gost*)           out "GOST ";;
                *dh*|*DH*)               out "DH " ;;
-               *)                       pr_warning "fixme: $cert_key_algo " ;;
+               *)                       pr_warning "pr_fixme: $cert_key_algo " ;;
           esac
           # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
           # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
@@ -6485,9 +6483,9 @@ certificate_info() {
                cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
                [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
           fi
-          debugme out_term "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
+          debugme tm_out "\"$NODE\" | \"$cn\" | \"$cn_nosni\""
      else
-          debugme out_term "\"$NODE\" | \"$cn\""
+          debugme tm_out "\"$NODE\" | \"$cn\""
      fi
 
 #FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
@@ -6539,7 +6537,7 @@ certificate_info() {
      issuer_DC="$(awk -F'=' '/DC=/ { print $2 }' <<< "$issuer")"
 
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$cn" ]]; then
-          pr_svrty_criticalln "self-signed (NOT ok)"
+          prln_svrty_critical "self-signed (NOT ok)"
           fileout "${json_prefix}issuer" "CRITICAL" "Issuer: selfsigned"
      else
           issuerfinding="$issuer_CN"
@@ -6645,7 +6643,7 @@ certificate_info() {
           trustfinding_nosni=""
      fi
      if "$has_dns_sans" && ( [[ $trust_nosni -eq 4 ]] || [[ $trust_nosni -eq 8 ]] ); then
-          pr_svrty_mediumln "$trustfinding_nosni"
+          prln_svrty_medium "$trustfinding_nosni"
      else
           outln "$trustfinding_nosni"
      fi
@@ -6978,7 +6976,7 @@ run_server_defaults() {
           lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
           unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
-          pr_svrty_lowln "(PFS requires session ticket keys to be rotated <= daily)"
+          prln_svrty_low "(PFS requires session ticket keys to be rotated <= daily)"
           fileout "session_ticket" "LOW" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
      fi
 
@@ -7028,7 +7026,7 @@ run_pfs() {
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
      outln
-     pr_headline " Testing robust (perfect) forward secrecy"; pr_underlineln ", (P)FS -- omitting Null Authentication/Encryption, 3DES, RC4 "
+     pr_headline " Testing robust (perfect) forward secrecy"; prln_underline ", (P)FS -- omitting Null Authentication/Encryption, 3DES, RC4 "
      if ! "$using_sockets"; then
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
           if ! "$HAS_DH_BITS" && "$WIDE"; then
@@ -7087,7 +7085,7 @@ run_pfs() {
           debugme echo $(actually_supported_ciphers $pfs_cipher_list)
           if [[ "$nr_supported_ciphers" -le "$CLIENT_MIN_PFS" ]]; then
                outln
-               local_problem_ln "You only have $nr_supported_ciphers PFS ciphers on the client side "
+               prln_local_problem "You only have $nr_supported_ciphers PFS ciphers on the client side "
                fileout "pfs" "WARN" "(Perfect) Forward Secrecy tests: Skipped. You only have $nr_supported_ciphers PFS ciphers on the client site. ($CLIENT_MIN_PFS are required)"
                return 1
           fi
@@ -7099,7 +7097,7 @@ run_pfs() {
 
      if [[ $sclient_success -ne 0 ]]; then
           outln
-          pr_svrty_mediumln " No ciphers supporting Forward Secrecy offered"
+          prln_svrty_medium " No ciphers supporting Forward Secrecy offered"
           fileout "pfs" "MEDIUM" "(Perfect) Forward Secrecy : No ciphers supporting Forward Secrecy offered"
      else
           outln
@@ -7352,7 +7350,7 @@ spdy_pre(){
           return 1
      fi
      if ! "$HAS_SPDY"; then
-          local_problem "$OPENSSL doesn't support SPDY/NPN";
+          pr_local_problem "$OPENSSL doesn't support SPDY/NPN";
           fileout "spdy_npn" "WARN" "SPDY/NPN : not tested $OPENSSL doesn't support SPDY/NPN"
           return 7
      fi
@@ -7373,7 +7371,7 @@ http2_pre(){
           return 1
      fi
      if ! "$HAS_ALPN" && "$SSL_NATIVE"; then
-          local_problem_ln "$OPENSSL doesn't support HTTP2/ALPN";
+          prln_local_problem "$OPENSSL doesn't support HTTP2/ALPN";
           fileout "https_alpn" "WARN" "HTTP2/ALPN : HTTP/2 was not tested as $OPENSSL does not support it"
           return 7
      fi
@@ -7403,7 +7401,7 @@ run_spdy() {
                fileout "spdy_npn" "INFO" "SPDY/NPN : $tmpstr (advertised)"
                ret=0
           else
-               pr_cyanln "please check manually, server response was ambiguous ..."
+               prln_cyan "please check manually, server response was ambiguous ..."
                fileout "spdy_npn" "INFO" "SPDY/NPN : please check manually, server response was ambiguous ..."
                ret=10
           fi
@@ -7661,7 +7659,7 @@ fd_socket() {
                     proyxline=${proyxline#* }
                     if [[ "${proyxline%% *}" != "200" ]]; then
                          pr_magenta "Unable to CONNECT via proxy. "
-                         [[ "$PORT" != 443 ]] && pr_magentaln "Check whether your proxy supports port $PORT and the underlying protocol."
+                         [[ "$PORT" != 443 ]] && prln_magenta "Check whether your proxy supports port $PORT and the underlying protocol."
                          return 6
                     fi
                fi
@@ -8022,7 +8020,7 @@ get_dh_ephemeralkey() {
      key_bitstring="$($OPENSSL pkey -pubin -in $tmp_der_key_file -inform DER 2> $ERRFILE)"
      rm $tmp_der_key_file
      [[ -z "$key_bitstring" ]] && return 1
-     retstring "$key_bitstring"
+     tm_out "$key_bitstring"
      return 0
 }
 
@@ -8262,7 +8260,7 @@ parse_tls_serverhello() {
           if [[ $tls_hello_ascii_len-$i -lt 10 ]]; then
                if [[ "$process_full" == "all" ]]; then
                     # The entire server response should have been retrieved.
-                    debugme pr_warningln_term "Malformed message."
+                    debugme tmln_warning "Malformed message."
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -8279,28 +8277,28 @@ parse_tls_serverhello() {
 
           if [[ $DEBUG -ge 2 ]]; then
                echo      "     tls_protocol (reclyr):  0x$tls_protocol"
-               out_term  "     tls_content_type:       0x$tls_content_type"
+               tm_out  "     tls_content_type:       0x$tls_content_type"
                case $tls_content_type in
-                    15) outln_term " (alert)" ;;
-                    16) outln_term " (handshake)" ;;
-                    17) outln_term " (application data)" ;;
-                     *) outln_term ;;
+                    15) tmln_out " (alert)" ;;
+                    16) tmln_out " (handshake)" ;;
+                    17) tmln_out " (application data)" ;;
+                     *) tmln_out ;;
                esac
                echo "     msg_len:                $((msg_len/2))"
-               outln_term
+               tmln_out
           fi
           if [[ $tls_content_type != "15" ]] && [[ $tls_content_type != "16" ]] && [[ $tls_content_type != "17" ]]; then
-               debugme pr_warningln_term "Content type other than alert, handshake, or application data detected."
+               debugme tmln_warning "Content type other than alert, handshake, or application data detected."
                return 1
           elif [[ "${tls_protocol:0:2}" != "03" ]]; then
-               debugme pr_warningln_term "Protocol record_version.major is not 03."
+               debugme tmln_warning "Protocol record_version.major is not 03."
                return 1
           fi
           DETECTED_TLS_VERSION=$tls_protocol
 
           if [[ $msg_len -gt $tls_hello_ascii_len-$i ]]; then
                if [[ "$process_full" == "all" ]]; then
-                    debugme pr_warningln_term "Malformed message."
+                    debugme tmln_warning "Malformed message."
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -8320,7 +8318,7 @@ parse_tls_serverhello() {
      # Now check the alert messages.
      tls_alert_ascii_len=${#tls_alert_ascii}
      if [[ "$process_full" == "all" ]] && [[ $tls_alert_ascii_len%4 -ne 0 ]]; then
-          debugme pr_warningln_term "Malformed message."
+          debugme tmln_warning "Malformed message."
           return 1
      fi
      if [[ $tls_alert_ascii_len -gt 0 ]]; then
@@ -8331,7 +8329,7 @@ parse_tls_serverhello() {
                tls_err_descr=${tls_alert_ascii:j:2}    # 112/0x70: Unrecognized name, 111/0x6F: certificate_unobtainable,
                                                        # 113/0x71: bad_certificate_status_response, #114/0x72: bad_certificate_hash_value
 
-               debugme out_term  "     tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
+               debugme tm_out  "     tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
                case $tls_err_descr in
                     00) tls_alert_descrip="close notify" ;;
                     01) tls_alert_descrip="end of early data" ;;
@@ -8377,17 +8375,17 @@ parse_tls_serverhello() {
                echo "alert $tls_alert_descrip" >> $TMPFILE
                echo "===============================================================================" >> $TMPFILE
                if [[ $DEBUG -ge 2 ]]; then
-                    outln_term " ($tls_alert_descrip)"
-                    out_term  "     tls_err_level:          ${tls_err_level}"
+                    tmln_out " ($tls_alert_descrip)"
+                    tm_out  "     tls_err_level:          ${tls_err_level}"
                     case $tls_err_level in
-                         01) outln_term " (warning)" ;;
-                         02) outln_term " (fatal)" ;;
-                          *) outln_term ;;
+                         01) tmln_out " (warning)" ;;
+                         02) tmln_out " (fatal)" ;;
+                          *) tmln_out ;;
                     esac
-                    outln_term
+                    tmln_out
                fi
                if [[ "$tls_err_level" != "01" ]] && [[ "$tls_err_level" != "02" ]]; then
-                    debugme pr_warningln_term "Unexpected AlertLevel (0x$tls_err_level)."
+                    debugme tmln_warning "Unexpected AlertLevel (0x$tls_err_level)."
                     return 1
                elif [[ "$tls_err_level" == "02" ]]; then
                     # Fatal alert
@@ -8407,7 +8405,7 @@ parse_tls_serverhello() {
           if [[ $tls_handshake_ascii_len-$i -lt 8 ]]; then
                if [[ "$process_full" == "all" ]]; then
                     # The entire server response should have been retrieved.
-                    debugme pr_warningln_term "Malformed message."
+                    debugme tmln_warning "Malformed message."
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -8421,34 +8419,34 @@ parse_tls_serverhello() {
           i=$i+6
 
           if [[ $DEBUG -ge 2 ]]; then
-               out_term  "     handshake type:         0x${tls_msg_type}"
+               tm_out  "     handshake type:         0x${tls_msg_type}"
                case $tls_msg_type in
-                    00) outln_term " (hello_request)" ;;
-                    01) outln_term " (client_hello)" ;;
-                    02) outln_term " (server_hello)" ;;
-                    03) outln_term " (hello_verify_request)" ;;
-                    04) outln_term " (NewSessionTicket)" ;;
-                    06) outln_term " (hello_retry_request)" ;;
-                    08) outln_term " (encrypted_extensions)" ;;
-                    0B) outln_term " (certificate)" ;;
-                    0C) outln_term " (server_key_exchange)" ;;
-                    0D) outln_term " (certificate_request)" ;;
-                    0E) outln_term " (server_hello_done)" ;;
-                    0F) outln_term " (certificate_verify)" ;;
-                    10) outln_term " (client_key_exchange)" ;;
-                    14) outln_term " (finished)" ;;
-                    15) outln_term " (certificate_url)" ;;
-                    16) outln_term " (certificate_status)" ;;
-                    17) outln_term " (supplemental_data)" ;;
-                    18) outln_term " (key_update)" ;;
-                    *) outln_term ;;
+                    00) tmln_out " (hello_request)" ;;
+                    01) tmln_out " (client_hello)" ;;
+                    02) tmln_out " (server_hello)" ;;
+                    03) tmln_out " (hello_verify_request)" ;;
+                    04) tmln_out " (NewSessionTicket)" ;;
+                    06) tmln_out " (hello_retry_request)" ;;
+                    08) tmln_out " (encrypted_extensions)" ;;
+                    0B) tmln_out " (certificate)" ;;
+                    0C) tmln_out " (server_key_exchange)" ;;
+                    0D) tmln_out " (certificate_request)" ;;
+                    0E) tmln_out " (server_hello_done)" ;;
+                    0F) tmln_out " (certificate_verify)" ;;
+                    10) tmln_out " (client_key_exchange)" ;;
+                    14) tmln_out " (finished)" ;;
+                    15) tmln_out " (certificate_url)" ;;
+                    16) tmln_out " (certificate_status)" ;;
+                    17) tmln_out " (supplemental_data)" ;;
+                    18) tmln_out " (key_update)" ;;
+                    *) tmln_out ;;
                esac
                echo "     msg_len:                $((msg_len/2))"
-               outln_term
+               tmln_out
           fi
           if [[ $msg_len -gt $tls_handshake_ascii_len-$i ]]; then
                if [[ "$process_full" == "all" ]]; then
-                    debugme pr_warningln_term "Malformed message."
+                    debugme tmln_warning "Malformed message."
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -8460,28 +8458,28 @@ parse_tls_serverhello() {
 
           if [[ "$tls_msg_type" == "02" ]]; then
                if [[ -n "$tls_serverhello_ascii" ]]; then
-                    debugme pr_warningln_term "Response contained more than one ServerHello handshake message."
+                    debugme tmln_warning "Response contained more than one ServerHello handshake message."
                     return 1
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverhello_ascii_len=$msg_len
           elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "0B" ]]; then
                if [[ -n "$tls_certificate_ascii" ]]; then
-                    debugme pr_warningln_term "Response contained more than one Certificate handshake message."
+                    debugme tmln_warning "Response contained more than one Certificate handshake message."
                     return 1
                fi
                tls_certificate_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_certificate_ascii_len=$msg_len
           elif ( [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]] ) && [[ "$tls_msg_type" == "0C" ]]; then
                if [[ -n "$tls_serverkeyexchange_ascii" ]]; then
-                    debugme pr_warningln_term "Response contained more than one ServerKeyExchange handshake message."
+                    debugme tmln_warning "Response contained more than one ServerKeyExchange handshake message."
                     return 1
                fi
                tls_serverkeyexchange_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverkeyexchange_ascii_len=$msg_len
           elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "16" ]]; then
                if [[ -n "$tls_certificate_status_ascii" ]]; then
-                    debugme pr_warningln_term "Response contained more than one certificate_status handshake message."
+                    debugme tmln_warning "Response contained more than one certificate_status handshake message."
                     return 1
                fi
                tls_certificate_status_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -8498,7 +8496,7 @@ parse_tls_serverhello() {
           return 1
      elif [[ "${tls_handshake_ascii:0:2}" != "02" ]]; then
           # the ServerHello MUST be the first handshake message
-          debugme pr_warningln_term "The first handshake protocol message is not a ServerHello."
+          debugme tmln_warning "The first handshake protocol message is not a ServerHello."
           return 1
      fi
 
@@ -8512,7 +8510,7 @@ parse_tls_serverhello() {
      # byte 38+39+sid-len:  extension length
      tls_protocol2="${tls_serverhello_ascii:0:4}"
      if [[ "${tls_protocol2:0:2}" != "03" ]]; then
-          debugme pr_warningln_term "server_version.major in ServerHello is not 03."
+          debugme tmln_warning "server_version.major in ServerHello is not 03."
           return 1
      fi
      DETECTED_TLS_VERSION="$tls_protocol2"
@@ -8549,7 +8547,7 @@ parse_tls_serverhello() {
           fi
           tls_extensions_len=$(hex2dec "${tls_serverhello_ascii:extns_offset:4}")*2
           if [[ $tls_extensions_len -ne $tls_serverhello_ascii_len-$extns_offset-4 ]]; then
-               debugme pr_warningln_term "Malformed message."
+               debugme tmln_warning "Malformed message."
                return 1
           fi
           for (( i=0; i<tls_extensions_len; i=i+8+extension_len )); do
@@ -8706,7 +8704,7 @@ parse_tls_serverhello() {
                     echo "     NPN protocols:          $(grep "Protocols advertised by server:" "$TMPFILE" | sed 's/Protocols advertised by server: //')"
                fi
           fi
-          outln_term
+          tmln_out
      fi
 
      # Now parse the Certificate message.
@@ -9019,7 +9017,7 @@ sslv2_sockets() {
      # https://idea.popcount.org/2012-06-16-dissecting-ssl-handshake/ (client)
 
      fd_socket 5 || return 6
-     debugme outln_term "sending client hello... "
+     debugme tmln_out "sending client hello... "
      socksend_sslv2_clienthello "$client_hello"
 
      sockread_serverhello 32768
@@ -9041,7 +9039,7 @@ sslv2_sockets() {
                response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
           done
      fi
-     debugme outln_term "reading server hello... "
+     debugme tmln_out "reading server hello... "
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -6
           outln
@@ -9408,7 +9406,7 @@ tls_sockets() {
                fi
           done
 
-          debugme outln_term "reading server hello..."
+          debugme tmln_out "reading server hello..."
           if [[ "$DEBUG" -ge 4 ]]; then
                hexdump -C $SOCK_REPLY_FILE | head -6
                echo
@@ -9428,7 +9426,7 @@ tls_sockets() {
 
           # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
           lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
-          debugme out_term "  (returned $lines lines)  "
+          debugme tm_out "  (returned $lines lines)  "
 
           # determine the return value for higher level, so that they can tell what the result is
           if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
@@ -9441,7 +9439,7 @@ tls_sockets() {
                     ret=2     # protocol NOT available, server downgraded to $DETECTED_TLS_VERSION
                fi
           fi
-          debugme outln_term
+          debugme tmln_out
      else
           debugme echo "stuck on sending: $ret"
      fi
@@ -9547,16 +9545,16 @@ run_heartbleed(){
      x00, x0f, x00, x01, x01"
 
      fd_socket 5 || return 6
-     debugme out_term "\nsending client hello (TLS version $tls_hexcode)"
-     debugme outln_term " ($n of $hb_rounds)"
+     debugme tm_out "\nsending client hello (TLS version $tls_hexcode)"
+     debugme tmln_out " ($n of $hb_rounds)"
      socksend "$client_hello" 1
 
-     debugme outln_term "\nreading server hello"
+     debugme tmln_out "\nreading server hello"
      sockread_serverhello 32768
      if [[ $DEBUG -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -20
-          outln_term "[...]"
-          outln_term "\nsending payload with TLS version $tls_hexcode:"
+          tmln_out "[...]"
+          tmln_out "\nsending payload with TLS version $tls_hexcode:"
      fi
      rm "$SOCK_REPLY_FILE"
 
@@ -9578,10 +9576,10 @@ run_heartbleed(){
           debugme echo "lines HB reply: $lines_returned"
 
           if [[ $DEBUG -ge 3 ]]; then
-               outln_term "\nheartbleed reply: "
+               tmln_out "\nheartbleed reply: "
                hexdump -C "$SOCK_REPLY_FILE" | head -20
-               [[ $lines_returned -gt 20 ]] && outln_term "[...]"
-               outln_term
+               [[ $lines_returned -gt 20 ]] && tmln_out "[...]"
+               tmln_out
           fi
 
           if [[ $lines_returned -gt 1 ]] && [[ "${tls_hello_ascii:0:4}" == "1803" ]]; then
@@ -9620,7 +9618,7 @@ run_heartbleed(){
 
 # helper function
 ok_ids(){
-     pr_done_bestln "\n ok -- something resetted our ccs packets"
+     prln_done_best "\n ok -- something resetted our ccs packets"
      return 0
 }
 
@@ -9688,25 +9686,25 @@ run_ccs_injection(){
      fd_socket 5 || return 6
 
 # we now make a standard handshake ...
-     debugme out_term "\nsending client hello, "
+     debugme tm_out "\nsending client hello, "
      socksend "$client_hello" 1
 
-     debugme outln_term "\nreading server hello"
+     debugme tmln_out "\nreading server hello"
      sockread_serverhello 32768
      if [[ $DEBUG -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -20
-          outln_term "[...]"
-          out_term "\nsending payload #1 with TLS version $tls_hexcode:  "
+          tmln_out "[...]"
+          tm_out "\nsending payload #1 with TLS version $tls_hexcode:  "
      fi
      rm "$SOCK_REPLY_FILE"
 # ... and then send the a change cipher spec message
      socksend "$ccs_message" 1 || ok_ids
      sockread_serverhello 4096 $CCS_MAX_WAITSOCK
      if [[ $DEBUG -ge 3 ]]; then
-          outln_term "\n1st reply: "
+          tmln_out "\n1st reply: "
           hexdump -C "$SOCK_REPLY_FILE" | head -20
-          outln_term
-          out_term "sending payload #2 with TLS version $tls_hexcode:  "
+          tmln_out
+          tm_out "sending payload #2 with TLS version $tls_hexcode:  "
      fi
      rm "$SOCK_REPLY_FILE"
 
@@ -9719,9 +9717,9 @@ run_ccs_injection(){
      debugme echo "tls_content_type: ${tls_hello_ascii:0:2} | tls_protocol: ${tls_hello_ascii:2:4} | byte6: $byte6"
 
      if [[ $DEBUG -ge 3 ]]; then
-          outln_term "\n2nd reply: "
+          tmln_out "\n2nd reply: "
           hexdump -C "$SOCK_REPLY_FILE"
-          outln_term
+          tmln_out
      fi
 
 # in general, see https://en.wikipedia.org/wiki/Transport_Layer_Security#Alert_protocol
@@ -9796,20 +9794,20 @@ run_renego() {
 #FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
           case $sec_renego in
                0)
-                    pr_svrty_criticalln "VULNERABLE (NOT ok)"
+                    prln_svrty_critical "VULNERABLE (NOT ok)"
                     fileout "secure_renego" "CRITICAL" "Secure Renegotiation: VULNERABLE" "$cve" "$cwe" "$hint"
                     ;;
                1)
-                    pr_done_bestln "not vulnerable (OK)"
+                    prln_done_best "not vulnerable (OK)"
                     fileout "secure_renego" "OK" "Secure Renegotiation: not vulnerable" "$cve" "$cwe"
                     ;;
                *)
-                    pr_warningln "FIXME (bug): $sec_renego"
+                    prln_warning "FIXME (bug): $sec_renego"
                     fileout "secure_renego" "WARN" "Secure Renegotiation: FIXME (bug) $sec_renego" "$cve" "$cwe"
                     ;;
           esac
      else
-          pr_warningln "handshake didn't succeed"
+          prln_warning "handshake didn't succeed"
           fileout "secure_renego" "WARN" "Secure Renegotiation: handshake didn't succeed" "$cve" "$cwe"
      fi
 
@@ -9820,7 +9818,7 @@ run_renego() {
           0.9.8*)             # we need this for Mac OSX unfortunately
                case "$OSSL_VER_APPENDIX" in
                     [a-l])
-                         local_problem_ln "$OPENSSL cannot test this secure renegotiation vulnerability"
+                         prln_local_problem "$OPENSSL cannot test this secure renegotiation vulnerability"
                          fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : $OPENSSL cannot test this secure renegotiation vulnerability" "$cve" "$cwe"
                          return 3
                          ;;
@@ -9836,7 +9834,7 @@ run_renego() {
      esac
 
      if "$CLIENT_AUTH"; then
-          pr_warningln "client authentication prevents this from being tested"
+          prln_warning "client authentication prevents this from being tested"
           fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : client authentication prevents this from being tested"
           sec_client_renego=1
      else
@@ -9862,11 +9860,11 @@ run_renego() {
                          fi
                          ;;
                     1)
-                         pr_done_goodln "not vulnerable (OK)"
+                         prln_done_good "not vulnerable (OK)"
                          fileout "sec_client_renego" "OK" "Secure Client-Initiated Renegotiation : not vulnerable" "$cve" "$cwe"
                          ;;
                     *)
-                         pr_warningln "FIXME (bug): $sec_client_renego"
+                         prln_warning "FIXME (bug): $sec_client_renego"
                          fileout "sec_client_renego" "DEBUG" "Secure Client-Initiated Renegotiation : FIXME (bug) $sec_client_renego - Please report" "$cve" "$cwe"
                          ;;
                esac
@@ -9900,7 +9898,7 @@ run_crime() {
      $OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib
      if [[ $? -eq 0 ]]; then
           if "$SSL_NATIVE"; then
-               local_problem_ln "$OPENSSL lacks zlib support"
+               prln_local_problem "$OPENSSL lacks zlib support"
                fileout "crime" "WARN" "CRIME, TLS: Not tested. $OPENSSL lacks zlib support" "$cve" "$cwe"
                return 7
           else
@@ -9976,7 +9974,7 @@ run_crime() {
 #              fi
 #         fi
 #    fi
-#    [[ $DEBUG -eq 2 ]] outln_term "$STR"
+#    [[ $DEBUG -eq 2 ]] tmln_out "$STR"
      tmpfile_handle $FUNCNAME.txt
      return $ret
 }
@@ -10027,7 +10025,7 @@ run_breach() {
           else
                fileout "breach" "WARN" "BREACH: Test failed (HTTP request stalled)" "$cve" "$cwe"
           fi
-          pr_warningln ") "
+          prln_warning ") "
           ret=3
      elif [[ -z $result ]]; then
           pr_done_best "no HTTP compression (OK) "
@@ -10124,7 +10122,7 @@ run_ssl_poodle() {
           sclient_success=$?
      else
           if ! "$HAS_SSL3"; then
-               local_problem_ln "Your $OPENSSL doesn't support SSLv3"
+               prln_local_problem "Your $OPENSSL doesn't support SSLv3"
                return 1
           fi
           nr_cbc_ciphers=$(count_ciphers $cbc_ciphers)
@@ -10164,7 +10162,7 @@ run_tls_poodle() {
 
      pr_bold " POODLE, TLS"; out " ($cve), experimental "
      #FIXME
-     pr_warningln "#FIXME"
+     prln_warning "#FIXME"
      fileout "poodle_tls" "WARN" "POODLE, TLS: Not tested. Not yet implemented #FIXME" "$cve" "$cwe"
      return 7
 }
@@ -10179,7 +10177,7 @@ run_tls_fallback_scsv() {
 
      # First check we have support for TLS_FALLBACK_SCSV in our local OpenSSL
      if ! "$HAS_FALLBACK_SCSV"; then
-          local_problem_ln "$OPENSSL lacks TLS_FALLBACK_SCSV support"
+          prln_local_problem "$OPENSSL lacks TLS_FALLBACK_SCSV support"
           return 4
      fi
      #TODO: this need some tuning: a) if one protocol is supported only it has practcally no value (theoretical it's interesting though)
@@ -10189,7 +10187,7 @@ run_tls_fallback_scsv() {
 
      # first: make sure SSLv3 or some TLS protocol is supported
      if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
-          pr_svrty_criticalln "No fallback possible, SSLv2 is the only protocol"
+          prln_svrty_critical "No fallback possible, SSLv2 is the only protocol"
           return 7
      fi
      # second: make sure we have tls1_2:
@@ -10266,7 +10264,7 @@ run_freak() {
      #echo "========= ${PIPESTATUS[*]}
 
      case $nr_supported_ciphers in
-          0)   local_problem_ln "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
+          0)   prln_local_problem "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
                fileout "freak" "WARN" "FREAK: Not tested. $OPENSSL doesn't have any EXPORT RSA ciphers configured" "$cve" "$cwe"
                return 7
                ;;
@@ -10324,9 +10322,9 @@ run_freak() {
                     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                          [[ "$hexc" == "${TLS_CIPHER_HEXCODE[i]}" ]] && break
                     done
-                    [[ $i -eq $TLS_NR_CIPHERS ]] && out_term "$hexc " || out_term "${TLS_CIPHER_OSSL_NAME[i]} "
+                    [[ $i -eq $TLS_NR_CIPHERS ]] && tm_out "$hexc " || tm_out "${TLS_CIPHER_OSSL_NAME[i]} "
                done
-               outln_term
+               tmln_out
           else
                echo $(actually_supported_ciphers $exportrsa_cipher_list)
           fi
@@ -10369,7 +10367,7 @@ run_logjam() {
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $exportdh_cipher_list))
           debugme echo $nr_supported_ciphers
           case $nr_supported_ciphers in
-               0)   local_problem_ln "$OPENSSL doesn't have any DH EXPORT ciphers configured"
+               0)   prln_local_problem "$OPENSSL doesn't have any DH EXPORT ciphers configured"
                     fileout "logjam" "WARN" "LOGJAM: Not tested. $OPENSSL doesn't have any DH EXPORT ciphers configured" "$cve" "$cwe"
                     return 1            # we could continue here testing common primes but the logjam test would be not complete and it's misleading/hard to code+display
                     ;;
@@ -10400,9 +10398,9 @@ run_logjam() {
                     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                          [[ "$hexc" == "${TLS_CIPHER_HEXCODE[i]}" ]] && break
                     done
-                    [[ $i -eq $TLS_NR_CIPHERS ]] && out_term "$hexc " || out_term "${TLS_CIPHER_OSSL_NAME[i]} "
+                    [[ $i -eq $TLS_NR_CIPHERS ]] && tm_out "$hexc " || tm_out "${TLS_CIPHER_OSSL_NAME[i]} "
                done
-               outln_term
+               tmln_out
           else
                echo $(actually_supported_ciphers $exportdh_cipher_list)
           fi
@@ -10443,10 +10441,10 @@ run_logjam() {
           dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
           [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
           len_dh_p="$((4*${#dh_p}))"
-          debugme outln_term "len(dh_p): $len_dh_p  |  dh_p: $dh_p"
+          debugme tmln_out "len(dh_p): $len_dh_p  |  dh_p: $dh_p"
           echo "$dh_p" > $TEMPDIR/dh_p.txt
           if [[ ! -s "$common_primes_file" ]]; then
-               local_problem_ln "couldn't read common primes file $common_primes_file"
+               prln_local_problem "couldn't read common primes file $common_primes_file"
                out "${spaces}"
                fileout "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
                ret=7
@@ -10561,7 +10559,7 @@ run_drown() {
 
      case $? in
           7) # strange reply, couldn't convert the cipher spec length to a hex number
-               fixme "strange v2 reply "
+               pr_fixme "strange v2 reply "
                outln " (rerun with DEBUG >=2)"
                [[ $DEBUG -ge 3 ]] && hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" | head -1
                ret=7
@@ -10569,20 +10567,20 @@ run_drown() {
                ;;
           3)   # vulnerable
                lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
-               debugme out_term "  ($lines lines)  "
+               debugme tm_out "  ($lines lines)  "
                if [[ "$lines" -gt 1 ]]; then
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$nr_ciphers_detected" ]]; then
-                         pr_svrty_highln "SSLv2 is supported but couldn't detect a cipher (NOT ok)";
+                         prln_svrty_high "SSLv2 is supported but couldn't detect a cipher (NOT ok)";
                          fileout "drown" "HIGH" "SSLv2 is offered, but could not detect a cipher" "$cve" "$cwe" "$hint"
                     else
-                         pr_svrty_criticalln  "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
+                         prln_svrty_critical  "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
                          fileout "drown" "CRITICAL" "VULNERABLE, SSLv2 offered with $nr_ciphers_detected ciphers" "$cve" "$cwe" "$hint"
                     fi
                fi
                ret=1
                ;;
-          *)   pr_done_bestln "not vulnerable on this port (OK)"
+          *)   prln_done_best "not vulnerable on this port (OK)"
                fileout "drown" "OK" "not vulnerable to DROWN" "$cve" "$cwe"
                # Any fingerprint that is placed in $RSA_CERT_FINGERPRINT_SHA2 is
                # also added to $CERT_FINGERPRINT_SHA2, so if $CERT_FINGERPRINT_SHA2
@@ -10713,10 +10711,10 @@ run_beast(){
           if [[ $? -ne 0 ]]; then                                # protocol supported?
                if "$continued"; then                             # second round: we hit TLS1
                     if "$HAS_SSL3" || "$using_sockets"; then
-                         pr_done_goodln "no SSL3 or TLS1 (OK)"
+                         prln_done_good "no SSL3 or TLS1 (OK)"
                          fileout "beast" "OK" "BEAST: not vulnerable, no SSL3 or TLS1" "$cve" "$cwe"
                     else
-                         pr_done_goodln "no TLS1 (OK)"
+                         prln_done_good "no TLS1 (OK)"
                          fileout "beast" "OK" "BEAST: not vulnerable, no TLS1" "$cve" "$cwe"
                     fi
                     return 0
@@ -10843,12 +10841,12 @@ run_beast(){
                     first=false
                else
                     [[ $proto == "tls1" ]] && ! $first && echo -n "$spaces "
-                    pr_done_goodln "no CBC ciphers for $(toupper $proto) (OK)"
+                    prln_done_good "no CBC ciphers for $(toupper $proto) (OK)"
                     first=false
                fi
           else
                if ! "$vuln_beast" ; then
-                    pr_done_goodln " no CBC ciphers for $(toupper $proto) (OK)"
+                    prln_done_good " no CBC ciphers for $(toupper $proto) (OK)"
                     fileout "cbc_$proto" "OK" "BEAST: No CBC ciphers for $(toupper $proto)" "$cve" "$cwe"
                fi
           fi
@@ -10878,7 +10876,7 @@ run_beast(){
                fileout "beast" "MEDIUM" "BEAST: VULNERABLE -- and no higher protocols as mitigation supported" "$cve" "$cwe" "$hint"
           fi
      fi
-     "$first" && ! "$vuln_beast" && pr_done_goodln "no CBC ciphers found for any protocol (OK)"
+     "$first" && ! "$vuln_beast" && prln_done_good "no CBC ciphers found for any protocol (OK)"
 
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
      tmpfile_handle $FUNCNAME.txt
@@ -11179,10 +11177,10 @@ run_rc4() {
           "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
           fileout "rc4" "HIGH" "RC4: VULNERABLE, Detected ciphers: $rc4_detected" "$cve" "$cwe" "$hint"
      elif [[ $nr_ciphers -eq 0 ]]; then
-          local_problem_ln "No RC4 Ciphers configured in $OPENSSL"
+          prln_local_problem "No RC4 Ciphers configured in $OPENSSL"
           fileout "rc4" "WARN" "RC4 ciphers not supported by local OpenSSL ($OPENSSL)"
      else
-          pr_done_goodln "no RC4 ciphers detected (OK)"
+          prln_done_good "no RC4 ciphers detected (OK)"
           fileout "rc4" "OK" "RC4: not vulnerable" "$cve" "$cwe"
      fi
      outln
@@ -11228,7 +11226,7 @@ get_install_dir() {
           CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/etc/cipher-mapping.txt"
           [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$RUN_DIR"          # probably TESTSSL_INSTALL_DIR
      fi
-
+     
      [[ -r "$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           [[ -r "$RUN_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/cipher-mapping.txt"
@@ -11267,7 +11265,7 @@ get_install_dir() {
           unset ADD_RFC_STR
           unset SHOW_RFC
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
-          pr_warningln "\nATTENTION: No cipher mapping file found!"
+          prln_warning "\nATTENTION: No cipher mapping file found!"
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
@@ -11305,8 +11303,8 @@ find_openssl_binary() {
 
      # 0. check environment variable whether it's executable
      if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
-          pr_warningln "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
-          outln_term " Looking some place else ..."
+          prln_warning "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
+          tmln_out " Looking some place else ..."
      elif [[ -x "$OPENSSL" ]]; then
           :    # 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
      elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
@@ -11413,7 +11411,7 @@ check4openssl_oldfarts() {
                ;;
      esac
      if [[ $OSSL_VER_MAJOR -lt 1 ]]; then ## mm: Patch for libressl
-          pr_warningln " Your \"$OPENSSL\" is way too old (<version 1.0) !"
+          prln_warning " Your \"$OPENSSL\" is way too old (<version 1.0) !"
           case $SYSTEM in
                *BSD|Darwin)
                     out " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from "
@@ -11706,7 +11704,7 @@ EOF
      pr_boldurl "$SWURL"; outln
      pr_bold "    ("
      pr_grey "$idtag"
-     pr_boldln ")"
+     prln_bold ")"
      pr_bold "$bb2"
      pr_boldurl "https://testssl.sh/bugs/"; outln
      pr_bold "$bb3"
@@ -11731,9 +11729,9 @@ EOF
 
 cleanup () {
      if [[ "$DEBUG" -ge 1 ]]; then
-          outln_term
-          pr_underline_term "DEBUG (level $DEBUG): see files in $TEMPDIR"
-          outln_term
+          tmln_out
+          tm_underline "DEBUG (level $DEBUG): see files in $TEMPDIR"
+          tmln_out
      else
           [[ -d "$TEMPDIR" ]] && rm -rf "$TEMPDIR";
      fi
@@ -11743,7 +11741,7 @@ cleanup () {
 }
 
 fatal() {
-     pr_magentaln "Fatal error: $1" >&2
+     prln_magenta "Fatal error: $1" >&2
      exit $2
      # 1:  cmd line error
      # 2:  secondary/other cmd line error
@@ -11769,7 +11767,7 @@ initialize_engine(){
           return 1
      else      # we have engine support
           if [[ -n "$OPENSSL_CONF" ]]; then
-               pr_warningln "For now I am providing the config file to have GOST support"
+               prln_warning "For now I am providing the config file to have GOST support"
           else
                OPENSSL_CONF=$TEMPDIR/gost.conf || exit -6
                # see https://www.mail-archive.com/openssl-users@openssl.org/msg65395.html
@@ -11804,7 +11802,7 @@ ignore_no_or_lame() {
      [[ "$WARNINGS" == off ]] && return 0
      [[ "$WARNINGS" == false ]] && return 0
      [[ "$WARNINGS" == batch ]] && return 1
-     pr_warning_term "$1 --> "
+     tm_warning "$1 --> "
      read a
      if [[ "$a" == "$(tolower "$2")" ]]; then
           return 0
@@ -11875,10 +11873,10 @@ prepare_logging() {
                : # just for clarity: a log file was specified, no need to do anything else
           fi
           >$LOGFILE
-          outln_term "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-          outln_term "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
-          outln_term "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
-          outln_term "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
+          tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
+          tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
+          tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
+          tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
           exec > >(tee -a ${LOGFILE})
           # not decided yet. Maybe good to have a separate file or none at all
           #exec 2> >(tee -a ${LOGFILE} >&2)
@@ -12226,7 +12224,7 @@ check_proxy() {
                fatal "Your $OPENSSL is too old to support the \"-proxy\" option" -5
           fi
           if [[ "$PROXY" == "auto" ]]; then
-               # get $ENV
+               # get $ENV 
                PROXY=${https_proxy#*\/\/}
                [[ -z "$PROXY" ]] && PROXY=${http_proxy#*\/\/}
                [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" 2
@@ -12310,7 +12308,7 @@ determine_optimal_proto() {
           [[ $all_failed -eq 0 ]] && OPTIMAL_PROTO=""
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
-               pr_magentaln "$NODEIP:$PORT appears to only support SSLv2."
+               prln_magenta "$NODEIP:$PORT appears to only support SSLv2."
                ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
                [[ $? -ne 0 ]] && exit -2
           fi
@@ -12325,7 +12323,7 @@ determine_optimal_proto() {
                pr_bold " $NODEIP:$PORT "
           fi
           tmpfile_handle $FUNCNAME.txt
-          pr_boldln "doesn't seem to be a TLS/SSL enabled server";
+          prln_bold "doesn't seem to be a TLS/SSL enabled server";
           ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
           [[ $? -ne 0 ]] && exit -2
      fi
@@ -12497,7 +12495,7 @@ run_mx_all_ips() {
           outln
           pr_bold "Done testing now all MX records (on port $mxport): "; outln "$mxs"
      else
-          pr_boldln " $1 has no MX records(s)"
+          prln_bold " $1 has no MX records(s)"
      fi
      return $ret
 }
@@ -12726,7 +12724,7 @@ parse_cmd_line() {
                     case $STARTTLS_PROTOCOL in
                          ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres) ;;
                          ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps|postgress) ;;
-                         *)   pr_magentaln_term "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
+                         *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
                     ;;
@@ -12885,7 +12883,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case "$WARNINGS" in
                          batch|off|false) ;;
-                         *)   pr_magentaln_term "\nwarnings can be either \"batch\", \"off\" or \"false\""
+                         *)   tmln_magenta "\nwarnings can be either \"batch\", \"off\" or \"false\""
                               help 1
                     esac
                     ;;
@@ -12903,7 +12901,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case $DEBUG in
                          [0-6]) ;;
-                         *)   pr_magentaln_term_term "\nunrecognized debug value \"$1\", must be between 0..6" 1>&2
+                         *)   tmln_magenta_term "\nunrecognized debug value \"$1\", must be between 0..6" 1>&2
                               help 1
                     esac
                     ;;
@@ -12913,7 +12911,7 @@ parse_cmd_line() {
                     case $COLOR in
                          [0-2]) ;;
                          *)   COLOR=2
-                              pr_magentaln_term "\nunrecognized color: \"$1\", must be between 0..2" 1>&2
+                              tmln_magenta "\nunrecognized color: \"$1\", must be between 0..2" 1>&2
                               help 1
                     esac
                     ;;
@@ -12971,9 +12969,6 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_html=true
                     ;;
-               --no-html-header)
-                    HTMLHEADER=false
-                    ;;
                --append)
                     APPEND=true
                     ;;
@@ -12992,7 +12987,7 @@ parse_cmd_line() {
                     case "$cipher_mapping" in
                          no-rfc) unset ADD_RFC_STR; unset SHOW_RFC;;
                          rfc) SHOW_RFC="rfc" ;;
-                         *)   pr_magentaln_term "\nmapping can only be \"rfc\" or \"no-rfc\""
+                         *)   tmln_magenta "\nmapping can only be \"rfc\" or \"no-rfc\""
                               help 1 ;;
                     esac
                     ;;
@@ -13012,7 +13007,7 @@ parse_cmd_line() {
                (--) shift
                     break
                     ;;
-               (-*) pr_warningln_term "0: unrecognized option \"$1\"" 1>&2;
+               (-*) tmln_warning "0: unrecognized option \"$1\"" 1>&2;
                     help 1
                     ;;
                (*)  break
@@ -13157,8 +13152,8 @@ lets_roll() {
 
 initialize_globals
 parse_cmd_line "$@"
-! "$do_html" && HTMLHEADER=false
-if "$HTMLHEADER" && ( ! "$do_mass_testing" || ( [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ) ); then
+
+if ( ! "$do_mass_testing" || ( [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ) ); then
      if "$do_display_only"; then
           html_header "local-ciphers"
      elif "$do_mass_testing"; then
@@ -13170,6 +13165,7 @@ if "$HTMLHEADER" && ( ! "$do_mass_testing" || ( [[ -n "$HTMLFILE" ]] && [[ ! -d 
           html_header
      fi
 fi
+
 get_install_dir
 set_color_functions
 maketempf
