@@ -228,8 +228,7 @@ HAS_FALLBACK_SCSV=false
 HAS_PROXY=false
 HAS_XMPP=false
 HAS_POSTGRES=false
-ADD_RFC_STR="rfc"                       # display RFC ciphernames
-SHOW_RFC=""                             # display RFC ciphernames instead of OpenSSL ciphernames
+DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -2454,8 +2453,21 @@ show_rfc_style(){
 }
 
 neat_header(){
-     outln "$(printf -- "Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.   Encryption  Bits${ADD_RFC_STR:+     Cipher Suite Name (RFC)}")"
-     outln "$(printf -- "%s--------------------------------------------------------------------------${ADD_RFC_STR:+---------------------------------------------------}")"
+     if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
+          out "$(printf -- "Hexcode  Cipher Suite Name (RFC)                           KeyExch.   Encryption  Bits")"
+          [[ "$DISPLAY_CIPHERNAMES" != "rfc-only" ]] && out "$(printf -- "     Cipher Suite Name (OpenSSL)")"
+          outln
+          out "$(printf -- "%s------------------------------------------------------------------------------------------")"
+          [[ "$DISPLAY_CIPHERNAMES" != "rfc-only" ]] && out "$(printf -- "---------------------------------------")"
+          outln
+     else
+          out "$(printf -- "Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.   Encryption  Bits")"
+          [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && out "$(printf -- "     Cipher Suite Name (RFC)")"
+          outln
+          out "$(printf -- "%s--------------------------------------------------------------------------")"
+          [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && out "$(printf -- "---------------------------------------------------")"
+          outln
+     fi
 }
 
 
@@ -2481,21 +2493,32 @@ neat_list(){
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
 
-     echo "$export" | grep -iq export && strength="$strength,exp"
+     grep -iq export <<< "$export" && strength="$strength,exp"
 
-     [[ -n "$ADD_RFC_STR" ]] && tls_cipher="$(show_rfc_style "$hexcode")"
+     [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
-     if [[ -z "$5" ]]; then
-          tm_out "$(printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
-          return 0
-     elif [[ "$5" == "false" ]]; then
-          line="$(printf -- " %-7s %-33s %-10s %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength" "$tls_cipher")"
-          pr_deemphasize "$line"
+     if [[ "$5" != "true" ]]; then
+          if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
+               line="$(printf -- " %-7s %-49s %-10s %-12s%-8s" "$hexcode" "$tls_cipher" "$kx" "$enc" "$strength")"
+               [[ "$DISPLAY_CIPHERNAMES" != "rfc-only" ]] && line+="$(printf -- " %-33s${SHOW_EACH_C:+  %-0s}" "$ossl_cipher")"
+          else
+               line="$(printf -- " %-7s %-33s %-10s %-12s%-8s" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength")"
+               [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && line+="$(printf -- " %-49s${SHOW_EACH_C:+  %-0s}" "$tls_cipher")"
+          fi
+          if [[ -z "$5" ]]; then
+               tm_out "$line"
+          else
+               pr_deemphasize "$line"
+          fi
           return 0
      fi
-     out "$(printf -- " %-7s %-33s " "$hexcode" "$ossl_cipher")"
-
      read what_dh bits <<< "$kx"
+     len=${#kx}
+     if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
+          out "$(printf -- " %-7s %-49s " "$hexcode" "$tls_cipher")"
+     else
+          out "$(printf -- " %-7s %-33s " "$hexcode" "$ossl_cipher")"
+     fi
      out "$what_dh"
      if [[ -n "$bits" ]]; then
           if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]]; then
@@ -2504,11 +2527,15 @@ neat_list(){
                pr_ecdh_quality "$bits" " $bits"
           fi
      fi
-     len=${#kx}
      for (( i=len; i<10; i++ )); do
           out " "
      done
-     out "$(printf -- " %-12s%-8s${ADD_RFC_STR:+ %-49s}${SHOW_EACH_C:+  %-0s}" "$enc" "$strength" "$tls_cipher")"
+     out "$(printf -- " %-12s%-8s" "$enc" "$strength")"
+     if [[ "$DISPLAY_CIPHERNAMES" == rfc ]]; then
+          out "$(printf -- " %-33s${SHOW_EACH_C:+  %-0s}" "$ossl_cipher")"
+     elif [[ "$DISPLAY_CIPHERNAMES" == openssl ]]; then
+          out "$(printf -- " %-49s${SHOW_EACH_C:+  %-0s}" "$tls_cipher")"
+     fi
 }
 
 test_just_one(){
@@ -4366,10 +4393,10 @@ run_client_simulation() {
                fi
                #FiXME: awk
                cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
-               if [[ -z "$SHOW_RFC" ]] && ( [[ "$cipher" == TLS_* ]] || [[ "$cipher" == SSL_* ]] ); then
+               if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$cipher" == TLS_* ]] || [[ "$cipher" == SSL_* ]] ); then
                     cipher="$(rfc2openssl "$cipher")"
                     [[ -z "$cipher" ]] && cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
-               elif [[ -n "$SHOW_RFC" ]] && [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
+               elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
                     cipher="$(openssl2rfc "$cipher")"
                     [[ -z "$cipher" ]] && cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
                fi
@@ -4882,7 +4909,7 @@ pr_cipher_quality() {
 
      [[ -z "$1" ]] && return 0
      [[ -z "$text" ]] && text="$cipher"
-     
+
      if [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
           # This must be the OpenSSL name for a cipher
           if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
@@ -5144,7 +5171,7 @@ run_server_preference() {
 
           pr_bold " Negotiated cipher            "
           default_cipher_ossl=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-          if [[ -z "$SHOW_RFC" ]]; then
+          if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
                default_cipher="$default_cipher_ossl"
           else
                default_cipher="$(openssl2rfc "$default_cipher_ossl")"
@@ -5203,7 +5230,7 @@ run_server_preference() {
                                              cipher1="${TLS_CIPHER_HEXCODE[j]}"
                                              cipher1="$(tolower "x${cipher1:2:2}${cipher1:7:2}${cipher1:12:2}")"
                                              if [[ "$supported_sslv2_ciphers" =~ "$cipher1" ]]; then
-                                                  if ( [[ -z "$SHOW_RFC" ]] && [[ "${TLS_CIPHER_OSSL_NAME[j]}" != "-" ]] ) || [[ "${TLS_CIPHER_RFC_NAME[j]}" == "-" ]]; then
+                                                  if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${TLS_CIPHER_OSSL_NAME[j]}" != "-" ]] ) || [[ "${TLS_CIPHER_RFC_NAME[j]}" == "-" ]]; then
                                                        cipher[i]="${TLS_CIPHER_OSSL_NAME[j]}"
                                                   else
                                                        cipher[i]="${TLS_CIPHER_RFC_NAME[j]}"
@@ -5228,7 +5255,7 @@ run_server_preference() {
                                    proto[i]="SSLv3"
                                    cipher[i]=""
                                    cipher1=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
-                                   if [[ -z "$SHOW_RFC" ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
+                                   if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
                                         cipher[i]="$(rfc2openssl "$cipher1")"
                                         [[ -z "${cipher[i]}" ]] && cipher[i]="$cipher1"
                                    fi
@@ -5245,7 +5272,7 @@ run_server_preference() {
                               proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
                               cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                               [[ ${cipher[i]} == "0000" ]] && cipher[i]=""                     # Hack!
-                              if [[ -n "$SHOW_RFC" ]] && [[ -n "${cipher[i]}" ]]; then
+                              if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ -n "${cipher[i]}" ]]; then
                                    cipher[i]="$(openssl2rfc "${cipher[i]}")"
                                    [[ -z "${cipher[i]}" ]] && cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                               fi
@@ -5269,7 +5296,7 @@ run_server_preference() {
                               cipher[i]=""
                          else
                               cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-                              if [[ -n "$SHOW_RFC" ]] && [[ -n "${cipher[i]}" ]]; then
+                              if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ -n "${cipher[i]}" ]]; then
                                    cipher[i]="$(openssl2rfc "${cipher[i]}")"
                                    [[ -z "${cipher[i]}" ]] && cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
                               fi
@@ -5284,7 +5311,7 @@ run_server_preference() {
                     if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
                           if [[ -z "${cipher[i-1]}" ]]; then                              # previous one empty
                               #outln
-                              if [[ -z "$SHOW_RFC" ]]; then
+                              if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
                                    out "$(printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}")"     # print out both
                               else
                                    out "$(printf -- "     %-51s %s" "${cipher[i]}:" "${proto[i]}")"     # print out both
@@ -5294,7 +5321,7 @@ run_server_preference() {
                                    out ", ${proto[i]}"                                    # same cipher --> only print out protocol behind it
                               else
                                    outln
-                                   if [[ -z "$SHOW_RFC" ]]; then
+                                   if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
                                         out "$(printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}")"     # print out both
                                    else
                                         out "$(printf -- "     %-51s %s" "${cipher[i]}:" "${proto[i]}")"     # print out both
@@ -5555,14 +5582,14 @@ cipher_pref_check() {
                     for (( i=0; i < nr_ciphers; i++ )); do
                          [[ "$cipher" == "${rfc_ciph[i]}" ]] && ciphers_found2[i]=true && break
                     done
-                    if [[ -z "$SHOW_RFC" ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
+                    if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
                          cipher="$(rfc2openssl "$cipher")"
                          # If there is no OpenSSL name for the cipher, then use the RFC name
                          [[ -z "$cipher" ]] && cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     fi
                     order+="$cipher "
                done
-          elif [[ -n "$order" ]] && [[ -n "$SHOW_RFC" ]]; then
+          elif [[ -n "$order" ]] && [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
                rfc_order=""
                while read -d " " cipher; do
                     rfc_ciph="$(openssl2rfc "$cipher")"
@@ -5604,7 +5631,7 @@ cipher_pref_check() {
                          order+="$cipher "
                     done
                fi
-               if [[ -n "$order" ]] && [[ -n "$SHOW_RFC" ]]; then
+               if [[ -n "$order" ]] && [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
                     rfc_order=""
                     while read -d " " cipher; do
                          rfc_ciph="$(openssl2rfc "$cipher")"
@@ -7162,7 +7189,7 @@ run_pfs() {
           for (( i=0; i < nr_supported_ciphers; i++ )); do
                ! "${ciphers_found[i]}" && ! "$SHOW_EACH_C" && continue
                if "${ciphers_found[i]}"; then
-                    if ( [[ -z "$SHOW_RFC" ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
+                    if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
                          pfs_cipher="${ciph[i]}"
                     else
                          pfs_cipher="${rfc_ciph[i]}"
@@ -10756,7 +10783,7 @@ run_beast(){
                     [[ "$cbc_cipher" == "${ciph[i]}" ]] && break
                done
                ciphers_found[i]=true
-               if [[ -z "$SHOW_RFC" ]] || [[ "${rfc_ciph[i]}" == "-" ]]; then
+               if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] || [[ "${rfc_ciph[i]}" == "-" ]]; then
                     detected_cbc_ciphers+="${ciph[i]} "
                else
                     detected_cbc_ciphers+="${rfc_ciph[i]} "
@@ -10787,7 +10814,7 @@ run_beast(){
                          [[ "$cbc_cipher" == "${rfc_ciph[i]}" ]] && break
                     done
                     ciphers_found[i]=true
-                    if ( [[ -z "$SHOW_RFC" ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
+                    if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
                          detected_cbc_ciphers+=" ${ciph[i]}"
                     else
                          detected_cbc_ciphers+=" ${rfc_ciph[i]}"
@@ -11165,7 +11192,7 @@ run_rc4() {
                     outln "${sigalg[i]}"
                fi
                if "${ciphers_found[i]}"; then
-                    if ( [[ -z "$SHOW_RFC" ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
+                    if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
                          rc4_detected+="${ciph[i]} "
                     else
                          rc4_detected+="${rfc_ciph[i]} "
@@ -11262,8 +11289,7 @@ get_install_dir() {
      fi
 
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]]; then
-          unset ADD_RFC_STR
-          unset SHOW_RFC
+          DISPLAY_CIPHERNAMES="no-rfc"
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
           prln_warning "\nATTENTION: No cipher mapping file found!"
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
@@ -11521,8 +11547,10 @@ output options (can also be preset via environment variables):
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
-     --mapping <rfc|no-rfc>        (rfc: display the RFC Cipher Suite name instead of the OpenSSL name;
-                                    no-rfc: don't display the RFC Cipher Suite Name)
+     --mapping <openssl|           openssl: use the OpenSSL Cipher suite name as the primary name cipher suite name form (default)
+                rfc|                 rfc: use the RFC Cipher suite name as the primary name cipher suite name form
+                no-openssl|          no-openssl: don't display the OpenSSL Cipher Suite Name, display RFC names only
+                no-rfc>              no-rfc: don't display the RFC Cipher Suite Name, display OpenSSL names only
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --colorblind                  swap green and blue in the output
      --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
@@ -12985,9 +13013,11 @@ parse_cmd_line() {
                     cipher_mapping=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     case "$cipher_mapping" in
-                         no-rfc) unset ADD_RFC_STR; unset SHOW_RFC;;
-                         rfc) SHOW_RFC="rfc" ;;
-                         *)   tmln_magenta "\nmapping can only be \"rfc\" or \"no-rfc\""
+                         no-openssl) DISPLAY_CIPHERNAMES="rfc-only" ;;
+                         no-rfc) DISPLAY_CIPHERNAMES="openssl-only" ;;
+                         openssl) DISPLAY_CIPHERNAMES="openssl" ;;
+                         rfc) DISPLAY_CIPHERNAMES="rfc" ;;
+                         *)   tmln_warning "\nmapping can only be \"no-openssl\", \"no-rfc\", \"openssl\" or \"rfc\""
                               help 1 ;;
                     esac
                     ;;
