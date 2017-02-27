@@ -28,7 +28,11 @@ get a warning for the other certificate stores while scanning internal net-
 works.  Second catch: If you scan other hosts in the internet the check against 
 your Root CA will fail, too. This will be fixed in the future, see #230.
 
-#### Mapping files
-The file ``mapping-rfc.txt`` uses the hexcode to map OpenSSL names
-against the RFC/IANA names. ``curves.txt`` is not being used yet, it
-is supposed to map EC curve names properly.
+#### Further needed files
+* ``mapping-rfc.txt`` uses the hexcode to map OpenSSL against the RFC/IANA names. 
+
+* ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs
+
+* ``common-primes.txt`` is used for LOGJAM
+
+* ``client_simulation.txt`` as the name indicates it's the data for the client simulation
