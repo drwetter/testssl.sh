@@ -1890,106 +1890,72 @@ run_hpkp() {
 }
 
 emphasize_stuff_in_headers(){
-     local text="$1"
-     local -i len
+     local html_brown="<span style=\\\"color:olive;\\\">"
+     local html_yellow="<span style=\\\"color:olive;font-weight:bold;\\\">"
+     local html_off="<\\/span>"
 
-     if [[ $COLOR -ne 2 ]]; then
-          out "$text"
-          text=""
+# see http://www.grymoire.com/Unix/Sed.html#uh-3
+#    outln "$1" | sed "s/[0-9]*/$brown&${off}/g"
+     tmln_out "$1" | sed -e "s/\([0-9]\)/${brown}\1${off}/g" \
+          -e "s/Debian/${yellow}\Debian${off}/g" \
+          -e "s/Win32/${yellow}\Win32${off}/g" \
+          -e "s/Win64/${yellow}\Win64${off}/g" \
+          -e "s/Ubuntu/${yellow}Ubuntu${off}/g" \
+          -e "s/ubuntu/${yellow}ubuntu${off}/g" \
+          -e "s/jessie/${yellow}jessie${off}/g" \
+          -e "s/squeeze/${yellow}squeeze${off}/g" \
+          -e "s/wheezy/${yellow}wheezy${off}/g" \
+          -e "s/lenny/${yellow}lenny${off}/g" \
+          -e "s/SUSE/${yellow}SUSE${off}/g" \
+          -e "s/Red Hat Enterprise Linux/${yellow}Red Hat Enterprise Linux${off}/g" \
+          -e "s/Red Hat/${yellow}Red Hat${off}/g" \
+          -e "s/CentOS/${yellow}CentOS${off}/g" \
+          -e "s/Via/${yellow}Via${off}/g" \
+          -e "s/X-Forwarded/${yellow}X-Forwarded${off}/g" \
+          -e "s/Liferay-Portal/${yellow}Liferay-Portal${off}/g" \
+          -e "s/X-Cache-Lookup/${yellow}X-Cache-Lookup${off}/g" \
+          -e "s/X-Cache/${yellow}X-Cache${off}/g" \
+          -e "s/X-Squid/${yellow}X-Squid${off}/g" \
+          -e "s/X-Server/${yellow}X-Server${off}/g" \
+          -e "s/X-Varnish/${yellow}X-Varnish${off}/g" \
+          -e "s/X-OWA-Version/${yellow}X-OWA-Version${off}/g" \
+          -e "s/MicrosoftSharePointTeamServices/${yellow}MicrosoftSharePointTeamServices${off}/g" \
+          -e "s/X-Version/${yellow}X-Version${off}/g" \
+          -e "s/X-Powered-By/${yellow}X-Powered-By${off}/g" \
+          -e "s/X-UA-Compatible/${yellow}X-UA-Compatible${off}/g" \
+          -e "s/X-AspNet-Version/${yellow}X-AspNet-Version${off}/g"
+
+     if "$do_html"; then
+          html_out "$(tm_out "$1" | sed -e "s/\([0-9]\)/${html_brown}\1${html_off}/g" \
+               -e "s/Debian/${html_yellow}\Debian${html_off}/g" \
+               -e "s/Win32/${html_yellow}\Win32${html_off}/g" \
+               -e "s/Win64/${html_yellow}\Win64${html_off}/g" \
+               -e "s/Ubuntu/${html_yellow}Ubuntu${html_off}/g" \
+               -e "s/ubuntu/${html_yellow}ubuntu${html_off}/g" \
+               -e "s/jessie/${html_yellow}jessie${html_off}/g" \
+               -e "s/squeeze/${html_yellow}squeeze${html_off}/g" \
+               -e "s/wheezy/${html_yellow}wheezy${html_off}/g" \
+               -e "s/lenny/${html_yellow}lenny${html_off}/g" \
+               -e "s/SUSE/${html_yellow}SUSE${html_off}/g" \
+               -e "s/Red Hat Enterprise Linux/${html_yellow}Red Hat Enterprise Linux${html_off}/g" \
+               -e "s/Red Hat/${html_yellow}Red Hat${html_off}/g" \
+               -e "s/CentOS/${html_yellow}CentOS${html_off}/g" \
+               -e "s/Via/${html_yellow}Via${html_off}/g" \
+               -e "s/X-Forwarded/${html_yellow}X-Forwarded${html_off}/g" \
+               -e "s/Liferay-Portal/${html_yellow}Liferay-Portal${html_off}/g" \
+               -e "s/X-Cache-Lookup/${html_yellow}X-Cache-Lookup${html_off}/g" \
+               -e "s/X-Cache/${html_yellow}X-Cache${html_off}/g" \
+               -e "s/X-Squid/${html_yellow}X-Squid${html_off}/g" \
+               -e "s/X-Server/${html_yellow}X-Server${html_off}/g" \
+               -e "s/X-Varnish/${html_yellow}X-Varnish${html_off}/g" \
+               -e "s/X-OWA-Version/${html_yellow}X-OWA-Version${html_off}/g" \
+               -e "s/MicrosoftSharePointTeamServices/${html_yellow}MicrosoftSharePointTeamServices${html_off}/g" \
+               -e "s/X-Version/${html_yellow}X-Version${html_off}/g" \
+               -e "s/X-Powered-By/${html_yellow}X-Powered-By${html_off}/g" \
+               -e "s/X-UA-Compatible/${html_yellow}X-UA-Compatible${html_off}/g" \
+               -e "s/X-AspNet-Version/${html_yellow}X-AspNet-Version${html_off}/g")"
+          html_out "\n"
      fi
-     len=${#text}
-     while [[ $len -gt 0 ]]; do
-          if [[ -z "$(tr -d '0-9' <<< "${text:0:1}")" ]]; then
-               tm_out "${brown}${text:0:1}${off}"
-               html_out "<span style=\"color:olive;\">${text:0:1}</span>"
-               text="${text:1}"
-               len=$len-1
-          elif [[ $len -ge 31 ]] && [[ "${text:0:31}" == "MicrosoftSharePointTeamServices" ]]; then
-               tm_out "${yellow}${text:0:31}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:31}</span>"
-               text="${text:31}"
-               len=$len-31
-          elif [[ $len -ge 24 ]] && [[ "${text:0:24}" == "Red Hat Enterprise Linux" ]]; then
-               tm_out "${yellow}${text:0:24}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:24}</span>"
-               text="${text:24}"
-               len=$len-24
-          elif [[ $len -ge 16 ]] && [[ "${text:0:16}" == "X-AspNet-Version" ]]; then
-               tm_out "${yellow}${text:0:16}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:16}</span>"
-               text="${text:16}"
-               len=$len-16
-          elif [[ $len -ge 15 ]] && [[ "${text:0:15}" == "X-UA-Compatible" ]]; then
-               tm_out "${yellow}${text:0:15}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:15}</span>"
-               text="${text:15}"
-               len=$len-15
-          elif [[ $len -ge 14 ]] && ( [[ "${text:0:14}" == "Liferay-Portal" ]] || [[ "${text:0:14}" == "X-Cache-Lookup" ]] || \
-                                      [[ "${text:0:14}" == "X-Cache-Status" ]] ) ; then
-               tm_out "${yellow}${text:0:14}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:14}</span>"
-               text="${text:14}"
-               len=$len-14
-          elif [[ $len -ge 13 ]] && [[ "${text:0:13}" == "X-OWA-Version" ]]; then
-               tm_out "${yellow}${text:0:13}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:13}</span>"
-               text="${text:13}"
-               len=$len-13
-          elif [[ $len -ge 12 ]] && [[ "${text:0:12}" == "X-Powered-By" ]]; then
-               tm_out "${yellow}${text:0:12}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:12}</span>"
-               text="${text:12}"
-               len=$len-12
-          elif [[ $len -ge 11 ]] && [[ "${text:0:11}" == "X-Forwarded" ]]; then
-               tm_out "${yellow}${text:0:11}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:11}</span>"
-               text="${text:11}"
-               len=$len-11
-          elif [[ $len -ge 9 ]] && ( [[ "${text:0:9}" == "X-Varnish" ]] || [[ "${text:0:9}" == "X-Version" ]] ); then
-               tm_out "${yellow}${text:0:9}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:9}</span>"
-               text="${text:9}"
-               len=$len-9
-          elif [[ $len -ge 8 ]] && [[ "${text:0:8}" == "X-Server" ]]; then
-               tm_out "${yellow}${text:0:8}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:8}</span>"
-               text="${text:8}"
-               len=$len-8
-          elif [[ $len -ge 7 ]] && ( [[ "${text:0:7}" == "squeeze" ]] || [[ "${text:0:7}" == "Red Hat" ]] || \
-                                     [[ "${text:0:7}" == "X-Cache" ]] || [[ "${text:0:7}" == "X-Squid" ]] ) ; then
-               tm_out "${yellow}${text:0:7}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:7}</span>"
-               text="${text:7}"
-               len=$len-7
-          elif [[ $len -ge 6 ]] && ( [[ "${text:0:6}" == "Debian" ]] || [[ "${text:0:6}" == "Ubuntu" ]] || \
-                                     [[ "${text:0:6}" == "ubuntu" ]] || [[ "${text:0:6}" == "jessie" ]] || \
-                                     [[ "${text:0:6}" == "wheezy" ]] || [[ "${text:0:6}" == "CentOS" ]] ) ; then
-               tm_out "${yellow}${text:0:6}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:6}</span>"
-               text="${text:6}"
-               len=$len-6
-          elif [[ $len -ge 5 ]] && ( [[ "${text:0:5}" == "Win32" ]] || [[ "${text:0:5}" == "Win64" ]] || [[ "${text:0:5}" == "lenny" ]] ); then
-               tm_out "${yellow}${text:0:5}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:5}</span>"
-               text="${text:5}"
-               len=$len-5
-          elif [[ $len -ge 4 ]] && [[ "${text:0:4}" == "SUSE" ]]; then
-               tm_out "${yellow}${text:0:4}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:4}</span>"
-               text="${text:4}"
-               len=$len-4
-          elif [[ $len -ge 3 ]] && [[ "${text:0:3}" == "Via" ]]; then
-               tm_out "${yellow}${text:0:3}${off}"
-               html_out "<span style=\"color:olive;font-weight:bold;\">${text:0:3}</span>"
-               text="${text:3}"
-               len=$len-3
-          else
-               out "${text:0:1}"
-               text="${text:1}"
-               len=$len-1
-          fi
-     done
-     outln
 }
 
 run_server_banner() {
