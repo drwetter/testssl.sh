@@ -1920,6 +1920,7 @@ emphasize_stuff_in_headers(){
           -e "s/X-Varnish/${yellow}X-Varnish${off}/g" \
           -e "s/X-OWA-Version/${yellow}X-OWA-Version${off}/g" \
           -e "s/MicrosoftSharePointTeamServices/${yellow}MicrosoftSharePointTeamServices${off}/g" \
+          -e "s/X-Application-Context/${yellow}X-Application-Context${off}/g" \
           -e "s/X-Version/${yellow}X-Version${off}/g" \
           -e "s/X-Powered-By/${yellow}X-Powered-By${off}/g" \
           -e "s/X-UA-Compatible/${yellow}X-UA-Compatible${off}/g" \
@@ -1950,6 +1951,7 @@ emphasize_stuff_in_headers(){
                -e "s/X-Varnish/${html_yellow}X-Varnish${html_off}/g" \
                -e "s/X-OWA-Version/${html_yellow}X-OWA-Version${html_off}/g" \
                -e "s/MicrosoftSharePointTeamServices/${html_yellow}MicrosoftSharePointTeamServices${html_off}/g" \
+               -e "s/X-Application-Context/${html_yellow}X-Application-Context${html_off}/g" \
                -e "s/X-Version/${html_yellow}X-Version${html_off}/g" \
                -e "s/X-Powered-By/${html_yellow}X-Powered-By${html_off}/g" \
                -e "s/X-UA-Compatible/${html_yellow}X-UA-Compatible${html_off}/g" \
