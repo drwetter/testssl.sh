@@ -1798,6 +1798,7 @@ emphasize_stuff_in_headers(){
           -e "s/X-Varnish/${yellow}X-Varnish${off}/g" \
           -e "s/X-OWA-Version/${yellow}X-OWA-Version${off}/g" \
           -e "s/MicrosoftSharePointTeamServices/${yellow}MicrosoftSharePointTeamServices${off}/g" \
+          -e "s/X-Application-Context/${yellow}X-Application-Context${off}/g" \
           -e "s/X-Version/${yellow}X-Version${off}/g" \
           -e "s/X-Powered-By/${yellow}X-Powered-By${off}/g" \
           -e "s/X-UA-Compatible/${yellow}X-UA-Compatible${off}/g" \
