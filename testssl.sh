@@ -160,6 +160,7 @@ LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
 HTMLFILE=${HTMLFILE:-""}                # HTML if used
+HTMLHEADER=true                         # include HTML headers and footers in HTML file, if one is being created
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 GIVE_HINTS=false                        # give an addtional info to findings
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
@@ -970,9 +971,30 @@ fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
 ################### FILE FORMATING END #########################
 
 html_header() {
-     local fname_prefix="$1"
+     local fname_prefix
 
-     [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"_"$PORT"
+     # Don't create HTML headers and footers in the following scenarios:
+     #  * HTML output is not being created.
+     #  * mass testing is being performed and each test will have its own HTML file.
+     #  * this is an individual test within a mass test and all HTML output is being placed in a single file.
+     if ! "$do_html" || \
+        ( "$do_mass_testing" && ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) ) || \
+        ( "$APPEND" && [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ); then
+          HTMLHEADER=false
+          return 0
+     fi
+
+     if "$do_display_only"; then
+          fname_prefix="local-ciphers"
+     elif "$do_mass_testing"; then
+          :
+     elif "$do_mx_all_ips"; then
+          fname_prefix="mx-$URI"
+     else
+          ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) && parse_hn_port "${URI}"    # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
+          fname_prefix="$NODE"_"$PORT"
+     fi
+
      if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
           rm -f "$HTMLFILE"
      elif [[ -z "$HTMLFILE" ]]; then
@@ -994,16 +1016,20 @@ html_header() {
 }
 
 html_banner() {
-     html_out "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
-     html_out "## at $HNAME:$OPENSSL_LOCATION\n"
-     html_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
-     html_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n\n"
+     if "$APPEND" && "$HTMLHEADER"; then
+          html_out "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
+          html_out "## at $HNAME:$OPENSSL_LOCATION\n"
+          html_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
+          html_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n\n"
+     fi
 }
 
 html_footer() {
-     html_out "</pre>\n"
-     html_out "</body>\n"
-     html_out "</html>\n"
+     if "$HTMLHEADER"; then
+          html_out "</pre>\n"
+          html_out "</body>\n"
+          html_out "</html>\n"
+     fi
      return 0
 }
 
@@ -12212,7 +12238,7 @@ check_proxy() {
                fatal "Your $OPENSSL is too old to support the \"-proxy\" option" -5
           fi
           if [[ "$PROXY" == "auto" ]]; then
-               # get $ENV 
+               # get $ENV
                PROXY=${https_proxy#*\/\/}
                [[ -z "$PROXY" ]] && PROXY=${http_proxy#*\/\/}
                [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" 2
@@ -12517,12 +12543,10 @@ run_mass_testing_parallel() {
 run_mass_testing() {
      local cmdline=""
      local global_cmdline=${CMDLINE%%--file*}
-     local html_header=""
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
-     [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && html_header="--no-html-header"
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
      APPEND=false # Make sure we close out our files
@@ -12530,7 +12554,7 @@ run_mass_testing() {
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q $html_header --append $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch -q --append $cmdline"
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$cmdline"
           $cmdline
@@ -13142,20 +13166,7 @@ lets_roll() {
 
 initialize_globals
 parse_cmd_line "$@"
-
-if ( ! "$do_mass_testing" || ( [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ) ); then
-     if "$do_display_only"; then
-          html_header "local-ciphers"
-     elif "$do_mass_testing"; then
-          html_header
-     elif "$do_mx_all_ips"; then
-          html_header "mx-$URI"
-     else
-          ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) && parse_hn_port "${URI}"    # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
-          html_header
-     fi
-fi
-
+html_header
 get_install_dir
 set_color_functions
 maketempf
