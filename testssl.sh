@@ -1927,7 +1927,9 @@ emphasize_stuff_in_headers(){
           -e "s/X-AspNet-Version/${yellow}X-AspNet-Version${off}/g"
 
      if "$do_html"; then
-          html_out "$(tm_out "$1" | sed -e "s/\([0-9]\)/${html_brown}\1${html_off}/g" \
+          html_out "$(tm_out "$1" | sed -e 's/\&/\&amp;/g' \
+               -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" \
+               -e "s/\([0-9]\)/${html_brown}\1${html_off}/g" \
                -e "s/Debian/${html_yellow}\Debian${html_off}/g" \
                -e "s/Win32/${html_yellow}\Win32${html_off}/g" \
                -e "s/Win64/${html_yellow}\Win64${html_off}/g" \
