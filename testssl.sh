@@ -8113,7 +8113,7 @@ get_a_record() {
      fi
      if [[ -z "$ip4" ]]; then
           if which nslookup &>/dev/null; then
-               ip4=$(filter_ip4_address "$(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | grep -v Name)")
+               ip4=$(filter_ip4_address "$(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/,/EOF/ { print $0 }' | awk '/Address/ { print $NF }')")
           fi
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
