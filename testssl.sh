@@ -220,6 +220,7 @@ HAS_SPDY=false
 HAS_FALLBACK_SCSV=false
 HAS_PROXY=false
 HAS_XMPP=false
+HAS_POSTGRES=false
 ADD_RFC_STR="rfc"                       # display RFC ciphernames
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
@@ -5633,6 +5634,10 @@ EOF
                     starttls_line "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" "proceed"
                     # BTW: https://xmpp.net !
                     ;;
+               postgres|postgress) # Postgres SQL, see http://www.postgresql.org/docs/devel/static/protocol-message-formats.html
+                    $FAST_STARTTLS || starttls_just_read
+                    starttls_line "\x00\x00\x00\x08\x04\xD2\x16\x2F" "S"
+                    ;;
                *) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
                     fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" -4
           esac
@@ -7496,6 +7501,7 @@ test_openssl_suffix() {
 
 find_openssl_binary() {
      local s_client_has=$TEMPDIR/s_client_has.txt
+     local s_client_starttls_has=$TEMPDIR/s_client_starttls_has.txt
 
      # 0. check environment variable whether it's executable
      if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
@@ -7552,6 +7558,8 @@ find_openssl_binary() {
 
      $OPENSSL s_client -help 2>$s_client_has
 
+     $OPENSSL s_client -starttls foo 2>$s_client_starttls_has
+
      grep -qw '\-alpn' $s_client_has && \
           HAS_ALPN=true
 
@@ -7566,6 +7574,9 @@ find_openssl_binary() {
 
      grep -q '\-xmpp' $s_client_has && \
           HAS_XMPP=true
+
+     grep -q 'postgres' $s_client_starttls_has && \
+          HAS_POSTGRES=true
 
      return 0
 }
@@ -7662,8 +7673,8 @@ special invocations:
 partly mandatory parameters:
      URI                           host|host:port|URL|URL:port   (port 443 is assumed unless otherwise specified)
      pattern                       an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
-     protocol                      is one of the STARTTLS protocols ftp,smtp,pop3,imap,xmpp,telnet,ldap 
-                                   (for the latter two you need e.g. the supplied openssl)
+     protocol                      is one of the STARTTLS protocols ftp,smtp,pop3,imap,xmpp,telnet,ldap,postgres
+                                   (for telnet and ldap you need e.g. the supplied openssl)
 
 tuning options (can also be preset via environment variables):
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
@@ -7751,6 +7762,7 @@ HAS_ALPN: $HAS_ALPN
 HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
 HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
+HAS_POSTGRES: $HAS_POSTGRES
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -8354,7 +8366,7 @@ determine_optimal_proto() {
 }
 
 
-# arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap (maybe with trailing s)
+# arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap, postgres (maybe with trailing s)
 determine_service() {
      local ua
      local protocol
@@ -8381,9 +8393,13 @@ determine_service() {
           service_detection $OPTIMAL_PROTO
      else
           # STARTTLS
-          protocol=${1%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+          if [[ "$1" == postgres ]]; then
+               protocol="postgres"
+          else
+               protocol=${1%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+          fi
           case "$protocol" in
-               ftp|smtp|pop3|imap|xmpp|telnet|ldap)
+               ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres)
                     STARTTLS="-starttls $protocol"
                     SNI=""
                     if [[ "$protocol" == xmpp ]]; then
@@ -8395,6 +8411,12 @@ determine_service() {
                               fi
                               STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # it's a hack -- instead of changing calls all over the place
                               # see http://xmpp.org/rfcs/rfc3920.html
+                         fi
+                    fi
+                    if [[ "$protocol" == postgres ]]; then
+                         # Check if openssl version supports postgres.
+                         if ! "$HAS_POSTGRES"; then
+                              fatal "Your $OPENSSL does not support the \"-starttls postgres\" option" -5
                          fi
                     fi
                     $OPENSSL s_client -connect $NODEIP:$PORT $PROXY $BUGS $STARTTLS 2>$ERRFILE >$TMPFILE </dev/null
@@ -8410,7 +8432,7 @@ determine_service() {
                     outln
                     ;;
                *)   outln
-                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet and ldap allowed" -4
+                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet, ldap and postgres allowed" -4
                     ;;
           esac
      fi
@@ -8718,8 +8740,8 @@ parse_cmd_line() {
                     STARTTLS_PROTOCOL=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
-                         ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp) ;;
-                         ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
+                         ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres) ;;
+                         ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps|postgress) ;;
                          *)   pr_magentaln "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
