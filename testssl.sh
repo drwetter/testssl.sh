@@ -297,14 +297,14 @@ set_severity_level() {
 show_finding() {
    local severity=$1
 
-   ([[ "$severity" == "DEBUG" ]]) ||
-   ([[ "$severity" == "WARN" ]]) ||
-   ([[ "$severity" == "INFO" ]] && [[ $SEVERITY_LEVEL -le $INFO ]]) ||
-   ([[ "$severity" == "OK" ]] && [[ $SEVERITY_LEVEL -le $OK ]]) ||
-   ([[ "$severity" == "LOW" ]] && [[ $SEVERITY_LEVEL -le $LOW ]]) ||
-   ([[ "$severity" == "MEDIUM" ]] && [[ $SEVERITY_LEVEL -le $MEDIUM ]]) ||
-   ([[ "$severity" == "HIGH" ]] && [[ $SEVERITY_LEVEL -le $HIGH ]]) ||
-   ([[ "$severity" == "CRITICAL" ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]])
+   ( [[ "$severity" == "DEBUG" ]] ) ||
+   ( [[ "$severity" == "WARN" ]] ) ||
+   ( [[ "$severity" == "INFO" ]] && [[ $SEVERITY_LEVEL -le $INFO ]] ) ||
+   ( [[ "$severity" == "OK" ]] && [[ $SEVERITY_LEVEL -le $OK ]] ) ||
+   ( [[ "$severity" == "LOW" ]] && [[ $SEVERITY_LEVEL -le $LOW ]] ) ||
+   ( [[ "$severity" == "MEDIUM" ]] && [[ $SEVERITY_LEVEL -le $MEDIUM ]] ) ||
+   ( [[ "$severity" == "HIGH" ]] && [[ $SEVERITY_LEVEL -le $HIGH ]] ) ||
+   ( [[ "$severity" == "CRITICAL" ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] )
 }
 
 
@@ -838,7 +838,7 @@ fileout_json_finding() {
 }
 
 is_json_format() {
-    ([[ -f "$JSONFILE" ]] && ("$do_json" || "$do_pretty_json"))
+    ( [[ -f "$JSONFILE" ]] && ("$do_json" || "$do_pretty_json") )
 }
 
 ################# JSON FILE FORMATING END ####################
