@@ -10226,7 +10226,10 @@ run_logjam() {
           len_dh_p="$((4*${#dh_p}))"
           debugme outln "len(dh_p): $len_dh_p  |  dh_p: $dh_p"
           echo "$dh_p" > $TEMPDIR/dh_p.txt
-          if [[ ! -s "$common_primes_file" ]]; then
+
+          DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+          if [[ ! -s "$DIR$common_primes_file" ]]; then
                local_problem_ln "couldn't read common primes file $common_primes_file"
                out "${spaces}"
                fileout "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
