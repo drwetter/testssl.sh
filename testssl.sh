@@ -209,7 +209,6 @@ GOST_STATUS_PROBLEM=false
 DETECTED_TLS_VERSION=""
 PATTERN2SHOW=""
 SOCK_REPLY_FILE=""
-HEXC=""
 NW_STR=""
 LEN_STR=""
 SNI=""
@@ -297,14 +296,14 @@ set_severity_level() {
 show_finding() {
    local severity=$1
 
-   ([[ "$severity" == "DEBUG" ]]) ||
-   ([[ "$severity" == "WARN" ]]) ||
-   ([[ "$severity" == "INFO" ]] && [[ $SEVERITY_LEVEL -le $INFO ]]) ||
-   ([[ "$severity" == "OK" ]] && [[ $SEVERITY_LEVEL -le $OK ]]) ||
-   ([[ "$severity" == "LOW" ]] && [[ $SEVERITY_LEVEL -le $LOW ]]) ||
-   ([[ "$severity" == "MEDIUM" ]] && [[ $SEVERITY_LEVEL -le $MEDIUM ]]) ||
-   ([[ "$severity" == "HIGH" ]] && [[ $SEVERITY_LEVEL -le $HIGH ]]) ||
-   ([[ "$severity" == "CRITICAL" ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]])
+   ( [[ "$severity" == "DEBUG" ]] ) ||
+   ( [[ "$severity" == "WARN" ]] ) ||
+   ( [[ "$severity" == "INFO" ]] && [[ $SEVERITY_LEVEL -le $INFO ]] ) ||
+   ( [[ "$severity" == "OK" ]] && [[ $SEVERITY_LEVEL -le $OK ]] ) ||
+   ( [[ "$severity" == "LOW" ]] && [[ $SEVERITY_LEVEL -le $LOW ]] ) ||
+   ( [[ "$severity" == "MEDIUM" ]] && [[ $SEVERITY_LEVEL -le $MEDIUM ]] ) ||
+   ( [[ "$severity" == "HIGH" ]] && [[ $SEVERITY_LEVEL -le $HIGH ]] ) ||
+   ( [[ "$severity" == "CRITICAL" ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] )
 }
 
 
@@ -838,7 +837,7 @@ fileout_json_finding() {
 }
 
 is_json_format() {
-    ([[ -f "$JSONFILE" ]] && ("$do_json" || "$do_pretty_json"))
+    ( [[ -f "$JSONFILE" ]] && ("$do_json" || "$do_pretty_json") )
 }
 
 ################# JSON FILE FORMATING END ####################
@@ -2022,30 +2021,19 @@ run_more_flags() {
 }
 
 
-# #1: string with 2 opensssl codes, HEXC= same in NSS/ssllabs terminology
+# #1: string with 2 opensssl codes, output is same in NSS/ssllabs terminology
 normalize_ciphercode() {
-     part1=$(echo "$1" | awk -F',' '{ print $1 }')
-     part2=$(echo "$1" | awk -F',' '{ print $2 }')
-     part3=$(echo "$1" | awk -F',' '{ print $3 }')
-     if [[ "$part1" == "0x00" ]]; then       # leading 0x00
-          HEXC=$part2
+     if [[ "${1:2:2}" == "00" ]]; then
+          out "$(tolower "x${1:7:2}")"
      else
-          #part2=$(echo $part2 | sed 's/0x//g')
-          part2=${part2//0x/}
-          if [[ -n "$part3" ]]; then    # a SSLv2 cipher has three parts
-               #part3=$(echo $part3 | sed 's/0x//g')
-               part3=${part3//0x/}
-          fi
-          HEXC="$part1$part2$part3"
+          out "$(tolower "x${1:2:2}${1:7:2}${1:12:2}")"
      fi
-#TODO: we should just echo this and avoid the global var HEXC
-     HEXC=$(tolower "$HEXC"| sed 's/0x/x/')  # strip leading 0
      return 0
 }
 
 prettyprint_local() {
      local arg
-     local hexcode dash ciph sslvers kx auth enc mac export
+     local hexc hexcode dash ciph sslvers kx auth enc mac export
      local re='^[0-9A-Fa-f]+$'
 
      if [[ "$1" == 0x* ]] || [[ "$1" == 0X* ]]; then
@@ -2066,19 +2054,19 @@ prettyprint_local() {
 
      if [[ -z "$1" ]]; then
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | while read hexcode dash ciph sslvers kx auth enc mac export ; do       # -V doesn't work with openssl < 1.0
-               normalize_ciphercode $hexcode
-               neat_list "$HEXC" "$ciph" "$kx" "$enc"
+               hexc="$(normalize_ciphercode $hexcode)"
+               neat_list "$hexc" "$ciph" "$kx" "$enc"
                outln
           done
      else
           #for arg in $(echo $@ | sed 's/,/ /g'); do
           for arg in ${*//,/ /}; do
                $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | while read hexcode dash ciph sslvers kx auth enc mac export ; do # -V doesn't work with openssl < 1.0
-                    normalize_ciphercode $hexcode
+                    hexc="$(normalize_ciphercode $hexcode)"
                     # for numbers we don't do word matching:
                     [[ $arg =~ $re ]] && \
-                         neat_list "$HEXC" "$ciph" "$kx" "$enc" | grep -ai "$arg" || \
-                         neat_list "$HEXC" "$ciph" "$kx" "$enc" | grep -wai "$arg"
+                         neat_list "$hexc" "$ciph" "$kx" "$enc" | grep -ai "$arg" || \
+                         neat_list "$hexc" "$ciph" "$kx" "$enc" | grep -wai "$arg"
                done
           done
      fi
@@ -2418,16 +2406,16 @@ test_just_one(){
                done
           else
                while read hexc n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
-                    normalize_ciphercode $hexc
+                    hexc="$(normalize_ciphercode $hexc)"
                     # is argument a number?
                     if [[ $arg =~ $re ]]; then
-                         neat_list "$HEXC" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" | grep -qai "$arg"
+                         neat_list "$hexc" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" | grep -qai "$arg"
                     else
-                         neat_list "$HEXC" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" | grep -qwai "$arg"
+                         neat_list "$hexc" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" | grep -qwai "$arg"
                     fi
                     if [[ $? -eq 0 ]]; then    # string matches, so we can ssl to it:
                          ciphers_found[nr_ciphers]=false
-                         normalized_hexcode[nr_ciphers]="$HEXC"
+                         normalized_hexcode[nr_ciphers]="$hexc"
                          sigalg[nr_ciphers]=""
                          ossl_supported[nr_ciphers]=true
                          nr_ciphers+=1
