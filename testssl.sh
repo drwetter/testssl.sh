@@ -818,37 +818,17 @@ fileout_json_footer() {
 
 fileout_json_section() {
     case $1 in
-    1)
-        echo -e    "                    \"protocols\"         : ["
-        ;;
-    2)
-        echo -e ",\n                    \"ciphers\"           : ["
-        ;;
-    3)
-        echo -e ",\n                    \"pfs\"               : ["
-        ;;
-    4)
-        echo -e ",\n                    \"serverPreferences\" : ["
-        ;;
-    5)
-        echo -e ",\n                    \"serverDefaults\"    : ["
-        ;;
-    6)
-        echo -e ",\n                    \"headerResponse\"    : ["
-        ;;
-    7)
-        echo -e ",\n                    \"vulnerabilities\"   : ["
-        ;;
-    8)
-        echo -e ",\n                    \"cipherTests\"       : ["
-        ;;
-    9)
-        echo -e ",\n                    \"browserSimulations\": ["
-        ;;
-    *)
-        echo "invalid section"
-        ;;
-    esac
+         1) echo -e    "                    \"protocols\"         : [" ;;
+         2) echo -e ",\n                    \"ciphers\"           : [" ;;
+         3) echo -e ",\n                    \"pfs\"               : [" ;;
+         4) echo -e ",\n                    \"serverPreferences\" : [" ;;
+         5) echo -e ",\n                    \"serverDefaults\"    : [" ;;
+         6) echo -e ",\n                    \"headerResponse\"    : [" ;;
+         7) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
+         8) echo -e ",\n                    \"cipherTests\"       : [" ;;
+         9) echo -e ",\n                    \"browserSimulations\": [" ;;
+         *) echo "invalid section" ;;
+     esac
 }
 
 fileout_section_header(){
@@ -923,9 +903,8 @@ is_json_format() {
     ( [[ -f "$JSONFILE" ]] && ("$do_json" || "$do_pretty_json") )
 }
 
-################# JSON FILE FORMATING END ####################
-
 ##################### FILE FORMATING #########################
+
 fileout_header() {
      if "$APPEND"; then
           if [[ -f "$JSONFILE" ]]; then
@@ -969,7 +948,8 @@ fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
          "$FIRST_FINDING" && FIRST_FINDING=false
      fi
 }
-################### FILE FORMATING END #########################
+
+################# JSON FILE FORMATING END. HTML START ####################
 
 html_header() {
      local fname_prefix
@@ -1033,6 +1013,10 @@ html_footer() {
      fi
      return 0
 }
+
+################# HTML FILE FORMATING END ####################
+
+################### FILE FORMATING END #########################
 
 ###### helper function definitions ######
 
@@ -1115,8 +1099,7 @@ out_row_aligned() {
 }
 
 # prints text over multiple lines, trying to make no line longer than $max_width.
-# Each line is indented with $spaces and each word in $text is printed using
-# $print_function.
+# Each line is indented with $spaces and each word in $text is printed using $print_function.
 out_row_aligned_max_width() {
      local text="$1"
      local spaces="$2"
@@ -1171,6 +1154,17 @@ out_row_aligned_max_width() {
           "$last" && break
      done
      return 0
+}
+
+# retrieve cipher from ServerHello (via openssl)
+get_cipher() {
+     awk '/Cipher *:/ { print $3 }' "$1"
+     #awk '/\<Cipher\>/ && !/Cipher is/  && !/^New/ { print $3 }' "$1"
+}
+
+# retrieve protocol from ServerHello (via openssl)
+get_protocol() {
+     awk '/Protocol *:/ { print $3 }' "$1"
 }
 
 is_number() {
@@ -1354,11 +1348,13 @@ service_detection() {
           HTTP)
                out " $SERVICE"
                fileout "service" "INFO" "Service detected: $SERVICE"
-               ret=0 ;;
+               ret=0
+               ;;
           IMAP|POP|SMTP|NNTP)
                out " $SERVICE, thus skipping HTTP specific checks"
                fileout "service" "INFO" "Service detected: $SERVICE, thus skipping HTTP specific checks"
-               ret=0 ;;
+               ret=0
+               ;;
           *)   if $CLIENT_AUTH; then
                     out "certificate based authentication => skipping all HTTP checks"
                     echo "certificate based authentication => skipping all HTTP checks" >$TMPFILE
@@ -3576,9 +3572,9 @@ run_client_simulation() {
 
      outln
      if "$using_sockets"; then
-          pr_headlineln " Running browser simulations via sockets (experimental) "
+          pr_headlineln " Running browser simulations via sockets "
      else
-          pr_headline " Running browser simulations via openssl (experimental) "
+          pr_headline " Running browser simulations via openssl "
      fi
      outln
 
@@ -3619,9 +3615,10 @@ run_client_simulation() {
                outln "No connection"
                fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
           else
-               #FIXME: awk
-               proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
+               proto=$(get_protocol $TMPFILE)
+               # hack:
                [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
+               [[ "$proto" == SSLv3 ]] && proto="SSLv3  "
                if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
                     # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                     for tls in ${tlsvers[i]}; do
@@ -3646,14 +3643,13 @@ run_client_simulation() {
                          fi
                     done
                fi
-               #FiXME: awk
-               cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
+               cipher=$(get_cipher $TMPFILE)
                if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$cipher" == TLS_* ]] || [[ "$cipher" == SSL_* ]] ); then
                     cipher="$(rfc2openssl "$cipher")"
-                    [[ -z "$cipher" ]] && cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
+                    [[ -z "$cipher" ]] && cipher=$(get_cipher $TMPFILE)
                elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
                     cipher="$(openssl2rfc "$cipher")"
-                    [[ -z "$cipher" ]] && cipher=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/ //g' -e 's/^Cipher://')
+                    [[ -z "$cipher" ]] && cipher=$(get_cipher $TMPFILE)
                fi
                out "$proto $cipher"
                "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
@@ -3800,22 +3796,18 @@ run_protocols() {
      else
           run_prototest_openssl "-ssl2"
           case $? in
-               0)
-                    prln_svrty_critical   "offered (NOT ok)"
+               0)   prln_svrty_critical   "offered (NOT ok)"
                     fileout "sslv2" "CRITICAL" "SSLv2 is offered"
                     add_tls_offered "ssl2"
                     ;;
-               1)
-                    prln_done_best "not offered (OK)"
+               1)   prln_done_best "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered"
                     ;;
-               5)
-                    pr_svrty_high "CVE-2015-3197: $supported_no_ciph2";
+               5)   pr_svrty_high "CVE-2015-3197: $supported_no_ciph2";
                     fileout "sslv2" "HIGH" "CVE-2015-3197: SSLv2 is $supported_no_ciph2"
                     add_tls_offered "ssl2"
                     ;;
-               7)
-                    fileout "sslv2" "INFO" "SSLv2 is not tested due to lack of local support"
+               7)   fileout "sslv2" "INFO" "SSLv2 is not tested due to lack of local support"
                     ;;                                                     # no local support
           esac
      fi
@@ -3827,19 +3819,16 @@ run_protocols() {
           run_prototest_openssl "-ssl3"
      fi
      case $? in
-          0)
-               prln_svrty_high "offered (NOT ok)"
+          0)   prln_svrty_high "offered (NOT ok)"
                fileout "sslv3" "HIGH" "SSLv3 is offered"
                latest_supported="0300"
                latest_supported_string="SSLv3"
                add_tls_offered "ssl3"
                ;;
-          1)
-               prln_done_best "not offered (OK)"
+          1)   prln_done_best "not offered (OK)"
                fileout "sslv3" "OK" "SSLv3 is not offered"
                ;;
-          2)
-               if [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
+          2)   if [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
                     prln_svrty_critical "server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "sslv3" "CRITICAL" "SSLv3: server responded with higher version number ($detected_version_string) than requested by client"
@@ -3848,14 +3837,12 @@ run_protocols() {
                     fileout "sslv3" "CRITICAL" "SSLv3: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
-          5)
-               pr_svrty_high "$supported_no_ciph2"
+          5)   pr_svrty_high "$supported_no_ciph2"
                fileout "sslv3" "HIGH" "SSLv3 is $supported_no_ciph1"
                outln "(may need debugging)"
                add_tls_offered "ssl3"
                ;;
-          7)
-               fileout "sslv3" "INFO" "SSLv3 is not tested due to lack of local support"
+          7)   fileout "sslv3" "INFO" "SSLv3 is not tested due to lack of local support"
                ;;                                                            # no local support
      esac
 
@@ -3866,15 +3853,13 @@ run_protocols() {
           run_prototest_openssl "-tls1"
      fi
      case $? in
-          0)
-               outln "offered"
+          0)   outln "offered"
                fileout "tls1" "INFO" "TLSv1.0 is offered"
                latest_supported="0301"
                latest_supported_string="TLSv1.0"
                add_tls_offered "tls1"
                ;;                                           # nothing wrong with it -- per se
-          1)
-               out "not offered"
+          1)   out "not offered"
                if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
                     fileout "tls1" "INFO" "TLSv1.0 is not offered" # neither good or bad
@@ -3883,8 +3868,7 @@ run_protocols() {
                     fileout "tls1" "CRITICAL" "TLSv1.0: connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
-          2)
-               pr_svrty_medium "not offered"
+          2)   pr_svrty_medium "not offered"
                if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
                     [[ $DEBUG -eq 1 ]] && tm_out " -- downgraded"
                     outln
@@ -3898,13 +3882,11 @@ run_protocols() {
                     fileout "tls1" "CRITICAL" "TLSv1.0: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
-          5)
-               outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
+          5)   outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
                fileout "tls1" "WARN" "TLSv1.0 is $supported_no_ciph1"
                add_tls_offered "tls1"
                ;;
-          7)
-               fileout "tlsv1" "INFO" "TLSv1.0 is not tested due to lack of local support"
+          7)   fileout "tlsv1" "INFO" "TLSv1.0 is not tested due to lack of local support"
                ;;                                                            # no local support
      esac
 
@@ -3915,15 +3897,13 @@ run_protocols() {
           run_prototest_openssl "-tls1_1"
      fi
      case $? in
-          0)
-               outln "offered"
+          0)   outln "offered"
                fileout "tls1_1" "INFO" "TLSv1.1 is offered"
                latest_supported="0302"
                latest_supported_string="TLSv1.1"
                add_tls_offered "tls1_1"
                ;;                                            # nothing wrong with it
-          1)
-               out "not offered"
+          1)   out "not offered"
                if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
                     fileout "tls1_1" "INFO" "TLSv1.1 is not offered"  # neither good or bad
@@ -3932,8 +3912,7 @@ run_protocols() {
                     fileout "tls1_1" "CRITICAL" "TLSv1.1: connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
-          2)
-               out "not offered"
+          2)   out "not offered"
                if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
                     [[ $DEBUG -eq 1 ]] && tm_out " -- downgraded"
                     outln
@@ -3950,13 +3929,11 @@ run_protocols() {
                     fileout "tls1_1" "CRITICAL" "TLSv1.1: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
-          5)
-               outln "$supported_no_ciph1"
+          5)   outln "$supported_no_ciph1"
                fileout "tls1_1" "WARN" "TLSv1.1 is $supported_no_ciph1"
                add_tls_offered "tls1_1"
                ;;                                # protocol ok, but no cipher
-          7)
-               fileout "tls1_1" "INFO" "TLSv1.1 is not tested due to lack of local support"
+          7)   fileout "tls1_1" "INFO" "TLSv1.1 is not tested due to lack of local support"
                ;;                                                            # no local support
      esac
 
@@ -3967,15 +3944,13 @@ run_protocols() {
           run_prototest_openssl "-tls1_2"
      fi
      case $? in
-          0)
-               prln_done_best "offered (OK)"
+          0)   prln_done_best "offered (OK)"
                fileout "tls1_2" "OK" "TLSv1.2 is offered"
                latest_supported="0303"
                latest_supported_string="TLSv1.2"
                add_tls_offered "tls1_2"
                ;;                                  # GCM cipher in TLS 1.2: very good!
-          1)
-               pr_svrty_medium "not offered"
+          1)   pr_svrty_medium "not offered"
                if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered" # no GCM, penalty
@@ -3984,8 +3959,7 @@ run_protocols() {
                     fileout "tls1_2" "CRITICAL" "TLSv1.2: connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
-          2)
-               pr_svrty_medium "not offered"
+          2)   pr_svrty_medium "not offered"
                if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
                     detected_version_string="SSLv3"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
@@ -4006,13 +3980,11 @@ run_protocols() {
                     fileout "tls1_2" "CRITICAL" "TLSv1.2: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                ;;
-          5)
-               outln "$supported_no_ciph1"
+          5)   outln "$supported_no_ciph1"
                fileout "tls1_2" "WARN" "TLSv1.2 is $supported_no_ciph1"
                add_tls_offered "tls1_2"
                ;;                                # protocol ok, but no cipher
-          7)
-               fileout "tls1_2" "INFO" "TLSv1.2 is not tested due to lack of local support"
+          7)   fileout "tls1_2" "INFO" "TLSv1.2 is not tested due to lack of local support"
                ;;                                                            # no local support
      esac
      return 0
@@ -4351,7 +4323,7 @@ run_server_preference() {
      fi
 
      if "$has_cipher_order"; then
-          cipher1=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+          cipher1=$(get_cipher $TMPFILE)
           addcmd2=""
           if [[ -n "$STARTTLS_OPTIMAL_PROTO" ]]; then
                addcmd2="$STARTTLS_OPTIMAL_PROTO"
@@ -4366,7 +4338,7 @@ run_server_preference() {
           fi
           $OPENSSL s_client $STARTTLS -cipher $list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2 </dev/null 2>>$ERRFILE >$TMPFILE
           # that worked above so no error handling here
-          cipher2=$(grep -wa Cipher $TMPFILE | egrep -avw "New|is" | sed -e 's/^ \+Cipher \+://' -e 's/ //g')
+          cipher2=$(get_cipher $TMPFILE)
 
           if [[ "$cipher1" != "$cipher2" ]]; then
                pr_svrty_high "nope (NOT ok)"
@@ -4387,7 +4359,7 @@ run_server_preference() {
                $OPENSSL s_client $STARTTLS $OPTIMAL_PROTO $BUGS -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
                sclient_connect_successful $? $TMPFILE || pr_warning "Handshake error!"
           fi
-          default_proto=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
+          default_proto=$(get_protocol $TMPFILE)
           case "$default_proto" in
                *TLSv1.2)
                     prln_done_best $default_proto
@@ -4425,7 +4397,7 @@ run_server_preference() {
           esac
 
           pr_bold " Negotiated cipher            "
-          default_cipher_ossl=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+          default_cipher_ossl=$(get_cipher $TMPFILE)
           if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
                default_cipher="$default_cipher_ossl"
           else
@@ -4434,23 +4406,17 @@ run_server_preference() {
           fi
           pr_cipher_quality "$default_cipher"
           case $? in
-               1)
-                    fileout "order_cipher" "CRITICAL" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
+               1)   fileout "order_cipher" "CRITICAL" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
                     ;;
-               2)
-                    fileout "order_cipher" "HIGH" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
+               2)   fileout "order_cipher" "HIGH" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
                     ;;
-               3)
-                    fileout "order_cipher" "MEDIUM" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
+               3)   fileout "order_cipher" "MEDIUM" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
                     ;;
-               6|7)
-                    fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
+               6|7) fileout "order_cipher" "OK" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $remark4default_cipher"
                     ;;   # best ones
-               4)
-                    fileout "order_cipher" "LOW" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") (cbc)  $remark4default_cipher"
+               4)   fileout "order_cipher" "LOW" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") (cbc)  $remark4default_cipher"
                     ;;  # it's CBC. --> lucky13
-               0)
-                    pr_warning "default cipher empty" ;
+               0)   pr_warning "default cipher empty" ;
                     if [[ $OSSL_VER == 1.0.2* ]]; then
                          out " (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
                          fileout "order_cipher" "WARN" "Default cipher empty  (Hint: if IIS6 give OpenSSL 1.0.1 a try)  $remark4default_cipher"
@@ -4458,8 +4424,7 @@ run_server_preference() {
                          fileout "order_cipher" "WARN" "Default cipher empty  $remark4default_cipher"
                     fi
                     ;;
-               *)
-                    fileout "order_cipher" "INFO" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string")  $remark4default_cipher"
+               *)   fileout "order_cipher" "INFO" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string")  $remark4default_cipher"
                     ;;
           esac
           read_dhbits_from_file "$TMPFILE"
@@ -4524,12 +4489,12 @@ run_server_preference() {
                          [[ "$p" =~ ssl ]] && sni="" || sni="$SNI"
                          $OPENSSL s_client $STARTTLS -"$p" $BUGS -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
                          if sclient_connect_successful $? $TMPFILE; then
-                              proto[i]=$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol.*://' -e 's/ //g')
-                              cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                              proto[i]=$(get_protocol $TMPFILE)
+                              cipher[i]=$(get_cipher $TMPFILE)
                               [[ ${cipher[i]} == "0000" ]] && cipher[i]=""                     # Hack!
                               if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ -n "${cipher[i]}" ]]; then
                                    cipher[i]="$(openssl2rfc "${cipher[i]}")"
-                                   [[ -z "${cipher[i]}" ]] && cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                                   [[ -z "${cipher[i]}" ]] && cipher[i]=$(get_cipher $TMPFILE)
                               fi
                               [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
                          else
@@ -4550,10 +4515,10 @@ run_server_preference() {
                          if [[ -z "${proto[i]}" ]]; then
                               cipher[i]=""
                          else
-                              cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                              cipher[i]=$(get_cipher $TMPFILE)
                               if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ -n "${cipher[i]}" ]]; then
                                    cipher[i]="$(openssl2rfc "${cipher[i]}")"
-                                   [[ -z "${cipher[i]}" ]] && cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
+                                   [[ -z "${cipher[i]}" ]] && cipher[i]=$(get_cipher $TMPFILE)
                               fi
                               [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
                          fi
@@ -8757,11 +8722,7 @@ run_heartbleed(){
      # determine TLS versions offered <-- needs to come from another place
      $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -tlsextdebug >$TMPFILE 2>$ERRFILE </dev/null
 
-     if "$HAS_SED_E"; then
-          tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
-     else
-          tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -r 's/[^[:digit:]]//g')
-     fi
+     tls_proto_offered=$(get_protocol $TMPFILE)
 #FIXME: for SSLv3 only we need to set tls_hexcode and the record layer TLS version correctly
      case $tls_proto_offered in
           12)  tls_hexcode="x03, x03" ;;
@@ -8913,11 +8874,7 @@ run_ccs_injection(){
      # determine TLS versions offered <-- needs to come from another place
      $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
 
-     if "$HAS_SED_E"; then
-          tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -E 's/[^[:digit:]]//g')
-     else
-          tls_proto_offered=$(grep -aw Protocol $TMPFILE | sed -r 's/[^[:digit:]]//g')
-     fi
+     tls_proto_offered=$(get_protocol $TMPFILE)
      case "$tls_proto_offered" in
           12)  tls_hexcode="x03, x03" ;;
           11)  tls_hexcode="x03, x02" ;;
@@ -9067,16 +9024,13 @@ run_renego() {
           sec_renego=$?                                                    # 0= Secure Renegotiation IS NOT supported
 #FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
           case $sec_renego in
-               0)
-                    prln_svrty_critical "VULNERABLE (NOT ok)"
+               0)   prln_svrty_critical "VULNERABLE (NOT ok)"
                     fileout "secure_renego" "CRITICAL" "Secure Renegotiation: VULNERABLE" "$cve" "$cwe" "$hint"
                     ;;
-               1)
-                    prln_done_best "not vulnerable (OK)"
+               1)   prln_done_best "not vulnerable (OK)"
                     fileout "secure_renego" "OK" "Secure Renegotiation: not vulnerable" "$cve" "$cwe"
                     ;;
-               *)
-                    prln_warning "FIXME (bug): $sec_renego"
+               *)   prln_warning "FIXME (bug): $sec_renego"
                     fileout "secure_renego" "WARN" "Secure Renegotiation: FIXME (bug) $sec_renego" "$cve" "$cwe"
                     ;;
           esac
@@ -9965,7 +9919,7 @@ run_beast(){
      for proto in tls1_1 tls1_2; do
           $OPENSSL s_client -state -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>>$ERRFILE >$TMPFILE </dev/null
           if sclient_connect_successful $? $TMPFILE; then
-               higher_proto_supported="$higher_proto_supported ""$(grep -aw "Protocol" $TMPFILE | sed -e 's/^.*Protocol .*://' -e 's/ //g')"
+               higher_proto_supported="$higher_proto_supported $(get_protocol $TMPFILE)"
           fi
      done
 
