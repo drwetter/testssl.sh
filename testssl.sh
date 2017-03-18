@@ -2365,7 +2365,7 @@ std_cipherlists() {
           tmpfile_handle $FUNCNAME.$debugname.txt
           [[ $DEBUG -ge 1 ]] && out " -- $1" || outln  #FIXME: should be in standard output at some time
      else
-          singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
+          singlespaces=$(sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g' <<< "$2")
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
                prln_local_problem "No $singlespaces for SSLv2 configured in $OPENSSL"
           else
@@ -5969,7 +5969,7 @@ certificate_info() {
      fi
 
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
-     if ! echo $expire | grep -qw not; then
+     if ! grep -qw not <<< "$expire" ; then
           pr_svrty_critical "expired!"
           expfinding="expired!"
           expok="CRITICAL"
@@ -6247,8 +6247,8 @@ run_server_defaults() {
           outln "(none)"
           fileout "session_ticket" "INFO" "TLS session tickes RFC 5077 not supported"
      else
-          lifetime=$(echo $sessticket_str | grep -a lifetime | sed 's/[A-Za-z:() ]//g')
-          unit=$(echo $sessticket_str | grep -a lifetime | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
+          lifetime=$(grep -a lifetime <<< "$sessticket_str" | sed 's/[A-Za-z:() ]//g')
+          unit=$(grep -a lifetime <<< "$sessticket_str" | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
           prln_svrty_low "(PFS requires session ticket keys to be rotated <= daily)"
           fileout "session_ticket" "LOW" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
@@ -6669,7 +6669,7 @@ run_spdy() {
           ret=1
      else
           # now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
-          if echo $tmpstr | egrep -aq "h2|spdy|http" ; then
+          if egrep -aq "h2|spdy|http" <<< $tmpstr ; then
                out "$tmpstr"
                outln " (advertised)"
                fileout "spdy_npn" "INFO" "SPDY/NPN : $tmpstr (advertised)"
