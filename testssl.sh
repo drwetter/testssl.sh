@@ -228,6 +228,7 @@ HAS_FALLBACK_SCSV=false
 HAS_PROXY=false
 HAS_XMPP=false
 HAS_POSTGRES=false
+OSSL_CIPHERS_S=""
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
@@ -1077,7 +1078,7 @@ count_ciphers() {
 }
 
 actually_supported_ciphers() {
-     $OPENSSL ciphers "$1" 2>/dev/null || echo ""
+     $OPENSSL ciphers $OSSL_CIPHERS_S "$1" 2>/dev/null || echo ""
 }
 
 newline_to_spaces() {
@@ -2236,14 +2237,14 @@ prettyprint_local() {
      neat_header
 
      if [[ -z "$1" ]]; then
-          $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | while read hexcode dash ciph sslvers kx auth enc mac export ; do       # -V doesn't work with openssl < 1.0
+          $OPENSSL ciphers $OSSL_CIPHERS_S -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | while read hexcode dash ciph sslvers kx auth enc mac export ; do       # -V doesn't work with openssl < 1.0
                hexc="$(normalize_ciphercode $hexcode)"
                outln "$(neat_list "$hexc" "$ciph" "$kx" "$enc")"
           done
      else
           #for arg in $(echo $@ | sed 's/,/ /g'); do
           for arg in ${*//,/ /}; do
-               $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | while read hexcode dash ciph sslvers kx auth enc mac export ; do # -V doesn't work with openssl < 1.0
+               $OPENSSL ciphers $OSSL_CIPHERS_S -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE | while read hexcode dash ciph sslvers kx auth enc mac export ; do # -V doesn't work with openssl < 1.0
                     hexc="$(normalize_ciphercode $hexcode)"
                     # for numbers we don't do word matching:
                     [[ $arg =~ $re ]] && \
@@ -2265,7 +2266,7 @@ listciphers() {
      local -i ret
      local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
 
-     $OPENSSL ciphers $2 "$1" &>$TMPFILE
+     $OPENSSL ciphers $OSSL_CIPHERS_S $2 "$1" &>$TMPFILE
      ret=$?
      debugme cat $TMPFILE
 
@@ -2612,7 +2613,7 @@ test_just_one(){
                          ossl_supported[nr_ciphers]=true
                          nr_ciphers+=1
                     fi
-               done < <($OPENSSL ciphers $ossl_ciphers_proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+               done < <($OPENSSL ciphers $OSSL_CIPHERS_S $ossl_ciphers_proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
           fi
 
           # Test the SSLv2 ciphers, if any.
@@ -2853,7 +2854,7 @@ run_allciphers() {
                sigalg[nr_ciphers]=""
                ossl_supported[nr_ciphers]=true
                nr_ciphers=$nr_ciphers+1
-          done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+          done < <($OPENSSL ciphers $OSSL_CIPHERS_S -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
           nr_ciphers_tested=$nr_ciphers
      fi
 
@@ -3152,7 +3153,7 @@ run_cipher_per_proto() {
                          ossl_supported[nr_ciphers]=true
                          nr_ciphers+=1
                     fi
-               done < <($OPENSSL ciphers $ossl_ciphers_proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+               done < <($OPENSSL ciphers $OSSL_CIPHERS_S $ossl_ciphers_proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
           fi
 
           if [[ "$proto" == "-ssl2" ]] && "$using_sockets"; then
@@ -6843,7 +6844,7 @@ run_server_defaults() {
      # ciphers_to_test[7]: cipher suites using certificates with GOST R 34.10 (either 2001 or 94) public keys
      ciphers_to_test[1]=""
      ciphers_to_test[2]=""
-     for ciph in $(colon_to_spaces $($OPENSSL ciphers "aRSA")); do
+     for ciph in $(colon_to_spaces $($OPENSSL ciphers $OSSL_CIPHERS_S "aRSA")); do
          if grep -q "\-RSA\-" <<<$ciph; then
              ciphers_to_test[1]="${ciphers_to_test[1]}:$ciph"
          else
@@ -6868,7 +6869,7 @@ run_server_defaults() {
               [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}"
          fi
 
-         if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
+         if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers $OSSL_CIPHERS_S "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
              if [[ $n -ge 8 ]]; then
                   sni="$SNI"
                   SNI=""
@@ -7075,7 +7076,7 @@ run_pfs() {
                sigalg[nr_supported_ciphers]=""
                ossl_supported[nr_supported_ciphers]=true
                nr_supported_ciphers+=1
-          done < <($OPENSSL ciphers -V "$pfs_cipher_list" 2>$ERRFILE)
+          done < <($OPENSSL ciphers $OSSL_CIPHERS_S -V "$pfs_cipher_list" 2>$ERRFILE)
      fi
      export=""
 
@@ -10687,7 +10688,7 @@ run_beast(){
                     fi
                     nr_ciphers+=1
                fi
-          done  < <($OPENSSL ciphers -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+          done  < <($OPENSSL ciphers $OSSL_CIPHERS_S -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
      fi
 
      # first determine whether it's mitigated by higher protocols
@@ -11026,7 +11027,7 @@ run_rc4() {
                     ossl_supported[nr_ciphers]=true
                     nr_ciphers+=1
                fi
-          done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+          done < <($OPENSSL ciphers $OSSL_CIPHERS_S -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
      fi
 
      if "$using_sockets" && [[ -n "$sslv2_ciphers_hex" ]]; then
@@ -11348,7 +11349,10 @@ find_openssl_binary() {
 
      initialize_engine
 
-     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
+     $OPENSSL ciphers -s 2>&1 | grep -aq "unknown option" || \
+          OSSL_CIPHERS_S="-s"
+
+     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers $OSSL_CIPHERS_S 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
 
      $OPENSSL s_client -ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_SSL2=true
@@ -11642,13 +11646,17 @@ USLEEP_REC $USLEEP_REC
 
 EOF
           which locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
-          $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
+          $OPENSSL ciphers $OSSL_CIPHERS_S -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
      # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
 
      if [[ -e $CIPHERS_BY_STRENGTH_FILE ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
-          ossl_supported_tls="$($OPENSSL ciphers -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
+          if "$HAS_SSL2"; then
+               ossl_supported_tls="$($OPENSSL ciphers $OSSL_CIPHERS_S -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
+          else
+               ossl_supported_tls="$($OPENSSL ciphers $OSSL_CIPHERS_S -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
+          fi
           while read hexc n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] mac TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
                TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS]="$hexc"
                TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=false
@@ -11680,7 +11688,7 @@ mybanner() {
      local cwd=""
 
      $QUIET && return
-     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
+     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers $OSSL_CIPHERS_S 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
      [[ -z "$GIT_REL" ]] && \
           idtag="$CVS_REL" || \
           idtag="$GIT_REL -- $CVS_REL_SHORT"
