@@ -2363,7 +2363,7 @@ std_cipherlists() {
                     ;;
           esac
           tmpfile_handle $FUNCNAME.$debugname.txt
-          [[ $DEBUG -ge 1 ]] && outln " -- $1" || outln  #FIXME: should be in standard output at some time
+          [[ $DEBUG -ge 1 ]] && out " -- $1" || outln  #FIXME: should be in standard output at some time
      else
           singlespaces=$(echo "$2" | sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g')
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
