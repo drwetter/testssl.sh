@@ -59,7 +59,8 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * LUCKY13 and SWEET32 checks
 * LOGJAM: now checking also for known DH parameters
 * Check for CAA RR
-* better formatting of output
+* better formatting of output (indentation)
+* native HTML support instead going through 'aha'
 * choice showing the RFC naming scheme only
 
 

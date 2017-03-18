@@ -957,7 +957,7 @@ fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
      local cwe="$5"
      local hint="$6"
 
-     if show_finding "$severity"; then
+     if ( "$do_pretty_json" && [[ "$1" == "service" ]] ) || show_finding "$severity"; then
          local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
 
          is_json_format && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
