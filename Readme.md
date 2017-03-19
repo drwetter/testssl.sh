@@ -41,7 +41,7 @@ of the limitations of disabled features from the openssl client are gone due to 
 checks. testssl.sh also works on otherunixoid system out of the box, supposed they have 
 `/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU versions 
 of grep and sed installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL 
-version  >= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to 
+version >= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to 
 display bit strengths for key exchanges.
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
@@ -49,19 +49,20 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 #### Features implemented in [2.9dev](Readme.md#devel)
 * Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
 * TLS 1.2 protocol check via socket
-* Further TLS socket improvements (handshake parsing, completeness, robustness)
-* non-flat JSON support
-* in file output (CSV, JSON flat, JSON non-flat) support of a minimum severity level (only above supplied level there will be output)
-* testing 359 default ciphers (``testssl.sh -e``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
-* finding more TLS extensions via sockets
+* Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
+* Finding more TLS extensions via sockets
+* Using bash sockets where ever possible
 * TLS Supported Groups Registry (RFC 7919), key shares extension
-* using bash sockets where ever possible
+* Non-flat JSON support
+* File output (CSV, JSON flat, JSON non-flat) supports a minimum severity level (only above supplied level there will be output)
+* Native HTML support instead going through 'aha'
+* Testing 359 default ciphers (``testssl.sh -e``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * LUCKY13 and SWEET32 checks
 * LOGJAM: now checking also for known DH parameters
 * Check for CAA RR
-* better formatting of output
-* choice showing the RFC naming scheme only
-
+* Check for OCSP must staple 
+* Better formatting of output (indentation)
+* Choice showing the RFC naming scheme only
 
 #### Features planned in 2.9dev
 
@@ -73,7 +74,7 @@ Contributions, feedback,  bug reports are welcome! For contributions please
 note: One patch per feature -- bug fix/improvement. Please test your
 changes thouroughly as reliability is important for this project.
 
-There's [coding guideline](https://github.com/drwetter/testssl.sh/wiki/Coding-Style).
+There's a [coding guideline](https://github.com/drwetter/testssl.sh/wiki/Coding-Style).
 
 Please file bug reports @ https://github.com/drwetter/testssl.sh/issues.
 
@@ -85,8 +86,9 @@ Help is needed here.
 
 #### Bug reports
 
-Please file bugs in the issue tracker. Do not forget to provide detailed information, see https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. (Nobody can read your thoughts 
--- yet. And only agencies your screen) ;-)
+Please file bugs in the issue tracker. Do not forget to provide detailed information, 
+see https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. (Nobody can read your 
+thoughts -- yet. And only agencies your screen) ;-)
 
 ----
 
