@@ -1018,7 +1018,7 @@ html_footer() {
 
 ################### FILE FORMATING END #########################
 
-###### helper function definitions ######
+###### START helper function definitions ######
 
 if [[ $(uname) == "Linux" ]] ; then
      toupper() { echo -n "${1^^}" ;  }
@@ -1086,16 +1086,61 @@ trim_trailing_space() {
      echo "${1%%*( )}"
 }
 
+# retrieve cipher from ServerHello (via openssl)
+get_cipher() {
+     awk '/Cipher *:/ { print $3 }' "$1"
+     #awk '/\<Cipher\>/ && !/Cipher is/  && !/^New/ { print $3 }' "$1"
+}
+
+# retrieve protocol from ServerHello (via openssl)
+get_protocol() {
+     awk '/Protocol *:/ { print $3 }' "$1"
+}
+
+is_number() {
+     [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
+          return 0 || \
+          return 1
+}
+
+is_ipv4addr() {
+     local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
+     local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
+
+     [[ -z "$1" ]] && return 1
+     # more than numbers, important for hosts like AAA.BBB.CCC.DDD.in-addr.arpa.DOMAIN.TLS
+     [[ -n $(tr -d '0-9\.' <<< "$1") ]] && return 1
+
+     grep -Eq "$ipv4address" <<< "$1" && \
+          return 0 || \
+          return 1
+}
+
+# a bit easier
+is_ipv6addr() {
+     [[ -z "$1" ]] && return 1
+     # less than 2x ":"
+     [[ $(count_lines "$(tr ':' '\n' <<< "$1")") -le 1 ]] && \
+          return 1
+     #check on chars allowed:
+     [[ -n "$(tr -d '0-9:a-fA-F ' <<< "$1" | sed -e '/^$/d')" ]] && \
+          return 1
+     return 0
+}
+
+
+###### END helper function definitions ######
+
 # prints out multiple lines in $1, left aligned by spaces in $2
 out_row_aligned() {
      local first=true
 
-     echo "$1" | while read line; do
+     while read line; do
           "$first" && \
                first=false || \
                out "$2"
           outln "$line"
-     done
+     done <<< "$1"
 }
 
 # prints text over multiple lines, trying to make no line longer than $max_width.
@@ -1156,48 +1201,6 @@ out_row_aligned_max_width() {
      return 0
 }
 
-# retrieve cipher from ServerHello (via openssl)
-get_cipher() {
-     awk '/Cipher *:/ { print $3 }' "$1"
-     #awk '/\<Cipher\>/ && !/Cipher is/  && !/^New/ { print $3 }' "$1"
-}
-
-# retrieve protocol from ServerHello (via openssl)
-get_protocol() {
-     awk '/Protocol *:/ { print $3 }' "$1"
-}
-
-is_number() {
-     [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
-          return 0 || \
-          return 1
-}
-
-is_ipv4addr() {
-     local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
-     local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
-
-     [[ -z "$1" ]] && return 1
-     # more than numbers, important for hosts like AAA.BBB.CCC.DDD.in-addr.arpa.DOMAIN.TLS
-     [[ -n $(tr -d '0-9\.' <<< "$1") ]] && return 1
-
-     echo -n "$1" | grep -Eq "$ipv4address" && \
-          return 0 || \
-          return 1
-}
-
-# a bit easier
-is_ipv6addr() {
-     [[ -z "$1" ]] && return 1
-     # less than 2x ":"
-     [[ $(count_lines "$(echo -n "$1" | tr ':' '\n')") -le 1 ]] && \
-          return 1
-     #check on chars allowed:
-     [[ -n "$(tr -d '0-9:a-fA-F ' <<< "$1" | sed -e '/^$/d')" ]] && \
-          return 1
-     return 0
-}
-
 
 tmpfile_handle() {
      mv $TMPFILE "$TEMPDIR/$NODEIP.$1" 2>/dev/null
@@ -1207,7 +1210,7 @@ tmpfile_handle() {
 
 # arg1: line with comment sign, tabs and so on
 filter_input() {
-     echo "$1" | sed -e 's/#.*$//' -e '/^$/d' | tr -d '\n' | tr -d '\t'
+     sed -e 's/#.*$//' -e '/^$/d' <<< "$1" | tr -d '\n' | tr -d '\t'
 }
 
 # dl's any URL (argv1) via HTTP 1.1 GET from port 80, arg2: file to store http body
@@ -1233,7 +1236,6 @@ http_get() {
 # example usage:
 # myfile=$(mktemp $TEMPDIR/http_get.XXXXXX.txt)
 # http_get "http://crl.startssl.com/sca-server1.crl" "$myfile"
-
 
 wait_kill(){
      local pid=$1             # pid we wait for or kill
