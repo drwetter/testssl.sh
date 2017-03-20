@@ -190,6 +190,7 @@ HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 FNAME=${FNAME:-""}                      # file name to read commands from
 IKNOW_FNAME=false
+MEASURE_TIME=${MEASURE_TIME:-false}
 
 # further global vars just declared here
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
@@ -12283,42 +12284,47 @@ reset_hostdepended_vars() {
      SERVER_SIZE_LIMIT_BUG=false
 }
 
+time_right_align() {
+     "$MEASURE_TIME" && printf "%${COLUMNS}s" "$START_TIME + $(($(date +%s) - START_TIME )) "
+}
 
 lets_roll() {
      local ret
      local section_number=1
+
+     START_TIME=$(date +%s)
+     "$MEASURE_TIME" && printf "%${COLUMNS}s" "$START_TIME + $(($(date +%s) - START_TIME )) "
 
      [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" 2
      nodeip_to_proper_ip6
      reset_hostdepended_vars
      determine_rdns
 
-     START_TIME=$(date +%s)
-
      ((SERVER_COUNTER++))
      determine_service "$1"        # any starttls service goes here
 
      $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit 0; }
      $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo "$?" ; exit 0; }
-     $do_test_just_one && test_just_one ${single_cipher}
+     $do_test_just_one && test_just_one ${single_cipher} && time_right_align
 
      # all top level functions  now following have the prefix "run_"
      fileout_section_header $section_number false && ((section_number++))
      $do_protocols && { run_protocols; ret=$(($? + ret)); }
      $do_spdy && { run_spdy; ret=$(($? + ret)); }
      $do_http2 && { run_http2; ret=$(($? + ret)); }
+     ( $do_protocols || $do_spdy || $do_http2 ) && time_right_align
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_std_cipherlists && { run_std_cipherlists; ret=$(($? + ret)); }
+     $do_std_cipherlists && { run_std_cipherlists; ret=$(($? + ret)); } && time_right_align
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_pfs && { run_pfs; ret=$(($? + ret)); }
+     $do_pfs && { run_pfs; ret=$(($? + ret)); } && time_right_align
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_preference && { run_server_preference; ret=$(($? + ret)); }
+     $do_server_preference && { run_server_preference; ret=$(($? + ret)); } && time_right_align
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_defaults && { run_server_defaults; ret=$(($? + ret)); }
+     $do_server_defaults && { run_server_defaults; ret=$(($? + ret)); } && time_right_align
 
      if $do_header; then
           #TODO: refactor this into functions
@@ -12333,6 +12339,7 @@ lets_roll() {
                run_cookie_flags "$URL_PATH"
                run_more_flags "$URL_PATH"
                run_rp_banner "$URL_PATH"
+               time_right_align
          fi
      else
          ((section_number++))
@@ -12345,27 +12352,27 @@ lets_roll() {
      fi
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); }
-     $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); }
-     $do_renego && { run_renego; ret=$(($? + ret)); }
-     $do_crime && { run_crime; ret=$(($? + ret)); }
-     $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret)); }
-     $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); }
-     $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); }
-     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); }
-     $do_freak && { run_freak; ret=$(($? + ret)); }
-     $do_drown && { run_drown ret=$(($? + ret)); }
-     $do_logjam && { run_logjam; ret=$(($? + ret)); }
-     $do_beast && { run_beast; ret=$(($? + ret)); }
-     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); }
-     $do_rc4 && { run_rc4; ret=$(($? + ret)); }
+     $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); } && time_right_align
+     $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); } && time_right_align
+     $do_renego && { run_renego; ret=$(($? + ret)); } && time_right_align
+     $do_crime && { run_crime; ret=$(($? + ret)); } && time_right_align
+     $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret)); } && time_right_align
+     $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); } && time_right_align
+     $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); } && time_right_align
+     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); } && time_right_align
+     $do_freak && { run_freak; ret=$(($? + ret)); } && time_right_align
+     $do_drown && { run_drown ret=$(($? + ret)); } && time_right_align
+     $do_logjam && { run_logjam; ret=$(($? + ret)); } && time_right_align
+     $do_beast && { run_beast; ret=$(($? + ret)); } && time_right_align
+     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); } && time_right_align
+     $do_rc4 && { run_rc4; ret=$(($? + ret)); } && time_right_align
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_allciphers && { run_allciphers; ret=$(($? + ret)); }
-     $do_cipher_per_proto && { run_cipher_per_proto; ret=$(($? + ret)); }
+     $do_allciphers && { run_allciphers; ret=$(($? + ret)); } && time_right_align
+     $do_cipher_per_proto && { run_cipher_per_proto; ret=$(($? + ret)); } && time_right_align
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); }
+     $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); } && time_right_align
 
      fileout_section_footer true
 
