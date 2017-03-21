@@ -78,7 +78,8 @@
 
 
 # debugging help:
-readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+#readonly PS4='${LINENO}> $(date "+%s.%N")\011 ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+readonly PS4='|$(date "+%s.%N")\011${LINENO}>\011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
@@ -260,14 +261,16 @@ GET_REQ11=""
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
 FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
-START_TIME=0
-END_TIME=0
+START_TIME=0                            # time in epoch when the action started
+END_TIME=0                              # .. ended
+SCAN_TIME=0                             # diff of both: total scan time
+LAST_TIME=0                             # only used for performance measurements (MEASURE_TIME=true)
 
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
 HEX_CIPHER=""
 
-SERVER_COUNTER=0                             # Counter for multiple servers
+SERVER_COUNTER=0                        # Counter for multiple servers
 
 #################### SEVERITY ####################
 INFO=0
@@ -787,7 +790,6 @@ strip_quote() {
 
 #################### JSON FILE FORMATING ####################
 fileout_pretty_json_header() {
-    START_TIME=$(date +%s)
     target="$NODE"
     $do_mx_all_ips && target="$URI"
 
@@ -802,9 +804,8 @@ fileout_pretty_json_header() {
 }
 
 fileout_pretty_json_footer() {
-    local scan_time=$((END_TIME - START_TIME))
     echo -e "          ],
-          \"scanTime\"  : \"$scan_time\"\n}"
+          \"scanTime\"  : \"$SCAN_TIME\"\n}"
 }
 
 fileout_json_header() {
@@ -10795,7 +10796,6 @@ maketempf() {
 }
 
 prepare_debug() {
-     local hexc mac ossl_ciph ossl_supported_tls="" ossl_supported_sslv2=""
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
 
@@ -10873,6 +10873,12 @@ EOF
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
      # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
+}
+
+
+prepare_arrays() {
+     local hexc mac ossl_ciph
+     local ossl_supported_tls="" ossl_supported_sslv2=""
 
      if [[ -e $CIPHERS_BY_STRENGTH_FILE ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
@@ -12284,8 +12290,15 @@ reset_hostdepended_vars() {
      SERVER_SIZE_LIMIT_BUG=false
 }
 
+# rough estimate, in the future we maybe want to make use of nano secs (%N)
+# note this is for performance debugging purposes (MEASURE_TIME=yes), so eye candy is not important
 time_right_align() {
-     "$MEASURE_TIME" && printf "%${COLUMNS}s" "$START_TIME + $(($(date +%s) - START_TIME )) "
+     local new_delta
+
+     "$MEASURE_TIME" || return
+     new_delta=$(( $(date +%s) - LAST_TIME ))
+     printf "%${COLUMNS}s" "$new_delta"
+     LAST_TIME=$(( $new_delta + LAST_TIME ))
 }
 
 lets_roll() {
@@ -12293,7 +12306,8 @@ lets_roll() {
      local section_number=1
 
      START_TIME=$(date +%s)
-     "$MEASURE_TIME" && printf "%${COLUMNS}s" "$START_TIME + $(($(date +%s) - START_TIME )) "
+     LAST_TIME=$START_TIME
+     time_right_align
 
      [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" 2
      nodeip_to_proper_ip6
@@ -12378,7 +12392,10 @@ lets_roll() {
 
      outln
      END_TIME=$(date +%s)
+     SCAN_TIME=$((END_TIME - START_TIME))
      datebanner " Done"
+
+     "$MEASURE_TIME" && printf "%${COLUMNS}s\n" "$SCAN_TIME"
 
      return $ret
 }
@@ -12396,6 +12413,7 @@ set_color_functions
 maketempf
 find_openssl_binary
 prepare_debug
+prepare_arrays
 mybanner
 check_proxy
 check4openssl_oldfarts
