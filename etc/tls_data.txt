@@ -1,0 +1,231 @@
+
+# data we need for socket based handshakes
+
+# 133 standard cipher + 4x GOST for TLS 1.2 and SPDY/NPN HTTP2/ALPN
+readonly TLS12_CIPHER="
+cc,14, cc,13, cc,15, c0,30, c0,2c, c0,28, c0,24, c0,14,
+c0,0a, c0,22, c0,21, c0,20, 00,a5, 00,a3, 00,a1, 00,9f,
+00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, 00,80, 00,81, 00,82, 00,83,
+c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87,
+00,86, 00,85, c0,32, c0,2e, c0,2a, c0,26, c0,0f, c0,05,
+c0,79, c0,75, 00,9d, 00,3d, 00,35, 00,c0, 00,84, c0,2f,
+c0,2b, c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d,
+00,a4, 00,a2, 00,a0, 00,9e, 00,67, 00,40, 00,3f, 00,3e,
+00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd,
+00,bc, 00,bb, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44,
+00,43, 00,42, c0,31, c0,2d, c0,29, c0,25, c0,0e, c0,04,
+c0,78, c0,74, 00,9c, 00,3c, 00,2f, 00,ba, 00,96, 00,41,
+00,07, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04,
+c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10,
+00,0d, c0,0d, c0,03, 00,0a, 00,63, 00,15, 00,12, 00,0f,
+00,0c, 00,62, 00,09, 00,65, 00,64, 00,14, 00,11, 00,0e,
+00,0b, 00,08, 00,06, 00,03, 00,ff"
+
+# 76 standard cipher + 4x GOST for SSLv3, TLS 1, TLS 1.1
+readonly TLS_CIPHER="
+c0,14, c0,0a, c0,22, c0,21, c0,20, 00,39, 00,38, 00,37,
+00,36, 00,88, 00,87, 00,86, 00,85, c0,0f, c0,05, 00,35,
+00,84, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,33, 00,32, 00,80, 00,81, 00,82, 00,83,
+00,31, 00,30, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44,
+00,43, 00,42, c0,0e, c0,04, 00,2f, 00,96, 00,41, 00,07,
+c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, c0,12,
+c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d,
+c0,0d, c0,03, 00,0a, 00,63, 00,15, 00,12, 00,0f, 00,0c,
+00,62, 00,09, 00,65, 00,64, 00,14, 00,11, 00,0e, 00,0b,
+00,08, 00,06, 00,03, 00,ff"
+
+readonly -a TLS13_KEY_SHARES=(
+ "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "a" "b" "c" "d" "e" "f"
+  "10" "11" "12" "13" "14" "15" "16"
+"-----BEGIN EC PARAMETERS-----
+BggqhkjOPQMBBw==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIHEhQsBkqt1i15mG1wluq/zLqDmjqNQegtgxyNBfRbZSoAoGCCqGSM49
+AwEHoUQDQgAEJP3GoZyVYrabOauJMWUZJxM0PEbtjTxW7K8V+JMDhJa+UyRQm8Tf
+2LDnzCAiuwzF8m0KhcloHEoptD2WBUmJlQ==
+-----END EC PRIVATE KEY-----
+"
+"-----BEGIN EC PARAMETERS-----
+BgUrgQQAIg==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MIGkAgEBBDA7MCUdHy2+Kc73fWph++jWo18LHzzm7SKLgycQBNtmeJu3w1y9pK0G
+EXgAWsIePIOgBwYFK4EEACKhZANiAAT/x7tN8plE6gbA6D4Igp3ash5EvZxvNqdG
+Q50fcDrIco91ybaVlg2tdngZgurTzte+jv7kdkYrILUmLnXxAUGg4d86yStfcZaI
+rDEB8Hc9BgJkFFoLSsXMVCKfoEo777k=
+-----END EC PRIVATE KEY-----
+"
+"-----BEGIN EC PARAMETERS-----
+BgUrgQQAIw==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MIHbAgEBBEFjBqkejwKserOf+LoY6xeSUUoLSZQDz/oNLXLB3NQJ3ewDkhbjOvcL
+jG1on33V080fXRTN3eNdfvzcqDw4c0GGCKAHBgUrgQQAI6GBiQOBhgAEAHuBnMpQ
++30lnd/gWrHwjLrXQ+EwtxYzMjSDkfRxr0UQ0YuzDNzsVP0azylC06BUlcAvVgiX
++61BiUapw+37EORuAaHOlob0nobmFND7peN0YglQuBeSdqK3cbdP/u9jffGr2H99
+bONJgO7LSp05PXa79CEi8sydmKYiH1pSLAzRiQnh
+-----END EC PRIVATE KEY-----
+" "1a" "1b" "1c"
+"-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VuBCIEIACiKGKr1nm2eobXvsI3HrWNKR5wEVAIf7KaCmDPxsJR
+-----END PRIVATE KEY-----
+" "1e" "1f"
+ "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "2a" "2b" "2c" "2d" "2e" "2f"
+ "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "3a" "3b" "3c" "3d" "3e" "3f"
+ "40" "41" "42" "43" "44" "45" "46" "47" "48" "49" "4a" "4b" "4c" "4d" "4e" "4f"
+ "50" "51" "52" "53" "54" "55" "56" "57" "58" "59" "5a" "5b" "5c" "5d" "5e" "5f"
+ "60" "61" "62" "63" "64" "65" "66" "67" "68" "69" "6a" "6b" "6c" "6d" "6e" "6f"
+ "70" "71" "72" "73" "74" "75" "76" "77" "78" "79" "7a" "7b" "7c" "7d" "7e" "7f"
+ "80" "81" "82" "83" "84" "85" "86" "87" "88" "89" "8a" "8b" "8c" "8d" "8e" "8f"
+ "90" "91" "92" "93" "94" "95" "96" "97" "98" "99" "9a" "9b" "9c" "9d" "9e" "9f"
+ "a0" "a1" "a2" "a3" "a4" "a5" "a6" "a7" "a8" "a9" "aa" "ab" "ac" "ad" "ae" "af"
+ "b0" "b1" "b2" "b3" "b4" "b5" "b6" "b7" "b8" "b9" "ba" "bb" "bc" "bd" "be" "bf"
+ "c0" "c1" "c2" "c3" "c4" "c5" "c6" "c7" "c8" "c9" "ca" "cb" "cc" "cd" "ce" "cf"
+ "d0" "d1" "d2" "d3" "d4" "d5" "d6" "d7" "d8" "d9" "da" "db" "dc" "dd" "de" "df"
+ "e0" "e1" "e2" "e3" "e4" "e5" "e6" "e7" "e8" "e9" "ea" "eb" "ec" "ed" "ee" "ef"
+ "f0" "f1" "f2" "f3" "f4" "f5" "f6" "f7" "f8" "f9" "fa" "fb" "fc" "fd" "fe" "ff"
+ "-----BEGIN PRIVATE KEY-----
+MIICJgIBADCCARcGCSqGSIb3DQEDATCCAQgCggEBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhKFyX//////////8C
+AQIEggEEAoIBAHxYskjJGeKwSGdAf//JLxPmGRGP6Uylmt12QX5w1FfFXQVJdrsY
+unjdqhTwgV1vTZ1QApd0uZB//q8ZNNM8SZK0elY4ZJsHJAIdJ/ROmvPvkMCkU0fK
+S/uUHroP6tEDyKF+v7ooiBF2KXS5CkOYRTKhiOBaWGsdhiFIkd+O7oY6oyhPxPNT
+2zQEdhIu3ZgFG/ZcscdliMPMmZnKvt/dF4yV8RnCHl3MRDRdL/3McDAb4z89bWqR
+HRexppcgNa9lhOvR+nF/55NCzT3KwkFPQODQmMRH3bzmME+48HZrFcaaom3/DGt+
+EC+vidtEr4YW86tV6jvig5+uNR1mIKpE8N4=
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+MIIDJgIBADCCAZcGCSqGSIb3DQEDATCCAYgCggGBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhH8/c3jVbO2UZA1u8
+NPTe+ZwCOGG0b8nW5skHetkdJpH39+5ZjLD6wYbZHK7+EwmFE5JwtBMMk7xDeUT0
+/URS4tdN02Ty4h5x9Uv/XK6Cq5yd9p7obSvFIjY6DavFIZebDeraHb+aQtXESE4K
+vNBr+lPd7zwbIO4/1Z18JeQdK2bGLjf//////////wIBAgSCAYQCggGAV6hlUz0f
+RwpauhaumL+dFJQcZHgYghHX9JfNDZv1uMzkTiKxgVutrtFmfHoaTaYNgw+HEQSF
+ZRnGzyOXb14/ZoGWo727N4T5usOqINFcHIeAbPiRimo0mwS7ivYKxEFBaw4N7OyE
+zfNKAYWNQe0J+R2FLMKBSbJ+b1nGQ/cUSQDffDpKSUS94+XxwxcvNaCv9Ygtkvnl
+e/t61L/0eQu/nmi0o7PzR4brmyVTXGnj2LujG/KOtIB4pXQ1GqrvsYLB3pCUTDdA
+E0heXfpYGZJK10ByMkWmOuH3pCuI8C+7+Bh7JwQAXUtSpZ+hp1Bz7v1PKwY/3fG1
+2HcPXp85q5N9x9zYZv1vmwFAd0nTdoWdtMbiEJxhCdr6sRpi1+KPg6W3Kqtfcv2f
+ZZC6MwVFtxogjzIlXt68O7HRH7Adz+DGhEeZqdxIQpaQR50p4LF7gqQ/mzXq8oCe
+XKC3XxrfV5h3OrPEL/zNTd2pzh3LLQB349aOHNz1F+3YPyPlvwOsXkeT
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+MIIEJgIBADCCAhcGCSqGSIb3DQEDATCCAggCggIBAP//////////rfhUWKK7Spqv
+3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
+3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
+8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
+Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
+/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhH8/c3jVbO2UZA1u8
+NPTe+ZwCOGG0b8nW5skHetkdJpH39+5ZjLD6wYbZHK7+EwmFE5JwtBMMk7xDeUT0
+/URS4tdN02Ty4h5x9Uv/XK6Cq5yd9p7obSvFIjY6DavFIZebDeraHb+aQtXESE4K
+vNBr+lPd7zwbIO4/1Z18JeQdK2aeHvFub1LDFk30+3kw6eTliFe2rH1fQtafbRh3
+Y88dVQNABIf1W6V+Mcx6cTXIhu+0MYrtah4BLZ5oMqkHYAqRgTDEbcd4+XGtADgJ
+KZmjM8uLehoduT1xQAA8Kk7OqfmNCswKgpHNzsl9z47JtVp/iKRrTbWoUfRBguHG
+igB+XmVfav//////////AgECBIICBAKCAgBKs8VkNMjroMib7Wuw71hVoHiB7lF9
+3FQsDwU3y//RgETN2CEx8gdarvb35ldNEkypxtiaYck+a5qKVkP8uW4/AUoGlH4V
+mIVz8R9e0Cewc4X8229+AgvyguaEhJHozp7EqIYEYlpLyn5GL53l2OYvBB3eH9Yi
+yjYKe5vCe16Jy88oJYrS6+ybYLXHcfJsLHIppMS17KuDdH/DUiCvy5HE5fA5ufD3
+ExQImgsDa3rm8nW6NUCix9Pl4X5OkWieYE7pXBePZ8Yk8BD4JpPbhsh/9husS4XL
+/IpSq+tzgXq44SKQv0o9hbkGaxR6xmTjTwOjRiqW1D/1pS/wHxZbH1qbgJSKq7Fx
+6VZZjH5Hyx9Zh5p3mksa7iZ4DQXVW/8ffz+8UdVRQolVUQxXWihcU5qfdtmDEPI0
+4dRR5mI/Pk1n7lAhdyE4H/Tz0TmqItfScZvNaj6RbPbk6KOapgHFKIX7dmtPxAOv
+oMMudOwsBg7md3CY08zH/XdE6O8lmVgCJQMjfwJ7QMayOKL1NYNMmUDPP0WIxOyz
+5UJj3GzmNrKgYftgr2o8blEwwDbETYN/hpgTPyWl8ieVxK2bn7SX8dFXXEwSdCAt
+Cg5c3H+YOc+ahx7VYXJtBDyAKuygUKnVqZ1ht6/xLUyJUxiSMZLbFKHBLkR3UuQa
+HyRwI92yYN4+Zg==
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+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
+-----END PRIVATE KEY-----
+"
+"-----BEGIN PRIVATE KEY-----
+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
+Y9zPgF69gpA9VpStqLAqHxBvEm4BYFoFyfw=
+-----END PRIVATE KEY-----
+" "105" "106" "107" "108" "109" "10a" "10b" "10c" "10d" "10e" "10f" )
