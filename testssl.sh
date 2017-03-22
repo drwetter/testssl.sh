@@ -191,7 +191,12 @@ HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 FNAME=${FNAME:-""}                      # file name to read commands from
 IKNOW_FNAME=false
-MEASURE_TIME=${MEASURE_TIME:-false}
+MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
+if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
+     MEASURE_TIME=true
+else
+     MEASURE_TIME=${MEASURE_TIME:-false}
+fi
 
 # further global vars just declared here
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
@@ -12298,6 +12303,7 @@ time_right_align() {
      "$MEASURE_TIME" || return
      new_delta=$(( $(date +%s) - LAST_TIME ))
      printf "%${COLUMNS}s" "$new_delta"
+     [[ -e "$MEASURE_TIME_FILE" ]] && echo "$1 : $new_delta " >> $MEASURE_TIME_FILE
      LAST_TIME=$(( $new_delta + LAST_TIME ))
 }
 
@@ -12305,9 +12311,14 @@ lets_roll() {
      local ret
      local section_number=1
 
-     START_TIME=$(date +%s)
-     LAST_TIME=$START_TIME
-     time_right_align
+     if [[ "$1" == init ]]; then
+          # called once upfront to be able to measure preperation time b4 everything starts
+          START_TIME=$(date +%s)
+          LAST_TIME=$START_TIME
+          [[ -n "$MEASURE_TIME_FILE" ]] && >$MEASURE_TIME_FILE
+          return 0
+     fi
+     time_right_align initialized
 
      [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" 2
      nodeip_to_proper_ip6
@@ -12323,22 +12334,21 @@ lets_roll() {
 
      # all top level functions  now following have the prefix "run_"
      fileout_section_header $section_number false && ((section_number++))
-     $do_protocols && { run_protocols; ret=$(($? + ret)); }
-     $do_spdy && { run_spdy; ret=$(($? + ret)); }
-     $do_http2 && { run_http2; ret=$(($? + ret)); }
-     ( $do_protocols || $do_spdy || $do_http2 ) && time_right_align
+     $do_protocols && { run_protocols; ret=$(($? + ret)); time_right_align run_protocols; }
+     $do_spdy && { run_spdy; ret=$(($? + ret)); time_right_align run_spdy; }
+     $do_http2 && { run_http2; ret=$(($? + ret)); time_right_align run_http2; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_std_cipherlists && { run_std_cipherlists; ret=$(($? + ret)); } && time_right_align
+     $do_std_cipherlists && { run_std_cipherlists; ret=$(($? + ret)); time_right_align run_std_cipherlists; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_pfs && { run_pfs; ret=$(($? + ret)); } && time_right_align
+     $do_pfs && { run_pfs; ret=$(($? + ret)); time_right_align run_pfs; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_preference && { run_server_preference; ret=$(($? + ret)); } && time_right_align
+     $do_server_preference && { run_server_preference; ret=$(($? + ret)); time_right_align run_server_preference; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_defaults && { run_server_defaults; ret=$(($? + ret)); } && time_right_align
+     $do_server_defaults && { run_server_defaults; ret=$(($? + ret)); time_right_align run_server_defaults; }
 
      if $do_header; then
           #TODO: refactor this into functions
@@ -12353,7 +12363,7 @@ lets_roll() {
                run_cookie_flags "$URL_PATH"
                run_more_flags "$URL_PATH"
                run_rp_banner "$URL_PATH"
-               time_right_align
+               time_right_align do_header
          fi
      else
          ((section_number++))
@@ -12366,36 +12376,37 @@ lets_roll() {
      fi
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); } && time_right_align
-     $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); } && time_right_align
-     $do_renego && { run_renego; ret=$(($? + ret)); } && time_right_align
-     $do_crime && { run_crime; ret=$(($? + ret)); } && time_right_align
-     $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret)); } && time_right_align
-     $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); } && time_right_align
-     $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); } && time_right_align
-     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); } && time_right_align
-     $do_freak && { run_freak; ret=$(($? + ret)); } && time_right_align
-     $do_drown && { run_drown ret=$(($? + ret)); } && time_right_align
-     $do_logjam && { run_logjam; ret=$(($? + ret)); } && time_right_align
-     $do_beast && { run_beast; ret=$(($? + ret)); } && time_right_align
-     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); } && time_right_align
-     $do_rc4 && { run_rc4; ret=$(($? + ret)); } && time_right_align
+     $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); time_right_align run_heartbleed; }
+     $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); time_right_align run_ccs_injection; }
+     $do_renego && { run_renego; ret=$(($? + ret)); time_right_align run_renego; }
+     $do_crime && { run_crime; ret=$(($? + ret)); time_right_align run_crime; }
+     $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret));  time_right_align run_breach; }
+     $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); time_right_align run_ssl_poodle; }
+     $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); time_right_align run_tls_fallback_scsv; }
+     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); time_right_align run_sweet32; }
+     $do_freak && { run_freak; ret=$(($? + ret)); time_right_align run_freak; }
+     $do_drown && { run_drown ret=$(($? + ret)); time_right_align run_drown; }
+     $do_logjam && { run_logjam; ret=$(($? + ret)); time_right_align run_logjam; }
+     $do_beast && { run_beast; ret=$(($? + ret)); time_right_align run_beast; }
+     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); time_right_align run_lucky13; }
+     $do_rc4 && { run_rc4; ret=$(($? + ret)); time_right_align run_rc4; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_allciphers && { run_allciphers; ret=$(($? + ret)); } && time_right_align
-     $do_cipher_per_proto && { run_cipher_per_proto; ret=$(($? + ret)); } && time_right_align
+     $do_allciphers && { run_allciphers; ret=$(($? + ret)); time_right_align run_allciphers; }
+     $do_cipher_per_proto && { run_cipher_per_proto; ret=$(($? + ret)); time_right_align run_cipher_per_proto; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); } && time_right_align
+     $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); time_right_align run_client_simulation; }
 
      fileout_section_footer true
 
      outln
      END_TIME=$(date +%s)
-     SCAN_TIME=$((END_TIME - START_TIME))
+     SCAN_TIME=$(( END_TIME - START_TIME ))
      datebanner " Done"
 
      "$MEASURE_TIME" && printf "%${COLUMNS}s\n" "$SCAN_TIME"
+     [[ -e "$MEASURE_TIME_FILE" ]] && echo "Total : $SCAN_TIME " >> $MEASURE_TIME_FILE
 
      return $ret
 }
@@ -12404,7 +12415,7 @@ lets_roll() {
 
 ################# main #################
 
-
+lets_roll init
 initialize_globals
 parse_cmd_line "$@"
 html_header
