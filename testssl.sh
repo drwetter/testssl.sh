@@ -5091,7 +5091,7 @@ extract_new_tls_extensions() {
           # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
           while read -d "\"" -r line; do
                if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
-  #FIXME: This is a string of quoted strings, so this seems to deterime the output format already. Better e.g. would be an array         
+#FIXME: This is a string of quoted strings, so this seems to determine the output format already. Better e.g. would be an array         
                     TLS_EXTENSIONS+=" \"${line}\""
                fi
           done <<<$tls_extensions
