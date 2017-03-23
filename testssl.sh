@@ -2057,7 +2057,7 @@ run_client_simulation() {
           if $do_all_simulations || ${current[i]} ; then
                if $do_all_simulations || [[ $(count_lines "$(echo "${service[i]}" | grep "$client_service")")  -eq 1 || "${service[i]}" == "ANY" ]]; then
                     #FIXME: printf formatting would look better, especially if we want a wide option here
-                    out " ${names[i]}   "
+                    out " $(printf -- "%-33s" "${names[i]}")"
                     if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
                          client_simulation_sockets "${handshakebytes[i]}"
                          sclient_success=$?
