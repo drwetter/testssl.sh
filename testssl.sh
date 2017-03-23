@@ -569,7 +569,7 @@ html_reserved(){
 }
 
 html_out() {
-     "$do_html" || return
+     "$do_html" || return 0
      [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "${1//%/%%}" >> "$HTMLFILE"
      # here and other printf's: a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%'. '--' and %b do the rest.
 }
