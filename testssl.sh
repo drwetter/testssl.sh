@@ -76,10 +76,10 @@
 # this missing feature! The idea is if this script can't tell something
 # for sure it speaks up so that you have clear picture.
 
-
+DEBUGTIME=${DEBUGTIME:-false}
 # debugging help:
-#readonly PS4='${LINENO}> $(date "+%s.%N")\011 ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
-readonly PS4='|$(date "+%s.%N")\011${LINENO}>\011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+"$DEBUGTIME" && readonly PS4='|$(date "+%s.%N")\011${LINENO}>\011${FUNCNAME[0]:+${FUNCNAME[0]}(): }' || \
+                readonly PS4='|${LINENO}>\011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
@@ -980,7 +980,7 @@ html_header() {
           fname_prefix="mx-$URI"
      else
           ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) && parse_hn_port "${URI}"    # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
-          fname_prefix="$NODE"_"$PORT"
+          fname_prefix="${NODE}"_p"${PORT}"
      fi
 
      if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
@@ -10774,7 +10774,7 @@ file output options (can also be preset via environment variables):
      --htmlfile <htmlfile>         additional output as HTML to the specifed file
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
-     --append                      if <csvfile> or <jsonfile> exists rather append then overwrite
+     --append                      if <logfile>, <csvfile> or <jsonfile> exists rather append then overwrite
 
 
 Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
@@ -11056,14 +11056,14 @@ parse_hn_port() {
 
      NODE="$1"
      # strip "https" and trailing urlpath supposed it was supplied additionally
-     echo "$NODE" | grep -q 'https://' && NODE=$(echo "$NODE" | sed -e 's/^https\:\/\///')
+     grep -q 'https://' <<< "$NODE" && NODE=$(sed -e 's/^https\:\/\///' <<< "$NODE")
 
      # strip trailing urlpath
-     NODE=$(echo "$NODE" | sed -e 's/\/.*$//')
+     NODE=$(sed -e 's/\/.*$//' <<< "$NODE")
 
      # if there's a trailing ':' probably a starttls/application protocol was specified
-     if grep -q ':$' <<< $NODE; then
-          if grep -wq http <<< $NODE; then
+     if grep -q ':$' <<< "$NODE"; then
+          if grep -wq http <<< "$NODE"; then
                fatal "\"http\" is not what you meant probably" 1
           else
                fatal "\"$1\" is not a valid URI" 1
@@ -11081,17 +11081,17 @@ parse_hn_port() {
           NODE=$(sed -e 's/\[//' -e 's/\]//' <<< "$NODE")
      else
           # determine v4 port, supposed it was supplied additionally
-          echo "$NODE" | grep -q ':' && \
-               PORT=$(echo "$NODE" | sed 's/^.*\://') && NODE=$(echo "$NODE" | sed 's/\:.*$//')
+          grep -q ':' <<< "$NODE" && \
+               PORT=$(sed 's/^.*\://' <<< "$NODE") && NODE=$(sed 's/\:.*$//' <<< "$NODE")
      fi
      debugme echo $NODE:$PORT
      SNI="-servername $NODE"
 
-     URL_PATH=$(echo "$1" | sed 's/https:\/\///' | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
-     URL_PATH=$(echo "$URL_PATH" | sed 's/\/\//\//g')       # we rather want // -> /
+     URL_PATH=$(sed 's/https:\/\///' <<< "$1" | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
+     URL_PATH=$(sed 's/\/\//\//g' <<< "$URL_PATH")          # we rather want // -> /
      [[ -z "$URL_PATH" ]] && URL_PATH="/"
      debugme echo $URL_PATH
-     return 0       # NODE, URL_PATH, PORT is set now
+     return 0                                               # NODE, URL_PATH, PORT is set now
 }
 
 
@@ -11100,7 +11100,7 @@ parse_hn_port() {
 prepare_logging() {
      local fname_prefix="$1"
 
-     [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"_"$PORT"
+     [[ -z "$fname_prefix" ]] && fname_prefix="${NODE}"_p"${PORT}"
 
      if "$do_logging"; then
           if [[ -z "$LOGFILE" ]]; then
@@ -11111,6 +11111,7 @@ prepare_logging() {
           else
                : # just for clarity: a log file was specified, no need to do anything else
           fi
+          [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
           >$LOGFILE
           tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
           tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
@@ -11138,7 +11139,6 @@ prepare_logging() {
           fi
      fi
      fileout_header           # write out any CSV/JSON header line
-
      return 0
 }
 
@@ -11896,7 +11896,7 @@ parse_opt_equal_sign() {
           echo ${1#*=}
           return 1  # = means we don't need to shift args!
      else
-          echo $2
+          echo "$2"
           return 0  # we need to shift
      fi
 }
@@ -12436,6 +12436,7 @@ if $do_display_only; then
 fi
 
 if $do_mass_testing; then
+     prepare_logging
      run_mass_testing
      exit $?
 fi
