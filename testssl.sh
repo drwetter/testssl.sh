@@ -7933,7 +7933,7 @@ parse_hn_port() {
      echo "$NODE" | grep -q 'https://' && NODE=$(echo "$NODE" | sed -e 's/^https\:\/\///')
 
      # strip trailing urlpath
-     NODE=$(echo "$NODE" | sed -e 's/\/.*$//')
+     NODE=$(sed -e 's/\/.*$//' <<< "$NODE")
 
      # if there's a trailing ':' probably a starttls/application protocol was specified
      if grep -q ':$' <<< $NODE ; then
@@ -7941,7 +7941,7 @@ parse_hn_port() {
      fi
 
      # was the address supplied like [AA:BB:CC::]:port ?
-     if echo "$NODE" | grep -q ']' ; then
+     if grep -q ']' <<< "$NODE" ; then
           tmp_port=$(printf "$NODE" | sed 's/\[.*\]//' | sed 's/://')
           # determine v6 port, supposed it was supplied additionally
           if [[ -n "$tmp_port" ]]; then
@@ -7951,17 +7951,17 @@ parse_hn_port() {
           NODE=$(sed -e 's/\[//' -e 's/\]//' <<< "$NODE")
      else
           # determine v4 port, supposed it was supplied additionally
-          echo "$NODE" | grep -q ':' && \
-               PORT=$(echo "$NODE" | sed 's/^.*\://') && NODE=$(echo "$NODE" | sed 's/\:.*$//')
+          grep -q ':' <<< "$NODE" && \
+               PORT=$(sed 's/^.*\://' <<< "$NODE") && NODE=$(sed 's/\:.*$//' <<< "$NODE")
      fi
      debugme echo $NODE:$PORT
      SNI="-servername $NODE"
 
-     URL_PATH=$(echo "$1" | sed 's/https:\/\///' | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
-     URL_PATH=$(echo "$URL_PATH" | sed 's/\/\//\//g')       # we rather want // -> /
+     URL_PATH=$(sed 's/https:\/\///' <<< "$1" | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')     # remove protocol and node part and port
+     URL_PATH=$(sed 's/\/\//\//g' <<< "$URL_PATH")          # we rather want // -> /
      [[ -z "$URL_PATH" ]] && URL_PATH="/"
      debugme echo $URL_PATH
-     return 0       # NODE, URL_PATH, PORT is set now
+     return 0                                               # NODE, URL_PATH, PORT is set now
 }
 
 
@@ -8660,7 +8660,7 @@ parse_opt_equal_sign() {
           echo ${1#*=}
           return 1  # = means we don't need to shift args!
      else
-          echo $2
+          echo "$2"
           return 0  # we need to shift
      fi
 }
@@ -9099,6 +9099,7 @@ if $do_display_only; then
 fi
 
 if $do_mass_testing; then
+     prepare_logging
      run_mass_testing
      exit $?
 fi
@@ -9145,4 +9146,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.571 2017/02/24 15:30:28 dirkw Exp $
+#  $Id: testssl.sh,v 1.572 2017/03/23 15:19:22 dirkw Exp $
