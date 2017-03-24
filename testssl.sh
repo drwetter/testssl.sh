@@ -2368,7 +2368,7 @@ std_cipherlists() {
                     ;;
           esac
           tmpfile_handle $FUNCNAME.$debugname.txt
-          [[ $DEBUG -ge 1 ]] && out " -- $1" || outln  #FIXME: should be in standard output at some time
+          [[ $DEBUG -ge 1 ]] && outln " -- $1" || outln  #FIXME: should be in standard output at some time
      else
           singlespaces=$(sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g' <<< "$2")
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
@@ -2378,8 +2378,6 @@ std_cipherlists() {
           fi
           fileout "std_$4" "WARN" "Cipher $2 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
-     # we need 1 x lf in those cases:
-     debugme echo
 }
 
 
