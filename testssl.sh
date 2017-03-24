@@ -7111,7 +7111,12 @@ get_server_certificate() {
                fi
           fi
           cp $TEMPDIR/$NODEIP.parse_tls_serverhello.txt $TMPFILE
-          extract_new_tls_extensions $TMPFILE
+
+          # When "$2" is empty, get_server_certificate() is being called with SNI="".
+          # In case the extensions returned by the server differ depending on wheter
+          # SNI is provided or not, don't collect extensions when SNI="" (unless
+          # no DNS name was provided at the command line).
+          [[ -z "$2" ]] && extract_new_tls_extensions $TMPFILE
      else
           ciphers_to_test="$1"
           if [[ "$1" =~ aRSA ]] && [[ "$1" =~ eRSA ]]; then
@@ -7131,11 +7136,6 @@ get_server_certificate() {
           [[ "${ciphers_to_test:0:1}" == : ]] &&  ciphers_to_test="${ciphers_to_test:1}"
           [[ $(count_ciphers $(actually_supported_ciphers "$ciphers_to_test")) -ge 1 ]] || return 1
 
-          # this all needs to be moved into determine_tls_extensions()
-          >$TEMPDIR/tlsext.txt
-          # first shot w/o any protocol, then in turn we collect all extensions
-          $OPENSSL s_client $STARTTLS $BUGS -cipher $ciphers_to_test -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
-          sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE >$TEMPDIR/tlsext.txt
           for proto in $protocols_to_try; do
                [[ 1 -eq $(has_server_protocol $proto) ]] && continue
                [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && continue
@@ -7143,7 +7143,6 @@ get_server_certificate() {
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $ciphers_to_test -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status -msg") </dev/null 2>$ERRFILE >$TMPFILE
                if sclient_connect_successful $? $TMPFILE; then
                     success=0
-                    grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
                     break               # now we have the certificate
                fi
           done                          # this loop is needed for IIS6 and others which have a handshake size limitations
@@ -7158,7 +7157,6 @@ get_server_certificate() {
                     tmpfile_handle ${FUNCNAME[0]}.txt
                     return 7  # this is ugly, I know
                else
-                    grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
                     GOST_STATUS_PROBLEM=true
                fi
           fi
@@ -7168,7 +7166,12 @@ get_server_certificate() {
                "tls1") DETECTED_TLS_VERSION="0301" ;;
                "ssl3") DETECTED_TLS_VERSION="0300" ;;
           esac
-          extract_new_tls_extensions $TMPFILE
+          # When "$2" is empty, get_server_certificate() is being called with SNI="".
+          # In case the extensions returned by the server differ depending on wheter
+          # SNI is provided or not, don't collect extensions when SNI="" (unless
+          # no DNS name was provided at the command line).
+          [[ -z "$2" ]] && extract_new_tls_extensions $TMPFILE
+
           extract_certificates "$proto"
           extract_stapled_ocsp
           success=$?
