@@ -313,7 +313,7 @@ readonly SSLv2_CLIENT_HELLO="
 
 
 ###### output functions ######
-# a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
+# a little bit of sanitizing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
 out(){ 
 #     if [[ "$BASH_VERSINFO" -eq 4 ]]; then
           printf -- "%b" "${1//%/%%}"
@@ -1106,7 +1106,7 @@ run_hpkp() {
           hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
 
           # Get keys/hashes from intermediate certificates
-          $OPENSSL s_client -showcerts $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+          $OPENSSL s_client $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
           # Place the server's certificate in $HOSTCERT and any intermediate
           # certificates that were provided in $TEMPDIR/intermediatecerts.pem
           # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
@@ -2118,29 +2118,32 @@ create_client_simulation_tls_clienthello() {
      len_extensions=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
      offset=$offset+4
      for (( 1; offset < tls_handshake_ascii_len; 1 )); do
-         extension_type="${tls_handshake_ascii:$offset:4}"
-         offset=$offset+4
-         len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
+          extension_type="${tls_handshake_ascii:$offset:4}"
+          offset=$offset+4
+          len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
 
-         if [[ "$extension_type" != "0000" ]]; then
-             # The extension will just be copied into the revised ClientHello
-             sni_extension_found=true
-             offset=$offset-4
-             len=$len_extension+8
-             tls_extensions+="${tls_handshake_ascii:$offset:$len}"
-             offset=$offset+$len
-         elif [[ -n "$SNI" ]]; then
-             # Create a server name extension that corresponds to $SNI
-             len_servername=${#NODE}
-             hexdump_format_str="$len_servername/1 \"%02x\""
-             servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}")
-             # convert lengths we need to fill in from dec to hex:
-             len_servername_hex=$(printf "%02x\n" $len_servername)
-             len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
-             len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
-             tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
-             offset=$offset+$len_extension+4
-         fi
+          if [[ "$extension_type" != "0000" ]]; then
+               # The extension will just be copied into the revised ClientHello
+               sni_extension_found=true
+               offset=$offset-4
+               len=$len_extension+8
+               tls_extensions+="${tls_handshake_ascii:$offset:$len}"
+               offset=$offset+$len
+          else
+               sni_extension_found=true
+               if [[ -n "$SNI" ]]; then
+                    # Create a server name extension that corresponds to $SNI
+                    len_servername=${#NODE}
+                    hexdump_format_str="$len_servername/1 \"%02x\""
+                    servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}")
+                    # convert lengths we need to fill in from dec to hex:
+                    len_servername_hex=$(printf "%02x\n" $len_servername)
+                    len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
+                    len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
+                    tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
+                    offset=$offset+$len_extension+4
+               fi
+          fi
      done
 
      if ! $sni_extension_found; then
@@ -4187,7 +4190,7 @@ determine_tls_extensions() {
 
      >$TEMPDIR/tlsext.txt
      # first shot w/o any protocol, then in turn we collect all extensions (if it succeeds)
-     $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
+     $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
      sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE  >$TEMPDIR/tlsext.txt
      for proto in $protocols_to_try; do
 # alpn: echo | openssl s_client -connect google.com:443 -tlsextdebug -alpn h2-14 -servername google.com  <-- suport needs to be checked b4 -- see also: ssl/t1_trce.c
