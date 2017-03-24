@@ -3590,7 +3590,7 @@ run_client_simulation() {
      debugme tmln_out
      for name in "${short[@]}"; do
           #FIXME: printf formatting would look better, especially if we want a wide option here
-          out " ${names[i]}   "
+          out " $(printf -- "%-33s" "${names[i]}")"
           if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
                client_simulation_sockets "${handshakebytes[i]}"
                sclient_success=$?
