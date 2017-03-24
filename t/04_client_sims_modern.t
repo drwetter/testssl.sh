@@ -18,13 +18,13 @@ my $socket = json('tmp.json');
 like($socketout, qr/Running client simulations via sockets/, "Tests ran via sockets"); $tests++;
 
 my $i = 0;
-foreach my $o ( @$openssl ) {
-	my $s = $$socket[$i];
-	if ( $o->{id} =~ /^client_/ ) {
-		pass("Comparing $o->{id}"); $tests++;
-		cmp_ok($o->{id}, "eq", $s->{id}, "Id's match"); $tests++;
-		cmp_ok($o->{severity}, "eq", $s->{severity}, "Severities match"); $tests++;
-		cmp_ok($o->{finding}, "eq", $s->{finding}, "Findings match"); $tests++;
+foreach my $s ( @$socket ) {
+	my $o = $$openssl[$i+1];
+	if ( $s->{id} =~ /^client_/ ) {
+		pass("Comparing $s->{id}"); $tests++;
+		cmp_ok($s->{id}, "eq", $o->{id}, "Id's match"); $tests++;
+		cmp_ok($s->{severity}, "eq", $o->{severity}, "Severities match"); $tests++;
+		cmp_ok($s->{finding}, "eq", $o->{finding}, "Findings match"); $tests++;
 	}
 	$i++;
 }
