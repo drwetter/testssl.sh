@@ -313,7 +313,7 @@ readonly SSLv2_CLIENT_HELLO="
 
 
 ###### output functions ######
-# a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
+# a little bit of sanitizing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
 out(){ 
 #     if [[ "$BASH_VERSINFO" -eq 4 ]]; then
           printf -- "%b" "${1//%/%%}"
