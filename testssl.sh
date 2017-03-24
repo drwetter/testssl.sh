@@ -2118,29 +2118,32 @@ create_client_simulation_tls_clienthello() {
      len_extensions=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
      offset=$offset+4
      for (( 1; offset < tls_handshake_ascii_len; 1 )); do
-         extension_type="${tls_handshake_ascii:$offset:4}"
-         offset=$offset+4
-         len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
+          extension_type="${tls_handshake_ascii:$offset:4}"
+          offset=$offset+4
+          len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
 
-         if [[ "$extension_type" != "0000" ]]; then
-             # The extension will just be copied into the revised ClientHello
-             sni_extension_found=true
-             offset=$offset-4
-             len=$len_extension+8
-             tls_extensions+="${tls_handshake_ascii:$offset:$len}"
-             offset=$offset+$len
-         elif [[ -n "$SNI" ]]; then
-             # Create a server name extension that corresponds to $SNI
-             len_servername=${#NODE}
-             hexdump_format_str="$len_servername/1 \"%02x\""
-             servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}")
-             # convert lengths we need to fill in from dec to hex:
-             len_servername_hex=$(printf "%02x\n" $len_servername)
-             len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
-             len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
-             tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
-             offset=$offset+$len_extension+4
-         fi
+          if [[ "$extension_type" != "0000" ]]; then
+               # The extension will just be copied into the revised ClientHello
+               sni_extension_found=true
+               offset=$offset-4
+               len=$len_extension+8
+               tls_extensions+="${tls_handshake_ascii:$offset:$len}"
+               offset=$offset+$len
+          else
+               sni_extension_found=true
+               if [[ -n "$SNI" ]]; then
+                    # Create a server name extension that corresponds to $SNI
+                    len_servername=${#NODE}
+                    hexdump_format_str="$len_servername/1 \"%02x\""
+                    servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}")
+                    # convert lengths we need to fill in from dec to hex:
+                    len_servername_hex=$(printf "%02x\n" $len_servername)
+                    len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
+                    len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
+                    tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
+                    offset=$offset+$len_extension+4
+               fi
+          fi
      done
 
      if ! $sni_extension_found; then
