@@ -3790,23 +3790,7 @@ run_server_preference() {
                     i=$((i+1))
                done
 
-               [[ -n "$PROXY" ]] && arg="   SPDY/NPN is"
                [[ -n "$STARTTLS" ]] && arg="    "
-               if spdy_pre " $arg" ; then                                       # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
-                                                                                # ALPN needs also some lines here
-                    $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg "$NPN_PROTOs" $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    if sclient_connect_successful $? $TMPFILE; then
-                         proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
-                         if [[ -z "${proto[i]}" ]]; then
-                              cipher[i]=""
-                         else
-                              cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-                              [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
-                         fi
-                    fi
-               else
-                    outln     # we miss for STARTTLS 1x LF otherwise
-               fi
 
                for i in 1 2 3 4 5 6; do
                     if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
@@ -3965,32 +3949,6 @@ cipher_pref_check() {
           fi
           [[ -z "$order" ]] || fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
      done
-     outln
-
-     if ! spdy_pre "     SPDY/NPN: "; then       # is NPN/SPDY supported and is this no STARTTLS?
-          outln
-     else
-          npn_protos=$($OPENSSL s_client $BUGS -nextprotoneg \"\" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
-          for p in $npn_protos; do
-               order=""
-               $OPENSSL s_client $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-               printf "    %-10s %s " "$p:" "$cipher"
-               tested_cipher="-"$cipher
-               order="$cipher"
-               while true; do
-                    $OPENSSL s_client -cipher "ALL:$tested_cipher" $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    sclient_connect_successful $? $TMPFILE || break
-                    cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-                    out "$cipher "
-                    tested_cipher="$tested_cipher:-$cipher"
-                    order+=" $cipher"
-               done
-               outln
-               [[ -n $order ]] && fileout "order_spdy_$p" "INFO" "Default cipher order for SPDY protocol $p: $order"
-          done
-     fi
-
      outln
      tmpfile_handle $FUNCNAME.txt
      return 0
