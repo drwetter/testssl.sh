@@ -2387,9 +2387,9 @@ std_cipherlists() {
 socksend() {
      # the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
      if "$HAS_SED_E"; then
-          data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      else
-          data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      fi
      [[ $DEBUG -ge 4 ]] && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
@@ -3463,7 +3463,6 @@ client_simulation_sockets() {
      sleep $USLEEP_SND
 
      sockread_serverhello 32768
-     TLS_NOW=$(LC_ALL=C date "+%s")
 
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
@@ -6915,10 +6914,9 @@ close_socket(){
 
 
 # first: helper function for protocol checks
+# arg1: formatted string here in the code
 code2network() {
-     # arg1: formatted string here in the code
      NW_STR=$(sed -e 's/,/\\\x/g' <<< "$1" | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
-     #TODO: just echo, no additional global var
 }
 
 len2twobytes() {
@@ -7295,7 +7293,7 @@ parse_sslv2_serverhello() {
           let offset=26+$certificate_len
           nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
           for (( i=0 ; i<nr_ciphers_detected; i++ )); do
-               echo "Supported cipher: x$(echo ${v2_hello_ascii:offset:6} |  tr 'A-Z' 'a-z')" >> $TMPFILE
+               echo "Supported cipher: x$(tolower "${v2_hello_ascii:offset:6}")" >> $TMPFILE
                let offset=$offset+6
           done
           echo "======================================" >> $TMPFILE
@@ -8260,7 +8258,7 @@ socksend_tls_clienthello() {
      local extension_session_ticket extension_next_protocol extension_padding
      local extension_supported_groups="" extension_supported_point_formats=""
      local extra_extensions extra_extensions_list=""
-     local offer_compression=false compression_metods
+     local offer_compression=false compression_methods
 
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
      [[ "$4" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
@@ -8360,7 +8358,7 @@ socksend_tls_clienthello() {
           # Each extension should appear in the ClientHello at most once. So,
           # find out what extensions were provided as an argument and only use
           # the provided values for those extensions.
-          extra_extensions="$(echo "$3" | tr 'A-Z' 'a-z')"
+          extra_extensions="$(tolower "$3")"
           code2network "$extra_extensions"
           len_all=${#extra_extensions}
           for (( i=0; i < len_all; i=i+16+4*0x$len_extension_hex )); do
@@ -8475,9 +8473,9 @@ socksend_tls_clienthello() {
 
      if "$offer_compression"; then
           # See http://www.iana.org/assignments/comp-meth-ids/comp-meth-ids.xhtml#comp-meth-ids-2
-          compression_metods="03,01,40,00" # Offer NULL, DEFLATE, and LZS compression
+          compression_methods="03,01,40,00" # Offer NULL, DEFLATE, and LZS compression
      else
-          compression_metods="01,00" # Only offer NULL compression (0x00)
+          compression_methods="01,00" # Only offer NULL compression (0x00)
      fi
 
      TLS_CLIENT_HELLO="
@@ -8496,7 +8494,7 @@ socksend_tls_clienthello() {
      ,00                      # Session ID length
      ,$len_ciph_suites_word   # Cipher suites length
      ,$cipher_suites
-     ,$compression_metods"
+     ,$compression_methods"
 
      fd_socket 5 || return 6
 
