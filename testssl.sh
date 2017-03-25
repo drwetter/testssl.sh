@@ -4516,27 +4516,7 @@ run_server_preference() {
                     i=$(($i + 1))
                done
 
-               [[ -n "$PROXY" ]] && arg="   SPDY/NPN is"
                [[ -n "$STARTTLS" ]] && arg="    "
-               if spdy_pre " $arg" ; then                                       # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
-                                                                                # ALPN needs also some lines here
-                    $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg "$NPN_PROTOs" $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    if sclient_connect_successful $? $TMPFILE; then
-                         proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
-                         if [[ -z "${proto[i]}" ]]; then
-                              cipher[i]=""
-                         else
-                              cipher[i]=$(get_cipher $TMPFILE)
-                              if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ -n "${cipher[i]}" ]]; then
-                                   cipher[i]="$(openssl2rfc "${cipher[i]}")"
-                                   [[ -z "${cipher[i]}" ]] && cipher[i]=$(get_cipher $TMPFILE)
-                              fi
-                              [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
-                         fi
-                    fi
-               else
-                    outln     # we miss for STARTTLS 1x LF otherwise
-               fi
 
                for i in 1 2 3 4 5 6; do
                     if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
@@ -4833,44 +4813,6 @@ cipher_pref_check() {
           fi
      done
      outln
-
-     if ! spdy_pre "     SPDY/NPN: "; then       # is NPN/SPDY supported and is this no STARTTLS?
-          outln
-     else
-          npn_protos=$($OPENSSL s_client $BUGS -nextprotoneg \"\" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
-          for p in $npn_protos; do
-               order=""
-               $OPENSSL s_client $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-               out "$(printf "    %-10s " "$p:")"
-               tested_cipher="-"$cipher
-               order="$cipher "
-               if ! "$FAST"; then
-                    while true; do
-                         $OPENSSL s_client -cipher "ALL:$tested_cipher" $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                         sclient_connect_successful $? $TMPFILE || break
-                         cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-                         tested_cipher="$tested_cipher:-$cipher"
-                         order+="$cipher "
-                    done
-               fi
-               if [[ -n "$order" ]] && [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
-                    rfc_order=""
-                    while read -d " " cipher; do
-                         rfc_ciph="$(openssl2rfc "$cipher")"
-                         if [[ -n "$rfc_ciph" ]]; then
-                              rfc_order+="$rfc_ciph "
-                         else
-                              rfc_order+="$cipher "
-                         fi
-                    done <<< "$order"
-                    order="$rfc_order"
-               fi
-               out_row_aligned_max_width "$order" "               " $TERM_WIDTH out
-               outln
-               [[ -n $order ]] && fileout "order_spdy_$p" "INFO" "Default cipher order for SPDY protocol $p: $order"
-          done
-     fi
 
      outln
      tmpfile_handle $FUNCNAME.txt
