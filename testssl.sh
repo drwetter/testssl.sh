@@ -76,10 +76,23 @@
 # this missing feature! The idea is if this script can't tell something
 # for sure it speaks up so that you have clear picture.
 
-DEBUGTIME=${DEBUGTIME:-false}
 # debugging help:
-"$DEBUGTIME" && readonly PS4='|$(date "+%s.%N")\011${LINENO}>\011${FUNCNAME[0]:+${FUNCNAME[0]}(): }' || \
-                readonly PS4='|${LINENO}>\011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
+DEBUGTIME=${DEBUGTIME:-false}
+
+if grep -q xtrace <<< "$SHELLOPTS"; then
+     if "$DEBUGTIME" ; then
+          # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
+          exec 42>&2 2> >(tee /tmp/testssl-$$.log | sed -u 's/^.*$/now/' | date -f - +%s.%N >/tmp/testssl-$$.time)
+          # for pasting both togher see https://stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
+     else
+          # for some reason here it still messes up the screen
+          exec 42>&2 2>/tmp/testssl-$$.log
+          BASH_XTRACEFD=42 
+     fi
+fi
+
 
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
@@ -3471,7 +3484,7 @@ client_simulation_sockets() {
      hello_done=$?
 
      for(( 1 ; hello_done==1; 1 )); do
-          sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+          sock_reply_file2=${SOCK_REPLY_FILE}.2
           mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
 
           debugme echo "requesting more server hello data..."
@@ -3489,9 +3502,8 @@ client_simulation_sockets() {
                hello_done=0
           else
                tls_hello_ascii+="$next_packet"
-
-               sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
-               mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
+               sock_reply_file3=${SOCK_REPLY_FILE}.3
+               mv "$SOCK_REPLY_FILE" "$sock_reply_file3"    #FIXME: we moved that already
                mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
                cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
                rm "$sock_reply_file3"
@@ -3613,7 +3625,7 @@ run_client_simulation() {
                what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
                bits=$(awk -F',' '{ print $3 }' <<< $temp)
                grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
-               bits=$(tr -d ' bits' <<< $bits)
+               bits="${bits/ bits/}"
                if [[ "$what_dh" == "DH" ]]; then
                     [[ ${minDhBits[i]} -ne -1 ]] && [[ $bits -lt ${minDhBits[i]} ]] && sclient_success=1
                     [[ ${maxDhBits[i]} -ne -1 ]] && [[ $bits -gt ${maxDhBits[i]} ]] && sclient_success=1
@@ -4223,7 +4235,7 @@ read_dhbits_from_file() {
      else
           bits=$(awk -F',' '{ print $2 }' <<< $temp)
      fi
-     bits=$(tr -d ' bits' <<< $bits)
+     bits="${bits/ bits/}"
 
      if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
           curve="$what_dh"
@@ -10917,6 +10929,8 @@ cleanup () {
      outln
      "$APPEND" || fileout_footer
      html_footer
+     # debugging off, see above
+     grep -q xtrace <<< "$SHELLOPTS" && exec 2>&42 42>&-
 }
 
 fatal() {
@@ -11623,7 +11637,14 @@ display_rdns_etc() {
 }
 
 datebanner() {
-     pr_reverse "$1 $(date +%F) $(date +%T)    -->> $NODEIP:$PORT ($NODE) <<--"
+     local scan_time_f=""
+
+     if [[ "$1" =~ Done ]] ; then
+          scan_time_f="$(printf "%04ss" "$SCAN_TIME")"
+          pr_reverse "$1 $(date +%F) $(date +%T) [$scan_time_f] -->> $NODEIP:$PORT ($NODE) <<--"
+     else
+          pr_reverse "$1 $(date +%F) $(date +%T)        -->> $NODEIP:$PORT ($NODE) <<--"
+     fi
      outln "\n"
      [[ "$1" =~ Start ]] && display_rdns_etc
 }
