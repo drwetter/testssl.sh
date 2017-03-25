@@ -1663,9 +1663,9 @@ std_cipherlists() {
 socksend() {
      # the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
      if "$HAS_SED_E"; then
-          data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      else
-          data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      fi
      [[ $DEBUG -ge 4 ]] && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
@@ -2194,7 +2194,6 @@ client_simulation_sockets() {
      sleep $USLEEP_SND
 
      sockread_serverhello 32768
-     TLS_NOW=$(LC_ALL=C date "+%s")
      debugme outln "reading server hello..."
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C $SOCK_REPLY_FILE | head -6
@@ -5611,10 +5610,9 @@ close_socket(){
 
 
 # first: helper function for protocol checks
+# arg1: formatted string here in the code
 code2network() {
-     # arg1: formatted string here in the code
      NW_STR=$(sed -e 's/,/\\\x/g' <<< "$1" | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
-     #TODO: just echo, no additional global var
 }
 
 len2twobytes() {
@@ -9107,4 +9105,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.572 2017/03/23 15:19:22 dirkw Exp $
+#  $Id: testssl.sh,v 1.573 2017/03/25 12:13:56 dirkw Exp $
