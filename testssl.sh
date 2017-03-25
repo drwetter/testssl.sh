@@ -162,7 +162,7 @@ SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
-HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
+HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-10}   # we wait this long before killing the process to retrieve a service banner / http header
 readonly MAX_WAITSOCK=10                # waiting at max 10 seconds for socket reply
 readonly CCS_MAX_WAITSOCK=5             # for the two CCS payload (each)
 readonly HEARTBLEED_MAX_WAITSOCK=8      # for the heartbleed payload
