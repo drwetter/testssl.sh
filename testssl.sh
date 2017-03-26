@@ -76,9 +76,22 @@
 # this missing feature! The idea is if this script can't tell something
 # for sure it speaks up so that you have clear picture.
 
-
 # debugging help:
-readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
+DEBUGTIME=${DEBUGTIME:-false}
+
+if grep -q xtrace <<< "$SHELLOPTS"; then
+     if "$DEBUGTIME" ; then
+          # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
+          exec 42>&2 2> >(tee /tmp/testssl-$$.log | sed -u 's/^.*$/now/' | date -f - +%s.%N >/tmp/testssl-$$.time)
+          # for pasting both togher see https://stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
+     else
+          exec 42>| /tmp/testssl-$$.log
+          BASH_XTRACEFD=42
+     fi
+fi
+
 
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
@@ -190,6 +203,12 @@ HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 FNAME=${FNAME:-""}                      # file name to read commands from
 IKNOW_FNAME=false
+MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
+if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
+     MEASURE_TIME=true
+else
+     MEASURE_TIME=${MEASURE_TIME:-false}
+fi
 
 # further global vars just declared here
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
@@ -259,14 +278,16 @@ GET_REQ11=""
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
 FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
-START_TIME=0
-END_TIME=0
+START_TIME=0                            # time in epoch when the action started
+END_TIME=0                              # .. ended
+SCAN_TIME=0                             # diff of both: total scan time
+LAST_TIME=0                             # only used for performance measurements (MEASURE_TIME=true)
 
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
 HEX_CIPHER=""
 
-SERVER_COUNTER=0                             # Counter for multiple servers
+SERVER_COUNTER=0                        # Counter for multiple servers
 
 #################### SEVERITY ####################
 INFO=0
@@ -560,7 +581,7 @@ html_reserved(){
 }
 
 html_out() {
-     "$do_html" || return
+     "$do_html" || return 0
      [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "${1//%/%%}" >> "$HTMLFILE"
      # here and other printf's: a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%'. '--' and %b do the rest.
 }
@@ -786,7 +807,6 @@ strip_quote() {
 
 #################### JSON FILE FORMATING ####################
 fileout_pretty_json_header() {
-    START_TIME=$(date +%s)
     target="$NODE"
     $do_mx_all_ips && target="$URI"
 
@@ -801,9 +821,8 @@ fileout_pretty_json_header() {
 }
 
 fileout_pretty_json_footer() {
-    local scan_time=$((END_TIME - START_TIME))
     echo -e "          ],
-          \"scanTime\"  : \"$scan_time\"\n}"
+          \"scanTime\"  : \"$SCAN_TIME\"\n}"
 }
 
 fileout_json_header() {
@@ -973,7 +992,7 @@ html_header() {
           fname_prefix="mx-$URI"
      else
           ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) && parse_hn_port "${URI}"    # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
-          fname_prefix="$NODE"_"$PORT"
+          fname_prefix="${NODE}"_p"${PORT}"
      fi
 
      if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
@@ -1770,7 +1789,7 @@ run_hpkp() {
           hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
 
           # Get keys/hashes from intermediate certificates
-          $OPENSSL s_client -showcerts $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+          $OPENSSL s_client $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
           # Place the server's certificate in $HOSTCERT and any intermediate
           # certificates that were provided in $TEMPDIR/intermediatecerts.pem
           # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
@@ -2361,7 +2380,7 @@ std_cipherlists() {
                     ;;
           esac
           tmpfile_handle $FUNCNAME.$debugname.txt
-          [[ $DEBUG -ge 1 ]] && out " -- $1" || outln  #FIXME: should be in standard output at some time
+          [[ $DEBUG -ge 1 ]] && outln " -- $1" || outln  #FIXME: should be in standard output at some time
      else
           singlespaces=$(sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g' <<< "$2")
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
@@ -2371,8 +2390,6 @@ std_cipherlists() {
           fi
           fileout "std_$4" "WARN" "Cipher $2 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
-     # we need 1 x lf in those cases:
-     debugme echo
 }
 
 
@@ -2382,9 +2399,9 @@ std_cipherlists() {
 socksend() {
      # the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
      if "$HAS_SED_E"; then
-          data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      else
-          data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      fi
      [[ $DEBUG -ge 4 ]] && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
@@ -3381,29 +3398,31 @@ create_client_simulation_tls_clienthello() {
      len_extensions=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
      offset=$offset+4
      for (( 1; offset < tls_handshake_ascii_len; 1 )); do
-         extension_type="${tls_handshake_ascii:$offset:4}"
-         offset=$offset+4
-         len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
+          extension_type="${tls_handshake_ascii:$offset:4}"
+          offset=$offset+4
+          len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
 
-         if [[ "$extension_type" != "0000" ]]; then
+          if [[ "$extension_type" != "0000" ]]; then
              # The extension will just be copied into the revised ClientHello
-             sni_extension_found=true
              offset=$offset-4
              len=$len_extension+8
              tls_extensions+="${tls_handshake_ascii:$offset:$len}"
              offset=$offset+$len
-         elif [[ -n "$SNI" ]]; then
-             # Create a server name extension that corresponds to $SNI
-             len_servername=${#NODE}
-             hexdump_format_str="$len_servername/1 \"%02x\""
-             servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}")
-             # convert lengths we need to fill in from dec to hex:
-             len_servername_hex=$(printf "%02x\n" $len_servername)
-             len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
-             len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
-             tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
-             offset=$offset+$len_extension+4
-         fi
+          else
+               sni_extension_found=true
+               if [[ -n "$SNI" ]]; then
+                    # Create a server name extension that corresponds to $SNI
+                    len_servername=${#NODE}
+                    hexdump_format_str="$len_servername/1 \"%02x\""
+                    servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}")
+                    # convert lengths we need to fill in from dec to hex:
+                    len_servername_hex=$(printf "%02x\n" $len_servername)
+                    len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
+                    len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
+                    tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
+                    offset=$offset+$len_extension+4
+               fi
+          fi
      done
 
      if ! $sni_extension_found; then
@@ -3456,7 +3475,6 @@ client_simulation_sockets() {
      sleep $USLEEP_SND
 
      sockread_serverhello 32768
-     TLS_NOW=$(LC_ALL=C date "+%s")
 
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
@@ -3465,7 +3483,7 @@ client_simulation_sockets() {
      hello_done=$?
 
      for(( 1 ; hello_done==1; 1 )); do
-          sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+          sock_reply_file2=${SOCK_REPLY_FILE}.2
           mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
 
           debugme echo "requesting more server hello data..."
@@ -3483,9 +3501,8 @@ client_simulation_sockets() {
                hello_done=0
           else
                tls_hello_ascii+="$next_packet"
-
-               sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
-               mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
+               sock_reply_file3=${SOCK_REPLY_FILE}.3
+               mv "$SOCK_REPLY_FILE" "$sock_reply_file3"    #FIXME: we moved that already
                mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
                cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
                rm "$sock_reply_file3"
@@ -3583,7 +3600,7 @@ run_client_simulation() {
      debugme tmln_out
      for name in "${short[@]}"; do
           #FIXME: printf formatting would look better, especially if we want a wide option here
-          out " ${names[i]}   "
+          out " $(printf -- "%-33s" "${names[i]}")"
           if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
                client_simulation_sockets "${handshakebytes[i]}"
                sclient_success=$?
@@ -3607,7 +3624,7 @@ run_client_simulation() {
                what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
                bits=$(awk -F',' '{ print $3 }' <<< $temp)
                grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
-               bits=$(tr -d ' bits' <<< $bits)
+               bits="${bits/ bits/}"
                if [[ "$what_dh" == "DH" ]]; then
                     [[ ${minDhBits[i]} -ne -1 ]] && [[ $bits -lt ${minDhBits[i]} ]] && sclient_success=1
                     [[ ${maxDhBits[i]} -ne -1 ]] && [[ $bits -gt ${maxDhBits[i]} ]] && sclient_success=1
@@ -4217,7 +4234,7 @@ read_dhbits_from_file() {
      else
           bits=$(awk -F',' '{ print $2 }' <<< $temp)
      fi
-     bits=$(tr -d ' bits' <<< $bits)
+     bits="${bits/ bits/}"
 
      if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
           curve="$what_dh"
@@ -4507,27 +4524,7 @@ run_server_preference() {
                     i=$(($i + 1))
                done
 
-               [[ -n "$PROXY" ]] && arg="   SPDY/NPN is"
                [[ -n "$STARTTLS" ]] && arg="    "
-               if spdy_pre " $arg" ; then                                       # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
-                                                                                # ALPN needs also some lines here
-                    $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg "$NPN_PROTOs" $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    if sclient_connect_successful $? $TMPFILE; then
-                         proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
-                         if [[ -z "${proto[i]}" ]]; then
-                              cipher[i]=""
-                         else
-                              cipher[i]=$(get_cipher $TMPFILE)
-                              if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ -n "${cipher[i]}" ]]; then
-                                   cipher[i]="$(openssl2rfc "${cipher[i]}")"
-                                   [[ -z "${cipher[i]}" ]] && cipher[i]=$(get_cipher $TMPFILE)
-                              fi
-                              [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
-                         fi
-                    fi
-               else
-                    outln     # we miss for STARTTLS 1x LF otherwise
-               fi
 
                for i in 1 2 3 4 5 6; do
                     if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
@@ -4825,44 +4822,6 @@ cipher_pref_check() {
      done
      outln
 
-     if ! spdy_pre "     SPDY/NPN: "; then       # is NPN/SPDY supported and is this no STARTTLS?
-          outln
-     else
-          npn_protos=$($OPENSSL s_client $BUGS -nextprotoneg \"\" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
-          for p in $npn_protos; do
-               order=""
-               $OPENSSL s_client $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-               out "$(printf "    %-10s " "$p:")"
-               tested_cipher="-"$cipher
-               order="$cipher "
-               if ! "$FAST"; then
-                    while true; do
-                         $OPENSSL s_client -cipher "ALL:$tested_cipher" $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                         sclient_connect_successful $? $TMPFILE || break
-                         cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-                         tested_cipher="$tested_cipher:-$cipher"
-                         order+="$cipher "
-                    done
-               fi
-               if [[ -n "$order" ]] && [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
-                    rfc_order=""
-                    while read -d " " cipher; do
-                         rfc_ciph="$(openssl2rfc "$cipher")"
-                         if [[ -n "$rfc_ciph" ]]; then
-                              rfc_order+="$rfc_ciph "
-                         else
-                              rfc_order+="$cipher "
-                         fi
-                    done <<< "$order"
-                    order="$rfc_order"
-               fi
-               out_row_aligned_max_width "$order" "               " $TERM_WIDTH out
-               outln
-               [[ -n $order ]] && fileout "order_spdy_$p" "INFO" "Default cipher order for SPDY protocol $p: $order"
-          done
-     fi
-
      outln
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -5068,6 +5027,30 @@ sclient_connect_successful() {
      return 1
 }
 
+extract_new_tls_extensions() {
+     local tls_extensions
+
+     # this is not beautiful (grep+sed)
+     # but maybe we should just get the ids and do a private matching, according to
+     # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
+     tls_extensions=$(grep -a 'TLS server extension ' "$1" | \
+          sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
+              -e 's/,.*$/,/g' -e 's/),$/\"/g' \
+              -e 's/elliptic curves\/#10/supported_groups\/#10/g')
+     tls_extensions=$(echo $tls_extensions)       # into one line
+
+     if [[ -n "$tls_extensions" ]]; then
+          # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
+          while read -d "\"" -r line; do
+               if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
+#FIXME: This is a string of quoted strings, so this seems to determine the output format already. Better e.g. would be an array         
+                    TLS_EXTENSIONS+=" \"${line}\""
+               fi
+          done <<<$tls_extensions
+          [[ "${TLS_EXTENSIONS:0:1}" == " " ]] && TLS_EXTENSIONS="${TLS_EXTENSIONS:1}"
+     fi
+}
+
 # Note that since, at the moment, this function is only called by run_server_defaults()
 # and run_heartbleed(), this function does not look for the status request or NPN
 # extensions. For run_heartbleed(), only the heartbeat extension needs to be detected.
@@ -5110,7 +5093,7 @@ determine_tls_extensions() {
                success=$?
           fi
           [[ $success -eq 2 ]] && success=0
-          [[ $success -eq 0 ]] && tls_extensions="$(grep -a 'TLS Extensions: ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/TLS Extensions: //' )"
+          [[ $success -eq 0 ]] && extract_new_tls_extensions "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
           if [[ -r "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ]]; then
                cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
                tmpfile_handle $FUNCNAME.txt
@@ -5137,23 +5120,8 @@ determine_tls_extensions() {
                sclient_connect_successful $? $TMPFILE
                success=$?
           fi
-          if [[ $success -eq 0 ]]; then
-               tls_extensions=$(grep -a 'TLS server extension ' $TMPFILE | \
-                    sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
-                        -e 's/,.*$/,/g' -e 's/),$/\"/g' \
-                        -e 's/elliptic curves\/#10/supported_groups\/#10/g')
-               tls_extensions=$(echo $tls_extensions)       # into one line
-          fi
+          [[ $success -eq 0 ]] && extract_new_tls_extensions $TMPFILE
           tmpfile_handle $FUNCNAME.txt
-     fi
-     if [[ -n "$tls_extensions" ]]; then
-          # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
-          while read -d "\"" -r line; do
-               if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
-                    TLS_EXTENSIONS+=" \"${line}\""
-               fi
-          done <<<$tls_extensions
-          [[ "${TLS_EXTENSIONS:0:1}" == " " ]] && TLS_EXTENSIONS="${TLS_EXTENSIONS:1}"
      fi
      return $success
 }
@@ -5163,7 +5131,7 @@ determine_tls_extensions() {
 get_server_certificate() {
      local protocols_to_try proto addcmd
      local success
-     local npn_params="" tls_extensions line
+     local npn_params="" line
      local savedir
      local nrsaved
 
@@ -5212,7 +5180,7 @@ get_server_certificate() {
      # this all needs to be moved into determine_tls_extensions()
      >$TEMPDIR/tlsext.txt
      # first shot w/o any protocol, then in turn we collect all extensions
-     $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
+     $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
      sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE >$TEMPDIR/tlsext.txt
      for proto in $protocols_to_try; do
           # we could know here which protcols are supported
@@ -5239,25 +5207,7 @@ get_server_certificate() {
                GOST_STATUS_PROBLEM=true
           fi
      fi
-     #tls_extensions=$(awk -F'"' '/TLS server extension / { printf "\""$2"\" " }' $TMPFILE)
-     #
-     # this is not beautiful (grep+sed)
-     # but maybe we should just get the ids and do a private matching, according to
-     # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
-     tls_extensions=$(grep -a 'TLS server extension ' $TEMPDIR/tlsext.txt | \
-          sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
-              -e 's/,.*$/,/g' -e 's/),$/\"/g' \
-              -e 's/elliptic curves\/#10/supported_groups\/#10/g')
-     tls_extensions=$(echo $tls_extensions)       # into one line
-
-     # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
-     while read -d "\"" -r line; do
-          if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
-#FIXME: This is a string of quoted strings, so this seems to deterime the output format already. Better e.g. would be an array
-               TLS_EXTENSIONS+=" \"${line}\""
-          fi
-     done <<<$tls_extensions
-     [[ "${TLS_EXTENSIONS:0:1}" == " " ]] && TLS_EXTENSIONS="${TLS_EXTENSIONS:1}"
+     extract_new_tls_extensions $TMPFILE
 
      # Place the server's certificate in $HOSTCERT and any intermediate
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
@@ -6975,10 +6925,9 @@ close_socket(){
 
 
 # first: helper function for protocol checks
+# arg1: formatted string here in the code
 code2network() {
-     # arg1: formatted string here in the code
      NW_STR=$(sed -e 's/,/\\\x/g' <<< "$1" | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
-     #TODO: just echo, no additional global var
 }
 
 len2twobytes() {
@@ -7355,7 +7304,7 @@ parse_sslv2_serverhello() {
           let offset=26+$certificate_len
           nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
           for (( i=0 ; i<nr_ciphers_detected; i++ )); do
-               echo "Supported cipher: x$(echo ${v2_hello_ascii:offset:6} |  tr 'A-Z' 'a-z')" >> $TMPFILE
+               echo "Supported cipher: x$(tolower "${v2_hello_ascii:offset:6}")" >> $TMPFILE
                let offset=$offset+6
           done
           echo "======================================" >> $TMPFILE
@@ -7805,23 +7754,23 @@ parse_tls_serverhello() {
                     return 1
                fi
                case $extension_type in
-                    0000) tls_extensions+=" \"server name/#0\"" ;;
-                    0001) tls_extensions+=" \"max fragment length/#1\"" ;;
-                    0002) tls_extensions+=" \"client certificate URL/#2\"" ;;
-                    0003) tls_extensions+=" \"trusted CA keys/#3\"" ;;
-                    0004) tls_extensions+=" \"truncated HMAC/#4\"" ;;
-                    0005) tls_extensions+=" \"status request/#5\"" ;;
-                    0006) tls_extensions+=" \"user mapping/#6\"" ;;
-                    0007) tls_extensions+=" \"client authz/#7\"" ;;
-                    0008) tls_extensions+=" \"server authz/#8\"" ;;
-                    0009) tls_extensions+=" \"cert type/#9\"" ;;
-                    000A) tls_extensions+=" \"supported_groups/#10\"" ;;
-                    000B) tls_extensions+=" \"EC point formats/#11\"" ;;
-                    000C) tls_extensions+=" \"SRP/#12\"" ;;
-                    000D) tls_extensions+=" \"signature algorithms/#13\"" ;;
-                    000E) tls_extensions+=" \"use SRTP/#14\"" ;;
-                    000F) tls_extensions+=" \"heartbeat/#15\"" ;;
-                    0010) tls_extensions+=" \"application layer protocol negotiation/#16\""
+                    0000) tls_extensions+="TLS server extension \"server name\" (id=0), len=$extension_len\n" ;;
+                    0001) tls_extensions+="TLS server extension \"max fragment length\" (id=1), len=$extension_len\n" ;;
+                    0002) tls_extensions+="TLS server extension \"client certificate URL\" (id=2), len=$extension_len\n" ;;
+                    0003) tls_extensions+="TLS server extension  \"trusted CA keys\" (id=3, len=$extension_len\n)" ;;
+                    0004) tls_extensions+="TLS server extension  \"truncated HMAC\" (id=4), len=$extension_len\n" ;;
+                    0005) tls_extensions+="TLS server extension  \"status request\" (id=5), len=$extension_len\n" ;;
+                    0006) tls_extensions+="TLS server extension  \"user mapping\" (id=6), len=$extension_len\n" ;;
+                    0007) tls_extensions+="TLS server extension  \"client authz\" (id=7), len=$extension_len\n" ;;
+                    0008) tls_extensions+="TLS server extension  \"server authz\" (id=8), len=$extension_len\n" ;;
+                    0009) tls_extensions+="TLS server extension  \"cert type\" (id=9), len=$extension_len\n" ;;
+                    000A) tls_extensions+="TLS server extension  \"supported_groups\" (id=10), len=$extension_len\n" ;;
+                    000B) tls_extensions+="TLS server extension \"EC point formats\" (id=11), len=$extension_len\n" ;;
+                    000C) tls_extensions+="TLS server extension  \"SRP\" (id=12), len=$extension_len\n" ;;
+                    000D) tls_extensions+="TLS server extension  \"signature algorithms\" (id=13), len=$extension_len\n" ;;
+                    000E) tls_extensions+="TLS server extension  \"use SRTP\" (id=14), len=$extension_len\n" ;;
+                    000F) tls_extensions+="TLS server extension  \"heartbeat\" (id=15), len=$extension_len\n" ;;
+                    0010) tls_extensions+="TLS server extension \"application layer protocol negotiation\" (id=16), len=$extension_len\n"
                           if [[ $extension_len -lt 4 ]]; then
                                debugme echo "Malformed application layer protocol negotiation extension."
                                return 1
@@ -7844,24 +7793,24 @@ parse_tls_serverhello() {
                           echo "" >> $TMPFILE
                           echo "===============================================================================" >> $TMPFILE
                           ;;
-                    0011) tls_extensions+=" \"certificate status version 2/#17\"" ;;
-                    0012) tls_extensions+=" \"signed certificate timestamps/#18\"" ;;
-                    0013) tls_extensions+=" \"client certificate type/#19\"" ;;
-                    0014) tls_extensions+=" \"server certificate type/#20\"" ;;
-                    0015) tls_extensions+=" \"TLS padding/#21\"" ;;
-                    0016) tls_extensions+=" \"encrypt-then-mac/#22\"" ;;
-                    0017) tls_extensions+=" \"extended master secret/#23\"" ;;
-                    0018) tls_extensions+=" \"token binding/#24\"" ;;
-                    0019) tls_extensions+=" \"cached info/#25\"" ;;
-                    0023) tls_extensions+=" \"session ticket/#35\"" ;;
-                    0028) tls_extensions+=" \"key share/#40\"" ;;
-                    0029) tls_extensions+=" \"pre-shared key/#41\"" ;;
-                    002A) tls_extensions+=" \"early data/#42\"" ;;
-                    002B) tls_extensions+=" \"supported versions/#43\"" ;;
-                    002C) tls_extensions+=" \"cookie/#44\"" ;;
-                    002D) tls_extensions+=" \"psk key exchange modes/#45\"" ;;
-                    002E) tls_extensions+=" \"ticket early data info/#46\"" ;;
-                    3374) tls_extensions+=" \"next protocol/#13172\""
+                    0011) tls_extensions+="TLS server extension  \"certificate status version 2\" (id=17), len=$extension_len\n" ;;
+                    0012) tls_extensions+="TLS server extension \"signed certificate timestamps\" (id=18), len=$extension_len\n" ;;
+                    0013) tls_extensions+="TLS server extension  \"client certificate type\" (id=19), len=$extension_len\n" ;;
+                    0014) tls_extensions+="TLS server extension  \"server certificate type\" (id=20), len=$extension_len\n" ;;
+                    0015) tls_extensions+="TLS server extension  \"TLS padding\" (id=21), len=$extension_len\n" ;;
+                    0016) tls_extensions+="TLS server extension  \"encrypt-then-mac\" (id=22), len=$extension_len\n" ;;
+                    0017) tls_extensions+="TLS server extension \"extended master secret\" (id=23), len=$extension_len\n" ;;
+                    0018) tls_extensions+="TLS server extension  \"token binding\" (id=24), len=$extension_len\n" ;;
+                    0019) tls_extensions+="TLS server extension  \"cached info\" (id=25), len=$extension_len\n" ;;
+                    0023) tls_extensions+="TLS server extension \"session ticket\" (id=35), len=$extension_len\n" ;;
+                    0028) tls_extensions+="TLS server extension  \"key share\" (id=40), len=$extension_len\n" ;;
+                    0029) tls_extensions+="TLS server extension  \"pre-shared key\" (id=41), len=$extension_len\n" ;;
+                    002A) tls_extensions+="TLS server extension  \"early data\" (id=42), len=$extension_len\n" ;;
+                    002B) tls_extensions+="TLS server extension  \"supported versions\" (id=43), len=$extension_len\n" ;;
+                    002C) tls_extensions+="TLS server extension  \"cookie\" (id=44), len=$extension_len\n" ;;
+                    002D) tls_extensions+="TLS server extension  \"psk key exchange modes\" (id=45), len=$extension_len\n" ;;
+                    002E) tls_extensions+="TLS server extension  \"ticket early data info\" (id=46), len=$extension_len\n" ;;
+                    3374) tls_extensions+="TLS server extension  \"next protocol\" (id=13172), len=$extension_len\n"
                           local -i protocol_len
                           echo -n "Protocols advertised by server: " >> $TMPFILE
                           let offset=$extns_offset+12+$i
@@ -7883,8 +7832,8 @@ parse_tls_serverhello() {
                           echo "" >> $TMPFILE
                           echo "===============================================================================" >> $TMPFILE
                           ;;
-                    FF01) tls_extensions+=" \"renegotiation info/#65281\"" ;;
-                       *) tls_extensions+=" \"unrecognized extension/#$(printf "%d\n\n" "0x$extension_type")\"" ;;
+                    FF01) tls_extensions+="TLS server extension \"renegotiation info\" (id=65281), len=$extension_len\n" ;;
+                       *) tls_extensions+="TLS server extension  \"unrecognized extension\" (id=$(printf "%d\n\n" "0x$extension_type")), len=$extension_len\n" ;;
                esac
           done
      fi
@@ -7914,7 +7863,7 @@ parse_tls_serverhello() {
           esac
           echo "===============================================================================" >> $TMPFILE
      fi
-     [[ -n "$tls_extensions" ]] && echo "TLS Extensions: ${tls_extensions:1}" >> $TMPFILE
+     [[ -n "$tls_extensions" ]] && echo -e "$tls_extensions" >> $TMPFILE
 
      if [[ $DEBUG -ge 2 ]]; then
           echo "TLS server hello message:"
@@ -7937,7 +7886,12 @@ parse_tls_serverhello() {
                esac
           fi
           if [[ -n "$tls_extensions" ]]; then
-               echo "     tls_extensions:         ${tls_extensions:1}"
+               echo -n "     tls_extensions: "
+               newline_to_spaces "$(grep -a 'TLS server extension ' $TMPFILE | \
+                    sed -e 's/TLS server extension //g' -e 's/\" (id=/\/#/g' \
+                        -e 's/,.*$/,/g' -e 's/),$/\"/g' \
+                        -e 's/elliptic curves\/#10/supported_groups\/#10/g')"
+               echo ""
                if [[ "$tls_extensions" =~ "application layer protocol negotiation" ]]; then
                     echo "     ALPN protocol:          $(grep "ALPN protocol:" "$TMPFILE" | sed 's/ALPN protocol:  //')"
                fi
@@ -8315,7 +8269,7 @@ socksend_tls_clienthello() {
      local extension_session_ticket extension_next_protocol extension_padding
      local extension_supported_groups="" extension_supported_point_formats=""
      local extra_extensions extra_extensions_list=""
-     local offer_compression=false compression_metods
+     local offer_compression=false compression_methods
 
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
      [[ "$4" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
@@ -8415,7 +8369,7 @@ socksend_tls_clienthello() {
           # Each extension should appear in the ClientHello at most once. So,
           # find out what extensions were provided as an argument and only use
           # the provided values for those extensions.
-          extra_extensions="$(echo "$3" | tr 'A-Z' 'a-z')"
+          extra_extensions="$(tolower "$3")"
           code2network "$extra_extensions"
           len_all=${#extra_extensions}
           for (( i=0; i < len_all; i=i+16+4*0x$len_extension_hex )); do
@@ -8530,9 +8484,9 @@ socksend_tls_clienthello() {
 
      if "$offer_compression"; then
           # See http://www.iana.org/assignments/comp-meth-ids/comp-meth-ids.xhtml#comp-meth-ids-2
-          compression_metods="03,01,40,00" # Offer NULL, DEFLATE, and LZS compression
+          compression_methods="03,01,40,00" # Offer NULL, DEFLATE, and LZS compression
      else
-          compression_metods="01,00" # Only offer NULL compression (0x00)
+          compression_methods="01,00" # Only offer NULL compression (0x00)
      fi
 
      TLS_CLIENT_HELLO="
@@ -8551,7 +8505,7 @@ socksend_tls_clienthello() {
      ,00                      # Session ID length
      ,$len_ciph_suites_word   # Cipher suites length
      ,$cipher_suites
-     ,$compression_metods"
+     ,$compression_methods"
 
      fd_socket 5 || return 6
 
@@ -10771,7 +10725,7 @@ file output options (can also be preset via environment variables):
      --htmlfile <htmlfile>         additional output as HTML to the specifed file
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
-     --append                      if <csvfile> or <jsonfile> exists rather append then overwrite
+     --append                      if <logfile>, <csvfile> or <jsonfile> exists rather append then overwrite
 
 
 Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
@@ -10794,7 +10748,6 @@ maketempf() {
 }
 
 prepare_debug() {
-     local hexc mac ossl_ciph ossl_supported_tls="" ossl_supported_sslv2=""
      if [[ $DEBUG -ne 0 ]]; then
           cat >$TEMPDIR/environment.txt << EOF
 
@@ -10872,6 +10825,12 @@ EOF
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
      # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
+}
+
+
+prepare_arrays() {
+     local hexc mac ossl_ciph
+     local ossl_supported_tls="" ossl_supported_sslv2=""
 
      if [[ -e $CIPHERS_BY_STRENGTH_FILE ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
@@ -10969,6 +10928,8 @@ cleanup () {
      outln
      "$APPEND" || fileout_footer
      html_footer
+     # debugging off, see above
+     grep -q xtrace <<< "$SHELLOPTS" && exec 2>&42 42>&-
 }
 
 fatal() {
@@ -11048,14 +11009,14 @@ parse_hn_port() {
 
      NODE="$1"
      # strip "https" and trailing urlpath supposed it was supplied additionally
-     echo "$NODE" | grep -q 'https://' && NODE=$(echo "$NODE" | sed -e 's/^https\:\/\///')
+     grep -q 'https://' <<< "$NODE" && NODE=$(sed -e 's/^https\:\/\///' <<< "$NODE")
 
      # strip trailing urlpath
-     NODE=$(echo "$NODE" | sed -e 's/\/.*$//')
+     NODE=$(sed -e 's/\/.*$//' <<< "$NODE")
 
      # if there's a trailing ':' probably a starttls/application protocol was specified
-     if grep -q ':$' <<< $NODE; then
-          if grep -wq http <<< $NODE; then
+     if grep -q ':$' <<< "$NODE"; then
+          if grep -wq http <<< "$NODE"; then
                fatal "\"http\" is not what you meant probably" 1
           else
                fatal "\"$1\" is not a valid URI" 1
@@ -11073,17 +11034,17 @@ parse_hn_port() {
           NODE=$(sed -e 's/\[//' -e 's/\]//' <<< "$NODE")
      else
           # determine v4 port, supposed it was supplied additionally
-          echo "$NODE" | grep -q ':' && \
-               PORT=$(echo "$NODE" | sed 's/^.*\://') && NODE=$(echo "$NODE" | sed 's/\:.*$//')
+          grep -q ':' <<< "$NODE" && \
+               PORT=$(sed 's/^.*\://' <<< "$NODE") && NODE=$(sed 's/\:.*$//' <<< "$NODE")
      fi
      debugme echo $NODE:$PORT
      SNI="-servername $NODE"
 
-     URL_PATH=$(echo "$1" | sed 's/https:\/\///' | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
-     URL_PATH=$(echo "$URL_PATH" | sed 's/\/\//\//g')       # we rather want // -> /
+     URL_PATH=$(sed 's/https:\/\///' <<< "$1" | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
+     URL_PATH=$(sed 's/\/\//\//g' <<< "$URL_PATH")          # we rather want // -> /
      [[ -z "$URL_PATH" ]] && URL_PATH="/"
      debugme echo $URL_PATH
-     return 0       # NODE, URL_PATH, PORT is set now
+     return 0                                               # NODE, URL_PATH, PORT is set now
 }
 
 
@@ -11092,7 +11053,7 @@ parse_hn_port() {
 prepare_logging() {
      local fname_prefix="$1"
 
-     [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"_"$PORT"
+     [[ -z "$fname_prefix" ]] && fname_prefix="${NODE}"_p"${PORT}"
 
      if "$do_logging"; then
           if [[ -z "$LOGFILE" ]]; then
@@ -11103,6 +11064,7 @@ prepare_logging() {
           else
                : # just for clarity: a log file was specified, no need to do anything else
           fi
+          [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
           >$LOGFILE
           tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
           tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
@@ -11130,7 +11092,6 @@ prepare_logging() {
           fi
      fi
      fileout_header           # write out any CSV/JSON header line
-
      return 0
 }
 
@@ -11675,7 +11636,14 @@ display_rdns_etc() {
 }
 
 datebanner() {
-     pr_reverse "$1 $(date +%F) $(date +%T)    -->> $NODEIP:$PORT ($NODE) <<--"
+     local scan_time_f=""
+
+     if [[ "$1" =~ Done ]] ; then
+          scan_time_f="$(printf "%04ss" "$SCAN_TIME")"           # 4 digits because of windows
+          pr_reverse "$1 $(date +%F) $(date +%T) [$scan_time_f] -->> $NODEIP:$PORT ($NODE) <<--"
+     else
+          pr_reverse "$1 $(date +%F) $(date +%T)        -->> $NODEIP:$PORT ($NODE) <<--"
+     fi
      outln "\n"
      [[ "$1" =~ Start ]] && display_rdns_etc
 }
@@ -11888,7 +11856,7 @@ parse_opt_equal_sign() {
           echo ${1#*=}
           return 1  # = means we don't need to shift args!
      else
-          echo $2
+          echo "$2"
           return 0  # we need to shift
      fi
 }
@@ -12283,42 +12251,60 @@ reset_hostdepended_vars() {
      SERVER_SIZE_LIMIT_BUG=false
 }
 
+# rough estimate, in the future we maybe want to make use of nano secs (%N)
+# note this is for performance debugging purposes (MEASURE_TIME=yes), so eye candy is not important
+time_right_align() {
+     local new_delta
+
+     "$MEASURE_TIME" || return
+     new_delta=$(( $(date +%s) - LAST_TIME ))
+     printf "%${COLUMNS}s" "$new_delta"
+     [[ -e "$MEASURE_TIME_FILE" ]] && echo "$1 : $new_delta " >> $MEASURE_TIME_FILE
+     LAST_TIME=$(( $new_delta + LAST_TIME ))
+}
 
 lets_roll() {
      local ret
      local section_number=1
+
+     if [[ "$1" == init ]]; then
+          # called once upfront to be able to measure preperation time b4 everything starts
+          START_TIME=$(date +%s)
+          LAST_TIME=$START_TIME
+          [[ -n "$MEASURE_TIME_FILE" ]] && >$MEASURE_TIME_FILE
+          return 0
+     fi
+     time_right_align initialized
 
      [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" 2
      nodeip_to_proper_ip6
      reset_hostdepended_vars
      determine_rdns
 
-     START_TIME=$(date +%s)
-
      ((SERVER_COUNTER++))
      determine_service "$1"        # any starttls service goes here
 
      $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit 0; }
      $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo "$?" ; exit 0; }
-     $do_test_just_one && test_just_one ${single_cipher}
+     $do_test_just_one && test_just_one ${single_cipher} && time_right_align
 
      # all top level functions  now following have the prefix "run_"
      fileout_section_header $section_number false && ((section_number++))
-     $do_protocols && { run_protocols; ret=$(($? + ret)); }
-     $do_spdy && { run_spdy; ret=$(($? + ret)); }
-     $do_http2 && { run_http2; ret=$(($? + ret)); }
+     $do_protocols && { run_protocols; ret=$(($? + ret)); time_right_align run_protocols; }
+     $do_spdy && { run_spdy; ret=$(($? + ret)); time_right_align run_spdy; }
+     $do_http2 && { run_http2; ret=$(($? + ret)); time_right_align run_http2; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_std_cipherlists && { run_std_cipherlists; ret=$(($? + ret)); }
+     $do_std_cipherlists && { run_std_cipherlists; ret=$(($? + ret)); time_right_align run_std_cipherlists; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_pfs && { run_pfs; ret=$(($? + ret)); }
+     $do_pfs && { run_pfs; ret=$(($? + ret)); time_right_align run_pfs; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_preference && { run_server_preference; ret=$(($? + ret)); }
+     $do_server_preference && { run_server_preference; ret=$(($? + ret)); time_right_align run_server_preference; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_defaults && { run_server_defaults; ret=$(($? + ret)); }
+     $do_server_defaults && { run_server_defaults; ret=$(($? + ret)); time_right_align run_server_defaults; }
 
      if $do_header; then
           #TODO: refactor this into functions
@@ -12333,6 +12319,7 @@ lets_roll() {
                run_cookie_flags "$URL_PATH"
                run_more_flags "$URL_PATH"
                run_rp_banner "$URL_PATH"
+               time_right_align do_header
          fi
      else
          ((section_number++))
@@ -12345,33 +12332,37 @@ lets_roll() {
      fi
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); }
-     $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); }
-     $do_renego && { run_renego; ret=$(($? + ret)); }
-     $do_crime && { run_crime; ret=$(($? + ret)); }
-     $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret)); }
-     $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); }
-     $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); }
-     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); }
-     $do_freak && { run_freak; ret=$(($? + ret)); }
-     $do_drown && { run_drown ret=$(($? + ret)); }
-     $do_logjam && { run_logjam; ret=$(($? + ret)); }
-     $do_beast && { run_beast; ret=$(($? + ret)); }
-     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); }
-     $do_rc4 && { run_rc4; ret=$(($? + ret)); }
+     $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); time_right_align run_heartbleed; }
+     $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); time_right_align run_ccs_injection; }
+     $do_renego && { run_renego; ret=$(($? + ret)); time_right_align run_renego; }
+     $do_crime && { run_crime; ret=$(($? + ret)); time_right_align run_crime; }
+     $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret));  time_right_align run_breach; }
+     $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); time_right_align run_ssl_poodle; }
+     $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); time_right_align run_tls_fallback_scsv; }
+     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); time_right_align run_sweet32; }
+     $do_freak && { run_freak; ret=$(($? + ret)); time_right_align run_freak; }
+     $do_drown && { run_drown ret=$(($? + ret)); time_right_align run_drown; }
+     $do_logjam && { run_logjam; ret=$(($? + ret)); time_right_align run_logjam; }
+     $do_beast && { run_beast; ret=$(($? + ret)); time_right_align run_beast; }
+     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); time_right_align run_lucky13; }
+     $do_rc4 && { run_rc4; ret=$(($? + ret)); time_right_align run_rc4; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_allciphers && { run_allciphers; ret=$(($? + ret)); }
-     $do_cipher_per_proto && { run_cipher_per_proto; ret=$(($? + ret)); }
+     $do_allciphers && { run_allciphers; ret=$(($? + ret)); time_right_align run_allciphers; }
+     $do_cipher_per_proto && { run_cipher_per_proto; ret=$(($? + ret)); time_right_align run_cipher_per_proto; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); }
+     $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); time_right_align run_client_simulation; }
 
      fileout_section_footer true
 
      outln
      END_TIME=$(date +%s)
+     SCAN_TIME=$(( END_TIME - START_TIME ))
      datebanner " Done"
+
+     "$MEASURE_TIME" && printf "%${COLUMNS}s\n" "$SCAN_TIME"
+     [[ -e "$MEASURE_TIME_FILE" ]] && echo "Total : $SCAN_TIME " >> $MEASURE_TIME_FILE
 
      return $ret
 }
@@ -12380,7 +12371,7 @@ lets_roll() {
 
 ################# main #################
 
-
+lets_roll init
 initialize_globals
 parse_cmd_line "$@"
 html_header
@@ -12389,6 +12380,7 @@ set_color_functions
 maketempf
 find_openssl_binary
 prepare_debug
+prepare_arrays
 mybanner
 check_proxy
 check4openssl_oldfarts
@@ -12404,6 +12396,7 @@ if $do_display_only; then
 fi
 
 if $do_mass_testing; then
+     prepare_logging
      run_mass_testing
      exit $?
 fi
