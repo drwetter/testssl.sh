@@ -87,9 +87,8 @@ if grep -q xtrace <<< "$SHELLOPTS"; then
           exec 42>&2 2> >(tee /tmp/testssl-$$.log | sed -u 's/^.*$/now/' | date -f - +%s.%N >/tmp/testssl-$$.time)
           # for pasting both togher see https://stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
      else
-          # for some reason here it still messes up the screen
-          exec 42>&2 2>/tmp/testssl-$$.log
-          BASH_XTRACEFD=42 
+          exec 42>| /tmp/testssl-$$.log
+          BASH_XTRACEFD=42
      fi
 fi
 
@@ -11640,7 +11639,7 @@ datebanner() {
      local scan_time_f=""
 
      if [[ "$1" =~ Done ]] ; then
-          scan_time_f="$(printf "%04ss" "$SCAN_TIME")"
+          scan_time_f="$(printf "%04ss" "$SCAN_TIME")"           # 4 digits because of windows
           pr_reverse "$1 $(date +%F) $(date +%T) [$scan_time_f] -->> $NODEIP:$PORT ($NODE) <<--"
      else
           pr_reverse "$1 $(date +%F) $(date +%T)        -->> $NODEIP:$PORT ($NODE) <<--"
