@@ -80,7 +80,6 @@
 readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 DEBUGTIME=${DEBUGTIME:-false}
-
 if grep -q xtrace <<< "$SHELLOPTS"; then
      if "$DEBUGTIME" ; then
           # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
@@ -173,12 +172,15 @@ LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
 HTMLFILE=${HTMLFILE:-""}                # HTML if used
-HTMLHEADER=true                         # include HTML headers and footers in HTML file, if one is being created
+FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
+JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
+CSVHEADER=true                          # same for CSV
+HTMLHEADER=true                         # same for HTML
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 GIVE_HINTS=false                        # give an addtional info to findings
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
-SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
+SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -277,7 +279,6 @@ HTTP_TIME=""
 GET_REQ11=""
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
-FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
 START_TIME=0                            # time in epoch when the action started
 END_TIME=0                              # .. ended
 SCAN_TIME=0                             # diff of both: total scan time
@@ -806,28 +807,10 @@ strip_quote() {
 }
 
 #################### JSON FILE FORMATING ####################
-fileout_pretty_json_header() {
-    target="$NODE"
-    $do_mx_all_ips && target="$URI"
-
-    echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
-          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
-          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
-          \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
-          \"target host\" : \"$target\",
-          \"port\"        : \"$PORT\",
-          \"startTime\"   : \"$START_TIME\",
-          \"scanResult\"  : ["
-}
 
 fileout_pretty_json_footer() {
     echo -e "          ],
           \"scanTime\"  : \"$SCAN_TIME\"\n}"
-}
-
-fileout_json_header() {
-     "$do_json" && printf "[\n" > "$JSONFILE"
-     "$do_pretty_json" && (printf "{\n%s\n" "$(fileout_pretty_json_header)") > "$JSONFILE"
 }
 
 fileout_json_footer() {
@@ -850,15 +833,15 @@ fileout_json_section() {
      esac
 }
 
-fileout_section_header(){
+fileout_section_header() {
     local str=""
-    $2 && str="$(fileout_section_footer false)"
+    "$2" && str="$(fileout_section_footer false)"
     "$do_pretty_json" && FIRST_FINDING=true && (printf "%s%s\n" "$str" "$(fileout_json_section "$1")") >> "$JSONFILE"
 }
 
-fileout_section_footer() { # IS_THE_LAST_ONE
+fileout_section_footer() { 
     "$do_pretty_json" && printf "\n                    ]" >> "$JSONFILE"
-    "$do_pretty_json" && $1 && echo -e "\n          }" >> "$JSONFILE"
+    "$do_pretty_json" && "$1" && echo -e "\n          }" >> "$JSONFILE"
 }
 
 fileout_json_print_parameter() {
@@ -866,34 +849,30 @@ fileout_json_print_parameter() {
     local filler="$2"
     local value="$3"
     local not_last="$4"
+    local spaces=""
 
-    local shift=""
-
-    if "$do_json"; then
-        shift="              "
-    else
-        shift="                                "
-    fi
-
+    "$do_json" && \
+        spaces="              " || \
+        spaces="                                "
     if [[ ! -z "$value" ]]; then
-        printf "%s%s%s%s" "$shift" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
+        printf "%s%s%s%s" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
         "$not_last" && printf ",\n" >> "$JSONFILE"
     fi
 }
 
 fileout_json_finding() {
-    if "$do_json"; then
-         "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
-         echo -e "        {"  >> "$JSONFILE"
-         fileout_json_print_parameter "id" "           " "$1" true
-         fileout_json_print_parameter "ip" "           " "$NODE/$NODEIP" true
-         fileout_json_print_parameter "port" "         " "$PORT" true
-         fileout_json_print_parameter "severity" "     " "$2" true
-         fileout_json_print_parameter "cve" "          " "$cve" true
-         fileout_json_print_parameter "cwe" "          " "$cwe" true
-         "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
-         fileout_json_print_parameter "finding" "      " "$finding" false
-         echo -e "\n         }" >> "$JSONFILE"
+     if "$do_json"; then
+          "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
+          echo -e "         {"  >> "$JSONFILE"
+          fileout_json_print_parameter "id" "           " "$1" true
+          fileout_json_print_parameter "ip" "           " "$NODE/$NODEIP" true
+          fileout_json_print_parameter "port" "         " "$PORT" true
+          fileout_json_print_parameter "severity" "     " "$2" true
+          fileout_json_print_parameter "cve" "          " "$cve" true
+          fileout_json_print_parameter "cwe" "          " "$cwe" true
+          "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
+          fileout_json_print_parameter "finding" "      " "$finding" false
+          echo -e "\n          }" >> "$JSONFILE"
     fi
     if "$do_pretty_json"; then
         if [[ "$1" == "service" ]]; then
@@ -904,69 +883,140 @@ fileout_json_finding() {
                     \"service\"         : \"$finding\",
                     \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
             $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
-        else
-            ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
-            echo -e -n "\n"  >> "$JSONFILE"
-            fileout_json_print_parameter "id" "           " "$1" true
-            fileout_json_print_parameter "severity" "     " "$2" true
-            fileout_json_print_parameter "cve" "          " "$cve" true
-            fileout_json_print_parameter "cwe" "          " "$cwe" true
-            "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
-            fileout_json_print_parameter "finding" "      " "$finding" false
-            echo -e -n "\n                           }" >> "$JSONFILE"
-        fi
+         else
+             ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
+             echo -e -n "\n"  >> "$JSONFILE"
+             fileout_json_print_parameter "id" "           " "$1" true
+             fileout_json_print_parameter "severity" "     " "$2" true
+             fileout_json_print_parameter "cve" "          " "$cve" true
+             fileout_json_print_parameter "cwe" "          " "$cwe" true
+             "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
+             fileout_json_print_parameter "finding" "      " "$finding" false
+             echo -e -n "\n                           }" >> "$JSONFILE"
+         fi
     fi
-}
-
-is_json_format() {
-    ( [[ -f "$JSONFILE" ]] && ("$do_json" || "$do_pretty_json") )
 }
 
 ##################### FILE FORMATING #########################
 
-fileout_header() {
-     if "$APPEND"; then
-          if [[ -f "$JSONFILE" ]]; then
-               FIRST_FINDING=false # We need to insert a comma, because there is file content already
-          else
-               fileout_json_header
+fileout_pretty_json_banner() {
+    echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
+          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
+          \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
+          \"target host\" : \"$target\",
+          \"port\"        : \"$PORT\",
+          \"startTime\"   : \"$START_TIME\",
+          \"scanResult\"  : ["
+}
+
+fileout_banner() {
+     local target="$NODE"
+     $do_mx_all_ips && target="$URI"
+
+     #if ! "$APPEND"; then
+     #     if "$CSVHEADER"; then
+     #          :
+     #     fi
+          if "$JSONHEADER"; then
+               # "$do_json" &&                    # here we maybe should add a banner, too
+               "$do_pretty_json" && (printf "%s\n" "$(fileout_pretty_json_banner)") >> "$JSONFILE"
           fi
-          if "$do_csv"; then
-               if [[ -f "$CSVFILE" ]]; then
-                    # add lf, just for overview
-                    echo >> "$CSVFILE"
-               else
-                    # create file, with headline
-                    echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
-               fi
-          fi
-     else
-          fileout_json_header
-          "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
-     fi
+     #fi
 }
 
 fileout_footer() {
-     is_json_format && fileout_json_footer
+     [[ -f "$JSONFILE" ]] && fileout_json_footer
+     # CSV: no footer
 }
 
-fileout() { # ID, SEVERITY, FINDING, CVE, CWE, HINT
+# ID, SEVERITY, FINDING, CVE, CWE, HINT
+fileout() { 
      local severity="$2"
      local cwe="$5"
      local hint="$6"
 
      if ( "$do_pretty_json" && [[ "$1" == "service" ]] ) || show_finding "$severity"; then
          local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
-
-         is_json_format && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
-
-         # does the following do any sanitization?
-         if "$do_csv"; then
+         [[ -f "$JSONFILE" ]] && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
+         "$do_csv" && \
               echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
-         fi
-         "$FIRST_FINDING" && FIRST_FINDING=false
      fi
+     "$FIRST_FINDING" && FIRST_FINDING=false
 }
+
+
+json_header() {
+     local fname_prefix
+
+     # Similar to HTML: Don't create headers and footers in the following scenarios:
+     #  * no JSON/CSV output is being created.
+     #  * mass testing is being performed and each test will have its own file.
+     #  * this is an individual test within a mass test and all output is being placed in a single file.
+
+     if ( ! "$do_json" && ! "$do_pretty_json" ) || \
+          ( "$do_mass_testing" && ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) ) || \
+          ( "$APPEND" && [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] ); then
+               JSONHEADER=false
+          return 0
+     fi
+     if "$do_display_only"; then
+          fname_prefix="local-ciphers"
+     elif "$do_mass_testing"; then
+          :
+     elif "$do_mx_all_ips"; then
+          fname_prefix="mx-$URI"
+     else
+          ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) && parse_hn_port "${URI}"
+          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
+          fname_prefix="${NODE}"_p"${PORT}"
+     fi
+     if [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]]; then
+          rm -f "$JSONFILE"
+     elif [[ -z "$JSONFILE" ]]; then
+          JSONFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".json)
+     else
+          JSONFILE=$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)
+     fi
+     "$do_json" && printf "[\n" > "$JSONFILE"
+     "$do_pretty_json" && printf "{\n" > "$JSONFILE"
+     #FIRST_FINDING=false
+     return 0
+}
+
+
+csv_header() {
+     local fname_prefix
+
+     # CSV similar:
+     if ! "$do_csv" || \
+          ( "$do_mass_testing" && ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) ) || \
+          ( "$APPEND" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] ); then
+               CSVHEADER=false
+          return 0
+     fi
+     if "$do_display_only"; then
+          fname_prefix="local-ciphers"
+     elif "$do_mass_testing"; then
+          :
+     elif "$do_mx_all_ips"; then
+          fname_prefix="mx-$URI"
+     else
+          ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) && parse_hn_port "${URI}"
+          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
+          fname_prefix="${NODE}"_p"${PORT}"
+     fi
+     if [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]]; then
+          rm -f "$CSVFILE"
+     elif [[ -z "$CSVFILE" ]]; then
+          CSVFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
+     else
+          CSVFILE=$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
+     fi
+     "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+     return 0
+}
+
 
 ################# JSON FILE FORMATING END. HTML START ####################
 
@@ -980,7 +1030,7 @@ html_header() {
      if ! "$do_html" || \
         ( "$do_mass_testing" && ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) ) || \
         ( "$APPEND" && [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ); then
-          HTMLHEADER=false
+               HTMLHEADER=false
           return 0
      fi
 
@@ -1016,7 +1066,7 @@ html_header() {
 }
 
 html_banner() {
-     if "$APPEND" && "$HTMLHEADER"; then
+     if ! "$APPEND" && "$HTMLHEADER"; then
           html_out "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
           html_out "## at $HNAME:$OPENSSL_LOCATION\n"
           html_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
@@ -10926,8 +10976,8 @@ cleanup () {
           [[ -d "$TEMPDIR" ]] && rm -rf "$TEMPDIR";
      fi
      outln
-     "$APPEND" || fileout_footer
      html_footer
+     fileout_footer
      # debugging off, see above
      grep -q xtrace <<< "$SHELLOPTS" && exec 2>&42 42>&-
 }
@@ -11071,28 +11121,7 @@ prepare_logging() {
           tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
           tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
           exec > >(tee -a ${LOGFILE})
-          # not decided yet. Maybe good to have a separate file or none at all
-          #exec 2> >(tee -a ${LOGFILE} >&2)
      fi
-
-     if "$do_json" || "$do_pretty_json"; then
-          if [[ -z "$JSONFILE" ]]; then
-               JSONFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".json)
-          elif [[ -d "$JSONFILE" ]]; then
-               # actually we were instructed to place all files in a DIR instead of the current working dir
-               JSONFILE=$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)
-          fi
-     fi
-     if "$do_csv"; then
-          if [[ -z "$CSVFILE" ]]; then
-               CSVFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
-          elif [[ -d "$CSVFILE" ]]; then
-               # actually we were instructed to place all files in a DIR instead of the current working dir
-               CSVFILE=$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
-          fi
-     fi
-     fileout_header           # write out any CSV/JSON header line
-     return 0
 }
 
 
@@ -12371,9 +12400,14 @@ lets_roll() {
 
 ################# main #################
 
+ret=0
+ip=""
+
 lets_roll init
 initialize_globals
 parse_cmd_line "$@"
+json_header
+csv_header
 html_header
 get_install_dir
 set_color_functions
@@ -12385,10 +12419,6 @@ mybanner
 check_proxy
 check4openssl_oldfarts
 check_bsd_mount
-
-# TODO: it is ugly to have those two vars here --> main()
-ret=0
-ip=""
 
 if $do_display_only; then
      prettyprint_local "$PATTERN2SHOW"
@@ -12402,41 +12432,44 @@ if $do_mass_testing; then
 fi
 
 html_banner
+fileout_banner
+
 #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
 if $do_mx_all_ips; then
-     query_globals                 # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
+     query_globals                                     # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
      [[ $? -eq 1 ]] && set_scanning_defaults
-     run_mx_all_ips "${URI}" $PORT # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
+     run_mx_all_ips "${URI}" $PORT                     # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
+     exit $?
+fi
+
+[[ -z "$NODE" ]] && parse_hn_port "${URI}"                                 # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
+prepare_logging
+if ! determine_ip_addresses; then
+     fatal "No IP address could be determined" 2
+fi
+if [[ -n "$CMDLINE_IP" ]]; then
+     #  we just test the one supplied
+     lets_roll "${STARTTLS_PROTOCOL}"
      ret=$?
-else
-     [[ -z "$NODE" ]] && parse_hn_port "${URI}"                                 # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
-     prepare_logging
-     if ! determine_ip_addresses; then
-          fatal "No IP address could be determined" 2
-     fi
-     if [[ -n "$CMDLINE_IP" ]]; then
-          #  we just test the one supplied
-          lets_roll "${STARTTLS_PROTOCOL}"
-          ret=$?
-     else                                                                       # no --ip was supplied
-          if [[ $(count_words "$(echo -n "$IPADDRs")") -gt 1 ]]; then           # we have more than one ipv4 address to check
-               pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
-               for ip in $IPADDRs; do
-                    draw_line "-" $((TERM_WIDTH * 2 / 3))
-                    outln
-                    NODEIP="$ip"
-                    lets_roll "${STARTTLS_PROTOCOL}"
-                    ret=$(($? + ret))
-               done
+else                                                                       # no --ip was supplied
+     if [[ $(count_words "$(echo -n "$IPADDRs")") -gt 1 ]]; then           # we have more than one ipv4 address to check
+          pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
+          for ip in $IPADDRs; do
                draw_line "-" $((TERM_WIDTH * 2 / 3))
                outln
-               pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
-          else                                                                  # we need just one ip4v to check
-               NODEIP="$IPADDRs"
+               NODEIP="$ip"
                lets_roll "${STARTTLS_PROTOCOL}"
-               ret=$?
-          fi
+               ret=$(($? + ret))
+          done
+          draw_line "-" $((TERM_WIDTH * 2 / 3))
+          outln
+          pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
+     else                                                                  # we need just one ip4v to check
+          NODEIP="$IPADDRs"
+          lets_roll "${STARTTLS_PROTOCOL}"
+          ret=$?
      fi
 fi
 
 exit $?
+
