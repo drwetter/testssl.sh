@@ -12190,7 +12190,7 @@ parse_cmd_line() {
                     do_html=true
                     ;;  # DEFINITION of HTMLFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a file location additionally
-               --htmlfile)
+               --htmlfile|--htmlfile=*)
                     HTMLFILE=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     do_html=true
