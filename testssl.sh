@@ -926,8 +926,11 @@ fileout_banner() {
 }
 
 fileout_footer() {
-     [[ -f "$JSONFILE" ]] && fileout_json_footer
+     if "$JSONHEADER"; then
+          fileout_json_footer
+     fi
      # CSV: no footer
+     return 0
 }
 
 # ID, SEVERITY, FINDING, CVE, CWE, HINT
@@ -958,7 +961,7 @@ json_header() {
           ( "$do_mass_testing" && ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) ) || \
           ( "$APPEND" && [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] ); then
                JSONHEADER=false
-          return 0
+               return 0
      fi
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -993,7 +996,7 @@ csv_header() {
           ( "$do_mass_testing" && ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) ) || \
           ( "$APPEND" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] ); then
                CSVHEADER=false
-          return 0
+               return 0
      fi
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1031,7 +1034,7 @@ html_header() {
         ( "$do_mass_testing" && ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) ) || \
         ( "$APPEND" && [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ); then
                HTMLHEADER=false
-          return 0
+               return 0
      fi
 
      if "$do_display_only"; then
@@ -1041,7 +1044,8 @@ html_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="mx-$URI"
      else
-          ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) && parse_hn_port "${URI}"    # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
+          ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) && parse_hn_port "${URI}"
+          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${NODE}"_p"${PORT}"
      fi
 
