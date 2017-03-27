@@ -10544,6 +10544,7 @@ test_openssl_suffix() {
 find_openssl_binary() {
      local s_client_has=$TEMPDIR/s_client_has.txt
      local s_client_starttls_has=$TEMPDIR/s_client_starttls_has.txt
+     local openssl_location cwd=""
 
      # 0. check environment variable whether it's executable
      if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
@@ -10589,6 +10590,18 @@ find_openssl_binary() {
      fi
 
      initialize_engine
+
+     openssl_location="$(which $OPENSSL)"
+     [[ -n "$GIT_REL" ]] && \
+          cwd=$(/bin/pwd) || \
+          cwd=$RUN_DIR
+     if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
+          OPENSSL_LOCATION="\$PWD/bin/$(basename "$openssl_location")"
+     elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
+          OPENSSL_LOCATION="${openssl_location%%$cwd}"
+     else
+         OPENSSL_LOCATION="$openssl_location"
+     fi
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
 
@@ -10923,8 +10936,6 @@ prepare_arrays() {
 mybanner() {
      local idtag
      local bb1 bb2 bb3
-     local openssl_location="$(which $OPENSSL)"
-     local cwd=""
 
      $QUIET && return
      OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
@@ -10962,17 +10973,6 @@ EOF
      outln "\n"
      outln " Using \"$($OPENSSL version 2>/dev/null)\" [~$OPENSSL_NR_CIPHERS ciphers]"
      out " on $HNAME:"
-
-     [[ -n "$GIT_REL" ]] && \
-          cwd=$(/bin/pwd) || \
-          cwd=$RUN_DIR
-     if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
-          OPENSSL_LOCATION="\$PWD/bin/$(basename "$openssl_location")"
-     elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
-          OPENSSL_LOCATION="${openssl_location%%$cwd}"
-     else
-         OPENSSL_LOCATION="$openssl_location"
-     fi
      outln "$OPENSSL_LOCATION"
      outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 }
