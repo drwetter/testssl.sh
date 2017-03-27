@@ -79,15 +79,20 @@
 # debugging help:
 readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
-DEBUGTIME=${DEBUGTIME:-false}
+# see stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
+# how to paste both in order to do performance analysis
+DEBUGTIME=${DEBUGTIME:-false} 
+DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen
 if grep -q xtrace <<< "$SHELLOPTS"; then
      if "$DEBUGTIME" ; then
           # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
           exec 42>&2 2> >(tee /tmp/testssl-$$.log | sed -u 's/^.*$/now/' | date -f - +%s.%N >/tmp/testssl-$$.time)
-          # for pasting both togher see https://stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
-     else
-          exec 42>| /tmp/testssl-$$.log
           BASH_XTRACEFD=42
+     else
+          if ! "$DEBUG_ALLINONE"; then
+               exec 42>| /tmp/testssl-$$.log
+               BASH_XTRACEFD=42
+          fi
      fi
 fi
 
@@ -944,8 +949,8 @@ fileout() {
          [[ -f "$JSONFILE" ]] && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
          "$do_csv" && \
               echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
-     fi
      "$FIRST_FINDING" && FIRST_FINDING=false
+     fi
 }
 
 
@@ -10983,7 +10988,7 @@ cleanup () {
      html_footer
      fileout_footer
      # debugging off, see above
-     grep -q xtrace <<< "$SHELLOPTS" && exec 2>&42 42>&-
+     grep -q xtrace <<< "$SHELLOPTS" && ! "$DEBUG_ALLINONE" && exec 2>&42 42>&-
 }
 
 fatal() {
