@@ -3683,7 +3683,8 @@ run_client_simulation() {
                what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
                bits=$(awk -F',' '{ print $3 }' <<< $temp)
                grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
-               bits="${bits/ bits/}"
+               bits="${bits/bits/}"
+               bits="${bits// /}"
                if [[ "$what_dh" == "DH" ]]; then
                     [[ ${minDhBits[i]} -ne -1 ]] && [[ $bits -lt ${minDhBits[i]} ]] && sclient_success=1
                     [[ ${maxDhBits[i]} -ne -1 ]] && [[ $bits -gt ${maxDhBits[i]} ]] && sclient_success=1
@@ -4293,7 +4294,8 @@ read_dhbits_from_file() {
      else
           bits=$(awk -F',' '{ print $2 }' <<< $temp)
      fi
-     bits="${bits/ bits/}"
+     bits="${bits/bits/}"
+     bits="${bits// /}"
 
      if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
           curve="$what_dh"
