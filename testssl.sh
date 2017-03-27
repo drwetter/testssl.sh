@@ -1663,9 +1663,9 @@ std_cipherlists() {
 socksend() {
      # the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
      if "$HAS_SED_E"; then
-          data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      else
-          data=$(echo "$1" | sed -e 's/# .*$//g' -e 's/ //g' | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
+          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      fi
      [[ $DEBUG -ge 4 ]] && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
@@ -2194,7 +2194,6 @@ client_simulation_sockets() {
      sleep $USLEEP_SND
 
      sockread_serverhello 32768
-     TLS_NOW=$(LC_ALL=C date "+%s")
      debugme outln "reading server hello..."
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C $SOCK_REPLY_FILE | head -6
@@ -3740,23 +3739,7 @@ run_server_preference() {
                     i=$((i+1))
                done
 
-               [[ -n "$PROXY" ]] && arg="   SPDY/NPN is"
                [[ -n "$STARTTLS" ]] && arg="    "
-               if spdy_pre " $arg" ; then                                       # is NPN/SPDY supported and is this no STARTTLS? / no PROXY
-                                                                                # ALPN needs also some lines here
-                    $OPENSSL s_client -connect $NODEIP:$PORT $BUGS -nextprotoneg "$NPN_PROTOs" $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    if sclient_connect_successful $? $TMPFILE; then
-                         proto[i]=$(grep -aw "Next protocol" $TMPFILE | sed -e 's/^Next protocol://' -e 's/(.)//' -e 's/ //g')
-                         if [[ -z "${proto[i]}" ]]; then
-                              cipher[i]=""
-                         else
-                              cipher[i]=$(grep -aw "Cipher" $TMPFILE | egrep -avw "New|is" | sed -e 's/^.*Cipher.*://' -e 's/ //g')
-                              [[ $DEBUG -ge 2 ]] && outln "Default cipher for ${proto[i]}: ${cipher[i]}"
-                         fi
-                    fi
-               else
-                    outln     # we miss for STARTTLS 1x LF otherwise
-               fi
 
                for i in 1 2 3 4 5 6; do
                     if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
@@ -3915,32 +3898,6 @@ cipher_pref_check() {
           fi
           [[ -z "$order" ]] || fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
      done
-     outln
-
-     if ! spdy_pre "     SPDY/NPN: "; then       # is NPN/SPDY supported and is this no STARTTLS?
-          outln
-     else
-          npn_protos=$($OPENSSL s_client $BUGS -nextprotoneg \"\" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE | grep -a "^Protocols " | sed -e 's/^Protocols.*server: //' -e 's/,//g')
-          for p in $npn_protos; do
-               order=""
-               $OPENSSL s_client $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-               printf "    %-10s %s " "$p:" "$cipher"
-               tested_cipher="-"$cipher
-               order="$cipher"
-               while true; do
-                    $OPENSSL s_client -cipher "ALL:$tested_cipher" $BUGS -nextprotoneg "$p" -connect $NODEIP:$PORT $SNI </dev/null 2>>$ERRFILE >$TMPFILE
-                    sclient_connect_successful $? $TMPFILE || break
-                    cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
-                    out "$cipher "
-                    tested_cipher="$tested_cipher:-$cipher"
-                    order+=" $cipher"
-               done
-               outln
-               [[ -n $order ]] && fileout "order_spdy_$p" "INFO" "Default cipher order for SPDY protocol $p: $order"
-          done
-     fi
-
      outln
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -5601,10 +5558,9 @@ close_socket(){
 
 
 # first: helper function for protocol checks
+# arg1: formatted string here in the code
 code2network() {
-     # arg1: formatted string here in the code
      NW_STR=$(sed -e 's/,/\\\x/g' <<< "$1" | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
-     #TODO: just echo, no additional global var
 }
 
 len2twobytes() {
@@ -9097,4 +9053,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.572 2017/03/23 15:19:22 dirkw Exp $
+#  $Id: testssl.sh,v 1.573 2017/03/25 12:13:56 dirkw Exp $
