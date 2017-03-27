@@ -11123,8 +11123,12 @@ prepare_logging() {
           else
                : # just for clarity: a log file was specified, no need to do anything else
           fi
-          [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
-          >$LOGFILE
+
+          if ! "$APPEND"; then
+               [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+          else
+               >$LOGFILE
+          fi
           tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
           tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
           tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
