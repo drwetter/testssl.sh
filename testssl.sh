@@ -155,6 +155,9 @@ WIDE=${WIDE:-false}                     # whether to display for some options ju
 LOGFILE=${LOGFILE:-""}                  # logfile if used
 JSONFILE=${JSONFILE:-""}                # jsonfile if used
 CSVFILE=${CSVFILE:-""}                  # csvfile if used
+FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
+JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
+CSVHEADER=true                          # same for CSV
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
@@ -249,7 +252,6 @@ HTTP_TIME=""
 GET_REQ11=""
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
-FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
 
 # Devel stuff, see -q below
 TLS_LOW_BYTE=""
@@ -459,52 +461,6 @@ strip_quote() {
           -e 's/ *$//g' <<< "$1"    
 }
 
-fileout_header() {
-     if "$APPEND"; then
-          if [[ -f "$JSONFILE" ]]; then
-               FIRST_FINDING=false # We need to insert a comma, because there is file content already
-          else
-               "$do_json" && printf "[\n" > "$JSONFILE"
-          fi
-          if "$do_csv"; then
-               if [[ -f "$CSVFILE" ]]; then
-                    # add lf, just for overview
-                    echo >> "$CSVFILE"
-               else
-                    # create file, with headline
-                    echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
-               fi
-          fi
-     else
-          "$do_json" && printf "[\n" > "$JSONFILE"
-          "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\"" > "$CSVFILE"
-     fi
-}
-
-fileout_footer() {
-     "$do_json" && [[ -f "$JSONFILE" ]] && printf "]\n" >> "$JSONFILE"
-}
-
-fileout() { # ID, SEVERITY, FINDING
-     local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
-
-     if "$do_json"; then
-          "$FIRST_FINDING" || echo -n "," >> $JSONFILE
-          echo "         {
-               \"id\"           : \"$1\",
-               \"ip\"           : \"$NODE/$NODEIP\",
-               \"port\"         : \"$PORT\",
-               \"severity\"     : \"$2\",
-               \"finding\"      : \"$finding\"
-          }" >> $JSONFILE
-     fi
-     # does the following do any sanitization? 
-     if "$do_csv"; then
-          echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$2"\",\""$finding"\"" >>$CSVFILE
-     fi
-     "$FIRST_FINDING" && FIRST_FINDING=false
-}
-
 ###### helper function definitions ######
 
 debugme() {
@@ -584,6 +540,161 @@ is_ipv4addr() {
           return 1
 }
 
+#################### JSON FILE FORMATING ####################
+
+fileout_json_footer() {
+     "$do_json" && printf "]\n" >> "$JSONFILE"
+}
+
+fileout_json_section() {
+    case $1 in
+         1) echo -e    "                    \"protocols\"         : [" ;;
+         2) echo -e ",\n                    \"ciphers\"           : [" ;;
+         3) echo -e ",\n                    \"pfs\"               : [" ;;
+         4) echo -e ",\n                    \"serverPreferences\" : [" ;;
+         5) echo -e ",\n                    \"serverDefaults\"    : [" ;;
+         6) echo -e ",\n                    \"headerResponse\"    : [" ;;
+         7) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
+         8) echo -e ",\n                    \"cipherTests\"       : [" ;;
+         9) echo -e ",\n                    \"browserSimulations\": [" ;;
+         *) echo "invalid section" ;;
+     esac
+}
+
+fileout_section_header() {
+    local str=""
+    "$2" && str="$(fileout_section_footer false)"
+}
+
+fileout_section_footer() {
+     return
+}
+
+fileout_json_print_parameter() {
+    local parameter="$1"
+    local filler="$2"
+    local value="$3"
+    local not_last="$4"
+    local spaces=""
+
+    "$do_json" && \
+        spaces="              " || \
+        spaces="                                "
+    if [[ ! -z "$value" ]]; then
+        printf "%s%s%s%s" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
+        "$not_last" && printf ",\n" >> "$JSONFILE"
+    fi
+}
+
+fileout_json_finding() {
+     if "$do_json"; then
+          "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
+          echo -e "         {"  >> "$JSONFILE"
+          fileout_json_print_parameter "id" "           " "$1" true
+          fileout_json_print_parameter "ip" "           " "$NODE/$NODEIP" true
+          fileout_json_print_parameter "port" "         " "$PORT" true
+          fileout_json_print_parameter "severity" "     " "$2" true
+          fileout_json_print_parameter "cve" "          " "$cve" true
+          fileout_json_print_parameter "cwe" "          " "$cwe" true
+          fileout_json_print_parameter "finding" "      " "$finding" false
+          echo -e "\n          }" >> "$JSONFILE"
+    fi
+}
+
+##################### FILE FORMATING #########################
+
+fileout_footer() {
+     if "$JSONHEADER"; then
+          fileout_json_footer
+     fi
+     # CSV: no footer
+     return 0
+}
+
+# ID, SEVERITY, FINDING, CVE, CWE, HINT
+fileout() {
+     local severity="$2"
+     local cwe="$5"
+     local hint="$6"
+
+     local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
+     [[ -f "$JSONFILE" ]] && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
+     "$do_csv" && \
+         echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
+     "$FIRST_FINDING" && FIRST_FINDING=false
+}
+
+json_header() {
+     local fname_prefix
+
+     # Similar to HTML: Don't create headers and footers in the following scenarios:
+     #  * no JSON/CSV output is being created.
+     #  * mass testing is being performed and each test will have its own file.
+     #  * this is an individual test within a mass test and all output is being placed in a single file.
+     if ! "$do_json" || \
+          ( "$do_mass_testing" && ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) ) || \
+          ( "$APPEND" && [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] ); then
+               JSONHEADER=false
+               return 0
+     fi
+     if "$do_display_only"; then
+          fname_prefix="local-ciphers"
+     elif "$do_mass_testing"; then
+          :
+     elif "$do_mx_all_ips"; then
+          fname_prefix="mx-$URI"
+     else
+          ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) && parse_hn_port "${URI}"
+          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
+          fname_prefix="${NODE}"_"${PORT}"
+     fi
+     if [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]]; then
+          rm -f "$JSONFILE"
+     elif [[ -z "$JSONFILE" ]]; then
+          JSONFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".json)
+     else
+          JSONFILE=$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)
+     fi
+     "$do_json" && printf "[\n" > "$JSONFILE"
+     #FIRST_FINDING=false
+     return 0
+}
+
+csv_header() {
+     local fname_prefix
+
+     # CSV similar:
+     if ! "$do_csv" || \
+          ( "$do_mass_testing" && ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) ) || \
+          ( "$APPEND" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] ); then
+               CSVHEADER=false
+               return 0
+     fi
+     if "$do_display_only"; then
+          fname_prefix="local-ciphers"
+     elif "$do_mass_testing"; then
+          :
+     elif "$do_mx_all_ips"; then
+          fname_prefix="mx-$URI"
+     else
+          ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) && parse_hn_port "${URI}"
+          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
+          fname_prefix="${NODE}"_"${PORT}"
+     fi
+     if [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]]; then
+          rm -f "$CSVFILE"
+     elif [[ -z "$CSVFILE" ]]; then
+          CSVFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
+     else
+          CSVFILE=$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
+     fi
+     "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+     return 0
+}
+
+
+################# JSON FILE FORMATING END. HTML START ####################
+
 # a bit easier
 is_ipv6addr() {
      [[ -z "$1" ]] && return 1
@@ -602,14 +713,14 @@ is_ipv6addr() {
 out_row_aligned() {
      local first=true
 
-     echo "$1" | while read line; do
+     while read line; do
           if $first; then
                first=false
           else
                out "$2"
           fi
           outln "$line"
-     done
+     done <<< "$1"
 }
 
 
@@ -4916,8 +5027,6 @@ certificate_info() {
 # FIXME: Trust (only CN)
 
 
-
-
 run_server_defaults() {
      local ciph match_found newhostcert sni
      local sessticket_str=""
@@ -7654,8 +7763,7 @@ HAS_SSL2: $HAS_SSL2
 HAS_SSL3: $HAS_SSL3
 HAS_NO_SSL2: $HAS_NO_SSL2
 HAS_SPDY: $HAS_SPDY
-HAS_ALPN: $HAS_ALPN
-HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
+HAS_ALPN: $HAS_ALPN HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
 HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
 
@@ -7758,7 +7866,7 @@ cleanup () {
           [[ -d "$TEMPDIR" ]] && rm -rf "$TEMPDIR";
      fi
      outln
-     "$APPEND" || fileout_footer
+     fileout_footer
 }
 
 fatal() {
@@ -7897,25 +8005,6 @@ prepare_logging() {
           # not decided yet. Maybe good to have a separate file or none at all
           #exec 2> >(tee -a ${LOGFILE} >&2)
      fi
-
-     if "$do_json"; then
-          if [[ -z "$JSONFILE" ]]; then
-               JSONFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".json)
-          elif [[ -d "$JSONFILE" ]]; then
-               # actually we were instructed to place all files in a DIR instead of the current working dir
-               JSONFILE=$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)
-          fi
-     fi
-     if "$do_csv"; then
-          if [[ -z "$CSVFILE" ]]; then
-               CSVFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
-          elif [[ -d "$CSVFILE" ]]; then
-               # actually we were instructed to place all files in a DIR instead of the current working dir
-               CSVFILE=$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
-          fi
-     fi
-     fileout_header           # write out any CSV/JSON header line
-
      return 0
 }
 
@@ -8461,7 +8550,6 @@ run_mass_testing() {
           outln "$cmdline"
           $cmdline
      done < "${FNAME}"
-     fileout_footer
      return $?
 }
 
@@ -8990,6 +9078,8 @@ parse_cmd_line "$@"
 set_color_functions
 maketempf
 find_openssl_binary
+json_header
+csv_header
 prepare_debug
 mybanner
 check_proxy
@@ -9053,4 +9143,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.573 2017/03/25 12:13:56 dirkw Exp $
+#  $Id: testssl.sh,v 1.574 2017/03/27 20:37:06 dirkw Exp $
