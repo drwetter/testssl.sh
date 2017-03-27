@@ -1075,7 +1075,7 @@ html_header() {
 }
 
 html_banner() {
-     if ! "$APPEND" && "$HTMLHEADER"; then
+     if "$APPEND" && "$HTMLHEADER"; then
           html_out "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
           html_out "## at $HNAME:$OPENSSL_LOCATION\n"
           html_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
