@@ -10784,7 +10784,7 @@ file output options (can also be preset via environment variables):
      --htmlfile <htmlfile>         additional output as HTML to the specifed file
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
-     --append                      if <logfile>, <csvfile> or <jsonfile> exists rather append then overwrite
+     --append                      if <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists rather append then overwrite. Omits any header
 
 
 Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
