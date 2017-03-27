@@ -11788,7 +11788,6 @@ run_mass_testing() {
           outln "$cmdline"
           $cmdline
      done < "${FNAME}"
-     fileout_footer
      return $?
 }
 
