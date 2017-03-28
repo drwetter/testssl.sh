@@ -10778,25 +10778,25 @@ output options (can also be preset via environment variables):
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
-     --mapping <openssl|           openssl: use the OpenSSL Cipher suite name as the primary name cipher suite name form (default)
-                rfc|                 rfc: use the RFC Cipher suite name as the primary name cipher suite name form
-                no-openssl|          no-openssl: don't display the OpenSSL Cipher Suite Name, display RFC names only
-                no-rfc>              no-rfc: don't display the RFC Cipher Suite Name, display OpenSSL names only
+     --mapping <openssl|           openssl: use the OpenSSL cipher suite name as the primary name cipher suite name form (default)
+                rfc|                 rfc: use the RFC cipher suite name as the primary name cipher suite name form
+                no-openssl|          no-openssl: don't display the OpenSSL cipher suite name, display RFC names only
+                no-rfc>              no-rfc: don't display the RFC cipher suite name, display OpenSSL names only
      --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
      --colorblind                  swap green and blue in the output
      --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
 
-file output options (can also be preset via environment variables):
-     --log, --logging              logs stdout to <NODE-YYYYMMDD-HHMM.log> in current working directory
-     --logfile <logfile>           logs stdout to <file/NODE-YYYYMMDD-HHMM.log> if file is a dir or to specified log file
-     --json                        additional output of findings to flat JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
-     --jsonfile <jsonfile>         additional output to the specified flat JSON file
-     --json-pretty                 additional pretty structured output of findings to JSON file <NODE-YYYYMMDD-HHMM.json> in cwd
-     --jsonfile-pretty <jsonfile>  additional pretty structured output as JSON to the specified file
-     --csv                         additional output of findings to CSV file <NODE-YYYYMMDD-HHMM.csv> in cwd
-     --csvfile <csvfile>           additional output as CSV to the specified file
-     --html                        additional output as HTML to file <NODE-YYYYMMDD-HHMM.html>
-     --htmlfile <htmlfile>         additional output as HTML to the specifed file
+file output options (can also be preset via environment variables)
+     --log, --logging              logs stdout to <NODE>-p<port#><YYYYMMDD-HHMM>.log in current working directory (cwd)
+     --logfile <logfile>           logs stdout to <dir/NODE>-p<port#><YYYYMMDD-HHMM>.log if <logfile> is a dir or to a specified <logfile>
+     --json                        additional output of findings to flat JSON file <NODE>-p<port#><YYYYMMDD-HHMM>.json in cwd
+     --jsonfile <jsonfile>         additional output to the specified flat JSON file or directory, similar to --logfile
+     --json-pretty                 additional JSON structured output of findings to a file <NODE>-p<port#><YYYYMMDD-HHMM>.json in cwd
+     --jsonfile-pretty <jsonfile>  additional JSON structured output to the specified file or directory, similar to --logfile
+     --csv                         additional output of findings to CSV file <NODE>-p<port#><YYYYMMDD-HHMM>.csv in cwd or directory
+     --csvfile <csvfile>           additional output as CSV to the specified file or directory, similar to --logfile
+     --html                        additional output as HTML to file <NODE>-p<port#><YYYYMMDD-HHMM>.html
+     --htmlfile <htmlfile>         additional output as HTML to the specifed file or directory, similar to --logfile
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists rather append then overwrite. Omits any header
