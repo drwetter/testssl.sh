@@ -1229,7 +1229,8 @@ out_row_aligned_max_width() {
      local -i max_width="$3"
      local -i i len
      local cr=$'\n'
-     local line first=true
+     local line
+     local first=true
 
      max_width=$max_width-${#spaces}
      len=${#text}
