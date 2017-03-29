@@ -1222,61 +1222,71 @@ out_row_aligned() {
 }
 
 # prints text over multiple lines, trying to make no line longer than $max_width.
-# Each line is indented with $spaces and each word in $text is printed using $print_function.
+# Each line is indented with $spaces.
 out_row_aligned_max_width() {
      local text="$1"
      local spaces="$2"
      local -i max_width="$3"
-     local print_function="$4"
      local -i i len
      local cr=$'\n'
-     local line entry first=true last=false
+     local line first=true
 
-     max_width=$max_width-1                  # at the moment we align to terminal width. This makes sure we don't wrap too late
      max_width=$max_width-${#spaces}
      len=${#text}
      while true; do
-          i=$max_width
-          if [[ $i -ge $len ]]; then
+          if [[ $len -lt $max_width ]]; then
+               # If the remaining text to print is shorter than $max_width,
+               # then just print it.
                i=$len
           else
-               while true; do
-                    [[ "${text:i:1}" == " " ]] && break
-                    [[ $i -eq 0 ]] && break
-                    i=$i-1
-               done
-               if [[ $i -eq 0 ]]; then
-                    i=$max_width+1
-                    while true; do
-                         [[ "${text:i:1}" == " " ]] && break
-                         [[ $i -eq $len ]] && break
-                         i+=1
-                    done
+               # Find the final space character in the text that is less than
+               # $max_width characters into the remaining text, and make the
+               # text up to that space character the next line to print.
+               line="${text:0:max_width}"
+               line="${line% *}"
+               i=${#line}
+               if [[ $i -eq $max_width ]]; then
+                    # If there are no space characters in the first $max_width
+                    # characters of the remaining text, then make the text up
+                    # to the first space the next line to print. If there are
+                    # no space characters in the remaining text, make the
+                    # remaining text the next line to print.
+                    line="${text#* }"
+                    i=$len-${#line}
+                    [[ $i -eq 0 ]] && i=$len
                fi
           fi
-          if [[ $i -eq $len ]]; then
-               line="$text"
-               if ! "$first"; then
-                    out "${cr}${spaces}"
-               fi
-               last=true
-          else
-               line="${text:0:i}"
-               if ! "$first"; then
-                    out "${cr}${spaces}"
-               fi
-               len=$len-$i-1
-               i=$i+1
-               text="${text:i:len}"
-               first=false
-               [[ $len -eq 0 ]] && last=true
+          if ! "$first"; then
+               tm_out "${cr}${spaces}"
           fi
-          while read entry; do
-              $print_function "$entry" ; out " "
-          done <<< "$(tr ' ' '\n' <<< "$line")"
-          "$last" && break
+          tm_out "${text:0:i}"
+          [[ $i -eq $len ]] && break
+          len=$len-$i-1
+          i=$i+1
+          text="${text:i:len}"
+          first=false
+          [[ $len -eq 0 ]] && break
      done
      return 0
+}
+
+out_row_aligned_max_width_by_entry() {
+     local text="$1"
+     local spaces="$2"
+     local -i max_width="$3"
+     local print_function="$4"
+     local resp entry prev_entry=" "
+
+     resp="$(out_row_aligned_max_width "$text" "$spaces" "$max_width")"
+     while read -d " " entry; do
+        if [[ -n "$entry" ]]; then
+             $print_function "$entry"
+        elif [[ -n "$prev_entry" ]]; then
+             outln; out " "
+        fi
+        out " "
+        prev_entry="$entry"
+    done <<< "$resp"
 }
 
 
@@ -4877,7 +4887,7 @@ cipher_pref_check() {
           if [[ -n "$order" ]]; then
                outln
                out "$(printf "    %-10s " "$proto: ")"
-               out_row_aligned_max_width "$order" "               " $TERM_WIDTH out
+               out "$(out_row_aligned_max_width "$order" "               " $TERM_WIDTH)"
                fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
           fi
      done
@@ -5773,7 +5783,7 @@ certificate_info() {
           while read san; do
                [[ -n "$san" ]] && all_san+="$san "
           done <<< "$sans"
-          out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH pr_italic
+          pr_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
           out "-- "
@@ -6078,7 +6088,7 @@ run_server_defaults() {
      local -a previous_hostcert previous_intermediates keysize cipher
      local -a ocsp_response ocsp_response_status sni_used
      local -a ciphers_to_test success
-     local cn_nosni cn_sni sans_nosni sans_sni san
+     local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
      local alpn_proto alpn="" alpn_list_len_hex alpn_extn_len_hex success
      local -i alpn_list_len alpn_extn_len
 
@@ -6216,7 +6226,16 @@ run_server_defaults() {
           fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
      else
 #FIXME: we rather want to have the chance to print each ext in italcs or another format. Atm is a string of quoted strings -- that needs to be fixed at the root
-          out_row_aligned_max_width "$TLS_EXTENSIONS" "                              " $TERM_WIDTH out; outln
+          # out_row_aligned_max_width() places line breaks at space characters.
+          # So, in order to prevent the text for an extension from being broken
+          # across lines, temporarily replace space characters within the text
+          # of an extension with "}", and then convert the "}" back to space in
+          # the output of out_row_aligned_max_width().
+          tls_extensions="${TLS_EXTENSIONS// /{}"
+          tls_extensions="${tls_extensions//\"{\"/\" \"}"
+          tls_extensions="$(out_row_aligned_max_width "$tls_extensions" "                              " $TERM_WIDTH)"
+          tls_extensions="${tls_extensions//{/ }"
+          outln "$tls_extensions"
           fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
 
@@ -6443,7 +6462,7 @@ run_pfs() {
                     outln "${sigalg[i]}"
                fi
           done
-          ! "$WIDE" && out_row_aligned_max_width "$pfs_ciphers" "                              " $TERM_WIDTH out
+          ! "$WIDE" && out "$(out_row_aligned_max_width "$pfs_ciphers" "                              " $TERM_WIDTH)"
           debugme echo $pfs_offered
           "$WIDE" || outln
           fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
@@ -6524,7 +6543,7 @@ run_pfs() {
           if [[ -n "$curves_offered" ]]; then
                "$WIDE" && outln
                pr_bold " Elliptic curves offered:     "
-               out_row_aligned_max_width "$curves_offered" "                              " $TERM_WIDTH pr_ecdh_curve_quality
+               out_row_aligned_max_width_by_entry "$curves_offered" "                              " $TERM_WIDTH pr_ecdh_curve_quality
                outln
                fileout "ecdhe_curves" "INFO" "Elliptic curves offered $curves_offered"
           fi
@@ -10079,8 +10098,8 @@ run_beast(){
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto): "
                     [[ -n "$higher_proto_supported" ]] && \
-                         out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH pr_svrty_low || \
-                         out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH pr_svrty_medium
+                         pr_svrty_low "$(out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH)" || \
+                         pr_svrty_medium "$(out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH)"
                     outln
                     detected_cbc_ciphers=""  # empty for next round
                     first=false
@@ -10417,7 +10436,7 @@ run_rc4() {
                     fi
                fi
           done
-          ! "$WIDE" && out_row_aligned_max_width "$rc4_detected" "                                                                " $TERM_WIDTH pr_svrty_high
+          ! "$WIDE" && pr_svrty_high "$(out_row_aligned_max_width "$rc4_detected" "                                                                " $TERM_WIDTH)"
           outln
           "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
           fileout "rc4" "HIGH" "RC4: VULNERABLE, Detected ciphers: $rc4_detected" "$cve" "$cwe" "$hint"
@@ -11665,8 +11684,7 @@ display_rdns_etc() {
                     further_ip_addrs+="$ip "
                fi
           done
-          out_row_aligned_max_width "$further_ip_addrs" "                         $CORRECT_SPACES" $TERM_WIDTH out
-          outln
+          outln "$(out_row_aligned_max_width "$further_ip_addrs" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
      if "$LOCAL_A"; then
           outln " A record via           $CORRECT_SPACES /etc/hosts "
@@ -11675,7 +11693,7 @@ display_rdns_etc() {
      fi
      if [[ -n "$rDNS" ]]; then
           out "$(printf " %-23s %s" "rDNS ($nodeip):")"
-          out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH out
+          out "$(out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
 }
 
