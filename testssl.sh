@@ -81,13 +81,13 @@ readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 # see stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
 # how to paste both in order to do performance analysis
-DEBUGTIME=${DEBUGTIME:-false} 
-DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen
+DEBUGTIME=${DEBUGTIME:-false}
+DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for just debugging)
 if grep -q xtrace <<< "$SHELLOPTS"; then
-     if "$DEBUGTIME" ; then
+     if "$DEBUGTIME"; then
           # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
           exec 42>&2 2> >(tee /tmp/testssl-$$.log | sed -u 's/^.*$/now/' | date -f - +%s.%N >/tmp/testssl-$$.time)
-          BASH_XTRACEFD=42
+          # BASH_XTRACEFD=42
      else
           if ! "$DEBUG_ALLINONE"; then
                exec 42>| /tmp/testssl-$$.log
