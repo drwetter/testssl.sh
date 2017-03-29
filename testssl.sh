@@ -921,26 +921,26 @@ fileout_pretty_json_banner() {
      local target
 
      if "$do_mass_testing"; then
-          echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
-               \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
-               \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
-               \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
-               \"startTime\"   : \"$START_TIME\",
-               \"scanResult\"  : ["
+        echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
+          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
+          \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
+          \"startTime\"   : \"$START_TIME\",
+          \"scanResult\"  : ["
      else
-          [[ -z "$NODE" ]] && parse_hn_port "${URI}"
-          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          target="$NODE"
-          $do_mx_all_ips && target="$URI"
+        [[ -z "$NODE" ]] && parse_hn_port "${URI}"
+        # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
+        target="$NODE"
+        $do_mx_all_ips && target="$URI"
 
-          echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
-               \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
-               \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
-               \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
-               \"target host\" : \"$target\",
-               \"port\"        : \"$PORT\",
-               \"startTime\"   : \"$START_TIME\",
-               \"scanResult\"  : ["
+        echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
+          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
+          \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
+          \"target host\" : \"$target\",
+          \"port\"        : \"$PORT\",
+          \"startTime\"   : \"$START_TIME\",
+          \"scanResult\"  : ["
      fi
 }
 
