@@ -16,6 +16,7 @@ my (
 pass("Running testssl.sh against ssl.sectionzero.org"); $tests++;
 $out = `./testssl.sh -H --jsonfile tmp.json --color 0 ssl.sectionzero.org`;
 $json = json('tmp.json');
+unlink 'tmp.json';
 
 # It is better to have findings in a hash
 # Look for a host cert match in the process.
