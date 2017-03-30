@@ -6102,11 +6102,11 @@ run_server_defaults() {
      ciphers_to_test[1]=""
      ciphers_to_test[2]=""
      for ciph in $(colon_to_spaces $($OPENSSL ciphers "aRSA")); do
-         if grep -q "\-RSA\-" <<<$ciph; then
-             ciphers_to_test[1]="${ciphers_to_test[1]}:$ciph"
-         else
-             ciphers_to_test[2]="${ciphers_to_test[2]}:$ciph"
-         fi
+          if grep -q "\-RSA\-" <<<$ciph; then
+               ciphers_to_test[1]="${ciphers_to_test[1]}:$ciph"
+          else
+               ciphers_to_test[2]="${ciphers_to_test[2]}:$ciph"
+          fi
      done
      [[ -n "${ciphers_to_test[1]}" ]] && ciphers_to_test[1]="${ciphers_to_test[1]:1}"
      [[ -n "${ciphers_to_test[2]}" ]] && ciphers_to_test[2]="${ciphers_to_test[2]:1}"
@@ -6117,94 +6117,96 @@ run_server_defaults() {
      ciphers_to_test[7]="aGOST"
 
      for (( n=1; n <= 14 ; n++ )); do
-         # Some servers use a different certificate if the ClientHello
-         # specifies TLSv1.1 and doesn't include a server name extension.
-         # So, for each public key type for which a certificate was found,
-         # try again, but only with TLSv1.1 and without SNI.
-         if [[ $n -ge 8 ]]; then
-              ciphers_to_test[n]=""
-              [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}"
-         fi
+          # Some servers use a different certificate if the ClientHello
+          # specifies TLSv1.1 and doesn't include a server name extension.
+          # So, for each public key type for which a certificate was found,
+          # try again, but only with TLSv1.1 and without SNI.
+          if [[ $n -ge 8 ]]; then
+               ciphers_to_test[n]=""
+               [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}"
+          fi
 
-         if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
-             if [[ $n -ge 8 ]]; then
-                  sni="$SNI"
-                  SNI=""
-                  get_server_certificate "-cipher ${ciphers_to_test[n]}" "tls1_1"
-                  success[n]=$?
-                  SNI="$sni"
-             else
-                  get_server_certificate "-cipher ${ciphers_to_test[n]}"
-                  success[n]=$?
-             fi
-             if [[ ${success[n]} -eq 0 ]]; then
-                 cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
-                 >$ERRFILE
-                 if [[ -z "$sessticket_str" ]]; then
-                     sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
-                 fi
+          if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
+               if [[ $n -ge 8 ]]; then
+                    sni="$SNI"
+                    SNI=""
+                    get_server_certificate "-cipher ${ciphers_to_test[n]}" "tls1_1"
+                    success[n]=$?
+                    SNI="$sni"
+               else
+                    get_server_certificate "-cipher ${ciphers_to_test[n]}"
+                    success[n]=$?
+               fi
+               if [[ ${success[n]} -eq 0 ]]; then
+                    cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
+                    >$ERRFILE
+                    if [[ -z "$sessticket_str" ]]; then
+                         sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+                    fi
 
-                 # check whether the host's certificate has been seen before
-                 match_found=false
-                 i=1
-                 newhostcert=$(cat $HOSTCERT)
-                 while [[ $i -le $certs_found ]]; do
-                     if [[ "$newhostcert" == "${previous_hostcert[i]}" ]]; then
-                        match_found=true
-                        break;
-                     fi
-                     i=$((i + 1))
-                 done
-                 if ! "$match_found" && [[ $n -ge 8 ]] && [[ $certs_found -ne 0 ]]; then
-                     # A new certificate was found using TLSv1.1 without SNI.
-                     # Check to see if the new certificate should be displayed.
-                     # It should be displayed if it is either a match for the
-                     # $NODE being tested or if it has the same subject
-                     # (CN and SAN) as other certificates for this host.
-                     compare_server_name_to_cert "$NODE" "$HOSTCERT"
-                     [[ $? -ne 0 ]] && success[n]=0 || success[n]=1
+                    # check whether the host's certificate has been seen before
+                    match_found=false
+                    i=1
+                    newhostcert=$(cat $HOSTCERT)
+                    while [[ $i -le $certs_found ]]; do
+                         if [[ "$newhostcert" == "${previous_hostcert[i]}" ]]; then
+                              match_found=true
+                              break;
+                         fi
+                         i=$((i + 1))
+                    done
+                    if ! "$match_found" && [[ $n -ge 8 ]] && [[ $certs_found -ne 0 ]]; then
+                         # A new certificate was found using TLSv1.1 without SNI.
+                         # Check to see if the new certificate should be displayed.
+                         # It should be displayed if it is either a match for the
+                         # $NODE being tested or if it has the same subject
+                         # (CN and SAN) as other certificates for this host.
+                         compare_server_name_to_cert "$NODE" "$HOSTCERT"
+                         [[ $? -ne 0 ]] && success[n]=0 || success[n]=1
 
-                     if [[ ${success[n]} -ne 0 ]]; then
-                         cn_nosni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
-                         sans_nosni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-                              tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
+                         if [[ ${success[n]} -ne 0 ]]; then
+                              cn_nosni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
+                              sans_nosni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
+                                   grep -A2 "Subject Alternative Name" | tr ',' '\n' | grep "DNS:" | \
+                                   sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
 
-                         echo "${previous_hostcert[1]}" > $HOSTCERT
-                         cn_sni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
+                              echo "${previous_hostcert[1]}" > $HOSTCERT
+                              cn_sni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
 
-                         # FIXME: Not sure what the matching rule should be. At
-                         # the moment, the no SNI certificate is considered a
-                         # match if the CNs are the same and the SANs (if
-                         # present) contain at least one DNS name in common.
-                         if [[ "$cn_nosni" == "$cn_sni" ]]; then
-                              sans_sni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-                                       tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
-                              if [[ "$sans_nosni" == "$sans_sni" ]]; then
-                                   success[n]=0
-                              else
-                                   for san in $sans_nosni; do
-                                        [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
-                                   done
+                              # FIXME: Not sure what the matching rule should be. At
+                              # the moment, the no SNI certificate is considered a
+                              # match if the CNs are the same and the SANs (if
+                              # present) contain at least one DNS name in common.
+                              if [[ "$cn_nosni" == "$cn_sni" ]]; then
+                                   sans_sni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
+                                        grep -A2 "Subject Alternative Name" | tr ',' '\n' | grep "DNS:" | \
+                                        sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
+                                   if [[ "$sans_nosni" == "$sans_sni" ]]; then
+                                        success[n]=0
+                                   else
+                                        for san in $sans_nosni; do
+                                             [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
+                                        done
+                                   fi
                               fi
                          fi
-                     fi
-                     # If the certificate found for TLSv1.1 w/o SNI appears to
-                     # be for a different host, then set match_found to true so
-                     # that the new certificate will not be included in the output.
-                     [[ ${success[n]} -ne 0 ]] && match_found=true
-                 fi
-                 if ! "$match_found"; then
-                     certs_found=$(($certs_found + 1))
-                     cipher[certs_found]=${ciphers_to_test[n]}
-                     keysize[certs_found]=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
-                     ocsp_response[certs_found]=$(grep -aA 20 "OCSP response" $TMPFILE)
-                     ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
-                     previous_hostcert[certs_found]=$newhostcert
-                     previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
-                     [[ $n -ge 8 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
-                 fi
-             fi
-         fi
+                         # If the certificate found for TLSv1.1 w/o SNI appears to
+                         # be for a different host, then set match_found to true so
+                         # that the new certificate will not be included in the output.
+                         [[ ${success[n]} -ne 0 ]] && match_found=true
+                    fi
+                    if ! "$match_found"; then
+                         certs_found=$(($certs_found + 1))
+                         cipher[certs_found]=${ciphers_to_test[n]}
+                         keysize[certs_found]=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
+                         ocsp_response[certs_found]=$(grep -aA 20 "OCSP response" $TMPFILE)
+                         ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
+                         previous_hostcert[certs_found]=$newhostcert
+                         previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
+                         [[ $n -ge 8 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
+                    fi
+               fi
+          fi
      done
 
      determine_tls_extensions
@@ -6263,10 +6265,10 @@ run_server_defaults() {
 
      i=1
      while [[ $i -le $certs_found ]]; do
-         echo "${previous_hostcert[i]}" > $HOSTCERT
-         echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
-         certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}"
-         i=$((i + 1))
+          echo "${previous_hostcert[i]}" > $HOSTCERT
+          echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
+          certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}"
+          i=$((i + 1))
      done
 }
 
