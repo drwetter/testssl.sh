@@ -956,6 +956,13 @@ fileout_banner() {
      #fi
 }
 
+fileout_separator() {
+     if "$JSONHEADER"; then
+          "$do_pretty_json" && echo "          ," >> "$JSONFILE"
+          "$do_json" && echo -n "," >> "$JSONFILE"
+     fi
+}
+
 fileout_footer() {
      if "$JSONHEADER"; then
           fileout_json_footer
@@ -11847,10 +11854,7 @@ run_mass_testing() {
           cmdline="$0 $global_cmdline --warnings=batch $cmdline"
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$cmdline"
-          if ! "$first" && "$JSONHEADER"; then
-               "$do_pretty_json" && echo "          ," >> "$JSONFILE"
-               "$do_json" && echo -n "," >> "$JSONFILE"
-          fi
+          "$first" || fileout_separator
           CHILD_MASS_TESTING=true $cmdline
           first=false
      done < "${FNAME}"
