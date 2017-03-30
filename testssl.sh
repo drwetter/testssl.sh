@@ -892,7 +892,7 @@ fileout_json_finding() {
                  $do_mx_all_ips && target="$URI"
                  echo -e "          {
                     \"target host\"     : \"$target\",
-                    \"port\"            : \"$PORT\"
+                    \"port\"            : \"$PORT\",
                     \"service\"         : \"$finding\",
                     \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
             else
