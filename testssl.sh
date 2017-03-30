@@ -6080,18 +6080,16 @@ certificate_info() {
 
 
 run_server_defaults() {
-     local ciph match_found newhostcert sni
-     local sessticket_str=""
-     local lifetime unit
-     local line
+     local ciph newhostcert sni
+     local match_found
+     local sessticket_str="" lifetime unit
      local -i i n
      local -i certs_found=0
      local -a previous_hostcert previous_intermediates keysize cipher
      local -a ocsp_response ocsp_response_status sni_used
-     local -a ciphers_to_test success
+     local -a ciphers_to_test
+     local -a -i success
      local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
-     local alpn_proto alpn="" alpn_list_len_hex alpn_extn_len_hex success
-     local -i alpn_list_len alpn_extn_len
 
      # Try each public key type once:
      # ciphers_to_test[1]: cipher suites using certificates with RSA signature public keys
@@ -6249,7 +6247,7 @@ run_server_defaults() {
           unit=$(grep -a lifetime <<< "$sessticket_str" | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
           prln_svrty_low "(PFS requires session ticket keys to be rotated <= daily)"
-          fileout "session_ticket" "LOW" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
+          fileout "session_ticket" "LOW" "TLS session ticket RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
      fi
 
      pr_bold " SSL Session ID support       "
