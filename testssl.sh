@@ -2284,7 +2284,7 @@ run_cookie_flags() {     # ARG1: Path
 
 run_more_flags() {
      local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
-     local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible"
+     local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible Referrer-Policy"
      local f2t
      local first=true
      local spaces="                              "
@@ -5477,7 +5477,7 @@ compare_server_name_to_cert()
 
      # If the CN contains any characters that are not valid for a DNS name,
      # then assume it does not contain a DNS name.
-     [[ -n $(echo -n "$cn" | sed 's/^[\.a-zA-Z0-9*\-]*//') ]] && return $ret
+     [[ -n $(sed 's/^[\.a-zA-Z0-9*\-]*//' <<< "$cn") ]] && return $ret
 
      # Check whether the CN in the certificate matches the servername
      [[ $(toupper "$cn") == "$servername" ]] && ret+=4 && return $ret
@@ -6241,7 +6241,7 @@ run_server_defaults() {
                     if ! "$match_found"; then
                          certs_found=$(($certs_found + 1))
                          cipher[certs_found]=${ciphers_to_test[n]}
-                         keysize[certs_found]=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
+                         keysize[certs_found]=$(awk '/Server public key/ { print $(NF-1) }' $TMPFILE)
                          ocsp_response[certs_found]=$(grep -aA 20 "OCSP response" $TMPFILE)
                          ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
                          previous_hostcert[certs_found]=$newhostcert
@@ -6314,6 +6314,19 @@ run_server_defaults() {
           i=$((i + 1))
      done
 }
+
+get_session_ticket_lifetime_from_serverhello() {
+     awk '/session ticket.*lifetime/ { print $(NF-1) "$1" }'
+}
+
+get_san_dns_from_cert() {
+     toupper "$($OPENSSL x509 -in "$1" -noout -text 2>>$ERRFILE | \
+          grep -A2 "Subject Alternative Name" | tr ',' '\n' | grep "DNS:" | \
+          sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')"
+}
+
+
+
 
 run_pfs() {
      local -i sclient_success
