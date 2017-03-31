@@ -16,6 +16,7 @@ my (
 pass("Running testssl.sh against badssl.com to create a baseline (may take 2~3 minutes)"); $tests++;
 my $okout = `./testssl.sh -S -e -U --jsonfile tmp.json --color 0 badssl.com`;
 my $okjson = json('tmp.json');
+unlink 'tmp.json';
 cmp_ok(@$okjson,'>',10,"We have more then 10 findings"); $tests++;
 
 # Expiration
@@ -23,6 +24,7 @@ pass("Running testssl against expired.badssl.com"); $tests++;
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 expired.badssl.com`;
 like($out, qr/Certificate Expiration\s+expired\!/,"The certificate should be expired"); $tests++;
 $json = json('tmp.json');
+unlink 'tmp.json';
 $found = 0;
 foreach my $f ( @$json ) {
 	if ( $f->{id} eq "expiration" ) {
@@ -39,6 +41,7 @@ pass("Running testssl against self-signed.badssl.com"); $tests++;
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 self-signed.badssl.com`;
 like($out, qr/Certificate Expiration\s+\d+/,"The certificate should not be expired"); $tests++;
 $json = json('tmp.json');
+unlink 'tmp.json';
 $found = 0;
 foreach my $f ( @$json ) {
 	if ( $f->{id} eq "expiration" ) {
@@ -79,6 +82,7 @@ is($found,1,"We had a finding for this in the JSON output"); $tests++;
 #$out = `./testssl.sh -S --jsonfile tmp.json --color 0 wrong.host.badssl.com`;
 #unlike($out, qr/Certificate Expiration\s+expired\!/,"The certificate should not be expired"); $tests++;
 #$json = json('tmp.json');
+#unlink 'tmp.json';
 #$found = 0;
 #foreach my $f ( @$json ) {
 #	if ( $f->{id} eq "expiration" ) {
@@ -95,6 +99,7 @@ pass("Running testssl against incomplete-chain.badssl.com"); $tests++;
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 incomplete-chain.badssl.com`;
 like($out, qr/Chain of trust.*?NOT ok\s+\(chain incomplete\)/,"Chain of trust should fail because of incomplete"); $tests++;
 $json = json('tmp.json');
+unlink 'tmp.json';
 $found = 0;
 foreach my $f ( @$json ) {
 	if ( $f->{id} eq "chain_of_trust" ) {
@@ -113,6 +118,7 @@ is($found,1,"We had a finding for this in the JSON output"); $tests++;
 #$out = `./testssl.sh -e -U --jsonfile tmp.json --color 0 cbc.badssl.com`;
 #like($out, qr/Chain of trust.*?NOT ok\s+\(chain incomplete\)/,"Chain of trust should fail because of incomplete"); $tests++;
 #$json = json('tmp.json');
+#unlink 'tmp.json';
 #$found = 0;
 #foreach my $f ( @$json ) {
 #	if ( $f->{id} eq "chain_of_trust" ) {
