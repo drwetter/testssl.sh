@@ -742,7 +742,7 @@ pr_url()     { tm_out "$1"; html_out "<a href="$1" style=\"color:black;text-deco
 pr_boldurl() { tm_bold "$1"; html_out "<a href="$1" style=\"font-weight:bold;color:black;text-decoration:none;\">$1</a>"; }
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
-###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
+###                          http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 set_color_functions() {
      local ncurses_tput=true
 
@@ -845,7 +845,7 @@ fileout_section_header() {
     "$do_pretty_json" && FIRST_FINDING=true && (printf "%s%s\n" "$str" "$(fileout_json_section "$1")") >> "$JSONFILE"
 }
 
-fileout_section_footer() { 
+fileout_section_footer() {
     "$do_pretty_json" && printf "\n                    ]" >> "$JSONFILE"
     "$do_pretty_json" && "$1" && echo -e "\n          }" >> "$JSONFILE"
 }
@@ -1072,7 +1072,7 @@ csv_header() {
 html_header() {
      local fname_prefix
      local filename_provided=false
-     
+
      [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && filename_provided=true
 
      # Don't create HTML headers and footers in the following scenarios:
@@ -1146,8 +1146,8 @@ if [[ $(uname) == "Linux" ]] ; then
      toupper() { echo -n "${1^^}" ;  }
      tolower() { echo -n "${1,,}" ;  }
 else
-     toupper() { echo -n "$1" | tr 'a-z' 'A-Z'; }
-     tolower() { echo -n "$1" | tr 'A-Z' 'a-z' ; }
+     toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
+     tolower() { tr 'A-Z' 'a-z'  <<< "$1"; }
 fi
 
 debugme() {
@@ -1181,7 +1181,7 @@ count_words() {
 }
 
 count_ciphers() {
-     echo -n "$1" | sed 's/:/ /g' | wc -w | sed 's/ //g'
+     echo $(wc -w <<< "${1//:/ }")
 }
 
 actually_supported_ciphers() {
@@ -1476,7 +1476,6 @@ service_detection() {
           head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
           debugme head -50 $TMPFILE
      fi
-# FIXME: we can guess ports by port number if not properly recognized (and label it as guessed)
 
      out " Service detected:      $CORRECT_SPACES"
      case $SERVICE in
@@ -2494,7 +2493,7 @@ std_cipherlists() {
                     ;;
           esac
           tmpfile_handle $FUNCNAME.$debugname.txt
-          [[ $DEBUG -ge 1 ]] && outln " -- $1" || outln  #FIXME: should be in standard output at some time
+          [[ $DEBUG -ge 1 ]] && tmln_out " -- $1" || tmln_out
      else
           singlespaces=$(sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g' <<< "$2")
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
@@ -10155,7 +10154,7 @@ run_beast(){
                fi
           else
                if ! "$vuln_beast" ; then
-                    prln_done_good " no CBC ciphers for $(toupper $proto) (OK)"
+                    prln_done_good "no CBC ciphers for $(toupper $proto) (OK)"
                     fileout "cbc_$proto" "OK" "BEAST: No CBC ciphers for $(toupper $proto)" "$cve" "$cwe"
                fi
           fi
@@ -10862,7 +10861,7 @@ EOF
 }
 
 maketempf() {
-     TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
+     TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX) || exit -6
      TMPFILE=$TEMPDIR/tempfile.txt || exit -6
      if [[ "$DEBUG" -eq 0 ]]; then
           ERRFILE="/dev/null"
@@ -10999,7 +10998,7 @@ mybanner() {
      bb1=$(cat <<EOF
 
 ###########################################################
-    $PROG_NAME       $VERSION from 
+    $PROG_NAME       $VERSION from
 EOF
 )
      bb2=$(cat <<EOF
@@ -11008,7 +11007,7 @@ EOF
              modification under GPLv2 permitted.
       USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @ 
+       Please file bugs @
 EOF
 )
      bb3=$(cat <<EOF
@@ -11218,9 +11217,9 @@ filter_ip6_address() {
                continue
           fi
           if "$HAS_SED_E"; then
-               echo "$a" | sed -E 's/^abcdeABCDEFf0123456789:]//g' | sed -e '/^$/d' -e '/^;;/d'
+               sed -E 's/^abcdeABCDEFf0123456789:]//g' <<< "$a" | sed -e '/^$/d' -e '/^;;/d'
           else
-               echo "$a" | sed -r 's/[^abcdefABCDEF0123456789:]//g' | sed -e '/^$/d' -e '/^;;/d'
+               sed -r 's/[^abcdefABCDEF0123456789:]//g' <<< "$a" | sed -e '/^$/d' -e '/^;;/d'
           fi
      done
 }
@@ -11233,9 +11232,9 @@ filter_ip4_address() {
                continue
           fi
           if "$HAS_SED_E"; then
-               echo "$a" | sed -E 's/[^[:digit:].]//g' | sed -e '/^$/d'
+               sed -E 's/[^[:digit:].]//g' <<< "$a" | sed -e '/^$/d'
           else
-               echo "$a" | sed -r 's/[^[:digit:].]//g' | sed -e '/^$/d'
+               sed -r 's/[^[:digit:].]//g' <<< "$a" | sed -e '/^$/d'
           fi
      done
 }
@@ -11578,7 +11577,7 @@ sclient_auth() {
 # this function determines OPTIMAL_PROTO. It is a workaround function as under certain circumstances
 # (e.g. IIS6.0 and openssl 1.0.2 as opposed to 1.0.1) needs a protocol otherwise s_client -connect will fail!
 # Circumstances observed so far: 1.) IIS 6  2.) starttls + dovecot imap
-# The first try in the loop is empty as we prefer not to specify always a protocol if it works w/o.
+# The first try in the loop is empty as we prefer not to specify always a protocol if we can get along w/o it
 #
 determine_optimal_proto() {
      local all_failed
@@ -11659,9 +11658,9 @@ determine_service() {
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
           GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          #HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
-          #GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          #HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+          # HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+          # GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
+          # HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
           service_detection $OPTIMAL_PROTO
      else
           # STARTTLS
@@ -11811,9 +11810,35 @@ run_mx_all_ips() {
      return $ret
 }
 
+run_mass_testing() {
+     local cmdline=""
+     local first=true
+     local global_cmdline=${CMDLINE%%--file*}               # $global_cmdline may have arguments in addition to the one in the file
 
+     if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
+          fatal "Can't read file \"$FNAME\"" "2"
+     fi
+
+     pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
+     while read cmdline; do
+          cmdline=$(filter_input "$cmdline")
+          [[ -z "$cmdline" ]] && continue
+          [[ "$cmdline" == "EOF" ]] && break
+          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
+          draw_line "=" $((TERM_WIDTH / 2)); outln;
+          outln "$cmdline"
+          "$first" || fileout_separator                     # this is needed for appended output, see #687
+          CHILD_MASS_TESTING=true $cmdline                  # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
+          first=false
+     done < "${FNAME}"
+     return $?
+}
+
+
+#FIXME: not called/tested yet
 run_mass_testing_parallel() {
      local cmdline=""
+     local first=true
      local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
@@ -11828,36 +11853,11 @@ run_mass_testing_parallel() {
           [[ "$cmdline" == "EOF" ]] && break
           cmdline="$0 $global_cmdline --warnings=batch $cmdline"
           draw_line "=" $((TERM_WIDTH / 2)); outln;
-          determine_logfile
           outln "$cmdline"
           CHILD_MASS_TESTING=true $cmdline >$LOGFILE &
+          # first=false
           sleep $PARALLEL_SLEEP
      done < "$FNAME"
-     return $?
-}
-
-
-run_mass_testing() {
-     local cmdline=""
-     local first=true
-     local global_cmdline=${CMDLINE%%--file*}
-
-     if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
-          fatal "Can't read file \"$FNAME\"" "2"
-     fi
-
-     pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
-     while read cmdline; do
-          cmdline=$(filter_input "$cmdline")
-          [[ -z "$cmdline" ]] && continue
-          [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
-          draw_line "=" $((TERM_WIDTH / 2)); outln;
-          outln "$cmdline"
-          "$first" || fileout_separator
-          CHILD_MASS_TESTING=true $cmdline
-          first=false
-     done < "${FNAME}"
      return $?
 }
 
@@ -12490,9 +12490,6 @@ ip=""
 lets_roll init
 initialize_globals
 parse_cmd_line "$@"
-json_header
-csv_header
-html_header
 get_install_dir
 set_color_functions
 maketempf
@@ -12503,6 +12500,9 @@ mybanner
 check_proxy
 check4openssl_oldfarts
 check_bsd_mount
+json_header
+csv_header
+html_header
 
 if "$do_display_only"; then
      prettyprint_local "$PATTERN2SHOW"
