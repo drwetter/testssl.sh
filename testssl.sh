@@ -186,6 +186,7 @@ GIVE_HINTS=false                        # give an addtional info to findings
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
+CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -866,6 +867,8 @@ fileout_json_print_parameter() {
 }
 
 fileout_json_finding() {
+     local target
+
      if "$do_json"; then
           "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
           echo -e "         {"  >> "$JSONFILE"
@@ -884,9 +887,19 @@ fileout_json_finding() {
             if [[ $SERVER_COUNTER -gt 1 ]]; then
                 echo "          ," >> "$JSONFILE"
             fi
-            echo -e "          {
+            if "$CHILD_MASS_TESTING" && ! "$JSONHEADER"; then
+                 target="$NODE"
+                 $do_mx_all_ips && target="$URI"
+                 echo -e "          {
+                    \"target host\"     : \"$target\",
+                    \"port\"            : \"$PORT\",
                     \"service\"         : \"$finding\",
                     \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
+            else
+                 echo -e "          {
+                    \"service\"         : \"$finding\",
+                    \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
+            fi
             $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
          else
              ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
@@ -905,7 +918,22 @@ fileout_json_finding() {
 ##################### FILE FORMATING #########################
 
 fileout_pretty_json_banner() {
-    echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+     local target
+
+     if "$do_mass_testing"; then
+        echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
+          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
+          \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
+          \"startTime\"   : \"$START_TIME\",
+          \"scanResult\"  : ["
+     else
+        [[ -z "$NODE" ]] && parse_hn_port "${URI}"
+        # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
+        target="$NODE"
+        $do_mx_all_ips && target="$URI"
+
+        echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
           \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
           \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
@@ -913,12 +941,10 @@ fileout_pretty_json_banner() {
           \"port\"        : \"$PORT\",
           \"startTime\"   : \"$START_TIME\",
           \"scanResult\"  : ["
+     fi
 }
 
 fileout_banner() {
-     local target="$NODE"
-     $do_mx_all_ips && target="$URI"
-
      #if ! "$APPEND"; then
      #     if "$CSVHEADER"; then
      #          :
@@ -928,6 +954,13 @@ fileout_banner() {
                "$do_pretty_json" && (printf "%s\n" "$(fileout_pretty_json_banner)") >> "$JSONFILE"
           fi
      #fi
+}
+
+fileout_separator() {
+     if "$JSONHEADER"; then
+          "$do_pretty_json" && echo "          ," >> "$JSONFILE"
+          "$do_json" && echo -n "," >> "$JSONFILE"
+     fi
 }
 
 fileout_footer() {
@@ -956,18 +989,18 @@ fileout() {
 
 json_header() {
      local fname_prefix
+     local filename_provided=false
+
+     [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && filename_provided=true
 
      # Similar to HTML: Don't create headers and footers in the following scenarios:
      #  * no JSON/CSV output is being created.
      #  * mass testing is being performed and each test will have its own file.
      #  * this is an individual test within a mass test and all output is being placed in a single file.
+     ! "$do_json" && ! "$do_pretty_json" && JSONHEADER=false && return 0
+     "$do_mass_testing" && ! "$filename_provided" && JSONHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && JSONHEADER=false && return 0
 
-     if ( ! "$do_json" && ! "$do_pretty_json" ) || \
-          ( "$do_mass_testing" && ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) ) || \
-          ( "$APPEND" && [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] ); then
-               JSONHEADER=false
-               return 0
-     fi
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
      elif "$do_mass_testing"; then
@@ -975,19 +1008,22 @@ json_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="mx-$URI"
      else
-          ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) && parse_hn_port "${URI}"
+          ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${NODE}"_p"${PORT}"
      fi
-     if [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]]; then
-          rm -f "$JSONFILE"
-     elif [[ -z "$JSONFILE" ]]; then
+     if [[ -z "$JSONFILE" ]]; then
           JSONFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".json)
-     else
+     elif [[ -d "$JSONFILE" ]]; then
           JSONFILE=$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)
      fi
-     "$do_json" && printf "[\n" > "$JSONFILE"
-     "$do_pretty_json" && printf "{\n" > "$JSONFILE"
+     if "$APPEND"; then
+          JSONHEADER=false
+     else
+          [[ -e "$JSONFILE" ]] && fatal "\"$JSONFILE\" exists. Either use \"--append\" or (re)move it" 1
+          "$do_json" && printf "[\n" > "$JSONFILE"
+          "$do_pretty_json" && printf "{\n" > "$JSONFILE"
+     fi
      #FIRST_FINDING=false
      return 0
 }
@@ -995,14 +1031,15 @@ json_header() {
 
 csv_header() {
      local fname_prefix
+     local filename_provided=false
+
+     [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && filename_provided=true
 
      # CSV similar:
-     if ! "$do_csv" || \
-          ( "$do_mass_testing" && ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) ) || \
-          ( "$APPEND" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] ); then
-               CSVHEADER=false
-               return 0
-     fi
+     ! "$do_csv" && CSVHEADER=false && return 0
+     "$do_mass_testing" && ! "$filename_provided" && CSVHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && CSVHEADER=false && return 0
+
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
      elif "$do_mass_testing"; then
@@ -1010,18 +1047,22 @@ csv_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="mx-$URI"
      else
-          ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) && parse_hn_port "${URI}"
+          ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${NODE}"_p"${PORT}"
      fi
-     if [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]]; then
-          rm -f "$CSVFILE"
-     elif [[ -z "$CSVFILE" ]]; then
+
+     if [[ -z "$CSVFILE" ]]; then
           CSVFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
-     else
+     elif [[ -d "$CSVFILE" ]]; then
           CSVFILE=$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
      fi
-     "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+     if "$APPEND"; then
+          CSVHEADER=false
+     else
+          [[ -e "$CSVFILE" ]] && fatal "\"$CSVFILE\" exists. Either use \"--append\" or (re)move it" 1
+          echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+     fi
      return 0
 }
 
@@ -1030,17 +1071,17 @@ csv_header() {
 
 html_header() {
      local fname_prefix
+     local filename_provided=false
+     
+     [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && filename_provided=true
 
      # Don't create HTML headers and footers in the following scenarios:
      #  * HTML output is not being created.
      #  * mass testing is being performed and each test will have its own HTML file.
      #  * this is an individual test within a mass test and all HTML output is being placed in a single file.
-     if ! "$do_html" || \
-        ( "$do_mass_testing" && ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) ) || \
-        ( "$APPEND" && [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ); then
-               HTMLHEADER=false
-               return 0
-     fi
+     ! "$do_html" && HTMLHEADER=false && return 0
+     "$do_mass_testing" && ! "$filename_provided" && HTMLHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && HTMLHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1049,33 +1090,36 @@ html_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="mx-$URI"
      else
-          ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) && parse_hn_port "${URI}"
+          ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${NODE}"_p"${PORT}"
      fi
 
-     if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
-          rm -f "$HTMLFILE"
-     elif [[ -z "$HTMLFILE" ]]; then
+     if [[ -z "$HTMLFILE" ]]; then
           HTMLFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".html)
-     else
+     elif [[ -d "$HTMLFILE" ]]; then
           HTMLFILE=$HTMLFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".html)
      fi
-     html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
-     html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
-     html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
-     html_out "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
-     html_out "<head>\n"
-     html_out "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
-     html_out "<title>testssl.sh</title>\n"
-     html_out "</head>\n"
-     html_out "<body>\n"
-     html_out "<pre>\n"
+     if "$APPEND"; then
+          HTMLHEADER=false
+     else
+          [[ -e "$HTMLFILE" ]] && fatal "\"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" 1
+          html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
+          html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
+          html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
+          html_out "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
+          html_out "<head>\n"
+          html_out "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
+          html_out "<title>testssl.sh</title>\n"
+          html_out "</head>\n"
+          html_out "<body>\n"
+          html_out "<pre>\n"
+     fi
      return 0
 }
 
 html_banner() {
-     if "$APPEND" && "$HTMLHEADER"; then
+     if "$CHILD_MASS_TESTING" && "$HTMLHEADER"; then
           html_out "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
           html_out "## at $HNAME:$OPENSSL_LOCATION\n"
           html_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
@@ -10946,7 +10990,8 @@ mybanner() {
      local openssl_location="$(which $OPENSSL)"
      local cwd=""
 
-     $QUIET && return
+     "$QUIET" && return
+     "$CHILD_MASS_TESTING" && return
      OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
      [[ -z "$GIT_REL" ]] && \
           idtag="$CVS_REL" || \
@@ -11133,30 +11178,34 @@ parse_hn_port() {
 # arg1: for testing mx records name we put a name of logfile in here, otherwise we get strange file names
 prepare_logging() {
      local fname_prefix="$1"
+     local filename_provided=false
+
+     [[ -n "$LOGFILE" ]] && [[ ! -d "$LOGFILE" ]] && filename_provided=true
+
+     # Similar to html_header():
+     ! "$do_logging" && return 0
+     "$do_mass_testing" && ! "$filename_provided" && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
 
      [[ -z "$fname_prefix" ]] && fname_prefix="${NODE}"_p"${PORT}"
 
-     if "$do_logging"; then
-          if [[ -z "$LOGFILE" ]]; then
-               LOGFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".log)
-          elif [[ -d "$LOGFILE" ]]; then
-               # actually we were instructed to place all files in a DIR instead of the current working dir
-               LOGFILE=$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)
-          else
-               : # just for clarity: a log file was specified, no need to do anything else
-          fi
-
-          if ! "$APPEND"; then
-               [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
-          else
-               >$LOGFILE
-          fi
-          tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-          tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
-          tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
-          tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
-          exec > >(tee -a ${LOGFILE})
+     if [[ -z "$LOGFILE" ]]; then
+          LOGFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".log)
+     elif [[ -d "$LOGFILE" ]]; then
+          # actually we were instructed to place all files in a DIR instead of the current working dir
+          LOGFILE=$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)
+     else
+          : # just for clarity: a log file was specified, no need to do anything else
      fi
+
+     if ! "$APPEND"; then
+          [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+     fi
+     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
+     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
+     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
+     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
+     exec > >(tee -a ${LOGFILE})
 }
 
 
@@ -11777,11 +11826,11 @@ run_mass_testing_parallel() {
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           determine_logfile
           outln "$cmdline"
-          $cmdline >$LOGFILE &
+          CHILD_MASS_TESTING=true $cmdline >$LOGFILE &
           sleep $PARALLEL_SLEEP
      done < "$FNAME"
      return $?
@@ -11790,6 +11839,7 @@ run_mass_testing_parallel() {
 
 run_mass_testing() {
      local cmdline=""
+     local first=true
      local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
@@ -11797,15 +11847,16 @@ run_mass_testing() {
      fi
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
-     APPEND=false # Make sure we close out our files
      while read cmdline; do
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q --append $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$cmdline"
-          $cmdline
+          "$first" || fileout_separator
+          CHILD_MASS_TESTING=true $cmdline
+          first=false
      done < "${FNAME}"
      return $?
 }
@@ -12453,19 +12504,20 @@ check_proxy
 check4openssl_oldfarts
 check_bsd_mount
 
-if $do_display_only; then
+if "$do_display_only"; then
      prettyprint_local "$PATTERN2SHOW"
      exit $?
 fi
 
-if $do_mass_testing; then
+fileout_banner
+
+if "$do_mass_testing"; then
      prepare_logging
      run_mass_testing
      exit $?
 fi
 
 html_banner
-fileout_banner
 
 #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
 if $do_mx_all_ips; then
