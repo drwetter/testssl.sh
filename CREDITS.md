@@ -1,6 +1,23 @@
 
 ##### Credits also to
 
+* David Cooper
+ - Detection + output of multiple certificates
+ - several cleanups of server certificate related stuff
+ - fixing the file outputs
+ - several further fixes
+ - improved parsing of TLS ServerHello messages
+ - speed improvements when testing all ciphers
+ - extensive CN <--> hostname check
+ - seperate check for curves
+
+* Frank Breedijk
+ - Detection of insecure redirects
+ - JSON and CSV output
+ - CA pinning
+ - Client simulations
+ - CI integration, test cases for it
+
 * Peter Mosmans
  - started way better cmd line parsing
  - cleanups, fixes
@@ -16,39 +33,23 @@
  - lots of cleanups
  - Shellcheck static analysis
 
-* Frank Breedijk
- - Detection of insecure redirects
- - JSON and CSV output
- - CA pinning
- - Client simulations
- - CI integration, test cases for it
-
-* David Cooper
- - Detection + output of multiple certificates
- - several cleanups of server certificate related stuff
- - several fixes
- - improved parsing of TLS ServerHello messages
- - speed improvements when testing all ciphers
- - extensive CN <--> hostname check
- - seperate check for curves
-
 - Christoph Badura
  - NetBSD fixes
 
 * Jean Marsault
  - client auth: ideas, code snipplets
- 
-* Maciej Grela 
+
+* Maciej Grela
   - colorless handling
 
 * Olivier Paroz
-  - conversion xxd --> hexdump stuff 
+  - conversion xxd --> hexdump stuff
 
 * @typingArtist
   - improved BEAST detection
 
 * @f-s
- - ARM binary support  
+ - ARM binary support
 
 * Jeroen Wiert Pluimers
   - Darwin binaries support
@@ -65,7 +66,6 @@
  - HTTP2/ALPN
  - bugfixes
  - former ARM binary support
-
 * Дилян Палаузов
  - bug fix for 3des report
  - reported a tricky STARTTLS bug
@@ -84,7 +84,7 @@
 * @nvsofts (NV)
  - LibreSSL patch for GOST
 
-* Markus Manzke: 
+* Markus Manzke:
  - Fix for HSTS + subdomains
  - LibreSSL patch
 
@@ -98,7 +98,7 @@
 
 * OpenSSL team for providing openssl.
 
-* Ivan Ristic/Qualys for the liberal license which made it possible to use the client data
+* Ivan Ristic/Qualys for the liberal license of the API which made it possible to use the client data
 
 * my family for supporting me doing this work
 
