@@ -83,7 +83,7 @@ readonly PS4='${LINENO}> ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
 
-readonly VERSION="2.8pre1"
+readonly VERSION="2.8"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
@@ -148,7 +148,7 @@ BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for 
 DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ are kept for further debugging purposes
                                         # 2: list more what's going on , also lists some errors of connections
                                         # 3: slight hexdumps + other info,
-                                        # 4: display bytes sent via sockets 
+                                        # 4: display bytes sent via sockets
                                         # 5: display bytes received via sockets
                                         # 6: whole 9 yards
 WIDE=${WIDE:-false}                     # whether to display for some options just ciphers or a table w hexcode/KX,Enc,strength etc.
@@ -160,8 +160,9 @@ JSONHEADER=true                         # include JSON headers and footers in HT
 CSVHEADER=true                          # same for CSV
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
-UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses 
+UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or cipher limit of ~128 ciphers (e.g. old ASAs)
+CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}   # child of $do_mass_testing
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -566,6 +567,13 @@ fileout_section_header() {
     "$2" && str="$(fileout_section_footer false)"
 }
 
+fileout_separator() {
+     if "$JSONHEADER"; then
+          "$do_json" && echo -n "," >> "$JSONFILE"
+     fi
+}
+
+
 fileout_section_footer() {
      return
 }
@@ -587,6 +595,8 @@ fileout_json_print_parameter() {
 }
 
 fileout_json_finding() {
+     local target
+
      if "$do_json"; then
           "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
           echo -e "         {"  >> "$JSONFILE"
@@ -600,6 +610,7 @@ fileout_json_finding() {
           echo -e "\n          }" >> "$JSONFILE"
     fi
 }
+
 
 ##################### FILE FORMATING #########################
 
@@ -624,19 +635,21 @@ fileout() {
      "$FIRST_FINDING" && FIRST_FINDING=false
 }
 
+
 json_header() {
      local fname_prefix
+     local filename_provided=false
 
-     # Similar to HTML: Don't create headers and footers in the following scenarios:
+     [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && filename_provided=true
+
+     # Don't create headers and footers in the following scenarios:
      #  * no JSON/CSV output is being created.
      #  * mass testing is being performed and each test will have its own file.
      #  * this is an individual test within a mass test and all output is being placed in a single file.
-     if ! "$do_json" || \
-          ( "$do_mass_testing" && ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) ) || \
-          ( "$APPEND" && [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] ); then
-               JSONHEADER=false
-               return 0
-     fi
+     ! "$do_json" && JSONHEADER=false && return 0
+     "$do_mass_testing" && ! "$filename_provided" && JSONHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && JSONHEADER=false && return 0
+
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
      elif "$do_mass_testing"; then
@@ -644,32 +657,36 @@ json_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="mx-$URI"
      else
-          ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) && parse_hn_port "${URI}"
+          ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${NODE}"_"${PORT}"
      fi
-     if [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]]; then
-          rm -f "$JSONFILE"
-     elif [[ -z "$JSONFILE" ]]; then
+     if [[ -z "$JSONFILE" ]]; then
           JSONFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".json)
-     else
+     elif [[ -d "$JSONFILE" ]]; then
           JSONFILE=$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)
      fi
-     "$do_json" && printf "[\n" > "$JSONFILE"
-     #FIRST_FINDING=false
+     if "$APPEND"; then
+          JSONHEADER=false
+     else
+          [[ -e "$JSONFILE" ]] && outln && fatal "\"$JSONFILE\" exists. Either use \"--append\" or (re)move it" 1
+          "$do_json" && printf "[\n" > "$JSONFILE"
+     fi
      return 0
 }
 
+
 csv_header() {
      local fname_prefix
+     local filename_provided=false
 
-     # CSV similar:
-     if ! "$do_csv" || \
-          ( "$do_mass_testing" && ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) ) || \
-          ( "$APPEND" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] ); then
-               CSVHEADER=false
-               return 0
-     fi
+     [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && filename_provided=true
+
+     # CSV similar to JSON:
+     ! "$do_csv" && CSVHEADER=false && return 0
+     "$do_mass_testing" && ! "$filename_provided" && CSVHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && CSVHEADER=false && return 0
+
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
      elif "$do_mass_testing"; then
@@ -677,18 +694,22 @@ csv_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="mx-$URI"
      else
-          ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) && parse_hn_port "${URI}"
+          ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${NODE}"_"${PORT}"
      fi
-     if [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]]; then
-          rm -f "$CSVFILE"
-     elif [[ -z "$CSVFILE" ]]; then
+
+     if [[ -z "$CSVFILE" ]]; then
           CSVFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
-     else
+     elif [[ -d "$CSVFILE" ]]; then
           CSVFILE=$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
      fi
-     "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+     if "$APPEND"; then
+          CSVHEADER=false
+     else
+          [[ -e "$CSVFILE" ]] && fatal "\"$CSVFILE\" exists. Either use \"--append\" or (re)move it" 1
+          echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+     fi
      return 0
 }
 
@@ -4118,7 +4139,7 @@ determine_trust() {
      local spaces="                              "
      local -i certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
-     
+
      # If $json_prefix is not empty, then there is more than one certificate 
      # and the output should should be indented by two more spaces.
      [[ -n $json_prefix ]] && spaces="                                "
@@ -7868,7 +7889,8 @@ mybanner() {
      local openssl_location="$(which $OPENSSL)"
      local cwd=""
 
-     $QUIET && return
+     "$QUIET" && return
+     "$CHILD_MASS_TESTING" && return
      OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
      [[ -z "$GIT_REL" ]] && \
           idtag="$CVS_REL" || \
@@ -8036,31 +8058,38 @@ parse_hn_port() {
 # arg1: for testing mx records name we put a name of logfile in here, otherwise we get strange file names
 prepare_logging() {
      local fname_prefix="$1"
+     local filename_provided=false
+
+     [[ -n "$LOGFILE" ]] && [[ ! -d "$LOGFILE" ]] && filename_provided=true
+
+     # Similar to html_header():
+     ! "$do_logging" && return 0
+     "$do_mass_testing" && ! "$filename_provided" && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
 
      [[ -z "$fname_prefix" ]] && fname_prefix="$NODE"
 
-     if "$do_logging"; then
-          if [[ -z "$LOGFILE" ]]; then
-               LOGFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".log)
-          elif [[ -d "$LOGFILE" ]]; then
-               # actually we were instructed to place all files in a DIR instead of the current working dir
-               LOGFILE=$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)
-          else
-               : # just for clarity: a log file was specified, no need to do anything else
-          fi
-          >$LOGFILE
-          outln "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-          outln "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
-          outln "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
-          outln "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
-          exec > >(tee -a ${LOGFILE})
-          # not decided yet. Maybe good to have a separate file or none at all
-          #exec 2> >(tee -a ${LOGFILE} >&2)
+     if [[ -z "$LOGFILE" ]]; then
+          LOGFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".log)
+     elif [[ -d "$LOGFILE" ]]; then
+          # actually we were instructed to place all files in a DIR instead of the current working dir
+          LOGFILE=$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)
+     else
+          : # just for clarity: a log file was specified, no need to do anything else
      fi
+
+     if ! "$APPEND"; then
+          [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+     fi
+     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
+     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
+     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
+     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
+     exec > >(tee -a ${LOGFILE})
      return 0
 }
 
-     
+
 # args: string containing ip addresses
 filter_ip6_address() {
      local a
@@ -8556,35 +8585,9 @@ run_mx_all_ips() {
      return $ret
 }
 
-
-run_mass_testing_parallel() {
-     local cmdline=""
-     local global_cmdline=${CMDLINE%%--file*}
-
-     if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
-          fatal "Can't read file \"$FNAME\"" "2"
-     fi
-     pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln
-     outln "(output is in ....\n)"
-#FIXME: once this function is being called we need a handler which does the right thing 
-# ==> not overwrite
-     while read cmdline; do
-          cmdline=$(filter_input "$cmdline")
-          [[ -z "$cmdline" ]] && continue
-          [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
-          draw_line "=" $((TERM_WIDTH / 2)); outln;
-          determine_logfile
-          outln "$cmdline"
-          $cmdline >$LOGFILE &
-          sleep $PARALLEL_SLEEP
-     done < "$FNAME"
-     return $?
-}
-
-
 run_mass_testing() {
      local cmdline=""
+     local first=true
      local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
@@ -8592,19 +8595,19 @@ run_mass_testing() {
      fi
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
-     APPEND=false # Make sure we close out our files
      while read cmdline; do
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q --append $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$cmdline"
-          $cmdline
+          "$first" || fileout_separator
+          CHILD_MASS_TESTING=true $cmdline
+          first=false
      done < "${FNAME}"
      return $?
 }
-
 
 
 # This initializes boolean global do_* variables. They keep track of what to do
