@@ -19,6 +19,7 @@ $json = json('tmp.json');
 
 # It is better to have findings in a hash
 # Look for a host cert match in the process.
+unlink 'tmp.json';
 my $found = 0;
 my %findings;
 foreach my $f ( @$json ) {
