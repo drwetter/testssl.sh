@@ -5449,8 +5449,7 @@ compare_server_name_to_cert()
      local -i ret=0
 
      # Check whether any of the DNS names in the certificate match the servername
-     dns_sans=$($OPENSSL x509 -in "$cert" -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-               tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
+     dns_sans="$(get_san_dns_from_cert "$cert")"
      for san in $dns_sans; do
           [[ $(toupper "$san") == "$servername" ]] && ret=1 && break
      done
@@ -5495,7 +5494,7 @@ must_staple() {
      local cert extn
      local -i extn_len
      local supported=false
-     
+
      # Note this function is only looking for status_request (5) and not
      # status_request_v2 (17), since OpenSSL seems to only include status_request (5)
      # in its ClientHello when the "-status" option is used.
@@ -6209,9 +6208,7 @@ run_server_defaults() {
 
                          if [[ ${success[n]} -ne 0 ]]; then
                               cn_nosni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
-                              sans_nosni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
-                                   grep -A2 "Subject Alternative Name" | tr ',' '\n' | grep "DNS:" | \
-                                   sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
+                              sans_nosni="$(toupper "$(get_san_dns_from_cert "$HOSTCERT")")"
 
                               echo "${previous_hostcert[1]}" > $HOSTCERT
                               cn_sni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
@@ -6221,9 +6218,7 @@ run_server_defaults() {
                               # match if the CNs are the same and the SANs (if
                               # present) contain at least one DNS name in common.
                               if [[ "$cn_nosni" == "$cn_sni" ]]; then
-                                   sans_sni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
-                                        grep -A2 "Subject Alternative Name" | tr ',' '\n' | grep "DNS:" | \
-                                        sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
+                                   sans_sni="$(toupper "$(get_san_dns_from_cert "$HOSTCERT")")"
                                    if [[ "$sans_nosni" == "$sans_sni" ]]; then
                                         success[n]=0
                                    else
@@ -6320,7 +6315,7 @@ get_session_ticket_lifetime_from_serverhello() {
 }
 
 get_san_dns_from_cert() {
-     toupper "$($OPENSSL x509 -in "$1" -noout -text 2>>$ERRFILE | \
+     echo "$($OPENSSL x509 -in "$1" -noout -text 2>>$ERRFILE | \
           grep -A2 "Subject Alternative Name" | tr ',' '\n' | grep "DNS:" | \
           sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')"
 }
