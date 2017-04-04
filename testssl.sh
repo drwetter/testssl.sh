@@ -91,7 +91,7 @@ egrep -q "dev|rc" <<< "$VERSION" && \
 
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname "$0")
-TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"   # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR 
+TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"   # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR
 CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"           # or CA_BUNDLES_PATH to find the CA BUNDLES. TESTSSL_INSTALL_DIR helps you to find the RFC mapping also
 MAPPING_FILE_RFC=""
 OPENSSL_LOCATION=""
@@ -317,7 +317,7 @@ readonly SSLv2_CLIENT_HELLO="
 
 ###### output functions ######
 # a little bit of sanitizing with bash internal search&replace -- otherwise printf will hiccup at '%' and '--' does the rest.
-out(){ 
+out(){
 #     if [[ "$BASH_VERSINFO" -eq 4 ]]; then
           printf -- "%b" "${1//%/%%}"
 #     else
@@ -459,7 +459,7 @@ strip_quote() {
      sed -e "s,\x1B\[[0-9;]*[a-zA-Z],,g" \
           -e "s/\"/\\'/g" \
           -e 's/^ *//g' \
-          -e 's/ *$//g' <<< "$1"    
+          -e 's/ *$//g' <<< "$1"
 }
 
 ###### helper function definitions ######
@@ -889,7 +889,7 @@ run_http_header() {
      # populate vars for HTTP time
 
      debugme echo "$NOW_TIME: $HTTP_TIME"
-     
+
      # delete from pattern til the end. We ignore any leading spaces (e.g. www.amazon.de)
      sed  -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<?XML/,$d' \
           -e '/<xml/,$d' -e '/<?xml/,$d'  -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
@@ -8126,7 +8126,7 @@ get_local_aaaa() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip6=$(grep -wh "$1" $etchosts 2>/dev/null | grep ':' | egrep -v '^#|\.local' | egrep "[[:space:]]$1" | awk '{ print $1 }')
+     ip6=$(grep -wih "$1" $etchosts 2>/dev/null | grep ':' | egrep -v '^#|\.local' | egrep -i "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv6addr "$ip6"; then
           echo "$ip6"
      else
@@ -8139,7 +8139,7 @@ get_local_a() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip4=$(grep -wh "$1" $etchosts 2>/dev/null | egrep -v ':|^#|\.local' |  egrep "[[:space:]]$1" | awk '{ print $1 }')
+     ip4=$(grep -wih "$1" $etchosts 2>/dev/null | egrep -v ':|^#|\.local' | egrep -i "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv4addr "$ip4"; then
           echo "$ip4"
      else
@@ -9198,4 +9198,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.574 2017/03/27 20:37:06 dirkw Exp $
+#  $Id: testssl.sh,v 1.576 2017/04/04 08:03:41 dirkw Exp $
