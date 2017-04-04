@@ -2,97 +2,97 @@
 ##### Credits also to
 
 * David Cooper
- - Detection + output of multiple certificates
- - several cleanups of server certificate related stuff
- - fixing the file outputs
- - several further fixes
- - improved parsing of TLS ServerHello messages
- - speed improvements when testing all ciphers
- - extensive CN <--> hostname check
- - seperate check for curves
+  * Detection + output of multiple certificates
+  * several cleanups of server certificate related stuff
+  * fixing the file outputs
+  * several further fixes
+  * improved parsing of TLS ServerHello messages
+  * speed improvements when testing all ciphers
+  * extensive CN <--> hostname check
+  * seperate check for curves
 
 * Frank Breedijk
- - Detection of insecure redirects
- - JSON and CSV output
- - CA pinning
- - Client simulations
- - CI integration, test cases for it
+  * Detection of insecure redirects
+  * JSON and CSV output
+  * CA pinning
+  * Client simulations
+  * CI integration, test cases for it
 
 * Peter Mosmans
- - started way better cmd line parsing
- - cleanups, fixes
- - openssl sources support with the "missing" features
+  * started way better cmd line parsing
+  * cleanups, fixes
+  * openssl sources support with the "missing" features
 
 * John Newbigin
- - Proxy support (sockets and openssl)
+  * Proxy support (sockets and openssl)
 
 * Jonathan Roach
- - TLS_FALLBACK_SCSV checks
+  * TLS_FALLBACK_SCSV checks
 
 * Mark Felder
- - lots of cleanups
- - Shellcheck static analysis
+  * lots of cleanups
+  * Shellcheck static analysis
 
 - Christoph Badura
- - NetBSD fixes
+  * NetBSD fixes
 
 * Jean Marsault
- - client auth: ideas, code snipplets
+  * client auth: ideas, code snipplets
 
 * Maciej Grela
-  - colorless handling
+   * colorless handling
 
 * Olivier Paroz
-  - conversion xxd --> hexdump stuff
+   * conversion xxd --> hexdump stuff
 
 * @typingArtist
-  - improved BEAST detection
+   * improved BEAST detection
 
 * @f-s
- - ARM binary support
+  * ARM binary support
 
 * Jeroen Wiert Pluimers
-  - Darwin binaries support
+   * Darwin binaries support
 
 * Julien Vehent
- - supplied 1st Darwin binary
+  * supplied 1st Darwin binary
 
 * Rechi
- - initial MX stuff
- - fixes
+  * initial MX stuff
+  * fixes
 
 * Laine Gholson
- - avahi/mDNS support
- - HTTP2/ALPN
- - bugfixes
- - former ARM binary support
+  * avahi/mDNS support
+  * HTTP2/ALPN
+  * bugfixes
+  * former ARM binary support
 * Дилян Палаузов
- - bug fix for 3des report
- - reported a tricky STARTTLS bug
+  * bug fix for 3des report
+  * reported a tricky STARTTLS bug
 
 * Viktor Szépe
- - color function maker
+  * color function maker
 
 * Thomas Martens
-  - colorblind
-  - no-rfc mapping
+   * colorblind
+   * no-rfc mapping
 
 * Jonathon Rossi
-  - fix for bash3 (Darwin)
-  - and other Darwin fixes
+   * fix for bash3 (Darwin)
+   * and other Darwin fixes
 
 * @nvsofts (NV)
- - LibreSSL patch for GOST
+  * LibreSSL patch for GOST
 
 * Markus Manzke:
- - Fix for HSTS + subdomains
- - LibreSSL patch
+  * Fix for HSTS + subdomains
+  * LibreSSL patch
 
 * Dmitri S
- - inspiration & help for Darwin port
+  * inspiration & help for Darwin port
 
 * Bug reports:
-  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl, Frank Breedijk
+   * Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl, Frank Breedijk
 
 ##### Last but not least:
 
