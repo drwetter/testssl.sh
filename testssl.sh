@@ -2493,7 +2493,8 @@ std_cipherlists() {
                     ;;
           esac
           tmpfile_handle $FUNCNAME.$debugname.txt
-          [[ $DEBUG -ge 1 ]] && tmln_out " -- $1" || tmln_out
+          [[ $DEBUG -ge 1 ]] && tm_out " -- $1"
+          outln
      else
           singlespaces=$(sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g' <<< "$2")
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
@@ -12498,6 +12499,7 @@ ip=""
 lets_roll init
 initialize_globals
 parse_cmd_line "$@"
+html_header
 get_install_dir
 set_color_functions
 maketempf
@@ -12510,7 +12512,6 @@ check4openssl_oldfarts
 check_bsd_mount
 json_header
 csv_header
-html_header
 
 if "$do_display_only"; then
      prettyprint_local "$PATTERN2SHOW"
