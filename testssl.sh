@@ -12499,7 +12499,12 @@ ip=""
 lets_roll init
 initialize_globals
 parse_cmd_line "$@"
+# html_header() needs to be called early! Otherwiseif  html_out() is called before html_header() and the
+# command line contains --htmlfile <htmlfile> or --html, it'll make problems with html output, see #692.
+# json_header and csv_header can be called later but for context reasons we'll leave it here
 html_header
+json_header
+csv_header
 get_install_dir
 set_color_functions
 maketempf
@@ -12510,8 +12515,6 @@ mybanner
 check_proxy
 check4openssl_oldfarts
 check_bsd_mount
-json_header
-csv_header
 
 if "$do_display_only"; then
      prettyprint_local "$PATTERN2SHOW"
