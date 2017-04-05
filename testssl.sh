@@ -519,12 +519,12 @@ strip_trailing_space() {
 }
 
 
-if [[ $(uname) == "Linux" ]] ; then
-     toupper() { echo -n "${1^^}" ;  }
-     tolower() { echo -n "${1,,}" ;  }
-else
-     toupper() { echo -n "$1" | tr 'a-z' 'A-Z'; }
-     tolower() { echo -n "$1" | tr 'A-Z' 'a-z' ; }
+toupper() { echo -n "${1^^}" ;  }
+tolower() { echo -n "${1,,}" ;  }
+if ! toupper aaa 2>/dev/null; then
+     # older bash can't do this (MacOS X), even SLES 11, see #697
+     toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
+     tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
 fi
 
 is_number() {
@@ -1379,7 +1379,7 @@ run_hpkp() {
           if ! "$has_backup_spki"; then
                pr_svrty_highln " No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site. "
                fileout "hpkp_backup" "HIGH" "No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site."
-          fi               
+          fi
      else
           outln "--"
           fileout "hpkp" "INFO" "No support for HTTP Public Key Pinning"
@@ -9205,4 +9205,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.577 2017/04/05 12:56:17 dirkw Exp $
+#  $Id: testssl.sh,v 1.578 2017/04/05 15:34:04 dirkw Exp $
