@@ -11015,7 +11015,7 @@ mybanner() {
      bb1=$(cat <<EOF
 
 ###########################################################
-    $PROG_NAME       $VERSION from
+    $PROG_NAME       $VERSION from 
 EOF
 )
      bb2=$(cat <<EOF
@@ -11034,9 +11034,13 @@ EOF
 )
      pr_bold "$bb1"
      pr_boldurl "$SWURL"; outln
-     pr_bold "    ("
-     pr_grey "$idtag"
-     prln_bold ")"
+     if [[ -n "$idtag" ]]; then
+          #FIXME: if we run it not off the git dir we miss the version tag.
+          # at least we don't want to display empty brackets here...
+          pr_bold "    ("
+          pr_grey "$idtag"
+          prln_bold ")"
+     fi
      pr_bold "$bb2"
      pr_boldurl "https://testssl.sh/bugs/"; outln
      pr_bold "$bb3"
