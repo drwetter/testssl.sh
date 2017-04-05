@@ -510,9 +510,14 @@ strip_spaces() {
      echo "${1// /}"
 }
 
-trim_trailing_space() {
-     echo "${1%%*( )}"
+# https://web.archive.org/web/20121022051228/http://codesnippets.joyent.com/posts/show/1816
+strip_leading_space() {
+     echo "${1#"${1%%[\![:space:]]*}"}"
 }
+strip_trailing_space() {
+     echo "${1%"${1##*[![:space:]]}"}"
+}
+
 
 if [[ $(uname) == "Linux" ]] ; then
      toupper() { echo -n "${1^^}" ;  }
@@ -1051,22 +1056,24 @@ detect_header() {
           HEADERVALUE=""
           return 0
      elif [[ $nr -eq 1 ]]; then
-          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://')
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE)
+          HEADERVALUE=${HEADERVALUE#*:}                        # remove leading part=key to colon
+          HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           return 1
-     else 
+     else
           pr_svrty_medium "misconfiguration: "
           pr_italic "$key"
           pr_svrty_medium " ${nr}x"
           out " -- checking first one "
           out "\n$spaces"
-          # first awk matches the key, second extracts the from the first line the value, be careful with quotes here!
-          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://' | head -1)
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | head -1)
+          HEADERVALUE=${HEADERVALUE#*:}
+          HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           [[ $DEBUG -ge 2 ]] && pr_italic "$HEADERVALUE" && out "\n$spaces"
           fileout "$2""_multiple" "WARN" "Multiple $2 headers. Using first header: $HEADERVALUE"
           return $nr
      fi
 }
-# wir brauchen hier eine Funktion, die generell den Header detectiert
 
 
 includeSubDomains() {
@@ -1243,7 +1250,7 @@ run_hpkp() {
           # certificates that were provided in $TEMPDIR/intermediatecerts.pem
           # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
           awk -v n=-1 "/Certificate chain/ {start=1}
-                  /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+                  /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
                   inc { print > (\"$TEMPDIR/level\" n \".crt\") }
                   /---END CERTIFICATE-----/{ inc=0 }" $TMPFILE
           nrsaved=$(count_words "$(echo $TEMPDIR/level?.crt 2>/dev/null)")
@@ -1256,7 +1263,7 @@ run_hpkp() {
                          $OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
                     hpkp_name="$(get_cn_from_cert $cert_fname)"
                     hpkp_ca="$($OPENSSL x509 -in $cert_fname -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
-                    [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout | sed 's/^subject= //') 
+                    [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout | sed 's/^subject= //')
                     echo "$hpkp_spki_ca $hpkp_name" >> "$TEMPDIR/intermediate.hashes"
                done
           fi
@@ -1299,7 +1306,7 @@ run_hpkp() {
                          certificate_found=true      # root CA found
                          spki_match=true
                          if [[ $(count_lines "$hpkp_matches") -eq 1 ]]; then
-                              # replace by awk 
+                              # replace by awk
                               match_ca=$(sed "s/[a-zA-Z0-9\+\/]*=* *//" <<< "$hpkp_matches")
                          else
                               match_ca=""
@@ -1332,7 +1339,7 @@ run_hpkp() {
                     fileout "hpkp_$hpkp_spki" "INFO" "SPKI $hpkp_spki doesn't match anything. This is ok for a backup for any certificate"
                     # CSV/JSON output here for the sake of simplicity, rest we do en bloc below
                fi
-          done 
+          done
 
           # now print every backup spki out we saved before
           out "\n$spaces_indented Backups:   "
@@ -1593,7 +1600,7 @@ run_more_flags() {
      pr_bold " Security headers             "
      for f2t in $good_flags2test; do
           debugme echo "---> $f2t"
-          detect_header $f2t $f2t
+          detect_header "$f2t" "$f2t"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
                     out "$spaces"  # output leading spaces if the first header
@@ -1607,7 +1614,7 @@ run_more_flags() {
 
      for f2t in $other_flags2test; do
           debugme echo "---> $f2t"
-          detect_header $f2t $f2t
+          detect_header "$f2t" "$f2t"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
                     out "$spaces"  # output leading spaces if the first header
@@ -9198,4 +9205,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.576 2017/04/04 08:03:41 dirkw Exp $
+#  $Id: testssl.sh,v 1.577 2017/04/05 12:56:17 dirkw Exp $
