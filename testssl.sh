@@ -521,7 +521,7 @@ strip_trailing_space() {
 
 toupper() { echo -n "${1^^}" ;  }
 tolower() { echo -n "${1,,}" ;  }
-if ! toupper aaa 2>/dev/null; then
+if ! toupper aaa 2>&1 >/dev/null; then
      # older bash can't do this (MacOS X), even SLES 11, see #697
      toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
      tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
@@ -9205,4 +9205,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.579 2017/04/05 18:15:29 dirkw Exp $
+#  $Id: testssl.sh,v 1.580 2017/04/05 18:30:16 dirkw Exp $
