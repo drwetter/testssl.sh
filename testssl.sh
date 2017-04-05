@@ -1144,7 +1144,7 @@ html_footer() {
 
 toupper() { echo -n "${1^^}" ;  }
 tolower() { echo -n "${1,,}" ;  }
-if ! toupper aaa 2>/dev/null; then
+if ! toupper aaa 2>&1 >/dev/null; then
      # Older bash can't do this (MacOS X), even SLES 11, see #697
      toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
      tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
@@ -11215,7 +11215,7 @@ prepare_logging() {
      fi
 
      if ! "$APPEND"; then
-          [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -e $LOGFILE ]] && outln && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
      fi
      tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
      tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
