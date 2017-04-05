@@ -1142,12 +1142,12 @@ html_footer() {
 
 ###### START helper function definitions ######
 
-if [[ $(uname) == "Linux" ]] ; then
-     toupper() { echo -n "${1^^}" ;  }
-     tolower() { echo -n "${1,,}" ;  }
-else
+toupper() { echo -n "${1^^}" ;  }
+tolower() { echo -n "${1,,}" ;  }
+if ! toupper aaa 2>/dev/null; then
+     # Older bash can't do this (MacOS X), even SLES 11, see #697
      toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
-     tolower() { tr 'A-Z' 'a-z'  <<< "$1"; }
+     tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
 fi
 
 debugme() {
@@ -1204,9 +1204,14 @@ strip_spaces() {
      echo "${1// /}"
 }
 
-trim_trailing_space() {
-     echo "${1%%*( )}"
+# https://web.archive.org/web/20121022051228/http://codesnippets.joyent.com/posts/show/1816
+strip_leading_space() {
+     echo "${1#"${1%%[\![:space:]]*}"}"
 }
+strip_trailing_space() {
+     echo "${1%"${1##*[![:space:]]}"}"
+}
+
 
 # retrieve cipher from ServerHello (via openssl)
 get_cipher() {
@@ -1714,7 +1719,9 @@ detect_header() {
           HEADERVALUE=""
           return 0
      elif [[ $nr -eq 1 ]]; then
-          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://')
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE)
+          HEADERVALUE=${HEADERVALUE#*:}                        # remove leading part=key to colon
+          HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           return 1
      else
           pr_svrty_medium "misconfiguration: "
@@ -1722,15 +1729,14 @@ detect_header() {
           pr_svrty_medium " ${nr}x"
           out " -- checking first one "
           out "\n$spaces"
-          # first awk matches the key, second extracts the from the first line the value, be careful with quotes here!
-          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://' | head -1)
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | head -1)
+          HEADERVALUE=${HEADERVALUE#*:}
+          HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           [[ $DEBUG -ge 2 ]] && tm_italic "$HEADERVALUE" && tm_out "\n$spaces"
           fileout "$2""_multiple" "WARN" "Multiple $2 headers. Using first header: $HEADERVALUE"
           return $nr
      fi
 }
-# wir brauchen hier eine Funktion, die generell den Header detectiert
-
 
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
@@ -2296,28 +2302,30 @@ run_more_flags() {
      pr_bold " Security headers             "
      for f2t in $good_flags2test; do
           debugme echo "---> $f2t"
-          detect_header $f2t $f2t
+          detect_header "$f2t" "$f2t"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
-                    out "$spaces"  # output leading spaces if the first header
+                    out "$spaces"       # output leading spaces if the first header
                else
                     first=false
                fi
-               pr_done_good "$f2t"; outln "$HEADERVALUE"
+               pr_done_good "$f2t"
+               outln "$(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
                fileout "$f2t" "OK" "$f2t: $HEADERVALUE"
           fi
      done
 
      for f2t in $other_flags2test; do
           debugme echo "---> $f2t"
-          detect_header $f2t $f2t
+          detect_header "$f2t" "$f2t"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
-                    out "$spaces"  # output leading spaces if the first header
+                    out "$spaces"       # output leading spaces if the first header
                else
                     first=false
                fi
-               pr_litecyan "$f2t"; outln "$HEADERVALUE"
+               pr_litecyan "$f2t"
+               outln "$HEADERVALUE"     # shouldn't be that long
                fileout "$f2t" "WARN" "$f2t: $HEADERVALUE"
           fi
      done
