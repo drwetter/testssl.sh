@@ -1144,7 +1144,7 @@ html_footer() {
 
 toupper() { echo -n "${1^^}" ;  }
 tolower() { echo -n "${1,,}" ;  }
-if ! toupper aaa 2>/dev/null; then
+if ! toupper aaa 2>&1 >/dev/null; then
      # Older bash can't do this (MacOS X), even SLES 11, see #697
      toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
      tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
@@ -11026,7 +11026,7 @@ mybanner() {
      bb1=$(cat <<EOF
 
 ###########################################################
-    $PROG_NAME       $VERSION from
+    $PROG_NAME       $VERSION from 
 EOF
 )
      bb2=$(cat <<EOF
@@ -11045,9 +11045,13 @@ EOF
 )
      pr_bold "$bb1"
      pr_boldurl "$SWURL"; outln
-     pr_bold "    ("
-     pr_grey "$idtag"
-     prln_bold ")"
+     if [[ -n "$idtag" ]]; then
+          #FIXME: if we run it not off the git dir we miss the version tag.
+          # at least we don't want to display empty brackets here...
+          pr_bold "    ("
+          pr_grey "$idtag"
+          prln_bold ")"
+     fi
      pr_bold "$bb2"
      pr_boldurl "https://testssl.sh/bugs/"; outln
      pr_bold "$bb3"
@@ -11215,7 +11219,7 @@ prepare_logging() {
      fi
 
      if ! "$APPEND"; then
-          [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -e $LOGFILE ]] && outln && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
      fi
      tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
      tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
