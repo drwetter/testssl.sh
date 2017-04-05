@@ -8088,10 +8088,10 @@ prepare_logging() {
      if ! "$APPEND"; then
           [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
      fi
-     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
-     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
-     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
+     outln "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
+     outln "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
+     outln "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
+     outln "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
      exec > >(tee -a ${LOGFILE})
      return 0
 }
@@ -9205,4 +9205,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.578 2017/04/05 15:34:04 dirkw Exp $
+#  $Id: testssl.sh,v 1.579 2017/04/05 18:15:29 dirkw Exp $
