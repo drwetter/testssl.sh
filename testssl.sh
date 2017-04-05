@@ -2310,7 +2310,7 @@ run_more_flags() {
                     first=false
                fi
                pr_done_good "$f2t"
-               outln "$(out_row_aligned_max_width "$HEADERVALUE" "                              " $TERM_WIDTH)"
+               outln "$(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
                fileout "$f2t" "OK" "$f2t: $HEADERVALUE"
           fi
      done
