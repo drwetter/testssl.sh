@@ -296,6 +296,15 @@ HEX_CIPHER=""
 
 SERVER_COUNTER=0                        # Counter for multiple servers
 
+########### Global variables for parallel mass testing
+readonly PARALLEL_SLEEP=1                 # Time to sleep after starting each test
+readonly MAX_WAIT_TEST=600                # Maximum time to wait for a test to complete
+readonly MAX_PARALLEL=20                  # Maximum number of tests to run in parallel
+declare -a -i PARALLEL_TESTING_PID=()     # process id for each child test
+declare -a PARALLEL_TESTING_CMDLINE=()    # command line for each child test
+declare -i NR_PARALLEL_TESTS=0            # number of parallel tests run
+declare -i NEXT_PARALLEL_TEST_TO_FINISH=0 # number of parallel tests that have completed and have been processed
+
 #################### SEVERITY ####################
 INFO=0
 OK=0
@@ -11064,6 +11073,20 @@ EOF
 
 
 cleanup () {
+     # If parallel mass testing is being performed, then the child tests need
+     # to be killed before $TEMPDIR is deleted. Otherwise, error messages
+     # will be created if testssl.sh is stopped before all testing is complete.
+     while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
+          if ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
+               kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >&2 2>/dev/null
+               wait ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} 2>/dev/null    # make sure pid terminated, see wait(1p)
+          else
+               # If a test had already completed, but its output wasn't yet processed,
+               # then process it now.
+               get_next_message_testing_parallel_result
+          fi
+          NEXT_PARALLEL_TEST_TO_FINISH+=1
+     done
      if [[ "$DEBUG" -ge 1 ]]; then
           tmln_out
           tm_underline "DEBUG (level $DEBUG): see files in $TEMPDIR"
@@ -11855,30 +11878,149 @@ run_mass_testing() {
      return $?
 }
 
+# Modify global command line for child tests in mass processing.
+# In particular if all (JSON, CSV, HTML) output is to go into a single
+# file, then have each child place its output in a separate, named file, so
+# that the separate files can be concatenated together once they are complete
+# to create the single file.
+modify_global_cmd_line() {
+     local global_cmdline="" filename
+     local ret
+
+     while [[ $# -gt 0 ]]; do
+          case "$1" in
+               --jsonfile|--jsonfile=*)
+                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    ret=$?
+                    # If <jsonfile> is a file, then have provide a different
+                    # file name to each child process. If <jsonfile> is a
+                    # directory, then just pass it on to the child processes.
+                    if "$JSONHEADER"; then
+                         global_cmdline+="--jsonfile=$TEMPDIR/jsonfile_XXXXXXXX.json "
+                    else
+                         global_cmdline+="$1 "
+                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
+                    fi
+                    [[ $ret -eq 0 ]] && shift
+                    ;;     
+               --jsonfile-pretty|--jsonfile-pretty=*)
+                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    ret=$?
+                    # Same as for --jsonfile
+                    if "$JSONHEADER"; then
+                         global_cmdline+="--jsonfile-pretty=$TEMPDIR/jsonfile_XXXXXXXX.json "
+                    else
+                         global_cmdline+="$1 "
+                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
+                    fi
+                    [[ $ret -eq 0 ]] && shift
+                    ;;               
+               --csvfile|--csvfile=*)
+                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    ret=$?
+                    # Same as for --jsonfile
+                    if "$CSVHEADER"; then
+                         global_cmdline+="--csvfile=$TEMPDIR/csvfile_XXXXXXXX.csv "
+                    else
+                         global_cmdline+="$1 "
+                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
+                    fi
+                    [[ $ret -eq 0 ]] && shift
+                    ;;
+               --htmlfile|--htmlfile=*)
+                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    ret=$?
+                    # Same as for --jsonfile
+                    if "$HTMLHEADER"; then
+                         global_cmdline+="--htmlfile=$TEMPDIR/htmlfile_XXXXXXXX.html "
+                    else
+                         global_cmdline+="$1 "
+                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
+                    fi
+                    [[ $ret -eq 0 ]] && shift
+                    ;;
+               *)
+                    global_cmdline+="$1 "
+                    ;;
+          esac
+          shift
+     done
+     tm_out "$global_cmdline"
+     return 0
+}
+
+# This function is called when it has been determined that the next child process has completed.
+# This process prints its output to the terminal and, if appropriate, adds any JSON, CSV, and HTML
+# output it has created to the appropriate file.
+get_next_message_testing_parallel_result() {
+     draw_line "=" $((TERM_WIDTH / 2)); outln;
+     outln "${PARALLEL_TESTING_CMDLINE[NEXT_PARALLEL_TEST_TO_FINISH]}"
+     cat "$TEMPDIR/term_output_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).log"
+     [[ $NEXT_PARALLEL_TEST_TO_FINISH -gt 0 ]] && fileout_separator                     # this is needed for appended output, see #687
+     "$JSONHEADER" && cat "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" >> "$JSONFILE"
+     "$CSVHEADER" && cat "$TEMPDIR/csvfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).csv" >> "$CSVFILE"
+     "$HTMLHEADER" && cat "$TEMPDIR/htmlfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).html" >> "$HTMLFILE"
+}
 
 #FIXME: not called/tested yet
 run_mass_testing_parallel() {
      local cmdline=""
-     local first=true
+     local one_jsonfile=false
      local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
-     pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln
-     outln "(output is in ....\n)"
-#FIXME: once this function is being called we need a handler which does the right thing, i.e.  ==> not to overwrite
+     global_cmdline="$(modify_global_cmd_line $global_cmdline)"
+     [[ "$global_cmdline" =~ jsonfile_XXXXXXXX ]] && one_jsonfile=true
+     
+     pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln "\n"
      while read cmdline; do
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
           cmdline="$0 $global_cmdline --warnings=batch $cmdline"
-          draw_line "=" $((TERM_WIDTH / 2)); outln;
-          outln "$cmdline"
-          CHILD_MASS_TESTING=true $cmdline >$LOGFILE &
-          # first=false
+
+          # If the JSON, CSV, or HTML output is to all go into a single file, then replace the
+          # generic "_XXXXXXXX" filenames with different names for each child process, by
+          # replacing "XXXXXXXX" with the test's number
+          cmdline="${cmdline/jsonfile_XXXXXXXX\.json/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json}"
+
+          # fileout() won't include the "service" information in the JSON file for the child process
+          # if the JSON file doesn't already exist.
+          "$one_jsonfile" && echo -n "" > "$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
+          cmdline="${cmdline/csvfile_XXXXXXXX\.csv/csvfile_$(printf "%08d" $NR_PARALLEL_TESTS).csv}"
+          cmdline="${cmdline/htmlfile_XXXXXXXX\.html/htmlfile_$(printf "%08d" $NR_PARALLEL_TESTS).html}"
+          PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$cmdline"
+          CHILD_MASS_TESTING=true $cmdline > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+          PARALLEL_TESTING_PID[NR_PARALLEL_TESTS]=$!
+          NR_PARALLEL_TESTS+=1
           sleep $PARALLEL_SLEEP
+          # Get the results of any completed tests
+          while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
+               if ! ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
+                    get_next_message_testing_parallel_result
+                    NEXT_PARALLEL_TEST_TO_FINISH+=1
+               else
+                    break
+               fi
+          done
+          if [[ $NR_PARALLEL_TESTS-$NEXT_PARALLEL_TEST_TO_FINISH -ge $MAX_PARALLEL ]]; then
+               # The maximum number of tests that may be run in parallel has
+               # been reached. Need to wait for one to finish before starting
+               # another.
+               wait_kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} $MAX_WAIT_TEST
+               [[ $? -eq 0 ]] && get_next_message_testing_parallel_result
+               NEXT_PARALLEL_TEST_TO_FINISH+=1
+          fi
      done < "$FNAME"
+
+     # Wait for remaining tests to finish
+     while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
+          wait_kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} $MAX_WAIT_TEST
+          [[ $? -eq 0 ]] && get_next_message_testing_parallel_result
+          NEXT_PARALLEL_TEST_TO_FINISH+=1
+     done
      return $?
 }
 
