@@ -760,8 +760,17 @@ fileout() {
      if ( "$do_pretty_json" && [[ "$1" == "service" ]] ) || show_finding "$severity"; then
          local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
          [[ -f "$JSONFILE" ]] && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
-         "$do_csv" && \
-              echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
+
+         if "$do_csv"; then
+            if "$do_test_just_one"; then
+                if [[ "$1" != "service" ]]; then
+                   read hexcode opensll_csn kx encyption bits rfc_csn availability <<< "$3"
+                   echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$hexcode\",\"$opensll_csn\",\"$kx\",\"$encyption\",\"$bits\",\"$rfc_csn\",\"$availability"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
+                fi
+            else
+                echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
+            fi
+         fi
      "$FIRST_FINDING" && FIRST_FINDING=false
      fi
 }
@@ -841,7 +850,11 @@ csv_header() {
           CSVHEADER=false
      else
           [[ -e "$CSVFILE" ]] && fatal "\"$CSVFILE\" exists. Either use \"--append\" or (re)move it" 1
-          echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+          if "$do_test_just_one"; then
+             echo "\"ID\",\"FQDN/IP\",\"Port\",\"Severity\",\"Hexcode\",\"OpenSSL CSN\",\"Key Exchange\",\"Encryption\",\"Bits\",\"RFC CSN\",\"Availability\",\"CVE\",\"CWE\",\"Hint\"" > "$CSVFILE"
+          else
+             echo "\"ID\",\"FQDN/IP\",\"Port\",\"Severity\",\"Finding\",\"CVE\",\"CWE\",\"Hint\"" > "$CSVFILE"
+          fi
      fi
      return 0
 }
@@ -2416,7 +2429,7 @@ neat_list(){
           fi
           return 0
      fi
-     read what_dh bits <<< "$kx"
+     read what_dh bits <<< "$(echo "$kx" | awk -F"(" '{a=$1" ("$2; print a}')"
      len=${#kx}
      if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
           out "$(printf -- " %-7s %-49s " "$hexcode" "$tls_cipher")"
@@ -2426,9 +2439,9 @@ neat_list(){
      out "$what_dh"
      if [[ -n "$bits" ]]; then
           if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]]; then
-               pr_dh_quality "$bits" " $bits"
+               pr_dh_quality "$bits" "$bits"
           elif [[ $what_dh == "ECDH" ]]; then
-               pr_ecdh_quality "$bits" " $bits"
+               pr_ecdh_quality "$bits" "$bits"
           fi
      fi
      for (( i=len; i<10; i++ )); do
@@ -2623,7 +2636,7 @@ test_just_one(){
                     ciphers_found[i]=true
                     if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
                          dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                         kx[i]="${kx[i]} $dhlen"
+                         kx[i]="${kx[i]}($dhlen)"
                     fi
                     "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
                          sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -2681,7 +2694,7 @@ test_just_one(){
                     ciphers_found[i]=true
                     if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
                          dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
-                         kx[i]="${kx[i]} $dhlen"
+                         kx[i]="${kx[i]}($dhlen)"
                     fi
                     "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
                           sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -2867,7 +2880,7 @@ run_allciphers() {
                               ciphers_found[i]=true
                               if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
                                    dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                                   kx[i]="${kx[i]} $dhlen"
+                                   kx[i]="${kx[i]}($dhlen)"
                               fi
                               "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
                                    sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -2930,7 +2943,7 @@ run_allciphers() {
                          ciphers_found[i]=true
                          if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
                               dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
-                              kx[i]="${kx[i]} $dhlen"
+                              kx[i]="${kx[i]}($dhlen)"
                          fi
                          "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
                     fi
@@ -3150,7 +3163,7 @@ run_cipher_per_proto() {
                                         ciphers_found[i]=true
                                         if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
                                              dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                                             kx[i]="${kx[i]} $dhlen"
+                                             kx[i]="${kx[i]}($dhlen)"
                                         fi
                                         "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
                                              sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -3216,7 +3229,7 @@ run_cipher_per_proto() {
                                    fi
                                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
                                         dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
-                                        kx[i]="${kx[i]} $dhlen"
+                                        kx[i]="${kx[i]}($dhlen)"
                                    fi
                                    "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
                                         sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -6240,7 +6253,7 @@ run_pfs() {
                ciphers_found[i]=true
                if "$WIDE"; then
                     dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                    kx[i]="${kx[i]} $dhlen"
+                    kx[i]="${kx[i]}($dhlen)"
                fi
                "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
                     sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -6266,7 +6279,7 @@ run_pfs() {
                     ciphers_found[i]=true
                     if "$WIDE"; then
                          dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
-                         kx[i]="${kx[i]} $dhlen"
+                         kx[i]="${kx[i]}($dhlen)"
                     fi
                     "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
                          sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -9870,7 +9883,7 @@ run_beast(){
                vuln_beast=true
                if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
                     dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                    kx[i]="${kx[i]} $dhlen"
+                    kx[i]="${kx[i]}($dhlen)"
                fi
                "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
                     sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -9901,7 +9914,7 @@ run_beast(){
                     vuln_beast=true
                     if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
                          dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
-                         kx[i]="${kx[i]} $dhlen"
+                         kx[i]="${kx[i]}($dhlen)"
                     fi
                     "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
                          sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -10193,7 +10206,7 @@ run_rc4() {
                          ciphers_found[i]=true
                          if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
                               dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                              kx[i]="${kx[i]} $dhlen"
+                              kx[i]="${kx[i]}($dhlen)"
                          fi
                          "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
                               sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
@@ -10239,7 +10252,7 @@ run_rc4() {
                     ciphers_found[i]=true
                     if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
                          dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
-                         kx[i]="${kx[i]} $dhlen"
+                         kx[i]="${kx[i]}($dhlen)"
                     fi
                     "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
                          sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
