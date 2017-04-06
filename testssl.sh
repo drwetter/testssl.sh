@@ -2072,7 +2072,7 @@ run_cookie_flags() {     # ARG1: Path
 run_more_flags() {
      local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
      local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible Referrer-Policy"
-     local f2t
+     local f2t line
      local first=true
      local spaces="                              "
 
@@ -2091,7 +2091,8 @@ run_more_flags() {
                     first=false
                fi
                pr_done_good "$f2t"
-               outln "$(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
+               line="$(out_row_aligned_max_width "$f2t$HEADERVALUE" "$spaces" $TERM_WIDTH)"
+               outln " ${line#* }"
                fileout "$f2t" "OK" "$f2t: $HEADERVALUE"
           fi
      done
