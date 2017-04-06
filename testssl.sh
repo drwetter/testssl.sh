@@ -82,7 +82,7 @@ readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # see stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
 # how to paste both in order to do performance analysis
 DEBUGTIME=${DEBUGTIME:-false}
-DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for just debugging)
+DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for testssl.sh and bash3's default
 if grep -q xtrace <<< "$SHELLOPTS"; then
      if "$DEBUGTIME"; then
           # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
@@ -923,7 +923,7 @@ html_footer() {
 ###### START helper function definitions ######
 
 if [[ "$BASH_VERSINFO" == 3 ]]; then
-     # older bash can't do this (MacOS X), even SLES 11, see #697 and also
+     # older bash can do this only (MacOS X), even SLES 11, see #697
      toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
      tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
 else
