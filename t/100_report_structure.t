@@ -19,6 +19,7 @@ $tests = 0;
 pass("Running testssl.sh against badssl.com to create a JSON report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
 $out = `./testssl.sh -S -e -U --jsonfile tmp.json --severity LOW --color 0 badssl.com`;
 $json = json('tmp.json');
+unlink 'tmp.json';
 $found = 0;
 cmp_ok(@$json,'>',0,"At least 1 finding is expected"); $tests++;
 foreach my $f ( @$json ) {
@@ -33,6 +34,7 @@ is($found,0,"We should not have any finding with INFO level"); $tests++;
 pass("Running testssl.sh against badssl.com to create a JSON-PRETTY report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
 $out = `./testssl.sh -S -e -U --jsonfile-pretty tmp.json --severity LOW --color 0 badssl.com`;
 $json_pretty = json('tmp.json');
+unlink 'tmp.json';
 $found = 0;
 my $vulnerabilities = $json_pretty->{scanResult}->[0]->{vulnerabilities};
 foreach my $f ( @$vulnerabilities ) {

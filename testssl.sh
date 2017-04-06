@@ -81,13 +81,13 @@ readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 # see stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
 # how to paste both in order to do performance analysis
-DEBUGTIME=${DEBUGTIME:-false} 
-DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen
+DEBUGTIME=${DEBUGTIME:-false}
+DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for testssl.sh and bash3's default
 if grep -q xtrace <<< "$SHELLOPTS"; then
-     if "$DEBUGTIME" ; then
+     if "$DEBUGTIME"; then
           # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
           exec 42>&2 2> >(tee /tmp/testssl-$$.log | sed -u 's/^.*$/now/' | date -f - +%s.%N >/tmp/testssl-$$.time)
-          BASH_XTRACEFD=42
+          # BASH_XTRACEFD=42
      else
           if ! "$DEBUG_ALLINONE"; then
                exec 42>| /tmp/testssl-$$.log
@@ -108,9 +108,10 @@ egrep -q "dev|rc" <<< "$VERSION" && \
 
 readonly PROG_NAME=$(basename "$0")
 readonly RUN_DIR=$(dirname "$0")
-TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"   # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR
-CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"           # or CA_BUNDLES_PATH to find the CA BUNDLES. TESTSSL_INSTALL_DIR helps you to find the RFC mapping also
+TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR
+CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # or CA_BUNDLES_PATH to find the CA BUNDLES. TESTSSL_INSTALL_DIR helps you to find the RFC mapping also
 CIPHERS_BY_STRENGTH_FILE=""
+TLS_DATA_FILE=""                                  # mandatory file for socket based handdhakes
 OPENSSL_LOCATION=""
 HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
@@ -186,6 +187,7 @@ GIVE_HINTS=false                        # give an addtional info to findings
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
+CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
 
 # tuning vars, can not be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -295,7 +297,17 @@ HEX_CIPHER=""
 
 SERVER_COUNTER=0                        # Counter for multiple servers
 
+########### Global variables for parallel mass testing
+readonly PARALLEL_SLEEP=1                 # Time to sleep after starting each test
+readonly MAX_WAIT_TEST=600                # Maximum time to wait for a test to complete
+readonly MAX_PARALLEL=20                  # Maximum number of tests to run in parallel
+declare -a -i PARALLEL_TESTING_PID=()     # process id for each child test
+declare -a PARALLEL_TESTING_CMDLINE=()    # command line for each child test
+declare -i NR_PARALLEL_TESTS=0            # number of parallel tests run
+declare -i NEXT_PARALLEL_TEST_TO_FINISH=0 # number of parallel tests that have completed and have been processed
+
 #################### SEVERITY ####################
+
 INFO=0
 OK=0
 LOW=1
@@ -335,237 +347,6 @@ show_finding() {
    ( [[ "$severity" == "CRITICAL" ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] )
 }
 
-
-###### some hexbytes for bash network sockets follow ######
-
-# 133 standard cipher + 4x GOST for TLS 1.2 and SPDY/NPN
-readonly TLS12_CIPHER="
-cc,14, cc,13, cc,15, c0,30, c0,2c, c0,28, c0,24, c0,14,
-c0,0a, c0,22, c0,21, c0,20, 00,a5, 00,a3, 00,a1, 00,9f,
-00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, 00,80, 00,81, 00,82, 00,83,
-c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87,
-00,86, 00,85, c0,32, c0,2e, c0,2a, c0,26, c0,0f, c0,05,
-c0,79, c0,75, 00,9d, 00,3d, 00,35, 00,c0, 00,84, c0,2f,
-c0,2b, c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d,
-00,a4, 00,a2, 00,a0, 00,9e, 00,67, 00,40, 00,3f, 00,3e,
-00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd,
-00,bc, 00,bb, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44,
-00,43, 00,42, c0,31, c0,2d, c0,29, c0,25, c0,0e, c0,04,
-c0,78, c0,74, 00,9c, 00,3c, 00,2f, 00,ba, 00,96, 00,41,
-00,07, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04,
-c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10,
-00,0d, c0,0d, c0,03, 00,0a, 00,63, 00,15, 00,12, 00,0f,
-00,0c, 00,62, 00,09, 00,65, 00,64, 00,14, 00,11, 00,0e,
-00,0b, 00,08, 00,06, 00,03, 00,ff"
-
-# 76 standard cipher +4x GOST for SSLv3, TLS 1, TLS 1.1
-readonly TLS_CIPHER="
-c0,14, c0,0a, c0,22, c0,21, c0,20, 00,39, 00,38, 00,37,
-00,36, 00,88, 00,87, 00,86, 00,85, c0,0f, c0,05, 00,35,
-00,84, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,33, 00,32, 00,80, 00,81, 00,82, 00,83,
-00,31, 00,30, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44,
-00,43, 00,42, c0,0e, c0,04, 00,2f, 00,96, 00,41, 00,07,
-c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, c0,12,
-c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d,
-c0,0d, c0,03, 00,0a, 00,63, 00,15, 00,12, 00,0f, 00,0c,
-00,62, 00,09, 00,65, 00,64, 00,14, 00,11, 00,0e, 00,0b,
-00,08, 00,06, 00,03, 00,ff"
-
-readonly -a TLS13_KEY_SHARES=(
- "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "a" "b" "c" "d" "e" "f"
-  "10" "11" "12" "13" "14" "15" "16"
-"-----BEGIN EC PARAMETERS-----
-BggqhkjOPQMBBw==
------END EC PARAMETERS-----
------BEGIN EC PRIVATE KEY-----
-MHcCAQEEIHEhQsBkqt1i15mG1wluq/zLqDmjqNQegtgxyNBfRbZSoAoGCCqGSM49
-AwEHoUQDQgAEJP3GoZyVYrabOauJMWUZJxM0PEbtjTxW7K8V+JMDhJa+UyRQm8Tf
-2LDnzCAiuwzF8m0KhcloHEoptD2WBUmJlQ==
------END EC PRIVATE KEY-----
-"
-"-----BEGIN EC PARAMETERS-----
-BgUrgQQAIg==
------END EC PARAMETERS-----
------BEGIN EC PRIVATE KEY-----
-MIGkAgEBBDA7MCUdHy2+Kc73fWph++jWo18LHzzm7SKLgycQBNtmeJu3w1y9pK0G
-EXgAWsIePIOgBwYFK4EEACKhZANiAAT/x7tN8plE6gbA6D4Igp3ash5EvZxvNqdG
-Q50fcDrIco91ybaVlg2tdngZgurTzte+jv7kdkYrILUmLnXxAUGg4d86yStfcZaI
-rDEB8Hc9BgJkFFoLSsXMVCKfoEo777k=
------END EC PRIVATE KEY-----
-"
-"-----BEGIN EC PARAMETERS-----
-BgUrgQQAIw==
------END EC PARAMETERS-----
------BEGIN EC PRIVATE KEY-----
-MIHbAgEBBEFjBqkejwKserOf+LoY6xeSUUoLSZQDz/oNLXLB3NQJ3ewDkhbjOvcL
-jG1on33V080fXRTN3eNdfvzcqDw4c0GGCKAHBgUrgQQAI6GBiQOBhgAEAHuBnMpQ
-+30lnd/gWrHwjLrXQ+EwtxYzMjSDkfRxr0UQ0YuzDNzsVP0azylC06BUlcAvVgiX
-+61BiUapw+37EORuAaHOlob0nobmFND7peN0YglQuBeSdqK3cbdP/u9jffGr2H99
-bONJgO7LSp05PXa79CEi8sydmKYiH1pSLAzRiQnh
------END EC PRIVATE KEY-----
-" "1a" "1b" "1c"
-"-----BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VuBCIEIACiKGKr1nm2eobXvsI3HrWNKR5wEVAIf7KaCmDPxsJR
------END PRIVATE KEY-----
-" "1e" "1f"
- "20" "21" "22" "23" "24" "25" "26" "27" "28" "29" "2a" "2b" "2c" "2d" "2e" "2f"
- "30" "31" "32" "33" "34" "35" "36" "37" "38" "39" "3a" "3b" "3c" "3d" "3e" "3f"
- "40" "41" "42" "43" "44" "45" "46" "47" "48" "49" "4a" "4b" "4c" "4d" "4e" "4f"
- "50" "51" "52" "53" "54" "55" "56" "57" "58" "59" "5a" "5b" "5c" "5d" "5e" "5f"
- "60" "61" "62" "63" "64" "65" "66" "67" "68" "69" "6a" "6b" "6c" "6d" "6e" "6f"
- "70" "71" "72" "73" "74" "75" "76" "77" "78" "79" "7a" "7b" "7c" "7d" "7e" "7f"
- "80" "81" "82" "83" "84" "85" "86" "87" "88" "89" "8a" "8b" "8c" "8d" "8e" "8f"
- "90" "91" "92" "93" "94" "95" "96" "97" "98" "99" "9a" "9b" "9c" "9d" "9e" "9f"
- "a0" "a1" "a2" "a3" "a4" "a5" "a6" "a7" "a8" "a9" "aa" "ab" "ac" "ad" "ae" "af"
- "b0" "b1" "b2" "b3" "b4" "b5" "b6" "b7" "b8" "b9" "ba" "bb" "bc" "bd" "be" "bf"
- "c0" "c1" "c2" "c3" "c4" "c5" "c6" "c7" "c8" "c9" "ca" "cb" "cc" "cd" "ce" "cf"
- "d0" "d1" "d2" "d3" "d4" "d5" "d6" "d7" "d8" "d9" "da" "db" "dc" "dd" "de" "df"
- "e0" "e1" "e2" "e3" "e4" "e5" "e6" "e7" "e8" "e9" "ea" "eb" "ec" "ed" "ee" "ef"
- "f0" "f1" "f2" "f3" "f4" "f5" "f6" "f7" "f8" "f9" "fa" "fb" "fc" "fd" "fe" "ff"
- "-----BEGIN PRIVATE KEY-----
-MIICJgIBADCCARcGCSqGSIb3DQEDATCCAQgCggEBAP//////////rfhUWKK7Spqv
-3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
-3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
-8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
-Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
-/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhKFyX//////////8C
-AQIEggEEAoIBAHxYskjJGeKwSGdAf//JLxPmGRGP6Uylmt12QX5w1FfFXQVJdrsY
-unjdqhTwgV1vTZ1QApd0uZB//q8ZNNM8SZK0elY4ZJsHJAIdJ/ROmvPvkMCkU0fK
-S/uUHroP6tEDyKF+v7ooiBF2KXS5CkOYRTKhiOBaWGsdhiFIkd+O7oY6oyhPxPNT
-2zQEdhIu3ZgFG/ZcscdliMPMmZnKvt/dF4yV8RnCHl3MRDRdL/3McDAb4z89bWqR
-HRexppcgNa9lhOvR+nF/55NCzT3KwkFPQODQmMRH3bzmME+48HZrFcaaom3/DGt+
-EC+vidtEr4YW86tV6jvig5+uNR1mIKpE8N4=
------END PRIVATE KEY-----
-"
-"-----BEGIN PRIVATE KEY-----
-MIIDJgIBADCCAZcGCSqGSIb3DQEDATCCAYgCggGBAP//////////rfhUWKK7Spqv
-3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
-3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
-8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
-Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
-/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhH8/c3jVbO2UZA1u8
-NPTe+ZwCOGG0b8nW5skHetkdJpH39+5ZjLD6wYbZHK7+EwmFE5JwtBMMk7xDeUT0
-/URS4tdN02Ty4h5x9Uv/XK6Cq5yd9p7obSvFIjY6DavFIZebDeraHb+aQtXESE4K
-vNBr+lPd7zwbIO4/1Z18JeQdK2bGLjf//////////wIBAgSCAYQCggGAV6hlUz0f
-RwpauhaumL+dFJQcZHgYghHX9JfNDZv1uMzkTiKxgVutrtFmfHoaTaYNgw+HEQSF
-ZRnGzyOXb14/ZoGWo727N4T5usOqINFcHIeAbPiRimo0mwS7ivYKxEFBaw4N7OyE
-zfNKAYWNQe0J+R2FLMKBSbJ+b1nGQ/cUSQDffDpKSUS94+XxwxcvNaCv9Ygtkvnl
-e/t61L/0eQu/nmi0o7PzR4brmyVTXGnj2LujG/KOtIB4pXQ1GqrvsYLB3pCUTDdA
-E0heXfpYGZJK10ByMkWmOuH3pCuI8C+7+Bh7JwQAXUtSpZ+hp1Bz7v1PKwY/3fG1
-2HcPXp85q5N9x9zYZv1vmwFAd0nTdoWdtMbiEJxhCdr6sRpi1+KPg6W3Kqtfcv2f
-ZZC6MwVFtxogjzIlXt68O7HRH7Adz+DGhEeZqdxIQpaQR50p4LF7gqQ/mzXq8oCe
-XKC3XxrfV5h3OrPEL/zNTd2pzh3LLQB349aOHNz1F+3YPyPlvwOsXkeT
------END PRIVATE KEY-----
-"
-"-----BEGIN PRIVATE KEY-----
-MIIEJgIBADCCAhcGCSqGSIb3DQEDATCCAggCggIBAP//////////rfhUWKK7Spqv
-3FYgJz088di5xYPOLTaVqeE2QRRkM/vMk53OJJs++X0v42NjDHXY9oGyAq7EYXrT
-3x7V1f1lYSQz9R9fBm7QhWNlVT3tGvO1VxNef1fJNZhPDHDg5ot34qaJ2vPv6HId
-8VihNq3nNTCsyk9IOnl6vAqxgrMk+2HRCKlLssjj+7lq2rdg1/RoHU9Co945TfSu
-Vu3nY3K7GQsHp8juCm1wngL84c334uzANATNKDQvYZFy/pzphYP/jk8SMu7ygYPD
-/jsbTG+tczu1/LwuwiAFxY7xg30Wg7LG80omwbLv+ohrQjhhH8/c3jVbO2UZA1u8
-NPTe+ZwCOGG0b8nW5skHetkdJpH39+5ZjLD6wYbZHK7+EwmFE5JwtBMMk7xDeUT0
-/URS4tdN02Ty4h5x9Uv/XK6Cq5yd9p7obSvFIjY6DavFIZebDeraHb+aQtXESE4K
-vNBr+lPd7zwbIO4/1Z18JeQdK2aeHvFub1LDFk30+3kw6eTliFe2rH1fQtafbRh3
-Y88dVQNABIf1W6V+Mcx6cTXIhu+0MYrtah4BLZ5oMqkHYAqRgTDEbcd4+XGtADgJ
-KZmjM8uLehoduT1xQAA8Kk7OqfmNCswKgpHNzsl9z47JtVp/iKRrTbWoUfRBguHG
-igB+XmVfav//////////AgECBIICBAKCAgBKs8VkNMjroMib7Wuw71hVoHiB7lF9
-3FQsDwU3y//RgETN2CEx8gdarvb35ldNEkypxtiaYck+a5qKVkP8uW4/AUoGlH4V
-mIVz8R9e0Cewc4X8229+AgvyguaEhJHozp7EqIYEYlpLyn5GL53l2OYvBB3eH9Yi
-yjYKe5vCe16Jy88oJYrS6+ybYLXHcfJsLHIppMS17KuDdH/DUiCvy5HE5fA5ufD3
-ExQImgsDa3rm8nW6NUCix9Pl4X5OkWieYE7pXBePZ8Yk8BD4JpPbhsh/9husS4XL
-/IpSq+tzgXq44SKQv0o9hbkGaxR6xmTjTwOjRiqW1D/1pS/wHxZbH1qbgJSKq7Fx
-6VZZjH5Hyx9Zh5p3mksa7iZ4DQXVW/8ffz+8UdVRQolVUQxXWihcU5qfdtmDEPI0
-4dRR5mI/Pk1n7lAhdyE4H/Tz0TmqItfScZvNaj6RbPbk6KOapgHFKIX7dmtPxAOv
-oMMudOwsBg7md3CY08zH/XdE6O8lmVgCJQMjfwJ7QMayOKL1NYNMmUDPP0WIxOyz
-5UJj3GzmNrKgYftgr2o8blEwwDbETYN/hpgTPyWl8ieVxK2bn7SX8dFXXEwSdCAt
-Cg5c3H+YOc+ahx7VYXJtBDyAKuygUKnVqZ1ht6/xLUyJUxiSMZLbFKHBLkR3UuQa
-HyRwI92yYN4+Zg==
------END PRIVATE KEY-----
-"
-"-----BEGIN PRIVATE KEY-----
-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
------END PRIVATE KEY-----
-"
-"-----BEGIN PRIVATE KEY-----
-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
-Y9zPgF69gpA9VpStqLAqHxBvEm4BYFoFyfw=
------END PRIVATE KEY-----
-" "105" "106" "107" "108" "109" "10a" "10b" "10c" "10d" "10e" "10f" )
 
 ###### Cipher suite information #####
 declare -i TLS_NR_CIPHERS=0
@@ -741,7 +522,7 @@ pr_url()     { tm_out "$1"; html_out "<a href="$1" style=\"color:black;text-deco
 pr_boldurl() { tm_bold "$1"; html_out "<a href="$1" style=\"font-weight:bold;color:black;text-decoration:none;\">$1</a>"; }
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
-###                         http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
+###                          http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 set_color_functions() {
      local ncurses_tput=true
 
@@ -844,7 +625,7 @@ fileout_section_header() {
     "$do_pretty_json" && FIRST_FINDING=true && (printf "%s%s\n" "$str" "$(fileout_json_section "$1")") >> "$JSONFILE"
 }
 
-fileout_section_footer() { 
+fileout_section_footer() {
     "$do_pretty_json" && printf "\n                    ]" >> "$JSONFILE"
     "$do_pretty_json" && "$1" && echo -e "\n          }" >> "$JSONFILE"
 }
@@ -866,6 +647,8 @@ fileout_json_print_parameter() {
 }
 
 fileout_json_finding() {
+     local target
+
      if "$do_json"; then
           "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
           echo -e "         {"  >> "$JSONFILE"
@@ -884,9 +667,19 @@ fileout_json_finding() {
             if [[ $SERVER_COUNTER -gt 1 ]]; then
                 echo "          ," >> "$JSONFILE"
             fi
-            echo -e "          {
+            if "$CHILD_MASS_TESTING" && ! "$JSONHEADER"; then
+                 target="$NODE"
+                 $do_mx_all_ips && target="$URI"
+                 echo -e "          {
+                    \"target host\"     : \"$target\",
+                    \"port\"            : \"$PORT\",
                     \"service\"         : \"$finding\",
                     \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
+            else
+                 echo -e "          {
+                    \"service\"         : \"$finding\",
+                    \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
+            fi
             $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
          else
              ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
@@ -905,7 +698,22 @@ fileout_json_finding() {
 ##################### FILE FORMATING #########################
 
 fileout_pretty_json_banner() {
-    echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+     local target
+
+     if "$do_mass_testing"; then
+        echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
+          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
+          \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
+          \"startTime\"   : \"$START_TIME\",
+          \"scanResult\"  : ["
+     else
+        [[ -z "$NODE" ]] && parse_hn_port "${URI}"
+        # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
+        target="$NODE"
+        $do_mx_all_ips && target="$URI"
+
+        echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
           \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
           \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
@@ -913,12 +721,10 @@ fileout_pretty_json_banner() {
           \"port\"        : \"$PORT\",
           \"startTime\"   : \"$START_TIME\",
           \"scanResult\"  : ["
+     fi
 }
 
 fileout_banner() {
-     local target="$NODE"
-     $do_mx_all_ips && target="$URI"
-
      #if ! "$APPEND"; then
      #     if "$CSVHEADER"; then
      #          :
@@ -928,6 +734,13 @@ fileout_banner() {
                "$do_pretty_json" && (printf "%s\n" "$(fileout_pretty_json_banner)") >> "$JSONFILE"
           fi
      #fi
+}
+
+fileout_separator() {
+     if "$JSONHEADER"; then
+          "$do_pretty_json" && echo "          ," >> "$JSONFILE"
+          "$do_json" && echo -n "," >> "$JSONFILE"
+     fi
 }
 
 fileout_footer() {
@@ -956,18 +769,18 @@ fileout() {
 
 json_header() {
      local fname_prefix
+     local filename_provided=false
+
+     [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && filename_provided=true
 
      # Similar to HTML: Don't create headers and footers in the following scenarios:
      #  * no JSON/CSV output is being created.
      #  * mass testing is being performed and each test will have its own file.
      #  * this is an individual test within a mass test and all output is being placed in a single file.
+     ! "$do_json" && ! "$do_pretty_json" && JSONHEADER=false && return 0
+     "$do_mass_testing" && ! "$filename_provided" && JSONHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && JSONHEADER=false && return 0
 
-     if ( ! "$do_json" && ! "$do_pretty_json" ) || \
-          ( "$do_mass_testing" && ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) ) || \
-          ( "$APPEND" && [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] ); then
-               JSONHEADER=false
-               return 0
-     fi
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
      elif "$do_mass_testing"; then
@@ -975,19 +788,22 @@ json_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="mx-$URI"
      else
-          ( [[ -z "$JSONFILE" ]] || [[ -d "$JSONFILE" ]] ) && parse_hn_port "${URI}"
+          ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${NODE}"_p"${PORT}"
      fi
-     if [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]]; then
-          rm -f "$JSONFILE"
-     elif [[ -z "$JSONFILE" ]]; then
+     if [[ -z "$JSONFILE" ]]; then
           JSONFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".json)
-     else
+     elif [[ -d "$JSONFILE" ]]; then
           JSONFILE=$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)
      fi
-     "$do_json" && printf "[\n" > "$JSONFILE"
-     "$do_pretty_json" && printf "{\n" > "$JSONFILE"
+     if "$APPEND"; then
+          JSONHEADER=false
+     else
+          [[ -e "$JSONFILE" ]] && fatal "\"$JSONFILE\" exists. Either use \"--append\" or (re)move it" 1
+          "$do_json" && printf "[\n" > "$JSONFILE"
+          "$do_pretty_json" && printf "{\n" > "$JSONFILE"
+     fi
      #FIRST_FINDING=false
      return 0
 }
@@ -995,14 +811,15 @@ json_header() {
 
 csv_header() {
      local fname_prefix
+     local filename_provided=false
+
+     [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && filename_provided=true
 
      # CSV similar:
-     if ! "$do_csv" || \
-          ( "$do_mass_testing" && ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) ) || \
-          ( "$APPEND" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] ); then
-               CSVHEADER=false
-               return 0
-     fi
+     ! "$do_csv" && CSVHEADER=false && return 0
+     "$do_mass_testing" && ! "$filename_provided" && CSVHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && CSVHEADER=false && return 0
+
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
      elif "$do_mass_testing"; then
@@ -1010,18 +827,22 @@ csv_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="mx-$URI"
      else
-          ( [[ -z "$CSVFILE" ]] || [[ -d "$CSVFILE" ]] ) && parse_hn_port "${URI}"
+          ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${NODE}"_p"${PORT}"
      fi
-     if [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]]; then
-          rm -f "$CSVFILE"
-     elif [[ -z "$CSVFILE" ]]; then
+
+     if [[ -z "$CSVFILE" ]]; then
           CSVFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
-     else
+     elif [[ -d "$CSVFILE" ]]; then
           CSVFILE=$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
      fi
-     "$do_csv" && echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+     if "$APPEND"; then
+          CSVHEADER=false
+     else
+          [[ -e "$CSVFILE" ]] && fatal "\"$CSVFILE\" exists. Either use \"--append\" or (re)move it" 1
+          echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+     fi
      return 0
 }
 
@@ -1030,17 +851,17 @@ csv_header() {
 
 html_header() {
      local fname_prefix
+     local filename_provided=false
+
+     [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && filename_provided=true
 
      # Don't create HTML headers and footers in the following scenarios:
      #  * HTML output is not being created.
      #  * mass testing is being performed and each test will have its own HTML file.
      #  * this is an individual test within a mass test and all HTML output is being placed in a single file.
-     if ! "$do_html" || \
-        ( "$do_mass_testing" && ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) ) || \
-        ( "$APPEND" && [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] ); then
-               HTMLHEADER=false
-               return 0
-     fi
+     ! "$do_html" && HTMLHEADER=false && return 0
+     "$do_mass_testing" && ! "$filename_provided" && HTMLHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && HTMLHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1049,33 +870,36 @@ html_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="mx-$URI"
      else
-          ( [[ -z "$HTMLFILE" ]] || [[ -d "$HTMLFILE" ]] ) && parse_hn_port "${URI}"
+          ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${NODE}"_p"${PORT}"
      fi
 
-     if [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]]; then
-          rm -f "$HTMLFILE"
-     elif [[ -z "$HTMLFILE" ]]; then
+     if [[ -z "$HTMLFILE" ]]; then
           HTMLFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".html)
-     else
+     elif [[ -d "$HTMLFILE" ]]; then
           HTMLFILE=$HTMLFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".html)
      fi
-     html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
-     html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
-     html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
-     html_out "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
-     html_out "<head>\n"
-     html_out "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
-     html_out "<title>testssl.sh</title>\n"
-     html_out "</head>\n"
-     html_out "<body>\n"
-     html_out "<pre>\n"
+     if "$APPEND"; then
+          HTMLHEADER=false
+     else
+          [[ -e "$HTMLFILE" ]] && fatal "\"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" 1
+          html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
+          html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
+          html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
+          html_out "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
+          html_out "<head>\n"
+          html_out "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
+          html_out "<title>testssl.sh</title>\n"
+          html_out "</head>\n"
+          html_out "<body>\n"
+          html_out "<pre>\n"
+     fi
      return 0
 }
 
 html_banner() {
-     if "$APPEND" && "$HTMLHEADER"; then
+     if "$CHILD_MASS_TESTING" && "$HTMLHEADER"; then
           html_out "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
           html_out "## at $HNAME:$OPENSSL_LOCATION\n"
           html_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
@@ -1098,12 +922,13 @@ html_footer() {
 
 ###### START helper function definitions ######
 
-if [[ $(uname) == "Linux" ]] ; then
-     toupper() { echo -n "${1^^}" ;  }
-     tolower() { echo -n "${1,,}" ;  }
+if [[ "$BASH_VERSINFO" == 3 ]]; then
+     # older bash can do this only (MacOS X), even SLES 11, see #697
+     toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
+     tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
 else
-     toupper() { echo -n "$1" | tr 'a-z' 'A-Z'; }
-     tolower() { echo -n "$1" | tr 'A-Z' 'a-z' ; }
+     toupper() { echo -n "${1^^}"; }
+     tolower() { echo -n "${1,,}"; }
 fi
 
 debugme() {
@@ -1137,7 +962,7 @@ count_words() {
 }
 
 count_ciphers() {
-     echo -n "$1" | sed 's/:/ /g' | wc -w | sed 's/ //g'
+     echo $(wc -w <<< "${1//:/ }")
 }
 
 actually_supported_ciphers() {
@@ -1160,9 +985,14 @@ strip_spaces() {
      echo "${1// /}"
 }
 
-trim_trailing_space() {
-     echo "${1%%*( )}"
+# https://web.archive.org/web/20121022051228/http://codesnippets.joyent.com/posts/show/1816
+strip_leading_space() {
+     echo "${1#"${1%%[\![:space:]]*}"}"
 }
+strip_trailing_space() {
+     echo "${1%"${1##*[![:space:]]}"}"
+}
+
 
 # retrieve cipher from ServerHello (via openssl)
 get_cipher() {
@@ -1222,61 +1052,72 @@ out_row_aligned() {
 }
 
 # prints text over multiple lines, trying to make no line longer than $max_width.
-# Each line is indented with $spaces and each word in $text is printed using $print_function.
+# Each line is indented with $spaces.
 out_row_aligned_max_width() {
      local text="$1"
      local spaces="$2"
      local -i max_width="$3"
-     local print_function="$4"
      local -i i len
      local cr=$'\n'
-     local line entry first=true last=false
+     local line
+     local first=true
 
-     max_width=$max_width-1                  # at the moment we align to terminal width. This makes sure we don't wrap too late
      max_width=$max_width-${#spaces}
      len=${#text}
      while true; do
-          i=$max_width
-          if [[ $i -ge $len ]]; then
+          if [[ $len -lt $max_width ]]; then
+               # If the remaining text to print is shorter than $max_width,
+               # then just print it.
                i=$len
           else
-               while true; do
-                    [[ "${text:i:1}" == " " ]] && break
-                    [[ $i -eq 0 ]] && break
-                    i=$i-1
-               done
-               if [[ $i -eq 0 ]]; then
-                    i=$max_width+1
-                    while true; do
-                         [[ "${text:i:1}" == " " ]] && break
-                         [[ $i -eq $len ]] && break
-                         i+=1
-                    done
+               # Find the final space character in the text that is less than
+               # $max_width characters into the remaining text, and make the
+               # text up to that space character the next line to print.
+               line="${text:0:max_width}"
+               line="${line% *}"
+               i=${#line}
+               if [[ $i -eq $max_width ]]; then
+                    # If there are no space characters in the first $max_width
+                    # characters of the remaining text, then make the text up
+                    # to the first space the next line to print. If there are
+                    # no space characters in the remaining text, make the
+                    # remaining text the next line to print.
+                    line="${text#* }"
+                    i=$len-${#line}
+                    [[ $i -eq 0 ]] && i=$len
                fi
           fi
-          if [[ $i -eq $len ]]; then
-               line="$text"
-               if ! "$first"; then
-                    out "${cr}${spaces}"
-               fi
-               last=true
-          else
-               line="${text:0:i}"
-               if ! "$first"; then
-                    out "${cr}${spaces}"
-               fi
-               len=$len-$i-1
-               i=$i+1
-               text="${text:i:len}"
-               first=false
-               [[ $len -eq 0 ]] && last=true
+          if ! "$first"; then
+               tm_out "${cr}${spaces}"
           fi
-          while read entry; do
-              $print_function "$entry" ; out " "
-          done <<< "$(tr ' ' '\n' <<< "$line")"
-          "$last" && break
+          tm_out "${text:0:i}"
+          [[ $i -eq $len ]] && break
+          len=$len-$i-1
+          i=$i+1
+          text="${text:i:len}"
+          first=false
+          [[ $len -eq 0 ]] && break
      done
      return 0
+}
+
+out_row_aligned_max_width_by_entry() {
+     local text="$1"
+     local spaces="$2"
+     local -i max_width="$3"
+     local print_function="$4"
+     local resp entry prev_entry=" "
+
+     resp="$(out_row_aligned_max_width "$text" "$spaces" "$max_width")"
+     while read -d " " entry; do
+        if [[ -n "$entry" ]]; then
+             $print_function "$entry"
+        elif [[ -n "$prev_entry" ]]; then
+             outln; out " "
+        fi
+        out " "
+        prev_entry="$entry"
+    done <<< "$resp"
 }
 
 
@@ -1421,7 +1262,6 @@ service_detection() {
           head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
           debugme head -50 $TMPFILE
      fi
-# FIXME: we can guess ports by port number if not properly recognized (and label it as guessed)
 
      out " Service detected:      $CORRECT_SPACES"
      case $SERVICE in
@@ -1660,7 +1500,9 @@ detect_header() {
           HEADERVALUE=""
           return 0
      elif [[ $nr -eq 1 ]]; then
-          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://')
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE)
+          HEADERVALUE=${HEADERVALUE#*:}                        # remove leading part=key to colon
+          HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           return 1
      else
           pr_svrty_medium "misconfiguration: "
@@ -1668,15 +1510,14 @@ detect_header() {
           pr_svrty_medium " ${nr}x"
           out " -- checking first one "
           out "\n$spaces"
-          # first awk matches the key, second extracts the from the first line the value, be careful with quotes here!
-          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | sed 's/^.*://' | head -1)
+          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | head -1)
+          HEADERVALUE=${HEADERVALUE#*:}
+          HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           [[ $DEBUG -ge 2 ]] && tm_italic "$HEADERVALUE" && tm_out "\n$spaces"
           fileout "$2""_multiple" "WARN" "Multiple $2 headers. Using first header: $HEADERVALUE"
           return $nr
      fi
 }
-# wir brauchen hier eine Funktion, die generell den Header detectiert
-
 
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
@@ -2230,7 +2071,7 @@ run_cookie_flags() {     # ARG1: Path
 
 run_more_flags() {
      local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
-     local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible"
+     local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible Referrer-Policy"
      local f2t
      local first=true
      local spaces="                              "
@@ -2242,28 +2083,30 @@ run_more_flags() {
      pr_bold " Security headers             "
      for f2t in $good_flags2test; do
           debugme echo "---> $f2t"
-          detect_header $f2t $f2t
+          detect_header "$f2t" "$f2t"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
-                    out "$spaces"  # output leading spaces if the first header
+                    out "$spaces"       # output leading spaces if the first header
                else
                     first=false
                fi
-               pr_done_good "$f2t"; outln "$HEADERVALUE"
+               pr_done_good "$f2t"
+               outln "$(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
                fileout "$f2t" "OK" "$f2t: $HEADERVALUE"
           fi
      done
 
      for f2t in $other_flags2test; do
           debugme echo "---> $f2t"
-          detect_header $f2t $f2t
+          detect_header "$f2t" "$f2t"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
-                    out "$spaces"  # output leading spaces if the first header
+                    out "$spaces"       # output leading spaces if the first header
                else
                     first=false
                fi
-               pr_litecyan "$f2t"; outln "$HEADERVALUE"
+               pr_litecyan "$f2t"
+               outln "$HEADERVALUE"     # shouldn't be that long
                fileout "$f2t" "WARN" "$f2t: $HEADERVALUE"
           fi
      done
@@ -2439,7 +2282,8 @@ std_cipherlists() {
                     ;;
           esac
           tmpfile_handle $FUNCNAME.$debugname.txt
-          [[ $DEBUG -ge 1 ]] && outln " -- $1" || outln  #FIXME: should be in standard output at some time
+          [[ $DEBUG -ge 1 ]] && tm_out " -- $1"
+          outln
      else
           singlespaces=$(sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g' <<< "$2")
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
@@ -4877,7 +4721,7 @@ cipher_pref_check() {
           if [[ -n "$order" ]]; then
                outln
                out "$(printf "    %-10s " "$proto: ")"
-               out_row_aligned_max_width "$order" "               " $TERM_WIDTH out
+               out "$(out_row_aligned_max_width "$order" "               " $TERM_WIDTH)"
                fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
           fi
      done
@@ -5395,8 +5239,7 @@ compare_server_name_to_cert()
      local -i ret=0
 
      # Check whether any of the DNS names in the certificate match the servername
-     dns_sans=$($OPENSSL x509 -in "$cert" -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-               tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g')
+     dns_sans="$(get_san_dns_from_cert "$cert")"
      for san in $dns_sans; do
           [[ $(toupper "$san") == "$servername" ]] && ret=1 && break
      done
@@ -5423,7 +5266,7 @@ compare_server_name_to_cert()
 
      # If the CN contains any characters that are not valid for a DNS name,
      # then assume it does not contain a DNS name.
-     [[ -n $(echo -n "$cn" | sed 's/^[\.a-zA-Z0-9*\-]*//') ]] && return $ret
+     [[ -n $(sed 's/^[\.a-zA-Z0-9*\-]*//' <<< "$cn") ]] && return $ret
 
      # Check whether the CN in the certificate matches the servername
      [[ $(toupper "$cn") == "$servername" ]] && ret+=4 && return $ret
@@ -5441,7 +5284,7 @@ must_staple() {
      local cert extn
      local -i extn_len
      local supported=false
-     
+
      # Note this function is only looking for status_request (5) and not
      # status_request_v2 (17), since OpenSSL seems to only include status_request (5)
      # in its ClientHello when the "-status" option is used.
@@ -5773,7 +5616,7 @@ certificate_info() {
           while read san; do
                [[ -n "$san" ]] && all_san+="$san "
           done <<< "$sans"
-          out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH pr_italic
+          pr_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
           out "-- "
@@ -6069,18 +5912,16 @@ certificate_info() {
 
 
 run_server_defaults() {
-     local ciph match_found newhostcert sni
-     local sessticket_str=""
-     local lifetime unit
-     local line
+     local ciph newhostcert sni
+     local match_found
+     local sessticket_str="" lifetime unit
      local -i i n
      local -i certs_found=0
      local -a previous_hostcert previous_intermediates keysize cipher
      local -a ocsp_response ocsp_response_status sni_used
-     local -a ciphers_to_test success
-     local cn_nosni cn_sni sans_nosni sans_sni san
-     local alpn_proto alpn="" alpn_list_len_hex alpn_extn_len_hex success
-     local -i alpn_list_len alpn_extn_len
+     local -a ciphers_to_test
+     local -a -i success
+     local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
 
      # Try each public key type once:
      # ciphers_to_test[1]: cipher suites using certificates with RSA signature public keys
@@ -6093,11 +5934,11 @@ run_server_defaults() {
      ciphers_to_test[1]=""
      ciphers_to_test[2]=""
      for ciph in $(colon_to_spaces $($OPENSSL ciphers "aRSA")); do
-         if grep -q "\-RSA\-" <<<$ciph; then
-             ciphers_to_test[1]="${ciphers_to_test[1]}:$ciph"
-         else
-             ciphers_to_test[2]="${ciphers_to_test[2]}:$ciph"
-         fi
+          if grep -q "\-RSA\-" <<<$ciph; then
+               ciphers_to_test[1]="${ciphers_to_test[1]}:$ciph"
+          else
+               ciphers_to_test[2]="${ciphers_to_test[2]}:$ciph"
+          fi
      done
      [[ -n "${ciphers_to_test[1]}" ]] && ciphers_to_test[1]="${ciphers_to_test[1]:1}"
      [[ -n "${ciphers_to_test[2]}" ]] && ciphers_to_test[2]="${ciphers_to_test[2]:1}"
@@ -6108,94 +5949,92 @@ run_server_defaults() {
      ciphers_to_test[7]="aGOST"
 
      for (( n=1; n <= 14 ; n++ )); do
-         # Some servers use a different certificate if the ClientHello
-         # specifies TLSv1.1 and doesn't include a server name extension.
-         # So, for each public key type for which a certificate was found,
-         # try again, but only with TLSv1.1 and without SNI.
-         if [[ $n -ge 8 ]]; then
-              ciphers_to_test[n]=""
-              [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}"
-         fi
+          # Some servers use a different certificate if the ClientHello
+          # specifies TLSv1.1 and doesn't include a server name extension.
+          # So, for each public key type for which a certificate was found,
+          # try again, but only with TLSv1.1 and without SNI.
+          if [[ $n -ge 8 ]]; then
+               ciphers_to_test[n]=""
+               [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}"
+          fi
 
-         if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
-             if [[ $n -ge 8 ]]; then
-                  sni="$SNI"
-                  SNI=""
-                  get_server_certificate "-cipher ${ciphers_to_test[n]}" "tls1_1"
-                  success[n]=$?
-                  SNI="$sni"
-             else
-                  get_server_certificate "-cipher ${ciphers_to_test[n]}"
-                  success[n]=$?
-             fi
-             if [[ ${success[n]} -eq 0 ]]; then
-                 cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
-                 >$ERRFILE
-                 if [[ -z "$sessticket_str" ]]; then
-                     sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
-                 fi
+          if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
+               if [[ $n -ge 8 ]]; then
+                    sni="$SNI"
+                    SNI=""
+                    get_server_certificate "-cipher ${ciphers_to_test[n]}" "tls1_1"
+                    success[n]=$?
+                    SNI="$sni"
+               else
+                    get_server_certificate "-cipher ${ciphers_to_test[n]}"
+                    success[n]=$?
+               fi
+               if [[ ${success[n]} -eq 0 ]]; then
+                    cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
+                    >$ERRFILE
+                    if [[ -z "$sessticket_str" ]]; then
+                         sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+                    fi
 
-                 # check whether the host's certificate has been seen before
-                 match_found=false
-                 i=1
-                 newhostcert=$(cat $HOSTCERT)
-                 while [[ $i -le $certs_found ]]; do
-                     if [[ "$newhostcert" == "${previous_hostcert[i]}" ]]; then
-                        match_found=true
-                        break;
-                     fi
-                     i=$((i + 1))
-                 done
-                 if ! "$match_found" && [[ $n -ge 8 ]] && [[ $certs_found -ne 0 ]]; then
-                     # A new certificate was found using TLSv1.1 without SNI.
-                     # Check to see if the new certificate should be displayed.
-                     # It should be displayed if it is either a match for the
-                     # $NODE being tested or if it has the same subject
-                     # (CN and SAN) as other certificates for this host.
-                     compare_server_name_to_cert "$NODE" "$HOSTCERT"
-                     [[ $? -ne 0 ]] && success[n]=0 || success[n]=1
+                    # check whether the host's certificate has been seen before
+                    match_found=false
+                    i=1
+                    newhostcert=$(cat $HOSTCERT)
+                    while [[ $i -le $certs_found ]]; do
+                         if [[ "$newhostcert" == "${previous_hostcert[i]}" ]]; then
+                              match_found=true
+                              break;
+                         fi
+                         i=$((i + 1))
+                    done
+                    if ! "$match_found" && [[ $n -ge 8 ]] && [[ $certs_found -ne 0 ]]; then
+                         # A new certificate was found using TLSv1.1 without SNI.
+                         # Check to see if the new certificate should be displayed.
+                         # It should be displayed if it is either a match for the
+                         # $NODE being tested or if it has the same subject
+                         # (CN and SAN) as other certificates for this host.
+                         compare_server_name_to_cert "$NODE" "$HOSTCERT"
+                         [[ $? -ne 0 ]] && success[n]=0 || success[n]=1
 
-                     if [[ ${success[n]} -ne 0 ]]; then
-                         cn_nosni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
-                         sans_nosni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-                              tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
+                         if [[ ${success[n]} -ne 0 ]]; then
+                              cn_nosni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
+                              sans_nosni="$(toupper "$(get_san_dns_from_cert "$HOSTCERT")")"
 
-                         echo "${previous_hostcert[1]}" > $HOSTCERT
-                         cn_sni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
+                              echo "${previous_hostcert[1]}" > $HOSTCERT
+                              cn_sni="$(toupper "$(get_cn_from_cert $HOSTCERT)")"
 
-                         # FIXME: Not sure what the matching rule should be. At
-                         # the moment, the no SNI certificate is considered a
-                         # match if the CNs are the same and the SANs (if
-                         # present) contain at least one DNS name in common.
-                         if [[ "$cn_nosni" == "$cn_sni" ]]; then
-                              sans_sni="$(toupper "$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-                                       tr ',' '\n' |  grep "DNS:" | sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')")"
-                              if [[ "$sans_nosni" == "$sans_sni" ]]; then
-                                   success[n]=0
-                              else
-                                   for san in $sans_nosni; do
-                                        [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
-                                   done
+                              # FIXME: Not sure what the matching rule should be. At
+                              # the moment, the no SNI certificate is considered a
+                              # match if the CNs are the same and the SANs (if
+                              # present) contain at least one DNS name in common.
+                              if [[ "$cn_nosni" == "$cn_sni" ]]; then
+                                   sans_sni="$(toupper "$(get_san_dns_from_cert "$HOSTCERT")")"
+                                   if [[ "$sans_nosni" == "$sans_sni" ]]; then
+                                        success[n]=0
+                                   else
+                                        for san in $sans_nosni; do
+                                             [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
+                                        done
+                                   fi
                               fi
                          fi
-                     fi
-                     # If the certificate found for TLSv1.1 w/o SNI appears to
-                     # be for a different host, then set match_found to true so
-                     # that the new certificate will not be included in the output.
-                     [[ ${success[n]} -ne 0 ]] && match_found=true
-                 fi
-                 if ! "$match_found"; then
-                     certs_found=$(($certs_found + 1))
-                     cipher[certs_found]=${ciphers_to_test[n]}
-                     keysize[certs_found]=$(grep -aw "^Server public key is" $TMPFILE | sed -e 's/^Server public key is //' -e 's/bit//' -e 's/ //')
-                     ocsp_response[certs_found]=$(grep -aA 20 "OCSP response" $TMPFILE)
-                     ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
-                     previous_hostcert[certs_found]=$newhostcert
-                     previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
-                     [[ $n -ge 8 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
-                 fi
-             fi
-         fi
+                         # If the certificate found for TLSv1.1 w/o SNI appears to
+                         # be for a different host, then set match_found to true so
+                         # that the new certificate will not be included in the output.
+                         [[ ${success[n]} -ne 0 ]] && match_found=true
+                    fi
+                    if ! "$match_found"; then
+                         certs_found=$(($certs_found + 1))
+                         cipher[certs_found]=${ciphers_to_test[n]}
+                         keysize[certs_found]=$(awk '/Server public key/ { print $(NF-1) }' $TMPFILE)
+                         ocsp_response[certs_found]=$(grep -aA 20 "OCSP response" $TMPFILE)
+                         ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
+                         previous_hostcert[certs_found]=$newhostcert
+                         previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
+                         [[ $n -ge 8 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
+                    fi
+               fi
+          fi
      done
 
      determine_tls_extensions
@@ -6216,7 +6055,16 @@ run_server_defaults() {
           fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
      else
 #FIXME: we rather want to have the chance to print each ext in italcs or another format. Atm is a string of quoted strings -- that needs to be fixed at the root
-          out_row_aligned_max_width "$TLS_EXTENSIONS" "                              " $TERM_WIDTH out; outln
+          # out_row_aligned_max_width() places line breaks at space characters.
+          # So, in order to prevent the text for an extension from being broken
+          # across lines, temporarily replace space characters within the text
+          # of an extension with "}", and then convert the "}" back to space in
+          # the output of out_row_aligned_max_width().
+          tls_extensions="${TLS_EXTENSIONS// /{}"
+          tls_extensions="${tls_extensions//\"{\"/\" \"}"
+          tls_extensions="$(out_row_aligned_max_width "$tls_extensions" "                              " $TERM_WIDTH)"
+          tls_extensions="${tls_extensions//{/ }"
+          outln "$tls_extensions"
           fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
 
@@ -6229,7 +6077,7 @@ run_server_defaults() {
           unit=$(grep -a lifetime <<< "$sessticket_str" | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
           prln_svrty_low "(PFS requires session ticket keys to be rotated <= daily)"
-          fileout "session_ticket" "LOW" "TLS session tickes RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
+          fileout "session_ticket" "LOW" "TLS session ticket RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
      fi
 
      pr_bold " SSL Session ID support       "
@@ -6245,12 +6093,25 @@ run_server_defaults() {
 
      i=1
      while [[ $i -le $certs_found ]]; do
-         echo "${previous_hostcert[i]}" > $HOSTCERT
-         echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
-         certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}"
-         i=$((i + 1))
+          echo "${previous_hostcert[i]}" > $HOSTCERT
+          echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
+          certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}"
+          i=$((i + 1))
      done
 }
+
+get_session_ticket_lifetime_from_serverhello() {
+     awk '/session ticket.*lifetime/ { print $(NF-1) "$1" }'
+}
+
+get_san_dns_from_cert() {
+     echo "$($OPENSSL x509 -in "$1" -noout -text 2>>$ERRFILE | \
+          grep -A2 "Subject Alternative Name" | tr ',' '\n' | grep "DNS:" | \
+          sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')"
+}
+
+
+
 
 run_pfs() {
      local -i sclient_success
@@ -6443,7 +6304,7 @@ run_pfs() {
                     outln "${sigalg[i]}"
                fi
           done
-          ! "$WIDE" && out_row_aligned_max_width "$pfs_ciphers" "                              " $TERM_WIDTH out
+          ! "$WIDE" && out "$(out_row_aligned_max_width "$pfs_ciphers" "                              " $TERM_WIDTH)"
           debugme echo $pfs_offered
           "$WIDE" || outln
           fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
@@ -6524,7 +6385,7 @@ run_pfs() {
           if [[ -n "$curves_offered" ]]; then
                "$WIDE" && outln
                pr_bold " Elliptic curves offered:     "
-               out_row_aligned_max_width "$curves_offered" "                              " $TERM_WIDTH pr_ecdh_curve_quality
+               out_row_aligned_max_width_by_entry "$curves_offered" "                              " $TERM_WIDTH pr_ecdh_curve_quality
                outln
                fileout "ecdhe_curves" "INFO" "Elliptic curves offered $curves_offered"
           fi
@@ -10079,8 +9940,8 @@ run_beast(){
                     ! "$first" && out "$spaces"
                     out "$(toupper $proto): "
                     [[ -n "$higher_proto_supported" ]] && \
-                         out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH pr_svrty_low || \
-                         out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH pr_svrty_medium
+                         pr_svrty_low "$(out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH)" || \
+                         pr_svrty_medium "$(out_row_aligned_max_width "$detected_cbc_ciphers" "                                                 " $TERM_WIDTH)"
                     outln
                     detected_cbc_ciphers=""  # empty for next round
                     first=false
@@ -10091,7 +9952,7 @@ run_beast(){
                fi
           else
                if ! "$vuln_beast" ; then
-                    prln_done_good " no CBC ciphers for $(toupper $proto) (OK)"
+                    prln_done_good "no CBC ciphers for $(toupper $proto) (OK)"
                     fileout "cbc_$proto" "OK" "BEAST: No CBC ciphers for $(toupper $proto)" "$cve" "$cwe"
                fi
           fi
@@ -10417,7 +10278,7 @@ run_rc4() {
                     fi
                fi
           done
-          ! "$WIDE" && out_row_aligned_max_width "$rc4_detected" "                                                                " $TERM_WIDTH pr_svrty_high
+          ! "$WIDE" && pr_svrty_high "$(out_row_aligned_max_width "$rc4_detected" "                                                                " $TERM_WIDTH)"
           outln
           "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
           fileout "rc4" "HIGH" "RC4: VULNERABLE, Detected ciphers: $rc4_detected" "$cve" "$cwe" "$hint"
@@ -10471,7 +10332,7 @@ get_install_dir() {
           CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/etc/cipher-mapping.txt"
           [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$RUN_DIR"          # probably TESTSSL_INSTALL_DIR
      fi
-     
+
      [[ -r "$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           [[ -r "$RUN_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/cipher-mapping.txt"
@@ -10514,6 +10375,17 @@ get_install_dir() {
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
           [[ $? -ne 0 ]] && exit -2
+     fi
+
+     TLS_DATA_FILE=$TESTSSL_INSTALL_DIR/etc/tls_data.txt
+     if [[ ! -r "$TLS_DATA_FILE" ]]; then
+          prln_warning "\nATTENTION: No TLS data file found -- needed for socket based handshakes"
+          outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
+          outln
+          ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
+          [[ $? -ne 0 ]] && exit -2
+     else
+          . $TLS_DATA_FILE
      fi
 }
 
@@ -10798,7 +10670,7 @@ EOF
 }
 
 maketempf() {
-     TEMPDIR=$(mktemp -d /tmp/ssltester.XXXXXX) || exit -6
+     TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX) || exit -6
      TMPFILE=$TEMPDIR/tempfile.txt || exit -6
      if [[ "$DEBUG" -eq 0 ]]; then
           ERRFILE="/dev/null"
@@ -10926,7 +10798,8 @@ mybanner() {
      local openssl_location="$(which $OPENSSL)"
      local cwd=""
 
-     $QUIET && return
+     "$QUIET" && return
+     "$CHILD_MASS_TESTING" && return
      OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
      [[ -z "$GIT_REL" ]] && \
           idtag="$CVS_REL" || \
@@ -10943,7 +10816,7 @@ EOF
              modification under GPLv2 permitted.
       USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @ 
+       Please file bugs @
 EOF
 )
      bb3=$(cat <<EOF
@@ -10953,9 +10826,13 @@ EOF
 )
      pr_bold "$bb1"
      pr_boldurl "$SWURL"; outln
-     pr_bold "    ("
-     pr_grey "$idtag"
-     prln_bold ")"
+     if [[ -n "$idtag" ]]; then
+          #FIXME: if we run it not off the git dir we miss the version tag.
+          # at least we don't want to display empty brackets here...
+          pr_bold "    ("
+          pr_grey "$idtag"
+          prln_bold ")"
+     fi
      pr_bold "$bb2"
      pr_boldurl "https://testssl.sh/bugs/"; outln
      pr_bold "$bb3"
@@ -10979,6 +10856,20 @@ EOF
 
 
 cleanup () {
+     # If parallel mass testing is being performed, then the child tests need
+     # to be killed before $TEMPDIR is deleted. Otherwise, error messages
+     # will be created if testssl.sh is stopped before all testing is complete.
+     while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
+          if ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
+               kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >&2 2>/dev/null
+               wait ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} 2>/dev/null    # make sure pid terminated, see wait(1p)
+          else
+               # If a test had already completed, but its output wasn't yet processed,
+               # then process it now.
+               get_next_message_testing_parallel_result
+          fi
+          NEXT_PARALLEL_TEST_TO_FINISH+=1
+     done
      if [[ "$DEBUG" -ge 1 ]]; then
           tmln_out
           tm_underline "DEBUG (level $DEBUG): see files in $TEMPDIR"
@@ -11113,30 +11004,34 @@ parse_hn_port() {
 # arg1: for testing mx records name we put a name of logfile in here, otherwise we get strange file names
 prepare_logging() {
      local fname_prefix="$1"
+     local filename_provided=false
+
+     [[ -n "$LOGFILE" ]] && [[ ! -d "$LOGFILE" ]] && filename_provided=true
+
+     # Similar to html_header():
+     ! "$do_logging" && return 0
+     "$do_mass_testing" && ! "$filename_provided" && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
 
      [[ -z "$fname_prefix" ]] && fname_prefix="${NODE}"_p"${PORT}"
 
-     if "$do_logging"; then
-          if [[ -z "$LOGFILE" ]]; then
-               LOGFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".log)
-          elif [[ -d "$LOGFILE" ]]; then
-               # actually we were instructed to place all files in a DIR instead of the current working dir
-               LOGFILE=$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)
-          else
-               : # just for clarity: a log file was specified, no need to do anything else
-          fi
-
-          if ! "$APPEND"; then
-               [[ -e $LOGFILE ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
-          else
-               >$LOGFILE
-          fi
-          tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-          tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
-          tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
-          tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
-          exec > >(tee -a ${LOGFILE})
+     if [[ -z "$LOGFILE" ]]; then
+          LOGFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".log)
+     elif [[ -d "$LOGFILE" ]]; then
+          # actually we were instructed to place all files in a DIR instead of the current working dir
+          LOGFILE=$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)
+     else
+          : # just for clarity: a log file was specified, no need to do anything else
      fi
+
+     if ! "$APPEND"; then
+          [[ -e $LOGFILE ]] && outln && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+     fi
+     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
+     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
+     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
+     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
+     exec > >(tee -a ${LOGFILE})
 }
 
 
@@ -11149,9 +11044,9 @@ filter_ip6_address() {
                continue
           fi
           if "$HAS_SED_E"; then
-               echo "$a" | sed -E 's/^abcdeABCDEFf0123456789:]//g' | sed -e '/^$/d' -e '/^;;/d'
+               sed -E 's/^abcdeABCDEFf0123456789:]//g' <<< "$a" | sed -e '/^$/d' -e '/^;;/d'
           else
-               echo "$a" | sed -r 's/[^abcdefABCDEF0123456789:]//g' | sed -e '/^$/d' -e '/^;;/d'
+               sed -r 's/[^abcdefABCDEF0123456789:]//g' <<< "$a" | sed -e '/^$/d' -e '/^;;/d'
           fi
      done
 }
@@ -11164,9 +11059,9 @@ filter_ip4_address() {
                continue
           fi
           if "$HAS_SED_E"; then
-               echo "$a" | sed -E 's/[^[:digit:].]//g' | sed -e '/^$/d'
+               sed -E 's/[^[:digit:].]//g' <<< "$a" | sed -e '/^$/d'
           else
-               echo "$a" | sed -r 's/[^[:digit:].]//g' | sed -e '/^$/d'
+               sed -r 's/[^[:digit:].]//g' <<< "$a" | sed -e '/^$/d'
           fi
      done
 }
@@ -11176,7 +11071,7 @@ get_local_aaaa() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip6=$(grep -wh "$1" $etchosts 2>/dev/null | grep ':' | egrep -v '^#|\.local' | egrep "[[:space:]]$1" | awk '{ print $1 }')
+     ip6=$(grep -wih "$1" $etchosts 2>/dev/null | grep ':' | egrep -v '^#|\.local' | egrep -i "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv6addr "$ip6"; then
           echo "$ip6"
      else
@@ -11189,7 +11084,7 @@ get_local_a() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip4=$(grep -wh "$1" $etchosts 2>/dev/null | egrep -v ':|^#|\.local' |  egrep "[[:space:]]$1" | awk '{ print $1 }')
+     ip4=$(grep -wih "$1" $etchosts 2>/dev/null | egrep -v ':|^#|\.local' | egrep -i "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv4addr "$ip4"; then
           echo "$ip4"
      else
@@ -11509,7 +11404,7 @@ sclient_auth() {
 # this function determines OPTIMAL_PROTO. It is a workaround function as under certain circumstances
 # (e.g. IIS6.0 and openssl 1.0.2 as opposed to 1.0.1) needs a protocol otherwise s_client -connect will fail!
 # Circumstances observed so far: 1.) IIS 6  2.) starttls + dovecot imap
-# The first try in the loop is empty as we prefer not to specify always a protocol if it works w/o.
+# The first try in the loop is empty as we prefer not to specify always a protocol if we can get along w/o it
 #
 determine_optimal_proto() {
      local all_failed
@@ -11590,9 +11485,9 @@ determine_service() {
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
           GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          #HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
-          #GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          #HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+          # HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+          # GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
+          # HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
           service_detection $OPTIMAL_PROTO
      else
           # STARTTLS
@@ -11665,8 +11560,7 @@ display_rdns_etc() {
                     further_ip_addrs+="$ip "
                fi
           done
-          out_row_aligned_max_width "$further_ip_addrs" "                         $CORRECT_SPACES" $TERM_WIDTH out
-          outln
+          outln "$(out_row_aligned_max_width "$further_ip_addrs" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
      if "$LOCAL_A"; then
           outln " A record via           $CORRECT_SPACES /etc/hosts "
@@ -11675,7 +11569,7 @@ display_rdns_etc() {
      fi
      if [[ -n "$rDNS" ]]; then
           out "$(printf " %-23s %s" "rDNS ($nodeip):")"
-          out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH out
+          out "$(out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
 }
 
@@ -11743,51 +11637,173 @@ run_mx_all_ips() {
      return $ret
 }
 
-
-run_mass_testing_parallel() {
-     local cmdline=""
-     local global_cmdline=${CMDLINE%%--file*}
-
-     if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
-          fatal "Can't read file \"$FNAME\"" "2"
-     fi
-     pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln
-     outln "(output is in ....\n)"
-#FIXME: once this function is being called we need a handler which does the right thing, i.e.  ==> not to overwrite
-     while read cmdline; do
-          cmdline=$(filter_input "$cmdline")
-          [[ -z "$cmdline" ]] && continue
-          [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q $cmdline"
-          draw_line "=" $((TERM_WIDTH / 2)); outln;
-          determine_logfile
-          outln "$cmdline"
-          $cmdline >$LOGFILE &
-          sleep $PARALLEL_SLEEP
-     done < "$FNAME"
-     return $?
-}
-
-
 run_mass_testing() {
      local cmdline=""
-     local global_cmdline=${CMDLINE%%--file*}
+     local first=true
+     local global_cmdline=${CMDLINE%%--file*}               # $global_cmdline may have arguments in addition to the one in the file
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
-     APPEND=false # Make sure we close out our files
      while read cmdline; do
           cmdline=$(filter_input "$cmdline")
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch -q --append $cmdline"
+          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$cmdline"
-          $cmdline
+          "$first" || fileout_separator                     # this is needed for appended output, see #687
+          CHILD_MASS_TESTING=true $cmdline                  # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
+          first=false
      done < "${FNAME}"
+     return $?
+}
+
+# Modify global command line for child tests in mass processing.
+# In particular if all (JSON, CSV, HTML) output is to go into a single
+# file, then have each child place its output in a separate, named file, so
+# that the separate files can be concatenated together once they are complete
+# to create the single file.
+modify_global_cmd_line() {
+     local global_cmdline="" filename
+     local ret
+
+     while [[ $# -gt 0 ]]; do
+          case "$1" in
+               --jsonfile|--jsonfile=*)
+                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    ret=$?
+                    # If <jsonfile> is a file, then have provide a different
+                    # file name to each child process. If <jsonfile> is a
+                    # directory, then just pass it on to the child processes.
+                    if "$JSONHEADER"; then
+                         global_cmdline+="--jsonfile=$TEMPDIR/jsonfile_XXXXXXXX.json "
+                    else
+                         global_cmdline+="$1 "
+                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
+                    fi
+                    [[ $ret -eq 0 ]] && shift
+                    ;;     
+               --jsonfile-pretty|--jsonfile-pretty=*)
+                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    ret=$?
+                    # Same as for --jsonfile
+                    if "$JSONHEADER"; then
+                         global_cmdline+="--jsonfile-pretty=$TEMPDIR/jsonfile_XXXXXXXX.json "
+                    else
+                         global_cmdline+="$1 "
+                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
+                    fi
+                    [[ $ret -eq 0 ]] && shift
+                    ;;               
+               --csvfile|--csvfile=*)
+                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    ret=$?
+                    # Same as for --jsonfile
+                    if "$CSVHEADER"; then
+                         global_cmdline+="--csvfile=$TEMPDIR/csvfile_XXXXXXXX.csv "
+                    else
+                         global_cmdline+="$1 "
+                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
+                    fi
+                    [[ $ret -eq 0 ]] && shift
+                    ;;
+               --htmlfile|--htmlfile=*)
+                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    ret=$?
+                    # Same as for --jsonfile
+                    if "$HTMLHEADER"; then
+                         global_cmdline+="--htmlfile=$TEMPDIR/htmlfile_XXXXXXXX.html "
+                    else
+                         global_cmdline+="$1 "
+                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
+                    fi
+                    [[ $ret -eq 0 ]] && shift
+                    ;;
+               *)
+                    global_cmdline+="$1 "
+                    ;;
+          esac
+          shift
+     done
+     tm_out "$global_cmdline"
+     return 0
+}
+
+# This function is called when it has been determined that the next child process has completed.
+# This process prints its output to the terminal and, if appropriate, adds any JSON, CSV, and HTML
+# output it has created to the appropriate file.
+get_next_message_testing_parallel_result() {
+     draw_line "=" $((TERM_WIDTH / 2)); outln;
+     outln "${PARALLEL_TESTING_CMDLINE[NEXT_PARALLEL_TEST_TO_FINISH]}"
+     cat "$TEMPDIR/term_output_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).log"
+     [[ $NEXT_PARALLEL_TEST_TO_FINISH -gt 0 ]] && fileout_separator                     # this is needed for appended output, see #687
+     "$JSONHEADER" && cat "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" >> "$JSONFILE"
+     "$CSVHEADER" && cat "$TEMPDIR/csvfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).csv" >> "$CSVFILE"
+     "$HTMLHEADER" && cat "$TEMPDIR/htmlfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).html" >> "$HTMLFILE"
+}
+
+#FIXME: not called/tested yet
+run_mass_testing_parallel() {
+     local cmdline=""
+     local one_jsonfile=false
+     local global_cmdline=${CMDLINE%%--file*}
+
+     if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
+          fatal "Can't read file \"$FNAME\"" "2"
+     fi
+     global_cmdline="$(modify_global_cmd_line $global_cmdline)"
+     [[ "$global_cmdline" =~ jsonfile_XXXXXXXX ]] && one_jsonfile=true
+     
+     pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln "\n"
+     while read cmdline; do
+          cmdline=$(filter_input "$cmdline")
+          [[ -z "$cmdline" ]] && continue
+          [[ "$cmdline" == "EOF" ]] && break
+          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
+
+          # If the JSON, CSV, or HTML output is to all go into a single file, then replace the
+          # generic "_XXXXXXXX" filenames with different names for each child process, by
+          # replacing "XXXXXXXX" with the test's number
+          cmdline="${cmdline/jsonfile_XXXXXXXX\.json/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json}"
+
+          # fileout() won't include the "service" information in the JSON file for the child process
+          # if the JSON file doesn't already exist.
+          "$one_jsonfile" && echo -n "" > "$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
+          cmdline="${cmdline/csvfile_XXXXXXXX\.csv/csvfile_$(printf "%08d" $NR_PARALLEL_TESTS).csv}"
+          cmdline="${cmdline/htmlfile_XXXXXXXX\.html/htmlfile_$(printf "%08d" $NR_PARALLEL_TESTS).html}"
+          PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$cmdline"
+          CHILD_MASS_TESTING=true $cmdline > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+          PARALLEL_TESTING_PID[NR_PARALLEL_TESTS]=$!
+          NR_PARALLEL_TESTS+=1
+          sleep $PARALLEL_SLEEP
+          # Get the results of any completed tests
+          while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
+               if ! ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
+                    get_next_message_testing_parallel_result
+                    NEXT_PARALLEL_TEST_TO_FINISH+=1
+               else
+                    break
+               fi
+          done
+          if [[ $NR_PARALLEL_TESTS-$NEXT_PARALLEL_TEST_TO_FINISH -ge $MAX_PARALLEL ]]; then
+               # The maximum number of tests that may be run in parallel has
+               # been reached. Need to wait for one to finish before starting
+               # another.
+               wait_kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} $MAX_WAIT_TEST
+               [[ $? -eq 0 ]] && get_next_message_testing_parallel_result
+               NEXT_PARALLEL_TEST_TO_FINISH+=1
+          fi
+     done < "$FNAME"
+
+     # Wait for remaining tests to finish
+     while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
+          wait_kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} $MAX_WAIT_TEST
+          [[ $? -eq 0 ]] && get_next_message_testing_parallel_result
+          NEXT_PARALLEL_TEST_TO_FINISH+=1
+     done
      return $?
 }
 
@@ -12414,76 +12430,84 @@ lets_roll() {
 
 ################# main #################
 
-ret=0
-ip=""
 
-lets_roll init
-initialize_globals
-parse_cmd_line "$@"
-json_header
-csv_header
-html_header
-get_install_dir
-set_color_functions
-maketempf
-find_openssl_binary
-prepare_debug
-prepare_arrays
-mybanner
-check_proxy
-check4openssl_oldfarts
-check_bsd_mount
+#main() {
+#     local ret=0
+#     local ip=""
+     ret=0
+     ip=""
 
-if $do_display_only; then
-     prettyprint_local "$PATTERN2SHOW"
-     exit $?
-fi
+     lets_roll init
+     initialize_globals
+     parse_cmd_line "$@"
+     # html_header() needs to be called early! Otherwise if html_out() is called before html_header() and the
+     # command line contains --htmlfile <htmlfile> or --html, it'll make problems with html output, see #692.
+     # json_header and csv_header can be called later but for context reasons we'll leave it here
+     html_header
+     json_header
+     csv_header
+     get_install_dir
+     set_color_functions
+     maketempf
+     find_openssl_binary
+     prepare_debug
+     prepare_arrays
+     mybanner
+     check_proxy
+     check4openssl_oldfarts
+     check_bsd_mount
 
-if $do_mass_testing; then
+     if "$do_display_only"; then
+          prettyprint_local "$PATTERN2SHOW"
+          exit $?
+     fi
+     fileout_banner
+
+     if "$do_mass_testing"; then
+          prepare_logging
+          run_mass_testing
+          exit $?
+     fi
+     html_banner
+
+     #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
+     if "$do_mx_all_ips"; then
+          query_globals                                     # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
+          [[ $? -eq 1 ]] && set_scanning_defaults
+          run_mx_all_ips "${URI}" $PORT                     # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
+          exit $?
+     fi
+
+     [[ -z "$NODE" ]] && parse_hn_port "${URI}"             # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
      prepare_logging
-     run_mass_testing
-     exit $?
-fi
-
-html_banner
-fileout_banner
-
-#TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
-if $do_mx_all_ips; then
-     query_globals                                     # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
-     [[ $? -eq 1 ]] && set_scanning_defaults
-     run_mx_all_ips "${URI}" $PORT                     # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
-     exit $?
-fi
-
-[[ -z "$NODE" ]] && parse_hn_port "${URI}"                                 # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
-prepare_logging
-if ! determine_ip_addresses; then
-     fatal "No IP address could be determined" 2
-fi
-if [[ -n "$CMDLINE_IP" ]]; then
-     #  we just test the one supplied
-     lets_roll "${STARTTLS_PROTOCOL}"
-     ret=$?
-else                                                                       # no --ip was supplied
-     if [[ $(count_words "$(echo -n "$IPADDRs")") -gt 1 ]]; then           # we have more than one ipv4 address to check
-          pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
-          for ip in $IPADDRs; do
-               draw_line "-" $((TERM_WIDTH * 2 / 3))
-               outln
-               NODEIP="$ip"
-               lets_roll "${STARTTLS_PROTOCOL}"
-               ret=$(($? + ret))
-          done
-          draw_line "-" $((TERM_WIDTH * 2 / 3))
-          outln
-          pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
-     else                                                                  # we need just one ip4v to check
-          NODEIP="$IPADDRs"
+     if ! determine_ip_addresses; then
+          fatal "No IP address could be determined" 2
+     fi
+     if [[ -n "$CMDLINE_IP" ]]; then
+          #  we just test the one supplied
           lets_roll "${STARTTLS_PROTOCOL}"
           ret=$?
+     else                                                                       # no --ip was supplied
+          if [[ $(count_words "$(echo -n "$IPADDRs")") -gt 1 ]]; then           # we have more than one ipv4 address to check
+               pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
+               for ip in $IPADDRs; do
+                    draw_line "-" $((TERM_WIDTH * 2 / 3))
+                    outln
+                    NODEIP="$ip"
+                    lets_roll "${STARTTLS_PROTOCOL}"
+                    ret=$(($? + ret))
+               done
+               draw_line "-" $((TERM_WIDTH * 2 / 3))
+               outln
+               pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
+          else                                                                  # we need just one ip4v to check
+               NODEIP="$IPADDRs"
+               lets_roll "${STARTTLS_PROTOCOL}"
+               ret=$?
+          fi
      fi
-fi
+#}
 
+#main
 exit $?
 
