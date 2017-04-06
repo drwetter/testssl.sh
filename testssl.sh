@@ -473,9 +473,9 @@ pr_bold()       { tm_bold "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"
 prln_bold()     { pr_bold "$1" ; outln; }
 
 tm_italic()     { [[ "$COLOR" -ne 0 ]] && tm_out "\033[3m$1" || tm_out "$1"; tm_off; }
-tmln_italic()   { tm_italic "$1" ; outln; }
+tmln_italic()   { tm_italic "$1" ; tmln_out; }
 pr_italic()     { tm_italic "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<i>$(html_reserved "$1")</i>" || html_out "$(html_reserved "$1")"; }
-prln_italic()   { pr_italic "$1"; tmln_out; }
+prln_italic()   { pr_italic "$1"; outln; }
 
 tm_strikethru()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[9m$1" || tm_out "$1"; tm_off; }                          # ugly!
 tmln_strikethru() { tm_strikethru "$1"; tmln_out; }
@@ -1792,7 +1792,7 @@ run_hpkp() {
           if [[ -n "${backup_spki_str[0]}" ]]; then
                pr_done_good "${backup_spki[0]}"
                #out " Root CA: "
-               tm_italic " ${backup_spki_str[0]}"
+               prln_italic " ${backup_spki_str[0]}"
           else
                outln "${backup_spki[0]}"
           fi
@@ -1802,7 +1802,7 @@ run_hpkp() {
                     # it's a Root CA outside the chain
                     pr_done_good "$spaces_indented            ${backup_spki[i]}"
                     #out " Root CA: "
-                    tm_italic " ${backup_spki_str[i]}"
+                    prln_italic " ${backup_spki_str[i]}"
                else
                     outln "$spaces_indented            ${backup_spki[i]}"
                fi
