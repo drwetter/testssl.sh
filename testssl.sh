@@ -518,13 +518,13 @@ strip_trailing_space() {
      echo "${1%"${1##*[![:space:]]}"}"
 }
 
-
-toupper() { echo -n "${1^^}" ;  }
-tolower() { echo -n "${1,,}" ;  }
-if ! toupper aaa 2>&1 >/dev/null; then
-     # older bash can't do this (MacOS X), even SLES 11, see #697
+if [[ "$BASH_VERSINFO" == 3 ]]; then
+     # older bash can do this only (MacOS X), even SLES 11, see #697
      toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
      tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
+else
+     toupper() { echo -n "${1^^}"; }
+     tolower() { echo -n "${1,,}"; }
 fi
 
 is_number() {
