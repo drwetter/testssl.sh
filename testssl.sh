@@ -922,12 +922,13 @@ html_footer() {
 
 ###### START helper function definitions ######
 
-toupper() { echo -n "${1^^}" ;  }
-tolower() { echo -n "${1,,}" ;  }
-if ! toupper aaa 2>&1 >/dev/null; then
-     # Older bash can't do this (MacOS X), even SLES 11, see #697
+if [[ "$BASH_VERSINFO" == 3 ]]; then
+     # older bash can't do this (MacOS X), even SLES 11, see #697 and also
      toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
      tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
+else
+     toupper() { echo -n "${1^^}"; }
+     tolower() { echo -n "${1,,}"; }
 fi
 
 debugme() {
