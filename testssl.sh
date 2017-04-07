@@ -11026,13 +11026,13 @@ prepare_logging() {
      fi
 
      if ! "$APPEND"; then
-          [[ -e $LOGFILE ]] && outln && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -e "$LOGFILE" ]] && outln && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
      fi
-     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
-     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
-     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
-     exec > >(tee -a ${LOGFILE})
+     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>"$LOGFILE"
+     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>"$LOGFILE"
+     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>"$LOGFILE"
+     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>"$LOGFILE"
+     exec > >(tee -a "$LOGFILE")
 }
 
 
