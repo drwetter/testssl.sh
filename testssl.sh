@@ -174,10 +174,10 @@ DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ ar
                                         # 6: whole 9 yards
 FAST=${FAST:-false}                     # preference: show only first cipher, run_allciphers with openssl instead of sockets
 WIDE=${WIDE:-false}                     # whether to display for some options just ciphers or a table w hexcode/KX,Enc,strength etc.
-LOGFILE=${LOGFILE:-""}                  # logfile if used
-JSONFILE=${JSONFILE:-""}                # jsonfile if used
-CSVFILE=${CSVFILE:-""}                  # csvfile if used
-HTMLFILE=${HTMLFILE:-""}                # HTML if used
+LOGFILE="${LOGFILE:-""}"                # logfile if used
+JSONFILE="${JSONFILE:-""}"              # jsonfile if used
+CSVFILE="${CSVFILE:-""}"                # csvfile if used
+HTMLFILE="${HTMLFILE:-""}"              # HTML if used
 FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
 JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
 CSVHEADER=true                          # same for CSV
@@ -437,7 +437,7 @@ prln_done_good() { pr_done_good "$1"; outln; }
 tm_done_best()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;34m$1" || tm_out "\033[1;32m$1" ) ||  tm_out "$1"; tm_off; }  # green (blue), This is the best
 tmln_done_best() { tm_done_best "$1"; tmln_out; }
 pr_done_best()   { tm_done_best "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
-prln_done_best() { pr_done_best "$1"; outln; } 
+prln_done_best() { pr_done_best "$1"; outln; }
 
 tm_svrty_low()     { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;33m$1" || tm_out "$1"; tm_off; }         # yellow brown | academic or minor problem
 tmln_svrty_low()   { tm_svrty_low "$1"; tmln_out; }
@@ -473,9 +473,9 @@ pr_bold()       { tm_bold "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"
 prln_bold()     { pr_bold "$1" ; outln; }
 
 tm_italic()     { [[ "$COLOR" -ne 0 ]] && tm_out "\033[3m$1" || tm_out "$1"; tm_off; }
-tmln_italic()   { tm_italic "$1" ; outln; }
+tmln_italic()   { tm_italic "$1" ; tmln_out; }
 pr_italic()     { tm_italic "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<i>$(html_reserved "$1")</i>" || html_out "$(html_reserved "$1")"; }
-prln_italic()   { pr_italic "$1"; tmln_out; }
+prln_italic()   { pr_italic "$1"; outln; }
 
 tm_strikethru()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[9m$1" || tm_out "$1"; tm_off; }                          # ugly!
 tmln_strikethru() { tm_strikethru "$1"; tmln_out; }
@@ -802,9 +802,9 @@ json_header() {
           fname_prefix="${NODE}"_p"${PORT}"
      fi
      if [[ -z "$JSONFILE" ]]; then
-          JSONFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".json)
+          JSONFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".json)"
      elif [[ -d "$JSONFILE" ]]; then
-          JSONFILE=$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)
+          JSONFILE="$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)"
      fi
      if "$APPEND"; then
           JSONHEADER=false
@@ -842,9 +842,9 @@ csv_header() {
      fi
 
      if [[ -z "$CSVFILE" ]]; then
-          CSVFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
+          CSVFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".csv)"
      elif [[ -d "$CSVFILE" ]]; then
-          CSVFILE=$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)
+          CSVFILE="$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)"
      fi
      if "$APPEND"; then
           CSVHEADER=false
@@ -889,9 +889,9 @@ html_header() {
      fi
 
      if [[ -z "$HTMLFILE" ]]; then
-          HTMLFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".html)
+          HTMLFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".html)"
      elif [[ -d "$HTMLFILE" ]]; then
-          HTMLFILE=$HTMLFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".html)
+          HTMLFILE="$HTMLFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".html)"
      fi
      if "$APPEND"; then
           HTMLHEADER=false
@@ -1805,7 +1805,7 @@ run_hpkp() {
           if [[ -n "${backup_spki_str[0]}" ]]; then
                pr_done_good "${backup_spki[0]}"
                #out " Root CA: "
-               tm_italic " ${backup_spki_str[0]}"
+               prln_italic " ${backup_spki_str[0]}"
           else
                outln "${backup_spki[0]}"
           fi
@@ -1815,7 +1815,7 @@ run_hpkp() {
                     # it's a Root CA outside the chain
                     pr_done_good "$spaces_indented            ${backup_spki[i]}"
                     #out " Root CA: "
-                    tm_italic " ${backup_spki_str[i]}"
+                    prln_italic " ${backup_spki_str[i]}"
                else
                     outln "$spaces_indented            ${backup_spki[i]}"
                fi
@@ -2085,7 +2085,7 @@ run_cookie_flags() {     # ARG1: Path
 run_more_flags() {
      local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
      local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible Referrer-Policy"
-     local f2t
+     local f2t line
      local first=true
      local spaces="                              "
 
@@ -2104,7 +2104,8 @@ run_more_flags() {
                     first=false
                fi
                pr_done_good "$f2t"
-               outln "$(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
+               line="$(out_row_aligned_max_width "$f2t$HEADERVALUE" "$spaces" $TERM_WIDTH)"
+               outln " ${line#* }"
                fileout "$f2t" "OK" "$f2t: $HEADERVALUE"
           fi
      done
@@ -10450,7 +10451,7 @@ find_openssl_binary() {
      # no ERRFILE initialized yet, thus we use /dev/null for stderr directly
      $OPENSSL version -a 2>/dev/null >/dev/null
      if [[ $? -ne 0 ]] || [[ ! -x "$OPENSSL" ]]; then
-          fatal "\ncannot exec or find any openssl binary" -5
+          fatal "cannot exec or find any openssl binary" -5
      fi
 
      # http://www.openssl.org/news/openssl-notes.html
@@ -10898,6 +10899,7 @@ cleanup () {
 }
 
 fatal() {
+     outln
      prln_magenta "Fatal error: $1" >&2
      exit $2
      # 1:  cmd line error
@@ -11029,22 +11031,22 @@ prepare_logging() {
      [[ -z "$fname_prefix" ]] && fname_prefix="${NODE}"_p"${PORT}"
 
      if [[ -z "$LOGFILE" ]]; then
-          LOGFILE=$fname_prefix-$(date +"%Y%m%d-%H%M".log)
+          LOGFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".log)"
      elif [[ -d "$LOGFILE" ]]; then
           # actually we were instructed to place all files in a DIR instead of the current working dir
-          LOGFILE=$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)
+          LOGFILE="$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)"
      else
           : # just for clarity: a log file was specified, no need to do anything else
      fi
 
      if ! "$APPEND"; then
-          [[ -e $LOGFILE ]] && outln && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -e "$LOGFILE" ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
      fi
-     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>${LOGFILE}
-     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>${LOGFILE}
-     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>${LOGFILE}
-     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>${LOGFILE}
-     exec > >(tee -a ${LOGFILE})
+     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>"$LOGFILE"
+     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>"$LOGFILE"
+     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>"$LOGFILE"
+     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>"$LOGFILE"
+     exec > >(tee -a "$LOGFILE")
 }
 
 
@@ -11368,13 +11370,16 @@ check_proxy() {
                fatal "Your $OPENSSL is too old to support the \"-proxy\" option" -5
           fi
           if [[ "$PROXY" == "auto" ]]; then
-               # get $ENV
-               PROXY=${https_proxy#*\/\/}
-               [[ -z "$PROXY" ]] && PROXY=${http_proxy#*\/\/}
+               # get $ENV (https_proxy is the one we care about)
+               PROXY="${https_proxy#*\/\/}"
+               [[ -z "$PROXY" ]] && PROXY="${http_proxy#*\/\/}"
                [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" 2
           fi
-          PROXYNODE=${PROXY%:*}
-          PROXYPORT=${PROXY#*:}
+          # strip off http/https part if supplied:
+          PROXY="${PROXY/http\:\/\//}"
+          PROXY="${PROXY/https\:\/\//}"
+          PROXYNODE="${PROXY%:*}"
+          PROXYPORT="${PROXY#*:}"
           is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" 2
 
           #if is_ipv4addr "$PROXYNODE" || is_ipv6addr "$PROXYNODE" ; then
@@ -11383,7 +11388,7 @@ check_proxy() {
           if is_ipv4addr "$PROXYNODE"; then
                PROXYIP="$PROXYNODE"
           else
-               PROXYIP=$(get_a_record "$PROXYNODE" 2>/dev/null | grep -v alias | sed 's/^.*address //')
+               PROXYIP="$(get_a_record "$PROXYNODE" 2>/dev/null | grep -v alias | sed 's/^.*address //')"
                [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "2"
           fi
           PROXY="-proxy $PROXYIP:$PROXYPORT"
@@ -11559,7 +11564,6 @@ display_rdns_etc() {
      local ip further_ip_addrs=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for displaying IPv6 addresses we don't need []
 
-
      if [[ -n "$PROXY" ]]; then
           out " Via Proxy:              $CORRECT_SPACES"
           outln "$PROXYIP:$PROXYPORT "
@@ -11661,7 +11665,7 @@ run_mass_testing() {
 
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
      while read cmdline; do
-          cmdline=$(filter_input "$cmdline")
+          cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
           cmdline="$0 $global_cmdline --warnings=batch $cmdline"
@@ -11686,7 +11690,7 @@ modify_global_cmd_line() {
      while [[ $# -gt 0 ]]; do
           case "$1" in
                --jsonfile|--jsonfile=*)
-                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    filename="$(parse_opt_equal_sign "$1" "$2")"
                     ret=$?
                     # If <jsonfile> is a file, then have provide a different
                     # file name to each child process. If <jsonfile> is a
@@ -11698,7 +11702,7 @@ modify_global_cmd_line() {
                          [[ $ret -eq 0 ]] && global_cmdline+="$2 "
                     fi
                     [[ $ret -eq 0 ]] && shift
-                    ;;     
+                    ;;
                --jsonfile-pretty|--jsonfile-pretty=*)
                     filename=$(parse_opt_equal_sign "$1" "$2")
                     ret=$?
@@ -11710,9 +11714,9 @@ modify_global_cmd_line() {
                          [[ $ret -eq 0 ]] && global_cmdline+="$2 "
                     fi
                     [[ $ret -eq 0 ]] && shift
-                    ;;               
+                    ;;
                --csvfile|--csvfile=*)
-                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    filename="$(parse_opt_equal_sign "$1" "$2")"
                     ret=$?
                     # Same as for --jsonfile
                     if "$CSVHEADER"; then
@@ -11724,7 +11728,7 @@ modify_global_cmd_line() {
                     [[ $ret -eq 0 ]] && shift
                     ;;
                --htmlfile|--htmlfile=*)
-                    filename=$(parse_opt_equal_sign "$1" "$2")
+                    filename="$(parse_opt_equal_sign "$1" "$2")"
                     ret=$?
                     # Same as for --jsonfile
                     if "$HTMLHEADER"; then
@@ -11769,10 +11773,10 @@ run_mass_testing_parallel() {
      fi
      global_cmdline="$(modify_global_cmd_line $global_cmdline)"
      [[ "$global_cmdline" =~ jsonfile_XXXXXXXX ]] && one_jsonfile=true
-     
+
      pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln "\n"
      while read cmdline; do
-          cmdline=$(filter_input "$cmdline")
+          cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
           cmdline="$0 $global_cmdline --warnings=batch $cmdline"
@@ -11965,7 +11969,7 @@ parse_cmd_line() {
                     PORT=587
                     ;;
                --ip|--ip=*)
-                    CMDLINE_IP=$(parse_opt_equal_sign "$1" "$2")
+                    CMDLINE_IP="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     ;;
                -n|--nodns)
@@ -11988,7 +11992,7 @@ parse_cmd_line() {
                     ;;
                -t|-t=*|--starttls|--starttls=*)
                     do_starttls=true
-                    STARTTLS_PROTOCOL=$(parse_opt_equal_sign "$1" "$2")
+                    STARTTLS_PROTOCOL="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
                          ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres) ;;
@@ -12141,7 +12145,7 @@ parse_cmd_line() {
                     ;;
                --file|--file=*)
                     # no shift here as otherwise URI is empty and it bails out
-                    FNAME=$(parse_opt_equal_sign "$1" "$2")
+                    FNAME="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     IKNOW_FNAME=true
                     WARNINGS=batch           # set this implicitly!
@@ -12175,7 +12179,7 @@ parse_cmd_line() {
                     esac
                     ;;
                --color|--color=*)
-                    COLOR=$(parse_opt_equal_sign "$1" "$2")
+                    COLOR="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case $COLOR in
                          [0-2]) ;;
@@ -12192,7 +12196,7 @@ parse_cmd_line() {
                     ;;   # DEFINITION of LOGFILE if no arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
                --logfile|--logfile=*)
-                    LOGFILE=$(parse_opt_equal_sign "$1" "$2")
+                    LOGFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_logging=true
                     ;;
@@ -12201,7 +12205,7 @@ parse_cmd_line() {
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
                --jsonfile|--jsonfile=*)
-                    JSONFILE=$(parse_opt_equal_sign "$1" "$2")
+                    JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_json=true
                     ;;
@@ -12209,7 +12213,7 @@ parse_cmd_line() {
                     do_pretty_json=true
                     ;;
                --jsonfile-pretty|--jsonfile-pretty=*)
-                    JSONFILE=$(parse_opt_equal_sign "$1" "$2")
+                    JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_pretty_json=true
                     ;;
@@ -12225,7 +12229,7 @@ parse_cmd_line() {
                     ;;   # DEFINITION of CSVFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
                --csvfile|--csvfile=*)
-                    CSVFILE=$(parse_opt_equal_sign "$1" "$2")
+                    CSVFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
                     ;;
@@ -12234,7 +12238,7 @@ parse_cmd_line() {
                     ;;  # DEFINITION of HTMLFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a file location additionally
                --htmlfile|--htmlfile=*)
-                    HTMLFILE=$(parse_opt_equal_sign "$1" "$2")
+                    HTMLFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_html=true
                     ;;
@@ -12242,16 +12246,16 @@ parse_cmd_line() {
                     APPEND=true
                     ;;
                --openssl|--openssl=*)
-                    OPENSSL=$(parse_opt_equal_sign "$1" "$2")
+                    OPENSSL="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     ;;
                --openssl-timeout|--openssl-timeout=*)
-                    OPENSSL_TIMEOUT=$(parse_opt_equal_sign "$1" "$2")
+                    OPENSSL_TIMEOUT="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     ;;
                --mapping|--mapping=*)
                     local cipher_mapping
-                    cipher_mapping=$(parse_opt_equal_sign "$1" "$2")
+                    cipher_mapping="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case "$cipher_mapping" in
                          no-openssl) DISPLAY_CIPHERNAMES="rfc-only" ;;
@@ -12263,7 +12267,7 @@ parse_cmd_line() {
                     esac
                     ;;
                --proxy|--proxy=*)
-                    PROXY=$(parse_opt_equal_sign "$1" "$2")
+                    PROXY="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     ;;
                -6)  # doesn't work automagically. My versions have -DOPENSSL_USE_IPV6, CentOS/RHEL/FC do not
@@ -12289,12 +12293,12 @@ parse_cmd_line() {
 
      # Show usage if no further options were specified
      if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! $do_display_only; then
-          echo && fatal "URI missing" "1"
+          fatal "URI missing" "1"
      else
      # left off here is the URI
           URI="$1"
           # parameter after URI supplied:
-          [[ -n "$2" ]] && echo && fatal "URI comes last" "1"
+          [[ -n "$2" ]] && fatal "URI comes last" "1"
      fi
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
