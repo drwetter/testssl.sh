@@ -10438,7 +10438,7 @@ find_openssl_binary() {
      # no ERRFILE initialized yet, thus we use /dev/null for stderr directly
      $OPENSSL version -a 2>/dev/null >/dev/null
      if [[ $? -ne 0 ]] || [[ ! -x "$OPENSSL" ]]; then
-          fatal "\ncannot exec or find any openssl binary" -5
+          fatal "cannot exec or find any openssl binary" -5
      fi
 
      # http://www.openssl.org/news/openssl-notes.html
@@ -10886,6 +10886,7 @@ cleanup () {
 }
 
 fatal() {
+     outln
      prln_magenta "Fatal error: $1" >&2
      exit $2
      # 1:  cmd line error
@@ -11026,7 +11027,7 @@ prepare_logging() {
      fi
 
      if ! "$APPEND"; then
-          [[ -e "$LOGFILE" ]] && outln && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -e "$LOGFILE" ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
      fi
      tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>"$LOGFILE"
      tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>"$LOGFILE"
@@ -12279,12 +12280,12 @@ parse_cmd_line() {
 
      # Show usage if no further options were specified
      if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! $do_display_only; then
-          echo && fatal "URI missing" "1"
+          fatal "URI missing" "1"
      else
      # left off here is the URI
           URI="$1"
           # parameter after URI supplied:
-          [[ -n "$2" ]] && echo && fatal "URI comes last" "1"
+          [[ -n "$2" ]] && fatal "URI comes last" "1"
      fi
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
