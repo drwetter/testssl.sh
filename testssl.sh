@@ -10590,7 +10590,7 @@ help() {
 single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
-     -f, --ciphers                 checks common cipher suites
+     -s, --std, --standard         tests certain lists of cipher suites by strength
      -p, --protocols               checks TLS/SSL protocols (including SPDY/HTTP2)
      -y, --spdy, --npn             checks for SPDY/NPN
      -Y, --http2, --alpn           checks for HTTP2/ALPN
@@ -10615,7 +10615,7 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -F, --freak                   tests for FREAK vulnerability
      -J, --logjam                  tests for LOGJAM vulnerability
      -D, --drown                   tests for DROWN vulnerability
-     -s, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
+     -f, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
 
 tuning / connect options (most also can be preset via environment variables):
@@ -12009,7 +12009,7 @@ parse_cmd_line() {
                -Y|--http2|--alpn)
                     do_http2=true
                     ;;
-               -f|--ciphers)
+               -s|--std|--standard)
                     do_std_cipherlists=true
                     ;;
                -S|--server[-_]defaults)
@@ -12099,7 +12099,7 @@ parse_cmd_line() {
                     do_rc4=true
                     let "VULN_COUNT++"
                     ;;
-               -s|--pfs|--fs|--nsa)
+               -f|--pfs|--fs|--nsa)
                     do_pfs=true
                     ;;
                --devel) ### this development feature will soon disappear
