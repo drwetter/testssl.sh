@@ -4,6 +4,7 @@
 [![Build Status](https://travis-ci.org/drwetter/testssl.sh.svg?branch=master)](https://travis-ci.org/drwetter/testssl.sh) 
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/drwetter/testssl.sh?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
+
 `testssl.sh` is a free command line tool which checks a server's service on
 any port for the support of TLS/SSL ciphers, protocols as well as some
 cryptographic flaws.
@@ -28,9 +29,8 @@ cryptographic flaws.
 
 #### Status
 
-_Here in the master branch you find the stable version 2.8rc3 of the software, it 
-superseds 2.6. Version 2.8 is currently being finalized_ . 2.9dev is the new
-developement branch  For the **a more thorough description of the command line options** 
+This is the stable version 2.8 of the software, it  supersedes 2.6. . 2.9dev is the new
+development branch  For a more thorough description of the command line options
 please see [testssl.sh](https://testssl.sh/ "Go to the site with the stable version
 and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation. 
 
@@ -46,8 +46,6 @@ is needed for better LOGJAM checks and to display bit strengths for key
 exchanges.
 
 #### Features in [2.8 stable](Readme.md#stable)
-
-Done so far:
 
 * Trust chain check against certificate stores from Apple (OS), Linux (OS),
   Microsoft (OS), Mozilla (Firefox Browser), works for openssl >=1.0.1
@@ -73,14 +71,12 @@ Done so far:
 * check for DROWN
 * Whole number of bugs squashed
 
-Update notification here or @ [twitter](https://twitter.com/drwetter).
-
 
 #### Contributions
 
 Contributions, feedback,  bug reports are welcome! For contributions please
 note: One patch per feature -- bug fix/improvement. Please test your
-changes thouroughly as reliability is important for this project.
+changes thoroughly as reliability is important for this project.
 
 There's [coding guideline](https://github.com/drwetter/testssl.sh/wiki/Coding-Style).
 
