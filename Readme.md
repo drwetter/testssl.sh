@@ -29,7 +29,7 @@ cryptographic flaws.
 
 #### Status
 
-This is the stable version 2.8 of the software, it  supersedes 2.6. . 2.9dev is the new
+This is the stable version 2.8 of the software, it supersedes 2.6. 2.9dev is the new
 development branch  For a more thorough description of the command line options
 please see [testssl.sh](https://testssl.sh/ "Go to the site with the stable version
 and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation. 
