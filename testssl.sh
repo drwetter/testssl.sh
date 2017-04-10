@@ -752,7 +752,7 @@ fileout_footer() {
 }
 
 # ID, SEVERITY, FINDING, CVE, CWE, HINT
-fileout() { 
+fileout() {
      local severity="$2"
      local cwe="$5"
      local hint="$6"
@@ -2443,7 +2443,7 @@ neat_list(){
      fi
 }
 
-test_just_one(){
+run_cipher_match(){
      local hexc n auth export ciphers_to_test supported_sslv2_ciphers s
      local -a hexcode normalized_hexcode ciph sslvers kx enc export2 sigalg
      local -a ciphers_found ciphers_found2 ciph2 rfc_ciph rfc_ciph2 ossl_supported
@@ -3986,7 +3986,7 @@ pr_dh_quality() {
           pr_done_good "$string"
      else
           out "$string"
-     fi 
+     fi
 }
 
 pr_ecdh_quality() {
@@ -4053,7 +4053,7 @@ pr_ecdh_curve_quality() {
 # The return value is an indicator of the quality of the cipher in $1:
 #   0 = $1 is empty
 #   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
-#   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best 
+#   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best
 pr_cipher_quality() {
      local cipher="$1"
      local text="$2"
@@ -4949,7 +4949,7 @@ extract_new_tls_extensions() {
           # check to see if any new TLS extensions were returned and add any new ones to TLS_EXTENSIONS
           while read -d "\"" -r line; do
                if [[ $line != "" ]] && [[ ! "$TLS_EXTENSIONS" =~ "$line" ]]; then
-#FIXME: This is a string of quoted strings, so this seems to determine the output format already. Better e.g. would be an array         
+#FIXME: This is a string of quoted strings, so this seems to determine the output format already. Better e.g. would be an array
                     TLS_EXTENSIONS+=" \"${line}\""
                fi
           done <<<$tls_extensions
@@ -11848,7 +11848,7 @@ initialize_globals() {
      do_ssl_poodle=false
      do_sweet32=false
      do_tls_fallback_scsv=false
-     do_test_just_one=false
+     do_cipher_match=false
      do_tls_sockets=false
      do_client_simulation=false
      do_display_only=false
@@ -11892,7 +11892,7 @@ query_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_sweet32 do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
+               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
      done
      return $true_nr
@@ -11905,7 +11905,7 @@ debug_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
-               do_sweet32 do_client_simulation do_test_just_one do_tls_sockets do_mass_testing do_display_only; do
+               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
      printf "%-22s : %s\n" URI: "$URI"
@@ -11973,7 +11973,7 @@ parse_cmd_line() {
                     fi
                     ;;
                -x|-x=*|--single[-_]cipher|--single[-_]cipher=*)
-                    do_test_just_one=true
+                    do_cipher_match=true
                     single_cipher=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     ;;
@@ -12349,7 +12349,7 @@ lets_roll() {
 
      $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit 0; }
      $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo "$?" ; exit 0; }
-     $do_test_just_one && test_just_one ${single_cipher} && time_right_align
+     $do_cipher_match && run_cipher_match ${single_cipher} && time_right_align
 
      # all top level functions  now following have the prefix "run_"
      fileout_section_header $section_number false && ((section_number++))
