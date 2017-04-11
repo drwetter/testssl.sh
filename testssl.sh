@@ -117,6 +117,10 @@ HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
 
 readonly CMDLINE="$@"
+# When performing mass testing, the child processes need to be sent the
+# command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
+readonly -a CMDLINE_ARRAY=("$@")
+declare -a MASS_TESTING_CMDLINE
 
 readonly CVS_REL=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')
 readonly CVS_REL_SHORT=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')
@@ -11641,10 +11645,109 @@ run_mx_all_ips() {
      return $ret
 }
 
+# If run_mass_testing() is being used, then create the command line
+# for the test based on the global command line (all elements of the
+# command line provided to the parent, except the --file option) and the
+# specific command line options for the test to be run. Each argument
+# in the command line needs to be a separate element in an array in order
+# to deal with word splitting within file names (see #702).
+#
+# If run_mass_testing_parallel() is being used, then in addition to the above,
+# modify global command line for child tests so that if all (JSON, CSV, HTML) 
+# output is to go into a single file, each child will have its output placed in
+# a separate, named file, so that the separate files can be concatenated
+# together once they are complete to create the single file.
+#
+# If run_mass_testing() is being used, then "$1" is "serial". If
+# run_mass_testing_parallel() is being used, then "$1" is "parallel XXXXXXXX"
+# where XXXXXXXX is the number of the test being run.
+create_mass_testing_cmdline() {
+     local testing_type="$1"
+     local cmd test_number
+     local -i nr_cmds=0
+     local skip_next=false
+
+     MASS_TESTING_CMDLINE=()
+     [[ "$testing_type" =~ parallel ]] && read testing_type test_number <<< "$testing_type"
+     
+     # Start by adding the elements from the global command line to the command
+     # line for the test. If run_mass_testing_parallel(), then modify the
+     # command line so that, when required, each child process sends its test
+     # results to a separate file.
+     for cmd in "${CMDLINE_ARRAY[@]}"; do
+          "$skip_next" && skip_next=false && continue
+          if [[ "$cmd" == "--file"* ]]; then
+               # Don't include the "--file[=...] argument in the child's command
+               # line, but do include "--warnings=batch".
+               MASS_TESTING_CMDLINE[nr_cmds]="--warnings=batch"
+               nr_cmds+=1
+               break
+          elif [[ "$testing_type" == "serial" ]]; then
+               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+               nr_cmds+=1
+          else
+               case "$cmd" in
+                    --jsonfile|--jsonfile=*)
+                         # If <jsonfile> is a file, then have provide a different
+                         # file name to each child process. If <jsonfile> is a
+                         # directory, then just pass it on to the child processes.
+                         if "$JSONHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_${test_number}.json"
+                              [[ "$cmd" == --jsonfile ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
+                    --jsonfile-pretty|--jsonfile-pretty=*)
+
+                         # Same as for --jsonfile
+                         if "$JSONHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_${test_number}.json"
+                              [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
+                    --csvfile|--csvfile=*)
+                         # Same as for --jsonfile
+                         if "$CSVHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile=$TEMPDIR/csvfile_${test_number}.csv"
+                              [[ "$cmd" == --csvfile ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
+                    --htmlfile|--htmlfile=*)
+                         # Same as for --jsonfile
+                         if "$HTMLHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile=$TEMPDIR/htmlfile_${test_number}.html"
+                              [[ "$cmd" == --htmlfile ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
+                    *)
+                         MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         ;;
+               esac
+               nr_cmds+=1
+          fi
+     done
+
+     # Now add the command line arguments for the specific test to the command
+     # line. Skip the first argument sent to this function, since it specifies
+     # the type of testing being performed.
+     shift
+     while [[ $# -gt 0 ]]; do
+          MASS_TESTING_CMDLINE[nr_cmds]="$1"
+          nr_cmds+=1
+          shift
+     done
+}
+
 run_mass_testing() {
-     local cmdline=""
+     local cmd cmdline=""
      local first=true
-     local global_cmdline=${CMDLINE%%--file*}               # $global_cmdline may have arguments in addition to the one in the file
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
           fatal "Can't read file \"$FNAME\"" "2"
@@ -11655,85 +11758,16 @@ run_mass_testing() {
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
+          # Create the command line for the child in the form of an array (see #702)
+          create_mass_testing_cmdline "serial" $cmdline
           draw_line "=" $((TERM_WIDTH / 2)); outln;
-          outln "$cmdline"
-          "$first" || fileout_separator                     # this is needed for appended output, see #687
-          CHILD_MASS_TESTING=true $cmdline                  # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
+          # See http://stackoverflow.com/questions/10835933/preserve-quotes-in-bash-arguments
+          outln "$(strip_leading_space "$(printf " %q" "$0" "${MASS_TESTING_CMDLINE[@]}")")"
+          "$first" || fileout_separator                              # this is needed for appended output, see #687
+          CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}"  # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
           first=false
      done < "${FNAME}"
      return $?
-}
-
-# Modify global command line for child tests in mass processing.
-# In particular if all (JSON, CSV, HTML) output is to go into a single
-# file, then have each child place its output in a separate, named file, so
-# that the separate files can be concatenated together once they are complete
-# to create the single file.
-modify_global_cmd_line() {
-     local global_cmdline="" filename
-     local ret
-
-     while [[ $# -gt 0 ]]; do
-          case "$1" in
-               --jsonfile|--jsonfile=*)
-                    filename="$(parse_opt_equal_sign "$1" "$2")"
-                    ret=$?
-                    # If <jsonfile> is a file, then have provide a different
-                    # file name to each child process. If <jsonfile> is a
-                    # directory, then just pass it on to the child processes.
-                    if "$JSONHEADER"; then
-                         global_cmdline+="--jsonfile=$TEMPDIR/jsonfile_XXXXXXXX.json "
-                    else
-                         global_cmdline+="$1 "
-                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
-                    fi
-                    [[ $ret -eq 0 ]] && shift
-                    ;;
-               --jsonfile-pretty|--jsonfile-pretty=*)
-                    filename=$(parse_opt_equal_sign "$1" "$2")
-                    ret=$?
-                    # Same as for --jsonfile
-                    if "$JSONHEADER"; then
-                         global_cmdline+="--jsonfile-pretty=$TEMPDIR/jsonfile_XXXXXXXX.json "
-                    else
-                         global_cmdline+="$1 "
-                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
-                    fi
-                    [[ $ret -eq 0 ]] && shift
-                    ;;
-               --csvfile|--csvfile=*)
-                    filename="$(parse_opt_equal_sign "$1" "$2")"
-                    ret=$?
-                    # Same as for --jsonfile
-                    if "$CSVHEADER"; then
-                         global_cmdline+="--csvfile=$TEMPDIR/csvfile_XXXXXXXX.csv "
-                    else
-                         global_cmdline+="$1 "
-                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
-                    fi
-                    [[ $ret -eq 0 ]] && shift
-                    ;;
-               --htmlfile|--htmlfile=*)
-                    filename="$(parse_opt_equal_sign "$1" "$2")"
-                    ret=$?
-                    # Same as for --jsonfile
-                    if "$HTMLHEADER"; then
-                         global_cmdline+="--htmlfile=$TEMPDIR/htmlfile_XXXXXXXX.html "
-                    else
-                         global_cmdline+="$1 "
-                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
-                    fi
-                    [[ $ret -eq 0 ]] && shift
-                    ;;
-               *)
-                    global_cmdline+="$1 "
-                    ;;
-          esac
-          shift
-     done
-     tm_out "$global_cmdline"
-     return 0
 }
 
 # This function is called when it has been determined that the next child process has completed.
@@ -11751,35 +11785,26 @@ get_next_message_testing_parallel_result() {
 
 #FIXME: not called/tested yet
 run_mass_testing_parallel() {
-     local cmdline=""
-     local one_jsonfile=false
-     local global_cmdline=${CMDLINE%%--file*}
+     local cmd cmdline=""
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
-     global_cmdline="$(modify_global_cmd_line $global_cmdline)"
-     [[ "$global_cmdline" =~ jsonfile_XXXXXXXX ]] && one_jsonfile=true
 
      pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln "\n"
      while read cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
-
-          # If the JSON, CSV, or HTML output is to all go into a single file, then replace the
-          # generic "_XXXXXXXX" filenames with different names for each child process, by
-          # replacing "XXXXXXXX" with the test's number
-          cmdline="${cmdline/jsonfile_XXXXXXXX\.json/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json}"
+          # Create the command line for the child in the form of an array (see #702)
+          create_mass_testing_cmdline "parallel $(printf "%08d" $NR_PARALLEL_TESTS)" $cmdline
 
           # fileout() won't include the "service" information in the JSON file for the child process
           # if the JSON file doesn't already exist.
-          "$one_jsonfile" && echo -n "" > "$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
-          cmdline="${cmdline/csvfile_XXXXXXXX\.csv/csvfile_$(printf "%08d" $NR_PARALLEL_TESTS).csv}"
-          cmdline="${cmdline/htmlfile_XXXXXXXX\.html/htmlfile_$(printf "%08d" $NR_PARALLEL_TESTS).html}"
-          PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$cmdline"
-          CHILD_MASS_TESTING=true $cmdline > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+          "$JSONHEADER" && echo -n "" > "$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
+          # See http://stackoverflow.com/questions/10835933/preserve-quotes-in-bash-arguments
+          PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$(strip_leading_space "$(printf " %q" "$0" "${MASS_TESTING_CMDLINE[@]}")")"
+          CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
           PARALLEL_TESTING_PID[NR_PARALLEL_TESTS]=$!
           NR_PARALLEL_TESTS+=1
           sleep $PARALLEL_SLEEP
