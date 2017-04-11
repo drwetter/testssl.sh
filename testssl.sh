@@ -10385,6 +10385,8 @@ get_install_dir() {
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
           [[ $? -ne 0 ]] && exit -2
+     else
+          :     # see #705, in a nutshell: not portable to initialize a global array inside a function. Thus it'll be done in main part below
      fi
 }
 
@@ -12449,6 +12451,7 @@ lets_roll() {
      json_header
      csv_header
      get_install_dir
+     # see #705, we need to source TLS_DATA_FILE here instead of in get_install_dir(), see #705
      [[ -r "$TLS_DATA_FILE" ]] && . $TLS_DATA_FILE
      set_color_functions
      maketempf
