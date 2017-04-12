@@ -11810,7 +11810,7 @@ run_mass_testing_parallel() {
           if [[ -z "$(which "$0")" ]]; then          
                CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
           else
-               CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+               CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
           fi
           PARALLEL_TESTING_PID[NR_PARALLEL_TESTS]=$!
           NR_PARALLEL_TESTS+=1
