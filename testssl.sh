@@ -10484,8 +10484,8 @@ find_openssl_binary() {
 
      openssl_location="$(which $OPENSSL)"
      [[ -n "$GIT_REL" ]] && \
-          cwd=$(/bin/pwd) || \
-          cwd=$RUN_DIR
+          cwd="$(/bin/pwd)" || \
+          cwd="$RUN_DIR"
      if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
           OPENSSL_LOCATION="\$PWD/bin/$(basename "$openssl_location")"
      elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
