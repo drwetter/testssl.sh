@@ -116,7 +116,7 @@ OPENSSL_LOCATION=""
 HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
 
-readonly CMDLINE="$@"
+declare CMDLINE
 # When performing mass testing, the child processes need to be sent the
 # command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
 readonly -a CMDLINE_ARRAY=("$@")
@@ -11746,7 +11746,7 @@ create_mass_testing_cmdline() {
 }
 
 run_mass_testing() {
-     local cmd cmdline=""
+     local cmdline=""
      local first=true
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
@@ -11761,8 +11761,7 @@ run_mass_testing() {
           # Create the command line for the child in the form of an array (see #702)
           create_mass_testing_cmdline "serial" $cmdline
           draw_line "=" $((TERM_WIDTH / 2)); outln;
-          # See http://stackoverflow.com/questions/10835933/preserve-quotes-in-bash-arguments
-          outln "$(strip_leading_space "$(printf " %q" "$0" "${MASS_TESTING_CMDLINE[@]}")")"
+          outln "$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
           "$first" || fileout_separator                              # this is needed for appended output, see #687
           CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}"  # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
           first=false
@@ -11785,7 +11784,7 @@ get_next_message_testing_parallel_result() {
 
 #FIXME: not called/tested yet
 run_mass_testing_parallel() {
-     local cmd cmdline=""
+     local cmdline=""
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
           fatal "Can't read file \"$FNAME\"" "2"
@@ -11802,8 +11801,7 @@ run_mass_testing_parallel() {
           # fileout() won't include the "service" information in the JSON file for the child process
           # if the JSON file doesn't already exist.
           "$JSONHEADER" && echo -n "" > "$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
-          # See http://stackoverflow.com/questions/10835933/preserve-quotes-in-bash-arguments
-          PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$(strip_leading_space "$(printf " %q" "$0" "${MASS_TESTING_CMDLINE[@]}")")"
+          PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
           CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
           PARALLEL_TESTING_PID[NR_PARALLEL_TESTS]=$!
           NR_PARALLEL_TESTS+=1
@@ -11949,8 +11947,30 @@ parse_opt_equal_sign() {
      fi
 }
 
+# Create the command line string for printing purposes
+# See http://stackoverflow.com/questions/10835933/preserve-quotes-in-bash-arguments
+create_cmd_line_string() {
+     local arg
+     local -a allargs=()
+     local chars='[ !"#$&()*,;<>?\^`{|}]'
+
+     while [[ $# -gt 0 ]]; do
+          if [[ $1 == *\'* ]]; then
+               arg=\""$1"\"
+          elif [[ $1 == *$chars* ]]; then
+               arg="'$1'"
+          else
+               arg="$1"
+          fi
+          allargs+=("$arg")    # ${allargs[@]} is to be used only for printing
+          shift
+     done
+     printf '%s\n' "${allargs[*]}"
+}
 
 parse_cmd_line() {
+     CMDLINE="$(create_cmd_line_string "${CMDLINE_ARRAY[@]}")"
+
      # Show usage if no options were specified
      [[ -z "$1" ]] && help 0
      # Set defaults if only an URI was specified, maybe ToDo: use "="-option, then: ${i#*=} i.e. substring removal
