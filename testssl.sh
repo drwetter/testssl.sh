@@ -106,8 +106,8 @@ egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
      SWURL="https://testssl.sh/    "
 
-readonly PROG_NAME=$(basename "$0")
-readonly RUN_DIR=$(dirname "$0")
+readonly PROG_NAME="$(basename "$0")"
+readonly RUN_DIR="$(dirname "$0")"
 TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR
 CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # or CA_BUNDLES_PATH to find the CA BUNDLES. TESTSSL_INSTALL_DIR helps you to find the RFC mapping also
 CIPHERS_BY_STRENGTH_FILE=""
@@ -116,7 +116,11 @@ OPENSSL_LOCATION=""
 HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
 
-readonly CMDLINE="$@"
+declare CMDLINE
+# When performing mass testing, the child processes need to be sent the
+# command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
+readonly -a CMDLINE_ARRAY=("$@")
+declare -a MASS_TESTING_CMDLINE
 
 readonly CVS_REL=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')
 readonly CVS_REL_SHORT=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')
@@ -3489,7 +3493,7 @@ run_client_simulation() {
      local using_sockets=true
 
      # source the external file
-     . $TESTSSL_INSTALL_DIR/etc/client_simulation.txt 2>/dev/null
+     . "$TESTSSL_INSTALL_DIR/etc/client_simulation.txt" 2>/dev/null
      if [[ $? -ne 0 ]]; then
           prln_local_problem "couldn't find client simulation data in $TESTSSL_INSTALL_DIR/etc/client_simulation.txt"
           return 1
@@ -4820,7 +4824,7 @@ determine_trust() {
      debugme tmln_out
 
      # if you run testssl.sh from a different path /you can set either TESTSSL_INSTALL_DIR or CA_BUNDLES_PATH to find the CA BUNDLES
-     if [[ -z $CA_BUNDLES_PATH ]]; then
+     if [[ -z "$CA_BUNDLES_PATH" ]]; then
           ca_bundles="$TESTSSL_INSTALL_DIR/etc/*.pem"
      else
           ca_bundles="$CA_BUNDLES_PATH/*.pem"
@@ -10345,7 +10349,7 @@ old_fart() {
 # TESTSSL_INSTALL_DIR can be supplied via environment so that the cipher mapping and CA bundles can be found
 # www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
 get_install_dir() {
-     [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$(dirname ${BASH_SOURCE[0]})"
+     [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
      if [[ -r "$RUN_DIR/etc/cipher-mapping.txt" ]]; then
           CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/etc/cipher-mapping.txt"
@@ -10361,17 +10365,17 @@ get_install_dir() {
      # we haven't found the cipher file yet...
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
           readlink -f ls &>/dev/null && \
-               TESTSSL_INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
-               TESTSSL_INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
+               TESTSSL_INSTALL_DIR="$(readlink -f "$(basename "${BASH_SOURCE[0]}")")" || \
+               TESTSSL_INSTALL_DIR="$(readlink "$(basename "${BASH_SOURCE[0]}")")"
                # not sure whether Darwin has -f
-          TESTSSL_INSTALL_DIR=$(dirname $TESTSSL_INSTALL_DIR 2>/dev/null)
+          TESTSSL_INSTALL_DIR="$(dirname "$TESTSSL_INSTALL_DIR" 2>/dev/null)"
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
           [[ -r "$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
      fi
 
      # still no cipher mapping file:
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which realpath &>/dev/null ; then
-          TESTSSL_INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
+          TESTSSL_INSTALL_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
           CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
@@ -10379,8 +10383,8 @@ get_install_dir() {
      # still no cipher mapping file (and realpath is not present):
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
          readlink -f ls &>/dev/null && \
-              TESTSSL_INSTALL_DIR=$(dirname $(readlink -f ${BASH_SOURCE[0]})) || \
-              TESTSSL_INSTALL_DIR=$(dirname $(readlink ${BASH_SOURCE[0]}))
+              TESTSSL_INSTALL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || \
+              TESTSSL_INSTALL_DIR="$(dirname "$(readlink "${BASH_SOURCE[0]}")")"
               # not sure whether Darwin has -f
           CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
@@ -10396,7 +10400,7 @@ get_install_dir() {
           [[ $? -ne 0 ]] && exit -2
      fi
 
-     TLS_DATA_FILE=$TESTSSL_INSTALL_DIR/etc/tls_data.txt
+     TLS_DATA_FILE="$TESTSSL_INSTALL_DIR/etc/tls_data.txt"
      if [[ ! -r "$TLS_DATA_FILE" ]]; then
           prln_warning "\nATTENTION: No TLS data file found -- needed for socket based handshakes"
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
@@ -10446,9 +10450,9 @@ find_openssl_binary() {
      elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
           # 2. otherwise, only if on Bash on Windows, use system binaries only.
           SYSTEM2="WSL"
-     elif test_openssl_suffix $RUN_DIR; then
+     elif test_openssl_suffix "$RUN_DIR"; then
           :    # 3. otherwise try openssl in path of testssl.sh
-     elif test_openssl_suffix $RUN_DIR/bin; then
+     elif test_openssl_suffix "$RUN_DIR/bin"; then
           :    # 4. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
      elif test_openssl_suffix "$(dirname "$(which openssl)")"; then
           :    # 5. we tried hard and failed, so now we use the system binaries
@@ -10797,7 +10801,7 @@ prepare_arrays() {
      local hexc mac ossl_ciph
      local ossl_supported_tls="" ossl_supported_sslv2=""
 
-     if [[ -e $CIPHERS_BY_STRENGTH_FILE ]]; then
+     if [[ -e "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
           ossl_supported_tls="$($OPENSSL ciphers -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
           while read hexc n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] mac TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
@@ -10819,7 +10823,7 @@ prepare_arrays() {
                     grep -qw "$hexc" <<< "$ossl_supported_sslv2" && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
                fi
                TLS_NR_CIPHERS+=1
-          done < $CIPHERS_BY_STRENGTH_FILE
+          done < "$CIPHERS_BY_STRENGTH_FILE"
      fi
 }
 
@@ -11659,10 +11663,109 @@ run_mx_all_ips() {
      return $ret
 }
 
+# If run_mass_testing() is being used, then create the command line
+# for the test based on the global command line (all elements of the
+# command line provided to the parent, except the --file option) and the
+# specific command line options for the test to be run. Each argument
+# in the command line needs to be a separate element in an array in order
+# to deal with word splitting within file names (see #702).
+#
+# If run_mass_testing_parallel() is being used, then in addition to the above,
+# modify global command line for child tests so that if all (JSON, CSV, HTML)
+# output is to go into a single file, each child will have its output placed in
+# a separate, named file, so that the separate files can be concatenated
+# together once they are complete to create the single file.
+#
+# If run_mass_testing() is being used, then "$1" is "serial". If
+# run_mass_testing_parallel() is being used, then "$1" is "parallel XXXXXXXX"
+# where XXXXXXXX is the number of the test being run.
+create_mass_testing_cmdline() {
+     local testing_type="$1"
+     local cmd test_number
+     local -i nr_cmds=0
+     local skip_next=false
+
+     MASS_TESTING_CMDLINE=()
+     [[ "$testing_type" =~ parallel ]] && read testing_type test_number <<< "$testing_type"
+
+     # Start by adding the elements from the global command line to the command
+     # line for the test. If run_mass_testing_parallel(), then modify the
+     # command line so that, when required, each child process sends its test
+     # results to a separate file.
+     for cmd in "${CMDLINE_ARRAY[@]}"; do
+          "$skip_next" && skip_next=false && continue
+          if [[ "$cmd" == "--file"* ]]; then
+               # Don't include the "--file[=...] argument in the child's command
+               # line, but do include "--warnings=batch".
+               MASS_TESTING_CMDLINE[nr_cmds]="--warnings=batch"
+               nr_cmds+=1
+               break
+          elif [[ "$testing_type" == "serial" ]]; then
+               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+               nr_cmds+=1
+          else
+               case "$cmd" in
+                    --jsonfile|--jsonfile=*)
+                         # If <jsonfile> is a file, then have provide a different
+                         # file name to each child process. If <jsonfile> is a
+                         # directory, then just pass it on to the child processes.
+                         if "$JSONHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_${test_number}.json"
+                              [[ "$cmd" == --jsonfile ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
+                    --jsonfile-pretty|--jsonfile-pretty=*)
+
+                         # Same as for --jsonfile
+                         if "$JSONHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_${test_number}.json"
+                              [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
+                    --csvfile|--csvfile=*)
+                         # Same as for --jsonfile
+                         if "$CSVHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile=$TEMPDIR/csvfile_${test_number}.csv"
+                              [[ "$cmd" == --csvfile ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
+                    --htmlfile|--htmlfile=*)
+                         # Same as for --jsonfile
+                         if "$HTMLHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile=$TEMPDIR/htmlfile_${test_number}.html"
+                              [[ "$cmd" == --htmlfile ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
+                    *)
+                         MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         ;;
+               esac
+               nr_cmds+=1
+          fi
+     done
+
+     # Now add the command line arguments for the specific test to the command
+     # line. Skip the first argument sent to this function, since it specifies
+     # the type of testing being performed.
+     shift
+     while [[ $# -gt 0 ]]; do
+          MASS_TESTING_CMDLINE[nr_cmds]="$1"
+          nr_cmds+=1
+          shift
+     done
+}
+
 run_mass_testing() {
      local cmdline=""
      local first=true
-     local global_cmdline=${CMDLINE%%--file*}               # $global_cmdline may have arguments in addition to the one in the file
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
           fatal "Can't read file \"$FNAME\"" "2"
@@ -11673,85 +11776,20 @@ run_mass_testing() {
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
+          # Create the command line for the child in the form of an array (see #702)
+          create_mass_testing_cmdline "serial" $cmdline
           draw_line "=" $((TERM_WIDTH / 2)); outln;
-          outln "$cmdline"
-          "$first" || fileout_separator                     # this is needed for appended output, see #687
-          CHILD_MASS_TESTING=true $cmdline                  # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
+          outln "$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
+          "$first" || fileout_separator                              # this is needed for appended output, see #687
+          # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
+          if [[ -z "$(which "$0")" ]]; then
+               CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}"
+          else
+               CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}"
+          fi
           first=false
      done < "${FNAME}"
      return $?
-}
-
-# Modify global command line for child tests in mass processing.
-# In particular if all (JSON, CSV, HTML) output is to go into a single
-# file, then have each child place its output in a separate, named file, so
-# that the separate files can be concatenated together once they are complete
-# to create the single file.
-modify_global_cmd_line() {
-     local global_cmdline="" filename
-     local ret
-
-     while [[ $# -gt 0 ]]; do
-          case "$1" in
-               --jsonfile|--jsonfile=*)
-                    filename="$(parse_opt_equal_sign "$1" "$2")"
-                    ret=$?
-                    # If <jsonfile> is a file, then have provide a different
-                    # file name to each child process. If <jsonfile> is a
-                    # directory, then just pass it on to the child processes.
-                    if "$JSONHEADER"; then
-                         global_cmdline+="--jsonfile=$TEMPDIR/jsonfile_XXXXXXXX.json "
-                    else
-                         global_cmdline+="$1 "
-                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
-                    fi
-                    [[ $ret -eq 0 ]] && shift
-                    ;;
-               --jsonfile-pretty|--jsonfile-pretty=*)
-                    filename=$(parse_opt_equal_sign "$1" "$2")
-                    ret=$?
-                    # Same as for --jsonfile
-                    if "$JSONHEADER"; then
-                         global_cmdline+="--jsonfile-pretty=$TEMPDIR/jsonfile_XXXXXXXX.json "
-                    else
-                         global_cmdline+="$1 "
-                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
-                    fi
-                    [[ $ret -eq 0 ]] && shift
-                    ;;
-               --csvfile|--csvfile=*)
-                    filename="$(parse_opt_equal_sign "$1" "$2")"
-                    ret=$?
-                    # Same as for --jsonfile
-                    if "$CSVHEADER"; then
-                         global_cmdline+="--csvfile=$TEMPDIR/csvfile_XXXXXXXX.csv "
-                    else
-                         global_cmdline+="$1 "
-                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
-                    fi
-                    [[ $ret -eq 0 ]] && shift
-                    ;;
-               --htmlfile|--htmlfile=*)
-                    filename="$(parse_opt_equal_sign "$1" "$2")"
-                    ret=$?
-                    # Same as for --jsonfile
-                    if "$HTMLHEADER"; then
-                         global_cmdline+="--htmlfile=$TEMPDIR/htmlfile_XXXXXXXX.html "
-                    else
-                         global_cmdline+="$1 "
-                         [[ $ret -eq 0 ]] && global_cmdline+="$2 "
-                    fi
-                    [[ $ret -eq 0 ]] && shift
-                    ;;
-               *)
-                    global_cmdline+="$1 "
-                    ;;
-          esac
-          shift
-     done
-     tm_out "$global_cmdline"
-     return 0
 }
 
 # This function is called when it has been determined that the next child process has completed.
@@ -11770,34 +11808,28 @@ get_next_message_testing_parallel_result() {
 #FIXME: not called/tested yet
 run_mass_testing_parallel() {
      local cmdline=""
-     local one_jsonfile=false
-     local global_cmdline=${CMDLINE%%--file*}
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
-     global_cmdline="$(modify_global_cmd_line $global_cmdline)"
-     [[ "$global_cmdline" =~ jsonfile_XXXXXXXX ]] && one_jsonfile=true
 
      pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln "\n"
      while read cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
-          cmdline="$0 $global_cmdline --warnings=batch $cmdline"
-
-          # If the JSON, CSV, or HTML output is to all go into a single file, then replace the
-          # generic "_XXXXXXXX" filenames with different names for each child process, by
-          # replacing "XXXXXXXX" with the test's number
-          cmdline="${cmdline/jsonfile_XXXXXXXX\.json/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json}"
+          # Create the command line for the child in the form of an array (see #702)
+          create_mass_testing_cmdline "parallel $(printf "%08d" $NR_PARALLEL_TESTS)" $cmdline
 
           # fileout() won't include the "service" information in the JSON file for the child process
           # if the JSON file doesn't already exist.
-          "$one_jsonfile" && echo -n "" > "$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
-          cmdline="${cmdline/csvfile_XXXXXXXX\.csv/csvfile_$(printf "%08d" $NR_PARALLEL_TESTS).csv}"
-          cmdline="${cmdline/htmlfile_XXXXXXXX\.html/htmlfile_$(printf "%08d" $NR_PARALLEL_TESTS).html}"
-          PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$cmdline"
-          CHILD_MASS_TESTING=true $cmdline > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+          "$JSONHEADER" && >"$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
+          PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
+          if [[ -z "$(which "$0")" ]]; then
+               CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+          else
+               CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+          fi
           PARALLEL_TESTING_PID[NR_PARALLEL_TESTS]=$!
           NR_PARALLEL_TESTS+=1
           sleep $PARALLEL_SLEEP
@@ -11942,8 +11974,30 @@ parse_opt_equal_sign() {
      fi
 }
 
+# Create the command line string for printing purposes
+# See http://stackoverflow.com/questions/10835933/preserve-quotes-in-bash-arguments
+create_cmd_line_string() {
+     local arg
+     local -a allargs=()
+     local chars='[ !"#$&()*,;<>?\^`{|}]'
+
+     while [[ $# -gt 0 ]]; do
+          if [[ $1 == *\'* ]]; then
+               arg=\""$1"\"
+          elif [[ $1 == *$chars* ]]; then
+               arg="'$1'"
+          else
+               arg="$1"
+          fi
+          allargs+=("$arg")    # ${allargs[@]} is to be used only for printing
+          shift
+     done
+     printf '%s\n' "${allargs[*]}"
+}
 
 parse_cmd_line() {
+     CMDLINE="$(create_cmd_line_string "${CMDLINE_ARRAY[@]}")"
+
      # Show usage if no options were specified
      [[ -z "$1" ]] && help 0
      # Set defaults if only an URI was specified, maybe ToDo: use "="-option, then: ${i#*=} i.e. substring removal
