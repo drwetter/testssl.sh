@@ -11671,7 +11671,7 @@ run_mx_all_ips() {
 # to deal with word splitting within file names (see #702).
 #
 # If run_mass_testing_parallel() is being used, then in addition to the above,
-# modify global command line for child tests so that if all (JSON, CSV, HTML) 
+# modify global command line for child tests so that if all (JSON, CSV, HTML)
 # output is to go into a single file, each child will have its output placed in
 # a separate, named file, so that the separate files can be concatenated
 # together once they are complete to create the single file.
@@ -11687,7 +11687,7 @@ create_mass_testing_cmdline() {
 
      MASS_TESTING_CMDLINE=()
      [[ "$testing_type" =~ parallel ]] && read testing_type test_number <<< "$testing_type"
-     
+
      # Start by adding the elements from the global command line to the command
      # line for the test. If run_mass_testing_parallel(), then modify the
      # command line so that, when required, each child process sends its test
@@ -11823,9 +11823,9 @@ run_mass_testing_parallel() {
 
           # fileout() won't include the "service" information in the JSON file for the child process
           # if the JSON file doesn't already exist.
-          "$JSONHEADER" && echo -n "" > "$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
+          "$JSONHEADER" && >"$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
           PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
-          if [[ -z "$(which "$0")" ]]; then          
+          if [[ -z "$(which "$0")" ]]; then
                CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
           else
                CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
