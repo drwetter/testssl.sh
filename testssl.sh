@@ -11763,7 +11763,12 @@ run_mass_testing() {
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
           "$first" || fileout_separator                              # this is needed for appended output, see #687
-          CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}"  # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
+          # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
+          if [[ -z "$(which "$0")" ]]; then
+               CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}"
+          else
+               CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}"
+          fi
           first=false
      done < "${FNAME}"
      return $?
@@ -11802,7 +11807,11 @@ run_mass_testing_parallel() {
           # if the JSON file doesn't already exist.
           "$JSONHEADER" && echo -n "" > "$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
           PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
-          CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+          if [[ -z "$(which "$0")" ]]; then          
+               CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+          else
+               CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+          fi
           PARALLEL_TESTING_PID[NR_PARALLEL_TESTS]=$!
           NR_PARALLEL_TESTS+=1
           sleep $PARALLEL_SLEEP
