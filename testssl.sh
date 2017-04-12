@@ -106,8 +106,8 @@ egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
      SWURL="https://testssl.sh/    "
 
-readonly PROG_NAME=$(basename "$0")
-readonly RUN_DIR=$(dirname "$0")
+readonly PROG_NAME="$(basename "$0")"
+readonly RUN_DIR="$(dirname "$0")"
 TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR
 CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # or CA_BUNDLES_PATH to find the CA BUNDLES. TESTSSL_INSTALL_DIR helps you to find the RFC mapping also
 CIPHERS_BY_STRENGTH_FILE=""
@@ -3477,7 +3477,7 @@ run_client_simulation() {
      local using_sockets=true
 
      # source the external file
-     . $TESTSSL_INSTALL_DIR/etc/client_simulation.txt 2>/dev/null
+     . "$TESTSSL_INSTALL_DIR/etc/client_simulation.txt" 2>/dev/null
      if [[ $? -ne 0 ]]; then
           prln_local_problem "couldn't find client simulation data in $TESTSSL_INSTALL_DIR/etc/client_simulation.txt"
           return 1
@@ -4802,7 +4802,7 @@ determine_trust() {
      debugme tmln_out
 
      # if you run testssl.sh from a different path /you can set either TESTSSL_INSTALL_DIR or CA_BUNDLES_PATH to find the CA BUNDLES
-     if [[ -z $CA_BUNDLES_PATH ]]; then
+     if [[ -z "$CA_BUNDLES_PATH" ]]; then
           ca_bundles="$TESTSSL_INSTALL_DIR/etc/*.pem"
      else
           ca_bundles="$CA_BUNDLES_PATH/*.pem"
@@ -10327,7 +10327,7 @@ old_fart() {
 # TESTSSL_INSTALL_DIR can be supplied via environment so that the cipher mapping and CA bundles can be found
 # www.carbonwind.net/TLS_Cipher_Suites_Project/tls_ssl_cipher_suites_simple_table_all.htm
 get_install_dir() {
-     [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$(dirname ${BASH_SOURCE[0]})"
+     [[ -z "$TESTSSL_INSTALL_DIR" ]] && TESTSSL_INSTALL_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
      if [[ -r "$RUN_DIR/etc/cipher-mapping.txt" ]]; then
           CIPHERS_BY_STRENGTH_FILE="$RUN_DIR/etc/cipher-mapping.txt"
@@ -10343,17 +10343,17 @@ get_install_dir() {
      # we haven't found the cipher file yet...
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
           readlink -f ls &>/dev/null && \
-               TESTSSL_INSTALL_DIR=$(readlink -f $(basename ${BASH_SOURCE[0]})) || \
-               TESTSSL_INSTALL_DIR=$(readlink $(basename ${BASH_SOURCE[0]}))
+               TESTSSL_INSTALL_DIR="$(readlink -f "$(basename "${BASH_SOURCE[0]}")")" || \
+               TESTSSL_INSTALL_DIR="$(readlink "$(basename "${BASH_SOURCE[0]}")")"
                # not sure whether Darwin has -f
-          TESTSSL_INSTALL_DIR=$(dirname $TESTSSL_INSTALL_DIR 2>/dev/null)
+          TESTSSL_INSTALL_DIR="$(dirname "$TESTSSL_INSTALL_DIR" 2>/dev/null)"
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
           [[ -r "$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
      fi
 
      # still no cipher mapping file:
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which realpath &>/dev/null ; then
-          TESTSSL_INSTALL_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
+          TESTSSL_INSTALL_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
           CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
@@ -10361,8 +10361,8 @@ get_install_dir() {
      # still no cipher mapping file (and realpath is not present):
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
          readlink -f ls &>/dev/null && \
-              TESTSSL_INSTALL_DIR=$(dirname $(readlink -f ${BASH_SOURCE[0]})) || \
-              TESTSSL_INSTALL_DIR=$(dirname $(readlink ${BASH_SOURCE[0]}))
+              TESTSSL_INSTALL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || \
+              TESTSSL_INSTALL_DIR="$(dirname "$(readlink "${BASH_SOURCE[0]}")")"
               # not sure whether Darwin has -f
           CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
@@ -10378,7 +10378,7 @@ get_install_dir() {
           [[ $? -ne 0 ]] && exit -2
      fi
 
-     TLS_DATA_FILE=$TESTSSL_INSTALL_DIR/etc/tls_data.txt
+     TLS_DATA_FILE="$TESTSSL_INSTALL_DIR/etc/tls_data.txt"
      if [[ ! -r "$TLS_DATA_FILE" ]]; then
           prln_warning "\nATTENTION: No TLS data file found -- needed for socket based handshakes"
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
@@ -10427,9 +10427,9 @@ find_openssl_binary() {
      elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
           # 2. otherwise, only if on Bash on Windows, use system binaries only.
           SYSTEM2="WSL"
-     elif test_openssl_suffix $RUN_DIR; then
+     elif test_openssl_suffix "$RUN_DIR"; then
           :    # 3. otherwise try openssl in path of testssl.sh
-     elif test_openssl_suffix $RUN_DIR/bin; then
+     elif test_openssl_suffix "$RUN_DIR/bin"; then
           :    # 4. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
      elif test_openssl_suffix "$(dirname "$(which openssl)")"; then
           :    # 5. we tried hard and failed, so now we use the system binaries
@@ -10766,7 +10766,7 @@ prepare_arrays() {
      local hexc mac ossl_ciph
      local ossl_supported_tls="" ossl_supported_sslv2=""
 
-     if [[ -e $CIPHERS_BY_STRENGTH_FILE ]]; then
+     if [[ -e "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
           ossl_supported_tls="$($OPENSSL ciphers -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
           while read hexc n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] mac TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
@@ -10788,7 +10788,7 @@ prepare_arrays() {
                     grep -qw "$hexc" <<< "$ossl_supported_sslv2" && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
                fi
                TLS_NR_CIPHERS+=1
-          done < $CIPHERS_BY_STRENGTH_FILE
+          done < "$CIPHERS_BY_STRENGTH_FILE"
      fi
 }
 
@@ -10842,8 +10842,8 @@ EOF
      out " on $HNAME:"
 
      [[ -n "$GIT_REL" ]] && \
-          cwd=$(/bin/pwd) || \
-          cwd=$RUN_DIR
+          cwd="$(/bin/pwd)" || \
+          cwd="$RUN_DIR"
      if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
           OPENSSL_LOCATION="\$PWD/bin/$(basename "$openssl_location")"
      elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
@@ -12452,7 +12452,7 @@ lets_roll() {
      csv_header
      get_install_dir
      # see #705, we need to source TLS_DATA_FILE here instead of in get_install_dir(), see #705
-     [[ -r "$TLS_DATA_FILE" ]] && . $TLS_DATA_FILE
+     [[ -r "$TLS_DATA_FILE" ]] && . "$TLS_DATA_FILE"
      set_color_functions
      maketempf
      find_openssl_binary
