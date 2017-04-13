@@ -2467,6 +2467,7 @@ run_cipher_match(){
      local -i nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0
      local -i num_bundles mod_check bundle_size bundle end_of_bundle
      local addcmd dhlen has_dh_bits="$HAS_DH_BITS"
+     local available
      local -i sclient_success
      local re='^[0-9A-Fa-f]+$'
      local using_sockets=true
@@ -2706,16 +2707,21 @@ run_cipher_match(){
           done
 
           for (( i=0; i < nr_ciphers; i++ )); do
+               "${ciphers_found[i]}" || "$SHOW_EACH_C" || continue
                export="${export2[i]}"
                neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
-               if "${ciphers_found[i]}"; then
-                    pr_cyan "  available"
-                    fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") available"
-               else
-                    pr_deemphasize "  not a/v"
-                    fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") not a/v"
+               available=""
+               if "$SHOW_EACH_C"; then
+                    if "${ciphers_found[i]}"; then
+                         available="available"
+                         pr_cyan "available"
+                    else
+                         available="not a/v"
+                         pr_deemphasize "not a/v"
+                    fi
                fi
-               outln
+               outln "${sigalg[i]}"
+               fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
           done
           "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
           exit
