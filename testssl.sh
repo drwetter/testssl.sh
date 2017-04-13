@@ -1875,37 +1875,41 @@ emphasize_stuff_in_headers(){
           -e "s/X-AspNet-Version/${yellow}X-AspNet-Version${off}/g"
 
      if "$do_html"; then
-          html_out "$(tm_out "$1" | sed -e 's/\&/\&amp;/g' \
-               -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" \
-               -e "s/\([0-9]\)/${html_brown}\1${html_off}/g" \
-               -e "s/Debian/${html_yellow}\Debian${html_off}/g" \
-               -e "s/Win32/${html_yellow}\Win32${html_off}/g" \
-               -e "s/Win64/${html_yellow}\Win64${html_off}/g" \
-               -e "s/Ubuntu/${html_yellow}Ubuntu${html_off}/g" \
-               -e "s/ubuntu/${html_yellow}ubuntu${html_off}/g" \
-               -e "s/jessie/${html_yellow}jessie${html_off}/g" \
-               -e "s/squeeze/${html_yellow}squeeze${html_off}/g" \
-               -e "s/wheezy/${html_yellow}wheezy${html_off}/g" \
-               -e "s/lenny/${html_yellow}lenny${html_off}/g" \
-               -e "s/SUSE/${html_yellow}SUSE${html_off}/g" \
-               -e "s/Red Hat Enterprise Linux/${html_yellow}Red Hat Enterprise Linux${html_off}/g" \
-               -e "s/Red Hat/${html_yellow}Red Hat${html_off}/g" \
-               -e "s/CentOS/${html_yellow}CentOS${html_off}/g" \
-               -e "s/Via/${html_yellow}Via${html_off}/g" \
-               -e "s/X-Forwarded/${html_yellow}X-Forwarded${html_off}/g" \
-               -e "s/Liferay-Portal/${html_yellow}Liferay-Portal${html_off}/g" \
-               -e "s/X-Cache-Lookup/${html_yellow}X-Cache-Lookup${html_off}/g" \
-               -e "s/X-Cache/${html_yellow}X-Cache${html_off}/g" \
-               -e "s/X-Squid/${html_yellow}X-Squid${html_off}/g" \
-               -e "s/X-Server/${html_yellow}X-Server${html_off}/g" \
-               -e "s/X-Varnish/${html_yellow}X-Varnish${html_off}/g" \
-               -e "s/X-OWA-Version/${html_yellow}X-OWA-Version${html_off}/g" \
-               -e "s/MicrosoftSharePointTeamServices/${html_yellow}MicrosoftSharePointTeamServices${html_off}/g" \
-               -e "s/X-Application-Context/${html_yellow}X-Application-Context${html_off}/g" \
-               -e "s/X-Version/${html_yellow}X-Version${html_off}/g" \
-               -e "s/X-Powered-By/${html_yellow}X-Powered-By${html_off}/g" \
-               -e "s/X-UA-Compatible/${html_yellow}X-UA-Compatible${html_off}/g" \
-               -e "s/X-AspNet-Version/${html_yellow}X-AspNet-Version${html_off}/g")"
+          if [[ $COLOR -eq 2 ]]; then
+               html_out "$(tm_out "$1" | sed -e 's/\&/\&amp;/g' \
+                    -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" \
+                    -e "s/\([0-9]\)/${html_brown}\1${html_off}/g" \
+                    -e "s/Debian/${html_yellow}\Debian${html_off}/g" \
+                    -e "s/Win32/${html_yellow}\Win32${html_off}/g" \
+                    -e "s/Win64/${html_yellow}\Win64${html_off}/g" \
+                    -e "s/Ubuntu/${html_yellow}Ubuntu${html_off}/g" \
+                    -e "s/ubuntu/${html_yellow}ubuntu${html_off}/g" \
+                    -e "s/jessie/${html_yellow}jessie${html_off}/g" \
+                    -e "s/squeeze/${html_yellow}squeeze${html_off}/g" \
+                    -e "s/wheezy/${html_yellow}wheezy${html_off}/g" \
+                    -e "s/lenny/${html_yellow}lenny${html_off}/g" \
+                    -e "s/SUSE/${html_yellow}SUSE${html_off}/g" \
+                    -e "s/Red Hat Enterprise Linux/${html_yellow}Red Hat Enterprise Linux${html_off}/g" \
+                    -e "s/Red Hat/${html_yellow}Red Hat${html_off}/g" \
+                    -e "s/CentOS/${html_yellow}CentOS${html_off}/g" \
+                    -e "s/Via/${html_yellow}Via${html_off}/g" \
+                    -e "s/X-Forwarded/${html_yellow}X-Forwarded${html_off}/g" \
+                    -e "s/Liferay-Portal/${html_yellow}Liferay-Portal${html_off}/g" \
+                    -e "s/X-Cache-Lookup/${html_yellow}X-Cache-Lookup${html_off}/g" \
+                    -e "s/X-Cache/${html_yellow}X-Cache${html_off}/g" \
+                    -e "s/X-Squid/${html_yellow}X-Squid${html_off}/g" \
+                    -e "s/X-Server/${html_yellow}X-Server${html_off}/g" \
+                    -e "s/X-Varnish/${html_yellow}X-Varnish${html_off}/g" \
+                    -e "s/X-OWA-Version/${html_yellow}X-OWA-Version${html_off}/g" \
+                    -e "s/MicrosoftSharePointTeamServices/${html_yellow}MicrosoftSharePointTeamServices${html_off}/g" \
+                    -e "s/X-Application-Context/${html_yellow}X-Application-Context${html_off}/g" \
+                    -e "s/X-Version/${html_yellow}X-Version${html_off}/g" \
+                    -e "s/X-Powered-By/${html_yellow}X-Powered-By${html_off}/g" \
+                    -e "s/X-UA-Compatible/${html_yellow}X-UA-Compatible${html_off}/g" \
+                    -e "s/X-AspNet-Version/${html_yellow}X-AspNet-Version${html_off}/g")"
+          else
+               html_out "$(html_reserved "$1")"
+          fi
           html_out "\n"
      fi
 }
