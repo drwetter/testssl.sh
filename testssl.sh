@@ -2630,7 +2630,7 @@ run_cipher_match(){
                     [[ -z "$ciphers_to_test" ]] && break
                     $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
                     sclient_connect_successful "$?" "$TMPFILE" || break
-                    cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                    cipher=$(get_cipher $TMPFILE)
                     [[ -z "$cipher" ]] && break
                     for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
                          [[ "$cipher" == "${ciph2[i]}" ]] && ciphers_found2[i]=true && break
@@ -2689,7 +2689,7 @@ run_cipher_match(){
                     fi
                     sclient_success=$?
                     [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
-                    cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
                          [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
                     done
@@ -2874,7 +2874,7 @@ run_allciphers() {
                     $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
                     sclient_connect_successful "$?" "$TMPFILE"
                     if [[ "$?" -eq 0 ]]; then
-                         cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                         cipher=$(get_cipher $TMPFILE)
                          if [[ -n "$cipher" ]]; then
                               success=0
                               for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
@@ -2939,7 +2939,7 @@ run_allciphers() {
                     ret=$?
                     if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
                          success=0
-                         cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                         cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                          for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
                               [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
                          done
@@ -3157,7 +3157,7 @@ run_cipher_per_proto() {
                               $OPENSSL s_client -cipher "${ciphers_to_test:1}" $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>$ERRFILE </dev/null
                               sclient_connect_successful "$?" "$TMPFILE"
                               if [[ "$?" -eq 0 ]]; then
-                                   cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                                   cipher=$(get_cipher $TMPFILE)
                                    if [[ -n "$cipher" ]]; then
                                         success=0
                                         for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
@@ -3221,7 +3221,7 @@ run_cipher_per_proto() {
                               fi
                               if [[ $? -eq 0 ]]; then
                                    success=0
-                                   cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                                   cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
                                         [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
                                    done
@@ -4421,7 +4421,7 @@ run_server_preference() {
                               if [[ $? -eq 0 ]]; then
                                    proto[i]="SSLv3"
                                    cipher[i]=""
-                                   cipher1=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                                   cipher1=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                                    if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
                                         cipher[i]="$(rfc2openssl "$cipher1")"
                                         [[ -z "${cipher[i]}" ]] && cipher[i]="$cipher1"
@@ -4493,7 +4493,7 @@ check_tls12_pref() {
      while true; do
           $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "ALL$tested_cipher:$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
-               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
+               cipher=$(get_cipher $TMPFILE)
                order+=" $cipher"
                tested_cipher="$tested_cipher:-$cipher"
                nr_ciphers_found_r1+=1
@@ -4510,7 +4510,7 @@ check_tls12_pref() {
           $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$batchremoved" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE ; then
                batchremoved_success=true               # signals that we have some of those ciphers and need to put everything together later on
-               cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
+               cipher=$(get_cipher $TMPFILE)
                order+=" $cipher"
                batchremoved="$batchremoved:-$cipher"
                nr_ciphers_found_r1+=1
@@ -4531,7 +4531,7 @@ check_tls12_pref() {
           while true; do
                $OPENSSL s_client $STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI </dev/null 2>>$ERRFILE >$TMPFILE
                if sclient_connect_successful $? $TMPFILE ; then
-                    cipher=$(awk '/Cipher.*:/ { print $3 }' $TMPFILE)
+                    cipher=$(get_cipher $TMPFILE)
                     order+=" $cipher"
                     tested_cipher="$tested_cipher:-$cipher"
                     nr_ciphers_found_r2+=1
@@ -4602,7 +4602,7 @@ cipher_pref_check() {
                     while true; do
                          $OPENSSL s_client $STARTTLS -"$p" $BUGS -cipher "ALL:COMPLEMENTOFALL$tested_cipher" -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
                          sclient_connect_successful $? $TMPFILE || break
-                         cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                         cipher=$(get_cipher $TMPFILE)
                          [[ -z "$cipher" ]] && break
                          order+="$cipher "
                          tested_cipher+=":-"$cipher
@@ -4666,7 +4666,7 @@ cipher_pref_check() {
                     [[ -z "$ciphers_to_test" ]] && break
                     tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
                     [[ $? -ne 0 ]] && break
-                    cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
                          [[ "$cipher" == "${rfc_ciph[i]}" ]] && ciphers_found2[i]=true && break
                     done
@@ -4717,14 +4717,14 @@ cipher_pref_check() {
                     [[ -z "$ciphers_to_test" ]] && break
                     tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
                     [[ $? -ne 0 ]] && break
-                    cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     for (( i=0; i < nr_ciphers; i++ )); do
                          [[ "$cipher" == "${rfc_ciph[i]}" ]] && ciphers_found2[i]=true && break
                     done
                     if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
                          cipher="$(rfc2openssl "$cipher")"
                          # If there is no OpenSSL name for the cipher, then use the RFC name
-                         [[ -z "$cipher" ]] && cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                         [[ -z "$cipher" ]] && cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     fi
                     order+="$cipher "
                done
@@ -6255,7 +6255,7 @@ run_pfs() {
                [[ -z "$ciphers_to_test" ]] && break
                $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
                sclient_connect_successful $? $TMPFILE || break
-               pfs_cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+               pfs_cipher=$(get_cipher $TMPFILE)
                [[ -z "$pfs_cipher" ]] && break
                for (( i=0; i < nr_supported_ciphers; i++ )); do
                     [[ "$pfs_cipher" == "${ciph[i]}" ]] && break
@@ -6282,7 +6282,7 @@ run_pfs() {
                     fi
                     sclient_success=$?
                     [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
-                    pfs_cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    pfs_cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     for (( i=0; i < nr_supported_ciphers; i++ )); do
                          [[ "$pfs_cipher" == "${rfc_ciph[i]}" ]] && break
                     done
@@ -9879,7 +9879,7 @@ run_beast(){
                [[ -z "$ciphers_to_test" ]] && break
                $OPENSSL s_client -cipher "${ciphers_to_test:1}" -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE || break
-               cbc_cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+               cbc_cipher=$(get_cipher $TMPFILE)
                [[ -z "$cbc_cipher" ]] && break
                for (( i=0; i < nr_ciphers; i++ )); do
                     [[ "$cbc_cipher" == "${ciph[i]}" ]] && break
@@ -9911,7 +9911,7 @@ run_beast(){
                          tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
                     fi
                     [[ $? -ne 0 ]] && break
-                    cbc_cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    cbc_cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     for (( i=0; i < nr_ciphers; i++ )); do
                          [[ "$cbc_cipher" == "${rfc_ciph[i]}" ]] && break
                     done
@@ -10205,7 +10205,7 @@ run_rc4() {
                $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
                sclient_connect_successful "$?" "$TMPFILE"
                if [[ "$?" -eq 0 ]]; then
-                    cipher=$(awk '/Cipher *:/ { print $3 }' $TMPFILE)
+                    cipher=$(get_cipher $TMPFILE)
                     if [[ -n "$cipher" ]]; then
                          success=0
                          rc4_offered=1
@@ -10254,7 +10254,7 @@ run_rc4() {
                if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
                     success=0
                     rc4_offered=1
-                    cipher=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     for (( i=0; i < nr_nonossl_ciphers; i++ )); do
                          [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
                     done
