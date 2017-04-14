@@ -8186,7 +8186,7 @@ sslv2_sockets() {
      debugme tmln_out "reading server hello... "
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -6
-          outln
+          tmln_out
      fi
 
      parse_sslv2_serverhello "$SOCK_REPLY_FILE" "$parse_complete"
@@ -8733,7 +8733,7 @@ run_heartbleed(){
                     else
                          out "likely "
                          pr_svrty_critical "VULNERABLE (NOT ok)"
-                         [[ $DEBUG -lt 3 ]] && out ", use debug >=3 to confirm"
+                         [[ $DEBUG -lt 3 ]] && tm_out ", use debug >=3 to confirm"
                          fileout "heartbleed" "CRITICAL" "Heartbleed: VULNERABLE $cve" "$cwe" "$hint"
                          ret=1
                     fi
