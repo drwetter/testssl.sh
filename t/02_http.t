@@ -33,7 +33,7 @@ cmp_ok($modedhtml, "eq", $okout, "HTML file matches terminal output"); $tests++;
 
 pass("Running testssl.sh against badssl.com with --debug 4 to create HTML output (may take 2~3 minutes)"); $tests++;
 # Redirect stderr to /dev/null in order to avoid some unexplained "date: invalid date" error messages
-my $debugout = `TERM_WIDTH=120 .testssl.sh --color 0 --debug 4 --htmlfile tmp.html badssl.com 2> /dev/null`;
+my $debugout = `TERM_WIDTH=120 ./testssl.sh --color 0 --debug 4 --htmlfile tmp.html badssl.com 2> /dev/null`;
 my $debughtml = `cat tmp.html`;
 unlink 'tmp.html';
 
