@@ -41,6 +41,10 @@ $debughtml =~ s/Start 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-
 $okhtml =~ s/Done 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9] \[  [0-9]*s\]//;
 $debughtml =~ s/Done 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9] \[  [0-9]*s\]//;
 
+# Remove time difference from "HTTP clock skew" line
+$okhtml =~ s/HTTP clock skew              +?-?[0-9]* //;
+$debughtml =~ s/HTTP clock skew              +?-?[0-9]* //;
+
 pass("Checking that using the --debug option doesn't affect the HTML file"); $tests++;
 cmp_ok($debughtml, "eq", $okhtml, "HTML file created with --debug 4 matches HTML file created without --debug"); $tests++;
 
