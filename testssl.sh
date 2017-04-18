@@ -5328,7 +5328,7 @@ must_staple() {
      # Note this function is only looking for status_request (5) and not
      # status_request_v2 (17), since OpenSSL seems to only include status_request (5)
      # in its ClientHello when the "-status" option is used.
-     
+
      # OpenSSL 1.1.0 supports pretty-printing the "TLS Feature extension." For any
      # previous versions of OpenSSL, OpenSSL can only show if the extension OID is present.
      if $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE | grep -A 1 "TLS Feature:" | grep -q "status_request"; then
@@ -10847,7 +10847,7 @@ mybanner() {
      bb1=$(cat <<EOF
 
 ###########################################################
-    $PROG_NAME       $VERSION from 
+    $PROG_NAME       $VERSION from
 EOF
 )
      bb2=$(cat <<EOF
@@ -12605,4 +12605,3 @@ lets_roll() {
 
 #main
 exit $?
-
