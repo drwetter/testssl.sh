@@ -102,7 +102,7 @@ trap "cleanup" QUIT EXIT
 
 readonly VERSION="2.9dev"
 readonly SWCONTACT="dirk aet testssl dot sh"
-egrep -q "dev|rc" <<< "$VERSION" && \
+grep -Eq "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
      SWURL="https://testssl.sh/    "
 
@@ -1263,7 +1263,7 @@ service_detection() {
           head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
           head $TMPFILE | grep -aq POP && SERVICE=POP
           head $TMPFILE | grep -aq IMAP && SERVICE=IMAP
-          head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
+          head $TMPFILE | grep -Eaqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
           debugme head -50 $TMPFILE
      fi
 
@@ -1329,7 +1329,7 @@ run_http_header() {
           HAD_SLEPT=0
      else
           # GET request needed to be killed before, try, whether it succeeded:
-          if egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
+          if grep -Eiaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
                NOW_TIME=$(($(date "+%s") - HAD_SLEPT))         # correct by seconds we slept
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           else
@@ -1434,7 +1434,7 @@ detect_ipv4() {
      fi
 
      # white list some headers as they are mistakenly identified as ipv4 address. Issues 158, 323,o facebook has a CSP rule for 127.0.0.1
-     if egrep -vi "$whitelisted_header" $HEADERFILE | grep -iqE "$ipv4address"; then
+     if grep -Evi "$whitelisted_header" $HEADERFILE | grep -iqE "$ipv4address"; then
           pr_bold " IPv4 address in header       "
           count=0
           while read line; do
@@ -1618,16 +1618,16 @@ run_hpkp() {
           run_http_header "$1" || return 3
      fi
      pr_bold " Public Key Pinning           "
-     egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
+     grep -Eaiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
-          if egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" ; then
+          if grep -Eaciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | grep -Ewaq "1" ; then
                :
           else
                hpkp_headers=""
                pr_svrty_medium "multiple HPKP headers: "
                # https://scotthelme.co.uk is a candidate
-               #FIXME: should display both Public-Key-Pins+Public-Key-Pins-Report-Only --> egrep -ai -w
-               for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
+               #FIXME: should display both Public-Key-Pins+Public-Key-Pins-Report-Only --> grep -Eai -w
+               for i in $(newline_to_spaces "$(grep -Eai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
                     pr_italic $i
                     hpkp_headers="$hpkp_headers$i "
                     out " "
@@ -1957,7 +1957,7 @@ run_rp_banner() {
           run_http_header "$1" || return 3
      fi
      pr_bold " Reverse Proxy banner         "
-     egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded' $HEADERFILE >$TMPFILE
+     grep -Eai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "rp_header" "INFO" "No reverse proxy banner found"
@@ -1991,7 +1991,7 @@ run_application_banner() {
           run_http_header "$1" || return 3
      fi
      pr_bold " Application banner           "
-     egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
+     grep -Eai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "app_banner" "INFO" "No Application Banners found"
@@ -2023,7 +2023,7 @@ run_cookie_flags() {     # ARG1: Path
      fi
 
      if ! grep -q 20 <<< "$HTTP_STATUS_CODE"; then
-          if egrep -q "301|302" <<< "$HTTP_STATUS_CODE"; then
+          if grep -Eq "301|302" <<< "$HTTP_STATUS_CODE"; then
                msg302=" -- maybe better try target URL of 30x"
                msg302_=" (30x detected, better try target URL of 30x)"
           else
@@ -3651,7 +3651,7 @@ run_prototest_openssl() {
      $OPENSSL s_client -state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>$ERRFILE </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
-     [[ $DEBUG -eq 2 ]] && egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     [[ $DEBUG -eq 2 ]] && grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      if ! locally_supported "$1" "$2" ; then
           ret=7
      else                                    # we remove SNI for SSLv2 and v3:
@@ -3660,7 +3660,7 @@ run_prototest_openssl() {
           $OPENSSL s_client -state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $sni >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           ret=$?
-          [[ $DEBUG -eq 2 ]] && egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          [[ $DEBUG -eq 2 ]] && grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
           grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
      fi
      tmpfile_handle $FUNCNAME$1.txt
@@ -3958,16 +3958,16 @@ run_std_cipherlists() {
   # ~ grep -i EXP etc/cipher-mapping.txt
      local exp_ciphers="00,63, 00,62, 00,61, 00,65, 00,64, 00,60, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e, 00,17, 00,03, 00,28, 00,2b, 00,ff"
      local sslv2_exp_ciphers="04,00,80, 02,00,80"
-  # ~ egrep -w '64|56' etc/cipher-mapping.txt | grep -v export
+  # ~ grep -Ew '64|56' etc/cipher-mapping.txt | grep -v export
      local low_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, 00,ff"
      local sslv2_low_ciphers="08,00,80, 06,00,40"
-  # ~ grep -w 128 etc/cipher-mapping.txt | egrep -v "Au=None|AEAD|ARIA|Camellia|AES"
+  # ~ grep -w 128 etc/cipher-mapping.txt | grep -Ev "Au=None|AEAD|ARIA|Camellia|AES"
      local medium_ciphers="00,9a, 00,99, 00,98, 00,97, 00,96, 00,07, 00,21, 00,25, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, 00,92, 00,8a, 00,20, 00,24, c0,33, 00,8e, 00,ff"
      local sslv2_medium_ciphers="01,00,80, 03,00,80, 05,00,80"
-  # ~ egrep -w '3DES' etc/cipher-mapping.txt
+  # ~ grep -Ew '3DES' etc/cipher-mapping.txt
      local tdes_ciphers="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,ff"
      local sslv2_tdes_ciphers="07,00,c0"
-  # ~ equivalent to 'grep -w "GOST|128" etc/cipher-mapping.txt | grep -v '=None' | egrep -vw 'RC4|AEAD|IDEA|SEED|RC2'
+  # ~ equivalent to 'grep -w "GOST|128" etc/cipher-mapping.txt | grep -v '=None' | grep -Evw 'RC4|AEAD|IDEA|SEED|RC2'
      local high_ciphers="c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,45, 00,44, 00,43, 00,42, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,3c, 00,2f, 00,ba, c0,37, c0,35, 00,b6, 00,b2, 00,90, 00,41, c0,9a, c0,98, c0,96, 00,ae, c0,94, 00,94, 00,8c, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,48, c0,4a, c0,4c, c0,4e, c0,64, c0,66, c0,68, c0,70, 00,80, 00,81, ff,00, ff,01, ff,02, ff,03, 00,ff"
      # no SSLv2 here and in strong
   # ~ equivalent to 'grep AEAD etc/cipher-mapping.txt | grep -v Au=None'
@@ -5646,7 +5646,7 @@ certificate_info() {
      fileout "${json_prefix}cn" "$cnok" "$cnfinding"
 
      sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
-          egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
+          grep -E "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
           sed -e 's/ *DNS://g' -e 's/ *IP Address://g' -e 's/ *email://g' -e 's/ *URI://g' -e 's/ *DirName://g' \
               -e 's/ *Registered ID://g' \
               -e 's/ *othername:<unsupported>//g' -e 's/ *X400Name:<unsupported>//g' -e 's/ *EdiPartyName:<unsupported>//g')
@@ -5796,7 +5796,7 @@ certificate_info() {
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
      # only the first one, seldom we have two
      policy_oid=$($OPENSSL x509 -in $HOSTCERT -text 2>>$ERRFILE | awk '/ .Policy: / { print $2 }' | awk 'NR < 2')
-     if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
+     if echo "$issuer" | grep -Eq 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
           [[ 2.16.840.1.114028.10.1.2 == "$policy_oid" ]] || \
           [[ 2.16.840.1.114412.1.3.0.2 == "$policy_oid" ]] || \
           [[ 2.16.840.1.114412.2.1 == "$policy_oid" ]] || \
@@ -6355,7 +6355,7 @@ run_pfs() {
           for curve in "${curves_ossl[@]}"; do
                ossl_supported[nr_curves]=false
                supported_curve[nr_curves]=false
-               $OPENSSL s_client -curves $curve -connect x 2>&1 | egrep -iaq "Error with command|unknown option"
+               $OPENSSL s_client -curves $curve -connect x 2>&1 | grep -Eiaq "Error with command|unknown option"
                [[ $? -ne 0 ]] && ossl_supported[nr_curves]=true && nr_ossl_curves+=1
                nr_curves+=1
           done
@@ -6548,7 +6548,7 @@ run_spdy() {
           ret=1
      else
           # now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
-          if egrep -aq "h2|spdy|http" <<< $tmpstr ; then
+          if grep -Eaq "h2|spdy|http" <<< $tmpstr ; then
                out "$tmpstr"
                outln " (advertised)"
                fileout "spdy_npn" "INFO" "SPDY/NPN : $tmpstr (advertised)"
@@ -6635,7 +6635,7 @@ starttls_line() {
      debugme echo "... received result: "
      debugme cat $TMPFILE
      if [[ -n "$2" ]]; then
-          if egrep -q "$2" $TMPFILE; then
+          if grep -Eq "$2" $TMPFILE; then
                debugme echo "---> reply matched \"$2\""
           else
                # slow down for exim and friends who need a proper handshake:, see
@@ -9221,7 +9221,7 @@ run_sweet32() {
           $OPENSSL s_client $STARTTLS $BUGS -cipher $sweet32_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE $SNI 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          [[ "$DEBUG" -eq 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      fi
      if [[ $sclient_success -eq 0 ]]; then
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers"
@@ -9277,7 +9277,7 @@ run_ssl_poodle() {
           $OPENSSL s_client -ssl3 $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          [[ "$DEBUG" -eq 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      fi
      if [[ $sclient_success -eq 0 ]]; then
           pr_svrty_high "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
@@ -9441,7 +9441,7 @@ run_freak() {
           $OPENSSL s_client $STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI $addcmd >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          [[ $DEBUG -eq 2 ]] && grep -Ea "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
           if [[ $sclient_success -ne 0 ]] && "$HAS_SSL2"; then
                $OPENSSL s_client $STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
@@ -9531,7 +9531,7 @@ run_logjam() {
           $OPENSSL s_client $STARTTLS $BUGS -cipher $exportdh_cipher_list -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          debugme egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          debugme grep -Ea "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      fi
      [[ $sclient_success -eq 0 ]] && \
           vuln_exportdh_ciphers=true || \
@@ -9583,7 +9583,7 @@ run_logjam() {
 
      # now the final test for common primes
      if [[ -n "$key_bitstring" ]]; then
-          dh_p="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | awk '/prime:/,/generator:/' | egrep -v "prime|generator")"
+          dh_p="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | awk '/prime:/,/generator:/' | grep -Ev "prime|generator")"
           dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
           [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
           len_dh_p="$((4*${#dh_p}))"
@@ -10061,7 +10061,7 @@ run_lucky13() {
           $OPENSSL s_client $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE $SNI 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          [[ "$DEBUG" -eq 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      fi
      if [[ $sclient_success -eq 0 ]]; then
           pr_svrty_low "VULNERABLE"; out ", uses cipher block chaining (CBC) ciphers"
@@ -11112,7 +11112,7 @@ get_local_aaaa() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip6=$(grep -wih "$1" $etchosts 2>/dev/null | grep ':' | egrep -v '^#|\.local' | egrep -i "[[:space:]]$1" | awk '{ print $1 }')
+     ip6=$(grep -wih "$1" $etchosts 2>/dev/null | grep ':' | grep -Ev '^#|\.local' | grep -Ei "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv6addr "$ip6"; then
           echo "$ip6"
      else
@@ -11125,7 +11125,7 @@ get_local_a() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip4=$(grep -wih "$1" $etchosts 2>/dev/null | egrep -v ':|^#|\.local' | egrep -i "[[:space:]]$1" | awk '{ print $1 }')
+     ip4=$(grep -wih "$1" $etchosts 2>/dev/null | grep -Ev ':|^#|\.local' | grep -Ei "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv4addr "$ip4"; then
           echo "$ip4"
      else
@@ -11234,7 +11234,7 @@ get_caa_rr_record() {
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
      elif which host &> /dev/null; then
           raw_caa="$(host -t type257 $1)"
-          if egrep -wvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
+          if grep -Ewvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
                raw_caa="$(sed -e 's/^.*has CAA record //' -e 's/^.*has TYPE257 record //' <<< "$raw_caa")"
           fi
      elif which nslookup &> /dev/null; then
