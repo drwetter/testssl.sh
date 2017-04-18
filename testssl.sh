@@ -952,6 +952,19 @@ hex2ascii() {
           done
 }
 
+# convert decimal number < 256 to hex
+dec02hex() {
+     printf "x%02x" "$1"
+}
+
+# convert decimal number between 256 and < 256*256 to hex
+dec04hex() {
+     local a=$(printf "%04x" "$1")
+     printf "x%02s, x%02s" "${a:0:2}" "${a:2:2}"
+}
+
+
+
 # trim spaces for BSD and old sed
 count_lines() {
      #echo "${$(wc -l <<< "$1")// /}"
@@ -6912,12 +6925,15 @@ socksend_sslv2_clienthello() {
 # for SSLv2 to TLS 1.2:
 sockread_serverhello() {
      [[ -z "$2" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
-
      SOCK_REPLY_FILE=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
      dd bs=$1 of=$SOCK_REPLY_FILE count=1 <&5 2>/dev/null &
      wait_kill $! $maxsleep
-
      return $?
+}
+
+#trying a faster version
+sockread_fast() {
+     dd bs=$1 count=1 <&5 2>/dev/null | hexdump -v -e '16/1 "%02X"'
 }
 
 get_pub_key_size() {
@@ -8777,7 +8793,7 @@ ok_ids(){
 
 #FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
 run_ccs_injection(){
-     local tls_proto_offered tls_hexcode ccs_message client_hello byte6 sockreply
+     local tls_hexcode ccs_message client_hello byte6 sockreply
      local -i retval ret
      local tls_hello_ascii=""
      local cve="CVE-2014-0224"
@@ -8789,16 +8805,25 @@ run_ccs_injection(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CCS injection vulnerability " && outln
      pr_bold " CCS"; out " ($cve)                       "
 
-     # determine TLS versions offered <-- needs to come from another place
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
+     if $(has_server_protocol "tls1"); then
+          tls_hexcode="x03, x01"
+     elif $(has_server_protocol "tls1_1"); then
+          tls_hexcode="x03, x02"
+     elif $(has_server_protocol "tls1_2"); then
+          tls_hexcode="x03, x03"
+     elif $(has_server_protocol "ssl3"); then
+          tls_hexcode="x03, x00"
+     else # no protcol for some reason defined, determine TLS versions offered with another handshake
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
+          case "$(get_protocol $TMPFILE)" in
+               1.2)  tls_hexcode="x03, x03" ;;
+               1.1)  tls_hexcode="x03, x02" ;;
+               TLSv1) tls_hexcode="x03, x01" ;;
+               SSLv3) tls_hexcode="x03, x00" ;;
+          esac
+     fi
+     debugme echo "using protocol $tls_hexcode"
 
-     tls_proto_offered=$(get_protocol $TMPFILE)
-     case "$tls_proto_offered" in
-          12)  tls_hexcode="x03, x03" ;;
-          11)  tls_hexcode="x03, x02" ;;
-          *) tls_hexcode="x03, x01" ;;
-#FIXME: for SSLv3 only we need to set tls_hexcode and the record layer TLS version correctly
-     esac
      ccs_message=", x14, $tls_hexcode ,x00, x01, x01"
 
      client_hello="
@@ -8921,6 +8946,203 @@ run_ccs_injection(){
      tmpfile_handle $FUNCNAME.dd
      return $ret
 }
+
+get_session_ticket_tls() {
+     local sessticket_tls=""
+
+     #FIXME: we likely have done this already before (either @ run_server_defaults() or at least the output from a previous handshake) --> would save 1x connect
+     #ATTENTION: we don't do SNI here as we assume this is a vulnerabilty of the TLS stack. If we do SNI here, we'd also need to do it in the ClientHello
+     #           of run_ticketbleed() otherwise the ticket will be different and the whole thing won't work!
+     sessticket_tls="$($OPENSSL s_client $BUGS $OPTIMAL_PROTO $PROXY -connect $NODEIP:$PORT </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
+     sessticket_tls="$(sed -e 's/^.* - /x/g' -e 's/  .*$//g' <<< "$sessticket_tls" | tr '\n' ',')"
+     sed -e 's/ /,x/g' -e 's/-/,x/g' <<< "$sessticket_tls"
+}
+
+
+# see https://blog.filippo.io/finding-ticketbleed/ |  http://ticketbleed.com/
+run_ticketbleed() {
+     local session_tckt_tls=""
+     local -i len_ch=216                            # fixed len of clienthello below
+     local sid="x00,x0B,xAD,xC0,xDE,x00,"           # some abitratry bytes
+     local len_sid="$(( ${#sid} / 4))"
+     local xlen_sid="$(dec02hex $len_sid)"
+     local -i len_tckt_tls=0
+     local xlen_tckt_tls="" xlen_handshake_record_layer="" xlen_handshake_ssl_layer=""
+     local -i len_handshake_record_layer=0
+     local cve="CVE-2016-9244"
+     local cwe="CWE-200"
+     local hint=""
+     local tls_version=""
+
+     [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
+     pr_bold " Ticketbleed"; out " ($cve), experiment.  "
+
+     [[ "$SERVICE" != HTTP ]] && prln "--   (applicable only for HTTPS)" && return 0
+
+     if $(has_server_protocol "tls1"); then
+          tls_hexcode="x03, x01"
+     elif $(has_server_protocol "tls1_1"); then
+          tls_hexcode="x03, x02"
+     elif $(has_server_protocol "tls1_2"); then
+          tls_hexcode="x03, x03"
+     elif $(has_server_protocol "ssl3"); then
+          tls_hexcode="x03, x00"
+     else # no protocol for some reason defined, determine TLS versions offered with another handshake
+          $OPENSSL s_client $BUGS $OPTIMAL_PROTO -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+          case "$(get_protocol $TMPFILE)" in
+               *1.2)  tls_hexcode="x03, x03" ;;
+               *1.1)  tls_hexcode="x03, x02" ;;
+               TLSv1) tls_hexcode="x03, x01" ;;
+               SSLv3) tls_hexcode="x03, x00" ;;
+          esac
+     fi
+     debugme echo "using protocol $tls_hexcode"
+
+     session_tckt_tls="$(get_session_ticket_tls)"
+     debugme echo " session ticket TLS \"$session_tckt_tls\""
+     if [[ "$session_tckt_tls" == "," ]]; then
+          pr_done_best "not vulnerable (OK)"
+          outln ", no session tickets"
+          fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable" "$cve" "$cwe"
+          return 0
+     fi
+
+     len_tckt_tls=${#session_tckt_tls}
+     len_tckt_tls=$(( len_tckt_tls / 4))
+
+     xlen_tckt_tls="$(dec02hex $len_tckt_tls)"
+     len_handshake_record_layer="$(( len_sid + len_ch + len_tckt_tls ))"
+     xlen_handshake_record_layer="$(dec04hex "$len_handshake_record_layer")"
+     len_handshake_ssl_layer="$(( len_handshake_record_layer + 4 ))"
+     xlen_handshake_ssl_layer="$(dec04hex "$len_handshake_ssl_layer")"
+
+     if [[ "$DEBUG" -ge 2 ]]; then
+          echo "len_tckt_tls (hex):            $len_tckt_tls ($xlen_tckt_tls)"
+          echo "sid:                           $sid"
+          echo "len_sid (hex)                  $len_sid ($xlen_sid)"
+          echo "len_handshake_record_layer:    $len_handshake_record_layer ($xlen_handshake_record_layer)"
+          echo "len_handshake_ssl_layer:       $len_handshake_ssl_layer ($xlen_handshake_ssl_layer)"
+          echo "session_tckt_tls:              $session_tckt_tls"
+     fi
+
+     client_hello="
+     # TLS header (5 bytes)
+     ,x16,               # Content type (x16 for handshake)
+     x03, x01,           # TLS version record layer
+                         # Length Secure Socket Layer follows:
+     $xlen_handshake_ssl_layer,
+     # Handshake header
+     x01,                # Type (x01 for ClientHello)
+                         # Length of client hello follows:
+     x00, $xlen_handshake_record_layer,
+     $tls_hexcode,        # TLS Version
+     # Random (32 byte) Unix time etc, see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
+     xee, xee, x5b, x90, x9d, x9b, x72, x0b,
+     xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
+     xcf, xbd, x39, x04, xcc, x16, x0a, x85,
+     x03, x90, x9f, x77, x04, x33, xff, xff,
+     $xlen_sid,          # Session ID length
+     $sid
+     x00, x66,           # Cipher suites length
+     # Cipher suites (51 suites)
+     xc0, x14, xc0, x0a, xc0, x22, xc0, x21,
+     x00, x39, x00, x38, x00, x88, x00, x87,
+     xc0, x0f, xc0, x05, x00, x35, x00, x84,
+     xc0, x12, xc0, x08, xc0, x1c, xc0, x1b,
+     x00, x16, x00, x13, xc0, x0d, xc0, x03,
+     x00, x0a, xc0, x13, xc0, x09, xc0, x1f,
+     xc0, x1e, x00, x33, x00, x32, x00, x9a,
+     x00, x99, x00, x45, x00, x44, xc0, x0e,
+     xc0, x04, x00, x2f, x00, x96, x00, x41,
+     xc0, x11, xc0, x07, xc0, x0c, xc0, x02,
+     x00, x05, x00, x04, x00, x15, x00, x12,
+     x00, x09, x00, x14, x00, x11, x00, x08,
+     x00, x06, x00, x03, x00, xff,
+     x01,               # Compression methods length
+     x00,               # Compression method (x00 for NULL)
+     x01, x0b,          # Extensions length
+# Extension: ec_point_formats
+     x00, x0b, x00, x04, x03, x00, x01, x02,
+# Extension: elliptic_curves
+     x00, x0a, x00, x34, x00, x32, x00, x0e,
+     x00, x0d, x00, x19, x00, x0b, x00, x0c,
+     x00, x18, x00, x09, x00, x0a, x00, x16,
+     x00, x17, x00, x08, x00, x06, x00, x07,
+     x00, x14, x00, x15, x00, x04, x00, x05,
+     x00, x12, x00, x13, x00, x01, x00, x02,
+     x00, x03, x00, x0f, x00, x10, x00, x11,
+# Extension: SessionTicket TLS
+     x00, x23,
+# length of SessionTicket TLS
+     x00, $xlen_tckt_tls,
+# Session Ticket
+     $session_tckt_tls                       # here we have the comma already
+# Extension: Heartbeat
+     x00, x0f, x00, x01, x01"
+
+     fd_socket 5 || return 6
+     debugme tmln_out "\nsending client hello "
+     socksend "$client_hello" 0
+
+     debugme tmln_out "\nreading server hello (ticketbleed reply)"
+     if [[ "$FAST_SOCKET" ]]; then
+          tls_hello_ascii=$(sockread_fast 32768)
+     else
+          sockread_serverhello 32768 $CCS_MAX_WAITSOCK
+          tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+     fi
+     [[ "$DEBUG" -ge 5 ]] && echo "$tls_hello_ascii"
+
+     if [[ "$DEBUG" -ge 4 ]]; then
+          echo "============================="
+          echo "$tls_hello_ascii"
+          echo "============================="
+     fi
+
+     if [[ "${tls_hello_ascii:0:2}" == "16" ]]; then
+          debugme echo -n "Handshake (TLS version: ${tls_hello_ascii:2:4}), "
+          if [[ "${tls_hello_ascii:10:6}" == 020000 ]]; then
+               debugme echo -n "ServerHello -- "
+          else
+               debugme echo -n "Message type: ${tls_hello_ascii:10:6} -- "
+          fi
+          sid_detected="${tls_hello_ascii:88:32}"
+          sid_input=$(sed -e 's/x//g' -e 's/,//g' <<< "$sid")
+          if [[ "$DEBUG" -ge 2 ]]; then
+               echo
+               echo "TLS version, record layer: ${tls_hello_ascii:18:4}"
+               echo "Random bytes / timestamp:  ${tls_hello_ascii:22:64}"
+               echo "Session ID:                $sid_detected"
+          fi
+          if grep -q $sid_input <<< "$sid_detected"; then
+               pr_svrty_critical "VULNERABLE (NOT ok)"
+               fileout "ticketbleed" "CRITICAL" "Ticketbleed: VULNERABLE" "$cve" "$cwe" "$hint"
+          else
+               out "likely "
+               pr_done_best "not vulnerable (OK)"
+               out " -- but received a session ID back which shouldn't happen"
+               fileout "ticketbleed" "OK" "Ticketbleed: vulnerable, but with a session ID reply" "$cve" "$cwe"
+          fi
+     elif [[ "${tls_hello_ascii:0:2}" == "15" ]]; then
+          debugme echo -n "TLS Alert ${tls_hello_ascii:10:4} (TLS version: ${tls_hello_ascii:2:4}) -- "
+          pr_done_best "not vulnerable (OK)"
+          fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable" "$cve" "$cwe"
+     else
+          ret=1
+          pr_warning "test failed "
+          out "around line $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})"
+          fileout "ticketbleed" "WARN" "Ticketbleed: test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
+     fi
+     outln
+
+     if [[ "$DEBUG" -ge 1 ]]; then
+          echo $tls_hello_ascii >$FUNCNAME.txt
+          tmpfile_handle $FUNCNAME.txt
+     fi
+     close_socket
+     return $ret
+}
+
 
 run_renego() {
 # no SNI here. Not needed as there won't be two different SSL stacks for one IP
@@ -10638,14 +10860,15 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -x, --single-cipher <pattern> tests matched <pattern> of ciphers
                                    (if <pattern> not a number: word match)
      -c, --client-simulation       test client simulations, see which client negotiates with cipher and protocol
-     -H, --header, --headers       tests HSTS, HPKP, server/app banner, security headers, cookie, reverse proxy, IPv4 address
+     -h, --header, --headers       tests HSTS, HPKP, server/app banner, security headers, cookie, reverse proxy, IPv4 address
 
      -U, --vulnerable              tests all (of the following) vulnerabilities (if applicable)
-     -B, --heartbleed              tests for heartbleed vulnerability
+     -H, --heartbleed              tests for heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
+     -T, --ticketbleed             tests for Ticketbleed vulnerability in BigIP loadbalancers
      -R, --renegotiation           tests for renegotiation vulnerabilities
      -C, --compression, --crime    tests for CRIME vulnerability (TLS compression issue)
-     -T, --breach                  tests for BREACH vulnerability (HTTP compression issue)
+     -B, --breach                  tests for BREACH vulnerability (HTTP compression issue)
      -O, --poodle                  tests for POODLE (SSL) vulnerability
      -Z, --tls-fallback            checks TLS_FALLBACK_SCSV mitigation
      -W, --sweet32                 tests 64 bit block ciphers (3DES, RC2 and IDEA): SWEET32 vulnerability
@@ -10856,7 +11079,7 @@ EOF
              modification under GPLv2 permitted.
       USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @
+       Please file bugs @ 
 EOF
 )
      bb3=$(cat <<EOF
@@ -11451,36 +11674,46 @@ sclient_auth() {
 # The first try in the loop is empty as we prefer not to specify always a protocol if we can get along w/o it
 #
 determine_optimal_proto() {
-     local all_failed
+     local all_failed=true
      local sni=""
-
-     #TODO: maybe query known openssl version before this workaround. 1.0.1 doesn't need this
+     local tmp=""
 
      >$ERRFILE
      if [[ -n "$1" ]]; then
-          # starttls workaround needed see https://github.com/drwetter/testssl.sh/issues/188
-          # kind of odd
+          # starttls workaround needed see https://github.com/drwetter/testssl.sh/issues/188 -- kind of odd
           for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
                $OPENSSL s_client $STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg -starttls $1 </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
-                    all_failed=1
+                    all_failed=false
                     break
                fi
-               all_failed=0
+               all_failed=true
           done
-          [[ $all_failed -eq 0 ]] && STARTTLS_OPTIMAL_PROTO=""
+          "$all_failed" && STARTTLS_OPTIMAL_PROTO=""
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
           for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
                [[ "$OPTIMAL_PROTO" =~ ssl ]] && sni="" || sni=$SNI
                $OPENSSL s_client $OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $sni </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
-                    all_failed=1
+                    # we use the successful handshake at least to get one valid protocol supported -- it saves us time later
+                    if [[ -z "$OPTIMAL_PROTO" ]]; then
+                         # convert to openssl terminology
+                         tmp=$(get_protocol $TMPFILE)
+                         tmp=${tmp/\./_}
+                         tmp=${tmp/v/}
+                         tmp="$(tolower $tmp)"
+                         add_tls_offered "$tmp"
+                    else
+                         add_tls_offered "${OPTIMAL_PROTO/-/}"
+                    fi
+                    debugme echo "one proto determined: $tmp"
+                    all_failed=false
                     break
                fi
-               all_failed=0
+               all_failed=true
           done
-          [[ $all_failed -eq 0 ]] && OPTIMAL_PROTO=""
+          "$all_failed" && OPTIMAL_PROTO=""
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
                prln_magenta "$NODEIP:$PORT appears to only support SSLv2."
@@ -11490,7 +11723,7 @@ determine_optimal_proto() {
      fi
      grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
 
-     if [[ $all_failed -eq 0 ]]; then
+     if "$all_failed"; then
           outln
           if "$HAS_IPv6"; then
                pr_bold " Your $OPENSSL is not IPv6 aware, or $NODEIP:$PORT "
@@ -11889,6 +12122,7 @@ initialize_globals() {
      do_lucky13=false
      do_breach=false
      do_ccs_injection=false
+     do_ticketbleed=false
      do_cipher_per_proto=false
      do_crime=false
      do_freak=false
@@ -11931,6 +12165,7 @@ set_scanning_defaults() {
      do_breach=true
      do_heartbleed=true
      do_ccs_injection=true
+     do_ticketbleed=true
      do_crime=true
      do_freak=true
      do_logjam=true
@@ -11956,7 +12191,7 @@ query_globals() {
      local gbl
      local true_nr=0
 
-     for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_cipher_per_proto do_crime \
+     for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
@@ -11969,7 +12204,7 @@ query_globals() {
 debug_globals() {
      local gbl
 
-     for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_cipher_per_proto do_crime \
+     for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
@@ -12107,7 +12342,7 @@ parse_cmd_line() {
                -P|--server[_-]preference|--preference)
                     do_server_preference=true
                     ;;
-               -H|--header|--headers)
+               -h|--header|--headers)
                     do_header=true
                     ;;
                -c|--client-simulation)
@@ -12117,6 +12352,7 @@ parse_cmd_line() {
                     do_vulnerabilities=true
                     do_heartbleed=true
                     do_ccs_injection=true
+                    do_ticketbleed=true
                     do_renego=true
                     do_crime=true
                     do_breach=true
@@ -12131,12 +12367,16 @@ parse_cmd_line() {
                     do_rc4=true
                     VULN_COUNT=10
                     ;;
-               -B|--heartbleed)
+               -H|--heartbleed)
                     do_heartbleed=true
                     let "VULN_COUNT++"
                     ;;
                -I|--ccs|--ccs[-_]injection)
                     do_ccs_injection=true
+                    let "VULN_COUNT++"
+                    ;;
+               -T|--ticketbleed)
+                    do_ticketbleed=true
                     let "VULN_COUNT++"
                     ;;
                -R|--renegotiation)
@@ -12147,7 +12387,7 @@ parse_cmd_line() {
                     do_crime=true
                     let "VULN_COUNT++"
                     ;;
-               -T|--breach)
+               -B|--breach)
                     do_breach=true
                     let "VULN_COUNT++"
                     ;;
@@ -12486,6 +12726,7 @@ lets_roll() {
      fileout_section_header $section_number true && ((section_number++))
      $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); time_right_align run_heartbleed; }
      $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); time_right_align run_ccs_injection; }
+     $do_ticketbleed && { run_ticketbleed; ret=$(($? + ret)); time_right_align run_ticketbleed; }
      $do_renego && { run_renego; ret=$(($? + ret)); time_right_align run_renego; }
      $do_crime && { run_crime; ret=$(($? + ret)); time_right_align run_crime; }
      $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret));  time_right_align run_breach; }
