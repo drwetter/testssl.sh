@@ -161,6 +161,7 @@ TERM_CURRPOS=0                                              # custom line wrappi
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch, see --help
 
 declare -x OPENSSL OPENSSL_TIMEOUT
+FAST_SOCKET=${FAST_SOCKET:-false}       # EXPERIMENTAL feature to accelerate sockets -- DO NOT USE it for production
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
 COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the output
 SHOW_EACH_C=${SHOW_EACH_C:-false}       # where individual ciphers are tested show just the positively ones tested
@@ -3422,7 +3423,6 @@ client_simulation_sockets() {
      sleep $USLEEP_SND
 
      sockread_serverhello 32768
-
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
 
@@ -8653,16 +8653,25 @@ run_heartbleed(){
           return 0
      fi
 
-     # determine TLS versions offered <-- needs to come from another place
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -tlsextdebug >$TMPFILE 2>$ERRFILE </dev/null
+     if $(has_server_protocol "tls1"); then
+          tls_hexcode="x03, x01"
+     elif $(has_server_protocol "tls1_1"); then
+          tls_hexcode="x03, x02"
+     elif $(has_server_protocol "tls1_2"); then
+          tls_hexcode="x03, x03"
+     elif $(has_server_protocol "ssl3"); then
+          tls_hexcode="x03, x00"
+     else # no protcol for some reason defined, determine TLS versions offered with a new handshake
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
+          case "$(get_protocol $TMPFILE)" in
+               *1.2)  tls_hexcode="x03, x03" ;;
+               *1.1)  tls_hexcode="x03, x02" ;;
+               TLSv1) tls_hexcode="x03, x01" ;;
+               SSLv3) tls_hexcode="x03, x00" ;;
+          esac
+     fi
+     debugme echo "using protocol $tls_hexcode"
 
-     tls_proto_offered=$(get_protocol $TMPFILE)
-#FIXME: for SSLv3 only we need to set tls_hexcode and the record layer TLS version correctly
-     case $tls_proto_offered in
-          12)  tls_hexcode="x03, x03" ;;
-          11)  tls_hexcode="x03, x02" ;;
-          *) tls_hexcode="x03, x01" ;;
-     esac
      heartbleed_payload=", x18, $tls_hexcode, x00, x03, x01, x40, x00"
 
      client_hello="
@@ -8813,11 +8822,11 @@ run_ccs_injection(){
           tls_hexcode="x03, x03"
      elif $(has_server_protocol "ssl3"); then
           tls_hexcode="x03, x00"
-     else # no protcol for some reason defined, determine TLS versions offered with another handshake
+     else # no protcol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
-               1.2)  tls_hexcode="x03, x03" ;;
-               1.1)  tls_hexcode="x03, x02" ;;
+               *1.2)  tls_hexcode="x03, x03" ;;
+               *1.1)  tls_hexcode="x03, x02" ;;
                TLSv1) tls_hexcode="x03, x01" ;;
                SSLv3) tls_hexcode="x03, x00" ;;
           esac
@@ -8987,7 +8996,7 @@ run_ticketbleed() {
           tls_hexcode="x03, x03"
      elif $(has_server_protocol "ssl3"); then
           tls_hexcode="x03, x00"
-     else # no protocol for some reason defined, determine TLS versions offered with another handshake
+     else # no protocol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $BUGS $OPTIMAL_PROTO -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
                *1.2)  tls_hexcode="x03, x03" ;;
@@ -9085,7 +9094,7 @@ run_ticketbleed() {
      socksend "$client_hello" 0
 
      debugme tmln_out "\nreading server hello (ticketbleed reply)"
-     if [[ "$FAST_SOCKET" ]]; then
+     if "$FAST_SOCKET"; then
           tls_hello_ascii=$(sockread_fast 32768)
      else
           sockread_serverhello 32768 $CCS_MAX_WAITSOCK
