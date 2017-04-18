@@ -12374,7 +12374,7 @@ parse_cmd_line() {
                     do_beast=true
                     do_lucky13=true
                     do_rc4=true
-                    VULN_COUNT=10
+                    VULN_COUNT=16
                     ;;
                -H|--heartbleed)
                     do_heartbleed=true
