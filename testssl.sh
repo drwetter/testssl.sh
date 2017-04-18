@@ -762,7 +762,8 @@ fileout() {
      local hint="$6"
 
      if ( "$do_pretty_json" && [[ "$1" == "service" ]] ) || show_finding "$severity"; then
-         local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
+         local finding
+         finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
          [[ -f "$JSONFILE" ]] && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
          "$do_csv" && \
               echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
