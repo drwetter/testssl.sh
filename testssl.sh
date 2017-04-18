@@ -10466,9 +10466,9 @@ find_openssl_binary() {
      elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
           # 2. otherwise, only if on Bash on Windows, use system binaries only.
           SYSTEM2="WSL"
-     elif test_openssl_suffix "$RUN_DIR"; then
+     elif test_openssl_suffix "$TESTSSL_INSTALL_DIR"; then
           :    # 3. otherwise try openssl in path of testssl.sh
-     elif test_openssl_suffix "$RUN_DIR/bin"; then
+     elif test_openssl_suffix "$TESTSSL_INSTALL_DIR/bin"; then
           :    # 4. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
      elif test_openssl_suffix "$(dirname "$(which openssl)")"; then
           :    # 5. we tried hard and failed, so now we use the system binaries
