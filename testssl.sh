@@ -957,17 +957,17 @@ hex2ascii() {
 count_lines() {
      #echo "${$(wc -l <<< "$1")// /}"
      # ^^ bad substitution under bash, zsh ok. For some reason this does the trick:
-     echo $(wc -l <<< "$1")
+     wc -l <<< "$1"
 }
 
 count_words() {
      #echo "${$(wc -w <<< "$1")// /}"
      # ^^ bad substitution under bash, zsh ok. For some reason this does the trick:
-     echo $(wc -w <<< "$1")
+     wc -w <<< "$1"
 }
 
 count_ciphers() {
-     echo $(wc -w <<< "${1//:/ }")
+     wc -w <<< "${1//:/ }"
 }
 
 actually_supported_ciphers() {
@@ -5193,7 +5193,7 @@ get_cn_from_cert() {
      # for e.g. russian sites -esc_msb,utf8 works in an UTF8 terminal -- any way to check platform indepedent?
      # see x509(1ssl):
      subject="$($OPENSSL x509 -in $1 -noout -subject -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
-     echo "$(awk -F'=' '/CN=/ { print $2 }' <<< "$subject")"
+     awk -F'=' '/CN=/ { print $2 }' <<< "$subject"
      return $?
 }
 
@@ -6146,9 +6146,9 @@ get_session_ticket_lifetime_from_serverhello() {
 }
 
 get_san_dns_from_cert() {
-     echo "$($OPENSSL x509 -in "$1" -noout -text 2>>$ERRFILE | \
+     $OPENSSL x509 -in "$1" -noout -text 2>>$ERRFILE | \
           grep -A2 "Subject Alternative Name" | tr ',' '\n' | grep "DNS:" | \
-          sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')"
+          sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' '
 }
 
 
@@ -9473,7 +9473,7 @@ run_freak() {
                done
                tmln_out
           else
-               echo $(actually_supported_ciphers $exportrsa_cipher_list)
+               actually_supported_ciphers $exportrsa_cipher_list
           fi
      fi
      debugme echo $nr_supported_ciphers
