@@ -10852,7 +10852,7 @@ help() {
 
 "$PROG_NAME <options>", where <options> is:
 
-     -h, --help                    what you're looking at
+     --help                        what you're looking at
      -b, --banner                  displays banner + version of $PROG_NAME
      -v, --version                 same as previous
      -V, --local                   pretty print all local ciphers
@@ -12266,7 +12266,7 @@ parse_cmd_line() {
 
      while [[ $# -gt 0 ]]; do
           case $1 in
-               -h|--help)
+               --help)
                     help 0
                     ;;
                -b|--banner|-v|--version)
