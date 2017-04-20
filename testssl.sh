@@ -2044,12 +2044,12 @@ run_client_simulation() {
 
      outln
      if "$using_sockets"; then
-          pr_headlineln " Running client simulations via sockets "
+          pr_headlineln " Running client simulations via sockets (experimental) "
      else
-          pr_headlineln " Running client simulations (experimental) "
+          pr_headlineln " Running client simulations via openssl (experimental) "
           outln
           pr_warningln " Depending on your openssl client and the server side this may yield to false values"
-          fileout "client_simulation" "WARNING" "Depending on your openssl client and the server side this may yield to false values"
+          fileout "client_simulation_openssl" "WARNING" "Running simulations via openssl, depending on your openssl client and the server side this may yield to false values"
      fi
      outln
 
@@ -2057,7 +2057,9 @@ run_client_simulation() {
      for name in "${short[@]}"; do
           # Make sure we run client simulations for those clients that support it
           if $do_all_simulations || ${current[i]} ; then
-               if $do_all_simulations || [[ $(count_lines "$(echo "${service[i]}" | grep "$client_service")")  -eq 1 || "${service[i]}" == "ANY" ]]; then
+               # if $do_all_simulations || [[ $(count_lines "$(echo "${service[i]}" | grep "$client_service")")  -eq 1 || "${service[i]}" == "ANY" ]]; then
+               # I know @drwetter hates wc -l, but in this case wc -l and count_lines give different results
+               if $do_all_simulations || [[ $(echo "${service[i]}" | grep "$client_service" |wc -l ) -eq 1 || "${service[i]}" == "ANY" ]]; then
                     #FIXME: printf formatting would look better, especially if we want a wide option here
                     out " $(printf -- "%-33s" "${names[i]}")"
                     if $using_sockets && [[ -n "${handshakebytes[i]}" ]]; then
