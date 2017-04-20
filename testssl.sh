@@ -3541,7 +3541,7 @@ run_client_simulation() {
           pr_headlineln " Running browser simulations via sockets "
      else
           pr_headline " Running browser simulations via openssl "
-          pr_warningln " Depending on your openssl client you may get false results"
+          prln_warning " Depending on your openssl client you may get false results"
           fileout "client_simulation" "WARNING" "Depending on your openssl client you may false results"
      fi
      outln
