@@ -73,13 +73,13 @@ foreach my $client ( @$ssllabs ) {
 				push @ciphers, "ECDHE-ECDSA-CHACHA20-POLY1305"; }
 			elsif ( $suite == "52394" ) {
 				push @ciphers, "DHE-RSA-CHACHA20-POLY1305"; }
-			else { 
+			else {
 				print "ALERT: ";
 				if ( $has_matched ) {
 					print " \"$shortname\" has ";
 					$has_matched = 0;
 				}
-				print "$suite. Please FIXME "; 
+				print "$suite. Please FIXME ";
 			}
 		}
 		print "\n" if ! $has_matched ;
@@ -89,7 +89,7 @@ foreach my $client ( @$ssllabs ) {
 		if ( exists $client->{supportsSni} && $client->{supportsSni} ) {
 			$sim->{sni} = "sni+=(\"\$SNI\")";
 		} else {
-			$sim->{sni} = "sni+=(\"\")";		
+			$sim->{sni} = "sni+=(\"\")";
 		}
 
 		# warning (if needed)
@@ -106,28 +106,28 @@ foreach my $client ( @$ssllabs ) {
 		my @proto_flags = ();
 		my @tls_flags = ();
 		# Figure out if we need to support sslv2
-		if ( $client->{lowestProtocol} < 768 && $client->{highestProtocol} >= 512 ) { 
+		if ( $client->{lowestProtocol} < 768 && $client->{highestProtocol} >= 512 ) {
 			# 512 = 0x200 = sslv2
 			# 768 = 0x300 = sslv3
 			push @proto_flags, "-ssl2";
 		}
 		# Do we need to support SSL3?
-		if ( $client->{lowestProtocol} <= 768 && $client->{highestProtocol} >= 768 ) { 
+		if ( $client->{lowestProtocol} <= 768 && $client->{highestProtocol} >= 768 ) {
 			# 768 = 0x300 = sslv3
 			push @proto_flags, "-ssl3";
 		}
 		# Do we need to support TLS 1.0?
-		if ( $client->{lowestProtocol} <= 769 && $client->{highestProtocol} >= 769 ) { 
+		if ( $client->{lowestProtocol} <= 769 && $client->{highestProtocol} >= 769 ) {
 			# 769 = 0x301 = tls1.0
 			push @proto_flags, "-tls1";
 		}
 		# Do we need to support TLS 1.1?
-		if ( $client->{lowestProtocol} <= 770 && $client->{highestProtocol} >= 770 ) { 
+		if ( $client->{lowestProtocol} <= 770 && $client->{highestProtocol} >= 770 ) {
 			# 770 = 0x302 = tls1.1
 			push @proto_flags, "-tls1_1";
 		}
 		# Do we need to support TLS 1.2?
-		if ( $client->{lowestProtocol} <= 771 && $client->{highestProtocol} >= 771 ) { 
+		if ( $client->{lowestProtocol} <= 771 && $client->{highestProtocol} >= 771 ) {
 			# 771 = 0x303 = tls1.2
 			push @proto_flags, "-tls1_2";
 		}
@@ -137,8 +137,8 @@ foreach my $client ( @$ssllabs ) {
 
 		if ( lc($client->{name}) eq "java" || lc($client->{name}) eq "openssl" ) {
 			# Java and OpenSSL are generic clients
-			$sim->{service} =  "service+=(\"ANY\")";		
-		} elsif ( $shortname =~ /^apple_ats/ ) { 
+			$sim->{service} =  "service+=(\"ANY\")";
+		} elsif ( $shortname =~ /^apple_ats/ ) {
 			# Apple ATS is HTTP(s) only
 			$sim->{service} = "service+=(\"HTTP\")";
 		} else {
@@ -155,7 +155,7 @@ foreach my $client ( @$ssllabs ) {
 		if ( defined $client->{requiresSha2} && $client->{requiresSha2} ) {
 			$sim->{requiresSha2} = "requiresSha2+=(true)";
 		} else {
-			$sim->{requiresSha2} = "requiresSha2+=(false)";		
+			$sim->{requiresSha2} = "requiresSha2+=(false)";
 		}
 	}
 }
@@ -238,11 +238,16 @@ foreach my $shortname ( reverse sort keys %sims ) {
 			$sims{$shortname}->{current} = "current+=(false)";
 		}
 	} elsif ($shortname =~ /^firefox/) {
-		$count{firefox}++;
-		if ( $count{firefox} <= 3 ) {
+		# Latest version + ESR releases
+		if ( $shortname =~ /ESR/ ) {
 			$sims{$shortname}->{current} = "current+=(true)";
 		} else {
-			$sims{$shortname}->{current} = "current+=(false)";
+			$count{firefox}++;
+			if ( $count{firefox} <= 1 ) {
+				$sims{$shortname}->{current} = "current+=(true)";
+			} else {
+				$sims{$shortname}->{current} = "current+=(false)";
+			}
 		}
 	} elsif ($shortname =~ /^googlebot/) {
 		$count{googlebot}++;
@@ -273,27 +278,61 @@ foreach my $shortname ( reverse sort keys %sims ) {
 			$sims{$shortname}->{current} = "current+=(false)";
 		}
 	} elsif ($shortname =~ /^opera/) {
-		# Opera isn't a current browser
+		$count{opera}++;
+		if ( $count{opera} <= 1 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
+	} elsif ($shortname =~ /^java 7/) {
+		$count{java7}++;
+		if ( $count{java7} <= 1 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
+	} elsif ($shortname =~ /^java 8/) {
+		$count{java8}++;
+		if ( $count{java8} <= 1 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
+	} elsif ($shortname =~ /^java/) {
+		# Other/older versions of java aren't current
 		$sims{$shortname}->{current} = "current+=(false)";
+	} elsif ($shortname =~ /^openssl/) {
+		$count{openssl}++;
+		if ( $count{openssl} <= 1 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
+	} elsif ($shortname =~ /^safari/) {
+		$count{safari}++;
+		if ( $count{safari} <= 2 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
 	} else {
 		# All versions are current
 		$sims{$shortname}->{current} = "current+=(true)";
 	}
 }
 
-open OUT, ">client-simulation-data.inc" or die "Unable to open client-simulation-data.inc";
-print OUT "
+open OUT, ">client-simulation-data.sh" or die "Unable to open client-simulation-data.sh";
+print OUT "#!/usr/bin/env bash
 
 # This file contains client handshake data used in the run_client_simulation function
 # Don't update this file by hand, but run util/update_client_sim_data.pl instead
 
-# Most clients are taken from Qualys SSL Labs --- From: https://api.dev.ssllabs.com/api/v3/getClients 
+# Most clients are taken from Qualys SSL Labs --- From: https://api.dev.ssllabs.com/api/v3/getClients
 ";
-
 foreach my $shortname ( sort keys %sims ) {
 	foreach my $k ( qw(name shortname ciphers sni warning handshakebytes protos lowestProtocol highestProtocol service
 		minDhBits maxDhBits minRsaBits maxRsaBits minEcdsaBits requiresSha2 current) ) {
-		print OUT "$sims{$shortname}->{$k}\n";
+		print OUT "     $sims{$shortname}->{$k}\n";
 	}
 	print OUT "\n";
 }
