@@ -45,7 +45,7 @@ foreach my $client ( @$ssllabs ) {
 		my $name = "$client->{name} $client->{version}";
 		$name .= " $client->{platform}" if exists $client->{platform};
 		# Get first namelength characters only
-		$name = substr($name . " " x $namelength,0,$namelength);
+		$name = substr($name . "" x $namelength,0,$namelength);
 		$sim->{name} = "names+=(\"$name\")";
 
 		# Ciphers
