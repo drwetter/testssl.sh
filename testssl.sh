@@ -3515,8 +3515,8 @@ run_client_simulation() {
      local minEcdsaBits=()
      local requiresSha2=()
      local i=0
-     local name tls proto cipher temp what_dh bits has_dh_bits
-     local using_sockets=true
+     local name tls proto cipher temp what_dh bits curve
+     local has_dh_bits using_sockets=true
 
      # source the external file
      . "$TESTSSL_INSTALL_DIR/etc/client_simulation.txt" 2>/dev/null
@@ -3546,8 +3546,23 @@ run_client_simulation() {
      outln
 
      debugme tmln_out
+     
+     if "$WIDE"; then
+          if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
+               out " Browser                          Protocol  Cipher Suite Name (OpenSSL)      "
+               ( "$using_sockets" || "$HAS_DH_BITS") && out "Forward Secrecy"
+               outln
+               out "------------------------------------------------------------------------------"
+          else
+               out " Browser                          Protocol  Cipher Suite Name (RFC)                          "
+               ( "$using_sockets" || "$HAS_DH_BITS") && out "Forward Secrecy"
+               outln
+               out "----------------------------------------------------------------------------------------------"
+          fi
+          ( "$using_sockets" || "$HAS_DH_BITS") && out "----------------------"
+          outln
+     fi
      for name in "${short[@]}"; do
-          #FIXME: printf formatting would look better, especially if we want a wide option here
           out " $(printf -- "%-33s" "${names[i]}")"
           if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
                client_simulation_sockets "${handshakebytes[i]}"
@@ -3571,9 +3586,18 @@ run_client_simulation() {
                temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")        # extract line
                what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
                bits=$(awk -F',' '{ print $3 }' <<< $temp)
-               grep -q bits <<< $bits || bits=$(awk -F',' '{ print $2 }' <<< $temp)
+               if grep -q bits <<< $bits; then
+                    curve="$(strip_spaces "$(awk -F',' '{ print $2 }' <<< $temp)")"
+               else
+                    curve=""
+                    bits=$(awk -F',' '{ print $2 }' <<< $temp)
+               fi
                bits="${bits/bits/}"
                bits="${bits// /}"
+               if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
+                    curve="$what_dh"
+                    what_dh="ECDH"
+               fi
                if [[ "$what_dh" == "DH" ]]; then
                     [[ ${minDhBits[i]} -ne -1 ]] && [[ $bits -lt ${minDhBits[i]} ]] && sclient_success=1
                     [[ ${maxDhBits[i]} -ne -1 ]] && [[ $bits -gt ${maxDhBits[i]} ]] && sclient_success=1
@@ -3619,11 +3643,27 @@ run_client_simulation() {
                     cipher="$(openssl2rfc "$cipher")"
                     [[ -z "$cipher" ]] && cipher=$(get_cipher $TMPFILE)
                fi
-               out "$proto $cipher"
-               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
-               "$HAS_DH_BITS" && read_dhbits_from_file $TMPFILE
-               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && HAS_DH_BITS=$has_dh_bits
-               [[ ":${ROBUST_PFS_CIPHERS}:" =~ ":${cipher}:" ]] && out ", " && pr_done_good "FS"
+               if ! "$WIDE"; then
+                    out "$proto $cipher"
+               elif [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
+                    out "$(printf -- "%-7s   %-33s" "$proto" "$cipher")"
+               else
+                    out "$(printf -- "%-7s   %-49s" "$proto" "$cipher")"
+               fi
+               if ! "$WIDE"; then
+                    "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
+                    "$HAS_DH_BITS" && read_dhbits_from_file $TMPFILE
+                    "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && HAS_DH_BITS=$has_dh_bits
+               elif [[ -n "$what_dh" ]]; then
+                    [[ -n "$curve" ]] && curve="($curve)"
+                    if [[ "$what_dh" == "ECDH" ]]; then
+                         pr_ecdh_quality "$bits" "$(printf -- "%-12s" "$bits bit $what_dh") $curve"
+                    else
+                         pr_dh_quality "$bits" "$(printf -- "%-12s" "$bits bit $what_dh") $curve"
+                    fi
+               elif "$HAS_DH_BITS" || ( "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] ); then
+                    out "No FS"
+               fi
                outln
                if [[ -n "${warning[i]}" ]]; then
                     out "                            "
