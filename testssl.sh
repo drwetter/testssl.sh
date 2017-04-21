@@ -290,7 +290,7 @@ NOW_TIME=""
 HTTP_TIME=""
 GET_REQ11=""
 readonly UA_STD="TLS tester from $SWURL"
-readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:41.0) Gecko/20100101 Firefox/41.0"
+readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
 START_TIME=0                            # time in epoch when the action started
 END_TIME=0                              # .. ended
 SCAN_TIME=0                             # diff of both: total scan time
@@ -963,7 +963,6 @@ dec04hex() {
      local a=$(printf "%04x" "$1")
      printf "x%02s, x%02s" "${a:0:2}" "${a:2:2}"
 }
-
 
 
 # trim spaces for BSD and old sed
@@ -4250,6 +4249,10 @@ read_dhbits_from_file() {
      return 0
 }
 
+
+sub_session_resumption() {
+     :
+}
 
 run_server_preference() {
      local cipher1 cipher2 prev_cipher=""
