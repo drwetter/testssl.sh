@@ -7,13 +7,14 @@ use JSON;
 
 my $tests = 0;
 
+unlink "tmp.json";
 pass("Running openssl based client simulations against smtp-relay.gmail.com:587"); $tests++;
-my $opensslout = `./testssl.sh -c --ssl-native -t smtp --jsonfile tmp.json --color 0 smtp-relay.gmail.com:587`;
+my $opensslout = `./testssl.sh --client-simulation --ssl-native -t smtp --jsonfile tmp.json --color 0 smtp-relay.gmail.com:587`;
 my $openssl = json('tmp.json');
 unlike($opensslout, qr/Running client simulations via sockets/, "Tests didn't run via sockets"); $tests++;
 
 pass("Running socket based client simulations against smtp-relay.gmail.com:587"); $tests++;
-my $socketout = `./testssl.sh -c -t smtp --jsonfile tmp.json --color 0 smtp-relay.gmail.com:587`;
+my $socketout = `./testssl.sh --client-simulation -t smtp --jsonfile tmp.json --color 0 smtp-relay.gmail.com:587`;
 my $socket = json('tmp.json');
 like($socketout, qr/Running client simulations via sockets/, "Tests ran via sockets"); $tests++;
 
@@ -30,6 +31,7 @@ foreach my $s ( @$socket ) {
 }
 
 done_testing($tests);
+unlink "tmp.json";
 
 sub json($) {
 	my $file = shift;
