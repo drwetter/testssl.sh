@@ -229,6 +229,7 @@ readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observerd @ facebook and others, old ones like h2-17 omitted as they could not be found
 readonly ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
 
+declare -a SESS_RESUMPTION
 TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
@@ -1137,9 +1138,12 @@ out_row_aligned_max_width_by_entry() {
     done <<< "$resp"
 }
 
-
+# saves $TMPFILE or file supplied in $2 under name "$TEMPDIR/$NODEIP.$1".
+# Note: after finishing $TEMPDIR will be removed unless DEBUG >=1
 tmpfile_handle() {
-     mv $TMPFILE "$TEMPDIR/$NODEIP.$1" 2>/dev/null
+     local savefile="$2"
+     [[ -z "$savefile" ]] && savefile=$TMPFILE
+     mv $savefile "$TEMPDIR/$NODEIP.$1" 2>/dev/null
      [[ $ERRFILE =~ dev.null ]] && return 0 || \
           mv $ERRFILE "$TEMPDIR/$NODEIP.$(sed 's/\.txt//g' <<<"$1").errorlog" 2>/dev/null
 }
@@ -4246,12 +4250,58 @@ read_dhbits_from_file() {
           fi
      fi
 
+     tmpfile_handle $FUNCNAME.log $tmpfile
+
      return 0
 }
 
 
+# arg1: ID or empty. if empty resumption by ticket will be tested
+# return: 0: it has resumption, 1:nope, 2: can't tell
 sub_session_resumption() {
-     :
+     local tmpfile=$(mktemp $TEMPDIR/session_resumption.$NODEIP.XXXXXX)
+     local sess_data=$(mktemp $TEMPDIR/sub_session_data_resumption.$NODEIP.XXXXXX)
+     local -a rw_line
+
+     if [[ "$1" == ID ]]; then
+          local byID=true
+          local addcmd="-no_ticket"
+     else
+          local byID=false
+          local addcmd=""
+     fi
+
+     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -no_ssl2 $addcmd -sess_out $sess_data </dev/null &>/dev/null
+     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -no_ssl2 $addcmd -sess_in $sess_data </dev/null >$tmpfile 2>$ERRFILE
+     # now get the line and compare the numbers read" and "writen" as a second criteria.
+     rw_line="$(awk '/^SSL handshake has read/ { print $5" "$(NF-1) }' "$tmpfile" )"
+     rw_line=($rw_line)
+     if [[ "${rw_line[0]}" -gt "${rw_line[1]}" ]]; then
+          new_sid2=true
+     else
+          new_sid2=false
+     fi
+     debugme echo "${rw_line[0]}, ${rw_line[1]}"
+     #grep -aq "^New" "$tmpfile" && new_sid=true || new_sid=false
+     grep -aq "^Reused" "$tmpfile" && new_sid=false || new_sid=true
+     if "$new_sid2" && "$new_sid"; then
+          debugme echo -n "No session resumption "
+          ret=1
+     elif ! "$new_sid2" && ! "$new_sid"; then
+          debugme echo -n "Session resumption "
+          ret=0
+     else
+          debugme echo -n "unclear status: "$new_sid, "$new_sid2 -- "
+          ret=2
+     fi
+     if [[ $DEBUG -ge 2 ]]; then
+          "$byID" && echo "byID" || echo "by ticket"
+     fi
+
+     "$byID" && \
+          tmpfile_handle $FUNCNAME.byID.log $tmpfile || \
+          tmpfile_handle $FUNCNAME.byticket.log $tmpfile
+     return $ret
 }
 
 run_server_preference() {
@@ -4964,7 +5014,7 @@ tls_time() {
           difftime=$(( TLS_TIME -  TLS_NOW))                     # TLS_NOW is being set in tls_sockets()
           if [[ "${#difftime}" -gt 5 ]]; then
                # openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
-               out "random values, no fingerprinting possible "
+               out "Random values, no fingerprinting possible "
                fileout "tls_time" "INFO" "Your TLS time seems to be filled with random values to prevent fingerprinting"
           else
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
@@ -6145,6 +6195,52 @@ run_server_defaults() {
      else
           outln "yes"
           fileout "session_id" "INFO" "SSL session ID support: yes"
+     fi
+
+     pr_bold " Session Resumption           "
+     if [[ -n "$sessticket_str" ]]; then
+          sub_session_resumption
+          case $? in
+               0) SESS_RESUMPTION[2]="ticket=yes"
+                  out "Tickets: yes, "
+                  fileout "session_resumption_ticket" "INFO" "Session resumption via TLS Session Tickets supported"
+               ;;
+               1) SESS_RESUMPTION[2]="ticket=no"
+                  out "Tickets no, "
+                  fileout "session_resumption_ticket" "INFO" "Session resumption via Session Tickets is not supported"
+                  ;;
+               2) SESS_RESUMPTION[2]="ticket=noclue"
+                  pr_warning "Ticket resumption test failed, pls report / "
+                  fileout "session_resumption_ticket" "WARNING" "resumption test for TLS Session Tickets failed, pls report"
+                  ;;
+          esac
+
+     else
+          SESS_RESUMPTION[2]="ticket=no"
+          outln "Ticket: no extension=no resumption, "
+          fileout "session_resumption_ticket" "INFO" "No TLS session ticket extension, no resumption possible (assumed)"
+     fi
+
+     if "$NO_SSL_SESSIONID"; then
+          SESS_RESUMPTION[1]="ID=no"
+          outln "ID: no"
+          fileout "session_resumption_id" "INFO" "No Session ID, no resumption"
+     else
+          sub_session_resumption ID
+          case $? in
+               0) SESS_RESUMPTION[1]="ID=yes"
+                  outln "ID: yes"
+                  fileout "session_resumption_id" "INFO" "Session resumption via Session ID supported"
+                  ;;
+               1) SESS_RESUMPTION[1]="ID=no"
+                  outln "ID: no"
+                  fileout "session_resumption_id" "INFO" "Session resumption via Session ID is not supported"
+                  ;;
+               2) SESS_RESUMPTION[1]="ID=noclue"
+                  prln_warning "ID resumption test failed, pls report"
+                  fileout "session_resumption_ID" "WARNING" "resumption test via Session ID failed, pls report"
+                  ;;
+          esac
      fi
 
      tls_time
@@ -8227,8 +8323,7 @@ sslv2_sockets() {
      ret=$?
 
      close_socket
-     TMPFILE=$SOCK_REPLY_FILE
-     tmpfile_handle $FUNCNAME.dd
+     tmpfile_handle $FUNCNAME.dd $SOCK_REPLY_FILE
      return $ret
 }
 
@@ -8623,8 +8718,7 @@ tls_sockets() {
      fi
 
      close_socket
-     TMPFILE=$SOCK_REPLY_FILE
-     tmpfile_handle $FUNCNAME.dd
+     tmpfile_handle $FUNCNAME.dd $SOCK_REPLY_FILE
      return $ret
 }
 
@@ -8792,10 +8886,8 @@ run_heartbleed(){
           fi
      fi
      outln
-
-     TMPFILE="$SOCK_REPLY_FILE"
+     tmpfile_handle $FUNCNAME.dd $SOCK_REPLY_FILE
      close_socket
-     tmpfile_handle $FUNCNAME.dd
      return $ret
 }
 
@@ -8955,9 +9047,8 @@ run_ccs_injection(){
      fi
      outln
 
-     TMPFILE="$SOCK_REPLY_FILE"
+     tmpfile_handle $FUNCNAME.dd $SOCK_REPLY_FILE
      close_socket
-     tmpfile_handle $FUNCNAME.dd
      return $ret
 }
 
@@ -12830,6 +12921,7 @@ lets_roll() {
 
      [[ -z "$NODE" ]] && parse_hn_port "${URI}"             # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
      prepare_logging
+
      if ! determine_ip_addresses; then
           fatal "No IP address could be determined" 2
      fi
