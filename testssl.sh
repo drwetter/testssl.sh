@@ -4270,9 +4270,10 @@ sub_session_resumption() {
           local byID=false
           local addcmd=""
      fi
+     "$HAS_NO_SSL2" && addcmd+=" -no_ssl2" || addcmd+=" $OPTIMAL_PROTO"
 
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -no_ssl2 $addcmd -sess_out $sess_data </dev/null &>/dev/null
-     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -no_ssl2 $addcmd -sess_in $sess_data </dev/null >$tmpfile 2>$ERRFILE
+     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data </dev/null &>/dev/null
+     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_in $sess_data </dev/null >$tmpfile 2>$ERRFILE
      # now get the line and compare the numbers read" and "writen" as a second criteria.
      rw_line="$(awk '/^SSL handshake has read/ { print $5" "$(NF-1) }' "$tmpfile" )"
      rw_line=($rw_line)
