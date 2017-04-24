@@ -4246,7 +4246,6 @@ read_dhbits_from_file() {
           curve="$what_dh"
           what_dh="ECDH"
      fi
-
      if [[ -z "$2" ]]; then
           if [[ -n "$curve" ]]; then
                debugme echo ">$HAS_DH_BITS|$what_dh($curve)|$bits<"
@@ -4254,7 +4253,6 @@ read_dhbits_from_file() {
                debugme echo ">$HAS_DH_BITS|$what_dh|$bits<"
           fi
      fi
-
      [[ -n "$what_dh" ]] && HAS_DH_BITS=true                            # FIX 190
      if [[ -z "$what_dh" ]] && ! "$HAS_DH_BITS"; then
           if [[ "$2" == "string" ]]; then
@@ -4264,12 +4262,10 @@ read_dhbits_from_file() {
           fi
           return 0
      fi
-
      if [[ "$2" == "quiet" ]]; then
           tm_out "$bits"
           return 0
      fi
-
      [[ -z "$2" ]] && [[ -n "$bits" ]] && out ", "
      if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]]; then
           add="bit DH"
@@ -4289,9 +4285,6 @@ read_dhbits_from_file() {
                pr_ecdh_quality "$bits" "$bits $add"
           fi
      fi
-
-     tmpfile_handle $FUNCNAME.log $tmpfile
-
      return 0
 }
 
@@ -6258,7 +6251,7 @@ run_server_defaults() {
 
      else
           SESS_RESUMPTION[2]="ticket=no"
-          outln "Ticket: no extension=no resumption, "
+          out "Ticket: no extension=no resumption, "
           fileout "session_resumption_ticket" "INFO" "No TLS session ticket extension, no resumption possible (assumed)"
      fi
 
