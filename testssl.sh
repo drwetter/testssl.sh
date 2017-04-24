@@ -9234,10 +9234,15 @@ run_ticketbleed() {
           pr_done_best "not vulnerable (OK)"
           fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable" "$cve" "$cwe"
      else
-          ret=1
-          pr_warning "test failed "
-          out "around line $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})"
-          fileout "ticketbleed" "WARN" "Ticketbleed: test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
+          ret=7
+          pr_warning "test failed"
+          if [[  -z "${tls_hello_ascii:0:2}" ]]; then
+               out ": reply empty"
+               fileout "ticketbleed" "WARN" "Ticketbleed: test failed with empty ServerHello" "$cve" "$cwe"
+          else
+               out " around line $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})"
+               fileout "ticketbleed" "WARN" "Ticketbleed: test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
+          fi
      fi
      outln
 
