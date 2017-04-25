@@ -9116,7 +9116,7 @@ run_ticketbleed() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
 
-     [[ "$SERVICE" != HTTP ]] && prln "--   (applicable only for HTTPS)" && return 0
+     [[ "$SERVICE" != HTTP ]] && outln "--   (applicable only for HTTPS)" && return 0
 
      if $(has_server_protocol "tls1"); then
           tls_hexcode="x03, x01"
