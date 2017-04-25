@@ -9548,7 +9548,7 @@ run_breach() {
           pr_svrty_high "potentially NOT ok, uses $result HTTP compression."
           outln "$disclaimer"
           outln "$spaces$when_makesense"
-          fileout "breach" "MEDIUM" "BREACH: potentially VULNERABLE, uses $result HTTP compression. $disclaimer ($when_makesense)" "$cve" "$cwe" "$hint"
+          fileout "breach" "HIGH" "BREACH: potentially VULNERABLE, uses $result HTTP compression. $disclaimer ($when_makesense)" "$cve" "$cwe" "$hint"
           ret=1
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
