@@ -9116,7 +9116,7 @@ run_ticketbleed() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
 
-     [[ "$SERVICE" != HTTP ]] && prln "--   (applicable only for HTTPS)" && return 0
+     [[ "$SERVICE" != HTTP ]] && outln "--   (applicable only for HTTPS)" && return 0
 
      if $(has_server_protocol "tls1"); then
           tls_hexcode="x03, x01"
@@ -9548,7 +9548,7 @@ run_breach() {
           pr_svrty_high "potentially NOT ok, uses $result HTTP compression."
           outln "$disclaimer"
           outln "$spaces$when_makesense"
-          fileout "breach" "HIGH" "BREACH: potentially VULNERABLE, uses $result HTTP compression. $disclaimer ($when_makesense)" "$cve" "$cwe" "$hint"
+          fileout "breach" "MEDIUM" "BREACH: potentially VULNERABLE, uses $result HTTP compression. $disclaimer ($when_makesense)" "$cve" "$cwe" "$hint"
           ret=1
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
@@ -12990,5 +12990,5 @@ lets_roll() {
 #}
 
 #main
-exit $?
+exit $ret
 
