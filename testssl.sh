@@ -12990,5 +12990,5 @@ lets_roll() {
 #}
 
 #main
-exit $?
+exit $ret
 
