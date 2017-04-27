@@ -1,0 +1,8 @@
+.DS_Store
+tmp.json
+*.bak
+*.json
+*.csv
+*.log
+*.xml
+*.iml
