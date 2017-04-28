@@ -14,6 +14,7 @@ my $openssl = json('tmp.json');
 unlike($opensslout, qr/Running client simulations via sockets/, "Tests didn't run via sockets"); $tests++;
 
 pass("Running socket based client simulations against mozilla-intermediate.badssl.com"); $tests++;
+unlink "tmp.json";
 my $socketout = `./testssl.sh --client-simulation --jsonfile tmp.json --color 0 mozilla-intermediate.badssl.com`;
 my $socket = json('tmp.json');
 like($socketout, qr/Running client simulations via sockets/, "Tests ran via sockets"); $tests++;
