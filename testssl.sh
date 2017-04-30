@@ -6828,6 +6828,26 @@ starttls_just_read(){
      return 0
 }
 
+starttls_read_one_line() {
+     local ret
+     local read_line
+     read -r -t $STARTTLS_SLEEP read_line
+     ret=$?
+     if [ $ret -gt 128 ]; then
+          # line-based read timed out. Let's continue with byte-based timeouts
+          local one_char
+          while read -d '' -N 1 -r -t $STARTTLS_SLEEP_TARPIT one_char; ret=$?; (exit $ret); do
+               if [ "${one_char}" == $'\n' ]; then
+                    break
+               else
+                    read_line+="${one_char}"
+               fi
+          done
+     fi
+     echo "${read_line}"
+     return $ret
+}
+
 starttls_full_read(){
      starttls_read_data=()
      local one_line=""
@@ -6843,7 +6863,7 @@ starttls_full_read(){
 
      local oldIFS="$IFS"
      IFS=''
-     while read -r -t $STARTTLS_SLEEP one_line; ret=$?; (exit $ret); do
+     while one_line=$(starttls_read_one_line); ret=$?; (exit $ret); do
           debugme echo "S: ${one_line}"
           if [[ $# -ge 3 ]]; then
                if [[ ${one_line} =~ $3 ]]; then
