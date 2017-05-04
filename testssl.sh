@@ -5758,11 +5758,17 @@ certificate_info() {
           while read san; do
                [[ -n "$san" ]] && all_san+="$san "
           done <<< "$sans"
-          pr_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
+          prln_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
-          prln_svrty_high "missing (NOT ok)"
-          fileout "${json_prefix}san" "HIGH" "subjectAltName (SAN) : --"
+          if [[ $SERVICE == "HTTP" ]]; then
+               # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280, https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
+               pr_svrty_medium "missing (NOT ok)"; outln " -- Browser will complain soon"
+               fileout "${json_prefix}san" "MEDIUM" "subjectAltName (SAN) : -- Browser will complain soon"
+          else
+               pr_svrty_low "missing"; outln " -- no SAN is deprecated"
+               fileout "${json_prefix}san" "LOW" "subjectAltName (SAN) : -- no SAN is deprecated"
+          fi
      fi
      out "$indent"; pr_bold " Issuer                       "
      #FIXME: oid would be better maybe (see above)
