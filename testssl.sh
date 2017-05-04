@@ -6848,7 +6848,7 @@ starttls_full_read(){
 
      local oldIFS="$IFS"
      IFS=''
-     while read -r -t $STARTTLS_SLEEP one_line; do
+     while read -r -t $STARTTLS_SLEEP one_line; ret=$?; (exit $ret); do
           debugme echo "S: ${one_line}"
           if [[ $# -ge 3 ]]; then
                if [[ ${one_line} =~ $3 ]]; then
@@ -6868,7 +6868,6 @@ starttls_full_read(){
                return 2
           fi
      done <&5
-     ret=$?
      debugme echo "=== full read error/timeout ==="
      IFS="${oldIFS}"
      return $ret
