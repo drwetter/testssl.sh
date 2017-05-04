@@ -5761,10 +5761,9 @@ certificate_info() {
           pr_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
-          out "-- "
-          fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : --"
+          prln_svrty_high "missing (NOT ok)"
+          fileout "${json_prefix}san" "HIGH" "subjectAltName (SAN) : --"
      fi
-     outln
      out "$indent"; pr_bold " Issuer                       "
      #FIXME: oid would be better maybe (see above)
      issuer="$($OPENSSL x509 -in  $HOSTCERT -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
