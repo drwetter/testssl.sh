@@ -3521,6 +3521,7 @@ run_client_simulation() {
      local i=0
      local name tls proto cipher temp what_dh bits curve
      local has_dh_bits using_sockets=true
+     local client_service
 
      # source the external file
      . "$TESTSSL_INSTALL_DIR/etc/client_simulation.txt" 2>/dev/null
@@ -3529,14 +3530,18 @@ run_client_simulation() {
           return 1
      fi
 
-     #FIXME, see client_simulation branch which has to be merged
-     if "$SSL_NATIVE" || [[ -n "$STARTTLS" ]]; then
-          using_sockets=false
-     fi
+     "$SSL_NATIVE" && using_sockets=false
 
-     # doesn't make sense for other services
-     if [[ $SERVICE != "HTTP" ]];  then
-          return 0
+     if [[ $SERVICE != "" ]];  then
+          client_service="$SERVICE"
+     else
+          # Can we take the service from STARTTLS?
+           if [[ -n "$STARTTLS_PROTOCOL" ]]; then
+               client_service=$(toupper "${STARTTLS_PROTOCOL%s}")    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+          else
+               outln "Could not determine which protocol was started, only simulating generic clients."
+               client_service="undetermined"
+          fi
      fi
 
      outln
@@ -3550,7 +3555,7 @@ run_client_simulation() {
      outln
 
      debugme tmln_out
-     
+
      if "$WIDE"; then
           if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
                out " Browser                          Protocol  Cipher Suite Name (OpenSSL)      "
@@ -3567,116 +3572,121 @@ run_client_simulation() {
           outln
      fi
      for name in "${short[@]}"; do
-          out " $(printf -- "%-33s" "${names[i]}")"
-          if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
-               client_simulation_sockets "${handshakebytes[i]}"
-               sclient_success=$?
-               if [[ $sclient_success -eq 0 ]]; then
-                    if [[ "0x${DETECTED_TLS_VERSION}" -lt ${lowest_protocol[i]} ]] || \
-                       [[ "0x${DETECTED_TLS_VERSION}" -gt ${highest_protocol[i]} ]]; then
-                         sclient_success=1
-                    fi
-                    [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
-               fi
-          else
-               ! "$HAS_NO_SSL2" && protos[i]="$(sed 's/-no_ssl2//' <<< "${protos[i]}")"
-               debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
-               $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
-               sclient_connect_successful $? $TMPFILE
-               sclient_success=$?
-          fi
-          if [[ $sclient_success -eq 0 ]]; then
-               # If an ephemeral DH key was used, check that the number of bits is within range.
-               temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")        # extract line
-               what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
-               bits=$(awk -F',' '{ print $3 }' <<< $temp)
-               if grep -q bits <<< $bits; then
-                    curve="$(strip_spaces "$(awk -F',' '{ print $2 }' <<< $temp)")"
-               else
-                    curve=""
-                    bits=$(awk -F',' '{ print $2 }' <<< $temp)
-               fi
-               bits="${bits/bits/}"
-               bits="${bits// /}"
-               if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
-                    curve="$what_dh"
-                    what_dh="ECDH"
-               fi
-               if [[ "$what_dh" == "DH" ]]; then
-                    [[ ${minDhBits[i]} -ne -1 ]] && [[ $bits -lt ${minDhBits[i]} ]] && sclient_success=1
-                    [[ ${maxDhBits[i]} -ne -1 ]] && [[ $bits -gt ${maxDhBits[i]} ]] && sclient_success=1
-               fi
-          fi
-          if [[ $sclient_success -ne 0 ]]; then
-               outln "No connection"
-               fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
-          else
-               proto=$(get_protocol $TMPFILE)
-               # hack:
-               [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
-               [[ "$proto" == SSLv3 ]] && proto="SSLv3  "
-               if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
-                    # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
-                    for tls in ${tlsvers[i]}; do
-                         debugme echo "$OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
-                         $OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
-                         sclient_connect_successful $? $TMPFILE
+          if ${current[i]} ; then
+               # for ANY we test this service or if the service we determined from STARTTLS matches
+               if [[ "${service[i]}" == "ANY" ]] || grep -q "$client_service" <<< "${service[i]}"; then
+                    out " $(printf -- "%-33s" "${names[i]}")"
+                    if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
+                         client_simulation_sockets "${handshakebytes[i]}"
                          sclient_success=$?
                          if [[ $sclient_success -eq 0 ]]; then
-                              case "$tls" in
-                                   "-tls1_2")
-                                        break
-                                        ;;
-                                   "-tls1_1")
-                                        proto="TLSv1.1"
-                                        break
-                                        ;;
-                                   "-tls1")
-                                        proto="TLSv1.0"
-                                        break
-                                        ;;
-                              esac
+                              if [[ "0x${DETECTED_TLS_VERSION}" -lt ${lowest_protocol[i]} ]] || \
+                                 [[ "0x${DETECTED_TLS_VERSION}" -gt ${highest_protocol[i]} ]]; then
+                                   sclient_success=1
+                              fi
+                              [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
                          fi
-                    done
-               fi
-               cipher=$(get_cipher $TMPFILE)
-               if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$cipher" == TLS_* ]] || [[ "$cipher" == SSL_* ]] ); then
-                    cipher="$(rfc2openssl "$cipher")"
-                    [[ -z "$cipher" ]] && cipher=$(get_cipher $TMPFILE)
-               elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
-                    cipher="$(openssl2rfc "$cipher")"
-                    [[ -z "$cipher" ]] && cipher=$(get_cipher $TMPFILE)
-               fi
-               if ! "$WIDE"; then
-                    out "$proto $cipher"
-               elif [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
-                    out "$(printf -- "%-7s   %-33s" "$proto" "$cipher")"
-               else
-                    out "$(printf -- "%-7s   %-49s" "$proto" "$cipher")"
-               fi
-               if ! "$WIDE"; then
-                    "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
-                    "$HAS_DH_BITS" && read_dhbits_from_file $TMPFILE
-                    "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && HAS_DH_BITS=$has_dh_bits
-               elif [[ -n "$what_dh" ]]; then
-                    [[ -n "$curve" ]] && curve="($curve)"
-                    if [[ "$what_dh" == "ECDH" ]]; then
-                         pr_ecdh_quality "$bits" "$(printf -- "%-12s" "$bits bit $what_dh") $curve"
                     else
-                         pr_dh_quality "$bits" "$(printf -- "%-12s" "$bits bit $what_dh") $curve"
+                         ! "$HAS_NO_SSL2" && protos[i]="$(sed 's/-no_ssl2//' <<< "${protos[i]}")"
+                         debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
+                         $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+                         sclient_connect_successful $? $TMPFILE
+                         sclient_success=$?
                     fi
-               elif "$HAS_DH_BITS" || ( "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] ); then
-                    out "No FS"
-               fi
-               outln
-               if [[ -n "${warning[i]}" ]]; then
-                    out "                            "
-                    outln "${warning[i]}"
-               fi
-               fileout "client_${short[i]}" "INFO" \
-                    "$(strip_spaces "${names[i]}") client simulation:  $proto $cipher   ${warning[i]}"
-               debugme cat $TMPFILE
-          fi
+                    if [[ $sclient_success -eq 0 ]]; then
+                         # If an ephemeral DH key was used, check that the number of bits is within range.
+                         temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")        # extract line
+                         what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
+                         bits=$(awk -F',' '{ print $3 }' <<< $temp)
+                         if grep -q bits <<< $bits; then
+                              curve="$(strip_spaces "$(awk -F',' '{ print $2 }' <<< $temp)")"
+                         else
+                              curve=""
+                              bits=$(awk -F',' '{ print $2 }' <<< $temp)
+                         fi
+                         bits="${bits/bits/}"
+                         bits="${bits// /}"
+                         if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
+                              curve="$what_dh"
+                              what_dh="ECDH"
+                         fi
+                         if [[ "$what_dh" == "DH" ]]; then
+                              [[ ${minDhBits[i]} -ne -1 ]] && [[ $bits -lt ${minDhBits[i]} ]] && sclient_success=1
+                              [[ ${maxDhBits[i]} -ne -1 ]] && [[ $bits -gt ${maxDhBits[i]} ]] && sclient_success=1
+                         fi
+                    fi
+                    if [[ $sclient_success -ne 0 ]]; then
+                         outln "No connection"
+                         fileout "client_${short[i]}" "INFO" "$(strip_spaces "${names[i]}") client simulation: No connection"
+                    else
+                         proto=$(get_protocol $TMPFILE)
+                         # hack:
+                         [[ "$proto" == TLSv1 ]] && proto="TLSv1.0"
+                         [[ "$proto" == SSLv3 ]] && proto="SSLv3  "
+                         if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
+                              # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
+                              for tls in ${tlsvers[i]}; do
+                                   debugme echo "$OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
+                                   $OPENSSL s_client $tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+                                   sclient_connect_successful $? $TMPFILE
+                                   sclient_success=$?
+                                   if [[ $sclient_success -eq 0 ]]; then
+                                        case "$tls" in
+                                             "-tls1_2")
+                                                  break
+                                                  ;;
+                                             "-tls1_1")
+                                                  proto="TLSv1.1"
+                                                  break
+                                                  ;;
+                                             "-tls1")
+                                                  proto="TLSv1.0"
+                                                  break
+                                                  ;;
+                                        esac
+                                   fi
+                              done
+                         fi
+                         cipher=$(get_cipher $TMPFILE)
+                         if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$cipher" == TLS_* ]] || [[ "$cipher" == SSL_* ]] ); then
+                              cipher="$(rfc2openssl "$cipher")"
+                              [[ -z "$cipher" ]] && cipher=$(get_cipher $TMPFILE)
+                         elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
+                              cipher="$(openssl2rfc "$cipher")"
+                              [[ -z "$cipher" ]] && cipher=$(get_cipher $TMPFILE)
+                         fi
+                         if ! "$WIDE"; then
+                              out "$proto $cipher"
+                         elif [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
+                              out "$(printf -- "%-7s   %-33s" "$proto" "$cipher")"
+                         else
+                              out "$(printf -- "%-7s   %-49s" "$proto" "$cipher")"
+                         fi
+                         if ! "$WIDE"; then
+                              "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
+                              "$HAS_DH_BITS" && read_dhbits_from_file $TMPFILE
+                              "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && HAS_DH_BITS=$has_dh_bits
+                         elif [[ -n "$what_dh" ]]; then
+                              [[ -n "$curve" ]] && curve="($curve)"
+                              if [[ "$what_dh" == "ECDH" ]]; then
+                                   pr_ecdh_quality "$bits" "$(printf -- "%-12s" "$bits bit $what_dh") $curve"
+                              else
+                                   pr_dh_quality "$bits" "$(printf -- "%-12s" "$bits bit $what_dh") $curve"
+                              fi
+                         elif "$HAS_DH_BITS" || ( "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] ); then
+                              out "No FS"
+                         fi
+                         outln
+                         if [[ -n "${warning[i]}" ]]; then
+                              out "                            "
+                              outln "${warning[i]}"
+                         fi
+                         fileout "client_${short[i]}" "INFO" \
+                              "$(strip_spaces "${names[i]}") client simulation:  $proto $cipher   ${warning[i]}"
+                         debugme cat $TMPFILE
+                    fi
+               fi   # correct service?
+          fi   #current?
           i=$((i+1))
      done
      tmpfile_handle $FUNCNAME.txt
