@@ -9104,7 +9104,7 @@ get_session_ticket_tls() {
      local sessticket_tls=""
 
      #FIXME: we likely have done this already before (either @ run_server_defaults() or at least the output from a previous handshake) --> would save 1x connect
-     #ATTENTION: we don't do SNI here as we assume this is a vulnerabilty of the TLS stack. If we do SNI here, we'd also need to do it in the ClientHello
+     #ATTENTION: we DO NOT do SNI here as we assume this is a vulnerabilty of the TLS stack. If we do SNI here, we'd also need to do it in the ClientHello
      #           of run_ticketbleed() otherwise the ticket will be different and the whole thing won't work!
      sessticket_tls="$($OPENSSL s_client $BUGS $OPTIMAL_PROTO $PROXY -connect $NODEIP:$PORT </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
      sessticket_tls="$(sed -e 's/^.* - /x/g' -e 's/  .*$//g' <<< "$sessticket_tls" | tr '\n' ',')"
@@ -9115,7 +9115,7 @@ get_session_ticket_tls() {
 # see https://blog.filippo.io/finding-ticketbleed/ |  http://ticketbleed.com/
 run_ticketbleed() {
      local session_tckt_tls=""
-     local -i len_ch=216                            # fixed len of clienthello below
+     local -i len_ch=300                            # fixed len of prepared clienthello below
      local sid="x00,x0B,xAD,xC0,xDE,x00,"           # some abitratry bytes
      local len_sid="$(( ${#sid} / 4))"
      local xlen_sid="$(dec02hex $len_sid)"
@@ -9181,12 +9181,12 @@ run_ticketbleed() {
      client_hello="
      # TLS header (5 bytes)
      ,x16,               # Content type (x16 for handshake)
-     x03, x01,           # TLS version record layer
+     x03,x01,            # TLS version record layer
                          # Length Secure Socket Layer follows:
      $xlen_handshake_ssl_layer,
      # Handshake header
      x01,                # Type (x01 for ClientHello)
-                         # Length of client hello follows:
+                         # Length of ClientHello follows:
      x00, $xlen_handshake_record_layer,
      $tls_hexcode,        # TLS Version
      # Random (32 byte) Unix time etc, see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
@@ -9196,39 +9196,63 @@ run_ticketbleed() {
      x03, x90, x9f, x77, x04, x33, xff, xff,
      $xlen_sid,          # Session ID length
      $sid
-     x00, x66,           # Cipher suites length
-     # Cipher suites (51 suites)
-     xc0, x14, xc0, x0a, xc0, x22, xc0, x21,
-     x00, x39, x00, x38, x00, x88, x00, x87,
-     xc0, x0f, xc0, x05, x00, x35, x00, x84,
-     xc0, x12, xc0, x08, xc0, x1c, xc0, x1b,
-     x00, x16, x00, x13, xc0, x0d, xc0, x03,
-     x00, x0a, xc0, x13, xc0, x09, xc0, x1f,
-     xc0, x1e, x00, x33, x00, x32, x00, x9a,
-     x00, x99, x00, x45, x00, x44, xc0, x0e,
-     xc0, x04, x00, x2f, x00, x96, x00, x41,
-     xc0, x11, xc0, x07, xc0, x0c, xc0, x02,
-     x00, x05, x00, x04, x00, x15, x00, x12,
-     x00, x09, x00, x14, x00, x11, x00, x08,
-     x00, x06, x00, x03, x00, xff,
+
+     x00, x6a,           # Cipher suites length 106
+     # 53 Cipher suites
+     xc0,x14, xc0,x13, xc0,x0a, xc0,x21,
+     x00,x39, x00,x38, x00,x88, x00,x87,
+     xc0,x0f, xc0,x05, x00,x35, x00,x84,
+     xc0,x12, xc0,x08, xc0,x1c, xc0,x1b,
+     x00,x16, x00,x13, xc0,x0d, xc0,x03,
+     x00,x0a, xc0,x13, xc0,x09, xc0,x1f,
+     xc0,x1e, x00,x33, x00,x32, x00,x9a,
+     x00,x99, x00,x45, x00,x44, xc0,x0e,
+     xc0,x04, x00,x2f, x00,x96, x00,x41,
+     xc0,x11, xc0,x07, xc0,x0c, xc0,x02,
+     x00,x05, x00,x04, x00,x15, x00,x12,
+     xc0,x30, xc0,x2f, x00,x9d, x00,x9c,
+     x00,x3d, x00,x3c, x00,x9f, x00,x9e,
+     x00,xff,
      x01,               # Compression methods length
      x00,               # Compression method (x00 for NULL)
-     x01, x0b,          # Extensions length
+     x01,x5b,           # Extensions length    ####### 10b + x14 + x3c
+# Extension Padding
+     x00,x15,
+     # length:
+     x00,x38,
+     x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00,
+     x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00,
+     x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00,
 # Extension: ec_point_formats
-     x00, x0b, x00, x04, x03, x00, x01, x02,
+     x00,x0b,
+     # length:
+     x00,x04,
+     # data:
+     x03,x00, x01,x02,
 # Extension: elliptic_curves
-     x00, x0a, x00, x34, x00, x32, x00, x0e,
-     x00, x0d, x00, x19, x00, x0b, x00, x0c,
-     x00, x18, x00, x09, x00, x0a, x00, x16,
-     x00, x17, x00, x08, x00, x06, x00, x07,
-     x00, x14, x00, x15, x00, x04, x00, x05,
-     x00, x12, x00, x13, x00, x01, x00, x02,
-     x00, x03, x00, x0f, x00, x10, x00, x11,
+     x00,x0a,
+     # length
+     x00,x34,
+     x00,x32,
+     # data:
+     x00,x0e, x00,x0d, x00,x19, x00,x0b, x00,x0c,
+     x00,x18, x00,x09, x00,x0a, x00,x16,
+     x00,x17, x00,x08, x00,x06, x00,x07,
+     x00,x14, x00,x15, x00,x04, x00,x05,
+     x00,x12, x00,x13, x00,x01, x00,x02,
+     x00,x03, x00,x0f, x00,x10, x00,x11,
+# Extension: Signature Algorithms
+     x00,x0d,
+     # length:
+     x00,x10,
+     # data:
+     x00,x0e ,x04,x01, x05,x01 ,x02,x01, x04,x03, x05,x03,
+     x02,x03, x02,x02,
 # Extension: SessionTicket TLS
      x00, x23,
-# length of SessionTicket TLS
+     # length of SessionTicket TLS
      x00, $xlen_tckt_tls,
-# Session Ticket
+     # data, Session Ticket
      $session_tckt_tls                       # here we have the comma already
 # Extension: Heartbeat
      x00, x0f, x00, x01, x01"
