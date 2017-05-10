@@ -305,9 +305,9 @@ SERVER_COUNTER=0                        # Counter for multiple servers
 
 ########### Global variables for parallel mass testing
 readonly PARALLEL_SLEEP=1                 # Time to sleep after starting each test
-readonly MAX_WAIT_TEST=600                # Maximum time to wait for a test to complete
+readonly MAX_WAIT_TEST=1200               # Maximum time (in seconds) to wait for a test to complete
 readonly MAX_PARALLEL=20                  # Maximum number of tests to run in parallel
-declare -a -i PARALLEL_TESTING_PID=()     # process id for each child test
+declare -a -i PARALLEL_TESTING_PID=()     # process id for each child test (or 0 to indicate test has already completed)
 declare -a PARALLEL_TESTING_CMDLINE=()    # command line for each child test
 declare -i NR_PARALLEL_TESTS=0            # number of parallel tests run
 declare -i NEXT_PARALLEL_TEST_TO_FINISH=0 # number of parallel tests that have completed and have been processed
@@ -11311,7 +11311,8 @@ cleanup () {
      # to be killed before $TEMPDIR is deleted. Otherwise, error messages
      # will be created if testssl.sh is stopped before all testing is complete.
      while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
-          if ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
+          if [[ ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} -ne 0 ]] && \
+             ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
                kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >&2 2>/dev/null
                wait ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} 2>/dev/null    # make sure pid terminated, see wait(1p)
           else
@@ -12246,6 +12247,9 @@ get_next_message_testing_parallel_result() {
 #FIXME: not called/tested yet
 run_mass_testing_parallel() {
      local cmdline=""
+     local -i i nr_active_tests=0
+     local -a -i start_time=()
+     local -i curr_time
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
           fatal "Can't read file \"$FNAME\"" "2"
@@ -12269,32 +12273,73 @@ run_mass_testing_parallel() {
                CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
           fi
           PARALLEL_TESTING_PID[NR_PARALLEL_TESTS]=$!
+          start_time[NR_PARALLEL_TESTS]=$(date +%s)
+          debugme echo "Started test #$NR_PARALLEL_TESTS"
           NR_PARALLEL_TESTS+=1
+          nr_active_tests+=1
           sleep $PARALLEL_SLEEP
           # Get the results of any completed tests
           while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
-               if ! ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
+               if [[ ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} -eq 0 ]]; then
                     get_next_message_testing_parallel_result
                     NEXT_PARALLEL_TEST_TO_FINISH+=1
+               elif ! ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
+                    debugme echo "Test #$NEXT_PARALLEL_TEST_TO_FINISH complete"
+                    get_next_message_testing_parallel_result
+                    NEXT_PARALLEL_TEST_TO_FINISH+=1
+                    nr_active_tests=$nr_active_tests-1
                else
                     break
                fi
           done
-          if [[ $NR_PARALLEL_TESTS-$NEXT_PARALLEL_TEST_TO_FINISH -ge $MAX_PARALLEL ]]; then
-               # The maximum number of tests that may be run in parallel has
-               # been reached. Need to wait for one to finish before starting
-               # another.
-               wait_kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} $MAX_WAIT_TEST
-               [[ $? -eq 0 ]] && get_next_message_testing_parallel_result
-               NEXT_PARALLEL_TEST_TO_FINISH+=1
+          if [[ $nr_active_tests -ge $MAX_PARALLEL ]]; then
+               curr_time=$(date +%s)
+               while true; do
+                    # Check to see if any test completed
+                    for (( i=NEXT_PARALLEL_TEST_TO_FINISH; i < NR_PARALLEL_TESTS; i++ )); do
+                         if [[ ${PARALLEL_TESTING_PID[i]} -ne 0 ]] && \
+                            ! ps ${PARALLEL_TESTING_PID[i]} >/dev/null ; then
+                              PARALLEL_TESTING_PID[i]=0
+                              nr_active_tests=$nr_active_tests-1
+                              debugme echo "Test #$i complete"
+                              break
+                         fi
+                    done
+                    [[ $nr_active_tests -lt $MAX_PARALLEL ]] && break
+                    if [[ $curr_time-${start_time[NEXT_PARALLEL_TEST_TO_FINISH]} -ge $MAX_WAIT_TEST ]]; then
+                         # No test completed in the allocated time, so the first one to
+                         # start will be killed.
+                         kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >&2 2>/dev/null
+                         wait ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} 2>/dev/null    # make sure pid terminated, see wait(1p)
+                         debugme echo "Test #$NEXT_PARALLEL_TEST_TO_FINISH stopped"
+                         NEXT_PARALLEL_TEST_TO_FINISH+=1
+                         nr_active_tests=$nr_active_tests-1
+                         break
+                    fi
+                    debugme echo "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH"
+                    sleep 1
+                    curr_time+=1
+               done
           fi
      done < "$FNAME"
 
      # Wait for remaining tests to finish
+     curr_time=$(date +%s)
      while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
-          wait_kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} $MAX_WAIT_TEST
-          [[ $? -eq 0 ]] && get_next_message_testing_parallel_result
-          NEXT_PARALLEL_TEST_TO_FINISH+=1
+          if [[ ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} -eq 0 ]] || \
+             ! ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
+               get_next_message_testing_parallel_result
+               NEXT_PARALLEL_TEST_TO_FINISH+=1
+          elif [[ $curr_time-${start_time[NEXT_PARALLEL_TEST_TO_FINISH]} -ge $MAX_WAIT_TEST ]]; then
+               kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >&2 2>/dev/null
+               wait ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} 2>/dev/null    # make sure pid terminated, see wait(1p)
+               debugme echo "Test #$NEXT_PARALLEL_TEST_TO_FINISH stopped"
+               NEXT_PARALLEL_TEST_TO_FINISH+=1
+          else
+               debugme echo "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH"
+               sleep 1
+               curr_time+=1
+          fi
      done
      return $?
 }
