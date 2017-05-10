@@ -4968,7 +4968,13 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " Chain of trust"; out "               "
-     determine_trust "$json_prefix" # Also handles fileout
+     if [[ "$issuer_O" =~ StartCom ]] || [[ "$issuer_O" =~ WoSign ]] || [[ "$issuer_CN" =~ StartCom ]] || [[ "$issuer_CN" =~ WoSign ]]; then
+          # Shortcut for this special case here.
+          pr_italic "WoSign/StartCom"; out " are " ; prln_svrty_critical "not trusted anymore (NOT ok)"
+          fileout "${json_prefix}issuer" "CRITICAL" "Issuer: not trusted anymore (WoSign/StartCom)"
+     else
+          determine_trust "$json_prefix" # Also handles fileout
+     fi
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
@@ -9205,4 +9211,4 @@ fi
 exit $?
 
 
-#  $Id: testssl.sh,v 1.580 2017/04/05 18:30:16 dirkw Exp $
+#  $Id: testssl.sh,v 1.582 2017/05/10 19:04:47 dirkw Exp $
