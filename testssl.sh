@@ -6973,7 +6973,7 @@ fd_socket() {
                pr_magenta "$PROG_NAME: unable to open a socket to proxy $PROXYIP:$PROXYPORT"
                return 6
           fi
-          echo "CONNECT $nodeip:$PORT" >&5
+          echo -e "CONNECT $nodeip:$PORT HTTP/1.0\n" >&5
           while true ; do
                read proyxline <&5
                if [[ "${proyxline%/*}" == "HTTP" ]]; then
