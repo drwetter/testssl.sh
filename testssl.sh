@@ -11484,7 +11484,7 @@ prepare_logging() {
      tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>"$LOGFILE"
      tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>"$LOGFILE"
      tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>"$LOGFILE"
-     exec > >(tee -a "$LOGFILE")
+     exec > >(tee -a -i "$LOGFILE")
 }
 
 
