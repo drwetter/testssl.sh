@@ -1143,6 +1143,7 @@ out_row_aligned_max_width_by_entry() {
 tmpfile_handle() {
      local savefile="$2"
      [[ -z "$savefile" ]] && savefile=$TMPFILE
+#FIXME: make sure/find out if we do not need $TEMPDIR/$NODEIP.$1" if debug=0. We would save fs access here
      mv $savefile "$TEMPDIR/$NODEIP.$1" 2>/dev/null
      [[ $ERRFILE =~ dev.null ]] && return 0 || \
           mv $ERRFILE "$TEMPDIR/$NODEIP.$(sed 's/\.txt//g' <<<"$1").errorlog" 2>/dev/null
@@ -1271,17 +1272,17 @@ service_detection() {
      local addcmd=""
 
      if ! $CLIENT_AUTH; then
-          # SNI is nonsense for !HTTPS but fortunately for other protocols s_client doesn't seem to care
+          # SNI is not standardardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
           [[ ! "$1" =~ ssl ]] && addcmd="$SNI"
           printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $addcmd >$TMPFILE 2>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
           was_killed=$?
-          head $TMPFILE | grep -aq ^HTTP && SERVICE=HTTP
-          head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
-          head $TMPFILE | grep -aq POP && SERVICE=POP
-          head $TMPFILE | grep -aq IMAP && SERVICE=IMAP
-          head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
-          debugme head -50 $TMPFILE
+          head $TMPFILE | grep -aq '^HTTP\/' && SERVICE=HTTP
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq POP && SERVICE=POP
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq IMAP && SERVICE=IMAP
+          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
+          debugme head -50 $TMPFILE | sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<\?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d'
      fi
 
      out " Service detected:      $CORRECT_SPACES"
@@ -1361,8 +1362,8 @@ run_http_header() {
      debugme echo "$NOW_TIME: $HTTP_TIME"
 
      # delete from pattern til the end. We ignore any leading spaces (e.g. www.amazon.de)
-     sed  -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<?XML/,$d' \
-          -e '/<xml/,$d' -e '/<?xml/,$d'  -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
+     sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' \
+         -e '/<\?XML/,$d' -e '/<?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
 #### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
      mv $HEADERFILE.2  $HEADERFILE  # sed'ing in place doesn't work with BSD and Linux simultaneously
      ret=0
@@ -7593,9 +7594,9 @@ parse_tls_serverhello() {
           msg_len=2*$(hex2dec "${tls_hello_ascii:i:4}")
           i=$i+4
 
-          if [[ $DEBUG -ge 2 ]]; then
-               echo      "     tls_protocol (reclyr):  0x$tls_protocol"
-               tm_out  "     tls_content_type:       0x$tls_content_type"
+          if [[ $DEBUG -ge 3 ]]; then
+               echo  "     protocol (rec. layer):  0x$tls_protocol"
+               echo  "     tls_content_type:       0x$tls_content_type"
                case $tls_content_type in
                     15) tmln_out " (alert)" ;;
                     16) tmln_out " (handshake)" ;;
@@ -7716,7 +7717,7 @@ parse_tls_serverhello() {
      # Now extract just the server hello, certificate, certificate status,
      # and server key exchange handshake messages.
      tls_handshake_ascii_len=${#tls_handshake_ascii}
-     if [[ $DEBUG -ge 2 ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
+     if [[ $DEBUG -ge 3 ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
           echo "TLS handshake messages:"
      fi
      for (( i=0; i<tls_handshake_ascii_len; i=i+msg_len )); do
@@ -7736,7 +7737,7 @@ parse_tls_serverhello() {
           msg_len=2*$(hex2dec "${tls_handshake_ascii:i:6}")
           i=$i+6
 
-          if [[ $DEBUG -ge 2 ]]; then
+          if [[ $DEBUG -ge 3 ]]; then
                tm_out  "     handshake type:         0x${tls_msg_type}"
                case $tls_msg_type in
                     00) tmln_out " (hello_request)" ;;
@@ -7993,7 +7994,7 @@ parse_tls_serverhello() {
      fi
      [[ -n "$tls_extensions" ]] && echo -e "$tls_extensions" >> $TMPFILE
 
-     if [[ $DEBUG -ge 2 ]]; then
+     if [[ $DEBUG -ge 3 ]]; then
           echo "TLS server hello message:"
           if [[ $DEBUG -ge 4 ]]; then
                echo "     tls_protocol:           0x$tls_protocol2"
@@ -9120,13 +9121,17 @@ run_ticketbleed() {
      local sid="x00,x0B,xAD,xC0,xDE,x00,"           # some abitratry bytes
      local len_sid="$(( ${#sid} / 4))"
      local xlen_sid="$(dec02hex $len_sid)"
-     local -i len_tckt_tls=0
+     local -i len_tckt_tls=0 nr_sid_detected=0
      local xlen_tckt_tls="" xlen_handshake_record_layer="" xlen_handshake_ssl_layer=""
      local -i len_handshake_record_layer=0
      local cve="CVE-2016-9244"
      local cwe="CWE-200"
      local hint=""
      local tls_version=""
+     local i
+     local -a memory sid_detected
+     local early_exit=true
+     local ret=0
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
@@ -9163,20 +9168,19 @@ run_ticketbleed() {
                SSLv3) tls_hexcode="x03, x00" ;;
           esac
      fi
-     debugme echo "using protocol $tls_hexcode"
+     debugme echo -e "\nusing protocol $tls_hexcode"
 
      session_tckt_tls="$(get_session_ticket_tls)"
-     debugme echo " session ticket TLS \"$session_tckt_tls\""
      if [[ "$session_tckt_tls" == "," ]]; then
           pr_done_best "not vulnerable (OK)"
           outln ", no session tickets"
           fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable" "$cve" "$cwe"
+          debugme echo " session ticket TLS \"$session_tckt_tls\""
           return 0
      fi
 
      len_tckt_tls=${#session_tckt_tls}
      len_tckt_tls=$(( len_tckt_tls / 4))
-
      xlen_tckt_tls="$(dec02hex $len_tckt_tls)"
      len_handshake_record_layer="$(( len_sid + len_ch + len_tckt_tls ))"
      xlen_handshake_record_layer="$(dec04hex "$len_handshake_record_layer")"
@@ -9210,7 +9214,6 @@ run_ticketbleed() {
      x03, x90, x9f, x77, x04, x33, xff, xff,
      $xlen_sid,          # Session ID length
      $sid
-
      x00, x6a,           # Cipher suites length 106
      # 53 Cipher suites
      xc0,x14, xc0,x13, xc0,x0a, xc0,x21,
@@ -9271,71 +9274,102 @@ run_ticketbleed() {
 # Extension: Heartbeat
      x00, x0f, x00, x01, x01"
 
-     fd_socket 5 || return 6
-     debugme tmln_out "\nsending client hello "
-     socksend "$client_hello" 0
+     # we do 3 client hellos, and see whether different memmory is returned
+     for i in 1 2 3; do
+          fd_socket 5 || return 6
+          debugme tmln_out "\nsending client hello "
+          socksend "$client_hello" 0
 
-     debugme tmln_out "\nreading server hello (ticketbleed reply)"
-     if "$FAST_SOCKET"; then
-          tls_hello_ascii=$(sockread_fast 32768)
-     else
-          sockread_serverhello 32768 $CCS_MAX_WAITSOCK
-          tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
-     fi
-     [[ "$DEBUG" -ge 5 ]] && echo "$tls_hello_ascii"
-
-     if [[ "$DEBUG" -ge 4 ]]; then
-          echo "============================="
-          echo "$tls_hello_ascii"
-          echo "============================="
-     fi
-
-     if [[ "${tls_hello_ascii:0:2}" == "16" ]]; then
-          debugme echo -n "Handshake (TLS version: ${tls_hello_ascii:2:4}), "
-          if [[ "${tls_hello_ascii:10:6}" == 020000 ]]; then
-               debugme echo -n "ServerHello -- "
+          debugme tmln_out "\nreading server hello (ticketbleed reply)"
+          if "$FAST_SOCKET"; then
+               tls_hello_ascii=$(sockread_fast 32768)
           else
-               debugme echo -n "Message type: ${tls_hello_ascii:10:6} -- "
+               sockread_serverhello 32768 $CCS_MAX_WAITSOCK
+               tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
           fi
-          sid_detected="${tls_hello_ascii:88:32}"
-          sid_input=$(sed -e 's/x//g' -e 's/,//g' <<< "$sid")
-          if [[ "$DEBUG" -ge 2 ]]; then
-               echo
-               echo "TLS version, record layer: ${tls_hello_ascii:18:4}"
-               echo "Random bytes / timestamp:  ${tls_hello_ascii:22:64}"
-               echo "Session ID:                $sid_detected"
+          [[ "$DEBUG" -ge 5 ]] && echo "$tls_hello_ascii"
+          if [[ "$DEBUG" -ge 4 ]]; then
+               echo "============================="
+               echo "$tls_hello_ascii"
+               echo "============================="
           fi
-          if grep -q $sid_input <<< "$sid_detected"; then
-               pr_svrty_critical "VULNERABLE (NOT ok)"
-               fileout "ticketbleed" "CRITICAL" "Ticketbleed: VULNERABLE" "$cve" "$cwe" "$hint"
-          else
-               out "likely "
+
+          if [[ "${tls_hello_ascii:0:2}" == "15" ]]; then
+               debugme echo -n "TLS Alert ${tls_hello_ascii:10:4} (TLS version: ${tls_hello_ascii:2:4}) -- "
                pr_done_best "not vulnerable (OK)"
-               out " -- but received a session ID back which shouldn't happen"
-               fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable, but with a session ID reply which shouldn't happen" "$cve" "$cwe"
-          fi
-     elif [[ "${tls_hello_ascii:0:2}" == "15" ]]; then
-          debugme echo -n "TLS Alert ${tls_hello_ascii:10:4} (TLS version: ${tls_hello_ascii:2:4}) -- "
-          pr_done_best "not vulnerable (OK)"
-          fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable" "$cve" "$cwe"
-     else
-          ret=7
-          pr_warning "test failed"
-          if [[  -z "${tls_hello_ascii:0:2}" ]]; then
-               out ": reply empty"
-               fileout "ticketbleed" "WARN" "Ticketbleed: test failed with empty ServerHello" "$cve" "$cwe"
+               fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable" "$cve" "$cwe"
+               break
+          elif [[ -z "${tls_hello_ascii:0:2}" ]]; then
+               pr_done_best "not vulnerable (OK)"
+               out ", reply empty"
+               fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable" "$cve" "$cwe"
+               break
+          elif [[ "${tls_hello_ascii:0:2}" == "16" ]]; then
+               early_exit=false
+               debugme echo -n "Handshake (TLS version: ${tls_hello_ascii:2:4}), "
+               if [[ "${tls_hello_ascii:10:6}" == 020000 ]]; then
+                    debugme echo -n "ServerHello -- "
+               else
+                    debugme echo -n "Message type: ${tls_hello_ascii:10:6} -- "
+               fi
+               sid_input=$(sed -e 's/x//g' -e 's/,//g' <<< "$sid")
+               sid_detected[i]="${tls_hello_ascii:88:32}"
+               memory[i]="${tls_hello_ascii:$((88+ len_sid*2)):$((32 - len_sid*2))}"
+               if [[ "$DEBUG" -ge 2 ]]; then
+                    echo
+                    echo "TLS version, record layer: ${tls_hello_ascii:18:4}"
+                    echo "Session ID:                ${sid_detected[i]}"
+                    echo "memory:                    ${memory[i]}"
+                    echo -n "$sid_input in SID:       " ;
+                         grep -q $sid_input <<< "${sid_detected[i]}" && echo "yes" || echo "no"
+               fi
+               [[ "$DEBUG" -ge 1 ]] && echo $tls_hello_ascii >$TEMPDIR/$FUNCNAME.tls_hello_ascii${i}.txt
           else
+               ret=7
+               pr_warning "test failed"
                out " around line $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})"
                fileout "ticketbleed" "WARN" "Ticketbleed: test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
+               break
+          fi
+          debugme echo "sending close_notify..."
+          if [[ ${tls_hello_ascii:18:4} == "0300" ]]; then
+               socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+          else
+               socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+          fi
+          close_socket
+     done
+
+     if ! "$early_exit"; then
+          # here we test the replys if a TLS server hello was received >1x
+          for i in 1 2 3 ; do
+               if grep -q $sid_input <<< "${sid_detected[i]}"; then
+                    # was our faked TLS SID returned?
+                    nr_sid_detected+=1
+               fi
+          done
+          if [[ $nr_sid_detected -eq 3 ]]; then
+               if [[ ${memory[1]} != ${memory[2]} ]] && [[ ${memory[2]} != ${memory[3]} ]]; then
+                    pr_svrty_critical "VULNERABLE (NOT ok)"
+                    fileout "ticketbleed" "CRITICAL" "Ticketbleed: VULNERABLE" "$cve" "$cwe" "$hint"
+               else
+                    pr_done_best "not vulnerable (OK)"
+                    out ", memory fragments do not differ"
+                    fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable, session IDs were returned but memory fragments do not differ" "$cve" "$cwe"
+               fi
+          else
+               if [[ "$DEBUG" -ge 2 ]]; then
+                    echo
+                    pr_warning "test failed, non reproducible results!"
+               else
+                    pr_warning "test failed, non reproducible results!"
+                    out " Please run again w \"--debug=2\"  (# of faked TLS SIDs detected: $nr_sid_detected)"
+               fi
+               fileout "ticketbleed" "WARN" "Ticketbleed: # of TLS Session IDs detected: $nr_sid_detected, ${sid_detected[1]},${sid_detected[2]},${sid_detected[3]}" "$cve" "$cwe"
+               ret=7
           fi
      fi
      outln
-
-     if [[ "$DEBUG" -ge 1 ]]; then
-          echo $tls_hello_ascii >$FUNCNAME.txt
-          tmpfile_handle $FUNCNAME.txt
-     fi
-     close_socket
      return $ret
 }
 
@@ -11952,8 +11986,7 @@ determine_service() {
 
      datebanner " Start"
      outln
-     if [[ -z "$1" ]]; then
-          # no STARTTLS.
+     if [[ -z "$1" ]]; then        # no STARTTLS.
           determine_optimal_proto "$1"
           $SNEAKY && \
                ua="$UA_SNEAKY" || \
@@ -11963,12 +11996,11 @@ determine_service() {
           # GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
           # HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
           service_detection $OPTIMAL_PROTO
-     else
-          # STARTTLS
+     else                          # STARTTLS
           if [[ "$1" == postgres ]]; then
                protocol="postgres"
           else
-               protocol=${1%s}    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+               protocol=${1%s}     # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           fi
           case "$protocol" in
                ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres)
@@ -11981,7 +12013,7 @@ determine_service() {
                               if ! "$HAS_XMPP"; then
                                    fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -5
                               fi
-                              STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # it's a hack -- instead of changing calls all over the place
+                              STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # small hack -- instead of changing calls all over the place
                               # see http://xmpp.org/rfcs/rfc3920.html
                          fi
                     fi
@@ -11993,7 +12025,7 @@ determine_service() {
                     fi
                     $OPENSSL s_client -connect $NODEIP:$PORT $PROXY $BUGS $STARTTLS 2>$ERRFILE >$TMPFILE </dev/null
                     if [[ $? -ne 0 ]]; then
-                         debugme cat $TMPFILE
+                         debugme cat $TMPFILE | head -25
                          outln
                          fatal " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT" -2
                     fi
@@ -12009,7 +12041,6 @@ determine_service() {
                     ;;
           esac
      fi
-     #outln
 
      tmpfile_handle $FUNCNAME.txt
      return 0       # OPTIMAL_PROTO, GET_REQ*/HEAD_REQ* is set now
