@@ -9304,7 +9304,7 @@ run_ticketbleed() {
                out "likely "
                pr_done_best "not vulnerable (OK)"
                out " -- but received a session ID back which shouldn't happen"
-               fileout "ticketbleed" "OK" "Ticketbleed: vulnerable, but with a session ID reply" "$cve" "$cwe"
+               fileout "ticketbleed" "OK" "Ticketbleed: not vulnerable, but with a session ID reply which shouldn't happen" "$cve" "$cwe"
           fi
      elif [[ "${tls_hello_ascii:0:2}" == "15" ]]; then
           debugme echo -n "TLS Alert ${tls_hello_ascii:10:4} (TLS version: ${tls_hello_ascii:2:4}) -- "
