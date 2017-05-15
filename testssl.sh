@@ -6077,7 +6077,7 @@ certificate_info() {
 run_server_defaults() {
      local ciph newhostcert sni
      local match_found
-     local sessticket_str="" lifetime unit
+     local sessticket_lifetime_hint="" lifetime unit
      local -i i n
      local -i certs_found=0
      local -a previous_hostcert previous_intermediates keysize cipher
@@ -6135,8 +6135,8 @@ run_server_defaults() {
                if [[ ${success[n]} -eq 0 ]]; then
                     cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
                     >$ERRFILE
-                    if [[ -z "$sessticket_str" ]]; then
-                         sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+                    if [[ -z "$sessticket_lifetime_hint" ]]; then
+                         sessticket_lifetime_hint=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
                     fi
 
                     # check whether the host's certificate has been seen before
@@ -6204,8 +6204,7 @@ run_server_defaults() {
      if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != "-ssl2" ]]; then
           cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
           >$ERRFILE
-
-          [[ -z "$sessticket_str" ]] && sessticket_str=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
+          [[ -z "$sessticket_lifetime_hint" ]] && sessticket_lifetime_hint=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
      fi
 
      outln
@@ -6217,7 +6216,8 @@ run_server_defaults() {
           outln "(none)"
           fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
      else
-#FIXME: we rather want to have the chance to print each ext in italcs or another format. Atm is a string of quoted strings -- that needs to be fixed at the root
+#FIXME: we rather want to have the chance to print each ext in italics or another format.
+# Atm is a string of quoted strings -- that needs to be fixed at the root then
           # out_row_aligned_max_width() places line breaks at space characters.
           # So, in order to prevent the text for an extension from being broken
           # across lines, temporarily replace space characters within the text
@@ -6231,13 +6231,15 @@ run_server_defaults() {
           fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
      fi
 
-     pr_bold " Session Tickets RFC 5077     "
-     if [[ -z "$sessticket_str" ]]; then
-          outln "(none)"
-          fileout "session_ticket" "INFO" "TLS session tickes RFC 5077 not supported"
+     pr_bold " Session Ticket RFC 5077 hint "
+     if [[ -z "$sessticket_lifetime_hint" ]]; then
+          outln "(no lifetime advertised)"
+          fileout "session_ticket" "INFO" "TLS session ticket RFC 5077 lifetime: none advertised"
+          # it MAY be given a hint of the lifetime of the ticket, see https://tools.ietf.org/html/rfc5077#section-5.6 .
+          # Sometimes it just does not -- but it then may also support TLS session tickets reuse
      else
-          lifetime=$(grep -a lifetime <<< "$sessticket_str" | sed 's/[A-Za-z:() ]//g')
-          unit=$(grep -a lifetime <<< "$sessticket_str" | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
+          lifetime=$(grep -a lifetime <<< "$sessticket_lifetime_hint" | sed 's/[A-Za-z:() ]//g')
+          unit=$(grep -a lifetime <<< "$sessticket_lifetime_hint" | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit "
           prln_svrty_low "(PFS requires session ticket keys to be rotated <= daily)"
           fileout "session_ticket" "LOW" "TLS session ticket RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
@@ -6253,28 +6255,21 @@ run_server_defaults() {
      fi
 
      pr_bold " Session Resumption           "
-     if [[ -n "$sessticket_str" ]]; then
-          sub_session_resumption
-          case $? in
-               0) SESS_RESUMPTION[2]="ticket=yes"
-                  out "Tickets: yes, "
-                  fileout "session_resumption_ticket" "INFO" "Session resumption via TLS Session Tickets supported"
-               ;;
-               1) SESS_RESUMPTION[2]="ticket=no"
-                  out "Tickets no, "
-                  fileout "session_resumption_ticket" "INFO" "Session resumption via Session Tickets is not supported"
-                  ;;
-               2) SESS_RESUMPTION[2]="ticket=noclue"
-                  pr_warning "Ticket resumption test failed, pls report / "
-                  fileout "session_resumption_ticket" "WARNING" "resumption test for TLS Session Tickets failed, pls report"
-                  ;;
-          esac
-
-     else
-          SESS_RESUMPTION[2]="ticket=no"
-          out "Ticket: no extension=no resumption, "
-          fileout "session_resumption_ticket" "INFO" "No TLS session ticket extension, no resumption possible (assumed)"
-     fi
+     sub_session_resumption
+     case $? in
+          0) SESS_RESUMPTION[2]="ticket=yes"
+             out "Tickets: yes, "
+             fileout "session_resumption_ticket" "INFO" "Session resumption via TLS Session Tickets supported"
+          ;;
+          1) SESS_RESUMPTION[2]="ticket=no"
+             out "Tickets no, "
+             fileout "session_resumption_ticket" "INFO" "Session resumption via Session Tickets is not supported"
+             ;;
+          2) SESS_RESUMPTION[2]="ticket=noclue"
+             pr_warning "Ticket resumption test failed, pls report / "
+             fileout "session_resumption_ticket" "WARNING" "resumption test for TLS Session Tickets failed, pls report"
+             ;;
+     esac
 
      if "$NO_SSL_SESSIONID"; then
           SESS_RESUMPTION[1]="ID=no"
@@ -9136,7 +9131,20 @@ run_ticketbleed() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
 
-     [[ "$SERVICE" != HTTP ]] && outln "--   (applicable only for HTTPS)" && return 0
+     if [[ "$SERVICE" != HTTP ]]; then
+          outln "--   (applicable only for HTTPS)"
+          fileout "ticketbleed" "INFO" "Ticketbleed: not applicable, not HTTP" "$cve" "$cwe"
+          return 0
+     fi
+
+     # highly unlikely that it is NOT supported. We may loose time here but it's more solid
+     [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
+     if ! grep -q 'session ticket' <<< "$TLS_EXTENSIONS"; then
+          pr_done_best "not vulnerable (OK)"
+          outln ", no session ticket extension"
+          fileout "ticketbleed" "OK" "Ticketbleed: no session ticket extension" "$cve" "$cwe"
+          return 0
+     fi
 
      if $(has_server_protocol "tls1"); then
           tls_hexcode="x03, x01"
