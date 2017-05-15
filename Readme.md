@@ -58,6 +58,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * Native HTML support instead going through 'aha'
 * Testing 359 default ciphers (``testssl.sh -e``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * LUCKY13 and SWEET32 checks
+* Ticketbleed check
 * LOGJAM: now checking also for known DH parameters
 * Check for CAA RR
 * Check for OCSP must staple 
