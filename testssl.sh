@@ -11278,10 +11278,11 @@ prepare_arrays() {
                TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS]="$hexc"
                TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=false
                if [[ ${#hexc} -eq 9 ]]; then
+                    # >= SSLv3 ciphers
                     if [[ $OSSL_VER_MAJOR -lt 1 ]]; then
                          [[ ":${ossl_supported_tls}:" =~ ":${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
                     else
-                         ossl_ciph="$(grep -w "$hexc" <<< "$ossl_supported_tls" | awk '{ print $3 }')"
+                         ossl_ciph="$(awk '/\<'"$hexc"'\>/ { print $3 }' <<< "$ossl_supported_tls")"
                          if [[ -n "$ossl_ciph" ]]; then
                               TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
                               [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}" ]] && TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]="$ossl_ciph"
