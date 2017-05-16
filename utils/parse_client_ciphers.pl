@@ -6,11 +6,10 @@ use Data::Dumper;
 my @spec;
 my %ciphers;
 
-# Turn cipher section of page like this https://www.ssllabs.com/ssltest/viewClient.html?name=Android&version=4.0.4 
+# Turn cipher section of page like this https://www.ssllabs.com/ssltest/viewClient.html?name=Android&version=4.0.4
 # into an openssl cipher spec
 
-# Get all ciphers first (sorry only works on 64 bit mac atm)
-foreach my $line ( split /\n/, `bin/openssl.Darwin.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'`) {
+foreach my $line ( split /\n/, `../bin/openssl.Linux.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'`) {
 	my @fields = split /\s+/, $line;
 	my $hex = "";
 	foreach my $byte ( split /,/, $fields[1] ) {
@@ -36,7 +35,7 @@ while (<>) {
 				print "** $_\n";
 			}
 		}
-	} 
+	}
 }
 print join ":", @spec;
 print "\n";
