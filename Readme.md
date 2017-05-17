@@ -62,6 +62,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * LOGJAM: now checking also for known DH parameters
 * Check for CAA RR
 * Check for OCSP must staple 
+* Check for session resumption (Ticket, ID)
 * Better formatting of output (indentation)
 * Choice showing the RFC naming scheme only
 
