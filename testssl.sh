@@ -307,6 +307,7 @@ SERVER_COUNTER=0                        # Counter for multiple servers
 readonly PARALLEL_SLEEP=1                 # Time to sleep after starting each test
 readonly MAX_WAIT_TEST=1200               # Maximum time (in seconds) to wait for a test to complete
 readonly MAX_PARALLEL=20                  # Maximum number of tests to run in parallel
+                                          # This value may be made larger on systems with faster processors
 declare -a -i PARALLEL_TESTING_PID=()     # process id for each child test (or 0 to indicate test has already completed)
 declare -a PARALLEL_TESTING_CMDLINE=()    # command line for each child test
 declare -i NR_PARALLEL_TESTS=0            # number of parallel tests run
@@ -11353,15 +11354,17 @@ cleanup () {
      # If parallel mass testing is being performed, then the child tests need
      # to be killed before $TEMPDIR is deleted. Otherwise, error messages
      # will be created if testssl.sh is stopped before all testing is complete.
+     "$INTERACTIVE" && [[ $NR_PARALLEL_TESTS -gt 0 ]] && echo -en "\r                                                             \r" 1>&2
      while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
           if [[ ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} -ne 0 ]] && \
              ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
                kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >&2 2>/dev/null
                wait ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} 2>/dev/null    # make sure pid terminated, see wait(1p)
+               get_next_message_testing_parallel_result "stopped"
           else
                # If a test had already completed, but its output wasn't yet processed,
                # then process it now.
-               get_next_message_testing_parallel_result
+               get_next_message_testing_parallel_result "completed"
           fi
           NEXT_PARALLEL_TEST_TO_FINISH+=1
      done
@@ -12271,17 +12274,26 @@ run_mass_testing() {
      return $?
 }
 
-# This function is called when it has been determined that the next child process has completed.
-# This process prints its output to the terminal and, if appropriate, adds any JSON, CSV, and HTML
-# output it has created to the appropriate file.
+# This function is called when it has been determined that the next child
+# process has completed or it has been stopped. If the child process completed,
+# then this process prints the child process's output to the terminal and, if
+# appropriate, adds any JSON, CSV, and HTML output it has created to the
+# appropriate file. If the child process was stopped, then a message indicating
+# that is printed, but the incomplete results are not used.
 get_next_message_testing_parallel_result() {
      draw_line "=" $((TERM_WIDTH / 2)); outln;
      outln "${PARALLEL_TESTING_CMDLINE[NEXT_PARALLEL_TEST_TO_FINISH]}"
-     cat "$TEMPDIR/term_output_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).log"
-     [[ $NEXT_PARALLEL_TEST_TO_FINISH -gt 0 ]] && fileout_separator                     # this is needed for appended output, see #687
-     "$JSONHEADER" && cat "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" >> "$JSONFILE"
-     "$CSVHEADER" && cat "$TEMPDIR/csvfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).csv" >> "$CSVFILE"
-     "$HTMLHEADER" && cat "$TEMPDIR/htmlfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).html" >> "$HTMLFILE"
+     if [[ "$1" == "completed" ]]; then
+          cat "$TEMPDIR/term_output_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).log"
+          [[ $NEXT_PARALLEL_TEST_TO_FINISH -gt 0 ]] && fileout_separator                     # this is needed for appended output, see #687
+          "$JSONHEADER" && cat "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" >> "$JSONFILE"
+          "$CSVHEADER" && cat "$TEMPDIR/csvfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).csv" >> "$CSVFILE"
+          "$HTMLHEADER" && cat "$TEMPDIR/htmlfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).html" >> "$HTMLFILE"
+     elif [[ "$1" == "stopped" ]]; then
+          outln "\nTest was stopped before it completed.\n"
+     else
+          outln "\nTest timed out before it completed.\n"
+     fi
 }
 
 #FIXME: not called/tested yet
@@ -12289,7 +12301,7 @@ run_mass_testing_parallel() {
      local cmdline=""
      local -i i nr_active_tests=0
      local -a -i start_time=()
-     local -i curr_time
+     local -i curr_time wait_time
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
           fatal "Can't read file \"$FNAME\"" "2"
@@ -12308,24 +12320,30 @@ run_mass_testing_parallel() {
           "$JSONHEADER" && >"$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
           PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
           if [[ -z "$(which "$0")" ]]; then
-               CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+               CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" 2>&1 &
           else
-               CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" &
+               CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" 2>&1 &
           fi
           PARALLEL_TESTING_PID[NR_PARALLEL_TESTS]=$!
           start_time[NR_PARALLEL_TESTS]=$(date +%s)
-          debugme echo "Started test #$NR_PARALLEL_TESTS"
+          if "$INTERACTIVE"; then
+               echo -en "\r                                                             \r" 1>&2
+               echo -n "Started test #$NR_PARALLEL_TESTS" 1>&2
+               [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]] && \
+                    echo -n " (waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH to finish)" 1>&2
+          fi
           NR_PARALLEL_TESTS+=1
           nr_active_tests+=1
           sleep $PARALLEL_SLEEP
           # Get the results of any completed tests
           while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
                if [[ ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} -eq 0 ]]; then
-                    get_next_message_testing_parallel_result
+                    "$INTERACTIVE" && echo -en "\r                                                             \r" 1>&2
+                    get_next_message_testing_parallel_result "completed"
                     NEXT_PARALLEL_TEST_TO_FINISH+=1
                elif ! ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
-                    debugme echo "Test #$NEXT_PARALLEL_TEST_TO_FINISH complete"
-                    get_next_message_testing_parallel_result
+                    "$INTERACTIVE" && echo -en "\r                                                             \r" 1>&2
+                    get_next_message_testing_parallel_result "completed"
                     NEXT_PARALLEL_TEST_TO_FINISH+=1
                     nr_active_tests=$nr_active_tests-1
                else
@@ -12341,7 +12359,6 @@ run_mass_testing_parallel() {
                             ! ps ${PARALLEL_TESTING_PID[i]} >/dev/null ; then
                               PARALLEL_TESTING_PID[i]=0
                               nr_active_tests=$nr_active_tests-1
-                              debugme echo "Test #$i complete"
                               break
                          fi
                     done
@@ -12351,14 +12368,32 @@ run_mass_testing_parallel() {
                          # start will be killed.
                          kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >&2 2>/dev/null
                          wait ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} 2>/dev/null    # make sure pid terminated, see wait(1p)
-                         debugme echo "Test #$NEXT_PARALLEL_TEST_TO_FINISH stopped"
+                         "$INTERACTIVE" && echo -en "\r                                                             \r" 1>&2
+                         get_next_message_testing_parallel_result "timeout"
                          NEXT_PARALLEL_TEST_TO_FINISH+=1
                          nr_active_tests=$nr_active_tests-1
                          break
                     fi
-                    debugme echo "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH"
-                    sleep 1
-                    curr_time+=1
+                    # Wake up to increment the counter every second (so that the counter
+                    # appears to users as if it is operating smoothly), but check the
+                    # status of the $MAX_PARALLEL active processes less often, since the
+                    # ps command is expensive.
+                    for (( i=0; i <= $((MAX_PARALLEL/5)); i++ )); do
+                         wait_time=$((curr_time-start_time[NEXT_PARALLEL_TEST_TO_FINISH]))
+                         [[ $wait_time -gt $MAX_WAIT_TEST ]] && wait_time=$MAX_WAIT_TEST
+                         if "$INTERACTIVE"; then
+                              echo -en "\r                                                             \r" 1>&2
+                              echo -n "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH to finish"
+                              if [[ $((MAX_WAIT_TEST-wait_time)) -le 60 ]]; then
+                                   echo -n " ($((MAX_WAIT_TEST-wait_time)) seconds to timeout)" 1>&2
+                              else
+                                   echo -n " ($wait_time seconds)" 1>&2
+                              fi
+                         fi
+                         [[ $wait_time -ge $MAX_WAIT_TEST ]] && break
+                         sleep 1
+                         curr_time=$(date +%s)
+                    done
                done
           fi
      done < "$FNAME"
@@ -12368,17 +12403,31 @@ run_mass_testing_parallel() {
      while [[ $NEXT_PARALLEL_TEST_TO_FINISH -lt $NR_PARALLEL_TESTS ]]; do
           if [[ ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} -eq 0 ]] || \
              ! ps ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >/dev/null ; then
-               get_next_message_testing_parallel_result
+               "$INTERACTIVE" && echo -en "\r                                                             \r" 1>&2
+               get_next_message_testing_parallel_result "completed"
                NEXT_PARALLEL_TEST_TO_FINISH+=1
           elif [[ $curr_time-${start_time[NEXT_PARALLEL_TEST_TO_FINISH]} -ge $MAX_WAIT_TEST ]]; then
                kill ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} >&2 2>/dev/null
                wait ${PARALLEL_TESTING_PID[NEXT_PARALLEL_TEST_TO_FINISH]} 2>/dev/null    # make sure pid terminated, see wait(1p)
-               debugme echo "Test #$NEXT_PARALLEL_TEST_TO_FINISH stopped"
+               "$INTERACTIVE" && echo -en "\r                                                             \r" 1>&2
+               get_next_message_testing_parallel_result "timeout"
                NEXT_PARALLEL_TEST_TO_FINISH+=1
           else
-               debugme echo "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH"
+               # Here it is okay to check process status every second, since the
+               # status of only one process is being checked.
+               if "$INTERACTIVE"; then
+                    echo -en "\r                                                             \r" 1>&2
+                    wait_time=$((curr_time-start_time[NEXT_PARALLEL_TEST_TO_FINISH]))
+                    [[ $wait_time -gt $MAX_WAIT_TEST ]] && wait_time=$MAX_WAIT_TEST
+                    echo -n "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH to finish"
+                    if [[ $((MAX_WAIT_TEST-wait_time)) -le 60 ]]; then
+                         echo -n " ($((MAX_WAIT_TEST-wait_time)) seconds to timeout)" 1>&2
+                    else
+                         echo -n " ($wait_time seconds)" 1>&2
+                    fi
+               fi
                sleep 1
-               curr_time+=1
+               curr_time=$(date +%s)
           fi
      done
      return $?
@@ -13074,7 +13123,11 @@ lets_roll() {
 
      if "$do_mass_testing"; then
           prepare_logging
-          run_mass_testing
+          if "$EXPERIMENTAL"; then
+               run_mass_testing_parallel
+          else
+                run_mass_testing
+          fi
           exit $?
      fi
      html_banner
