@@ -1,7 +1,7 @@
 
 ## Intro
 
-[![Build Status](https://travis-ci.org/drwetter/testssl.sh.svg?branch=master)](https://travis-ci.org/drwetter/testssl.sh) 
+[![Build Status](https://travis-ci.org/drwetter/testssl.sh.svg?branch=master)](https://travis-ci.org/drwetter/testssl.sh)
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/drwetter/testssl.sh?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 `testssl.sh` is a free command line tool which checks a server's service on
@@ -32,16 +32,16 @@ Here in the _2.9dev branch you find the development version_ of the software
 -- with new features and maybe some bugs. For the stable version and **a
 more thorough description of the command line options** please see
 [testssl.sh](https://testssl.sh/ "Go to the site with the stable version
-and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation. 
+and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation.
 
 #### Compatibility
 
 testssl.sh is working on every Linux/BSD distribution out of the box. In 2.9dev most
-of the limitations of disabled features from the openssl client are gone due to bash-socket-based 
-checks. testssl.sh also works on otherunixoid system out of the box, supposed they have 
-`/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU versions 
-of grep and sed installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL 
-version >= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to 
+of the limitations of disabled features from the openssl client are gone due to bash-socket-based
+checks. testssl.sh also works on otherunixoid system out of the box, supposed they have
+`/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU versions
+of grep and sed installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL
+version >= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to
 display bit strengths for key exchanges.
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
@@ -56,17 +56,18 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * Non-flat JSON support
 * File output (CSV, JSON flat, JSON non-flat) supports a minimum severity level (only above supplied level there will be output)
 * Native HTML support instead going through 'aha'
-* Testing 359 default ciphers (``testssl.sh -e``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
+* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * LUCKY13 and SWEET32 checks
 * Ticketbleed check
 * LOGJAM: now checking also for known DH parameters
 * Check for CAA RR
-* Check for OCSP must staple 
+* Check for OCSP must staple
 * Check for session resumption (Ticket, ID)
 * Better formatting of output (indentation)
 * Choice showing the RFC naming scheme only
+* Parallel mass testing
 
-#### Features planned in 2.9dev
+#### Further features planned in 2.9dev
 
 https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A2.9dev
 
@@ -88,9 +89,9 @@ Help is needed here.
 
 #### Bug reports
 
-Please file bugs in the issue tracker. Do not forget to provide detailed information, 
-see https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. (Nobody can read your 
-thoughts -- yet. And only agencies your screen) ;-)
+Please file bugs in the issue tracker. Do not forget to provide detailed information,
+see https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. Nobody can read your
+thoughts -- yet. And only agencies your screen ;-)
 
 ----
 

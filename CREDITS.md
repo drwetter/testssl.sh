@@ -21,43 +21,44 @@
  - JSON and CSV output
  - CA pinning
  - Client simulations
- - CI integration, test cases for it
+ - CI integration, some test cases for it
 
 * David Cooper
  - Detection + output of multiple certificates
  - several cleanups of server certificate related stuff
- - several fixes
- - completing parsing of TLS ServerHello messages
- - testssl.sh -e: testing with a mixture of openssl + sockets
+ - extended parsing of TLS ServerHello messages
+ - testssl.sh -e/-E: testing with a mixture of openssl + sockets
  - finding more TLS extensions via sockets
- - extensive CN <--> hostname check
+ - extensive CN+SAN <--> hostname check
  - seperate check for curves
  - RFC 7919, key shares extension
- 
+ - parallel mass testing!
+ - numerous fixes
+
 * Thomas Patzke:
-  - Support of supplying timeout value for openssl connect 
- 
+  - Support of supplying timeout value for openssl connect
+
 * Oleksandr Nosenko
-  - non-flat JSON support
-  - in file output (CSV, JSON flat, JSON non-flat) support of a minimum severity level 
+  - non-flat JSON support (--json-pretty)
+  - in file output (CSV, JSON flat, JSON non-flat) support of a minimum severity level
 
 - Christoph Badura
  - NetBSD fixes
 
 * Jean Marsault
  - client auth: ideas, code snipplets
- 
-* Maciej Grela 
+
+* Maciej Grela
   - colorless handling
 
 * Olivier Paroz
-  - conversion xxd --> hexdump stuff 
+  - conversion xxd --> hexdump stuff
 
 * @typingArtist
   - improved BEAST detection
 
 * @f-s
- - ARM binary support  
+ - ARM binary support
 
 * Jeroen Wiert Pluimers
   - Darwin binaries support
@@ -93,15 +94,16 @@
 * @nvsofts (NV)
  - LibreSSL patch for GOST
 
-* Markus Manzke: 
+* Markus Manzke
  - Fix for HSTS + subdomains
  - LibreSSL patch
 
 * Dmitri S
  - inspiration & help for Darwin port
 
-* Bug reports:
-  - Viktor Szépe, Olivier Paroz, Jan H. Terstegge, Lorenz Adena, Jonathon Rossi, Stefan Stidl, Frank Breedijk
+
+Others I forgot to mention which did give me feedback, bug reports and helped one way or another.
+
 
 ##### Last but not least:
 
@@ -109,5 +111,5 @@
 
 * Ivan Ristic/Qualys for the liberal license which made it possible to use the client data
 
-* my family for supporting me doing this work
+* My family for supporting me doing this work
 
