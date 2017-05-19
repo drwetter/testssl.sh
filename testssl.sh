@@ -12170,10 +12170,11 @@ create_mass_testing_cmdline() {
      MASS_TESTING_CMDLINE=()
      [[ "$testing_type" =~ parallel ]] && read testing_type test_number <<< "$testing_type"
 
-     # Start by adding the elements from the global command line to the command
-     # line for the test. If run_mass_testing_parallel(), then modify the
-     # command line so that, when required, each child process sends its test
-     # results to a separate file.
+     # Start by adding the elements from the global command line to the command line for the
+     # test. If run_mass_testing_parallel(), then modify the command line so that, when
+     # required, each child process sends its test # results to a separate file.  If a cmd
+     # uses '=' for supplying a value we just skip next parameter (we don't use 'parse_opt_equal_sign' here)
+     debugme echo "${CMDLINE_ARRAY[@]}"
      for cmd in "${CMDLINE_ARRAY[@]}"; do
           "$skip_next" && skip_next=false && continue
           if [[ "$cmd" == "--file"* ]]; then
@@ -12181,7 +12182,8 @@ create_mass_testing_cmdline() {
                # line, but do include "--warnings=batch".
                MASS_TESTING_CMDLINE[nr_cmds]="--warnings=batch"
                nr_cmds+=1
-               break
+               # next is the file itself, as no '=' was supplied
+               [[ "$cmd" == '--file' ]] && skip_next=true
           elif [[ "$testing_type" == "serial" ]]; then
                MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                nr_cmds+=1
@@ -12193,14 +12195,13 @@ create_mass_testing_cmdline() {
                          # directory, then just pass it on to the child processes.
                          if "$JSONHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_${test_number}.json"
+                              # next is the jsonfile itself, as no '=' was supplied
                               [[ "$cmd" == --jsonfile ]] && skip_next=true
                          else
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
                          ;;
                     --jsonfile-pretty|--jsonfile-pretty=*)
-
-                         # Same as for --jsonfile
                          if "$JSONHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_${test_number}.json"
                               [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
@@ -12209,7 +12210,6 @@ create_mass_testing_cmdline() {
                          fi
                          ;;
                     --csvfile|--csvfile=*)
-                         # Same as for --jsonfile
                          if "$CSVHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--csvfile=$TEMPDIR/csvfile_${test_number}.csv"
                               [[ "$cmd" == --csvfile ]] && skip_next=true
@@ -12218,7 +12218,6 @@ create_mass_testing_cmdline() {
                          fi
                          ;;
                     --htmlfile|--htmlfile=*)
-                         # Same as for --jsonfile
                          if "$HTMLHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile=$TEMPDIR/htmlfile_${test_number}.html"
                               [[ "$cmd" == --htmlfile ]] && skip_next=true
@@ -12234,15 +12233,16 @@ create_mass_testing_cmdline() {
           fi
      done
 
-     # Now add the command line arguments for the specific test to the command
-     # line. Skip the first argument sent to this function, since it specifies
-     # the type of testing being performed.
+     # Now add the command line arguments for the specific test to the command line.
+     # Skip the first argument sent to this function, since it specifies the type of testing being performed.
      shift
      while [[ $# -gt 0 ]]; do
           MASS_TESTING_CMDLINE[nr_cmds]="$1"
           nr_cmds+=1
           shift
      done
+
+     return 0
 }
 
 run_mass_testing() {
@@ -13126,7 +13126,7 @@ lets_roll() {
           if "$EXPERIMENTAL"; then
                run_mass_testing_parallel
           else
-                run_mass_testing
+               run_mass_testing
           fi
           exit $?
      fi
