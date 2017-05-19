@@ -83,6 +83,8 @@ readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 # how to paste both in order to do performance analysis
 DEBUGTIME=${DEBUGTIME:-false}
 DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for testssl.sh and bash3's default
+                                                  # false: needed for performance analysis or useful for just having an extra file
+
 if grep -q xtrace <<< "$SHELLOPTS"; then
      if "$DEBUGTIME"; then
           # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
@@ -212,6 +214,7 @@ DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, thre
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
 NODNS=${NODNS:-false}                   # always do DNS lookups per default. For some pentests it might save time to set this to true
+DNS_VIA_PROXY=${DNS_VIA_PROXY:-false}   # don't do DNS lookups via proxy. --ip=proxy reverses this
 readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test for PFS
 HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
@@ -371,7 +374,8 @@ declare TLS_CIPHER_OSSL_SUPPORTED=()
 
 # For HTML output, replace any HTML reserved characters with the entity name
 html_reserved(){
-    sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" <<< "$1"
+     "$do_html" || return 0
+     sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" <<< "$1"
 }
 
 html_out() {
@@ -5687,7 +5691,7 @@ certificate_info() {
                     fileout "${json_prefix}key_size" "OK" "Server keys $cert_keysize bits"
                     outln " bits"
                else
-                    pr_magenta "weird key size: $cert_keysize bits"; outln " (could cause compatibility problems)"
+                    pr_warning "weird key size: $cert_keysize bits"; outln " (could cause compatibility problems)"
                     fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (Odd)"
                fi
           else
@@ -6816,7 +6820,7 @@ starttls_line() {
                     debugme echo "---> reply with automated FAST_STARTTLS=false matched \"$2\""
                else
                     debugme echo "---> reply didn't match \"$2\", see $TMPFILE"
-                    pr_magenta "STARTTLS handshake problem. "
+                    pr_warning "STARTTLS handshake problem. "
                     outln "Either switch to native openssl (--ssl-native), "
                     outln "   give the server more time to reply (STARTTLS_SLEEP=<seconds> ./testssh.sh ..) -- "
                     outln "   or debug what happened (add --debug=2)"
@@ -6967,16 +6971,20 @@ fd_socket() {
      if [[ -n "$PROXY" ]]; then
           if ! exec 5<> /dev/tcp/${PROXYIP}/${PROXYPORT}; then
                outln
-               pr_magenta "$PROG_NAME: unable to open a socket to proxy $PROXYIP:$PROXYPORT"
+               pr_warning "$PROG_NAME: unable to open a socket to proxy $PROXYIP:$PROXYPORT"
                return 6
           fi
-          echo -e "CONNECT $nodeip:$PORT HTTP/1.0\n" >&5
+          if "$DNS_VIA_PROXY"; then
+               echo -e "CONNECT $NODE:$PORT HTTP/1.0\n" >&5
+          else
+               echo -e "CONNECT $nodeip:$PORT HTTP/1.0\n" >&5
+          fi
           while true ; do
                read proyxline <&5
                if [[ "${proyxline%/*}" == "HTTP" ]]; then
                     proyxline=${proyxline#* }
                     if [[ "${proyxline%% *}" != "200" ]]; then
-                         pr_magenta "Unable to CONNECT via proxy. "
+                         pr_warning "Unable to CONNECT via proxy. "
                          [[ "$PORT" != 443 ]] && prln_magenta "Check whether your proxy supports port $PORT and the underlying protocol."
                          return 6
                     fi
@@ -6987,7 +6995,7 @@ fd_socket() {
           done
      elif ! exec 5<>/dev/tcp/$nodeip/$PORT; then  #  2>/dev/null would remove an error message, but disables debugging
           outln
-          pr_magenta "Unable to open a socket to $NODEIP:$PORT. "
+          pr_warning "Unable to open a socket to $NODEIP:$PORT. "
           # It can last ~2 minutes but for for those rare occasions we don't do a timeout handler here, KISS
           return 6
      fi
@@ -12383,7 +12391,7 @@ run_mass_testing_parallel() {
                          [[ $wait_time -gt $MAX_WAIT_TEST ]] && wait_time=$MAX_WAIT_TEST
                          if "$INTERACTIVE"; then
                               echo -en "\r                                                             \r" 1>&2
-                              echo -n "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH to finish" >&2
+                              echo -n "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH to finish" 1>&2
                               if [[ $((MAX_WAIT_TEST-wait_time)) -le 60 ]]; then
                                    echo -n " ($((MAX_WAIT_TEST-wait_time)) seconds to timeout)" 1>&2
                               else
@@ -12419,7 +12427,7 @@ run_mass_testing_parallel() {
                     echo -en "\r                                                             \r" 1>&2
                     wait_time=$((curr_time-start_time[NEXT_PARALLEL_TEST_TO_FINISH]))
                     [[ $wait_time -gt $MAX_WAIT_TEST ]] && wait_time=$MAX_WAIT_TEST
-                    echo -n "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH to finish"
+                    echo -n "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH to finish"          1>&2
                     if [[ $((MAX_WAIT_TEST-wait_time)) -le 60 ]]; then
                          echo -n " ($((MAX_WAIT_TEST-wait_time)) seconds to timeout)" 1>&2
                     else
@@ -12604,6 +12612,10 @@ parse_cmd_line() {
                --ip|--ip=*)
                     CMDLINE_IP="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
+                    if [[ $CMDLINE_IP == "proxy" ]]; then
+                         DNS_VIA_PROXY=true
+                         unset CMDLINE_IP
+                    fi
                     ;;
                -n|--nodns)
                     NODNS=true
