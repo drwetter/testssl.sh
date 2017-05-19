@@ -12383,7 +12383,7 @@ run_mass_testing_parallel() {
                          [[ $wait_time -gt $MAX_WAIT_TEST ]] && wait_time=$MAX_WAIT_TEST
                          if "$INTERACTIVE"; then
                               echo -en "\r                                                             \r" 1>&2
-                              echo -n "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH to finish"
+                              echo -n "Waiting for test #$NEXT_PARALLEL_TEST_TO_FINISH to finish" >&2
                               if [[ $((MAX_WAIT_TEST-wait_time)) -le 60 ]]; then
                                    echo -n " ($((MAX_WAIT_TEST-wait_time)) seconds to timeout)" 1>&2
                               else
