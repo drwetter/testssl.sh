@@ -3556,23 +3556,23 @@ run_client_simulation() {
      else
           pr_headline " Running client simulations via openssl "
           prln_warning " Depending on your openssl client you may get false results"
-          fileout "client_simulation" "WARNING" "Depending on your openssl client you may false results"
+          fileout "client_simulation" "WARNING" "Depending on your openssl client you may encounter false results"
      fi
      outln
 
-     debugme tmln_out
+     debugme echo
 
      if "$WIDE"; then
           if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
-               out " Browser                          Protocol  Cipher Suite Name (OpenSSL)      "
+               out " Browser                      Protocol  Cipher Suite Name (OpenSSL)       "
                ( "$using_sockets" || "$HAS_DH_BITS") && out "Forward Secrecy"
                outln
-               out "------------------------------------------------------------------------------"
+               out "--------------------------------------------------------------------------"
           else
-               out " Browser                          Protocol  Cipher Suite Name (RFC)                          "
+               out " Browser                      Protocol  Cipher Suite Name (RFC)                          "
                ( "$using_sockets" || "$HAS_DH_BITS") && out "Forward Secrecy"
                outln
-               out "----------------------------------------------------------------------------------------------"
+               out "------------------------------------------------------------------------------------------"
           fi
           ( "$using_sockets" || "$HAS_DH_BITS") && out "----------------------"
           outln
@@ -3581,7 +3581,7 @@ run_client_simulation() {
           if ${current[i]} ; then
                # for ANY we test this service or if the service we determined from STARTTLS matches
                if [[ "${service[i]}" == "ANY" ]] || grep -q "$client_service" <<< "${service[i]}"; then
-                    out " $(printf -- "%-33s" "${names[i]}")"
+                    out " $(printf -- "%-29s" "${names[i]}")"
                     if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
                          client_simulation_sockets "${handshakebytes[i]}"
                          sclient_success=$?
@@ -3593,7 +3593,7 @@ run_client_simulation() {
                               [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
                          fi
                     else
-                         ! "$HAS_NO_SSL2" && protos[i]="$(sed 's/-no_ssl2//' <<< "${protos[i]}")"
+                         "$HAS_NO_SSL2" || protos[i]="$(sed 's/-no_ssl2//' <<< "${protos[i]}")"
                          debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
                          $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
                          sclient_connect_successful $? $TMPFILE
@@ -3638,17 +3638,11 @@ run_client_simulation() {
                                    sclient_success=$?
                                    if [[ $sclient_success -eq 0 ]]; then
                                         case "$tls" in
-                                             "-tls1_2")
-                                                  break
-                                                  ;;
-                                             "-tls1_1")
-                                                  proto="TLSv1.1"
-                                                  break
-                                                  ;;
-                                             "-tls1")
-                                                  proto="TLSv1.0"
-                                                  break
-                                                  ;;
+                                             "-tls1_2") break ;;
+                                             "-tls1_1") proto="TLSv1.1"
+                                                        break ;;
+                                             "-tls1")   proto="TLSv1.0"
+                                                        break ;;
                                         esac
                                    fi
                               done
@@ -3664,9 +3658,9 @@ run_client_simulation() {
                          if ! "$WIDE"; then
                               out "$proto $cipher"
                          elif [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
-                              out "$(printf -- "%-7s   %-33s" "$proto" "$cipher")"
+                              out "$(printf -- "%-7s   %-34s" "$proto" "$cipher")"
                          else
-                              out "$(printf -- "%-7s   %-49s" "$proto" "$cipher")"
+                              out "$(printf -- "%-7s   %-50s" "$proto" "$cipher")"
                          fi
                          if ! "$WIDE"; then
                               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
@@ -11279,32 +11273,34 @@ EOF
 prepare_arrays() {
      local hexc mac ossl_ciph
      local ossl_supported_tls="" ossl_supported_sslv2=""
+     local -i i=0
 
      if [[ -e "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
           ossl_supported_tls="$($OPENSSL ciphers -tls1 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
-          while read hexc n TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS] TLS_CIPHER_RFC_NAME[TLS_NR_CIPHERS] TLS_CIPHER_SSLVERS[TLS_NR_CIPHERS] TLS_CIPHER_KX[TLS_NR_CIPHERS] TLS_CIPHER_AUTH[TLS_NR_CIPHERS] TLS_CIPHER_ENC[TLS_NR_CIPHERS] mac TLS_CIPHER_EXPORT[TLS_NR_CIPHERS]; do
-               TLS_CIPHER_HEXCODE[TLS_NR_CIPHERS]="$hexc"
-               TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=false
+          while read hexc n TLS_CIPHER_OSSL_NAME[i] TLS_CIPHER_RFC_NAME[i] TLS_CIPHER_SSLVERS[i] TLS_CIPHER_KX[i] TLS_CIPHER_AUTH[i] TLS_CIPHER_ENC[i] mac TLS_CIPHER_EXPORT[i]; do
+               TLS_CIPHER_HEXCODE[i]="$hexc"
+               TLS_CIPHER_OSSL_SUPPORTED[i]=false
                if [[ ${#hexc} -eq 9 ]]; then
                     # >= SSLv3 ciphers
                     if [[ $OSSL_VER_MAJOR -lt 1 ]]; then
-                         [[ ":${ossl_supported_tls}:" =~ ":${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+                         [[ ":${ossl_supported_tls}:" =~ ":${TLS_CIPHER_OSSL_NAME[i]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                     else
                          ossl_ciph="$(awk '/\<'"$hexc"'\>/ { print $3 }' <<< "$ossl_supported_tls")"
                          if [[ -n "$ossl_ciph" ]]; then
-                              TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
-                              [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}" ]] && TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]="$ossl_ciph"
+                              TLS_CIPHER_OSSL_SUPPORTED[i]=true
+                              [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[i]}" ]] && TLS_CIPHER_OSSL_NAME[i]="$ossl_ciph"
                          fi
                     fi
                elif [[ $OSSL_VER_MAJOR -lt 1 ]]; then
-                    [[ ":${ossl_supported_sslv2}:" =~ ":${TLS_CIPHER_OSSL_NAME[TLS_NR_CIPHERS]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+                    [[ ":${ossl_supported_sslv2}:" =~ ":${TLS_CIPHER_OSSL_NAME[i]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                else
-                    grep -qw "$hexc" <<< "$ossl_supported_sslv2" && TLS_CIPHER_OSSL_SUPPORTED[TLS_NR_CIPHERS]=true
+                    grep -qw "$hexc" <<< "$ossl_supported_sslv2" && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                fi
-               TLS_NR_CIPHERS+=1
+               i+=1
           done < "$CIPHERS_BY_STRENGTH_FILE"
      fi
+     TLS_NR_CIPHERS=i
 }
 
 
