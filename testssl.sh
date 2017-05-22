@@ -340,7 +340,7 @@ set_severity_level() {
            SEVERITY_LEVEL=$CRITICAL
    else
         echo "Supported severity levels are LOW, MEDIUM, HIGH, CRITICAL!"
-        help
+        help 1
    fi
 }
 
@@ -11180,6 +11180,10 @@ Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --
 URI always needs to be the last parameter.
 
 EOF
+     # Set HTMLHEADER and JSONHEADER to false so that the cleanup() function won't
+     # try to write footers to the HTML and JSON files.
+     HTMLHEADER=false
+     JSONHEADER=false
      #' Fix syntax highlight on sublime
      exit $1
 }
@@ -12293,7 +12297,10 @@ get_next_message_testing_parallel_result() {
      outln "${PARALLEL_TESTING_CMDLINE[NEXT_PARALLEL_TEST_TO_FINISH]}"
      if [[ "$1" == "completed" ]]; then
           cat "$TEMPDIR/term_output_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).log"
-          [[ $NEXT_PARALLEL_TEST_TO_FINISH -gt 0 ]] && fileout_separator                     # this is needed for appended output, see #687
+          if [[ $NEXT_PARALLEL_TEST_TO_FINISH -gt 0 ]] && "$JSONHEADER" && \
+               [[ -s "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" ]]; then
+               fileout_separator                     # this is needed for appended output, see #687
+          fi
           "$JSONHEADER" && cat "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" >> "$JSONFILE"
           "$CSVHEADER" && cat "$TEMPDIR/csvfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).csv" >> "$CSVFILE"
           "$HTMLHEADER" && cat "$TEMPDIR/htmlfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).html" >> "$HTMLFILE"
