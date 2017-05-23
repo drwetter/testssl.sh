@@ -315,6 +315,7 @@ declare -a -i PARALLEL_TESTING_PID=()     # process id for each child test (or 0
 declare -a PARALLEL_TESTING_CMDLINE=()    # command line for each child test
 declare -i NR_PARALLEL_TESTS=0            # number of parallel tests run
 declare -i NEXT_PARALLEL_TEST_TO_FINISH=0 # number of parallel tests that have completed and have been processed
+declare FIRST_JSON_OUTPUT=true            # true if no output has been added to $JSONFILE yet.
 
 #################### SEVERITY ####################
 
@@ -12193,7 +12194,19 @@ create_mass_testing_cmdline() {
                # next is the file itself, as no '=' was supplied
                [[ "$cmd" == '--file' ]] && skip_next=true
           elif [[ "$testing_type" == "serial" ]]; then
-               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+               if "$JSONHEADER" && [[ "$cmd" == "--jsonfile-pretty"* ]]; then
+                    >"$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_child.json"
+                    # next is the jsonfile itself, as no '=' was supplied
+                    [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
+               elif "$JSONHEADER" && [[ "$cmd" == "--jsonfile"* ]]; then
+                    >"$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_child.json"
+                    # next is the jsonfile itself, as no '=' was supplied
+                    [[ "$cmd" == --jsonfile ]] && skip_next=true
+               else
+                    MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+               fi
                nr_cmds+=1
           else
                case "$cmd" in
@@ -12270,14 +12283,19 @@ run_mass_testing() {
           create_mass_testing_cmdline "serial" $cmdline
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
-          "$first" || fileout_separator                              # this is needed for appended output, see #687
           # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
           if [[ -z "$(which "$0")" ]]; then
                CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}"
           else
                CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}"
           fi
-          first=false
+          if "$JSONHEADER" && [[ -s "$TEMPDIR/jsonfile_child.json" ]]; then
+               # Need to ensure that a separator is only added if the test
+               # produced some JSON output.
+               "$first" || fileout_separator                         # this is needed for appended output, see #687
+               first=false
+               cat "$TEMPDIR/jsonfile_child.json" >> "$JSONFILE"
+          fi
      done < "${FNAME}"
      return $?
 }
@@ -12293,11 +12311,13 @@ get_next_message_testing_parallel_result() {
      outln "${PARALLEL_TESTING_CMDLINE[NEXT_PARALLEL_TEST_TO_FINISH]}"
      if [[ "$1" == "completed" ]]; then
           cat "$TEMPDIR/term_output_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).log"
-          if [[ $NEXT_PARALLEL_TEST_TO_FINISH -gt 0 ]] && "$JSONHEADER" && \
-               [[ -s "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" ]]; then
-               fileout_separator                     # this is needed for appended output, see #687
+          if "$JSONHEADER" && [[ -s "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" ]]; then
+               # Need to ensure that a separator is only added if the test
+               # produced some JSON output.
+               "$FIRST_JSON_OUTPUT" || fileout_separator                     # this is needed for appended output, see #687
+               FIRST_JSON_OUTPUT=false
+               cat "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" >> "$JSONFILE"
           fi
-          "$JSONHEADER" && cat "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" >> "$JSONFILE"
           "$CSVHEADER" && cat "$TEMPDIR/csvfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).csv" >> "$CSVFILE"
           "$HTMLHEADER" && cat "$TEMPDIR/htmlfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).html" >> "$HTMLFILE"
      elif [[ "$1" == "stopped" ]]; then
