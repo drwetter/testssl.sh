@@ -12156,6 +12156,10 @@ check_mass_testing_cmd_line() {
           case $1 in
                --help|-b|--banner|-v|--version|-V|-V=*|--local|--local=*|--file|--file=*)
                     tm_out "Invalid mass testing command: $1"; return 1 ;;
+               --openssl=*|--openssl|--jsonfile=*|--jsonfile|--jsonfile-pretty=*|--jsonfile-pretty)
+                    tm_out "Invalid mass testing command: $1"; return 1 ;;
+               --logfile=*|--logfile|--csvfile=*|--csvfile|--htmlfile=*|--htmlfile)
+                    tm_out "Invalid mass testing command: $1"; return 1 ;;
                --mx|--mx465|--mx587|--ip=*|-n|--nodns|-x=*|--single[-_]cipher=*|--xmpphost|-e|--each-cipher) ;;
                -E|--cipher-per-proto|--cipher_per_proto|-p|--protocols|-y|--spdy|--npn|-Y|--http2|--alpn) ;;
                -s|--std|--standard|-S|--server[-_]defaults|-P|--server[_-]preference|--preference) ;;
@@ -12164,13 +12168,10 @@ check_mass_testing_cmd_line() {
                -B|--breach|-O|--poodle|-Z|--tls[_-]fallback|tls[_-]fallback[_-]scs|-W|--sweet32|-F|--freak) ;;
                -D|--drown|-J|--logjam|-A|--beast|-L|--lucky13|-4|--rc4|--appelbaum|-f|--pfs|--fs|--nsa|--wide) ;;
                --assuming[_-]http|--assume[-_]http|--sneaky|-q|--quiet|--show[-_]each|--fast|--bugs|--colorblind) ;;
-               --log|--logging|--logfile=*|--json|--jsonfile=*|--json-pretty|--jsonfile-pretty=*|--severity=*|--hints) ;;
-               --csv|--csvfile=*|--html|--htmlfile=*|--append|--openssl=*|--openssl-timeout=*|--proxy=*|-6) ;;
+               --log|--logging|--json|--json-pretty|--severity=*|--hints) ;;
+               --csv|--html|--append|--openssl-timeout=*|--proxy=*|-6) ;;
                --has[-_]dhbits|--has[_-]dh[-_]bits|--ssl_native|--ssl-native) ;;
-               --ip|-x|--single[-_]cipher|--logfile|--jsonfile|--jsonfile-pretty|--severity)
-                    shift
-                    ;;
-               --csvfile|--htmlfile|--openssl|--openssl-timeout|--proxy)
+               --ip|-x|--single[-_]cipher|--severity|--openssl-timeout|--proxy)
                     shift
                     ;;
                -t|-t=*|--starttls|--starttls=*|--xmpphost=*)
