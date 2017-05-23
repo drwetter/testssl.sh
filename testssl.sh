@@ -12149,6 +12149,114 @@ run_mx_all_ips() {
      return $ret
 }
 
+check_mass_testing_cmd_line() {
+     local next
+
+     while [[ $# -gt 0 ]]; do
+          case $1 in
+               --help|-b|--banner|-v|--version|-V|-V=*|--local|--local=*|--file|--file=*)
+                    tm_out "Invalid mass testing command: $1"; return 1 ;;
+               --mx|--mx465|--mx587|--ip=*|-n|--nodns|-x=*|--single[-_]cipher=*|--xmpphost|-e|--each-cipher) ;;
+               -E|--cipher-per-proto|--cipher_per_proto|-p|--protocols|-y|--spdy|--npn|-Y|--http2|--alpn) ;;
+               -s|--std|--standard|-S|--server[-_]defaults|-P|--server[_-]preference|--preference) ;;
+               -h|--header|--headers|-c|--client-simulation|-U|--vulnerable|-H|--heartbleed) ;;
+               -I|--ccs|--ccs[-_]injection|-T|--ticketbleed|-R|--renegotiation|-C|--compression|--crime) ;;
+               -B|--breach|-O|--poodle|-Z|--tls[_-]fallback|tls[_-]fallback[_-]scs|-W|--sweet32|-F|--freak) ;;
+               -D|--drown|-J|--logjam|-A|--beast|-L|--lucky13|-4|--rc4|--appelbaum|-f|--pfs|--fs|--nsa|--wide) ;;
+               --assuming[_-]http|--assume[-_]http|--sneaky|-q|--quiet|--show[-_]each|--fast|--bugs|--colorblind) ;;
+               --log|--logging|--logfile=*|--json|--jsonfile=*|--json-pretty|--jsonfile-pretty=*|--severity=*|--hints) ;;
+               --csv|--csvfile=*|--html|--htmlfile=*|--append|--openssl=*|--openssl-timeout=*|--proxy=*|-6) ;;
+               --has[-_]dhbits|--has[_-]dh[-_]bits|--ssl_native|--ssl-native) ;;
+               --ip|-x|--single[-_]cipher|--logfile|--jsonfile|--jsonfile-pretty|--severity)
+                    shift
+                    ;;
+               --csvfile|--htmlfile|--openssl|--openssl-timeout|--proxy)
+                    shift
+                    ;;
+               -t|-t=*|--starttls|--starttls=*|--xmpphost=*)
+                    next="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    case $next in
+                         ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres) ;;
+                         ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps|postgress) ;;
+                         *)   tm_out "\nunrecognized STARTTLS protocol \"$1\""; return 1 ;;
+                    esac
+                    ;;
+               --devel) ### this development feature will soon disappear
+                    if [[ $# -eq 4 ]]; then  # protocol AND ciphers specified
+                         shift
+                    fi
+                    shift
+                    ;;
+               --warnings|--warnings=*)
+                    next=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    case "$next" in
+                         batch|off|false) ;;
+                         *)   tm_out "\nwarnings can be either \"batch\", \"off\" or \"false\""; return 1 ;;
+                    esac
+                    ;;
+               --debug|--debug=*)
+                    next=$(parse_opt_equal_sign "$1" "$2")
+                    [[ $? -eq 0 ]] && shift
+                    case $next in
+                         [0-6]) ;;
+                         *)   tm_out "\nunrecognized debug value \"$1\", must be between 0..6"; return 1 ;;
+                    esac
+                    ;;
+               --color|--color=*)
+                    next="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    case $next in
+                         [0-2]) ;;
+                         *)   tm_out "\nunrecognized color: \"$1\", must be between 0..2"; return 1 ;;
+                    esac
+                    ;;
+               --mapping|--mapping=*)
+                    next="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    case "$next" in
+                         no-openssl|no-rfc|openssl|rfc) ;;
+                         *)   tm_out "\nmapping can only be \"no-openssl\", \"no-rfc\", \"openssl\" or \"rfc\""; return 1 ;;
+                    esac
+                    ;;
+               (--) shift
+                    break
+                    ;;
+               (-*) tm_out "0: unrecognized option \"$1\""; return 1
+                    ;;
+               (*)  break
+                    ;;
+          esac
+          shift
+     done
+     if [[ -z "$1" ]]; then
+          tm_out "URI missing"; return 1
+     elif [[ -n "$2" ]]; then
+          tm_out "URI comes last"; return 1
+     fi
+     return 0
+}
+
+check_mass_testing_cmd_lines() {
+     local fname="$1"
+     local cmdline err
+
+     if [[ ! -r "$fname" ]]; then
+          fatal "Can't read file \"$fname\"" "2"
+     fi
+
+     while read cmdline; do
+          cmdline="$(filter_input "$cmdline")"
+          [[ -z "$cmdline" ]] && continue
+          [[ "$cmdline" == "EOF" ]] && break
+          err="$(check_mass_testing_cmd_line $cmdline)"
+          if [[ $? -ne 0 ]]; then
+               fatal "$err ($cmdline)" "2"
+          fi
+     done < "$fname"
+}
+
 # If run_mass_testing() is being used, then create the command line
 # for the test based on the global command line (all elements of the
 # command line provided to the parent, except the --file option) and the
@@ -12257,6 +12365,8 @@ run_mass_testing() {
           fatal "Can't read file \"$FNAME\"" "2"
      fi
 
+     check_mass_testing_cmd_lines "$FNAME"
+
      pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
      while read cmdline; do
           cmdline="$(filter_input "$cmdline")"
@@ -12310,6 +12420,8 @@ run_mass_testing_parallel() {
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
+
+     check_mass_testing_cmd_lines "$FNAME"
 
      pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln "\n"
      while read cmdline; do
