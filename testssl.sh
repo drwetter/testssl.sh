@@ -101,6 +101,7 @@ fi
 
 # make sure that temporary files are cleaned up after use in ANY case
 trap "cleanup" QUIT EXIT
+trap "child_error" USR1
 
 readonly VERSION="2.9dev"
 readonly SWCONTACT="dirk aet testssl dot sh"
@@ -11175,6 +11176,7 @@ URI always needs to be the last parameter.
 
 EOF
      #' Fix syntax highlight on sublime
+     "$CHILD_MASS_TESTING" && kill -s USR1 $PPID
      exit $1
 }
 
@@ -11384,6 +11386,11 @@ cleanup () {
      fileout_footer
      # debugging off, see above
      grep -q xtrace <<< "$SHELLOPTS" && ! "$DEBUG_ALLINONE" && exec 2>&42 42>&-
+}
+
+child_error() {
+     cleanup
+     exit 1
 }
 
 fatal() {
