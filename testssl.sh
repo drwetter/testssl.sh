@@ -6069,6 +6069,9 @@ certificate_info() {
      if [[ -n "$caa" ]]; then
           pr_done_good "OK"; out " (" ; pr_italic "$caa"; out ")"
           fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : \"$caa\" "
+     elif "$NODNS"; then
+          pr_warning "(was instructed to not use DNS)"
+          fileout "${json_prefix}CAA_record" "WARN" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : test skipped as instructed"
      else
           pr_svrty_low "--"
           fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
@@ -11622,6 +11625,7 @@ get_a_record() {
 
      "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
+     check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
           if which avahi-resolve &>/dev/null; then
                ip4=$(filter_ip4_address $(avahi-resolve -4 -n "$1" 2>/dev/null | awk '{ print $2 }'))
@@ -11661,6 +11665,7 @@ get_aaaa_record() {
 
      "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
+     check_resolver_bins
      if [[ -z "$ip6" ]]; then
           if [[ "$NODE" == *.local ]]; then
                if which avahi-resolve &>/dev/null; then
@@ -11694,6 +11699,7 @@ get_caa_rr_record() {
      local caa_property_value
      local saved_openssl_conf="$OPENSSL_CONF"
 
+     "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
      # rougly that's the difference between text and binary format
      # 1) 'google.com has CAA record 0 issue "symantec.com"'
@@ -11701,6 +11707,7 @@ get_caa_rr_record() {
      # for dig +short the output always starts with '0 issue [..]' or '\# 19 [..]' so we normalize thereto to keep caa_flag, caa_property
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
+     check_resolver_bins
      if which dig &> /dev/null; then
           raw_caa="$(dig $1 type257 +short)"
           # empty if no CAA record
@@ -11758,7 +11765,7 @@ get_mx_record() {
 
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
-     # we need tha last two columns here!
+     # we need the last two columns here
      if which host &> /dev/null; then
           mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif which dig &> /dev/null; then
@@ -11781,11 +11788,17 @@ determine_ip_addresses() {
      local ip4=""
      local ip6=""
 
+     ip4=$(get_a_record $NODE)
+     ip6=$(get_aaaa_record $NODE)
+     IP46ADDRs=$(newline_to_spaces "$ip4 $ip6")
+
      if [[ -n "$CMDLINE_IP" ]]; then
-          # command line has supplied an IP address
-          [[ "$CMDLINE_IP" == "one" ]] && \
-               CMDLINE_IP="$(get_a_record $NODE | head -1)"
+          # command line has supplied an IP address or "one"
+          if [[ "$CMDLINE_IP" == "one" ]]; then
                # use first IPv4 address
+               CMDLINE_IP="$(head -1 <<< "$ip4")"
+               [[ -z "$CMDLINE_IP" ]] && CMDLINE_IP="$(head -1 <<< "$ip6")"
+          fi
           NODEIP="$CMDLINE_IP"
           if is_ipv4addr "$NODEIP"; then
                ip4="$NODEIP"
@@ -11800,7 +11813,6 @@ determine_ip_addresses() {
      else
           ip4=$(get_local_a $NODE)           # is there a local host entry?
           if [[ -z $ip4 ]]; then             # empty: no (LOCAL_A is predefined as false)
-               check_resolver_bins
                ip4=$(get_a_record $NODE)
           else
                LOCAL_A=true                  # we have the ip4 from local host entry and need to signal this to testssl
@@ -11808,14 +11820,13 @@ determine_ip_addresses() {
           # same now for ipv6
           ip6=$(get_local_aaaa $NODE)
           if [[ -z $ip6 ]]; then
-               check_resolver_bins
                ip6=$(get_aaaa_record $NODE)
           else
                LOCAL_AAAA=true               # we have a local ipv6 entry and need to signal this to testssl
           fi
      fi
 
-     if [[ -z "$ip4" ]]; then                # IPv6  only address
+     if [[ -z "$ip4" ]]; then                # IPv6 only address
           if "$HAS_IPv6"; then
                IPADDRs=$(newline_to_spaces "$ip6")
                IP46ADDRs="$IPADDRs"          # IP46ADDRs are the ones to display, IPADDRs the ones to test
@@ -11823,14 +11834,16 @@ determine_ip_addresses() {
      else
           if "$HAS_IPv6" && [[ -n "$ip6" ]]; then
                IPADDRs=$(newline_to_spaces "$ip4 $ip6")
-               IP46ADDRs="$IPADDRs"
           else
                IPADDRs=$(newline_to_spaces "$ip4")
-               IP46ADDRs=$(newline_to_spaces "$ip4 $ip6")
           fi
      fi
      if [[ -z "$IPADDRs" ]]; then
-          fatal "No IPv4 address for \"$NODE\" available" -1
+          if [[ -n "$ip6" ]]; then
+               fatal "Only IPv6 address(es) for \"$NODE\" available, maybe add \"-6\" to $0" -1
+          else
+               fatal "No IPv4/IPv6 address(es) for \"$NODE\" available" -1
+          fi
      fi
      return 0                                # IPADDR and IP46ADDR is set now
 }
@@ -11841,6 +11854,7 @@ determine_rdns() {
 
      "$NODNS" && rDNS="--" && return 0
      OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
+     check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
           if which avahi-resolve &>/dev/null; then
                rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
@@ -12953,7 +12967,8 @@ parse_cmd_line() {
                -6)  # doesn't work automagically. My versions have -DOPENSSL_USE_IPV6, CentOS/RHEL/FC do not
                     HAS_IPv6=true
                     ;;
-               --has[-_]dhbits|--has[_-]dh[-_]bits)      # For CentOS, RHEL and FC with openssl server temp key backport on version 1.0.1, see #190. But should work automagically
+               --has[-_]dhbits|--has[_-]dh[-_]bits)
+                    # Should work automagically. Helper switch for CentOS,RHEL+FC w openssl server temp key backport (version 1.0.1), see #190
                     HAS_DH_BITS=true
                     ;;
                --ssl_native|--ssl-native)
@@ -12980,6 +12995,7 @@ parse_cmd_line() {
           # parameter after URI supplied:
           [[ -n "$2" ]] && fatal "URI comes last" "1"
      fi
+     [[ $CMDLINE_IP == "one" ]] && "$NODNS" && fatal "\"--ip=one\" and \"--nodns\" doesn't work together"
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
      # if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
@@ -13176,40 +13192,34 @@ lets_roll() {
 
      #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
      if "$do_mx_all_ips"; then
-          query_globals                                     # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
+          query_globals                                # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
           [[ $? -eq 1 ]] && set_scanning_defaults
-          run_mx_all_ips "${URI}" $PORT                     # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
+          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
           exit $?
      fi
 
-     [[ -z "$NODE" ]] && parse_hn_port "${URI}"             # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
+     [[ -z "$NODE" ]] && parse_hn_port "${URI}"        # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
      prepare_logging
 
      if ! determine_ip_addresses; then
           fatal "No IP address could be determined" 2
      fi
-     if [[ -n "$CMDLINE_IP" ]]; then
-          #  we just test the one supplied
-          lets_roll "${STARTTLS_PROTOCOL}"
-          ret=$?
-     else                                                                       # no --ip was supplied
-          if [[ $(count_words "$(echo -n "$IPADDRs")") -gt 1 ]]; then           # we have more than one ipv4 address to check
-               pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
-               for ip in $IPADDRs; do
-                    draw_line "-" $((TERM_WIDTH * 2 / 3))
-                    outln
-                    NODEIP="$ip"
-                    lets_roll "${STARTTLS_PROTOCOL}"
-                    ret=$(($? + ret))
-               done
+     if [[ $(count_words "$IPADDRs") -gt 1 ]]; then    # we have more than one ipv4 address to check
+          pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
+          for ip in $IPADDRs; do
                draw_line "-" $((TERM_WIDTH * 2 / 3))
                outln
-               pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
-          else                                                                  # we need just one ip4v to check
-               NODEIP="$IPADDRs"
+               NODEIP="$ip"
                lets_roll "${STARTTLS_PROTOCOL}"
-               ret=$?
-          fi
+               ret=$(($? + ret))
+          done
+          draw_line "-" $((TERM_WIDTH * 2 / 3))
+          outln
+          pr_bold "Done testing now all IP addresses (on port $PORT): "; outln "$IPADDRs"
+     else                                              # Just 1x ip4v to check, applies also if CMDLINE_IP was supplied
+          NODEIP="$IPADDRs"
+          lets_roll "${STARTTLS_PROTOCOL}"
+          ret=$?
      fi
 #}
 
