@@ -10255,7 +10255,6 @@ run_beast(){
                hexc="${TLS_CIPHER_HEXCODE[i]}"
                if [[ ${#hexc} -eq 9 ]] && [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ CBC ]] && \
                   [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]]; then
-                    cbc_cipher_list_hex+=", ${hexc:2:2},${hexc:7:2}"
                     ciph[nr_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
                     hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
                     rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
@@ -10275,7 +10274,6 @@ run_beast(){
                     nr_ciphers+=1
                fi
           done
-          cbc_cipher_list_hex="${cbc_cipher_list_hex:2}"
      else
           while read hexc dash ciph[nr_ciphers] sslvers kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
                if [[ ":${cbc_cipher_list}:" =~ ":${ciph[nr_ciphers]}:" ]]; then
@@ -10333,7 +10331,7 @@ run_beast(){
                     "ssl3") proto_hex="00" ;;
                     "tls1") proto_hex="01" ;;
                esac
-               tls_sockets "$proto_hex" "$cbc_cipher_list_hex"
+               tls_sockets "$proto_hex" "$cbc_ciphers_hex"
                [[ $? -eq 0 ]] || continue
           else
                $OPENSSL s_client -"$proto" -cipher "$cbc_cipher_list" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>>$ERRFILE </dev/null
