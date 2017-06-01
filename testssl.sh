@@ -48,7 +48,8 @@
 # can achieve e.g. the same result with my favorite interactive shell: zsh (zmodload zsh/net/socket
 # -- checkout zsh/net/tcp) too!
 # /bin/bash though is way more often used within Linux and it's perfect
-# for cross platform support, see MacOS X and also under Windows the MSYS2 extension or Cygwin.
+# for cross platform support, see MacOS X and also under Windows the MSYS2 extension or Cygwin
+# as well as Bash on Windows (WSL)
 # Cross-platform is one of the three main goals of this script. Second: Ease of installation.
 # No compiling, install gems, go to CPAN, use pip etc. Third: Easy to use and to interpret
 # the results.
@@ -3054,7 +3055,8 @@ run_cipher_per_proto() {
                continue
           fi
           outln
-          has_server_protocol "${proto:1}" || continue
+#FIXME: see #759
+          #has_server_protocol "${proto:1}" || continue
 
           # get a list of all the cipher suites to test
           nr_ciphers=0
@@ -4709,7 +4711,8 @@ cipher_pref_check() {
                out "\n    SSLv3:     "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
                continue
           fi
-          has_server_protocol "$p" || continue
+# FIXME: #759
+          # has_server_protocol "$p" || continue
 
           if [[ $p != ssl3 ]] || "$HAS_SSL3"; then
                # with the supplied binaries SNI works also for SSLv3
