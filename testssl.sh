@@ -5475,7 +5475,7 @@ must_staple() {
                prln_done_good "supported"
                fileout "${json_prefix}ocsp_must_staple" "OK" "OCSP must staple : supported"
           else
-               prln_svrty_high "\"must staple\" requires OCSP stapling (NOT ok)"
+               prln_svrty_high "requires OCSP stapling (NOT ok)"
                fileout "${json_prefix}" "HIGH" "must staple extension detected but no OCSP stapling provided"
           fi
      else
