@@ -5774,12 +5774,11 @@ certificate_info() {
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
           if [[ $SERVICE == "HTTP" ]]; then
-               # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280, https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
-               pr_svrty_medium "missing (NOT ok)"; outln " -- Browser will complain soon"
-               fileout "${json_prefix}san" "MEDIUM" "subjectAltName (SAN) : -- Browser will complain soon"
+               pr_svrty_high "missing (NOT ok)"; outln " -- Browsers are complaining"
+               fileout "${json_prefix}san" "HIGH" "subjectAltName (SAN) : -- Browsers are complaining"
           else
-               pr_svrty_low "missing"; outln " -- no SAN is deprecated"
-               fileout "${json_prefix}san" "LOW" "subjectAltName (SAN) : -- no SAN is deprecated"
+               pr_svrty_medium "missing"; outln " -- no SAN is deprecated"
+               fileout "${json_prefix}san" "MEDIUM" "subjectAltName (SAN) : -- no SAN is deprecated"
           fi
      fi
      out "$indent"; pr_bold " Issuer                       "
@@ -5841,19 +5840,19 @@ certificate_info() {
           0) trustfinding="certificate does not match supplied URI" ;;
           1) trustfinding="Ok via SAN" ;;
           2) trustfinding="Ok via SAN wildcard" ;;
-          4) if $has_dns_sans; then
-                  trustfinding="Ok via CN, but not SAN"
+          4) if "$has_dns_sans"; then
+                  trustfinding="via CN, but not SAN"
              else
-                  trustfinding="Ok via CN"
+                  trustfinding="via CN only"
              fi
              ;;
           5) trustfinding="Ok via SAN and CN" ;;
           6) trustfinding="Ok via SAN wildcard and CN"
              ;;
-          8) if $has_dns_sans; then
-                  trustfinding="Ok via CN wildcard, but not SAN"
+          8) if "$has_dns_sans"; then
+                  trustfinding="via CN wildcard, but not SAN"
              else
-                  trustfinding="Ok via CN wildcard"
+                  trustfinding="via CN (wildcard) only"
              fi
              ;;
           9) trustfinding="Ok via CN wildcard and SAN"
@@ -5865,9 +5864,25 @@ certificate_info() {
      if [[ $trust_sni -eq 0 ]]; then
           pr_svrty_medium "$trustfinding"
           trust_sni="fail"
-     elif "$has_dns_sans" && ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
-          pr_svrty_medium "$trustfinding"
-          trust_sni="warn"
+     elif ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
+          if "$has_dns_sans"; then
+               if [[ $SERVICE == "HTTP" ]]; then
+                    https://bugs.chromium.org/p/chromium/issues/detail?id=308330
+                    https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
+                    https://www.chromestatus.com/feature/4981025180483584
+                    pr_svrty_high "$trustfinding"; out " -- Browsers are complaining"
+               else
+                    pr_svrty_medium "$trustfinding"
+                    trust_sni="warn"
+               fi
+          else
+               if [[ $SERVICE == "HTTP" ]]; then
+                    pr_svrty_high "$trustfinding"; out " -- Browsers are complaining"
+               else
+                    # we punish this for non-HTTP as it is deprecated https://tools.ietf.org/html/rfc2818#section-3.1
+                    pr_svrty_medium "$trustfinding"; out " -- CN only match is deprecated"
+               fi
+          fi
      else
           pr_done_good "$trustfinding"
           trust_sni="ok"
@@ -5905,7 +5920,7 @@ certificate_info() {
      if [[ "$trust_sni" == "ok" ]]; then
           fileout "${json_prefix}trust" "INFO" "${trustfinding}${trustfinding_nosni}"
      else
-          fileout "${json_prefix}trust" "WARN" "${trustfinding}${trustfinding_nosni}"
+          fileout "${json_prefix}trust" "MEDIUM" ${trustfinding}${trustfinding_nosni}"
      fi
 
      out "$indent"; pr_bold " Chain of trust"; out "               "
