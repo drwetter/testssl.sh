@@ -1513,16 +1513,16 @@ run_http_date() {
 }
 
 
-
 # HEADERFILE needs to contain the HTTP header (made sure by invoker)
 # arg1: key=word to match
-# arg2: hint for fileout()
+# arg2: hint for fileout() if double header
+# args3:indentation, i.e string w spaces
 # returns:
 #    0 if header not found
 #    1-n nr of headers found, then in HEADERVALUE the first value from key
-
 detect_header() {
      local key="$1"
+     local spaces="$3"
      local -i nr=0
 
      nr=$(grep -Faciw "$key:" $HEADERFILE)
@@ -1538,13 +1538,13 @@ detect_header() {
           pr_svrty_medium "misconfiguration: "
           pr_italic "$key"
           pr_svrty_medium " ${nr}x"
-          out " -- checking first one "
+          out " -- checking first one only"
           out "\n$spaces"
           HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | head -1)
           HEADERVALUE=${HEADERVALUE#*:}
           HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           [[ $DEBUG -ge 2 ]] && tm_italic "$HEADERVALUE" && tm_out "\n$spaces"
-          fileout "$2""_multiple" "WARN" "Multiple $2 headers. Using first header: $HEADERVALUE"
+          fileout "${2}_multiple" "MEDIUM" "Multiple $2 headers. Using first header: $HEADERVALUE"
           return $nr
      fi
 }
@@ -1578,7 +1578,7 @@ run_hsts() {
           run_http_header "$1" || return 3
      fi
      pr_bold " Strict Transport Security    "
-     detect_header "Strict-Transport-Security" "HSTS"
+     detect_header "Strict-Transport-Security" "HSTS" "$spaces"
      if [[ $? -ne 0 ]]; then
           echo "$HEADERVALUE" >$TMPFILE
           hsts_age_sec=$(sed -e 's/[^0-9]*//g' <<< $HEADERVALUE)
@@ -1650,7 +1650,7 @@ run_hpkp() {
                :
           else
                hpkp_headers=""
-               pr_svrty_medium "multiple HPKP headers: "
+               pr_svrty_medium "misconfiguration, multiple HPKP headers: "
                # https://scotthelme.co.uk is a candidate
                #FIXME: should display both Public-Key-Pins+Public-Key-Pins-Report-Only --> egrep -ai -w
                for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
@@ -1658,7 +1658,7 @@ run_hpkp() {
                     hpkp_headers="$hpkp_headers$i "
                     out " "
                done
-               out "\n$spaces Examining first one: "
+               out "\n$spaces Examining first: "
                first_hpkp_header=$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1)
                pr_italic "$first_hpkp_header, "
                fileout "hpkp_multiple" "WARN" "Multiple HPKP headers $hpkp_headers. Using first header: $first_hpkp_header"
@@ -2117,7 +2117,7 @@ run_more_flags() {
      pr_bold " Security headers             "
      for f2t in $good_flags2test; do
           debugme echo "---> $f2t"
-          detect_header "$f2t" "$f2t"
+          detect_header "$f2t" "$f2t" "$spaces"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
                     out "$spaces"       # output leading spaces if the first header
@@ -2133,7 +2133,7 @@ run_more_flags() {
 
      for f2t in $other_flags2test; do
           debugme echo "---> $f2t"
-          detect_header "$f2t" "$f2t"
+          detect_header "$f2t" "$f2t" "$spaces"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
                     out "$spaces"       # output leading spaces if the first header
