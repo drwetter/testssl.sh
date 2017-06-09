@@ -17,7 +17,8 @@ trap "cleanup" QUIT EXIT
 SID="x00,x00,x0B,xAD,xC0,xDE,"               # don't forget the trailing comma
 
 NODE="$1"
-PORT="443"
+NODE="${NODE%:*}"			     # strip port if supplied
+PORT="443"				     # we curently support 443 only
 TLSV=${2:-01}                                # TLS 1.0=x01  1.1=0x02, 1.2=0x3
 MAXSLEEP=10
 SOCKREPLY=""
