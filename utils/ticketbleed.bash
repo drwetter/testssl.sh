@@ -8,19 +8,22 @@
 #
 ###### DON'T DO EVIL! USAGE AT YOUR OWN RISK. DON'T VIOLATE LAWS! #######
 
-readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
-trap "cleanup" QUIT EXIT
+[[ -z "$1" ]] && echo "IP is missing" && exit 1
 
-[[ -z "$1" ]] && exit 1
+readonly PS4='${LINENO}: ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
+OPENSSL=${OPENSSL:-$(type -p openssl)}
+TIMEOUT=${TIMEOUT:-20}
 
 # insert some hexspeak here :-)
 SID="x00,x00,x0B,xAD,xC0,xDE,"               # don't forget the trailing comma
 
 NODE="$1"
-NODE="${NODE%:*}"			     # strip port if supplied
-PORT="443"				     # we curently support 443 only
+PORT="${NODE#*:}"
+PORT="${PORT-443}"                           # probably this doesn't make sense
+NODE="${NODE%:*}"                            # strip port if supplied
 TLSV=${2:-01}                                # TLS 1.0=x01  1.1=0x02, 1.2=0x3
-MAXSLEEP=10
+MAXSLEEP=$TIMEOUT
 SOCKREPLY=""
 COL_WIDTH=32
 DEBUG=${DEBUG:-"false"}
@@ -215,10 +218,17 @@ cleanup() {
 
 get_sessticket() {
      local sessticket_str
+     local output
 
-     sessticket_str="$(openssl s_client -connect $NODE:$PORT </dev/null 2>/dev/null | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
-     sessticket_str="$(sed -e 's/^.* - /x/g' -e 's/  .*$//g' <<< "$sessticket_str" | tr '\n' ',')"
-     sed -e 's/ /,x/g' -e 's/-/,x/g' <<< "$sessticket_str"
+     output="$($OPENSSL s_client -connect $NODE:$PORT </dev/null 2>/dev/null)"
+     if ! grep -qw CONNECTED <<< "$output"; then
+        return 1
+     else
+        sessticket_str="$(awk '/TLS session ticket:/,/^$/' <<< "$output" | awk '!/TLS session ticket/')"
+        sessticket_str="$(sed -e 's/^.* - /x/g' -e 's/  .*$//g' <<< "$sessticket_str" | tr '\n' ',')"
+        sed -e 's/ /,x/g' -e 's/-/,x/g' <<< "$sessticket_str"
+        return 0
+    fi
 }
 
 #### main
@@ -229,13 +239,33 @@ early_exit=true
 declare -a memory sid_detected
 nr_sid_detected=0
 
+
+# there are different "timeout". Check whether --preserve-status is supported
+if type -p timeout &>/dev/null ; then
+        if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
+            OPENSSL="timeout --preserve-status $TIMEOUT $OPENSSL"
+        else
+            OPENSSL="timeout $TIMEOUT $OPENSSL"
+        fi
+else
+        echo " binary \"timeout\" not found. Continuing without it"
+        unset TIMEOUT
+fi
+
+
 echo
 "$DEBUG" && ( echo )
 echo "##### 1) Connect to determine 1x session ticket TLS"
 # attn! neither here nor in the following client hello we do SNI. Assuming this is a vulnebilty of the TLS implementation
 SESS_TICKET_TLS="$(get_sessticket)"
+if [[ $? -ne 0 ]]; then
+        echo >&2
+        echo -e "$NODE:$PORT ${magenta}not reachable / no TLS${normal}\n " >&2
+        exit 0
+fi
 [[ "$SESS_TICKET_TLS" == "," ]] && echo -e "${green}OK, not vulnerable${normal}, no session tickets\n" && exit 0
 
+trap "cleanup" QUIT EXIT
 "$DEBUG" && ( echo; echo )
 echo "##### 2) Sending 1 to 3 ClientHello(s) (TLS version 03,$TLSV) with this ticket and a made up SessionID"
 
@@ -317,4 +347,6 @@ if ! "$early_exit"; then
 fi
 
 exit 0
+
+#  vim:ts=5:sw=5
 
