@@ -5500,7 +5500,9 @@ certificate_info() {
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
      local policy_oid
      local spaces=""
-     local trust_sni=0 trust_nosni=0 has_dns_sans
+     local -i trust_sni=0 trust_nosni=0
+     local has_dns_sans has_dns_sans_nosni
+     local trust_sni_finding
      local -i certificates_provided
      local cnfinding trustfinding trustfinding_nosni
      local cnok="OK"
@@ -5782,12 +5784,11 @@ certificate_info() {
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
           if [[ $SERVICE == "HTTP" ]]; then
-               # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280, https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
-               pr_svrty_medium "missing (NOT ok)"; outln " -- Browser will complain soon"
-               fileout "${json_prefix}san" "MEDIUM" "subjectAltName (SAN) : -- Browser will complain soon"
+               pr_svrty_high "missing (NOT ok)"; outln " -- Browsers are complaining"
+               fileout "${json_prefix}san" "HIGH" "subjectAltName (SAN) : -- Browsers are complaining"
           else
-               pr_svrty_low "missing"; outln " -- no SAN is deprecated"
-               fileout "${json_prefix}san" "LOW" "subjectAltName (SAN) : -- no SAN is deprecated"
+               pr_svrty_medium "missing"; outln " -- no SAN is deprecated"
+               fileout "${json_prefix}san" "MEDIUM" "subjectAltName (SAN) : -- no SAN is deprecated"
           fi
      fi
      out "$indent"; pr_bold " Issuer                       "
@@ -5849,19 +5850,19 @@ certificate_info() {
           0) trustfinding="certificate does not match supplied URI" ;;
           1) trustfinding="Ok via SAN" ;;
           2) trustfinding="Ok via SAN wildcard" ;;
-          4) if $has_dns_sans; then
-                  trustfinding="Ok via CN, but not SAN"
+          4) if "$has_dns_sans"; then
+                  trustfinding="via CN, but not SAN"
              else
-                  trustfinding="Ok via CN"
+                  trustfinding="via CN only"
              fi
              ;;
           5) trustfinding="Ok via SAN and CN" ;;
           6) trustfinding="Ok via SAN wildcard and CN"
              ;;
-          8) if $has_dns_sans; then
-                  trustfinding="Ok via CN wildcard, but not SAN"
+          8) if "$has_dns_sans"; then
+                  trustfinding="via CN wildcard, but not SAN"
              else
-                  trustfinding="Ok via CN wildcard"
+                  trustfinding="via CN (wildcard) only"
              fi
              ;;
           9) trustfinding="Ok via CN wildcard and SAN"
@@ -5871,14 +5872,24 @@ certificate_info() {
      esac
 
      if [[ $trust_sni -eq 0 ]]; then
-          pr_svrty_medium "$trustfinding"
-          trust_sni="fail"
-     elif "$has_dns_sans" && ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
-          pr_svrty_medium "$trustfinding"
-          trust_sni="warn"
+          pr_svrty_high "$trustfinding"
+          trust_sni_finding="HIGH"
+     elif ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
+          if [[ $SERVICE == "HTTP" ]]; then
+               # https://bugs.chromium.org/p/chromium/issues/detail?id=308330
+               # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
+               # https://www.chromestatus.com/feature/4981025180483584
+               pr_svrty_high "$trustfinding"; out " -- Browsers are complaining"
+               trust_sni_finding="HIGH"
+          else
+               pr_svrty_medium "$trustfinding"
+               trust_sni_finding="MEDIUM"
+               # we punish CN matching for non-HTTP as it is deprecated https://tools.ietf.org/html/rfc2818#section-3.1
+               ! "$has_dns_sans" && out " -- CN only match is deprecated"
+          fi
      else
           pr_done_good "$trustfinding"
-          trust_sni="ok"
+          trust_sni_finding="OK"
      fi
 
      if [[ -n "$cn_nosni" ]]; then
@@ -5886,35 +5897,56 @@ certificate_info() {
           trust_nosni=$?
           $OPENSSL x509 -in "$HOSTCERT.nosni" -noout -text 2>>$ERRFILE | \
                grep -A2 "Subject Alternative Name" | grep -q "DNS:" && \
-               has_dns_sans=true || has_dns_sans=false
+               has_dns_sans_nosni=true || has_dns_sans_nosni=false
      fi
 
+     # See issue #733.
      if [[ -z "$sni_used" ]]; then
           trustfinding_nosni=""
-     elif "$has_dns_sans" && [[ $trust_nosni -eq 4 ]]; then
-          trustfinding_nosni=" (w/o SNI: Ok via CN, but not SAN)"
-     elif "$has_dns_sans" && [[ $trust_nosni -eq 8 ]]; then
-          trustfinding_nosni=" (w/o SNI: Ok via CN wildcard, but not SAN)"
-     elif [[ $trust_nosni -eq 0 ]] && ( [[ "$trust_sni" == "ok" ]] || [[ "$trust_sni" == "warn" ]] ); then
-          trustfinding_nosni=" (SNI mandatory)"
-     elif [[ "$trust_sni" == "ok" ]] || [[ "$trust_sni" == "warn" ]]; then
+     elif ( [[ $trust_sni -eq $trust_sni ]] && [[ "$has_dns_sans" == "$has_dns_sans_nosni" ]] ) || \
+          ( [[ $trust_sni -eq 0 ]] && [[ $trust_nosni -eq 0 ]] ); then
+          trustfinding_nosni=" (same w/o SNI)"
+     elif [[ $trust_nosni -eq 0 ]]; then
+          if [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]]; then
+               trustfinding_nosni=" (w/o SNI: certificate does not match supplied URI)"
+          else
+               trustfinding_nosni=" (SNI mandatory)"
+          fi
+     elif [[ $trust_nosni -eq 4 ]] || [[ $trust_nosni -eq 8 ]] || [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]]; then
+          case $trust_nosni in
+               1) trustfinding_nosni="(w/o SNI: Ok via SAN)" ;;
+               2) trustfinding_nosni="(w/o SNI: Ok via SAN wildcard)" ;;
+               4) if "$has_dns_sans_nosni"; then
+                       trustfinding_nosni="(w/o SNI: via CN, but not SAN)"
+                  else
+                       trustfinding_nosni="(w/o SNI: via CN only)"
+                  fi
+                  ;;
+               5) trustfinding_nosni="(w/o SNI: Ok via SAN and CN)" ;;
+               6) trustfinding_nosni="(w/o SNI: Ok via SAN wildcard and CN)" ;;
+               8) if "$has_dns_sans_nosni"; then
+                       trustfinding_nosni="(w/o SNI: via CN wildcard, but not SAN)"
+                  else
+                       trustfinding_nosni="(w/o SNI: via CN (wildcard) only)"
+                  fi
+                  ;;
+               9) trustfinding_nosni="(w/o SNI: Ok via CN wildcard and SAN)" ;;
+              10) trustfinding_nosni="(w/o SNI: Ok via SAN wildcard and CN wildcard)" ;;
+          esac
+     elif [[ $trust_sni -ne 0 ]]; then
           trustfinding_nosni=" (works w/o SNI)"
-     elif [[ $trust_nosni -ne 0 ]]; then
+     else
           trustfinding_nosni=" (however, works w/o SNI)"
-     else
-          trustfinding_nosni=""
      fi
-     if "$has_dns_sans" && ( [[ $trust_nosni -eq 4 ]] || [[ $trust_nosni -eq 8 ]] ); then
-          prln_svrty_medium "$trustfinding_nosni"
-     else
+     if [[ -n "$sni_used" ]] || [[ $trust_nosni -eq 0 ]] || ( [[ $trust_nosni -ne 4 ]] && [[ $trust_nosni -ne 8 ]] ); then
           outln "$trustfinding_nosni"
+     elif [[ $SERVICE == "HTTP" ]]; then
+          prln_svrty_high "$trustfinding_nosni"
+     else
+          prln_svrty_medium "$trustfinding_nosni"
      fi
 
-     if [[ "$trust_sni" == "ok" ]]; then
-          fileout "${json_prefix}trust" "INFO" "${trustfinding}${trustfinding_nosni}"
-     else
-          fileout "${json_prefix}trust" "WARN" "${trustfinding}${trustfinding_nosni}"
-     fi
+     fileout "${json_prefix}trust" "$trust_sni_finding" "${trustfinding}${trustfinding_nosni}"
 
      out "$indent"; pr_bold " Chain of trust"; out "               "
      if [[ "$issuer_O" =~ StartCom ]] || [[ "$issuer_O" =~ WoSign ]] || [[ "$issuer_CN" =~ StartCom ]] || [[ "$issuer_CN" =~ WoSign ]]; then
