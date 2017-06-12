@@ -161,6 +161,7 @@ if [[ -z $TERM_WIDTH ]]; then                               # no batch file and 
 fi
 TERM_CURRPOS=0                                              # custom line wrapping needs alter the current horizontal cursor pos
 
+## CONFIGURATION PART ##
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch, see --help
 
@@ -183,6 +184,7 @@ DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ ar
                                         # 6: whole 9 yards
 FAST=${FAST:-false}                     # preference: show only first cipher, run_allciphers with openssl instead of sockets
 WIDE=${WIDE:-false}                     # whether to display for some options just ciphers or a table w hexcode/KX,Enc,strength etc.
+MASS_TESTING_MODE=${MASS_TESTING_MODE:-serial}    # can be serial or parallel. Subject to change
 LOGFILE="${LOGFILE:-""}"                # logfile if used
 JSONFILE="${JSONFILE:-""}"              # jsonfile if used
 CSVFILE="${CSVFILE:-""}"                # csvfile if used
@@ -228,7 +230,13 @@ if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
 else
      MEASURE_TIME=${MEASURE_TIME:-false}
 fi
+DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
+SHOW_CENSYS_LINK=${SHOW_CENSYS_LINK:-true}
+readonly UA_STD="TLS tester from $SWURL"
+readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
 
+
+## INITIALIZATION PART ##
 # further global vars just declared here
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observerd @ facebook and others, old ones like h2-17 omitted as they could not be found
@@ -267,7 +275,6 @@ HAS_FALLBACK_SCSV=false
 HAS_PROXY=false
 HAS_XMPP=false
 HAS_POSTGRES=false
-DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -285,7 +292,6 @@ SERVICE=""                              # is the server running an HTTP server, 
 URI=""
 CERT_FINGERPRINT_SHA2=""
 RSA_CERT_FINGERPRINT_SHA2=""
-SHOW_CENSYS_LINK=${SHOW_CENSYS_LINK:-true}
 STARTTLS_PROTOCOL=""
 OPTIMAL_PROTO=""                        # we need this for IIS6 (sigh) and OpenSSL 1.0.2, otherwise some handshakes
                                         # will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
@@ -295,8 +301,6 @@ TLS_NOW=""
 NOW_TIME=""
 HTTP_TIME=""
 GET_REQ11=""
-readonly UA_STD="TLS tester from $SWURL"
-readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
 START_TIME=0                            # time in epoch when the action started
 END_TIME=0                              # .. ended
 SCAN_TIME=0                             # diff of both: total scan time
@@ -1279,7 +1283,7 @@ service_detection() {
      local -i was_killed
      local addcmd=""
 
-     if ! $CLIENT_AUTH; then
+     if ! "$CLIENT_AUTH"; then
           # SNI is not standardardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
           [[ ! "$1" =~ ssl ]] && addcmd="$SNI"
           printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $addcmd >$TMPFILE 2>$ERRFILE &
@@ -1305,7 +1309,7 @@ service_detection() {
                fileout "service" "INFO" "Service detected: $SERVICE, thus skipping HTTP specific checks"
                ret=0
                ;;
-          *)   if $CLIENT_AUTH; then
+          *)   if "$CLIENT_AUTH"; then
                     out "certificate based authentication => skipping all HTTP checks"
                     echo "certificate based authentication => skipping all HTTP checks" >$TMPFILE
                     fileout "client_auth" "INFO" "certificate based authentication => skipping all HTTP checks"
@@ -9178,7 +9182,7 @@ run_ticketbleed() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
 
-     if [[ "$SERVICE" != HTTP ]]; then
+     if [[ "$SERVICE" != HTTP ]] && ! "$CLIENT_AUTH"; then
           outln "--   (applicable only for HTTPS)"
           fileout "ticketbleed" "INFO" "Ticketbleed: not applicable, not HTTP" "$cve" "$cwe"
           return 0
@@ -9562,7 +9566,7 @@ run_crime() {
           ret=7
      elif grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
           pr_done_good "not vulnerable (OK)"
-          if [[ $SERVICE != "HTTP" ]] && ! $CLIENT_AUTH;  then
+          if [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH";  then
                out " (not using HTTP anyway)"
                fileout "crime" "OK" "CRIME, TLS: Not vulnerable (not using HTTP anyway)" "$cve" "$cwe"
           else
@@ -9635,10 +9639,14 @@ run_breach() {
      local cwe="CWE-310"
      local hint=""
 
-     [[ $SERVICE != "HTTP" ]] && return 7
+     [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH" && return 7
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
+     if "$CLIENT_AUTH"; then
+          outln "cannot be tested (server side requires authentication"
+          fileout "breach" "INFO" "BREACH: Test failed (HTTP request stalled)" "$cve" "$cwe"
+     fi
 
      url="$1"
      [[ -z "$url" ]] && url="/"
@@ -11124,13 +11132,14 @@ help() {
 
 "$PROG_NAME <options> URI", where <options> is:
 
-     -t, --starttls <protocol>     does a default run against a STARTTLS enabled <protocol,
+     -t, --starttls <protocol>     Does a default run against a STARTTLS enabled <protocol,
                                    protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres> (latter three require supplied openssl)
-     --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
-     --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
-     --file <fname|fname.gmap>     mass testing option: Reads command lines from <fname>, one line per instance.
+     --xmpphost <to_domain>        For STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
+     --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
+     --file <fname|fname.gmap>     Mass testing option: Reads command lines from <fname>, one line per instance.
                                    Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch".
                                    Alternatively: nmap output in greppable format (-oG) is also allowed (1x same port per line)
+     --mode <serial|parallel>      Mass testing to be done serial (default) or parallel
 
 single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -e, --each-cipher             checks each local cipher remotely
@@ -12324,6 +12333,18 @@ nmap_to_plain_file() {
      local target_fname=""
      local oneline=""
 
+     # Ok, since we are here we have an nmap file. To avoid questions we make sure it's the right format too
+     if [[ "$(head -1 "$FNAME")" =~ ( -oG )(.*) ]]; then
+          # yes, grappable
+          if [[ $(grep -c Status "$FNAME") -ge 1 ]]; then
+               [[ $(grep -c  '\/open\/' $FNAME)  -eq 0 ]] && \
+                    fatal "Nmap file $FNAME should contain at least one open port" -1
+          else
+               fatal "strange, nmap grepable misses \"Status\"" -1
+          fi
+     else
+          fatal "Nmap file $FNAME is not in grep(p)able format (-oG filename.gmap)" -1
+     fi
      # test whether there's more than one "open" per line which is not supported currently
      while read -r oneline; do
           if [[ $(tr ',' '\n' <<< "$oneline" | grep -c '\/open\/') -gt 1 ]]; then
@@ -12331,6 +12352,10 @@ nmap_to_plain_file() {
           fi
      done < "$FNAME"
      target_fname=${FNAME%.*}.txt     # strip extension
+#FIXME: # nmap in mass testing mode supplies the hostname too in $3. That's normally unreliable
+# as a DNS reverse lookup used and reality shows those records are not as good maintained.
+# However a check whether the forward lookup matches the IP should be done and if so we should
+# should rather use the fqdn    And: better use read here
      awk '/\/open\// { print $2":"$5 }' "$FNAME" | sed 's/\/open.*$//g' >"$target_fname"
      [[ $? -ne 0 ]] && \
           fatal "conversion from nmap grepable to text somehow failed around $LINENO" -3
@@ -12343,29 +12368,18 @@ run_mass_testing() {
      local cmdline=""
      local first=true
      local gmapadd=""
+     local saved_fname="$FNAME"
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
- # at least now we checked the command line. But it's not sure yet whether we have the right file
-     if [[ "$(head -1 "$FNAME")" =~ (Nmap [4-8])(.*)( scan initiated )(.*) ]]; then
-          # Ok, we have an nmap file. To avoid questions we make sure it's the right format too
-          if [[ "$(head -1 "$FNAME")" =~ ( -oG )(.*) ]]; then
-               if [[ $(grep -c Status "$FNAME") -ge 1 ]]; then
-                    [[ $(grep -c  '\/open\/' $FNAME)  -eq 0 ]] && \
-                         fatal "Nmap file $FNAME should contain at least one open port" -1
-                    IS_GMAP_FILE=true
-                    gmapadd="grep(p)able nmap "
-                    nmap_to_plain_file
-               else
-                    fatal "wierdly nmap grepable misses \"Status\"" -1
-               fi
-          else
-               fatal "Nmap file $FNAME is not in grep(p)able format (-oG filename.gmap)" -1
-          fi
-     fi
-     pr_reverse "====== Running in file batch mode with ${gmapadd}file=\"$FNAME\" ======"; outln "\n"
 
+     if [[ "$(head -1 "$FNAME")" =~ (Nmap [4-8])(.*)( scan initiated )(.*) ]]; then
+          gmapadd="grep(p)able nmap "
+          nmap_to_plain_file
+     fi
+
+     pr_reverse "====== Running in file batch mode with ${gmapadd}file=\"$saved_fname\" ======"; outln "\n"
      while read cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
@@ -12424,12 +12438,19 @@ run_mass_testing_parallel() {
      local -i i nr_active_tests=0
      local -a -i start_time=()
      local -i curr_time wait_time
+     local gmapadd=""
+     local saved_fname="$FNAME"
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
 
-     pr_reverse "====== Running in parallel file batch mode with file=\"$FNAME\" ======"; outln "\n"
+     if [[ "$(head -1 "$FNAME")" =~ (Nmap [4-8])(.*)( scan initiated )(.*) ]]; then
+          gmapadd="grep(p)able nmap "
+          nmap_to_plain_file
+     fi
+
+     pr_reverse "====== Running in file batch mode with ${gmapadd}file=\"$saved_fname\" ======"; outln "\n"
      while read cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
@@ -12915,6 +12936,15 @@ parse_cmd_line() {
                     WARNINGS=batch           # set this implicitly!
                     do_mass_testing=true
                     ;;
+               --mode|--mode=*)
+                    MASS_TESTING_MODE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    case "$MASS_TESTING_MODE" in
+                         serial|parallel) ;;
+                         *)   tmln_magenta "\nmass testing mode can be either \"serial\" or \"parallel\""
+                              help 1
+                    esac
+                    ;;
                --warnings|--warnings=*)
                     WARNINGS=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
@@ -13251,7 +13281,7 @@ lets_roll() {
 
      if "$do_mass_testing"; then
           prepare_logging
-          if "$EXPERIMENTAL"; then
+          if [[ "$MASS_TESTING_MODE" == "parallel" ]]; then
                run_mass_testing_parallel
           else
                run_mass_testing
