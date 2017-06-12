@@ -11128,8 +11128,9 @@ help() {
                                    protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres> (latter three require supplied openssl)
      --xmpphost <to_domain>        for STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            tests MX records from high to low priority (STARTTLS, port 25)
-     --file <fname>                mass testing option: Reads command lines from <fname>, one line per instance.
-                                   Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch"
+     --file <fname|fname.gmap>     mass testing option: Reads command lines from <fname>, one line per instance.
+                                   Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch".
+                                   Alternatively: nmap output in greppable format (-oG) is also allowed (1x same port per line)
 
 single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -e, --each-cipher             checks each local cipher remotely
@@ -12319,15 +12320,52 @@ create_mass_testing_cmdline() {
      return 0
 }
 
+nmap_to_plain_file() {
+     local target_fname=""
+     local oneline=""
+
+     # test whether there's more than one "open" per line which is not supported currently
+     while read -r oneline; do
+          if [[ $(tr ',' '\n' <<< "$oneline" | grep -c '\/open\/') -gt 1 ]]; then
+               fatal "nmap parser for file $FNAME cannot contain > 1 port per line" -3
+          fi
+     done < "$FNAME"
+     target_fname=${FNAME%.*}.txt     # strip extension
+     awk '/\/open\// { print $2":"$5 }' "$FNAME" | sed 's/\/open.*$//g' >"$target_fname"
+     [[ $? -ne 0 ]] && \
+          fatal "conversion from nmap grepable to text somehow failed around $LINENO" -3
+     [[ -s "$target_fname" ]] || \
+          fatal "Couldn't find any open port in $FNAME" -3
+     export FNAME=$target_fname
+}
+
 run_mass_testing() {
      local cmdline=""
      local first=true
+     local gmapadd=""
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
           fatal "Can't read file \"$FNAME\"" "2"
      fi
+ # at least now we checked the command line. But it's not sure yet whether we have the right file
+     if [[ "$(head -1 "$FNAME")" =~ (Nmap [4-8])(.*)( scan initiated )(.*) ]]; then
+          # Ok, we have an nmap file. To avoid questions we make sure it's the right format too
+          if [[ "$(head -1 "$FNAME")" =~ ( -oG )(.*) ]]; then
+               if [[ $(grep -c Status "$FNAME") -ge 1 ]]; then
+                    [[ $(grep -c  '\/open\/' $FNAME)  -eq 0 ]] && \
+                         fatal "Nmap file $FNAME should contain at least one open port" -1
+                    IS_GMAP_FILE=true
+                    gmapadd="grep(p)able nmap "
+                    nmap_to_plain_file
+               else
+                    fatal "wierdly nmap grepable misses \"Status\"" -1
+               fi
+          else
+               fatal "Nmap file $FNAME is not in grep(p)able format (-oG filename.gmap)" -1
+          fi
+     fi
+     pr_reverse "====== Running in file batch mode with ${gmapadd}file=\"$FNAME\" ======"; outln "\n"
 
-     pr_reverse "====== Running in file batch mode with file=\"$FNAME\" ======"; outln "\n"
      while read cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
