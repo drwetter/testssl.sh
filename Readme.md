@@ -66,6 +66,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * Better formatting of output (indentation)
 * Choice showing the RFC naming scheme only
 * Parallel mass testing
+* File input for mass testing can be also nmap grep(p)able (-oG)
 
 #### Further features planned in 2.9dev
 
@@ -84,7 +85,7 @@ Please file bug reports @ https://github.com/drwetter/testssl.sh/issues.
 #### Documentation
 
 For a start see the
-[wiki](https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation).
+[wiki](https://github.com/drwetter/testssl.sh/wiki/Man-Page).
 Help is needed here.
 
 #### Bug reports
