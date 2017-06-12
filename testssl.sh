@@ -11139,7 +11139,7 @@ help() {
      --file <fname|fname.gmap>     Mass testing option: Reads command lines from <fname>, one line per instance.
                                    Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch".
                                    Alternatively: nmap output in greppable format (-oG) is also allowed (1x same port per line)
-     --mode <serial|parallel>      Mass testing to be done serial (default) or parallel
+     --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
 
 single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -e, --each-cipher             checks each local cipher remotely
@@ -12944,6 +12944,9 @@ parse_cmd_line() {
                          *)   tmln_magenta "\nmass testing mode can be either \"serial\" or \"parallel\""
                               help 1
                     esac
+                    ;;
+               --parallel)
+                    MASS_TESTING_MODE=parallel
                     ;;
                --warnings|--warnings=*)
                     WARNINGS=$(parse_opt_equal_sign "$1" "$2")
