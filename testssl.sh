@@ -11138,7 +11138,7 @@ help() {
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
      --file <fname|fname.gmap>     Mass testing option: Reads command lines from <fname>, one line per instance.
                                    Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch".
-                                   Alternatively: nmap output in greppable format (-oG) is also allowed (1x same port per line)
+                                   Alternatively: nmap output in greppable format (-oG) (1x port per line allowed)
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
 
 single check as <options>  ("$PROG_NAME  URI" does everything except -E):
@@ -12329,13 +12329,17 @@ create_mass_testing_cmdline() {
      return 0
 }
 
+
 nmap_to_plain_file() {
      local target_fname=""
      local oneline=""
+     local ip hosttxt round_brackets ports_etc
+     local portstxt tmp tmp2 port
+     #FIXME: IPv6 is missing here
 
-     # Ok, since we are here we have an nmap file. To avoid questions we make sure it's the right format too
+     # Ok, since we are here we are sure to have an nmap file. To avoid questions we make sure it's the right format too
      if [[ "$(head -1 "$FNAME")" =~ ( -oG )(.*) ]]; then
-          # yes, grappable
+          # yes, greppable
           if [[ $(grep -c Status "$FNAME") -ge 1 ]]; then
                [[ $(grep -c  '\/open\/' $FNAME)  -eq 0 ]] && \
                     fatal "Nmap file $FNAME should contain at least one open port" -1
@@ -12348,17 +12352,44 @@ nmap_to_plain_file() {
      # test whether there's more than one "open" per line which is not supported currently
      while read -r oneline; do
           if [[ $(tr ',' '\n' <<< "$oneline" | grep -c '\/open\/') -gt 1 ]]; then
-               fatal "nmap parser for file $FNAME cannot contain > 1 port per line" -3
+               fatal "nmap parser for file $FNAME currently cannot contain > 1 port per line" -3
           fi
      done < "$FNAME"
-     target_fname=${FNAME%.*}.txt     # strip extension
-#FIXME: # nmap in mass testing mode supplies the hostname too in $3. That's normally unreliable
-# as a DNS reverse lookup used and reality shows those records are not as good maintained.
-# However a check whether the forward lookup matches the IP should be done and if so we should
-# should rather use the fqdn    And: better use read here
-     awk '/\/open\// { print $2":"$5 }' "$FNAME" | sed 's/\/open.*$//g' >"$target_fname"
-     [[ $? -ne 0 ]] && \
-          fatal "conversion from nmap grepable to text somehow failed around $LINENO" -3
+     # strip extension and create output file *.txt in same folder
+     target_fname="${FNAME%.*}.txt"
+     > "${target_fname}"
+     if [[ $? -ne 0 ]]; then
+          # try to just create ${FNAME%.*}.txt in the same dir as the gmap file failed.
+          # backup is using one in $TEMPDIR
+          target_fname="${target_fname##*\/}"     # strip path (Unix)
+          target_fname="${target_fname##*\\}"     # strip path (Dos)
+          target_fname="$TEMPDIR/$target_fname"
+          > "${target_fname}" || fatal "Cannot create \"${target_fname}\""  -1
+     fi
+
+     # format:
+     # Line x:   "Status: Up"
+     # Line x+1: "Host: AAA.BBB.CCC.DDD (<FQDN>) Ports: 443/open/tcp//https///"
+     # or e.g.for ports in Line x+1 (if we can deal with > 1x port):
+     #            Ports: 22/open/tcp//ssh//<banner>/, 25/open/tcp//smtp//<banner>/, 443/open/tcp//ssl|http//<banner>
+     while read -r hosttxt ip round_brackets ports_etc; do
+          grep -q "Status: " <<< "$ports_etc" && continue
+          grep -q '\/open\/' <<< "$ports_etc" || continue
+          read -r portstxt tmp <<< "$ports_etc"
+          IFS="/" read -r port tmp2 <<< "$tmp"         # fetch first (and only) port (and for now ignore the rest)
+          fqdn="${round_brackets/\(/}"
+          fqdn="${fqdn/\)/}"
+          if [[ -n "$fqdn" ]]; then
+               tmp="$(get_a_record "$fqdn")"
+               debugme echo "$tmp \?= $ip"
+               if [[ "$tmp" == "$ip" ]]; then
+                    echo "$fqdn:$port" >>"$target_fname"
+                    continue
+               fi
+          fi
+          echo "$ip:$port" >>"$target_fname"
+     done < "$FNAME"
+
      [[ -s "$target_fname" ]] || \
           fatal "Couldn't find any open port in $FNAME" -3
      export FNAME=$target_fname
@@ -12944,6 +12975,9 @@ parse_cmd_line() {
                          *)   tmln_magenta "\nmass testing mode can be either \"serial\" or \"parallel\""
                               help 1
                     esac
+                    ;;
+               --serial)
+                    MASS_TESTING_MODE=serial
                     ;;
                --parallel)
                     MASS_TESTING_MODE=parallel
