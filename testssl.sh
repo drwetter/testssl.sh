@@ -12330,6 +12330,30 @@ create_mass_testing_cmdline() {
 }
 
 
+ports2starttls() {
+     local tcp_port=$1
+
+     case $tcp_port in
+          21)       echo "-t ftp" ;;
+          23)       echo "-t telnet" ;;
+          119)      echo "-t nntp" ;;   # to come
+          25|587)   echo "-t smtp" ;;
+          110)      echo "-t pop3" ;;
+          143)      echo "-t imap" ;;
+          389)      echo "-t ldap";;
+          3306)     echo "-t mysql" ;;  # to come
+          5222)     echo "-t xmpp" ;;   # domain of jabber server maybe needed
+          5432)     echo "-t postgres" ;;
+# for the following plain TLS ports we wouldn't need to list them. We do this just for reference which port is used by which service
+          563)      ;;  # NNTPS
+          636)      ;;  # LDAP
+          443|465)  ;;  # HTTPS | SMTP
+          631)      ;;  # CUPS
+          993|995)  ;;  # POP3|IMAP
+          3389)     ;;  # RDP
+     esac
+}
+
 nmap_to_plain_file() {
      local target_fname=""
      local oneline=""
