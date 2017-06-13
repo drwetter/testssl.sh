@@ -12332,33 +12332,38 @@ create_mass_testing_cmdline() {
 
 ports2starttls() {
      local tcp_port=$1
+     local ret=0
 
+# https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
      case $tcp_port in
-          21)       echo "-t ftp" ;;
-          23)       echo "-t telnet" ;;
-          119)      echo "-t nntp" ;;   # to come
-          25|587)   echo "-t smtp" ;;
-          110)      echo "-t pop3" ;;
-          143)      echo "-t imap" ;;
-          389)      echo "-t ldap";;
-          3306)     echo "-t mysql" ;;  # to come
-          5222)     echo "-t xmpp" ;;   # domain of jabber server maybe needed
+          21)       echo "-t ftp " ;;
+          23)       echo "-t telnet " ;;
+          119|433)  echo "-t nntp " ;;   # to come
+          25|587)   echo "-t smtp " ;;
+          110)      echo "-t pop3 " ;;
+          143)      echo "-t imap " ;;
+          389)      echo "-t ldap ";;
+          3306)     echo "-t mysql " ;;  # to come
+          5222)     echo "-t xmpp " ;;   # domain of jabber server maybe needed
           5432)     echo "-t postgres" ;;
-# for the following plain TLS ports we wouldn't need to list them. We do this just for reference which port is used by which service
-          563)      ;;  # NNTPS
-          636)      ;;  # LDAP
-          443|465)  ;;  # HTTPS | SMTP
-          631)      ;;  # CUPS
-          993|995)  ;;  # POP3|IMAP
-          3389)     ;;  # RDP
+          563)                ;;  # NNTPS
+          636)                ;;  # LDAP
+          1443|8443|443|981)  ;;  # HTTPS
+          465)                ;;  # HTTPS | SMTP
+          631)                ;;  # CUPS
+          853)                ;;  # DNS over TLS
+          995|993)            ;;  # POP3|IMAP
+          3389)               ;;  # RDP
+          *) ret=1            ;;  # we don't know this ports so we rather do not scan it
      esac
+     return $ret
 }
 
 nmap_to_plain_file() {
      local target_fname=""
      local oneline=""
-     local ip hosttxt round_brackets ports_etc
-     local portstxt tmp tmp2 port
+     local ip hosttxt round_brackets ports_specs starttls
+     local tmp port host_spec protocol dontcare dontcare1
      #FIXME: IPv6 is missing here
 
      # Ok, since we are here we are sure to have an nmap file. To avoid questions we make sure it's the right format too
@@ -12373,12 +12378,6 @@ nmap_to_plain_file() {
      else
           fatal "Nmap file $FNAME is not in grep(p)able format (-oG filename.gmap)" -1
      fi
-     # test whether there's more than one "open" per line which is not supported currently
-     while read -r oneline; do
-          if [[ $(tr ',' '\n' <<< "$oneline" | grep -c '\/open\/') -gt 1 ]]; then
-               fatal "nmap parser for file $FNAME currently cannot contain > 1 port per line" -3
-          fi
-     done < "$FNAME"
      # strip extension and create output file *.txt in same folder
      target_fname="${FNAME%.*}.txt"
      > "${target_fname}"
@@ -12391,28 +12390,34 @@ nmap_to_plain_file() {
           > "${target_fname}" || fatal "Cannot create \"${target_fname}\""  -1
      fi
 
-     # format:
-     # Line x:   "Status: Up"
+     # Line x:   "Host: AAA.BBB.CCC.DDD (<FQDN>) Status: Up"
      # Line x+1: "Host: AAA.BBB.CCC.DDD (<FQDN>) Ports: 443/open/tcp//https///"
-     # or e.g.for ports in Line x+1 (if we can deal with > 1x port):
-     #            Ports: 22/open/tcp//ssh//<banner>/, 25/open/tcp//smtp//<banner>/, 443/open/tcp//ssl|http//<banner>
-     while read -r hosttxt ip round_brackets ports_etc; do
-          grep -q "Status: " <<< "$ports_etc" && continue
-          grep -q '\/open\/' <<< "$ports_etc" || continue
-          read -r portstxt tmp <<< "$ports_etc"
-          IFS="/" read -r port tmp2 <<< "$tmp"         # fetch first (and only) port (and for now ignore the rest)
+     # (or):      Host: AAA.BBB.CCC.DDD (<FQDN>) Ports: 22/open/tcp//ssh//<banner>/, 25/open/tcp//smtp//<banner>/, 443/open/tcp//ssl|http//<banner>
+     while read -r hosttxt ip round_brackets tmp ports_specs; do
+          grep -q "Status: " <<< "$ports_specs" && continue             # we don't need this
+          grep -q '\/open\/tcp\/' <<< "$ports_specs" || continue        # no open tcp at all for this IP --> move on
           fqdn="${round_brackets/\(/}"
           fqdn="${fqdn/\)/}"
           if [[ -n "$fqdn" ]]; then
                tmp="$(get_a_record "$fqdn")"
                debugme echo "$tmp \?= $ip"
                if [[ "$tmp" == "$ip" ]]; then
-                    echo "$fqdn:$port" >>"$target_fname"
-                    continue
+                    host_spec="$fqdn"
                fi
+          else
+               host_spec="$ip"
           fi
-          echo "$ip:$port" >>"$target_fname"
+          while read oneline; do
+               # 25/open/tcp//smtp//<banner>/,
+               grep -q '\/open\/tcp\/' <<< "$oneline" || continue          # no open tcp for this port on this IP --> move on
+               IFS=/ read -r port dontcare protocol dontcare1 <<< "$oneline"
+               starttls="$(ports2starttls $port)"
+               [[ $? -eq 1 ]] && continue                                  # nmap got a port but we don't know how to speak to
+               [[ "$DEBUG" -ge 1 ]] && echo "${starttls}$host_spec:$port"
+               echo "${starttls}${host_spec}:${port}" >>"$target_fname"
+          done < <(tr ',' '\n' <<< "$ports_specs")
      done < "$FNAME"
+     [[ "$DEBUG" -ge 1 ]] && echo
 
      [[ -s "$target_fname" ]] || \
           fatal "Couldn't find any open port in $FNAME" -3
