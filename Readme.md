@@ -86,7 +86,7 @@ Please file bug reports @ https://github.com/drwetter/testssl.sh/issues.
 
 For a start see the
 [wiki](https://github.com/drwetter/testssl.sh/wiki/Man-Page).
-Help is needed here. Will Hunt provides a good [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/) for Version 2.8, including useful background info.
+Help is needed here. Will Hunt provides a good [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/) for version 2.8, including useful background info.
 
 #### Bug reports
 
