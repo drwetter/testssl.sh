@@ -12370,7 +12370,7 @@ nmap_to_plain_file() {
      if [[ "$(head -1 "$FNAME")" =~ ( -oG )(.*) ]]; then
           # yes, greppable
           if [[ $(grep -c Status "$FNAME") -ge 1 ]]; then
-               [[ $(grep -c  '\/open\/' $FNAME)  -eq 0 ]] && \
+               [[ $(grep -c  '\/open\/' "$FNAME")  -eq 0 ]] && \
                     fatal "Nmap file $FNAME should contain at least one open port" -1
           else
                fatal "strange, nmap grepable misses \"Status\"" -1
@@ -12396,6 +12396,7 @@ nmap_to_plain_file() {
      while read -r hosttxt ip round_brackets tmp ports_specs; do
           grep -q "Status: " <<< "$ports_specs" && continue             # we don't need this
           grep -q '\/open\/tcp\/' <<< "$ports_specs" || continue        # no open tcp at all for this IP --> move on
+          host_spec="$ip"
           fqdn="${round_brackets/\(/}"
           fqdn="${fqdn/\)/}"
           if [[ -n "$fqdn" ]]; then
@@ -12404,10 +12405,8 @@ nmap_to_plain_file() {
                if [[ "$tmp" == "$ip" ]]; then
                     host_spec="$fqdn"
                fi
-          else
-               host_spec="$ip"
           fi
-          while read oneline; do
+          while read -r oneline; do
                # 25/open/tcp//smtp//<banner>/,
                grep -q '\/open\/tcp\/' <<< "$oneline" || continue          # no open tcp for this port on this IP --> move on
                IFS=/ read -r port dontcare protocol dontcare1 <<< "$oneline"
