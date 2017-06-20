@@ -1880,6 +1880,7 @@ emphasize_stuff_in_headers(){
           -e "s/Win64/${yellow}\Win64${off}/g" \
           -e "s/Ubuntu/${yellow}Ubuntu${off}/g" \
           -e "s/ubuntu/${yellow}ubuntu${off}/g" \
+          -e "s/stretch/${yellow}stretch${off}/g" \
           -e "s/jessie/${yellow}jessie${off}/g" \
           -e "s/squeeze/${yellow}squeeze${off}/g" \
           -e "s/wheezy/${yellow}wheezy${off}/g" \
@@ -1902,6 +1903,10 @@ emphasize_stuff_in_headers(){
           -e "s/X-Version/${yellow}X-Version${off}/g" \
           -e "s/X-Powered-By/${yellow}X-Powered-By${off}/g" \
           -e "s/X-UA-Compatible/${yellow}X-UA-Compatible${off}/g" \
+          -e "s/Link/${yellow}Link${off}/g" \
+          -e "s/X-Rack-Cache/${yellow}X-Rack-Cache${off}/g" \
+          -e "s/X-Runtime/${yellow}X-Runtime${off}/g" \
+          -e "s/X-Pingback/${yellow}X-Pingback${off}/g" \
           -e "s/X-AspNet-Version/${yellow}X-AspNet-Version${off}/g"
 
      if "$do_html"; then
@@ -1914,6 +1919,7 @@ emphasize_stuff_in_headers(){
                     -e "s/Win64/${html_yellow}\Win64${html_off}/g" \
                     -e "s/Ubuntu/${html_yellow}Ubuntu${html_off}/g" \
                     -e "s/ubuntu/${html_yellow}ubuntu${html_off}/g" \
+                    -e "s/stretch//${html_yellow}stretch${html_off}/g" \
                     -e "s/jessie/${html_yellow}jessie${html_off}/g" \
                     -e "s/squeeze/${html_yellow}squeeze${html_off}/g" \
                     -e "s/wheezy/${html_yellow}wheezy${html_off}/g" \
@@ -1936,6 +1942,10 @@ emphasize_stuff_in_headers(){
                     -e "s/X-Version/${html_yellow}X-Version${html_off}/g" \
                     -e "s/X-Powered-By/${html_yellow}X-Powered-By${html_off}/g" \
                     -e "s/X-UA-Compatible/${html_yellow}X-UA-Compatible${html_off}/g" \
+                    -e "s/Link/${html_yellow}Link${html_off}/g" \
+                    -e "s/X-Runtime/${html_yellow}X-Runtime${html_off}/g" \
+                    -e "s/X-Rack-Cache/${html_yellow}X-Rack-Cache${html_off}/g" \
+                    -e "s/X-Pingback/${html_yellow}X-Pingback${html_off}/g" \
                     -e "s/X-AspNet-Version/${html_yellow}X-AspNet-Version${html_off}/g")"
           else
                html_out "$(html_reserved "$1")"
