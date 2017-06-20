@@ -11146,8 +11146,6 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -E, --cipher-per-proto        checks those per protocol
      -s, --std, --standard         tests certain lists of cipher suites by strength
      -p, --protocols               checks TLS/SSL protocols (including SPDY/HTTP2)
-     -y, --spdy, --npn             checks for SPDY/NPN
-     -Y, --http2, --alpn           checks for HTTP2/ALPN
      -S, --server-defaults         displays the server's default picks and certificate info
      -P, --server-preference       displays the server's picks: protocol+cipher
      -x, --single-cipher <pattern> tests matched <pattern> of ciphers
@@ -12668,8 +12666,6 @@ initialize_globals() {
      do_std_cipherlists=false
      do_server_defaults=false
      do_server_preference=false
-     do_spdy=false
-     do_http2=false
      do_ssl_poodle=false
      do_sweet32=false
      do_tls_fallback_scsv=false
@@ -12704,8 +12700,6 @@ set_scanning_defaults() {
      do_std_cipherlists=true
      do_server_defaults=true
      do_server_preference=true
-     do_spdy=true
-     do_http2=true
      do_tls_fallback_scsv=true
      do_client_simulation=true
      VULN_COUNT=16
@@ -12717,7 +12711,7 @@ query_globals() {
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
-               do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
+               do_std_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
      done
@@ -12730,7 +12724,7 @@ debug_globals() {
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
-               do_std_cipherlists do_server_defaults do_server_preference do_spdy do_http2 do_ssl_poodle do_tls_fallback_scsv \
+               do_std_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
@@ -12852,14 +12846,6 @@ parse_cmd_line() {
                     ;;
                -p|--protocols)
                     do_protocols=true
-                    do_spdy=true
-                    do_http2=true
-                    ;;
-               -y|--spdy|--npn)
-                    do_spdy=true
-                    ;;
-               -Y|--http2|--alpn)
-                    do_http2=true
                     ;;
                -s|--std|--standard)
                     do_std_cipherlists=true
@@ -13227,9 +13213,11 @@ lets_roll() {
 
      # all top level functions  now following have the prefix "run_"
      fileout_section_header $section_number false && ((section_number++))
-     $do_protocols && { run_protocols; ret=$(($? + ret)); time_right_align run_protocols; }
-     $do_spdy && { run_spdy; ret=$(($? + ret)); time_right_align run_spdy; }
-     $do_http2 && { run_http2; ret=$(($? + ret)); time_right_align run_http2; }
+     $do_protocols && {
+          run_protocols; ret=$(($? + ret)); time_right_align run_protocols;
+          run_spdy; ret=$(($? + ret)); time_right_align run_spdy;
+          run_http2; ret=$(($? + ret)); time_right_align run_http2;
+     }
 
      fileout_section_header $section_number true && ((section_number++))
      $do_std_cipherlists && { run_std_cipherlists; ret=$(($? + ret)); time_right_align run_std_cipherlists; }
