@@ -1875,6 +1875,7 @@ emphasize_stuff_in_headers(){
 # see http://www.grymoire.com/Unix/Sed.html#uh-3
 #    outln "$1" | sed "s/[0-9]*/$brown&${off}/g"
      tmln_out "$1" | sed -e "s/\([0-9]\)/${brown}\1${off}/g" \
+          -e "s/Unix/${yellow}\Unix${off}/g" \
           -e "s/Debian/${yellow}\Debian${off}/g" \
           -e "s/Win32/${yellow}\Win32${off}/g" \
           -e "s/Win64/${yellow}\Win64${off}/g" \
@@ -1914,6 +1915,7 @@ emphasize_stuff_in_headers(){
                html_out "$(tm_out "$1" | sed -e 's/\&/\&amp;/g' \
                     -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" \
                     -e "s/\([0-9]\)/${html_brown}\1${html_off}/g" \
+                    -e "s/Unix/${html_yellow}\Unix${html_off}/g" \
                     -e "s/Debian/${html_yellow}\Debian${html_off}/g" \
                     -e "s/Win32/${html_yellow}\Win32${html_off}/g" \
                     -e "s/Win64/${html_yellow}\Win64${html_off}/g" \
@@ -1997,7 +1999,7 @@ run_rp_banner() {
           run_http_header "$1" || return 3
      fi
      pr_bold " Reverse Proxy banner         "
-     egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded' $HEADERFILE >$TMPFILE
+     egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded|^Forwarded' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "rp_header" "INFO" "No reverse proxy banner found"
@@ -2119,7 +2121,7 @@ run_cookie_flags() {     # ARG1: Path
 
 run_more_flags() {
      local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
-     local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible Referrer-Policy"
+     local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible Referrer-Policy X-UA-Compatible"
      local f2t line
      local first=true
      local spaces="                              "
@@ -9441,7 +9443,7 @@ run_renego() {
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Renegotiation vulnerabilities " && outln
 
-     pr_bold " Secure Renegotiation "; out "($cve)      "    # and RFC5746, OSVDB 59968-59974
+     pr_bold " Secure Renegotiation "; out "($cve)      "    # and RFC 5746, OSVDB 59968-59974
                                                                       # community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
      [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
      $OPENSSL s_client $OPTIMAL_PROTO $STARTTLS $BUGS -connect $NODEIP:$PORT $addcmd $PROXY 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
@@ -11122,12 +11124,8 @@ check_bsd_mount() {
 help() {
      cat << EOF
 
-     "$PROG_NAME URI"    or    "$PROG_NAME <options>"    or    "$PROG_NAME <options> URI"
+     "$PROG_NAME [options] <URI>"    or    "$PROG_NAME <options>"
 
-
-"$PROG_NAME URI", where URI is:
-
-     URI                           host|host:port|URL|URL:port   port 443 is default, URL can only contain HTTPS protocol)
 
 "$PROG_NAME <options>", where <options> is:
 
@@ -11137,10 +11135,13 @@ help() {
      -V, --local                   pretty print all local ciphers
      -V, --local <pattern>         which local ciphers with <pattern> are available? If pattern is not a number: word match
 
-     pattern                       is always an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
+     <pattern>                     is always an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
 
+"$PROG_NAME <URI>", where <URI> is:
 
-"$PROG_NAME <options> URI", where <options> is:
+     <URI>                         host|host:port|URL|URL:port   port 443 is default, URL can only contain HTTPS protocol)
+
+"$PROG_NAME [options] <URI>", where [options] is:
 
      -t, --starttls <protocol>     Does a default run against a STARTTLS enabled <protocol,
                                    protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres> (latter three require supplied openssl)
@@ -11164,7 +11165,7 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -h, --header, --headers       tests HSTS, HPKP, server/app banner, security headers, cookie, reverse proxy, IPv4 address
 
      -U, --vulnerable              tests all (of the following) vulnerabilities (if applicable)
-     -H, --heartbleed              tests for heartbleed vulnerability
+     -H, --heartbleed              tests for Heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -T, --ticketbleed             tests for Ticketbleed vulnerability in BigIP loadbalancers
      -R, --renegotiation           tests for renegotiation vulnerabilities
@@ -11226,7 +11227,7 @@ file output options (can also be preset via environment variables)
 
 
 Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
-URI always needs to be the last parameter.
+<URI> always needs to be the last parameter.
 
 EOF
      # Set HTMLHEADER and JSONHEADER to false so that the cleanup() function won't
