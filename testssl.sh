@@ -1875,10 +1875,10 @@ emphasize_stuff_in_headers(){
 # see http://www.grymoire.com/Unix/Sed.html#uh-3
 #    outln "$1" | sed "s/[0-9]*/$brown&${off}/g"
      tmln_out "$1" | sed -e "s/\([0-9]\)/${brown}\1${off}/g" \
-          -e "s/Unix/${yellow}\Unix${off}/g" \
-          -e "s/Debian/${yellow}\Debian${off}/g" \
-          -e "s/Win32/${yellow}\Win32${off}/g" \
-          -e "s/Win64/${yellow}\Win64${off}/g" \
+          -e "s/Unix/${yellow}Unix${off}/g" \
+          -e "s/Debian/${yellow}Debian${off}/g" \
+          -e "s/Win32/${yellow}Win32${off}/g" \
+          -e "s/Win64/${yellow}Win64${off}/g" \
           -e "s/Ubuntu/${yellow}Ubuntu${off}/g" \
           -e "s/ubuntu/${yellow}ubuntu${off}/g" \
           -e "s/stretch/${yellow}stretch${off}/g" \
@@ -1915,10 +1915,10 @@ emphasize_stuff_in_headers(){
                html_out "$(tm_out "$1" | sed -e 's/\&/\&amp;/g' \
                     -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" \
                     -e "s/\([0-9]\)/${html_brown}\1${html_off}/g" \
-                    -e "s/Unix/${html_yellow}\Unix${html_off}/g" \
-                    -e "s/Debian/${html_yellow}\Debian${html_off}/g" \
-                    -e "s/Win32/${html_yellow}\Win32${html_off}/g" \
-                    -e "s/Win64/${html_yellow}\Win64${html_off}/g" \
+                    -e "s/Unix/${html_yellow}Unix${html_off}/g" \
+                    -e "s/Debian/${html_yellow}Debian${html_off}/g" \
+                    -e "s/Win32/${html_yellow}Win32${html_off}/g" \
+                    -e "s/Win64/${html_yellow}Win64${html_off}/g" \
                     -e "s/Ubuntu/${html_yellow}Ubuntu${html_off}/g" \
                     -e "s/ubuntu/${html_yellow}ubuntu${html_off}/g" \
                     -e "s/stretch//${html_yellow}stretch${html_off}/g" \
