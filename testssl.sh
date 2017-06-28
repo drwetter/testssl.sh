@@ -176,6 +176,7 @@ QUIET=${QUIET:-false}                   # don't output the banner. By doing this
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
 ASSUME_HTTP=${ASSUME_HTTP:-false}       # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
+WARNINGS=${WARNINGS:-""}                # can be either off or batch
 DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ are kept for further debugging purposes
                                         # 2: list more what's going on , also lists some errors of connections
                                         # 3: slight hexdumps + other info,
@@ -11513,7 +11514,6 @@ ignore_no_or_lame() {
      local a
 
      [[ "$WARNINGS" == off ]] && return 0
-     [[ "$WARNINGS" == false ]] && return 0
      [[ "$WARNINGS" == batch ]] && return 1
      tm_warning "$1 --> "
      read a
@@ -13011,8 +13011,8 @@ parse_cmd_line() {
                     WARNINGS=$(parse_opt_equal_sign "$1" "$2")
                     [[ $? -eq 0 ]] && shift
                     case "$WARNINGS" in
-                         batch|off|false) ;;
-                         *)   tmln_magenta "\nwarnings can be either \"batch\", \"off\" or \"false\""
+                         batch|off) ;;
+                         *)   tmln_magenta "\nwarnings can be either \"batch\", or \"off\""
                               help 1
                     esac
                     ;;
