@@ -4087,12 +4087,12 @@ run_std_cipherlists() {
      std_cipherlists 'LOW:DES:!ADH:!EXP:!NULL'               " LOW: 64 Bit + DES encryption (w/o export) "    -2 "DES+64Bit" "$low_ciphers"    "$sslv2_low_ciphers"
 
      std_cipherlists 'MEDIUM:!aNULL:!AES:!CAMELLIA:!ARIA:!CHACHA20:!3DES' \
-                                                             " Weak 128 Bit ciphers                      "    -1 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers"
+                                                             " Weak 128 Bit ciphers (SEED, IDEA, RC[2,4])"    -1 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers"
      std_cipherlists '3DES:!aNULL:!ADH'                      " Triple DES Ciphers (Medium)               "     0 "3DES"      "$tdes_ciphers"   "$sslv2_tdes_ciphers"
      std_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!AESGCM:!CamelliaGCM:!AESCCM8:!AESCCM'\
-                                                             " High grade encryption                     "     1 "HIGH"      "$high_ciphers"    ""
+                                                             " High encryption (AES+Camellia, no AEAD)   "     1 "HIGH"      "$high_ciphers"    ""
      std_cipherlists 'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM8:AESCCM' \
-                                                             " Strong grade encryption (AEAD ciphers)    "     2 "STRONG"    "$strong_ciphers"  ""
+                                                             " Strong encryption (AEAD ciphers)          "     2 "STRONG"    "$strong_ciphers"  ""
      outln
      return 0
 }
