@@ -3447,8 +3447,8 @@ client_simulation_sockets() {
      done
      debugme echo "sending client hello..."
      code2network "${data}"
-     fd_socket 5 || return 6
      data="$NW_STR"
+     fd_socket 5 || return 6
      [[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
