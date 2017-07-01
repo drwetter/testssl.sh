@@ -7005,8 +7005,8 @@ starttls_nntp_dialog() {
 
 starttls_postgres_dialog() {
      debugme echo "=== starting postgres STARTTLS dialog ==="
-     local reINITTLS="\x00\x00\x00\x08\x04\xD2\x16\x2F"
-     starttls_just_send "${reINITTLS}"                     && debugme echo "initiated STARTTLS" &&
+     local init_tls="\x00\x00\x00\x08\x04\xD2\x16\x2F"
+     starttls_just_send "${init_tls}"                      && debugme echo "initiated STARTTLS" &&
      starttls_full_read '' '' 'S'                          && debugme echo "received ack for STARTTLS"
      local ret=$?
      debugme echo "=== finished postgres STARTTLS dialog with ${ret} ==="
@@ -7100,7 +7100,7 @@ EOF
                     starttls_line "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" "proceed"
                     # BTW: https://xmpp.net !
                     ;;
-               postgres|postgress) # Postgres SQL, see http://www.postgresql.org/docs/devel/static/protocol-message-formats.html
+               postgres) # Postgres SQL, see http://www.postgresql.org/docs/devel/static/protocol-message-formats.html
                     starttls_postgres_dialog
                     ;;
                mysql) # MySQL, see https://dev.mysql.com/doc/internals/en/x-protocol-lifecycle-lifecycle.html#x-protocol-lifecycle-tls-extension
@@ -12864,7 +12864,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
                          ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres|mysql) ;;
-                         ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps|postgress) ;;
+                         ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
                          *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
