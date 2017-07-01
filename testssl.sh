@@ -276,6 +276,7 @@ HAS_FALLBACK_SCSV=false
 HAS_PROXY=false
 HAS_XMPP=false
 HAS_POSTGRES=false
+HAS_MYSQL=false
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -7012,6 +7013,15 @@ starttls_postgres_dialog() {
      return $ret
 }
 
+starttls_mysql_dialog() {
+     debugme echo "=== starting mysql STARTTLS dialog ==="
+
+     debugme echo "mysql socket dialog not yet implemented"
+
+     debugme echo "=== finished mysql STARTTLS dialog with ${ret} ==="
+     return $ret
+}
+
 # arg for a fd doesn't work here
 fd_socket() {
      local jabber=""
@@ -7092,6 +7102,9 @@ EOF
                     ;;
                postgres) # Postgres SQL, see http://www.postgresql.org/docs/devel/static/protocol-message-formats.html
                     starttls_postgres_dialog
+                    ;;
+               mysql) # MySQL, see https://dev.mysql.com/doc/internals/en/x-protocol-lifecycle-lifecycle.html#x-protocol-lifecycle-tls-extension
+                    starttls_mysql_dialog
                     ;;
                *) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
                     fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" -4
@@ -11061,6 +11074,9 @@ find_openssl_binary() {
      grep -q 'postgres' $s_client_starttls_has && \
           HAS_POSTGRES=true
 
+     grep -q 'mysql' $s_client_starttls_has && \
+          HAS_MYSQL=true
+
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
           if which timeout >&2 2>/dev/null ; then
                # there are different "timeout". Check whether --preserve-status is supported
@@ -11145,7 +11161,7 @@ help() {
 "$PROG_NAME [options] <URI>", where [options] is:
 
      -t, --starttls <protocol>     Does a default run against a STARTTLS enabled <protocol,
-                                   protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres> (latter three require supplied openssl)
+                                   protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql> (latter 4 require supplied openssl)
      --xmpphost <to_domain>        For STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
      --file <fname|fname.gmap>     Mass testing option: Reads command lines from <fname>, one line per instance.
@@ -11288,6 +11304,7 @@ HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
 HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
 HAS_POSTGRES: $HAS_POSTGRES
+HAS_MYSQL: $HAS_MYSQL
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -12057,7 +12074,7 @@ determine_optimal_proto() {
 }
 
 
-# arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap, postgres (maybe with trailing s)
+# arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap, postgres, mysql (maybe with trailing s)
 determine_service() {
      local ua
      local protocol
@@ -12088,7 +12105,7 @@ determine_service() {
                protocol=${1%s}     # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           fi
           case "$protocol" in
-               ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres)
+               ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql)
                     STARTTLS="-starttls $protocol"
                     SNI=""
                     if [[ "$protocol" == xmpp ]]; then
@@ -12108,6 +12125,12 @@ determine_service() {
                               fatal "Your $OPENSSL does not support the \"-starttls postgres\" option" -5
                          fi
                     fi
+                    if [[ "$protocol" == mysql ]]; then
+                         # Check if openssl version supports mysql.
+                         if ! "$HAS_MYSQL"; then
+                              fatal "Your $OPENSSL does not support the \"-starttls mysql\" option" -5
+                         fi
+                    fi
                     $OPENSSL s_client -connect $NODEIP:$PORT $PROXY $BUGS $STARTTLS 2>$ERRFILE >$TMPFILE </dev/null
                     if [[ $? -ne 0 ]]; then
                          debugme cat $TMPFILE | head -25
@@ -12116,13 +12139,14 @@ determine_service() {
                     fi
                     grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
                     out " Service set:$CORRECT_SPACES            STARTTLS via "
-                    fileout "service" "INFO" "$protocol"
                     out "$(toupper "$protocol")"
+                    [[ "$protocol" == mysql ]] && out " -- attention, this is experimental"
+                    fileout "service" "INFO" "$protocol"
                     [[ -n "$XMPP_HOST" ]] && out " (XMPP domain=\'$XMPP_HOST\')"
                     outln
                     ;;
                *)   outln
-                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet, ldap and postgres allowed" -4
+                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet, ldap, postgres, and mysql allowed" -4
                     ;;
           esac
      fi
@@ -12352,7 +12376,7 @@ ports2starttls() {
           110)      echo "-t pop3 " ;;
           143)      echo "-t imap " ;;
           389)      echo "-t ldap ";;
-          3306)     echo "-t mysql " ;;  # to come
+          3306)     echo "-t mysql " ;;
           5222)     echo "-t xmpp " ;;   # domain of jabber server maybe needed
           5432)     echo "-t postgres" ;;
           563)                ;;  # NNTPS
@@ -12839,7 +12863,7 @@ parse_cmd_line() {
                     STARTTLS_PROTOCOL="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
-                         ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres) ;;
+                         ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres|mysql) ;;
                          ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
                          *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
