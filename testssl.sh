@@ -270,6 +270,7 @@ HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
 HAS_SSL2=false
 HAS_SSL3=false
 HAS_NO_SSL2=false
+HAS_NOSERVERNAME=false
 HAS_ALPN=false
 HAS_SPDY=false
 HAS_FALLBACK_SCSV=false
@@ -1293,6 +1294,29 @@ string_to_asciihex() {
 
 }
 
+# Adjust options to $OPENSSL s_client based on OpenSSL version and protocol version
+s_client_options() {
+     local options="$1"
+
+     # Don't include the -servername option for an SSLv2 or SSLv3 ClientHello.
+     [[ -n "$SNI" ]] && [[ " $options " =~ \ -ssl[2|3]\  ]] && options="$(sed "s/$SNI//" <<< "$options")"
+
+     # The server_name extension should not be included in the ClientHello unless
+     # the -servername option is provided. However, OpenSSL 1.1.1 will include the
+     # server_name extension unless the -noservername option is provided. So, if
+     # the command line doesn't include -servername and the -noservername option is
+     # supported, then add -noservername to the options.
+     "$HAS_NOSERVERNAME" && [[ ! " $options " =~ " -servername " ]] && options+=" -noservername"
+
+     # Newer versions of OpenSSL have dropped support for the -no_ssl2 option, so
+     # remove any -no_ssl2 option if the option isn't supported. (Since versions of
+     # OpenSSL that don't support -no_ssl2 also don't support SSLv2, the option
+     # isn't needed for these versions of OpenSSL.)
+     ! "$HAS_NO_SSL2" && options="$(sed 's/-no_ssl2//' <<< "$options")"
+
+     tm_out "$options"
+}
+
 ###### check code starts here ######
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
@@ -1300,12 +1324,10 @@ string_to_asciihex() {
 service_detection() {
      local -i ret=0
      local -i was_killed
-     local addcmd=""
 
      if ! "$CLIENT_AUTH"; then
           # SNI is not standardardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
-          [[ ! "$1" =~ ssl ]] && addcmd="$SNI"
-          printf "$GET_REQ11" | $OPENSSL s_client $1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $addcmd >$TMPFILE 2>$ERRFILE &
+          printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
           was_killed=$?
           head $TMPFILE | grep -aq '^HTTP\/' && SERVICE=HTTP
@@ -1358,7 +1380,7 @@ service_detection() {
 
 #problems not handled: chunked
 run_http_header() {
-     local header addcmd=""
+     local header
      local -i ret
      local referer useragent
      local url redirect
@@ -1368,13 +1390,12 @@ run_http_header() {
      outln
 
      [[ -z "$1" ]] && url="/" || url="$1"
-     [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
-     printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $addcmd >$HEADERFILE 2>$ERRFILE &
+     printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      if [[ $? -eq 0 ]]; then
           # we do the get command again as it terminated within $HEADER_MAXSLEEP. Thus it didn't hang, we do it
           # again in the foreground to get an accurate header time!
-          printf "$GET_REQ11" | $OPENSSL s_client $OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $addcmd >$HEADERFILE 2>$ERRFILE
+          printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           HAD_SLEPT=0
@@ -2281,15 +2302,14 @@ std_cipherlists() {
      local -i i len sclient_success
      local sslv2_cipherlist detected_ssl2_ciphers
      local singlespaces
-     local proto="" addcmd=""
+     local proto=""
      local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
 
      [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && proto="$OPTIMAL_PROTO"
      pr_bold "$2    "                   # to be indented equal to server preferences
      if [[ -n "$5" ]] || listciphers "$1" $proto; then
           if [[ -z "$5" ]] || ( "$FAST" && listciphers "$1" -tls1 ); then
-               "$HAS_NO_SSL2" && addcmd="-no_ssl2"
-               $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $addcmd 2>$ERRFILE >$TMPFILE </dev/null
+               $OPENSSL s_client $(s_client_options "-cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -no_ssl2") 2>$ERRFILE >$TMPFILE </dev/null
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
                debugme cat $ERRFILE
@@ -2551,7 +2571,7 @@ run_cipher_match(){
      local -a -i index
      local -i nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0
      local -i num_bundles mod_check bundle_size bundle end_of_bundle
-     local addcmd dhlen has_dh_bits="$HAS_DH_BITS"
+     local dhlen has_dh_bits="$HAS_DH_BITS"
      local available
      local -i sclient_success
      local re='^[0-9A-Fa-f]+$'
@@ -2704,7 +2724,6 @@ run_cipher_match(){
                [[ $mod_check -ne 0 ]] && bundle_size+=1
           fi
 
-          "$HAS_NO_SSL2" && addcmd="-no_ssl2" || addcmd=""
           for (( bundle=0; bundle < num_bundles; bundle++ )); do
                end_of_bundle=$bundle*$bundle_size+$bundle_size
                [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
@@ -2714,7 +2733,7 @@ run_cipher_match(){
                          ! "${ciphers_found2[i]}" && ciphers_to_test+=":${ciph2[i]}"
                     done
                     [[ -z "$ciphers_to_test" ]] && break
-                    $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+                    $OPENSSL s_client $(s_client_options "-no_ssl2 -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
                     sclient_connect_successful "$?" "$TMPFILE" || break
                     cipher=$(get_cipher $TMPFILE)
                     [[ -z "$cipher" ]] && break
@@ -2836,7 +2855,7 @@ run_allciphers() {
      local -i i end_of_bundle bundle bundle_size num_bundles mod_check
      local -a ciphers_found ciphers_found2 hexcode2 ciph2 sslvers2 rfc_ciph2
      local -i -a index
-     local dhlen available ciphers_to_test supported_sslv2_ciphers addcmd=""
+     local dhlen available ciphers_to_test supported_sslv2_ciphers
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
 
@@ -2961,7 +2980,6 @@ run_allciphers() {
           [[ $mod_check -ne 0 ]] && bundle_size+=1
      fi
 
-     "$HAS_NO_SSL2" && addcmd="-no_ssl2"
      for (( bundle=0; bundle < num_bundles; bundle++ )); do
           end_of_bundle=$bundle*$bundle_size+$bundle_size
           [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
@@ -2972,7 +2990,7 @@ run_allciphers() {
                done
                success=1
                if [[ -n "$ciphers_to_test" ]]; then
-                    $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+                    $OPENSSL s_client $(s_client_options "-no_ssl2 -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
                     sclient_connect_successful "$?" "$TMPFILE"
                     if [[ "$?" -eq 0 ]]; then
                          cipher=$(get_cipher $TMPFILE)
@@ -3089,7 +3107,7 @@ run_cipher_per_proto() {
      local -a hexcode2 ciph2 rfc_ciph2
      local -i i bundle end_of_bundle bundle_size num_bundles mod_check
      local -a ciphers_found ciphers_found2 sigalg ossl_supported index
-     local dhlen supported_sslv2_ciphers ciphers_to_test addcmd sni temp
+     local dhlen supported_sslv2_ciphers ciphers_to_test addcmd temp
      local available
      local id
      local has_dh_bits="$HAS_DH_BITS"
@@ -3248,8 +3266,6 @@ run_cipher_per_proto() {
                     [[ $mod_check -ne 0 ]] && bundle_size+=1
                fi
 
-               sni=""
-               [[ ! "$proto" =~ ssl ]] && sni="$SNI"
                for (( bundle=0; bundle < num_bundles; bundle++ )); do
                     end_of_bundle=$bundle*$bundle_size+$bundle_size
                     [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
@@ -3260,7 +3276,7 @@ run_cipher_per_proto() {
                          done
                          success=1
                          if [[ -n "$ciphers_to_test" ]]; then
-                              $OPENSSL s_client -cipher "${ciphers_to_test:1}" $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>$ERRFILE </dev/null
+                              $OPENSSL s_client $(s_client_options "-cipher "${ciphers_to_test:1}" $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
                               sclient_connect_successful "$?" "$TMPFILE"
                               if [[ "$?" -eq 0 ]]; then
                                    cipher=$(get_cipher $TMPFILE)
@@ -3636,6 +3652,7 @@ run_client_simulation() {
      local name tls proto cipher temp what_dh bits curve
      local has_dh_bits using_sockets=true
      local client_service
+     local options
 
      # source the external file
      . "$TESTSSL_INSTALL_DIR/etc/client-simulation.txt" 2>/dev/null
@@ -3701,9 +3718,9 @@ run_client_simulation() {
                               [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
                          fi
                     else
-                         "$HAS_NO_SSL2" || protos[i]="$(sed 's/-no_ssl2//' <<< "${protos[i]}")"
-                         debugme echo "$OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null"
-                         $OPENSSL s_client -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+                         options="$(s_client_options "-cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
+                         debugme echo "$OPENSSL s_client $options  </dev/null"
+                         $OPENSSL s_client $options </dev/null >$TMPFILE 2>$ERRFILE
                          sclient_connect_successful $? $TMPFILE
                          sclient_success=$?
                     fi
@@ -5335,7 +5352,7 @@ determine_tls_extensions() {
 # arg1 is "-cipher <OpenSSL cipher>" or empty
 # arg2 is a list of protocols to try (tls1_2, tls1_1, tls1, ssl3) or empty (if all should be tried)
 get_server_certificate() {
-     local protocols_to_try proto addcmd
+     local protocols_to_try proto
      local success
      local npn_params="" line
      local savedir
@@ -5391,8 +5408,7 @@ get_server_certificate() {
      for proto in $protocols_to_try; do
           # we could know here which protcols are supported
           addcmd=""
-          [[ ! "$proto" =~ ssl ]] && addcmd="$SNI"
-          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug $npn_params -status </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status") </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                success=0
                grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
@@ -5401,7 +5417,7 @@ get_server_certificate() {
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
-          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $addcmd -$proto -tlsextdebug </dev/null 2>>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug") </dev/null 2>>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
                if [ -z "$1" ]; then
                    prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
@@ -5951,7 +5967,7 @@ certificate_info() {
 
      if [[ -n "$sni_used" ]]; then
           # no cipher suites specified here. We just want the default vhost subject
-          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO") 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
           if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
                cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
                [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
@@ -10209,7 +10225,7 @@ run_freak() {
      local exportrsa_tls_cipher_list_hex="00,62, 00,61, 00,64, 00,60, 00,14, 00,0E, 00,08, 00,06, 00,03"
      local exportrsa_ssl2_cipher_list_hex="04,00,80, 02,00,80"
      local detected_ssl2_ciphers
-     local addcmd="" addtl_warning="" hexc
+     local addtl_warning="" hexc
      local cve="CVE-2015-0204"
      local cwe="CWE-310"
      local hint=""
@@ -10254,8 +10270,7 @@ run_freak() {
                fi
           fi
      else
-          "$HAS_NO_SSL2" && addcmd="-no_ssl2" || addcmd=""
-          $OPENSSL s_client $STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI $addcmd >$TMPFILE 2>$ERRFILE </dev/null
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI -no_ssl2") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
           debugme egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
@@ -10918,7 +10933,7 @@ run_rc4() {
      local -i i
      local -a ciphers_found ciphers_found2 hexcode2 ciph2 sslvers2 rfc_ciph2
      local -i -a index
-     local dhlen available="" ciphers_to_test supported_sslv2_ciphers addcmd=""
+     local dhlen available="" ciphers_to_test supported_sslv2_ciphers
      local has_dh_bits="$HAS_DH_BITS" rc4_detected=""
      local using_sockets=true
      local cve="CVE-2013-2566, CVE-2015-2808"
@@ -11032,7 +11047,6 @@ run_rc4() {
           fi
      done
 
-     "$HAS_NO_SSL2" && addcmd="-no_ssl2"
      for (( success=0; success==0 ; 1 )); do
           ciphers_to_test=""
           for (( i=0; i < nr_ossl_ciphers; i++ )); do
@@ -11040,7 +11054,7 @@ run_rc4() {
           done
           success=1
           if [[ -n "$ciphers_to_test" ]]; then
-               $OPENSSL s_client $addcmd -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+               $OPENSSL s_client $(s_client_options "-no_ssl2 -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
                sclient_connect_successful "$?" "$TMPFILE"
                if [[ "$?" -eq 0 ]]; then
                     cipher=$(get_cipher $TMPFILE)
@@ -11346,6 +11360,9 @@ find_openssl_binary() {
 
      $OPENSSL s_client -no_ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_NO_SSL2=true
+
+     $OPENSSL s_client -noservername -connect x 2>&1 | grep -aq "unknown option" || \
+          HAS_NOSERVERNAME=true
 
      $OPENSSL s_client -help 2>$s_client_has
 
