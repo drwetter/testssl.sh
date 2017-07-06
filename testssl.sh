@@ -2079,7 +2079,7 @@ run_cookie_flags() {     # ARG1: Path
      pr_bold " Cookie(s)                    "
      grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
      if [[ $? -eq 0 ]]; then
-          nr_cookies=$(count_lines "$TMPFILE")
+          nr_cookies=$(count_lines "$(cat $TMPFILE)")
           out "$nr_cookies issued: "
           fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\"$msg302_"
           if [[ $nr_cookies -gt 1 ]]; then
