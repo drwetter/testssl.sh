@@ -13081,18 +13081,22 @@ parse_cmd_line() {
                     do_logging=true
                     ;;
                --json)
+                    $do_pretty_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
                     do_json=true
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
                --jsonfile|--jsonfile=*)
+                    $do_pretty_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_json=true
                     ;;
                --json-pretty)
+                    $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
                     do_pretty_json=true
                     ;;
                --jsonfile-pretty|--jsonfile-pretty=*)
+                    $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_pretty_json=true
