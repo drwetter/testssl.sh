@@ -1725,7 +1725,7 @@ run_hpkp() {
           hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
 
           # Get keys/hashes from intermediate certificates
-          $OPENSSL s_client $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+          $OPENSSL s_client $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT $SNI  </dev/null >$TMPFILE 2>$ERRFILE
           # Place the server's certificate in $HOSTCERT and any intermediate
           # certificates that were provided in $TEMPDIR/intermediatecerts.pem
           # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
