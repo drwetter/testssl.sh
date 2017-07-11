@@ -1068,6 +1068,13 @@ is_ipv6addr() {
      return 0
 }
 
+contains() {
+     local array="$1[@]"
+     for item in "${!array}"; do
+          [[ $item == $2 ]] && return 0
+     done
+     return 1
+}
 
 ###### END helper function definitions ######
 
@@ -2401,6 +2408,17 @@ rfc2openssl() {
      return 0
 }
 
+# argv[1]: rfc cipher name
+# return: hexcode (ex: "00,33")
+rfc2hexcode() {
+     local hexcode=""
+     local -i i
+
+     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+          [[ "$1" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && hexcode="${TLS_CIPHER_HEXCODE[i]}" && break
+     done
+     echo "${hexcode:2:2},${hexcode:7:2}"
+}
 
 show_rfc_style(){
      local rfcname="" hexcode
@@ -10783,8 +10801,14 @@ run_rc4() {
 
      for (( success=0; success==0 ; 1 )); do
           ciphers_to_test=""
+          local -i nr_ciphers_to_test=0
+          local -a hex_ciphers_to_test
           for (( i=0; i < nr_nonossl_ciphers; i++ )); do
-               ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode2[i]}"
+               if ! "${ciphers_found2[i]}"; then
+                    ciphers_to_test+=", ${hexcode2[i]}"
+                    hex_ciphers_to_test[nr_ciphers_to_test]=${hexcode2[i]}
+                    nr_ciphers_to_test+=1
+               fi
           done
           success=1
           if [[ -n "$ciphers_to_test" ]]; then
@@ -10801,6 +10825,13 @@ run_rc4() {
                     for (( i=0; i < nr_nonossl_ciphers; i++ )); do
                          [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
                     done
+                    # Deal with yaSSL server bug
+                    cipher_hex=$(rfc2hexcode $cipher)
+                    if ! contains hex_ciphers_to_test $cipher_hex; then
+                         debugme echo "Server returned a cipher not in the client list: $cipher"
+                         rc4_offered=0
+                         break
+                    fi
                     i=${index[i]}
                     ciphers_found[i]=true
                     if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
