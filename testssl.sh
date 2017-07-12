@@ -1725,7 +1725,7 @@ run_hpkp() {
           hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
 
           # Get keys/hashes from intermediate certificates
-          $OPENSSL s_client $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+          $OPENSSL s_client $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT $SNI  </dev/null >$TMPFILE 2>$ERRFILE
           # Place the server's certificate in $HOSTCERT and any intermediate
           # certificates that were provided in $TEMPDIR/intermediatecerts.pem
           # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
@@ -3447,8 +3447,8 @@ client_simulation_sockets() {
      done
      debugme echo "sending client hello..."
      code2network "${data}"
-     fd_socket 5 || return 6
      data="$NW_STR"
+     fd_socket 5 || return 6
      [[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
@@ -6883,9 +6883,16 @@ starttls_line() {
      return 0
 }
 
+# Line based send with newline characters appended
 starttls_just_send(){
      debugme echo -e "C: $1"
      echo -ne "$1\r\n" >&5
+}
+
+# Stream based send
+starttls_just_send2(){
+     debugme echo -e "C: $1"
+     echo -ne "$1" >&5
 }
 
 starttls_just_read(){
@@ -7015,9 +7022,20 @@ starttls_postgres_dialog() {
 
 starttls_mysql_dialog() {
      debugme echo "=== starting mysql STARTTLS dialog ==="
-
-     debugme echo "mysql socket dialog not yet implemented"
-
+     local login_request="
+     , 20, 00, 00, 01,               # payload_length, sequence_id
+     85, ae, ff, 00,                 # capability flags, CLIENT_SSL always set
+     00, 00, 00, 01,                 # max-packet size
+     21,                             # character set
+     00, 00, 00, 00, 00, 00, 00, 00, # string[23] reserved (all [0])
+     00, 00, 00, 00, 00, 00, 00, 00,
+     00, 00, 00, 00, 00, 00, 00"
+     code2network "${login_request}"
+     starttls_just_read                     && debugme echo -e "\nreceived server greeting" &&
+     starttls_just_send2 "$NW_STR"          && debugme echo "initiated STARTTLS"
+     # TODO: We could detect if the server supports STARTTLS via the "Server Capabilities"
+     # bit field, but we'd need to parse the binary stream, with greater precision than regex.
+     local ret=$?
      debugme echo "=== finished mysql STARTTLS dialog with ${ret} ==="
      return $ret
 }
