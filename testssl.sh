@@ -7662,7 +7662,7 @@ parse_tls_serverhello() {
      # byte 3+4:    fragment length
      # bytes 5...:  message fragment
      tls_hello_ascii_len=${#tls_hello_ascii}
-     if [[ $DEBUG -ge 2 ]] && [[ $tls_hello_ascii_len -gt 0 ]]; then
+     if [[ $DEBUG -ge 3 ]] && [[ $tls_hello_ascii_len -gt 0 ]]; then
           echo "TLS message fragments:"
      fi
      for (( i=0; i<tls_hello_ascii_len; i=i+msg_len )); do
@@ -7731,14 +7731,14 @@ parse_tls_serverhello() {
           return 1
      fi
      if [[ $tls_alert_ascii_len -gt 0 ]]; then
-          debugme echo "TLS alert messages:"
+          [[ $DEBUG -ge 3 ]] && echo "TLS alert messages:"
           for (( i=0; i+3 < tls_alert_ascii_len; i=i+4 )); do
                tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
                j=$i+2
                tls_err_descr=${tls_alert_ascii:j:2}    # 112/0x70: Unrecognized name, 111/0x6F: certificate_unobtainable,
                                                        # 113/0x71: bad_certificate_status_response, #114/0x72: bad_certificate_hash_value
 
-               debugme tm_out  "     tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
+               [[ $DEBUG -ge 3 ]] && tm_out  "     tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
                case $tls_err_descr in
                     00) tls_alert_descrip="close notify" ;;
                     01) tls_alert_descrip="end of early data" ;;
@@ -7783,7 +7783,7 @@ parse_tls_serverhello() {
                esac
                echo "alert $tls_alert_descrip" >> $TMPFILE
                echo "===============================================================================" >> $TMPFILE
-               if [[ $DEBUG -ge 2 ]]; then
+               if [[ $DEBUG -ge 3 ]]; then
                     tmln_out " ($tls_alert_descrip)"
                     tm_out  "     tls_err_level:          ${tls_err_level}"
                     case $tls_err_level in
