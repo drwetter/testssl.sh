@@ -3770,7 +3770,7 @@ add_tls_offered() {
 
 # function which checks whether SSLv2 - TLS 1.2 is being offereed
 has_server_protocol() {
-     [[ -z "$PROTOS_OFFERED" ]] && return 0            # if empty we rather return 0, means check at additional cost=connect will be done
+     [[ -z "$PROTOS_OFFERED" ]] && return 1  # if empty return 1, hinting to the caller to check at additional cost/connect
      if grep -qw "$1" <<< "$PROTOS_OFFERED"; then
           return 0
      fi
@@ -9059,7 +9059,7 @@ run_ccs_injection(){
           tls_hexcode="x03, x03"
      elif $(has_server_protocol "ssl3"); then
           tls_hexcode="x03, x00"
-     else # no protcol for some reason defined, determine TLS versions offered with a new handshake
+     else # no protocol defined for some reason, determine TLS versions offered with a new handshake
           $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
                *1.2)  tls_hexcode="x03, x03" ;;
