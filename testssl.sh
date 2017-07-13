@@ -7686,7 +7686,7 @@ parse_tls_serverhello() {
 
           if [[ $DEBUG -ge 3 ]]; then
                echo  "     protocol (rec. layer):  0x$tls_protocol"
-               echo  "     tls_content_type:       0x$tls_content_type"
+               echo -n "     tls_content_type:       0x$tls_content_type"
                case $tls_content_type in
                     15) tmln_out " (alert)" ;;
                     16) tmln_out " (handshake)" ;;
