@@ -7625,9 +7625,13 @@ check_tls_serverhellodone() {
 # arg1: ASCII-HEX encoded reply
 # arg2: (optional): "all" -  process full response (including Certificate and certificate_status handshake messages)
 #                   "ephemeralkey" - extract the server's ephemeral key (if any)
+# arg3: (optional): CIPHER_SUITES string (lowercase, and in the format output by code2network())
+#       If present, parse_tls_serverhello() will check that the cipher in the ServerHello appears in
+#       the CIPHER_SUITES string.
 parse_tls_serverhello() {
      local tls_hello_ascii="$1"
      local process_full="$2"
+     local cipherlist="$3"
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
      local tls_serverhello_ascii="" tls_certificate_ascii=""
@@ -7640,7 +7644,7 @@ parse_tls_serverhello() {
      local tls_err_level tls_err_descr tls_cipher_suite rfc_cipher_suite tls_compression_method
      local tls_extensions="" extension_type named_curve_str=""
      local -i i j extension_len tls_extensions_len ocsp_response_len ocsp_response_list_len
-     local -i certificate_list_len certificate_len
+     local -i certificate_list_len certificate_len cipherlist_len
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
      local tmp_der_certfile tmp_pem_certfile hostcert_issuer="" ocsp_response=""
@@ -8121,6 +8125,21 @@ parse_tls_serverhello() {
           tmln_out
      fi
 
+     # If a CIPHER_SUITES string was provided, then check that $tls_cipher_suite is in the string.
+     if [[ -n "$cipherlist" ]]; then
+          tls_cipher_suite="$(tolower "$tls_cipher_suite")"
+          tls_cipher_suite="${tls_cipher_suite:0:2}\\x${tls_cipher_suite:2:2}"
+          cipherlist_len=${#cipherlist}
+          for (( i=0; i < cipherlist_len; i=i+8 )); do
+               [[ "${cipherlist:i:6}" == "$tls_cipher_suite" ]] && break
+          done
+          if [[ $i -ge $cipherlist_len ]]; then
+               debugme echo "The ServerHello specifies a cipher suite that wasn't included in the ClientHello."
+               tmpfile_handle $FUNCNAME.txt
+               return 1
+          fi
+     fi
+
      # Now parse the Certificate message.
      if [[ "$process_full" == "all" ]]; then
           [[ -e "$HOSTCERT" ]] && rm "$HOSTCERT"
@@ -8469,7 +8488,7 @@ sslv2_sockets() {
 
 
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
-# ARG2: CIPHER_SUITES string
+# ARG2: CIPHER_SUITES string (lowercase, and in the format output by code2network())
 # ARG3: (optional) additional request extensions
 # ARG4: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
 socksend_tls_clienthello() {
@@ -8492,8 +8511,7 @@ socksend_tls_clienthello() {
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
      [[ "$4" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
 
-     code2network "$(tolower "$2")"               # convert CIPHER_SUITES
-     cipher_suites="$NW_STR"                      # we don't have the leading \x here so string length is two byte less, see next
+     cipher_suites="$2"                      # we don't have the leading \x here so string length is two byte less, see next
      len_ciph_suites_byte=${#cipher_suites}
      let "len_ciph_suites_byte += 2"
 
@@ -8766,6 +8784,8 @@ tls_sockets() {
                cipher_list_2send="$TLS_CIPHER"
           fi
      fi
+     code2network "$(tolower "$cipher_list_2send")"   # convert CIPHER_SUITES to a "standardized" format
+     cipher_list_2send="$NW_STR"
 
      debugme echo "sending client hello..."
      socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$4" "$offer_compression"
@@ -8825,7 +8845,7 @@ tls_sockets() {
                echo
           fi
 
-          parse_tls_serverhello "$tls_hello_ascii" "$process_full"
+          parse_tls_serverhello "$tls_hello_ascii" "$process_full" "$cipher_list_2send"
           save=$?
 
           if [[ $save == 0 ]]; then
