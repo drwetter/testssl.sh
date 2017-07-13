@@ -26,13 +26,22 @@ cryptographic flaws.
   going on and you can change it.
 * Heck, even the development is open (github)
 
+#### Installation
+
+You can download testssl.sh by cloning this git repository:
+
+    git clone --depth 1 https://github.com/drwetter/testssl.sh.git 
+
+Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl.sh/archive/2.9dev.zip. Then ``testssl.sh --help`` will give you some help upfront. More help: see doc directory. Older sample runs are at https://testssl.sh/.
+
+
 #### Status
 
 Here in the _2.9dev branch you find the development version_ of the software
--- with new features and maybe some bugs. For the stable version and **a
-more thorough description of the command line options** please see
-[testssl.sh](https://testssl.sh/ "Go to the site with the stable version
-and more documentation") or https://github.com/drwetter/testssl.sh/wiki/Usage-Documentation.
+-- with new features and maybe some bugs -- albeit we try our best before 
+committing to test changes. For the previous stable version please see
+[testssl.sh](https://testssl.sh/ "Go to the site with the stable version") 
+or download 2.8 from here.
 
 #### Compatibility
 
@@ -48,7 +57,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 #### Features implemented in [2.9dev](Readme.md#devel)
 * Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
-* TLS 1.2 protocol check via socket
+* TLS 1.2 protocol check via socket in production
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
 * Finding more TLS extensions via sockets
 * Using bash sockets where ever possible
@@ -67,6 +76,8 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * Choice showing the RFC naming scheme only
 * Parallel mass testing
 * File input for mass testing can be also nmap grep(p)able (-oG)
+* Postgres und MySQL STARTTLS support
+* Man page
 
 #### Further features planned in 2.9dev
 
@@ -104,7 +115,7 @@ respective projects
 #### Cool web frontend
 * https://github.com/TKCERT/testssl.sh-webfrontend
 
-#### mass scanner w parallel scans and elastic searching the results
+#### Mass scanner w parallel scans and elastic searching the results
 * https://github.com/TKCERT/testssl.sh-masscan
 
 #### Ready-to-go docker images are available at:

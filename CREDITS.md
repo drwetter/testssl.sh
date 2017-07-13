@@ -1,39 +1,43 @@
 
-##### Credits also to
+##### Credits to
 
 * Peter Mosmans
- - started way better cmd line parsing
- - cleanups, fixes
- - openssl sources support with the "missing" features
+  - started way better cmd line parsing
+  - cleanups, fixes
+  - openssl sources support with the "missing" features
 
 * John Newbigin
- - Proxy support (sockets and openssl)
+  - Proxy support (sockets and openssl)
 
 * Jonathan Roach
- - TLS_FALLBACK_SCSV checks
+  - TLS_FALLBACK_SCSV checks
 
 * Mark Felder
- - lots of cleanups
- - Shellcheck static analysis
+  - lots of cleanups
+  - Shellcheck static analysis
 
 * Frank Breedijk
- - Detection of insecure redirects
- - JSON and CSV output
- - CA pinning
- - Client simulations
- - CI integration, some test cases for it
+  - Detection of insecure redirects
+  - JSON and CSV output
+  - CA pinning
+  - Client simulations
+  - CI integration, some test cases for it
 
 * David Cooper
- - Detection + output of multiple certificates
- - several cleanups of server certificate related stuff
- - extended parsing of TLS ServerHello messages
- - testssl.sh -e/-E: testing with a mixture of openssl + sockets
- - finding more TLS extensions via sockets
- - extensive CN+SAN <--> hostname check
- - seperate check for curves
- - RFC 7919, key shares extension
- - parallel mass testing!
- - numerous fixes
+  - Detection + output of multiple certificates
+  - several cleanups of server certificate related stuff
+  - extended parsing of TLS ServerHello messages
+  - testssl.sh -e/-E: testing with a mixture of openssl + sockets
+  - finding more TLS extensions via sockets
+  - extensive CN+SAN <--> hostname check
+  - seperate check for curves
+  - RFC 7919, key shares extension
+  - parallel mass testing!
+  - RFC <--> OpenSSL cipher name space switches for the command line 
+  - numerous fixes
+ 
+ * Steven Danneman
+   - Postgres and MySQL STARTTLS support
 
 * Thomas Patzke:
   - Support of supplying timeout value for openssl connect
@@ -42,11 +46,11 @@
   - non-flat JSON support (--json-pretty)
   - in file output (CSV, JSON flat, JSON non-flat) support of a minimum severity level
 
-- Christoph Badura
- - NetBSD fixes
+* Christoph Badura
+  - NetBSD fixes
 
 * Jean Marsault
- - client auth: ideas, code snipplets
+  - client auth: ideas, code snipplets
 
 * Maciej Grela
   - colorless handling
@@ -58,33 +62,33 @@
   - improved BEAST detection
 
 * @f-s
- - ARM binary support
+  - ARM binary support
 
 * Jeroen Wiert Pluimers
   - Darwin binaries support
 
 * Julien Vehent
- - supplied 1st Darwin binary
+  - supplied 1st Darwin binary
 
 * Rechi
- - initial MX stuff
- - fixes
+  - initial MX stuff
+  - fixes
 
 * Laine Gholson
- - avahi/mDNS support
- - HTTP2/ALPN
- - bugfixes
- - former ARM binary support
+  - avahi/mDNS support
+  - HTTP2/ALPN
+  - bugfixes
+  - former ARM binary support
 
 * Дилян Палаузов
- - bug fix for 3des report
- - reported a tricky STARTTLS bug
+  - bug fix for 3des report
+  - reported a tricky STARTTLS bug
 
 * Viktor Szépe
- - color function maker
+  - color function maker
 
 * Thomas Martens
-  - colorblind
+  - adding colorblind option
   - no-rfc mapping
 
 * Jonathon Rossi
@@ -92,14 +96,14 @@
   - and other Darwin fixes
 
 * @nvsofts (NV)
- - LibreSSL patch for GOST
+  - LibreSSL patch for GOST
 
 * Markus Manzke
- - Fix for HSTS + subdomains
- - LibreSSL patch
+  - Fix for HSTS + subdomains
+  - LibreSSL patch
 
 * Dmitri S
- - inspiration & help for Darwin port
+  - inspiration & help for Darwin port
 
 
 Others I forgot to mention which did give me feedback, bug reports and helped one way or another.

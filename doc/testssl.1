@@ -1,0 +1,677 @@
+.\" generated with Ronn/v0.7.3
+.\" http://github.com/rtomayko/ronn/tree/0.7.3
+.
+.TH "TESTSSL" "1" "July 2017" "" ""
+.
+.SH "NAME"
+\fBtestssl\fR
+.
+.SH "NAME"
+testssl\.sh \-\- check encryption of SSL/TLS servers
+.
+.SH "SYNOPSIS"
+\fBtestssl\.sh [OPTIONS] <URI>\fR, \fBtestssl\.sh [OPTIONS] \-\-file <FILE>\fR
+.
+.P
+or
+.
+.P
+\fBtestssl\.sh [BANNER OPTIONS]\fR
+.
+.SH "DESCRIPTION"
+testssl\.sh is a free command line tool which checks a server\'s service on any port for the support of TLS/SSL ciphers, protocols as well as cryptographic flaws and much more\.
+.
+.P
+The output rates findings by color (screen) or severity (file output) so that you are able to tell whether something is good or bad\. The (screen) output has several sections in which classes of checks are being performed\. To ease readability on the screen it aligns and indents the output properly\.
+.
+.P
+Except DNS lookups it doesn\'t use any third parties for checks, it\'s only you who sees the result and you also can use it internally on your LAN\.
+.
+.P
+It is out of the box pretty much portable: testssl\.sh runs under any Unix\-like stack (Linux, *BSD, MacOS X, WSL=bash on Windows, Cygwin and MSYS2)\. \fBbash\fR (also version 3 is still supported) is a prerequisite as well as standard utilities like awk, sed, tr and head\. This can be of BSD, System 5 or GNU flavor whereas grep from System V is not yet supported\.
+.
+.SH "GENERAL"
+\fBtestssl\.sh URI\fR as the default invocation does the so\-called default run which does a number of checks and puts out the results colorized (ANSI and termcap) on the screen\. It does every check listed below except \fB\-E\fR which are (order of appearance):
+.
+.P
+0) displays a banner (see below), does a DNS lookup also for further IP addresses and does for the returned IP address a reverse lookup\. Last but not least a service check is being done\.
+.
+.P
+1) SSL/TLS protocol check
+.
+.P
+2) standard cipher categories to give you upfront an idea for the ciphers supported
+.
+.P
+3) checks (perfect) forward secrecy: ciphers and elliptical curves
+.
+.P
+4) server preferences (server order)
+.
+.P
+5) server defaults (certificate info, TLS extensions, session information)
+.
+.P
+6) HTTP header (if HTTP detected or being forced via \fB\-\-assume\-http\fR)
+.
+.P
+7) vulnerabilities
+.
+.P
+8) testing each of 359 ciphers
+.
+.P
+9) client simulation
+.
+.SH "OPTIONS AND PARAMETERS"
+Options are either short or long options\. All options requiring a value can be called with or without an equal sign \'=\' e\.g\. \fBtestssl\.sh \-t=smtp \-\-wide \-\-openssl=/usr/bin/openssl <URI>\fR is equivalent to \fBtestssl\.sh \-\-starttls smtp \-\-wide \-\-openssl /usr/bin/openssl <URI>\fR\. Some command line options can also be preset via ENV variables\. \fBWIDE=true OPENSSL=/usr/bin/openssl testssl\.sh \-\-starttls smtp <URI>\fR would be the equivalent to the aforementioned examples\. Preference has the command line over any enviroment variables\.
+.
+.P
+\fB<URI>\fR or \fB\-\-file <FILE>\fR always needs to be the last parameter\.
+.
+.SS "BANNER OPTIONS"
+\fB\-\-help\fR (or no arg) display command line help
+.
+.P
+\fB\-b, \-\-banner\fR displays testssl\.sh banner, including license, usage conditions, version of testssl\.sh, detected openssl version, its path to it, # of ciphers of openssl, its build date and the architecture
+.
+.P
+\fB\-v, \-\-version\fR same as before
+.
+.P
+\fB\-V <pattern> , \-\-local <pattern>\fR pretty print all local ciphers supported by openssl version\. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below\. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or RFC), key exchange, encryption, bits\. It does a word pattern match for non\-numbers, for number just a normal match applies\. Numbers here are defined as [0\-9,A\-F]\. This means (attention: catch) that the pattern CBC is matched as non\-word, but AES as word\.
+.
+.SS "INPUT PARAMETERS"
+\fB<URI>\fR can be a hostname, an IPv4 or IPv6 address (restriction see below) or an URL\. IPv6 addresses need to be in square brackets\. For any given parameter port 443 is assumed unless specified by appending a colon and a port number\. The only preceding protocol specifier allowed is \fBhttps\fR\. You need to be aware that checks for an IP address might not hit the vhost you want\. DNS resolution (A/AAAA record) is being performed unless you have an \fB/etc/hosts\fR entry for the hostname\.
+.
+.P
+\fB\-\-file <fname>\fR is the mass testing option\. Per default it implicitly turns on \fB\-\-warnings batch\fR\. In its first incarnation the mass testing option reads command lines from \fB<fname>\fR\. \fB<fname>\fR consists of command lines of testssl, one line per instance\. Comments after \fB#\fR are ignored, \fBEOF\fR signals the end of \fIfname\fR any subsequent lines will be ignored too\. You can also supply additional options which will be inherited to each child, e\.g\. When invoking \fBtestssl\.sh \-\-wide \-\-log \-\-file <fname>\fR \. Each single line in \fB<fname>\fR is parsed upon execution\. If there\'s a conflicting option and serial mass testing option is being performed the check will be aborted at the time it occurs and depending on the output option potentially leaving you with an output file without footer\. In parallel mode the mileage varies\.
+.
+.P
+Alternatively \fB<fname>\fR can be in \fBnmap\fR\'s grep(p)able output format (\fB\-oG\fR)\. Only open ports will be considered\. Multiple ports per line are allowed\. The ports can be different and will be tested by testssl\.sh according to common practice in the internet, \.i\.e\. if nmap shows in its output an open port 25, automatically \fB\-t smtp\fR will be added before the URI whereas port 465 will be treated as a plain TLS/SSL port, not requiring an STARTTLS SMTP handshake upfront\. This is done by an internal table which correlates nmap\'s open port to the STARTTLS/plain text decision from testssl\.sh\.
+.
+.P
+The nmap output always returns IP addresses and \-\- only if there\'s a PTR DNS record available \-\- a hostname\. As it is not checked by nmap whether the hostname matches the IP (A or AAAA record), testssl\.sh does this for you\. If the A record of the hostname matches the IP address, the hostname is used and not the IP address\. Watch out as stated above checks against an IP address might not hit the vhost you maybe were aiming at\.
+.
+.P
+A typical internal conversion from nmap\'s grep(p)able format could look like:
+.
+.IP "" 4
+.
+.nf
+
+10\.10\.12\.16:443
+10\.10\.12\.16:1443
+\-t smtp host\.example\.com:25
+host\.example\.com:443
+host\.example\.com:631
+\-t ftp 10\.10\.12\.11:21
+10\.10\.12\.11:8443
+.
+.fi
+.
+.IP "" 0
+.
+.P
+Please note that \fB<fname>\fR has to be in Unix format\. DOS carriage returns won\'t be accepted\. Instead of the command line switch the environment variable FNAME will be honored too\.
+.
+.P
+\fB\-\-mode <serial|parallel>\fR\. Mass testing to be done serial (default) or parallel (\fB\-\-parallel\fR is shortcut for the latter, \fB\-\-serial\fR is the opposite option)\. Per default mass testing is being run in serial mode, i\.e\. one line after the other is processed and invoked\. The variable \fBMASS_TESTING_MODE\fR can be defined to be either equal \fBserial\fR or \fBparallel\fR\.
+.
+.SS "SPECIAL INVOCATIONS"
+\fB\-t <protocol>, \-\-starttls <protocol>\fR does a default run against a STARTTLS enabled \fB<protocol>\fR\. \fB<protocol>\fR is one of \fBftp\fR, \fBsmtp\fR, \fBpop3\fR, \fBimap\fR, \fBxmpp\fR, \fBtelnet\fR, \fBldap\fR, \fBpostgres\fR, \fBmysql\fR\. For the latter four you need e\.g\. the supplied openssl\.
+.
+.P
+\fB\-\-xmpphost <jabber_domain>\fR is an additional option for STARTTLS enabled XMPP: It expects as a parameter the jabber domain\. This is only needed if the domain is different from the URI supplied\.
+.
+.P
+\fB\-\-mx <domain|host>\fR tests all MX records (STARTTLS, port 25) from high to low priority one after the other\.
+.
+.P
+\fB\-\-ip <ip>\fR tests either the supplied IPv4 or IPv6 address instead of resolving host(s) in \fB<URI>\fR\. IPv6 addresses needs to be in square brackets\. \fB\-\-ip=one\fR means: just test the first DNS returns (useful for multiple IPs)\. It\'s also useful if you want to resolve the supplied hostname to a different IP, similar as if you would edit \fB/etc/hosts\fR or \fB/c/Windows/System32/drivers/etc/hosts\fR\. \fB\-\-ip=proxy\fR tries a DNS resolution via proxy\.
+.
+.P
+\fB\-\-proxy <host>:<port>\fR does the whole check via the specified HTTP proxy\. \fB\-\-proxy=auto\fR inherits the proxy setting from the environment\. Proxying via IPv6 addresses is not possible\. The hostname supplied will only be resolved to the first A record\. Authentication to the proxy is not supported\. In addition if you want lookups via proxy you can specify \fBDNS_VIA_PROXY=true\fR\.
+.
+.P
+\fB\-6\fR does (also) IPv6 checks\. This works only with both a supporting openssl binary like the one supplied and IPv6 connectivity\. testssl\.sh does no connectivity checks for IPv6, it also cannot determine reliably whether the OpenSSL binary you are using has IPv6 support\. \fBHAS_IPv6\fR is the respective enviroment variable\.
+.
+.P
+\fB\-\-ssl\-native\fR instead of using a mixture of bash sockets and openssl s_client connects testssl\.sh uses the latter only\. This is at the moment faster but provides less accurate results, especially in the client simulation and if the openssl binary lacks cipher support\. For TLS protocol checks and standard cipher lists and certain other checks you will see a warning if testssl\.sh internally can tell if one check cannot be performed or will give you inaccurate results\. For e\.g\. single cipher checks (\fB\-\-each\-cipher\fR and \fB\-\-cipher\-per\-proto\fR) you might end up getting false negatives without a warning\.
+.
+.P
+\fB\-\-openssl <path_to_openssl>\fR testssl\.sh tries very hard to find automagically the binary supplied (where the tree of testssl\.sh resides, from the directory where testssl\.sh has been started from, etc\.)\. If all that doesn\'t work it falls back to openssl supplied from the OS (\fB$PATH\fR)\. With this option you can point testssl\.sh to your binary of choice and override any internal magic to find the openssl binary\. (environment preset via \fBOPENSSL=<path_to_openssl>\fR)
+.
+.P
+\fB\-\-bugs\fR does some workarounds for buggy servers like padding for old F5 devices\. The option is passed as \fB\-bug\fR to openssl when needed, see \fBs_client(1)\fR\. For the socket part testssl\.sh tries its best also without that option to cope with broken server implementations (environment preset via \fBBUGS="\-bugs"\fR)
+.
+.P
+\fB\-\-assuming\-http\fR testssl\.sh does upfront a protocol detection on the application layer\. In cases where for some reasons the usage of HTTP cannot be automatically detected you may want to use this option\. It helps you to tell testssl\.sh not to skip HTTP specific tests and to run the client simulation with browsers\. Sometimes also the severity depends on the application protocol, e\.g\. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server\.
+.
+.IP "\(bu" 4
+\fB\-n, \-\-no\-dns\fR instructs testssl\.sh to not do any DNS lookups\. This is useful if you either can\'t or are not willing to perform DNS lookups\. The latter applies e\.g\. to some pentests, the former could e\.g\. help you to avoid timeouts by DNS lookups\. \fBNODNS=true\fR has the same effect\.
+.
+.IP "\(bu" 4
+\fB\-\-sneaky\fR as a friendly feature for the server side testssl\.sh uses a user agent \fBTLS tester from ${URL}\fR (HTTP)\. With this option your traces are less verbose and a Firefox user agent is being used\. Be aware that it doesn\'t hide your activities\. That is just not possible (environment preset via \fBSNEAKY=true\fR)\.
+.
+.IP "" 0
+.
+.SS "SINGLE CHECK OPTIONS"
+Any single check switch supplied as an argument prevents testssl\.sh from doing a default run\. It just takes this and if supplied other options and runs them \- in the order they would also appear in the default run\.
+.
+.P
+\fB\-e, \-\-each\-cipher\fR checks each of the local 359 cipher (openssl + sockets) remotely on the server and reports back the result in wide mode\. If you want to display each cipher tested you need to add \fB\-\-show\-each\fR\. The default is here to list the following parameter: \fBhexcode\fR, \fBOpenSSL cipher suite name\fR,i \fBkey exchange\fR, \fBencryption bits\fR, \fBRFC cipher suite name (RFC)\fR\. Please note the \fB\-\-mapping\fR parameter changes what cipher suite names you will see here and at which position\. Also please note that the \fBbit\fR length for the encryption is shown and not the \fBsecurity\fR length\. For 3DES due to the Meet\-in\-the\-Middle problem the bit size of 168 bits is equivalent to the security size of 112 bits\.
+.
+.P
+\fB\-E, \-\-cipher\-per\-proto\fR checks each of the possible ciphers per protocol\. If you want to display each cipher tested you need to add \fB\-\-show\-each\fR
+.
+.P
+\fB\-s, \-\-std, \-\-standard\fR tests certain lists of cipher suites by strength\. Those lists are (\fBopenssl ciphers $LIST\fR, $LIST from below:)
+.
+.IP "\(bu" 4
+\fBNULL encryption ciphers\fR: \'NULL:eNULL\'
+.
+.IP "\(bu" 4
+\fBAnonymous NULL ciphers\fR: \'aNULL:ADH\'
+.
+.IP "\(bu" 4
+\fBExport ciphers\fR (w/o the preceding ones): \'EXPORT:!ADH:!NULL\'
+.
+.IP "\(bu" 4
+\fBLOW\fR (64 Bit + DES ciphers, without EXPORT ciphers): \'LOW:DES:!ADH:!EXP:!NULL\'
+.
+.IP "\(bu" 4
+\fBWeak 128 Bit ciphers\fR: \'MEDIUM:!aNULL:!AES:!CAMELLIA:!ARIA:!CHACHA20:!3DES\'
+.
+.IP "\(bu" 4
+\fB3DES Ciphers\fR: \'3DES:!aNULL:!ADH\'
+.
+.IP "\(bu" 4
+\fBHigh grade Ciphers\fR: \'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!AESGCM:!CamelliaGCM:!AESCCM8:!AESCCM\'
+.
+.IP "\(bu" 4
+\fBStrong grade Ciphers\fR (AEAD): \'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM8:AESCCM\'
+.
+.IP "" 0
+.
+.P
+\fB\-p, \-\-protocols\fR checks TLS/SSL protocols SSLv2, SSLv3, TLS 1\.0 \- TLS1\.2 and for HTTP: SPDY (NPN) and ALPN, a\.k\.a\. HTTP/2
+.
+.P
+\fB\-P, \-\-preference\fR displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher\. If there\'s a cipher order enforced by the server it displays it for each protocol (openssl+sockets)\. If there\'s not, it displays instead which ciphers from the server were picked with each protocol (by using openssl only)
+.
+.P
+\fB\-S, \-\-server_defaults\fR displays information from the server hello(s): available TLS extensions, TLS ticket + session information/capabilities and several certificate info including revocation info (CRL, OCSP, OCSP stapling/must staple), Certification Authority Authorization (CAA) record and: trust (CN, SAN, Chain of trust, expiration of certificate)\. For trust chain check there are 4 certificate stores provided (see section \fBFILES\fR below)\. If the trust is confirmed or not confirmed and the same in all four vertificate stores there will be only one line of output with the appropriate result\. If there are different results, each store is listed and for the one where there\'s no trust there\'s an indication what the failure is\. Additional certificate stores for e\.g\. an intranet CA an be put into \fBetc/\fR with the extension \fBpem\fR\. In that case there will be a complaint about a missing trust with the other stores, in the opposite case \-\- i\.e\. if trust will be checked against hosts having a certificate issued by a different CA \-\- there will be a complaint by a missing trust in this additional store\. If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be clearly indicated as this is deprecated\. Possible fingerprinting is possible by the results in TLS clock skew: Only a few servers nowadays still have and TLS/SSL implementation which returns the local clock \fBgmt_unix_time\fR (e\.g\. IIS, openssl < 1\.0\.1f)\. In addition to the HTTP date you could derive that there are different hosts where your TLS and your HTTP request ended \-\- if the time deltas differ significantly\. Also multiple server certificates are being checked for as well as the certificate reply to a non\-SNI (Server Name Indication) client hello to the IP address\.
+.
+.P
+\fB\-x <pattern>, \-\-single\-cipher <pattern>\fR tests matched \fB<pattern>\fR of ciphers against a server\. Patterns are similar to \fB\-V <pattern> , \-\-local <pattern>\fR
+.
+.P
+\fB\-h, \-\-header, \-\-headers\fR if the service is HTTP (either by detection or by enforcing via \fB\-\-assume\-http\fR\. It tests several HTTP headers like
+.
+.IP "\(bu" 4
+HTTP Strict Transport Security (HSTS)
+.
+.IP "\(bu" 4
+HTTP Public Key Pinning (HPKP)
+.
+.IP "\(bu" 4
+Server banner
+.
+.IP "\(bu" 4
+HTTP date+time
+.
+.IP "\(bu" 4
+Application banner (PHP, RoR, OWA, SharePoint, Wordpress, etc)
+.
+.IP "\(bu" 4
+Reverse proxy headers
+.
+.IP "\(bu" 4
+Linux or other Unix vendor headers
+.
+.IP "\(bu" 4
+Web server module
+.
+.IP "\(bu" 4
+IPv4 address
+.
+.IP "\(bu" 4
+Cookie (including Secure/HTTPOnly flags)
+.
+.IP "\(bu" 4
+Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
+.
+.IP "" 0
+.
+.SS "VULNERABILITIES"
+\fB\-U, \-\-vulnerable\fR Just tests all (following) vulnerabilities\. The environment variable \fBVULN_THRESHLD\fR determines after which value a separate headline for each vulnerability is being displayed\. Default is \fB1\fR which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed \-\- in addition to the vulnerability and the result\. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result\. A vulnerability section is comprised of more than one check, e\.g\. the renegotiation vulnerability check has two checks, so has Logjam\.
+.
+.P
+\fB\-H, \-\-heartbleed\fR Checks for Heartbleed, a memory leakage in openssl\. Unless the server side doesn\'t support the heartbeat extension it is likely that this check runs into a timeout\. The seconds to wait for a reply can be adjusted with \fBHEARTBLEED_MAX_WAITSOCK\fR\. 8 is the default (unit: seconds)
+.
+.P
+\fB\-I, \-\-ccs, \-\-ccs\-injection\fR Checks for CCS injection which is an openssl vulnerability\. Sometimes also here the check needs to wait for a reply\. The predefined timeout of 5 seconds can be changed with the enviroment variable \fBCCS_MAX_WAITSOCK\fR\.
+.
+.P
+\fB\-T, \-\-ticketbleed\fR Checks for Ticketbleed memory leakage in BigIP loadbalancers\.
+.
+.P
+\fB\-R, \-\-renegotiation\fR Tests renegotiation vulnerabilities\. Currently there\'s a check for "Secure Renegotiation" and for "Secure Client\-Initiated Renegotiation"\. Please be aware that vulnerable servers to the latter can likely be DoSed very easily (HTTP)\. A check for "Insecure Client\-Initiated Renegotiation" is not yet implemented\.
+.
+.P
+\fB\-C, \-\-compression, \-\-crime\fR Checks for CRIME ("Compression Ratio Info\-leak Made Easy") vulnerability in TLS\. CRIME in SPDY is not yet being checked for\.
+.
+.P
+\fB\-B, \-\-breach\fR Checks for BREACH ("Browser Reconnaissance and Exfiltration via Adaptive Compression of Hypertext") vulnerability\. As for this vulnerabilty HTTP level compressoin is a prerequisite it\'ll be not tested if HTTP cannot be detected or the detection is not enforced via \fB`\-\-assume\-http\fR\. Please note that only the URL supplied (normally "/" ) is being tested\.
+.
+.P
+\fB\-O, \-\-poodle\fR Tests for SSL POODLE ("Padding Oracle On Downgraded Legacy Encryption") vulnerability\. It basically checks for the existence of CBC ciphers in SSLv3\.
+.
+.P
+\fB\-Z, \-\-tls\-fallback\fR Checks TLS_FALLBACK_SCSV mitigation\. TLS_FALLBACK_SCSV is basically a ciphersuite appended to the Client Hello trying to prevent protocol downgrade attacks by a Man in the Middle\.
+.
+.P
+\fB\-W, \-\-sweet32\fR Checks for vulnerabilty to SWEET32 by testing 64 bit block ciphers (3DES, RC2 and IDEA)\.
+.
+.P
+\fB\-A, \-\-beast\fR Checks BEAST vulnerabilities in SSL 3 and TLS 1\.0 by testing the usage of CBC ciphers\.
+.
+.P
+\fB\-L, \-\-lucky13\fR Checks for LUCKY13 vulnerability\. It checks for the presence of CBC ciphers in all TLS versions\.
+.
+.P
+\fB\-F, \-\-freak\fR Checks for FREAK vulnerability by testing for EXPORT RSA ciphers
+.
+.P
+\fB\-J, \-\-logjam\fR Checks for LOGJAM vulnerability by checking for DH EXPORT ciphrs\. It also checks for "common primes" which are preconfigured DH keys\. DH keys =< 1024 Bit will be penalized
+.
+.P
+\fB\-D, \-\-drown\fR Checks for DROWN vulnerability by checking whether the SSL 2 protocol is available at the target\. Please note that if you use the same RSA certificate elsewhere you might be vulnerable too\. testssl\.sh doesn\'t check for this but provides a helpful link @ censys\.io which provides this service\.
+.
+.P
+\fB\-f, \-\-pfs, \-\-fs,\-\-nsa\fR Checks robust (perfect) forward secrecy settings\. "Robust" means \-\- as the headline says \-\- that ciphers having intrinsic severe weaknesses like "Null Authentication/Encryption, 3DES, RC4" won\'t be considered here\. There shouldn\'t be the wrong impression that a secure key exchange has been taking place and everything is fine when in reality the encryption sucks\. Also this section lists the available elliptical curves\.
+.
+.P
+\fB\-4, \-\-rc4, \-\-appelbaum\fR Checks which RC4 stream ciphers are being offered\.
+.
+.SS "OUTPUT OPTIONS"
+\fB\-\-warnings <batch|off>\fR The warnings parameter determines how testssl\.sh will deal with situations where user input will normally be necessary\. There are a couple of options here\. \fBbatch\fR doesn\'t wait for a confirming keypress\. This is automatically being chosen for mass testing (\fB\-\-file\fR)\. \fB\-false\fR just skips the warning AND the confirmation\. Please note that there are conflicts where testssl\.sh will still ask for confirmation\. Those are ones which would have a drastic impact on the results\. The same can be achived by setting the environment variable \fBWARNINGS\fR\.
+.
+.P
+\fB\-\-openssl\-timeout <seconds>\fR This is especially useful for all connects using openssl and practically useful for mass testing\. It avoids the openssl connect to hang for ~2 minutes\. The expected parameter \fB<seconds>\fR instructs testssl\.sh to wait before the openssl connect will be terminated\. The option is only available if your OS has a timeout binary installed\. As there are different implementations of \fBtimeout\fR: It automatically calls the binary with the right parameters\.
+.
+.P
+\fB\-q, \-\-quiet\fR Normally testssl\.sh displays a banner on stdout with several version information, usage rights and a warning\. This option suppresses it\. Pleas not that by chosing this option you acknowledge usage terms and the warning normally appearing in the banner\.
+.
+.P
+\fB\-\-wide\fR Except the "each cipher output" all tests displays the single cipher name (scheme see below)\. This option enables testssl\.sh to display also for the following sections the same output as for testing each ciphers: BEAST, PFS, RC4\. The client simulation has also a wide mode\. The difference here is restricted to a column aligned output and a proper headline\. The environment variable \fBWIDE\fR can be used instead\.
+.
+.P
+\fB\-\-mapping <openssl|rfc|no\-openssl|no\-rfc>\fR
+.
+.IP "\(bu" 4
+\fBopenssl\fR: use the OpenSSL cipher suite name as the primary name cipher suite name form (default),
+.
+.IP "\(bu" 4
+\fBrfc\fR: use the RFC cipher suite name as the primary name cipher suite name form\.
+.
+.IP "\(bu" 4
+\fBno\-openssl\fR: don\'t display the OpenSSL cipher suite name, display RFC names only\.
+.
+.IP "\(bu" 4
+\fBno\-rfc\fR: don\'t display the RFC cipher suite name, display OpenSSL names only\.
+.
+.IP "" 0
+.
+.P
+\fB\-\-show\-each\fR This is an option for all wide modes \-\- i\.e\. per switch or the each cipher test: it displays all ciphers tested \-\- not only succeeded ones\. \fBSHOW_EACH_C\fR is your friend if you prefer to set this via the shell environment\.
+.
+.P
+\fB\-\-color <0|1|2>\fR It determines the use of colors on the screen: \fB2\fR is the default and makes use of ANSI and termcap escape codes on your terminal\. \fB1\fR just uses non\-colored mark\-up like bold, italics, underline, reverse\. \fB0\fR means no mark\-up at all = no escape codes\. Setting the environment varable \fBCOLOR\fR achives the same result\.
+.
+.P
+\fB\-\-colorblind\fR Swaps green and blue colors in the output, so that this percentage of folks (up to 8% of males, see https://en\.wikipedia\.org/wiki/Color_blindness) can distuingish those findings better\. \fBCOLORBLIND\fR is the according variable if you want to set this in the environment\.
+.
+.P
+\fB\-\-debug <0\-6>\fR This gives you additional output on the screen (2\-6), only useful for debugging\. \fBDEBUG\fR is the according enviroment variable which you can use\. There are six levels (0 is the default, thus it has no effect):
+.
+.IP "1." 4
+screen output normal but leaves useful debug output in \fB/tmp/testssl\.XXXXXX/\fR \. The info about the exact directory is included in the screen output\.
+.
+.IP "2." 4
+list more what\'s going on, e\.g\. lists some errors of connections and general debug statements
+.
+.IP "3." 4
+even slightly more info: hexdumps + other info
+.
+.IP "4." 4
+display bytes sent via sockets
+.
+.IP "5." 4
+display bytes received via sockets
+.
+.IP "6." 4
+whole 9 yards
+.
+.IP "" 0
+.
+.SS "FILE OUTPUT OPTIONS"
+\fB\-\-log, \-\-logging\fR Logs stdout also to \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.log\fR in current working directory of the shell\. Depending on the color output option (see above) the output file will contain color and other markup escape codes\. \fBcat\fR and \-\- if properly configured \fBless\fR \-\- will show the output properly formatted on your terminal\. The output shows a banner with the almost the same information as on the screen\. In addition it shows the command line of the testssl\.sh instance\. Please note that the resulting log file is formatted according to the width of your screen while runing testssl\.sh\.
+.
+.P
+\fB\-\-logfile <logfile>\fR Instead of the previous option you may want to use this one if you want to log into a directory or if you rather want to specify the log file name yourself\. If \fB<logfile>\fR is a directory the output will put into \fB<logfile>/<NODE>\-p<port#><YYYYMMDD\-HHMM>\.log\fR\. If \fB<logfile>\fRis a file it will use that file name, an absolute path is also permitted here\. LOGFILE is the variable you need to set if you prefer to work environment variables instead\. Please note that the resulting log file is formatted according to the width of your screen while run ing testssl\.sh\.
+.
+.P
+\fB\-\-json\fR Logs additionally to JSON file \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.json\fR in the current working directory of the shell\. The resulting JSON file is opposed to \fB\-\-json\-pretty\fR flat \-\- which means each section is self contained and has an identifier for each single check, the hostname/IP address, the port, severity and the finding\. For vulnerabilities it may contain a cve and cwe entry too\. The output doesn\'t contain a banner or a footer\.
+.
+.P
+\fB\-\-jsonfile <jsonfile>\fR Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself\. If \fB<jsonfile>\fR is a directory the output will put into \fB<logfile>/<NODE>\-p<port#><YYYYMMDD\-HHMM>\.json\fR\. If \fB<jsonfile>\fRis a file it will use that file name, an absolute path is also permitted here\. JSONFILE is the variable you need to set if you prefer to work environment variables instead\.
+.
+.P
+\fB\-\-json\-pretty\fR Logs additionally to JSON file \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.json\fR in the current working directory of the shell\. The resulting JSON file is opposed to \fB\-\-json\fR non\-flat \-\- which means it is structured\. The structure contains a header similar to the banner on the screen (with the epoch of the start time) and then for every test section of testssl\.sh it contains a seperate JSON object/section\. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding\. For vulnerabilities it may contain a cve and cwe entry too\. The footer lists the scan time in seconds\.
+.
+.P
+\fB\-\-jsonfile\-pretty <jsonfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in pretty JSON format (see \fB\-\-json\-pretty\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB`\-\-logfile\fR\. \fBJSONFILE\fR is the variable you need to set if you prefer to work environment with variables instead\.
+.
+.P
+\fB\-\-csv\fR Logs additionally to a CSV file \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.csv\fR in the current working directory of the shell\. The output contains a header with the keys, the values are the same as in the flat JSON format (identifier for each single check, the hostname/IP address, the port, severity,the finding and for vulnerabilities a cve and cwe too)\.
+.
+.P
+\fB\-\-csvfile <csvfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in CSV format (see \fB\-\-cvs\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB`\-\-logfile\fR\. \fBCSVFILE\fR is the variable you need to set if you prefer to work environment with variables instead\.
+.
+.P
+\-\-html Logs additionally to an HTML file \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.html\fR in the current working directory of the shell\. It contains a 1:1 output of the konsole\. In former versions there was a non\-native option to use "aha" (Ansi HTML Adapter: github\.com/theZiz/aha) like \fBtestssl\.sh <options> <URI> | aha >output\.html\fR \. This is not neccessary anymore\.
+.
+.P
+\fB\-\-htmlfile <htmlfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in HTML format (see \fB\-\-html\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB\-\-logfile\fR\. \fBHTMLFILE\fR is the variable you need to set if you prefer to work with environment variables instead\.
+.
+.P
+\fB\-\-hints\fR Thios option is not in use yet\. This option is meant to give hints how to fix a finding or at least a help to improve something\. GIVE_HINTS is the environment variable for this\.
+.
+.P
+\fB\-\-severity <severity>\fR For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the \fB<severity>\fR value specified\. Allowed are \fB<LOW|MEDIUM|HIGH|CRITICAL>\fR
+.
+.P
+\fB\-\-append\fR If an output file exists it will append to this file, without a header\. The environment variable APPEND does the same\. If the file exists and you don\'t use \fB\-\-append\fR testssl\.sh will exit with an error\. Be careful using this switch/variable\. A complementary option which overwrites an existing file doesn\'t exist per design\.
+.
+.P
+A few file output options can also be preset via environment variables\.
+.
+.SS "COLOR RATINGS"
+Testssl\.sh makes use of (the eight) standard terminal colors\. The color scheme is as follows:
+.
+.IP "\(bu" 4
+light red: a critical finding
+.
+.IP "\(bu" 4
+red: a high finding
+.
+.IP "\(bu" 4
+brown: a medium finding
+.
+.IP "\(bu" 4
+yellow: a low finding
+.
+.IP "\(bu" 4
+green (blue if COLORBLIND is set): something which is either in general a good thing or a negative result of a check which otherwise results in a high finding
+.
+.IP "\(bu" 4
+light green (light blue if COLORBLIND is set) : something which is either in general a very good thing or a negative result of a check which otherwise results in a critical finding
+.
+.IP "\(bu" 4
+no color at places where also a finding can be expected: a finding on an info level
+.
+.IP "\(bu" 4
+cyan: currently used for \fB\-\-show\-each\fR or an additional hint
+.
+.IP "\(bu" 4
+magenta: signals a warning condition, e\.g\. either a local lack of capabilities on the client side or another problem
+.
+.IP "\(bu" 4
+light magenta: a fatal error which either requires strict consent from the user to continue or a condition which leaves no other choice for testssl\.sh to quit
+.
+.IP "" 0
+.
+.P
+What is labeled as "light" above appears as such on the screen but is technically speaking "bold"\. Markup (without any color) is used in the following manner:
+.
+.IP "\(bu" 4
+bold: for the name of the test
+.
+.IP "\(bu" 4
+underline + bold: for the headline of each test section
+.
+.IP "\(bu" 4
+underline: for a sub\-headline
+.
+.IP "\(bu" 4
+italics: for strings just reflecting a value read from the server
+.
+.IP "" 0
+.
+.SS "TUNING via ENV variables and more options"
+Except the environment variables mentioned above which replace command line options here a some which cannot be set otherwise\. Variables used for tuning are preset with reasonable values\. There should be no reason to change them unless you use testssl\.sh under special conditions\.
+.
+.IP "\(bu" 4
+UNBRACKTD_IPV6: needs to be set to true for some versions of OpenSSL (like from Gentoo) which don\'t support [bracketed] IPv6 addresses
+.
+.IP "\(bu" 4
+HEADER_MAXSLEEP: To wait how long before killing the process to retrieve a service banner / HTTP header
+.
+.IP "\(bu" 4
+MAX_WAITSOCK: It instructs testssl\.sh to wait until the specified time before declaring a socket connection dead\. Don\'t change this unless you\'re absolutely sure what you\'re doing\. Value is in seconds\.
+.
+.IP "\(bu" 4
+CCS_MAX_WAITSOCK Is the similar to above but applies only to the CCS handshakes, for both of the two the two CCS payload\. Don\'t change this unless you\'re absolutely sure what you\'re doing\. Value is in seconds\.
+.
+.IP "\(bu" 4
+HEARTBLEED_MAX_WAITSOCK Is the similar to MAX_WAITSOCK but applies only to the ServerHello after sending the Heartbleed payload\. Don\'t change this unless you\'re absolutely sure what you\'re doing\. Value is in seconds\.
+.
+.IP "\(bu" 4
+MEASURE_TIME_FILE For seldom cases when you don\'t want the scan time to be included in the output you can set this to false\.
+.
+.IP "" 0
+.
+.SH "EXAMPLES"
+.
+.nf
+
+  testssl\.sh testssl\.sh
+.
+.fi
+.
+.P
+does a default run on https://testssl\.sh (protocols, standard cipher lists, PFS, server preferences, server defaults, vulnerabilities, testing all (359 possible) ciphers, client simulation\.
+.
+.IP "" 4
+.
+.nf
+
+  testssl\.sh testssl\.net:443
+.
+.fi
+.
+.IP "" 0
+.
+.P
+does the same default run as above with the subtle difference that testssl\.net has two IPv4 addresses\. Both are tested\.
+.
+.IP "" 4
+.
+.nf
+
+  testssl\.sh \-\-ip=one \-\-wide https://testssl\.net:443
+.
+.fi
+.
+.IP "" 0
+.
+.P
+does the same checks as above, with the difference that one IP address is being picked randomly\. Displayed is everything where possible in wide format\.
+.
+.IP "" 4
+.
+.nf
+
+  testssl\.sh \-t smtp smtp\.gmail\.com:25
+.
+.fi
+.
+.IP "" 0
+.
+.P
+implicilty does a STARTTLS handshake on the plain text port, then check the IPs @ smtp\.gmail\.com\.
+.
+.IP "" 4
+.
+.nf
+
+    testssl\.sh \-\-starttls=imap imap\.gmx\.net:143
+.
+.fi
+.
+.IP "" 0
+.
+.P
+does the same on the plain text IMAP port\. Please note that for plain TLS\-encrypted ports you must not specify the protocol option: \fBtestssl\.sh smtp\.gmail\.com:465\fR tests the encryption on the SMTPS port, \fBtestssl\.sh imap\.gmx\.net:993\fR on the IMAPS port\.
+.
+.SH "RFCs and other standards"
+.
+.IP "\(bu" 4
+RFC 2246: The TLS Protocol Version 1\.0
+.
+.IP "\(bu" 4
+RFC 2818: HTTP Over TLS
+.
+.IP "\(bu" 4
+RFC 2595: Using TLS with IMAP, POP3 and ACAP
+.
+.IP "\(bu" 4
+RFC 3207: SMTP Service Extension for Secure SMTP over Transport Layer Security
+.
+.IP "\(bu" 4
+RFC 3501: INTERNET MESSAGE ACCESS PROTOCOL \- VERSION 4rev1
+.
+.IP "\(bu" 4
+RFC 4346: The Transport Layer Security (TLS) Protocol Version 1\.1
+.
+.IP "\(bu" 4
+RFC 4366: Transport Layer Security (TLS) Extensions
+.
+.IP "\(bu" 4
+RFC 4492: Elliptic Curve Cryptography (ECC) Cipher Suites for Transport Layer Security (TLS)
+.
+.IP "\(bu" 4
+RFC 5077: Transport Layer Security (TLS) Session Resumption
+.
+.IP "\(bu" 4
+RFC 5246: The Transport Layer Security (TLS) Protocol Version 1\.2
+.
+.IP "\(bu" 4
+RFC 5280: Internet X\.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile
+.
+.IP "\(bu" 4
+RFC 5321: Simple Mail Transfer Protocol
+.
+.IP "\(bu" 4
+RFC 5746: Transport Layer Security (TLS) Renegotiation Indication Extension
+.
+.IP "\(bu" 4
+RFC 6066: Transport Layer Security (TLS) Extensions: Extension Definitions
+.
+.IP "\(bu" 4
+RFC 6101: The Secure Sockets Layer (SSL) Protocol Version 3\.0
+.
+.IP "\(bu" 4
+RFC 6120: Extensible Messaging and Presence Protocol (XMPP): Core
+.
+.IP "\(bu" 4
+RFC 6125: Domain\-Based Application Service Identity [\.\.]
+.
+.IP "\(bu" 4
+RFC 6797: HTTP Strict Transport Security (HSTS)
+.
+.IP "\(bu" 4
+RFC 6961: The Transport Layer Security (TLS) Multiple Certificate Status Request Extension
+.
+.IP "\(bu" 4
+RFC 7469: Public Key Pinning Extension for HTTP (HPKP)
+.
+.IP "\(bu" 4
+RFC 7507: TLS Fallback Signaling Cipher Suite Value (SCSV) for Preventing Protocol Downgrade Attacks
+.
+.IP "\(bu" 4
+RFC 7627: Transport Layer Security (TLS) Session Hash and Extended Master Secret Extension
+.
+.IP "\(bu" 4
+RFC 7633: X\.509v3 Transport Layer Security (TLS) Feature Extension
+.
+.IP "\(bu" 4
+RFC 7465: Prohibiting RC4 Cipher Suites
+.
+.IP "\(bu" 4
+RFC 7685: A Transport Layer Security (TLS) ClientHello Padding Extension
+.
+.IP "\(bu" 4
+RFC 7905: ChaCha20\-Poly1305 Cipher Suites for Transport Layer Security (TLS)
+.
+.IP "\(bu" 4
+RFC 7919: Negotiated Finite Field Diffie\-Hellman Ephemeral Parameters for Transport Layer Security
+.
+.IP "\(bu" 4
+W3C CSP: Content Security Policy Level 1\-3
+.
+.IP "\(bu" 4
+TLSWG Draft: The Transport Layer Security (TLS) Protocol Version 1\.3
+.
+.IP "" 0
+.
+.SH "EXIT STATUS"
+.
+.IP "\(bu" 4
+0 testssl\.sh finished successfully
+.
+.IP "\(bu" 4
+245 no bash used
+.
+.IP "\(bu" 4
+249 temp file creation problem
+.
+.IP "\(bu" 4
+251 feature not yet supported
+.
+.IP "\(bu" 4
+252 no DNS resolver found or not executable / proxy couldn\'t be determined from given values / \-xmpphost supplied but OPENSSL too old
+.
+.IP "\(bu" 4
+253 no SSL/TLS enabled server / OPENSSL too old / couldn\'t connect to proxy / couldn\'t connect via STARTTLS
+.
+.IP "\(bu" 4
+254 no OPENSSL found or not executable / no IPv4 address could be determined / illegal STARTTLS protocol supplied / supplied file name not readable
+.
+.IP "" 0
+.
+.SH "FILES"
+\fBetc/*pem\fR Here are the certificate stores from Apple, Linux, Mozilla Firefox, Windows\.
+.
+.P
+\fBetc/mapping\-rfc\.txt\fR Provides a mandatory file with mapping from OpenSSL cipher suites names to the ones from IANA / used in the RFCs\.
+.
+.P
+\fBetc/tls_data\.txt\fR Provides a mandatory file for ciphers (bash sockets) and key material\.
+.
+.SH "AUTHORS"
+Developed by Dirk Wetter and others, see https://github\.com/drwetter/testssl\.sh/blob/master/CREDITS\.md
+.
+.SH "COPYRIGHT"
+Copyright © 2012 Dirk Wetter\. License GPLv2: Free Software Foundation, Inc\. This is free software: you are free to change and redistribute it under the terms of the license\. Usage WITHOUT ANY WARRANTY\. USE at your OWN RISK!
+.
+.SH "LIMITATION"
+The Windows implementation is known to be slow\.
+.
+.SH "BUGS"
+Known ones and interface for filing new ones: https://testssl\.sh/bugs/ \.
+.
+.SH "SEE ALSO"
+\fBciphers\fR(1), \fBopenssl\fR(1), \fBs_client\fR(1), \fBx509\fR(1), \fBverify\fR(1), \fBocsp\fR(1), \fBcrl\fR(1), \fBbash\fR(1) and the websites \fBhttps://testssl\.sh/\fR and \fBhttps://github\.com/drwetter/testssl\.sh/\fR \.
