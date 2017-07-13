@@ -30,9 +30,9 @@ cryptographic flaws.
 
 You can download testssl.sh by cloning this git repository:
 
-git clone --depth 1 https://github.com/drwetter/testssl.sh.git 
+    git clone --depth 1 https://github.com/drwetter/testssl.sh.git 
 
-Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl.sh/archive/2.9dev.zip. Then ``testssl.sh --help`` will give you some help upfront. More help: see doc directory. Older sample runs are at https://testssl.sh/
+Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl.sh/archive/2.9dev.zip. Then ``testssl.sh --help`` will give you some help upfront. More help: see doc directory. Older sample runs are at https://testssl.sh/.
 
 
 #### Status
