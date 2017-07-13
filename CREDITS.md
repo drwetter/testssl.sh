@@ -1,5 +1,5 @@
 
-##### Credits also to
+##### Credits to
 
 * Peter Mosmans
   - started way better cmd line parsing
@@ -37,7 +37,7 @@
   - numerous fixes
  
  * Steven Danneman
-  - Postgres and MySQL STARTTLS support
+   - Postgres and MySQL STARTTLS support
 
 * Thomas Patzke:
   - Support of supplying timeout value for openssl connect
@@ -96,14 +96,14 @@
   - and other Darwin fixes
 
 * @nvsofts (NV)
- - LibreSSL patch for GOST
+  - LibreSSL patch for GOST
 
 * Markus Manzke
- - Fix for HSTS + subdomains
- - LibreSSL patch
+  - Fix for HSTS + subdomains
+  - LibreSSL patch
 
 * Dmitri S
- - inspiration & help for Darwin port
+  - inspiration & help for Darwin port
 
 
 Others I forgot to mention which did give me feedback, bug reports and helped one way or another.
