@@ -1725,7 +1725,7 @@ run_hpkp() {
           hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
 
           # Get keys/hashes from intermediate certificates
-          $OPENSSL s_client $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT ${sni[i]}  </dev/null >$TMPFILE 2>$ERRFILE
+          $OPENSSL s_client $STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT $SNI  </dev/null >$TMPFILE 2>$ERRFILE
           # Place the server's certificate in $HOSTCERT and any intermediate
           # certificates that were provided in $TEMPDIR/intermediatecerts.pem
           # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
@@ -3447,8 +3447,8 @@ client_simulation_sockets() {
      done
      debugme echo "sending client hello..."
      code2network "${data}"
-     fd_socket 5 || return 6
      data="$NW_STR"
+     fd_socket 5 || return 6
      [[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
@@ -6883,9 +6883,16 @@ starttls_line() {
      return 0
 }
 
+# Line based send with newline characters appended
 starttls_just_send(){
      debugme echo -e "C: $1"
      echo -ne "$1\r\n" >&5
+}
+
+# Stream based send
+starttls_just_send2(){
+     debugme echo -e "C: $1"
+     echo -ne "$1" >&5
 }
 
 starttls_just_read(){
@@ -7015,9 +7022,20 @@ starttls_postgres_dialog() {
 
 starttls_mysql_dialog() {
      debugme echo "=== starting mysql STARTTLS dialog ==="
-
-     debugme echo "mysql socket dialog not yet implemented"
-
+     local login_request="
+     , 20, 00, 00, 01,               # payload_length, sequence_id
+     85, ae, ff, 00,                 # capability flags, CLIENT_SSL always set
+     00, 00, 00, 01,                 # max-packet size
+     21,                             # character set
+     00, 00, 00, 00, 00, 00, 00, 00, # string[23] reserved (all [0])
+     00, 00, 00, 00, 00, 00, 00, 00,
+     00, 00, 00, 00, 00, 00, 00"
+     code2network "${login_request}"
+     starttls_just_read                     && debugme echo -e "\nreceived server greeting" &&
+     starttls_just_send2 "$NW_STR"          && debugme echo "initiated STARTTLS"
+     # TODO: We could detect if the server supports STARTTLS via the "Server Capabilities"
+     # bit field, but we'd need to parse the binary stream, with greater precision than regex.
+     local ret=$?
      debugme echo "=== finished mysql STARTTLS dialog with ${ret} ==="
      return $ret
 }
@@ -7607,9 +7625,13 @@ check_tls_serverhellodone() {
 # arg1: ASCII-HEX encoded reply
 # arg2: (optional): "all" -  process full response (including Certificate and certificate_status handshake messages)
 #                   "ephemeralkey" - extract the server's ephemeral key (if any)
+# arg3: (optional): CIPHER_SUITES string (lowercase, and in the format output by code2network())
+#       If present, parse_tls_serverhello() will check that the cipher in the ServerHello appears in
+#       the CIPHER_SUITES string.
 parse_tls_serverhello() {
      local tls_hello_ascii="$1"
      local process_full="$2"
+     local cipherlist="$3"
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
      local tls_serverhello_ascii="" tls_certificate_ascii=""
@@ -7622,7 +7644,7 @@ parse_tls_serverhello() {
      local tls_err_level tls_err_descr tls_cipher_suite rfc_cipher_suite tls_compression_method
      local tls_extensions="" extension_type named_curve_str=""
      local -i i j extension_len tls_extensions_len ocsp_response_len ocsp_response_list_len
-     local -i certificate_list_len certificate_len
+     local -i certificate_list_len certificate_len cipherlist_len
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
      local tmp_der_certfile tmp_pem_certfile hostcert_issuer="" ocsp_response=""
@@ -7668,7 +7690,7 @@ parse_tls_serverhello() {
 
           if [[ $DEBUG -ge 3 ]]; then
                echo  "     protocol (rec. layer):  0x$tls_protocol"
-               echo  "     tls_content_type:       0x$tls_content_type"
+               echo -n "     tls_content_type:       0x$tls_content_type"
                case $tls_content_type in
                     15) tmln_out " (alert)" ;;
                     16) tmln_out " (handshake)" ;;
@@ -8103,6 +8125,21 @@ parse_tls_serverhello() {
           tmln_out
      fi
 
+     # If a CIPHER_SUITES string was provided, then check that $tls_cipher_suite is in the string.
+     if [[ -n "$cipherlist" ]]; then
+          tls_cipher_suite="$(tolower "$tls_cipher_suite")"
+          tls_cipher_suite="${tls_cipher_suite:0:2}\\x${tls_cipher_suite:2:2}"
+          cipherlist_len=${#cipherlist}
+          for (( i=0; i < cipherlist_len; i=i+8 )); do
+               [[ "${cipherlist:i:6}" == "$tls_cipher_suite" ]] && break
+          done
+          if [[ $i -ge $cipherlist_len ]]; then
+               debugme echo "The ServerHello specifies a cipher suite that wasn't included in the ClientHello."
+               tmpfile_handle $FUNCNAME.txt
+               return 1
+          fi
+     fi
+
      # Now parse the Certificate message.
      if [[ "$process_full" == "all" ]]; then
           [[ -e "$HOSTCERT" ]] && rm "$HOSTCERT"
@@ -8451,7 +8488,7 @@ sslv2_sockets() {
 
 
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
-# ARG2: CIPHER_SUITES string
+# ARG2: CIPHER_SUITES string (lowercase, and in the format output by code2network())
 # ARG3: (optional) additional request extensions
 # ARG4: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
 socksend_tls_clienthello() {
@@ -8474,8 +8511,7 @@ socksend_tls_clienthello() {
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
      [[ "$4" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
 
-     code2network "$(tolower "$2")"               # convert CIPHER_SUITES
-     cipher_suites="$NW_STR"                      # we don't have the leading \x here so string length is two byte less, see next
+     cipher_suites="$2"                      # we don't have the leading \x here so string length is two byte less, see next
      len_ciph_suites_byte=${#cipher_suites}
      let "len_ciph_suites_byte += 2"
 
@@ -8748,6 +8784,8 @@ tls_sockets() {
                cipher_list_2send="$TLS_CIPHER"
           fi
      fi
+     code2network "$(tolower "$cipher_list_2send")"   # convert CIPHER_SUITES to a "standardized" format
+     cipher_list_2send="$NW_STR"
 
      debugme echo "sending client hello..."
      socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$4" "$offer_compression"
@@ -8807,7 +8845,7 @@ tls_sockets() {
                echo
           fi
 
-          parse_tls_serverhello "$tls_hello_ascii" "$process_full"
+          parse_tls_serverhello "$tls_hello_ascii" "$process_full" "$cipher_list_2send"
           save=$?
 
           if [[ $save == 0 ]]; then
