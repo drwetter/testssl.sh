@@ -201,7 +201,7 @@ UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo)
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
 CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
 
-# tuning vars, can not be set by a cmd line switch
+# tuning vars, can be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 MAX_WAITSOCK=${MAX_WAITSOCK:-10}        # waiting at max 10 seconds for socket reply. There shouldn't be any reason to change this.
@@ -255,6 +255,7 @@ HEADERVALUE=""
 HTTP_STATUS_CODE=""
 PROTOS_OFFERED=""
 TLS_EXTENSIONS=""
+BAD_SERVER_HELLO_CIPHER=false           # reserved for cases where a ServerHello doesn't contain a cipher offered in the ClientHello
 GOST_STATUS_PROBLEM=false
 DETECTED_TLS_VERSION=""
 PATTERN2SHOW=""
@@ -8126,6 +8127,8 @@ parse_tls_serverhello() {
      fi
 
      # If a CIPHER_SUITES string was provided, then check that $tls_cipher_suite is in the string.
+     # this appeared in yassl + MySQL (https://github.com/drwetter/testssl.sh/pull/784) but adds robustness
+     # to the implemenation
      if [[ -n "$cipherlist" ]]; then
           tls_cipher_suite="$(tolower "$tls_cipher_suite")"
           tls_cipher_suite="${tls_cipher_suite:0:2}\\x${tls_cipher_suite:2:2}"
@@ -8134,6 +8137,7 @@ parse_tls_serverhello() {
                [[ "${cipherlist:i:6}" == "$tls_cipher_suite" ]] && break
           done
           if [[ $i -ge $cipherlist_len ]]; then
+               BAD_SERVER_HELLO_CIPHER=true
                debugme echo "The ServerHello specifies a cipher suite that wasn't included in the ClientHello."
                tmpfile_handle $FUNCNAME.txt
                return 1
@@ -9169,8 +9173,8 @@ run_ccs_injection(){
 # in general, see https://en.wikipedia.org/wiki/Transport_Layer_Security#Alert_protocol
 #                 https://tools.ietf.org/html/rfc5246#section-7.2
 #
-# not ok fo CCSI:  15 | 0301    | 00 02    | 02 15
-#               ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
+# not ok for CCSI:  15 | 0301    | 00 02    | 02 15
+#                ALERT | TLS 1.0 | Length=2 | Decryption failed (21)
 #
 # ok:   nothing: ==> RST
 #
@@ -9186,7 +9190,7 @@ run_ccs_injection(){
           fi
           ret=0
      elif [[ "$byte6" == "15" ]] && [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
-          # decyption failed received
+          # decryption failed received
           pr_svrty_critical "VULNERABLE (NOT ok)"
           fileout "ccs" "CRITICAL" "CCS: VULNERABLE" "$cve" "$cwe" "$hint"
           ret=1
@@ -9198,6 +9202,12 @@ run_ccs_injection(){
                out " - alert description type: $byte6"
                fileout "ccs" "WARN" "CCS: probably not vulnerable but received 0x${byte6} instead of 0x15" "$cve" "$cwe" "$hint"
           fi
+     elif [[ $STARTTLS_PROTOCOL == "mysql" ]] && [[ "${tls_hello_ascii:14:12}" == "233038533031" ]]; then
+          # MySQL community edition (yaSSL) returns a MySQL error instead of a TLS Alert
+          # Error: #08S01 Bad handshake
+          pr_done_best "not vulnerable (OK)"
+          out ", looks like MySQL community edition (yaSSL)"
+          fileout "ccs" "OK" "CCS: not vulnerable (MySQL community edition (yaSSL) detected)" "$cve" "$cwe"
      elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != "03" ]]; then
           pr_warning "test failed"
           out ", probably read buffer too small (${tls_hello_ascii:0:14})"
