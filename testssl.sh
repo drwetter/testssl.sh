@@ -8625,10 +8625,7 @@ socksend_tls_clienthello() {
                ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
                ,$servername_hexstr"     # server_name target
           fi
-          if [[ ! "$extra_extensions_list" =~ " 000f " ]]; then
-               [[ -n "$all_extensions" ]] && all_extensions+=","
-               all_extensions+="$extension_heartbeat"
-          fi
+
           if [[ ! "$extra_extensions_list" =~ " 0023 " ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_session_ticket"
@@ -8661,6 +8658,13 @@ socksend_tls_clienthello() {
                all_extensions+="$extra_extensions"
           fi
 
+          # Make sure that a non-empty extension goes last (either heartbeat or padding).
+          # See PR #792 and https://www.ietf.org/mail-archive/web/tls/current/msg19720.html.
+          if [[ ! "$extra_extensions_list" =~ " 000f " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extension_heartbeat"
+          fi
+
           code2network "$all_extensions" # convert extensions
           all_extensions="$NW_STR"       # we don't have the leading \x here so string length is two byte less, see next
           len_extension=${#all_extensions}
@@ -8674,7 +8678,7 @@ socksend_tls_clienthello() {
           "$offer_compression" && len_all+=2
           if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]] && [[ ! "$extra_extensions_list" =~ " 0015 " ]]; then
                if [[ $len_all -gt 508 ]]; then
-                    len_padding_extension=0
+                    len_padding_extension=1 # Final extension cannot be empty: see PR #792
                else
                     len_padding_extension=$((508 - 0x$len_ciph_suites - 0x2b - 0x$len_extension_hex - 0x2))
                fi
