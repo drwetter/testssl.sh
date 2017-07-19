@@ -9186,7 +9186,7 @@ run_ccs_injection(){
           fi
           ret=0
      elif [[ "$byte6" == "15" ]] && [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
-          # decyption failed received
+          # decryption failed received
           pr_svrty_critical "VULNERABLE (NOT ok)"
           fileout "ccs" "CRITICAL" "CCS: VULNERABLE" "$cve" "$cwe" "$hint"
           ret=1
@@ -9198,6 +9198,11 @@ run_ccs_injection(){
                out " - alert description type: $byte6"
                fileout "ccs" "WARN" "CCS: probably not vulnerable but received 0x${byte6} instead of 0x15" "$cve" "$cwe" "$hint"
           fi
+     elif [[ $STARTTLS_PROTOCOL == "mysql" ]] && [[ "${tls_hello_ascii:14:12}" == "233038533031" ]]; then
+          # MySQL community edition (yaSSL) returns a MySQL error instead of a TLS Alert
+          # Error: #08S01 Bad handshake
+          pr_done_best "not vulnerable (OK)"
+          fileout "ccs" "OK" "CCS: not vulnerable" "$cve" "$cwe"
      elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != "03" ]]; then
           pr_warning "test failed"
           out ", probably read buffer too small (${tls_hello_ascii:0:14})"
