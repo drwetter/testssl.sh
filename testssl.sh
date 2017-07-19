@@ -11417,7 +11417,7 @@ prepare_arrays() {
                     if [[ $OSSL_VER_MAJOR -lt 1 ]]; then
                          [[ ":${ossl_supported_tls}:" =~ ":${TLS_CIPHER_OSSL_NAME[i]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                     else
-                         ossl_ciph="$(awk '/\<'"$hexc"'\>/ { print $3 }' <<< "$ossl_supported_tls")"
+                         ossl_ciph="$(grep -w "$hexc" <<< "$ossl_supported_tls" | awk '{ print $3 }')"
                          if [[ -n "$ossl_ciph" ]]; then
                               TLS_CIPHER_OSSL_SUPPORTED[i]=true
                               [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[i]}" ]] && TLS_CIPHER_OSSL_NAME[i]="$ossl_ciph"
