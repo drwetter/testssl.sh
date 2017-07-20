@@ -2294,59 +2294,72 @@ std_cipherlists() {
                     fi
                fi
           fi
-          case $3 in
-               2)  if [[ $sclient_success -eq 0 ]]; then
-                         # Strong is excellent to offer
-                         pr_done_best "offered (OK)"
-                         fileout "std_$4" "OK" "$2 offered"
-                    else
-                         pr_svrty_medium "not offered"
-                         fileout "std_$4" "MEDIUM" "$2 not offered"
-                    fi
-                    ;;
+          if [[ $sclient_success -ne 0 ]] && $BAD_SERVER_HELLO_CIPHER; then
+               # If server failed with a known error, raise it to the user.
+               if [[ $STARTTLS_PROTOCOL == "mysql" ]]; then
+                    pr_warning "SERVER_ERROR: test inconclusive due to MySQL Community Edition (yaSSL) bug."
+                    fileout "std_$4" "WARN" "SERVER_ERROR: test inconclusive due to MySQL Community Edition (yaSSL) bug."
+               else
+                    pr_warning "SERVER_ERROR: test inconclusive."
+                    fileout "std_$4" "WARN" "SERVER_ERROR: test inconclusive."
+               fi
+          else
+               # Otherwise the error means the server doesn't support that cipher list.
+               case $3 in
+                    2)  if [[ $sclient_success -eq 0 ]]; then
+                              # Strong is excellent to offer
+                              pr_done_best "offered (OK)"
+                              fileout "std_$4" "OK" "$2 offered"
+                         else
+                              pr_svrty_medium "not offered"
+                              fileout "std_$4" "MEDIUM" "$2 not offered"
+                         fi
+                         ;;
 
-               1)  if [[ $sclient_success -eq 0 ]]; then
-                         # High is good to offer
-                         pr_done_good "offered (OK)"
-                         fileout "std_$4" "OK" "$2 offered"
-                    else
-                         # FIXME: the rating could be readjusted if we knew the result of STRONG before
-                         pr_svrty_medium "not offered"
-                         fileout "std_$4" "MEDIUM" "$2 not offered"
-                    fi
-                    ;;
-               0)   if [[ $sclient_success -eq 0 ]]; then
-                         # medium is not that bad
-                         pr_svrty_medium "offered"
-                         fileout "std_$4" "MEDIUM" "$2 offered - not too bad"
-                    else
-                         out "not offered (OK)"
-                         fileout "std_$4" "OK" "$2 not offered"
-                    fi
-                    ;;
-               -1)  if [[ $sclient_success -eq 0 ]]; then
-                         # bad but there is worse
-                         pr_svrty_high "offered (NOT ok)"
-                         fileout "std_$4" "HIGH" "$2 offered - bad"
-                    else
-                         pr_done_good "not offered (OK)"
-                         fileout "std_$4" "OK" "$2 not offered"
-                    fi
-                    ;;
-               -2)  if [[ $sclient_success -eq 0 ]]; then
-                         # the ugly ones
-                         pr_svrty_critical "offered (NOT ok)"
-                         fileout "std_$4" "CRITICAL" "$2 offered - ugly"
-                    else
-                         pr_done_best "not offered (OK)"
-                         fileout "std_$4" "OK" "$2 not offered"
-                    fi
-                    ;;
-               *) # we shouldn't reach this
-                    pr_warning "?: $3 (please report this)"
-                    fileout "std_$4" "WARN" "return condition $3 unclear"
-                    ;;
-          esac
+                    1)  if [[ $sclient_success -eq 0 ]]; then
+                              # High is good to offer
+                              pr_done_good "offered (OK)"
+                              fileout "std_$4" "OK" "$2 offered"
+                         else
+                              # FIXME: the rating could be readjusted if we knew the result of STRONG before
+                              pr_svrty_medium "not offered"
+                              fileout "std_$4" "MEDIUM" "$2 not offered"
+                         fi
+                         ;;
+                    0)   if [[ $sclient_success -eq 0 ]]; then
+                              # medium is not that bad
+                              pr_svrty_medium "offered"
+                              fileout "std_$4" "MEDIUM" "$2 offered - not too bad"
+                         else
+                              out "not offered (OK)"
+                              fileout "std_$4" "OK" "$2 not offered"
+                         fi
+                         ;;
+                    -1)  if [[ $sclient_success -eq 0 ]]; then
+                              # bad but there is worse
+                              pr_svrty_high "offered (NOT ok)"
+                              fileout "std_$4" "HIGH" "$2 offered - bad"
+                         else
+                              # need a check for -eq 1 here
+                              pr_done_good "not offered (OK)"
+                              fileout "std_$4" "OK" "$2 not offered"
+                         fi
+                         ;;
+                    -2)  if [[ $sclient_success -eq 0 ]]; then
+                              # the ugly ones
+                              pr_svrty_critical "offered (NOT ok)"
+                              fileout "std_$4" "CRITICAL" "$2 offered - ugly"
+                         else
+                              pr_done_best "not offered (OK)"
+                              fileout "std_$4" "OK" "$2 not offered"
+                         fi
+                         ;;
+                    *) # we shouldn't reach this
+                         pr_warning "?: $3 (please report this)"
+                         fileout "std_$4" "WARN" "return condition $3 unclear"
+                         ;;
+               esac
+          fi
           tmpfile_handle $FUNCNAME.$debugname.txt
           [[ $DEBUG -ge 1 ]] && tm_out " -- $1"
           outln
