@@ -232,7 +232,6 @@ else
      MEASURE_TIME=${MEASURE_TIME:-false}
 fi
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
-SHOW_CENSYS_LINK=${SHOW_CENSYS_LINK:-true}
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
 
@@ -10281,8 +10280,19 @@ run_drown() {
      fi
 # if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
      pr_bold " DROWN"; out " ($cve)      "
-     sslv2_sockets
 
+     # Any fingerprint that is placed in $RSA_CERT_FINGERPRINT_SHA2 is also added to
+     # to $CERT_FINGERPRINT_SHA2, so if $CERT_FINGERPRINT_SHA2 is not empty, but
+     # $RSA_CERT_FINGERPRINT_SHA2 is empty, then the server doesn't have an RSA certificate.
+     if [[ -z "$CERT_FINGERPRINT_SHA2" ]]; then
+          get_host_cert "-cipher aRSA"
+          [[ $? -eq 0 ]] && cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed -e 's/^.*Fingerprint=//' -e 's/://g' )"
+     else
+          cert_fingerprint_sha2="$RSA_CERT_FINGERPRINT_SHA2"
+          # cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
+     fi
+
+     sslv2_sockets
      case $? in
           7) # strange reply, couldn't convert the cipher spec length to a hex number
                pr_fixme "strange v2 reply "
@@ -10291,43 +10301,32 @@ run_drown() {
                ret=7
                fileout "drown" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)" "$cve" "$cwe"
                ;;
-          3)   # vulnerable
+          3)   # vulnerable, [[ -n "$cert_fingerprint_sha2" ]] test is not needed as we should have RSA certificate here
                lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
                debugme tm_out "  ($lines lines)  "
                if [[ "$lines" -gt 1 ]]; then
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$nr_ciphers_detected" ]]; then
-                         prln_svrty_high "SSLv2 is supported but couldn't detect a cipher (NOT ok)";
-                         fileout "drown" "HIGH" "SSLv2 is offered, but could not detect a cipher" "$cve" "$cwe" "$hint"
+                         fileout "drown" "HIGH" "SSLv2 is offered, but could not detect a cipher, Make sure you don't use this certificate elsewhere, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe" "$hint"
                     else
                          prln_svrty_critical  "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
-                         fileout "drown" "CRITICAL" "VULNERABLE, SSLv2 offered with $nr_ciphers_detected ciphers" "$cve" "$cwe" "$hint"
+                         fileout "drown" "CRITICAL" "VULNERABLE, SSLv2 offered with $nr_ciphers_detected ciphers. Make sure you don't use this certificate elsewhere, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe" "$hint"
                     fi
+                    outln "$spaces Make sure you don't use this certificate elsewhere, see:"
+                    out "$spaces "
+                    pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
+                    outln
                fi
                ret=1
                ;;
-          *)   prln_done_best "not vulnerable on this port (OK)"
-               fileout "drown" "OK" "not vulnerable to DROWN" "$cve" "$cwe"
-               # Any fingerprint that is placed in $RSA_CERT_FINGERPRINT_SHA2 is
-               # also added to $CERT_FINGERPRINT_SHA2, so if $CERT_FINGERPRINT_SHA2
-               # is not empty, but $RSA_CERT_FINGERPRINT_SHA2 is empty, then the server
-               # doesn't have an RSA certificate.
-               if [[ -z "$CERT_FINGERPRINT_SHA2" ]]; then
-                    get_host_cert "-cipher aRSA"
-                    [[ $? -eq 0 ]] && cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed -e 's/^.*Fingerprint=//' -e 's/://g' )"
-               else
-                    cert_fingerprint_sha2="$RSA_CERT_FINGERPRINT_SHA2"
-               fi
+          *)   prln_done_best "not vulnerable on this host and port (OK)"
+               fileout "drown" "OK" "not vulnerable to DROWN on this host and port" "$cve" "$cwe"
                if [[ -n "$cert_fingerprint_sha2" ]]; then
                     outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
-                    if [[ "$DEBUG" -ge 1 ]] || "$SHOW_CENSYS_LINK"; then
-# not advertising it as it after 5 tries and account is needed
-                         cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
-                         out "$spaces "
-                         pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
-                         outln " could help you to find out"
-                         fileout "drown" "INFO" "make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2"
-                    fi
+                    out "$spaces "
+                    pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
+                    outln " could help you to find out"
+                    fileout "drown" "INFO" "make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2"
                else
                     outln "$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
                     fileout "drown" "INFO" "no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
