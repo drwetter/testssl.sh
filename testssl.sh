@@ -10289,7 +10289,7 @@ run_drown() {
           [[ $? -eq 0 ]] && cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed -e 's/^.*Fingerprint=//' -e 's/://g' )"
      else
           cert_fingerprint_sha2="$RSA_CERT_FINGERPRINT_SHA2"
-          # cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
+          cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
      fi
 
      sslv2_sockets
@@ -11416,7 +11416,7 @@ prepare_arrays() {
                     if [[ $OSSL_VER_MAJOR -lt 1 ]]; then
                          [[ ":${ossl_supported_tls}:" =~ ":${TLS_CIPHER_OSSL_NAME[i]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                     else
-                         ossl_ciph="$(awk '/\<'"$hexc"'\>/ { print $3 }' <<< "$ossl_supported_tls")"
+                         ossl_ciph="$(awk '/'"$hexc"'/ { print $3 }' <<< "$ossl_supported_tls")"
                          if [[ -n "$ossl_ciph" ]]; then
                               TLS_CIPHER_OSSL_SUPPORTED[i]=true
                               [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[i]}" ]] && TLS_CIPHER_OSSL_NAME[i]="$ossl_ciph"
