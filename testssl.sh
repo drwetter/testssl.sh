@@ -1923,7 +1923,7 @@ emphasize_stuff_in_headers(){
                     -e "s/Win64/${html_yellow}Win64${html_off}/g" \
                     -e "s/Ubuntu/${html_yellow}Ubuntu${html_off}/g" \
                     -e "s/ubuntu/${html_yellow}ubuntu${html_off}/g" \
-                    -e "s/stretch//${html_yellow}stretch${html_off}/g" \
+                    -e "s/stretch/${html_yellow}stretch${html_off}/g" \
                     -e "s/jessie/${html_yellow}jessie${html_off}/g" \
                     -e "s/squeeze/${html_yellow}squeeze${html_off}/g" \
                     -e "s/wheezy/${html_yellow}wheezy${html_off}/g" \
