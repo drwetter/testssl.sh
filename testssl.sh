@@ -3446,12 +3446,18 @@ client_simulation_sockets() {
      for (( i=0; i < len; i=i+2 )); do
           data+=", ${clienthello:i:2}"
      done
-     # Extact list of cipher suites
-     sid_len=4*$(hex2dec "${data:174:2}")
-     offset1=178+$sid_len
-     offset2=182+$sid_len
-     len=4*$(hex2dec "${data:offset1:2}${data:offset2:2}")-2
-     offset1=186+$sid_len
+     if [[ "${1:0:4}" == "1603" ]]; then
+          # Extact list of cipher suites from SSLv3 or later ClientHello
+          sid_len=4*$(hex2dec "${data:174:2}")
+          offset1=178+$sid_len
+          offset2=182+$sid_len
+          len=4*$(hex2dec "${data:offset1:2}${data:offset2:2}")-2
+          offset1=186+$sid_len
+     else
+          # Extact list of cipher suites from SSLv2 ClientHello
+          offset1=46
+          len=4*$(hex2dec "${data:26:2}")-2
+     fi
      code2network "$(tolower "${data:offset1:len}")"   # convert CIPHER_SUITES to a "standardized" format
      cipher_list_2send="$NW_STR"
 
