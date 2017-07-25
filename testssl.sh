@@ -262,6 +262,7 @@ SOCK_REPLY_FILE=""
 NW_STR=""
 LEN_STR=""
 SNI=""
+POODLE=""                               # keep vulnerability status for TLS_FALLBACK_SCSV
 OSSL_VER=""                             # openssl version, will be auto-determined
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
@@ -9859,9 +9860,11 @@ run_ssl_poodle() {
           [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      fi
      if [[ $sclient_success -eq 0 ]]; then
+          POODLE=0
           pr_svrty_high "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
           fileout "poodle_ssl" "HIGH" "POODLE, SSL: VULNERABLE, uses SSLv3+CBC" "$cve" "$cwe" "$hint"
      else
+          POODLE=1
           pr_done_best "not vulnerable (OK)";
           if "$using_sockets"; then
                fileout "poodle_ssl" "OK" "POODLE, SSL: not vulnerable" "$cve" "$cwe"
@@ -9925,9 +9928,20 @@ run_tls_fallback_scsv() {
           $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2 -fallback_scsv &>$TMPFILE </dev/null
           if grep -q "CONNECTED(00" "$TMPFILE"; then
                if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
-                    pr_svrty_medium "Downgrade attack prevention NOT supported"
-                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention NOT supported"
-                    ret=1
+                    if [[ -z "$POODLE" ]]; then
+                         pr_warning "Rerun including POODLE SSL check. "
+                         pr_svrty_medium "Downgrade attack prevention NOT supported"
+                         fileout "fallback_scsv" "WARNING" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported. Pls rerun wity POODLE SSL check"
+                         ret=1
+                    elif [[ "$POODLE" -eq 0 ]]; then
+                         pr_svrty_high "Downgrade attack prevention NOT supported and vulnerable to POODLE SSL"
+                         fileout "fallback_scsv" "HIGH" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported and vulnerable to POODLE SSL"
+                         ret=0
+                    else
+                         pr_svrty_medium "Downgrade attack prevention NOT supported"
+                         fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported"
+                         ret=1
+                    fi
                elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
                     pr_done_good "Downgrade attack prevention supported (OK)"
                     fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported"
