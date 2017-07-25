@@ -2276,7 +2276,7 @@ std_cipherlists() {
                sclient_success=$?
                [[ $sclient_success -eq 2 ]] && sclient_success=0
           fi
-          if [[ $sclient_success -ne 0 ]] && has_server_protocol "ssl2"; then
+          if [[ $sclient_success -ne 0 ]]; then
                if ( [[ -z "$6" ]] || "$FAST" ) && "$HAS_SSL2" && listciphers "$1" -ssl2; then
                     $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY -ssl2 2>$ERRFILE >$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE
