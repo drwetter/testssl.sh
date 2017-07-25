@@ -3433,7 +3433,7 @@ client_simulation_sockets() {
      local -i len i ret=0
      local -i save=0
      local lines clienthello data=""
-     local cipher_list_2send
+     local cipher_list_2send=""
      local sock_reply_file2 sock_reply_file3
      local tls_hello_ascii next_packet hello_done=0
      local -i sid_len offset1 offset2
@@ -3458,12 +3458,17 @@ client_simulation_sockets() {
           offset2=182+$sid_len
           len=4*$(hex2dec "${data:offset1:2}${data:offset2:2}")-2
           offset1=186+$sid_len
+          code2network "$(tolower "${data:offset1:len}")"    # convert CIPHER_SUITES to a "standardized" format
      else
           # Extact list of cipher suites from SSLv2 ClientHello
-          offset1=46
-          len=4*$(hex2dec "${data:26:2}")-2
+          len=2*$(hex2dec "${clienthello:12:2}")
+          for (( i=22; i < 22+len; i=i+6 )); do
+               offset1=$i+2
+               offset2=$i+4
+               [[ "${clienthello:i:2}" == "00" ]] && cipher_list_2send+=", ${clienthello:offset1:2},${clienthello:offset2:2}"
+          done
+          code2network "$(tolower "${cipher_list_2send:2}")" # convert CIPHER_SUITES to a "standardized" format
      fi
-     code2network "$(tolower "${data:offset1:len}")"   # convert CIPHER_SUITES to a "standardized" format
      cipher_list_2send="$NW_STR"
 
      debugme echo "sending client hello..."
