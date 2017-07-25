@@ -3436,6 +3436,7 @@ client_simulation_sockets() {
      local cipher_list_2send
      local sock_reply_file2 sock_reply_file3
      local tls_hello_ascii next_packet hello_done=0
+     local -i sid_len offset1 offset2
 
      if [[ "${1:0:4}" == "1603" ]]; then
           clienthello="$(create_client_simulation_tls_clienthello "$1")"
@@ -3446,6 +3447,25 @@ client_simulation_sockets() {
      for (( i=0; i < len; i=i+2 )); do
           data+=", ${clienthello:i:2}"
      done
+     # same as above. If a CIPHER_SUITES string was provided, then check that it is in the ServerHello
+     # this appeared 1st in yassl + MySQL (https://github.com/drwetter/testssl.sh/pull/784) but adds
+     # robustness to the implementation
+     # see also https://github.com/drwetter/testssl.sh/pull/797
+     if [[ "${1:0:4}" == "1603" ]]; then
+          # Extact list of cipher suites from SSLv3 or later ClientHello
+          sid_len=4*$(hex2dec "${data:174:2}")
+          offset1=178+$sid_len
+          offset2=182+$sid_len
+          len=4*$(hex2dec "${data:offset1:2}${data:offset2:2}")-2
+          offset1=186+$sid_len
+     else
+          # Extact list of cipher suites from SSLv2 ClientHello
+          offset1=46
+          len=4*$(hex2dec "${data:26:2}")-2
+     fi
+     code2network "$(tolower "${data:offset1:len}")"   # convert CIPHER_SUITES to a "standardized" format
+     cipher_list_2send="$NW_STR"
+
      debugme echo "sending client hello..."
      code2network "${data}"
      data="$NW_STR"
@@ -3497,7 +3517,7 @@ client_simulation_sockets() {
           echo
      fi
 
-     parse_tls_serverhello "$tls_hello_ascii" "ephemeralkey"
+     parse_tls_serverhello "$tls_hello_ascii" "ephemeralkey" "$cipher_list_2send"
      save=$?
 
      if [[ $save -eq 0 ]]; then
@@ -3771,7 +3791,7 @@ add_tls_offered() {
 
 # function which checks whether SSLv2 - TLS 1.2 is being offereed
 has_server_protocol() {
-     [[ -z "$PROTOS_OFFERED" ]] && return 0            # if empty we rather return 0, means check at additional cost=connect will be done
+     [[ -z "$PROTOS_OFFERED" ]] && return 1  # if empty return 1, hinting to the caller to check at additional cost/connect
      if grep -qw "$1" <<< "$PROTOS_OFFERED"; then
           return 0
      fi
@@ -8128,7 +8148,7 @@ parse_tls_serverhello() {
 
      # If a CIPHER_SUITES string was provided, then check that $tls_cipher_suite is in the string.
      # this appeared in yassl + MySQL (https://github.com/drwetter/testssl.sh/pull/784) but adds robustness
-     # to the implemenation
+     # to the implementation
      if [[ -n "$cipherlist" ]]; then
           tls_cipher_suite="$(tolower "$tls_cipher_suite")"
           tls_cipher_suite="${tls_cipher_suite:0:2}\\x${tls_cipher_suite:2:2}"
@@ -9087,7 +9107,7 @@ run_ccs_injection(){
           tls_hexcode="x03, x03"
      elif $(has_server_protocol "ssl3"); then
           tls_hexcode="x03, x00"
-     else # no protcol for some reason defined, determine TLS versions offered with a new handshake
+     else # no protocol defined for some reason, determine TLS versions offered with a new handshake
           $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
                *1.2)  tls_hexcode="x03, x03" ;;
