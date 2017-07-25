@@ -3447,6 +3447,10 @@ client_simulation_sockets() {
      for (( i=0; i < len; i=i+2 )); do
           data+=", ${clienthello:i:2}"
      done
+     # same as above. If a CIPHER_SUITES string was provided, then check that it is in the ServerHello
+     # this appeared 1st in yassl + MySQL (https://github.com/drwetter/testssl.sh/pull/784) but adds
+     # robustness to the implementation
+     # see also https://github.com/drwetter/testssl.sh/pull/797
      if [[ "${1:0:4}" == "1603" ]]; then
           # Extact list of cipher suites from SSLv3 or later ClientHello
           sid_len=4*$(hex2dec "${data:174:2}")
@@ -8144,7 +8148,7 @@ parse_tls_serverhello() {
 
      # If a CIPHER_SUITES string was provided, then check that $tls_cipher_suite is in the string.
      # this appeared in yassl + MySQL (https://github.com/drwetter/testssl.sh/pull/784) but adds robustness
-     # to the implemenation
+     # to the implementation
      if [[ -n "$cipherlist" ]]; then
           tls_cipher_suite="$(tolower "$tls_cipher_suite")"
           tls_cipher_suite="${tls_cipher_suite:0:2}\\x${tls_cipher_suite:2:2}"
