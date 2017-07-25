@@ -2276,7 +2276,8 @@ std_cipherlists() {
                sclient_success=$?
                [[ $sclient_success -eq 2 ]] && sclient_success=0
           fi
-          if [[ $sclient_success -ne 0 ]] && has_server_protocol "ssl2"; then
+          # FIXME #759 if [[ $sclient_success -ne 0 ]] &&  && has_server_protocol "ssl2"; then
+          if [[ $sclient_success -ne 0 ]]; then
                if ( [[ -z "$6" ]] || "$FAST" ) && "$HAS_SSL2" && listciphers "$1" -ssl2; then
                     $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY -ssl2 2>$ERRFILE >$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE
@@ -4077,13 +4078,13 @@ run_std_cipherlists() {
   # ~ egrep -w '64|56' etc/cipher-mapping.txt | grep -v export
      local low_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, 00,ff"
      local sslv2_low_ciphers="08,00,80, 06,00,40"
-  # ~ grep -w 128 etc/cipher-mapping.txt | egrep -v "Au=None|AEAD|ARIA|Camellia|AES"
+  # ~ egrep -w 128 etc/cipher-mapping.txt | egrep -v "Au=None|AEAD|ARIA|Camellia|AES"
      local medium_ciphers="00,9a, 00,99, 00,98, 00,97, 00,96, 00,07, 00,21, 00,25, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, 00,92, 00,8a, 00,20, 00,24, c0,33, 00,8e, 00,ff"
      local sslv2_medium_ciphers="01,00,80, 03,00,80, 05,00,80"
   # ~ egrep -w '3DES' etc/cipher-mapping.txt
      local tdes_ciphers="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,ff"
      local sslv2_tdes_ciphers="07,00,c0"
-  # ~ equivalent to 'grep -w "GOST|128" etc/cipher-mapping.txt | grep -v '=None' | egrep -vw 'RC4|AEAD|IDEA|SEED|RC2'
+  # ~ equivalent to 'egrep -w "GOST|128" etc/cipher-mapping.txt | grep -v '=None' | egrep -vw 'RC4|AEAD|IDEA|SEED|RC2'
      local high_ciphers="c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,45, 00,44, 00,43, 00,42, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,3c, 00,2f, 00,ba, c0,37, c0,35, 00,b6, 00,b2, 00,90, 00,41, c0,9a, c0,98, c0,96, 00,ae, c0,94, 00,94, 00,8c, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,48, c0,4a, c0,4c, c0,4e, c0,64, c0,66, c0,68, c0,70, 00,80, 00,81, ff,00, ff,01, ff,02, ff,03, 00,ff"
      # no SSLv2 here and in strong
   # ~ equivalent to 'grep AEAD etc/cipher-mapping.txt | grep -v Au=None'
