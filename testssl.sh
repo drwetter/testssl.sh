@@ -1689,7 +1689,11 @@ run_hpkp() {
           fi
 
           # print key=value pair with awk, then strip non-numbers, to be improved with proper parsing of key-value with awk
-          hpkp_age_sec=$(awk -F= '/max-age/{max_age=$2; print max_age}' $TMPFILE | sed -E 's/[^[:digit:]]//g')
+          if "$HAS_SED_E"; then
+               hpkp_age_sec=$(awk -F= '/max-age/{max_age=$2; print max_age}' $TMPFILE | sed -E 's/[^[:digit:]]//g')
+          else
+               hpkp_age_sec=$(awk -F= '/max-age/{max_age=$2; print max_age}' $TMPFILE | sed -r 's/[^[:digit:]]//g')
+          fi
           hpkp_age_days=$((hpkp_age_sec / 86400))
           if [[ $hpkp_age_sec -ge $HPKP_MIN ]]; then
                pr_done_good "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
