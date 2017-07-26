@@ -2139,7 +2139,7 @@ run_more_flags() {
 
      pr_bold " Security headers             "
      for f2t in $good_flags2test; do
-          debugme echo "---> $f2t"
+          [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$f2t\""
           detect_header "$f2t" "$f2t" "$spaces"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
@@ -2155,7 +2155,7 @@ run_more_flags() {
      done
 
      for f2t in $other_flags2test; do
-          debugme echo "---> $f2t"
+          [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$f2t\""
           detect_header "$f2t" "$f2t" "$spaces"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
@@ -2377,7 +2377,7 @@ socksend() {
      else
           data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      fi
-     [[ $DEBUG -ge 4 ]] && echo "\"$data\""
+     [[ $DEBUG -ge 4 ]] && echo -e "\n\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $2
 }
@@ -3471,7 +3471,7 @@ client_simulation_sockets() {
      code2network "$(tolower "${data:offset1:len}")"   # convert CIPHER_SUITES to a "standardized" format
      cipher_list_2send="$NW_STR"
 
-     debugme echo "sending client hello..."
+     debugme echo -e "\nsending client hello... "
      code2network "${data}"
      data="$NW_STR"
      fd_socket 5 || return 6
@@ -3490,7 +3490,7 @@ client_simulation_sockets() {
           sock_reply_file2=${SOCK_REPLY_FILE}.2
           mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
 
-          debugme echo "requesting more server hello data..."
+          debugme echo -n "requesting more server hello data... "
           socksend "" $USLEEP_SND
           sockread_serverhello 32768
 
@@ -3516,12 +3516,11 @@ client_simulation_sockets() {
           fi
      done
 
-     debugme tmln_out "reading server hello..."
+     debugme echo "reading server hello..."
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C $SOCK_REPLY_FILE | head -6
           echo
      fi
-
      parse_tls_serverhello "$tls_hello_ascii" "ephemeralkey" "$cipher_list_2send"
      save=$?
 
@@ -3534,9 +3533,11 @@ client_simulation_sockets() {
           fi
      fi
 
-     # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
-     lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
-     debugme tm_out "  (returned $lines lines)  "
+     if [[ $DEBUG -ge 2 ]]; then
+          # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
+          lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
+          tm_out "  ($lines lines returned)  "
+     fi
 
      # determine the return value for higher level, so that they can tell what the result is
      if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
@@ -3767,7 +3768,7 @@ run_prototest_openssl() {
      $OPENSSL s_client -state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>$ERRFILE </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
-     [[ $DEBUG -eq 2 ]] && egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     debugme egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if ! locally_supported "$1" "$2" ; then
           ret=7
      else                                    # we remove SNI for SSLv2 and v3:
@@ -3776,7 +3777,7 @@ run_prototest_openssl() {
           $OPENSSL s_client -state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $sni >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           ret=$?
-          [[ $DEBUG -eq 2 ]] && egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          debugme egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
           grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
      fi
      tmpfile_handle $FUNCNAME$1.txt
@@ -3940,7 +3941,7 @@ run_protocols() {
                ;;
           2)   pr_svrty_medium "not offered"
                if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
-                    [[ $DEBUG -eq 1 ]] && tm_out " -- downgraded"
+                    [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
                     outln
                     fileout "tls1" "MEDIUM" "TLSv1.0 is not offered, and downgraded to SSL"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
@@ -3984,7 +3985,7 @@ run_protocols() {
                ;;
           2)   out "not offered"
                if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
-                    [[ $DEBUG -eq 1 ]] && tm_out " -- downgraded"
+                    [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
                     outln
                     fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, and downgraded to a weaker protocol"
                elif [[ "$DETECTED_TLS_VERSION" == "0300" ]] && [[ "$latest_supported" == "0301" ]]; then
@@ -4036,7 +4037,7 @@ run_protocols() {
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
                fi
                if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
-                    [[ $DEBUG -eq 1 ]] && tm_out " -- downgraded"
+                    [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
                     outln
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered and downgraded to a weaker protocol"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
@@ -7682,7 +7683,7 @@ parse_tls_serverhello() {
      DETECTED_TLS_VERSION=""
      [[ -n "$tls_hello_ascii" ]] && echo "CONNECTED(00000003)" > $TMPFILE
 
-     [[ "$DEBUG" -eq 5 ]] && echo $tls_hello_ascii      # one line without any blanks
+     [[ "$DEBUG" -ge 5 ]] && echo $tls_hello_ascii      # one line without any blanks
 
      # Client messages, including handshake messages, are carried by the record layer.
      # First, extract the handshake and alert messages.
@@ -7692,7 +7693,7 @@ parse_tls_serverhello() {
      # byte 3+4:    fragment length
      # bytes 5...:  message fragment
      tls_hello_ascii_len=${#tls_hello_ascii}
-     if [[ $DEBUG -ge 2 ]] && [[ $tls_hello_ascii_len -gt 0 ]]; then
+     if [[ $DEBUG -ge 3 ]] && [[ $tls_hello_ascii_len -gt 0 ]]; then
           echo "TLS message fragments:"
      fi
      for (( i=0; i<tls_hello_ascii_len; i=i+msg_len )); do
@@ -7765,9 +7766,7 @@ parse_tls_serverhello() {
           for (( i=0; i+3 < tls_alert_ascii_len; i=i+4 )); do
                tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
                j=$i+2
-               tls_err_descr=${tls_alert_ascii:j:2}    # 112/0x70: Unrecognized name, 111/0x6F: certificate_unobtainable,
-                                                       # 113/0x71: bad_certificate_status_response, #114/0x72: bad_certificate_hash_value
-
+               tls_err_descr=${tls_alert_ascii:j:2}
                debugme tm_out  "     tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
                case $tls_err_descr in
                     00) tls_alert_descrip="close notify" ;;
@@ -7807,22 +7806,19 @@ parse_tls_serverhello() {
                     78) tls_alert_descrip="no application protocol" ;;
                      *) tls_alert_descrip="$(hex2dec "$tls_err_descr")";;
                esac
-               case $tls_err_level in
-                    01) echo -n "warning " >> $TMPFILE ;;
-                    02) echo -n "fatal " >> $TMPFILE ;;
-               esac
-               echo "alert $tls_alert_descrip" >> $TMPFILE
-               echo "===============================================================================" >> $TMPFILE
                if [[ $DEBUG -ge 2 ]]; then
                     tmln_out " ($tls_alert_descrip)"
                     tm_out  "     tls_err_level:          ${tls_err_level}"
-                    case $tls_err_level in
-                         01) tmln_out " (warning)" ;;
-                         02) tmln_out " (fatal)" ;;
-                          *) tmln_out ;;
-                    esac
-                    tmln_out
                fi
+               case $tls_err_level in
+                    01) echo -n "warning " >> $TMPFILE
+                        debugme tmln_out " (warning)" ;;
+                    02) echo -n "fatal " >> $TMPFILE
+                        debugme tmln_out " (fatal)" ;;
+               esac
+               echo "alert $tls_alert_descrip" >> $TMPFILE
+               echo "===============================================================================" >> $TMPFILE
+
                if [[ "$tls_err_level" != "01" ]] && [[ "$tls_err_level" != "02" ]]; then
                     debugme tmln_warning "Unexpected AlertLevel (0x$tls_err_level)."
                     return 1
@@ -8479,7 +8475,7 @@ sslv2_sockets() {
      # https://idea.popcount.org/2012-06-16-dissecting-ssl-handshake/ (client)
 
      fd_socket 5 || return 6
-     debugme tmln_out "sending client hello... "
+     debugme echo -n "sending client hello... "
      socksend_sslv2_clienthello "$client_hello"
 
      sockread_serverhello 32768
@@ -8491,7 +8487,7 @@ sslv2_sockets() {
                sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
                mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
 
-               debugme echo "requesting more server hello data..."
+               debugme echo -n "requesting more server hello data... "
                socksend "" $USLEEP_SND
                sockread_serverhello 32768
 
@@ -8501,7 +8497,7 @@ sslv2_sockets() {
                response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
           done
      fi
-     debugme tmln_out "reading server hello... "
+     debugme echo "reading server hello... "
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -6
           tmln_out
@@ -8820,7 +8816,7 @@ tls_sockets() {
      code2network "$(tolower "$cipher_list_2send")"   # convert CIPHER_SUITES to a "standardized" format
      cipher_list_2send="$NW_STR"
 
-     debugme echo "sending client hello..."
+     debugme echo -en "\nsending client hello... "
      socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$4" "$offer_compression"
      ret=$?                             # 6 means opening socket didn't succeed, e.g. timeout
 
@@ -8844,7 +8840,7 @@ tls_sockets() {
                sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
                mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
 
-               debugme echo "requesting more server hello data..."
+               debugme echo -n "requesting more server hello data... "
                socksend "" $USLEEP_SND
                sockread_serverhello 32768
 
@@ -8872,7 +8868,7 @@ tls_sockets() {
                fi
           done
 
-          debugme tmln_out "reading server hello..."
+          debugme echo "reading server hello..."
           if [[ "$DEBUG" -ge 4 ]]; then
                hexdump -C $SOCK_REPLY_FILE | head -6
                echo
@@ -8890,9 +8886,11 @@ tls_sockets() {
                fi
           fi
 
-          # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
-          lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
-          debugme tm_out "  (returned $lines lines)  "
+          if [[ $DEBUG -ge 2 ]]; then
+               # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
+               lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
+               tm_out "  ($lines lines returned)  "
+          fi
 
           # determine the return value for higher level, so that they can tell what the result is
           if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
@@ -8901,11 +8899,11 @@ tls_sockets() {
                if [[ 03$tls_low_byte -eq $DETECTED_TLS_VERSION ]]; then
                     ret=0     # protocol available, TLS version returned equal to the one send
                else
-                    [[ $DEBUG -ge 2 ]] && echo -n "protocol send: 0x03$tls_low_byte, returned: 0x$DETECTED_TLS_VERSION"
+                    debugme echo -n "protocol send: 0x03$tls_low_byte, returned: 0x$DETECTED_TLS_VERSION"
                     ret=2     # protocol NOT available, server downgraded to $DETECTED_TLS_VERSION
                fi
           fi
-          debugme tmln_out
+          debugme echo
      else
           debugme echo "stuck on sending: $ret"
      fi
@@ -8927,7 +8925,6 @@ run_heartbleed(){
      local tls_proto_offered tls_hexcode
      local heartbleed_payload client_hello
      local -i n ret lines_returned
-     local -i hb_rounds=3
      local append=""
      local tls_hello_ascii=""
      local cve="CVE-2014-0160"
@@ -9015,11 +9012,10 @@ run_heartbleed(){
      x00, x0f, x00, x01, x01"
 
      fd_socket 5 || return 6
-     debugme tm_out "\nsending client hello (TLS version $tls_hexcode)"
-     debugme tmln_out " ($n of $hb_rounds)"
+     debugme echo -en "\nsending client hello... "
      socksend "$client_hello" 1
 
-     debugme tmln_out "\nreading server hello"
+     debugme echo "reading server hello...  "
      sockread_serverhello 32768
      if [[ $DEBUG -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -20
@@ -9159,10 +9155,10 @@ run_ccs_injection(){
      fd_socket 5 || return 6
 
 # we now make a standard handshake ...
-     debugme tm_out "\nsending client hello, "
+     debugme echo -n "sending client hello... "
      socksend "$client_hello" 1
 
-     debugme tmln_out "\nreading server hello"
+     debugme echo "reading server hello... "
      sockread_serverhello 32768
      if [[ $DEBUG -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -20
@@ -9317,7 +9313,7 @@ run_ticketbleed() {
                SSLv3) tls_hexcode="x03, x00" ;;
           esac
      fi
-     debugme echo -e "\nusing protocol $tls_hexcode"
+     debugme echo "using protocol $tls_hexcode"
 
      session_tckt_tls="$(get_session_ticket_tls)"
      if [[ "$session_tckt_tls" == "," ]]; then
@@ -9336,7 +9332,7 @@ run_ticketbleed() {
      len_handshake_ssl_layer="$(( len_handshake_record_layer + 4 ))"
      xlen_handshake_ssl_layer="$(dec04hex "$len_handshake_ssl_layer")"
 
-     if [[ "$DEBUG" -ge 2 ]]; then
+     if [[ "$DEBUG" -ge 4 ]]; then
           echo "len_tckt_tls (hex):            $len_tckt_tls ($xlen_tckt_tls)"
           echo "sid:                           $sid"
           echo "len_sid (hex)                  $len_sid ($xlen_sid)"
@@ -9426,10 +9422,10 @@ run_ticketbleed() {
      # we do 3 client hellos, and see whether different memmory is returned
      for i in 1 2 3; do
           fd_socket 5 || return 6
-          debugme tmln_out "\nsending client hello "
+          debugme echo -n "sending client hello... "
           socksend "$client_hello" 0
 
-          debugme tmln_out "\nreading server hello (ticketbleed reply)"
+          debugme echo "reading server hello (ticketbleed reply)... "
           if "$FAST_SOCKET"; then
                tls_hello_ascii=$(sockread_fast 32768)
           else
@@ -9464,7 +9460,7 @@ run_ticketbleed() {
                sid_input=$(sed -e 's/x//g' -e 's/,//g' <<< "$sid")
                sid_detected[i]="${tls_hello_ascii:88:32}"
                memory[i]="${tls_hello_ascii:$((88+ len_sid*2)):$((32 - len_sid*2))}"
-               if [[ "$DEBUG" -ge 2 ]]; then
+               if [[ "$DEBUG" -ge 3 ]]; then
                     echo
                     echo "TLS version, record layer: ${tls_hello_ascii:18:4}"
                     echo "Session ID:                ${sid_detected[i]}"
@@ -10059,7 +10055,7 @@ run_freak() {
           $OPENSSL s_client $STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI $addcmd >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          [[ $DEBUG -eq 2 ]] && egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          debugme egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
           if [[ $sclient_success -ne 0 ]] && "$HAS_SSL2"; then
                $OPENSSL s_client $STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
@@ -10404,7 +10400,7 @@ run_beast(){
           outln
           pr_headlineln " Testing for BEAST vulnerability "
      fi
-     if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
      fi
      pr_bold " BEAST"; out " ($cve)                     "
@@ -10661,6 +10657,9 @@ run_lucky13() {
      local hint=""
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for LUCKY13 vulnerability " && outln
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
+          outln
+     fi
      pr_bold " LUCKY13"; out " ($cve)                   "
 
      "$SSL_NATIVE" && using_sockets=false
@@ -10728,7 +10727,7 @@ run_rc4() {
           outln
           pr_headlineln " Checking for vulnerable RC4 Ciphers "
      fi
-     if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
      fi
      pr_bold " RC4"; out " ($cve)        "
