@@ -325,7 +325,7 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
 .IP "" 0
 .
 .P
-\fB\-\-show\-each\fR This is an option for all wide modes \-\- i\.e\. per switch or the each cipher test: it displays all ciphers tested \-\- not only succeeded ones\. \fBSHOW_EACH_C\fR is your friend if you prefer to set this via the shell environment\.
+\fB\-\-show\-each\fR This is an option for all wide modes only: it displays all ciphers tested \-\- not only succeeded ones\. \fBSHOW_EACH_C\fR is your friend if you prefer to set this via the shell environment\.
 .
 .P
 \fB\-\-color <0|1|2>\fR It determines the use of colors on the screen: \fB2\fR is the default and makes use of ANSI and termcap escape codes on your terminal\. \fB1\fR just uses non\-colored mark\-up like bold, italics, underline, reverse\. \fB0\fR means no mark\-up at all = no escape codes\. Setting the environment varable \fBCOLOR\fR achives the same result\.
@@ -340,7 +340,7 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
 screen output normal but leaves useful debug output in \fB/tmp/testssl\.XXXXXX/\fR \. The info about the exact directory is included in the screen output\.
 .
 .IP "2." 4
-list more what\'s going on, e\.g\. lists some errors of connections and general debug statements
+list more what\'s going on, status (high level) and connection errors, a few general debug output
 .
 .IP "3." 4
 even slightly more info: hexdumps + other info
