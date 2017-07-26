@@ -3483,8 +3483,10 @@ client_simulation_sockets() {
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
 
-     check_tls_serverhellodone "$tls_hello_ascii"
-     hello_done=$?
+     if [[ "${tls_hello_ascii:0:1}" != "8" ]]; then
+          check_tls_serverhellodone "$tls_hello_ascii"
+          hello_done=$?
+     fi
 
      for(( 1 ; hello_done==1; 1 )); do
           sock_reply_file2=${SOCK_REPLY_FILE}.2
@@ -3522,29 +3524,40 @@ client_simulation_sockets() {
           echo
      fi
 
-     parse_tls_serverhello "$tls_hello_ascii" "ephemeralkey" "$cipher_list_2send"
-     save=$?
-
-     if [[ $save -eq 0 ]]; then
-          debugme echo "sending close_notify..."
-          if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
-               socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+     if [[ "${tls_hello_ascii:0:1}" == "8" ]]; then
+          parse_sslv2_serverhello "$SOCK_REPLY_FILE" "false"
+          if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+               echo "Protocol  : SSLv2" > "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
+               DETECTED_TLS_VERSION="0200"
+               ret=0
           else
-               socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+               ret=1
           fi
-     fi
-
-     # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
-     lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
-     debugme tm_out "  (returned $lines lines)  "
-
-     # determine the return value for higher level, so that they can tell what the result is
-     if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
-          ret=1          # NOT available
      else
-          ret=0
+          parse_tls_serverhello "$tls_hello_ascii" "ephemeralkey" "$cipher_list_2send"
+          save=$?
+
+          if [[ $save -eq 0 ]]; then
+               debugme echo "sending close_notify..."
+               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+                    socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+               else
+                    socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+               fi
+          fi
+
+          # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
+          lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
+          debugme tm_out "  (returned $lines lines)  "
+
+          # determine the return value for higher level, so that they can tell what the result is
+          if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
+               ret=1          # NOT available
+          else
+               ret=0
+          fi
+          debugme tmln_out
      fi
-     debugme tmln_out
 
      close_socket
      TMPFILE=$SOCK_REPLY_FILE
