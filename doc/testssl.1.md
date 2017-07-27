@@ -222,7 +222,7 @@ The same can be achived by setting the environment variable `WARNINGS`.
 * `no-rfc`: don't display the RFC cipher suite name, display OpenSSL names only.
 
 
-`--show-each`                   This is an option for all wide modes -- i.e. per switch or the each cipher test: it displays all ciphers tested -- not only succeeded ones.  `SHOW_EACH_C` is your friend if you prefer to set this via the shell environment.
+`--show-each`                   This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  `SHOW_EACH_C` is your friend if you prefer to set this via the shell environment.
 
 
 `--color <0|1|2>`               It determines the use of colors on the screen: `2` is the default and makes use of ANSI and termcap escape codes on your terminal. `1` just uses non-colored mark-up like bold, italics, underline, reverse.  `0` means no mark-up at all = no escape codes. Setting the environment varable `COLOR` achives the same result.
@@ -233,7 +233,7 @@ The same can be achived by setting the environment variable `WARNINGS`.
 `--debug <0-6>`			This gives you additional output on the screen (2-6), only useful for debugging. `DEBUG` is the according enviroment variable which you can use. There are six levels (0 is the default, thus it has no effect):
 
 1. screen output normal but leaves useful debug output in __/tmp/testssl.XXXXXX/__ . The info about the exact directory is included in the screen output.
-2. list more what's going on, e.g. lists some errors of connections and general debug statements
+2. list more what's going on, status (high level) and connection errors, a few general debug output
 3. even slightly more info: hexdumps + other info
 4. display bytes sent via sockets
 5. display bytes received via sockets
