@@ -1293,9 +1293,11 @@ service_detection() {
           wait_kill $! $HEADER_MAXSLEEP
           was_killed=$?
           head $TMPFILE | grep -aq '^HTTP\/' && SERVICE=HTTP
-          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq SMTP && SERVICE=SMTP
-          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq POP && SERVICE=POP
-          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq IMAP && SERVICE=IMAP
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -waq "SMTP|ESMTP|Exim|IdeaSmtpServer|Kerio Connect|Postfix" && SERVICE=SMTP   # I know some overlap here
+          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -waq "POP|Gpop|MailEnable POP3 Server|OK Dovecot|Cyrus POP3" && SERVICE=POP  # I know some overlap here
+          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -waq "IMAP|IMAP4|Cyrus IMAP4IMAP4rev1|IMAP4REV1|Gimap" && SERVICE=IMAP       # I know some overlap here
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq FTP && SERVICE=FTP
+          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqi "jabber|xmpp" && SERVICE=XMPP
           [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
           debugme head -50 $TMPFILE | sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<\?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d'
      fi
@@ -4076,6 +4078,12 @@ run_protocols() {
           7)   fileout "tls1_2" "INFO" "TLSv1.2 is not tested due to lack of local support"
                ;;                                                            # no local support
      esac
+     debugme echo "PROTOS_OFFERED: $PROTOS_OFFERED"
+     if [[ -z "$PROTOS_OFFERED" ]]; then
+          outln
+          ignore_no_or_lame "You should not proceed as no protocol was detected. If you still really really want to, say \"YES\"" "YES"
+          [[ $? -ne 0 ]] && exit -2
+     fi
      return 0
 }
 
