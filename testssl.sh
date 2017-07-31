@@ -4036,6 +4036,7 @@ run_protocols() {
           if [[ $ret -ne 0 ]]; then
                tls_sockets "03" "$TLS12_CIPHER_2ND_TRY"
                [[ $? -eq 0 ]] && ret=0
+               # see #807 and #806
           fi
      else
           run_prototest_openssl "-tls1_2"

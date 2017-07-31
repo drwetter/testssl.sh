@@ -1,5 +1,7 @@
 
 # data we need for socket based handshakes
+# see #807 and #806 (especially
+# https://github.com/drwetter/testssl.sh/issues/806#issuecomment-318686374)
 
 # 123 standard cipher + 4x GOST for TLS 1.2 and SPDY/NPN HTTP2/ALPN
 readonly TLS12_CIPHER="
