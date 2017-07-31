@@ -3833,6 +3833,7 @@ run_protocols() {
      local latest_supported=""  # version.major and version.minor of highest version supported by the server.
      local detected_version_string latest_supported_string
      local lines nr_ciphers_detected
+     local -i ret
 
      outln; pr_headline " Testing protocols "
 
@@ -4031,10 +4032,16 @@ run_protocols() {
      pr_bold " TLS 1.2    ";
      if "$using_sockets"; then
           tls_sockets "03" "$TLS12_CIPHER"
+          ret=$?
+          if [[ $ret -ne 0 ]]; then
+               tls_sockets "03" "$TLS12_CIPHER_2ND_TRY"
+               [[ $? -eq 0 ]] && ret=0
+          fi
      else
           run_prototest_openssl "-tls1_2"
+          ret=$?
      fi
-     case $? in
+     case $ret in
           0)   prln_done_best "offered (OK)"
                fileout "tls1_2" "OK" "TLSv1.2 is offered"
                latest_supported="0303"
