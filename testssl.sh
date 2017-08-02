@@ -8388,10 +8388,10 @@ parse_tls_serverhello() {
                     esac
                fi
                if [[ $dh_bits -ne 0 ]] && [[ $named_curve -ne 29 ]] && [[ $named_curve -ne 30 ]]; then
-                    debugme echo "dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
+                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                ECDH, $named_curve_str, $dh_bits bits\n"
                     echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
                elif [[ $dh_bits -ne 0 ]]; then
-                    debugme echo "dh_bits:                $named_curve_str, $dh_bits bits"
+                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                $named_curve_str, $dh_bits bits\n"
                     echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
                fi
           elif [[ $rfc_cipher_suite =~ TLS_DHE_ ]] || [[ $rfc_cipher_suite =~ TLS_DH_anon ]] || \
@@ -8450,7 +8450,7 @@ parse_tls_serverhello() {
                     [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
                fi
 
-               [[ $DEBUG -ge 2 ]] && [[ $dh_bits -ne 0 ]] && echo "dh_bits:                DH,$named_curve_str $dh_bits bits"
+               [[ $DEBUG -ge 3 ]] && [[ $dh_bits -ne 0 ]] && echo -e "     dh_bits:                DH,$named_curve_str $dh_bits bits\n"
                [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: DH,$named_curve_str $dh_bits bits" >> $TMPFILE
           fi
      fi
