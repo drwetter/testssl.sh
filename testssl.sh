@@ -5348,6 +5348,12 @@ get_server_certificate() {
                GOST_STATUS_PROBLEM=true
           fi
      fi
+     case "$proto" in
+          "tls1_2") DETECTED_TLS_VERSION="0303" ;;
+          "tls1_1") DETECTED_TLS_VERSION="0302" ;;
+          "tls1") DETECTED_TLS_VERSION="0301" ;;
+          "ssl3") DETECTED_TLS_VERSION="0300" ;;
+     esac
      extract_new_tls_extensions $TMPFILE
 
      # Place the server's certificate in $HOSTCERT and any intermediate
@@ -5563,6 +5569,69 @@ must_staple() {
      fi
 }
 
+# TODO: This function checks for Certificate Transparency support based on RFC 6962.
+# It will need to be updated to add checks for Certificate Transparency support based on 6962bis.
+certificate_transparency() {
+     local cert="$1"
+     local ocsp_response="$2"
+     local -i number_of_certificates=$3
+     local cipher="$4"
+     local sni_used="$5"
+     local tls_version="$6"
+     local sni=""
+     local ciphers=""
+     local hexc n ciph sslver kx auth enc mac export
+     local -i success
+
+     # First check whether signed certificate timestamps (SCT) are included in the
+     # server's certificate. If they aren't, check whether the server provided
+     # a stapled OCSP response with SCTs. If no SCTs were found in the certificate
+     # or OCSP response, check for an SCT TLS extension.
+     if $OPENSSL x509 -noout -text 2>>$ERRFILE <<< "$cert" | egrep -q "CT Precertificate SCTs|1.3.6.1.4.1.11129.2.4.2" ; then
+          tm_out "certificate extension"
+          return 0
+     fi
+     if egrep -q "CT Certificate SCTs|1.3.6.1.4.1.11129.2.4.5" <<< "$ocsp_response"; then
+          tm_out "OCSP extension"
+          return 0
+     fi
+
+     # If the server only has one certificate, then it is sufficient to check whether
+     # determine_tls_extensions() discovered an SCT TLS extension. If the server has more than
+     # one certificate, then it is possible that an SCT TLS extension is returned for some
+     # certificates, but not for all of them.
+     if [[ $number_of_certificates -eq 1 ]] && [[ "$TLS_EXTENSIONS" =~ "signed certificate timestamps" ]]; then
+          tm_out "TLS extension"
+          return 0
+     fi
+
+     if [[ $number_of_certificates -gt 1 ]] && ! "$SSL_NATIVE"; then
+          while read hexc n ciph sslver kx auth enc mac export; do
+               if [[ ${#hexc} -eq 9 ]]; then
+                    ciphers+=", ${hexc:2:2},${hexc:7:2}"
+               fi
+          done < <($OPENSSL ciphers -V $cipher 2>>$ERRFILE)
+          [[ -z "$sni_used" ]] && sni="$SNI" && SNI=""
+          tls_sockets "${tls_version:2:2}" "${ciphers:2}" "all" "00,12,00,00"
+          success=$?
+          [[ -z "$sni_used" ]] && SNI="$sni"
+          if ( [[ $success -eq 0 ]] || [[ $success -eq 2 ]] ) && \
+             grep -a 'TLS server extension ' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | \
+             grep -aq "signed certificate timestamps"; then
+               tm_out "TLS extension"
+               return 0
+          fi
+     fi
+
+     if [[ $SERVICE != "HTTP" ]]; then
+          # At the moment Certificate Transparency only applies to HTTPS.
+          tm_out "N/A"
+     else
+          tm_out "no"
+     fi
+     return 0
+}
+
 certificate_info() {
      local proto
      local -i certificate_number=$1
@@ -5572,6 +5641,7 @@ certificate_info() {
      local ocsp_response=$5
      local ocsp_response_status=$6
      local sni_used=$7
+     local ct="$8"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo
      local expire days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
@@ -6187,8 +6257,17 @@ certificate_info() {
           pr_svrty_low "--"
           fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
      fi
+     outln
 
-     outln "\n"
+     out "$indent"; pr_bold " Certificate Transparency     ";
+     if [[ "$ct" =~ extension ]]; then
+          pr_done_good "yes"; outln " ($ct)"
+          fileout "${json_prefix}certificate_transparency" "OK" "Certificate Transparency: yes ($ct)"
+     else
+          outln "$ct"
+          fileout "${json_prefix}certificate_transparency" "INFO" "Certificate Transparency: $ct"
+     fi
+     outln
      return $ret
 }
 
@@ -6199,7 +6278,7 @@ run_server_defaults() {
      local -i i n
      local -i certs_found=0
      local -a previous_hostcert previous_intermediates keysize cipher
-     local -a ocsp_response ocsp_response_status sni_used
+     local -a ocsp_response ocsp_response_status sni_used tls_version ct
      local -a ciphers_to_test
      local -a -i success
      local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
@@ -6308,11 +6387,19 @@ run_server_defaults() {
                          certs_found=$(( certs_found + 1))
                          cipher[certs_found]=${ciphers_to_test[n]}
                          keysize[certs_found]=$(awk '/Server public key/ { print $(NF-1) }' $TMPFILE)
-                         ocsp_response[certs_found]=$(grep -aA 20 "OCSP response" $TMPFILE)
+                         # If an OCSP response was sent, then get the full
+                         # response so that certificate_info() can determine
+                         # whether it includes a certificate transparency extension.
+                         if grep -a "OCSP response:" $TMPFILE | grep -q "no response sent"; then
+                              ocsp_response[certs_found]="$(grep -a "OCSP response" $TMPFILE)"
+                         else
+                              ocsp_response[certs_found]="$(awk -v n=2 '/OCSP response:/ {start=1; inc=2} /======================================/ { if (start) {inc--} } inc' $TMPFILE)"
+                         fi
                          ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
                          previous_hostcert[certs_found]=$newhostcert
                          previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
                          [[ $n -ge 8 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
+                         tls_version[certs_found]="$DETECTED_TLS_VERSION"
                     fi
                fi
           fi
@@ -6324,6 +6411,15 @@ run_server_defaults() {
           >$ERRFILE
           [[ -z "$sessticket_lifetime_hint" ]] && sessticket_lifetime_hint=$(grep -aw "session ticket" $TMPFILE | grep -a lifetime)
      fi
+
+     # Now that all of the server's certificates have been found, determine for
+     # each certificate whether certificate transparency information is provided.
+     for (( i=1; i <= certs_found; i++ )); do
+          ct[i]="$(certificate_transparency "${previous_hostcert[i]}" "${ocsp_response[i]}" "$certs_found" "${cipher[i]}" "${sni_used[i]}" "${tls_version[i]}")"
+          # If certificate_transparency() called tls_sockets() and found a "signed certificate timestamps" extension, then add it to $TLS_EXTENSIONS,
+          # since it may not have been found by determine_tls_extensions().
+          [[ $certs_found -gt 1 ]] && [[ "${ct[i]}" == "TLS extension" ]] && extract_new_tls_extensions "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
+     done
 
      outln
      pr_headlineln " Testing server defaults (Server Hello) "
@@ -6413,12 +6509,10 @@ run_server_defaults() {
 
      tls_time
 
-     i=1
-     while [[ $i -le $certs_found ]]; do
+     for (( i=1; i <= certs_found; i++ )); do
           echo "${previous_hostcert[i]}" > $HOSTCERT
           echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
-          certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}"
-          i=$((i + 1))
+          certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
      done
 }
 
