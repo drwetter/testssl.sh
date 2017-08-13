@@ -29,7 +29,7 @@ works.  Second catch: If you scan other hosts in the internet the check against
 your Root CA will fail, too. This will be fixed in the future, see #230.
 
 #### Further needed files
-* ``tls_data.txt`` contains lists of cipher suites and privaet keys for sockets-based tests
+* ``tls_data.txt`` contains lists of cipher suites and private keys for sockets-based tests
 
 * ``cipher-mapping.txt`` contains information about all of the cipher suites defined for SSL/TLS
 
