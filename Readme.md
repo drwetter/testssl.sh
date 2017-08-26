@@ -71,11 +71,12 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * LOGJAM: now checking also for known DH parameters
 * Check for CAA RR
 * Check for OCSP must staple
+* Check for Certificate Transparency
 * Check for session resumption (Ticket, ID)
 * Better formatting of output (indentation)
 * Choice showing the RFC naming scheme only
 * Parallel mass testing
-* File input for mass testing can be also nmap grep(p)able (-oG)
+* File input for mass testing can be also in nmap grep(p)able (-oG) format
 * Postgres und MySQL STARTTLS support
 * Man page
 
