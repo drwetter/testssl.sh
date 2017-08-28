@@ -267,6 +267,7 @@ OSSL_VER=""                             # openssl version, will be auto-determin
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
+CLIENT_PROB_NO=1
 HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
 HAS_SSL2=false
 HAS_SSL3=false
@@ -771,6 +772,22 @@ fileout_footer() {
      # CSV: no footer
      return 0
 }
+
+fileout_insert_warning() {
+     # See #815. Make sure we don't mess up the JSON PRETTY format if we complain with a client side warning.
+     # This should only be called if an *extra* warning will be printed (previously: 'fileout <extra_warning_ID> "WARN" '
+     # arg1: json identifier,  arg2: normally "WARN",  arg3: finding
+     if "$do_pretty_json"; then
+          echo -e "          \"clientProblem${CLIENT_PROB_NO}\" : [" >>"$JSONFILE"
+          CLIENT_PROB_NO=$((CLIENT_PROB_NO + 1))
+          FIRST_FINDING=true       # make sure we don't have a comma here
+     fi
+     fileout "$1" "$2" "$3"
+     if "$do_pretty_json"; then
+          echo -e "\n          ]," >>"$JSONFILE"
+     fi
+}
+
 
 # ID, SEVERITY, FINDING, CVE, CWE, HINT
 fileout() {
@@ -1991,7 +2008,7 @@ run_server_banner() {
           # https://support.microsoft.com/en-us/kb/245030
      else
           outln "(no \"Server\" line in header, interesting!)"
-          fileout "serverbanner" "WARN" "No Server banner in header, interesting!"
+          fileout "serverbanner" "INFO" "No Server banner in header, interesting!"
      fi
 
      tmpfile_handle $FUNCNAME.txt
@@ -2057,7 +2074,7 @@ run_application_banner() {
                emphasize_stuff_in_headers "$line"
                app_banners="${app_banners}${line}"
           done < "$TMPFILE"
-          fileout "app_banner" "WARN" "Application Banners found: $app_banners"
+          fileout "app_banner" "INFO" "Application Banners found: $app_banners"
      fi
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -2103,7 +2120,7 @@ run_cookie_flags() {     # ARG1: Path
           if [[ $nr_cookies -eq $nr_secure ]]; then
                fileout "cookie_secure" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as secure"
           else
-               fileout "cookie_secure" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as secure"
+               fileout "cookie_secure" "INFO" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as secure"
           fi
           nr_httponly=$(grep -cai httponly $TMPFILE)
           case $nr_httponly in
@@ -2114,7 +2131,7 @@ run_cookie_flags() {     # ARG1: Path
           if [[ $nr_cookies -eq $nr_httponly ]]; then
                fileout "cookie_httponly" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
           else
-               fileout "cookie_httponly" "WARN" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
+               fileout "cookie_httponly" "INFO" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
           fi
           out "$msg302"
      else
@@ -2167,7 +2184,7 @@ run_more_flags() {
                fi
                pr_litecyan "$f2t"
                outln "$HEADERVALUE"     # shouldn't be that long
-               fileout "$f2t" "WARN" "$f2t: $HEADERVALUE"
+               fileout "$f2t" "INFO" "$f2t: $HEADERVALUE"
           fi
      done
      #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall" or Access-Control-Allow-Origin: *
@@ -3625,7 +3642,7 @@ run_client_simulation() {
      else
           pr_headline " Running client simulations via openssl "
           prln_warning " Depending on your openssl client you may get false results"
-          fileout "client_simulation" "WARNING" "Depending on your openssl client you may encounter false results"
+          fileout_insert_warning "client_simulation" "WARN" "Depending on your openssl client you will encounter false results"
      fi
      outln
 
@@ -3934,7 +3951,8 @@ run_protocols() {
                outln "(may need debugging)"
                add_tls_offered "ssl3"
                ;;
-          7)   fileout "sslv3" "INFO" "SSLv3 is not tested due to lack of local support"
+          7)   prln_warning "SSLv3 seems locally not supported"
+               fileout "sslv3" "WARN" "SSLv3 is not tested due to lack of local support"
                ;;                                                            # no local support
      esac
 
@@ -3975,11 +3993,12 @@ run_protocols() {
                fi
                ;;
           5)   outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
-               fileout "tls1" "WARN" "TLSv1.0 is $supported_no_ciph1"
+               fileout "tls1" "INFO" "TLSv1.0 is $supported_no_ciph1"
                add_tls_offered "tls1"
                ;;
-          7)   fileout "tlsv1" "INFO" "TLSv1.0 is not tested due to lack of local support"
-               ;;                                                            # no local support
+          7)   prln_warning "TLSv1.0 seems locally not supported"
+               fileout "tlsv1" "WARN" "TLSv1.0 is not tested due to lack of local support"
+               ;;                                                          # no local support
      esac
 
      pr_bold " TLS 1.1    ";
@@ -4022,11 +4041,12 @@ run_protocols() {
                fi
                ;;
           5)   outln "$supported_no_ciph1"
-               fileout "tls1_1" "WARN" "TLSv1.1 is $supported_no_ciph1"
+               fileout "tls1_1" "INFO" "TLSv1.1 is $supported_no_ciph1"
                add_tls_offered "tls1_1"
-               ;;                                # protocol ok, but no cipher
-          7)   fileout "tls1_1" "INFO" "TLSv1.1 is not tested due to lack of local support"
-               ;;                                                            # no local support
+               ;;                                                # protocol ok, but no cipher
+          7)   prln_warning "TLSv1.1 seems locally not supported"
+               fileout "tls1_1" "WARN" "TLSv1.1 is not tested due to lack of local support"
+               ;;                                                # no local support
      esac
 
      pr_bold " TLS 1.2    ";
@@ -4080,11 +4100,12 @@ run_protocols() {
                fi
                ;;
           5)   outln "$supported_no_ciph1"
-               fileout "tls1_2" "WARN" "TLSv1.2 is $supported_no_ciph1"
+               fileout "tls1_2" "INFO" "TLSv1.2 is $supported_no_ciph1"
                add_tls_offered "tls1_2"
                ;;                                # protocol ok, but no cipher
-          7)   fileout "tls1_2" "INFO" "TLSv1.2 is not tested due to lack of local support"
-               ;;                                                            # no local support
+          7)   prln_warning "TLSv1.2 seems locally not supported"
+               fileout "tls1_2" "WARN" "TLSv1.2 is not tested due to lack of local support"
+               ;;                                # no local support
      esac
      debugme echo "PROTOS_OFFERED: $PROTOS_OFFERED"
      if [[ -z "$PROTOS_OFFERED" ]]; then
@@ -4978,8 +4999,10 @@ get_host_cert() {
           awk '/-----BEGIN/,/-----END/ { print $0 }' $tmpvar >$HOSTCERT
           return 0
      else
-          [[ -z "$1" ]] && prln_warning "could not retrieve host certificate!"
-          #fileout "host_certificate" "WARN" "Could not retrieve host certificate!"
+          if [[ -z "$1" ]]; then
+                prln_warning "could not retrieve host certificate!"
+                fileout_insert_warning "host_certificate" "WARN" "Could not retrieve host certificate!"
+          fi
           return 1
      fi
      #tmpfile_handle $FUNCNAME.txt
@@ -5032,7 +5055,7 @@ determine_trust() {
           [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]] && \
           [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1" ]]; then
           addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
-          fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
+          fileout_insert_warning "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme tmln_out
 
@@ -10334,7 +10357,7 @@ run_logjam() {
           if [[ ! -s "$common_primes_file" ]]; then
                prln_local_problem "couldn't read common primes file $common_primes_file"
                out "${spaces}"
-               fileout "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
+               fileout_insert_warning "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
                ret=7
           else
                dh_p="$(toupper "$dh_p")"
@@ -11101,7 +11124,7 @@ old_fart() {
      out "Get precompiled bins or compile "
      pr_url "https://github.com/PeterMosmans/openssl"
      outln "."
-     fileout "old_fart" "WARN" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed. Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
+     fileout_insert_warning "old_fart" "WARN" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed. Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
      fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn't make much sense to proceed." -5
 }
 
@@ -11313,6 +11336,7 @@ find_openssl_binary() {
      return 0
 }
 
+
 check4openssl_oldfarts() {
      case "$OSSL_VER" in
           0.9.7*|0.9.6*|0.9.5*)
@@ -11331,10 +11355,10 @@ check4openssl_oldfarts() {
                *BSD|Darwin)
                     out " Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from "
                     pr_url "github.com/PeterMosmans/openssl"; outln "."
-                    fileout "too_old_openssl" "WARN" "Your $OPENSSL $OSSL_VER version is way too old. Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl ." ;;
+                    fileout_insert_warning "too_old_openssl" "WARN" "Your $OPENSSL $OSSL_VER version is way too old. Please use binary provided in \$INSTALLDIR/bin/ or from ports/brew or compile from github.com/PeterMosmans/openssl ." ;;
                *)   out " Update openssl binaries or compile from "
                     pr_url "https://github.com/PeterMosmans/openssl"; outln "."
-                    fileout "too_old_openssl" "WARN" "Update openssl binaries or compile from https://github.com/PeterMosmans/openssl .";;
+                    fileout_insert_warning "too_old_openssl" "WARN" "Update openssl binaries or compile from https://github.com/PeterMosmans/openssl .";;
           esac
           ignore_no_or_lame " Type \"yes\" to accept false negatives or positives" "yes"
           [[ $? -ne 0 ]] && exit -2
@@ -11708,10 +11732,12 @@ initialize_engine(){
      if ! $OPENSSL engine gost -vvvv -t -c 2>/dev/null >/dev/null; then
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
+          fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
           return 1
      elif $OPENSSL engine gost -vvvv -t -c 2>&1 | grep -iq "No such" ; then
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
+          fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
           return 1
      else      # we have engine support
           if [[ -n "$OPENSSL_CONF" ]]; then
