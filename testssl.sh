@@ -3642,7 +3642,7 @@ run_client_simulation() {
      else
           pr_headline " Running client simulations via openssl "
           prln_warning " Depending on your openssl client you may get false results"
-          fileout "client_simulation_WARNING" "WARN" "Depending on your openssl client you will encounter false results"
+          fileout "client_simulation_Problem" "WARN" "Depending on your openssl client you will encounter false results"
      fi
      outln
 
