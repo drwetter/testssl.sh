@@ -6504,7 +6504,7 @@ run_server_defaults() {
              ;;
           2) SESS_RESUMPTION[2]="ticket=noclue"
              pr_warning "Ticket resumption test failed, pls report / "
-             fileout "session_resumption_ticket" "WARNING" "resumption test for TLS Session Tickets failed, pls report"
+             fileout "session_resumption_ticket" "WARN" "resumption test for TLS Session Tickets failed, pls report"
              ;;
      esac
 
@@ -6525,7 +6525,7 @@ run_server_defaults() {
                   ;;
                2) SESS_RESUMPTION[1]="ID=noclue"
                   prln_warning "ID resumption test failed, pls report"
-                  fileout "session_resumption_ID" "WARNING" "resumption test via Session ID failed, pls report"
+                  fileout "session_resumption_ID" "WARN" "resumption test via Session ID failed, pls report"
                   ;;
           esac
      fi
@@ -10103,7 +10103,7 @@ run_tls_fallback_scsv() {
                     if [[ -z "$POODLE" ]]; then
                          pr_warning "Rerun including POODLE SSL check. "
                          pr_svrty_medium "Downgrade attack prevention NOT supported"
-                         fileout "fallback_scsv" "WARNING" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported. Pls rerun wity POODLE SSL check"
+                         fileout "fallback_scsv" "WARN" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported. Pls rerun wity POODLE SSL check"
                          ret=1
                     elif [[ "$POODLE" -eq 0 ]]; then
                          pr_svrty_high "Downgrade attack prevention NOT supported and vulnerable to POODLE SSL"
