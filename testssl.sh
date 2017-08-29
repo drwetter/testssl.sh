@@ -627,17 +627,18 @@ fileout_json_footer() {
 }
 
 fileout_json_section() {
-    case $1 in
-         1) echo -e    "                    \"protocols\"         : [" ;;
-         2) echo -e ",\n                    \"ciphers\"           : [" ;;
-         3) echo -e ",\n                    \"pfs\"               : [" ;;
-         4) echo -e ",\n                    \"serverPreferences\" : [" ;;
-         5) echo -e ",\n                    \"serverDefaults\"    : [" ;;
-         6) echo -e ",\n                    \"headerResponse\"    : [" ;;
-         7) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
-         8) echo -e ",\n                    \"cipherTests\"       : [" ;;
-         9) echo -e ",\n                    \"browserSimulations\": [" ;;
-         *) echo "invalid section" ;;
+     case $1 in
+           1) echo -e    "                    \"singleCipher\"      : [" ;;
+           2) echo -e    "                    \"protocols\"         : [" ;;
+           3) echo -e ",\n                    \"ciphers\"           : [" ;;
+           4) echo -e ",\n                    \"pfs\"               : [" ;;
+           5) echo -e ",\n                    \"serverPreferences\" : [" ;;
+           6) echo -e ",\n                    \"serverDefaults\"    : [" ;;
+           7) echo -e ",\n                    \"headerResponse\"    : [" ;;
+           8) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
+           9) echo -e ",\n                    \"cipherTests\"       : [" ;;
+          10) echo -e ",\n                    \"browserSimulations\": [" ;;
+           *) echo "invalid section" ;;
      esac
 }
 
@@ -2797,6 +2798,16 @@ run_cipher_match(){
                fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
           done
           "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
+          tmpfile_handle $FUNCNAME.txt
+          time_right_align run_cipher_match
+          fileout_section_footer true
+          outln
+          END_TIME=$(date +%s)
+          SCAN_TIME=$(( END_TIME - START_TIME ))
+          datebanner " Done"
+
+          "$MEASURE_TIME" && printf "%${COLUMNS}s\n" "$SCAN_TIME"
+          [[ -e "$MEASURE_TIME_FILE" ]] && echo "Total : $SCAN_TIME " >> "$MEASURE_TIME_FILE"
           exit
      done
      outln
@@ -13491,7 +13502,8 @@ lets_roll() {
 
      $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit 0; }
      $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo "$?" ; exit 0; }
-     $do_cipher_match && run_cipher_match ${single_cipher} && time_right_align
+     $do_cipher_match && { fileout_section_header $section_number false; run_cipher_match ${single_cipher}; }
+     ((section_number++))
 
      # all top level functions  now following have the prefix "run_"
      fileout_section_header $section_number false && ((section_number++))
