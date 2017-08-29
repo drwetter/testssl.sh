@@ -5012,7 +5012,7 @@ get_host_cert() {
      else
           if [[ -z "$1" ]]; then
                 prln_warning "could not retrieve host certificate!"
-                fileout_insert_warning "host_certificate" "WARN" "Could not retrieve host certificate!"
+                fileout "host_certificate_Problem" "WARN" "Could not retrieve host certificate!"
           fi
           return 1
      fi
@@ -5066,7 +5066,7 @@ determine_trust() {
           [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]] && \
           [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1" ]]; then
           addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
-          fileout_insert_warning "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
+          fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
      fi
      debugme tmln_out
 
@@ -10368,7 +10368,7 @@ run_logjam() {
           if [[ ! -s "$common_primes_file" ]]; then
                prln_local_problem "couldn't read common primes file $common_primes_file"
                out "${spaces}"
-               fileout_insert_warning "LOGJAM_common primes" "WARN" "couldn't read common primes file $common_primes_file"
+               fileout "LOGJAM_common primes_Problem" "WARN" "couldn't read common primes file $common_primes_file"
                ret=7
           else
                dh_p="$(toupper "$dh_p")"
