@@ -5066,7 +5066,7 @@ determine_trust() {
           [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]] && \
           [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1" ]]; then
           addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
-          fileout "${json_prefix}chain_of_trust_warn" "WARN" "$addtl_warning"
+          fileout "${json_prefix}chain_of_trust_Problem" "WARN" "$addtl_warning"
      fi
      debugme tmln_out
 
