@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "TESTSSL" "1" "July 2017" "" ""
+.TH "TESTSSL" "1" "August 2017" "" ""
 .
 .SH "NAME"
 \fBtestssl\fR
@@ -452,6 +452,9 @@ italics: for strings just reflecting a value read from the server
 .
 .SS "TUNING via ENV variables and more options"
 Except the environment variables mentioned above which replace command line options here a some which cannot be set otherwise\. Variables used for tuning are preset with reasonable values\. There should be no reason to change them unless you use testssl\.sh under special conditions\.
+.
+.IP "\(bu" 4
+ALL_CLIENTS runs a client simulation with all (currently) 117 clients
 .
 .IP "\(bu" 4
 UNBRACKTD_IPV6: needs to be set to true for some versions of OpenSSL (like from Gentoo) which don\'t support [bracketed] IPv6 addresses

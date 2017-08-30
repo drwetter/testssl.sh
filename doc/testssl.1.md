@@ -306,6 +306,7 @@ Except the environment variables mentioned above which replace command line opti
 [comment]: # * SHOW_SIGALGO
 [comment]: # * FAST
 [comment]: # * EXPERIMENTAL
+* ALL_CLIENTS runs a client simulation with all (currently) 117 clients
 * UNBRACKTD_IPV6: needs to be set to true for some versions of OpenSSL (like from Gentoo) which don't support [bracketed] IPv6 addresses
 * HEADER_MAXSLEEP: To wait how long before killing the process to retrieve a service banner / HTTP header
 * MAX_WAITSOCK:    It instructs testssl.sh to wait until the specified time before declaring a socket connection dead. Don't change this unless you're absolutely sure what you're doing. Value is in seconds.
