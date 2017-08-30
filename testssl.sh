@@ -10822,7 +10822,7 @@ run_lucky13() {
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
           outln
      fi
-     pr_bold " LUCKY13"; out " ($cve)                   "
+     pr_bold " LUCKY13"; out " ($cve), experimental     "
 
      "$SSL_NATIVE" && using_sockets=false
      # The openssl binary distributed has almost everything we need (PSK, KRB5 ciphers and feff, ffe0 are typically missing).
@@ -10841,8 +10841,11 @@ run_lucky13() {
           [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      fi
      if [[ $sclient_success -eq 0 ]]; then
-          pr_svrty_low "VULNERABLE"; out ", uses cipher block chaining (CBC) ciphers"
-          fileout "lucky13" "LOW" "LUCKY13, uses cipher block chaining (CBC) ciphers" "$cve" "$cwe" "$hint"
+          out "potentially "
+          pr_svrty_low "VULNERABLE"; out ", uses cipher block chaining (CBC) ciphers with TLS"
+          fileout "lucky13" "LOW" "potentially vulnerable to LUCKY13, uses cipher block chaining (CBC) ciphers with TLS. Check patches" "$cve" "$cwe" "$hint"
+          # the CBC padding which led to timing differences during MAC processing has been solved in openssl (https://www.openssl.org/news/secadv/20130205.txt)
+          # and other software. However we can't tell with reasonable effort from the outside. Thus we still issue a warning and label it experimental
      else
           pr_done_best "not vulnerable (OK)";
           if "$using_sockets"; then
