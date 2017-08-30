@@ -193,6 +193,7 @@ FNAME=${FNAME:-""}                      # file name to read commands from
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 NODNS=${NODNS:-false}                   # always do DNS lookups per default. For some pentests it might save time to set this to true
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
+ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
 
 # tuning vars which cannot be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
@@ -3624,9 +3625,9 @@ run_client_simulation() {
      local client_service
 
      # source the external file
-     . "$TESTSSL_INSTALL_DIR/etc/client_simulation.txt" 2>/dev/null
+     . "$TESTSSL_INSTALL_DIR/etc/client-simulation.txt" 2>/dev/null
      if [[ $? -ne 0 ]]; then
-          prln_local_problem "couldn't find client simulation data in $TESTSSL_INSTALL_DIR/etc/client_simulation.txt"
+          prln_local_problem "couldn't find client simulation data in $TESTSSL_INSTALL_DIR/etc/client-simulation.txt"
           return 1
      fi
 
@@ -3672,7 +3673,7 @@ run_client_simulation() {
           outln
      fi
      for name in "${short[@]}"; do
-          if ${current[i]} ; then
+          if ${current[i]} || "$ALL_CLIENTS" ; then
                # for ANY we test this service or if the service we determined from STARTTLS matches
                if [[ "${service[i]}" == "ANY" ]] || grep -q "$client_service" <<< "${service[i]}"; then
                     out " $(printf -- "%-29s" "${names[i]}")"
