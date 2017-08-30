@@ -73,13 +73,20 @@ foreach my $client ( @$ssllabs ) {
 				push @ciphers, "ECDHE-ECDSA-CHACHA20-POLY1305"; }
 			elsif ( $suite == "52394" ) {
 				push @ciphers, "DHE-RSA-CHACHA20-POLY1305"; }
+			elsif ( $suite == "14906" ) {
+				if ( $has_matched ) {
+					print " \"$shortname\": ";
+					$has_matched = 0;
+				}
+				print " skipping GREASE cipher "; printf("%s%04X", "0x", $suite);
+			}
 			else {
-				print "ALERT: ";
+				print " | FIXME: ";
 				if ( $has_matched ) {
 					print " \"$shortname\" has ";
 					$has_matched = 0;
 				}
-				print "$suite. Please FIXME ";
+				printf("%s%04X", "0x", $suite); printf " ($suite)";
 			}
 		}
 		print "\n" if ! $has_matched ;
@@ -321,11 +328,12 @@ foreach my $shortname ( reverse sort keys %sims ) {
 	}
 }
 
-open OUT, ">client-simulation-data.sh" or die "Unable to open client-simulation-data.sh";
-print OUT "#!/usr/bin/env bash
+open OUT, ">client-simulation_generated.txt" or die "Unable to open client-simulation_generated.txt";
 
 # This file contains client handshake data used in the run_client_simulation function
-# Don't update this file by hand, but run util/update_client_sim_data.pl instead
+# Don't update this file by hand, but run util/update_client_sim_data.pl instead.
+# The one currently distributed with testssl.sh (etc/client-simulation.txt) has been generated
+# from this script and manually edited (=which UA to show up) and sorted.
 
 # Most clients are taken from Qualys SSL Labs --- From: https://api.dev.ssllabs.com/api/v3/getClients
 ";
