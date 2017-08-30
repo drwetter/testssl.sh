@@ -83,32 +83,32 @@
       0x00,0x84 - CAMELLIA256-SHA                TLS_RSA_WITH_CAMELLIA_256_CBC_SHA                  SSLv3      Kx=RSA         Au=RSA     Enc=Camellia(256)              Mac=SHA1               
       0x00,0x95 - RSA-PSK-AES256-CBC-SHA         TLS_RSA_PSK_WITH_AES_256_CBC_SHA                   SSLv3      Kx=RSAPSK      Au=RSA     Enc=AES(256)                   Mac=SHA1               
       0x00,0x8D - PSK-AES256-CBC-SHA             TLS_PSK_WITH_AES_256_CBC_SHA                       SSLv3      Kx=PSK         Au=PSK     Enc=AES(256)                   Mac=SHA1    
-      0xC0,0x3D - -                              TLS_RSA_WITH_ARIA_256_CBC_SHA384                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(256)                  Mac=SHA384            
+      0xC0,0x3D - ARIA256-CBC-SHA384             TLS_RSA_WITH_ARIA_256_CBC_SHA384                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(256)                  Mac=SHA384            
       0xC0,0x3F - -                              TLS_DH_DSS_WITH_ARIA_256_CBC_SHA384                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIA(256)                  Mac=SHA384             
       0xC0,0x41 - -                              TLS_DH_RSA_WITH_ARIA_256_CBC_SHA384                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIA(256)                  Mac=SHA384             
-      0xC0,0x43 - -                              TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(256)                  Mac=SHA384             
-      0xC0,0x45 - -                              TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(256)                  Mac=SHA384             
-      0xC0,0x47 - -                              TLS_DH_anon_WITH_ARIA_256_CBC_SHA384               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(256)                  Mac=SHA384             
-      0xC0,0x49 - -                              TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x43 - DHE-DSS-ARIA256-CBC-SHA384     TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x45 - DHE-RSA-ARIA256-CBC-SHA384     TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x47 - DH-anon-ARIA256-CBC-SHA384     TLS_DH_anon_WITH_ARIA_256_CBC_SHA384               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x49 - ECDHE-ECDSA-ARIA256-CBC-SHA384 TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(256)                  Mac=SHA384             
       0xC0,0x4B - -                              TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIA(256)                  Mac=SHA384             
-      0xC0,0x4D - -                              TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(256)                  Mac=SHA384             
+      0xC0,0x4D - ECDHE-RSA-ARIA256-CBC-SHA384   TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(256)                  Mac=SHA384             
       0xC0,0x4F - -                              TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIA(256)                  Mac=SHA384             
-      0xC0,0x51 - -                              TLS_RSA_WITH_ARIA_256_GCM_SHA384                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x53 - -                              TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x55 - -                              TLS_DH_RSA_WITH_ARIA_256_GCM_SHA384                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x57 - -                              TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x59 - -                              TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x5B - -                              TLS_DH_anon_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x5D - -                              TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x5F - -                              TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x61 - -                              TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x63 - -                              TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x51 - ARIA256-GCM-SHA384             TLS_RSA_WITH_ARIA_256_GCM_SHA384                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x53 - DHE-RSA-ARIA256-GCM-SHA384     TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x55 - DH-RSA-ARIA256-GCM-SHA384      TLS_DH_RSA_WITH_ARIA_256_GCM_SHA384                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x57 - DHE-DSS-ARIA256-GCM-SHA384     TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x59 - DH-DSS-ARIA256-GCM-SHA384      TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x5B - ADH-ARIA256-GCM-SHA384         TLS_DH_anon_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DH          Au=None    Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x5D - ECDHE-ECDSA-ARIA256-GCM-SHA384 TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x5F - ECDH-ECDSA-ARIA256-GCM-SHA384  TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x61 - ECDHE-ARIA256-GCM-SHA384       TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x63 - ECDH-ARIA256-GCM-SHA384        TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIAGCM(256)               Mac=AEAD               
       0xC0,0x65 - -                              TLS_PSK_WITH_ARIA_256_CBC_SHA384                   TLSv1      Kx=PSK         Au=PSK     Enc=ARIA(256)                  Mac=SHA384             
       0xC0,0x67 - -                              TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384               TLSv1      Kx=DHEPSK      Au=PSK     Enc=ARIA(256)                  Mac=SHA384             
       0xC0,0x69 - -                              TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384               TLSv1      Kx=RSAPSK      Au=RSA     Enc=ARIA(256)                  Mac=SHA384             
-      0xC0,0x6B - -                              TLS_PSK_WITH_ARIA_256_GCM_SHA384                   TLSv1.2    Kx=PSK         Au=PSK     Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x6D - -                              TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=ARIA(256)                  Mac=AEAD               
-      0xC0,0x6F - -                              TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=ARIA(256)                  Mac=AEAD               
+      0xC0,0x6B - PSK-ARIA256-GCM-SHA384         TLS_PSK_WITH_ARIA_256_GCM_SHA384                   TLSv1.2    Kx=PSK         Au=PSK     Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x6D - DHE-PSK-ARIA256-GCM-SHA384     TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=ARIAGCM(256)               Mac=AEAD               
+      0xC0,0x6F - RSA-PSK-ARIA256-GCM-SHA384     TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384               TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=ARIAGCM(256)               Mac=AEAD               
       0xC0,0x71 - -                              TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384             TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=ARIA(256)                  Mac=SHA384             
       0xC0,0x7B - -                              TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384               TLSv1.2    Kx=RSA         Au=RSA     Enc=CamelliaGCM(256)           Mac=AEAD               
       0xC0,0x7D - -                              TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384           TLSv1.2    Kx=DH          Au=RSA     Enc=CamelliaGCM(256)           Mac=AEAD               
@@ -220,32 +220,32 @@
       0x00,0x8C - PSK-AES128-CBC-SHA             TLS_PSK_WITH_AES_128_CBC_SHA                       SSLv3      Kx=PSK         Au=PSK     Enc=AES(128)                   Mac=SHA1               
       0x00,0x21 - KRB5-IDEA-CBC-SHA              TLS_KRB5_WITH_IDEA_CBC_SHA                         SSLv3      Kx=KRB5        Au=KRB5    Enc=IDEA(128)                  Mac=SHA1               
       0x00,0x25 - KRB5-IDEA-CBC-MD5              TLS_KRB5_WITH_IDEA_CBC_MD5                         SSLv3      Kx=KRB5        Au=KRB5    Enc=IDEA(128)                  Mac=MD5                
-      0xC0,0x3C - -                              TLS_RSA_WITH_ARIA_128_CBC_SHA256                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x3C - ARIA128-CBC-SHA256             TLS_RSA_WITH_ARIA_128_CBC_SHA256                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
       0xC0,0x3E - -                              TLS_DH_DSS_WITH_ARIA_128_CBC_SHA256                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIA(128)                  Mac=SHA256             
       0xC0,0x40 - -                              TLS_DH_RSA_WITH_ARIA_128_CBC_SHA256                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIA(128)                  Mac=SHA256             
-      0xC0,0x42 - -                              TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(128)                  Mac=SHA256             
-      0xC0,0x44 - -                              TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
-      0xC0,0x46 - -                              TLS_DH_anon_WITH_ARIA_128_CBC_SHA256               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(128)                  Mac=SHA256             
-      0xC0,0x48 - -                              TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x42 - DHE-DSS-ARIA128-CBC-SHA256     TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x44 - DHE-RSA-ARIA128-CBC-SHA256     TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x46 - DH-anon-ARIA128-CBC-SHA256     TLS_DH_anon_WITH_ARIA_128_CBC_SHA256               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x48 - ECDHE-ECDSA-ARIA128-CBC-SHA256 TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(128)                  Mac=SHA256             
       0xC0,0x4A - -                              TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIA(128)                  Mac=SHA256             
-      0xC0,0x4C - -                              TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
+      0xC0,0x4C - ECDHE-RSA-ARIA128-CBC-SHA256   TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
       0xC0,0x4E - -                              TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIA(128)                  Mac=SHA256             
-      0xC0,0x50 - -                              TLS_RSA_WITH_ARIA_128_GCM_SHA256                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x52 - -                              TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x54 - -                              TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x56 - -                              TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x58 - -                              TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x5A - -                              TLS_DH_anon_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DH          Au=None    Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x5C - -                              TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x5E - -                              TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x60 - -                              TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x62 - -                              TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x50 - ARIA128-GCM-SHA256             TLS_RSA_WITH_ARIA_128_GCM_SHA256                   TLSv1.2    Kx=RSA         Au=RSA     Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x52 - DHE-RSA-ARIA128-GCM-SHA256     TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DH          Au=RSA     Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x54 - DH-RSA-ARIA128-GCM-SHA256      TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256                TLSv1.2    Kx=DH/RSA      Au=DH      Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x56 - DHE-DSS-ARIA128-GCM-SHA256     TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DH          Au=DSS     Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x58 - DH-DSS-ARIA128-GCM-SHA256      TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256                TLSv1.2    Kx=DH/DSS      Au=DH      Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x5A - ADH-ARIA128-GCM-SHA256         TLS_DH_anon_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DH          Au=None    Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x5C - ECDHE-ECDSA-ARIA128-GCM-SHA256 TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256           TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x5E - ECDH-ECDSA-ARIA128-GCM-SHA256  TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256            TLSv1.2    Kx=ECDH/ECDSA  Au=ECDH    Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x60 - ECDHE-ARIA128-GCM-SHA256       TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256             TLSv1.2    Kx=ECDH        Au=RSA     Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x62 - ECDH-ARIA128-GCM-SHA256        TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256              TLSv1.2    Kx=ECDH/RSA    Au=ECDH    Enc=ARIAGCM(128)               Mac=AEAD               
       0xC0,0x64 - -                              TLS_PSK_WITH_ARIA_128_CBC_SHA256                   TLSv1      Kx=PSK         Au=PSK     Enc=ARIA(128)                  Mac=SHA256             
       0xC0,0x66 - -                              TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256               TLSv1      Kx=DHEPSK      Au=PSK     Enc=ARIA(128)                  Mac=SHA256             
       0xC0,0x68 - -                              TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256               TLSv1      Kx=RSAPSK      Au=RSA     Enc=ARIA(128)                  Mac=SHA256             
-      0xC0,0x6A - -                              TLS_PSK_WITH_ARIA_128_GCM_SHA256                   TLSv1.2    Kx=PSK         Au=PSK     Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x6C - -                              TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=ARIA(128)                  Mac=AEAD               
-      0xC0,0x6E - -                              TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=ARIA(128)                  Mac=AEAD               
+      0xC0,0x6A - PSK-ARIA128-GCM-SHA256         TLS_PSK_WITH_ARIA_128_GCM_SHA256                   TLSv1.2    Kx=PSK         Au=PSK     Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x6C - DHE-PSK-ARIA128-GCM-SHA256     TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=DHEPSK      Au=PSK     Enc=ARIAGCM(128)               Mac=AEAD               
+      0xC0,0x6E - RSA-PSK-ARIA128-GCM-SHA256     TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256               TLSv1.2    Kx=RSAPSK      Au=RSA     Enc=ARIAGCM(128)               Mac=AEAD               
       0xC0,0x70 - -                              TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256             TLSv1      Kx=ECDHEPSK    Au=PSK     Enc=ARIA(128)                  Mac=SHA256             
       0xC0,0x7A - -                              TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256               TLSv1.2    Kx=RSA         Au=RSA     Enc=CamelliaGCM(128)           Mac=AEAD               
       0xC0,0x7C - -                              TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256           TLSv1.2    Kx=DH          Au=RSA     Enc=CamelliaGCM(128)           Mac=AEAD               
