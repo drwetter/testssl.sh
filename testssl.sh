@@ -6488,9 +6488,14 @@ run_server_defaults() {
      else
           lifetime=$(grep -a lifetime <<< "$sessticket_lifetime_hint" | sed 's/[A-Za-z:() ]//g')
           unit=$(grep -a lifetime <<< "$sessticket_lifetime_hint" | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
-          out "$lifetime $unit "
-          prln_svrty_low "(PFS requires session ticket keys to be rotated <= daily)"
-          fileout "session_ticket" "LOW" "TLS session ticket RFC 5077 valid for $lifetime $unit (PFS requires session ticket keys to be rotated at least daily)"
+          out "$lifetime $unit"
+          if [[ $((3600 * 24)) -lt $lifetime ]]; then
+               prln_svrty_low " but: PFS requires session ticket keys to be rotated < daily !"
+               fileout "session_ticket" "LOW" "TLS session ticket RFC 5077 valid for $lifetime $unit but PFS requires session ticket keys to be rotated at least daily!"
+          else
+               outln ", session tickets keys seems to be rotated < daily"
+               fileout "session_ticket" "INFO" "TLS session ticket RFC 5077 valid for $lifetime $unit only (PFS requires session ticket keys are rotated at least daily)"
+          fi
      fi
 
      pr_bold " SSL Session ID support       "
