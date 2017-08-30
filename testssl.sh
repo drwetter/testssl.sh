@@ -164,7 +164,6 @@ TERM_CURRPOS=0                                              # custom line wrappi
 ## CONFIGURATION PART ##
 # following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch, see --help
-
 declare -x OPENSSL OPENSSL_TIMEOUT
 FAST_SOCKET=${FAST_SOCKET:-false}       # EXPERIMENTAL feature to accelerate sockets -- DO NOT USE it for production
 COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
@@ -190,18 +189,12 @@ LOGFILE="${LOGFILE:-""}"                # logfile if used
 JSONFILE="${JSONFILE:-""}"              # jsonfile if used
 CSVFILE="${CSVFILE:-""}"                # csvfile if used
 HTMLFILE="${HTMLFILE:-""}"              # HTML if used
-FIRST_FINDING=true                      # Is this the first finding we are outputting to file?
-JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
-CSVHEADER=true                          # same for CSV
-HTMLHEADER=true                         # same for HTML
+FNAME=${FNAME:-""}                      # file name to read commands from
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
-GIVE_HINTS=false                        # give an addtional info to findings
+NODNS=${NODNS:-false}                   # always do DNS lookups per default. For some pentests it might save time to set this to true
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
-UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
-SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
-CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
 
-# tuning vars, can be set by a cmd line switch
+# tuning vars which cannot be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 MAX_WAITSOCK=${MAX_WAITSOCK:-10}        # waiting at max 10 seconds for socket reply. There shouldn't be any reason to change this.
@@ -218,13 +211,10 @@ HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, p
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
-NODNS=${NODNS:-false}                   # always do DNS lookups per default. For some pentests it might save time to set this to true
 DNS_VIA_PROXY=${DNS_VIA_PROXY:-false}   # don't do DNS lookups via proxy. --ip=proxy reverses this
+UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test for PFS
-HAD_SLEPT=0
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
-FNAME=${FNAME:-""}                      # file name to read commands from
-IKNOW_FNAME=false
 MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
 if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
      MEASURE_TIME=true
@@ -235,9 +225,16 @@ DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both O
 readonly UA_STD="TLS tester from $SWURL"
 readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
 
-
-## INITIALIZATION PART ##
-# further global vars just declared here
+# initialization part, further global vars just declared here
+IKNOW_FNAME=false
+FIRST_FINDING=true                      # is this the first finding we are outputting to file?
+JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
+CSVHEADER=true                          # same for CSV
+HTMLHEADER=true                         # same for HTML
+GIVE_HINTS=false                        # give an addtional info to findings
+SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
+CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
+HAD_SLEPT=0
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observerd @ facebook and others, old ones like h2-17 omitted as they could not be found
 readonly ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
@@ -3652,8 +3649,8 @@ run_client_simulation() {
           pr_headlineln " Running client simulations via sockets "
      else
           pr_headline " Running client simulations via openssl "
-          prln_warning " Depending on your openssl client you may get false results"
-          fileout "client_simulation_Problem" "WARN" "Depending on your openssl client you will encounter false results"
+          prln_warning " -- you shouldn't run this with \"--ssl-native\" as you will get false results"
+          fileout "client_simulation_Problem" "WARN" "You shouldn't run this with \"--ssl-native\" as you will get false results"
      fi
      outln
 
@@ -3779,7 +3776,7 @@ run_client_simulation() {
                               outln "${warning[i]}"
                          fi
                          fileout "client_${short[i]}" "INFO" \
-                              "$(strip_spaces "${names[i]}") client simulation:  $proto $cipher   ${warning[i]}"
+                              "$(strip_spaces "${names[i]}") client simulation:  $proto $cipher  ${warning[i]}"
                          debugme cat $TMPFILE
                     fi
                fi   # correct service?
