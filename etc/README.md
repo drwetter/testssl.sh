@@ -37,6 +37,6 @@ your Root CA will fail, too. This will be fixed in the future, see #230.
 
 * ``common-primes.txt`` is used for LOGJAM
 
-* ``client_simulation.txt`` as the name indicates it's the data for the client simulation. Use
+* ``client-simulation.txt`` as the name indicates it's the data for the client simulation. Use
   ``~/utils/update_client_sim_data.pl`` for an update. Note: This list has been manually
   edited to sort it and weed it out.
