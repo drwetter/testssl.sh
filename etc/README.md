@@ -6,10 +6,10 @@ The certificate stores were retrieved by
 * Mozilla; see https://curl.haxx.se/docs/caextract.html
 * Linux: Just copied from an up-to-date Linux machine
 * Microsoft: For Windows >= 7/2008 Microsoft decided not to provide
-  a full certificate store by default or via update as all other OS do. 
-  It's being populated with time -- supposed you use e.g. IE while browsing. 
+  a full certificate store by default or via update as all other OS do.
+  It's being populated with time -- supposed you use e.g. IE while browsing.
   Thus this file is smaller as the others.
-  This store was destilled from three different windows installations via 
+  This store was destilled from three different windows installations via
   "certmgr.msc". It's a PKCS7 export of "Trusted Root Certification Authorities"
   and the Third Party Store.
   Feedback is welcome, see #317.
@@ -22,10 +22,10 @@ The certificate stores were retrieved by
   --> "Category" --> "All Items"
   Select all CA certificates,  "File" --> "Export Items"
 
-In this directory you can also save e.g. your company Root CA(s) in PEM 
-format, extension ``pem``. This has two catches momentarily: You will still 
+In this directory you can also save e.g. your company Root CA(s) in PEM
+format, extension ``pem``. This has two catches momentarily: You will still
 get a warning for the other certificate stores while scanning internal net-
-works.  Second catch: If you scan other hosts in the internet the check against 
+works.  Second catch: If you scan other hosts in the internet the check against
 your Root CA will fail, too. This will be fixed in the future, see #230.
 
 #### Further needed files
@@ -37,4 +37,6 @@ your Root CA will fail, too. This will be fixed in the future, see #230.
 
 * ``common-primes.txt`` is used for LOGJAM
 
-* ``client_simulation.txt`` as the name indicates it's the data for the client simulation
+* ``client_simulation.txt`` as the name indicates it's the data for the client simulation. Use
+  ``~/utils/update_client_sim_data.pl`` for an update. Note: This list has been manually
+  edited to sort it and weed it out.
