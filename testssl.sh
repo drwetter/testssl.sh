@@ -9696,7 +9696,7 @@ run_renego() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Renegotiation vulnerabilities " && outln
 
      pr_bold " Secure Renegotiation "; out "($cve)      "    # and RFC 5746, OSVDB 59968-59974
-                                                                      # community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
+                                                             # community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
      [[ ! "$OPTIMAL_PROTO" =~ ssl ]] && addcmd="$SNI"
      $OPENSSL s_client $OPTIMAL_PROTO $STARTTLS $BUGS -connect $NODEIP:$PORT $addcmd $PROXY 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
      if sclient_connect_successful $? $TMPFILE; then
@@ -9726,8 +9726,8 @@ run_renego() {
           0.9.8*)             # we need this for Mac OSX unfortunately
                case "$OSSL_VER_APPENDIX" in
                     [a-l])
-                         prln_local_problem "$OPENSSL cannot test this secure renegotiation vulnerability"
-                         fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : $OPENSSL cannot test this secure renegotiation vulnerability" "$cve" "$cwe"
+                         prln_local_problem " Your $OPENSSL cannot test this secure renegotiation vulnerability"
+                         fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation: your $OPENSSL cannot test this secure renegotiation vulnerability" "$cve" "$cwe"
                          return 3
                          ;;
                     [m-z])
@@ -9742,8 +9742,8 @@ run_renego() {
      esac
 
      if "$CLIENT_AUTH"; then
-          prln_warning "client authentication prevents this from being tested"
-          fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : client authentication prevents this from being tested"
+          prln_warning "client x509-based authentication prevents this from being tested"
+          fileout "sec_client_renego" "WARN" "Secure Client-Initiated Renegotiation : client x509-based authentication prevents this from being tested"
           sec_client_renego=1
      else
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
@@ -9903,13 +9903,14 @@ run_breach() {
      local cwe="CWE-310"
      local hint=""
 
-     [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH" && return 7
+     [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH" return 7
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
      if "$CLIENT_AUTH"; then
-          outln "cannot be tested (server side requires authentication"
-          fileout "breach" "INFO" "BREACH: Test failed (HTTP request stalled)" "$cve" "$cwe"
+          prln_warning "cannot be tested (server side requires x509 authentication)"
+          fileout "breach" "INFO" "BREACH: cannot be tested (server side requires x509 authentication)" "$cve" "$cwe"
+          return 7
      fi
 
      url="$1"
@@ -9957,7 +9958,8 @@ run_breach() {
      return $ret
 }
 
-# SWEET32 (https://sweet32.info/). Birthday attacks on 64-bit block ciphers. In a nutshell: don't use 3DES ciphers anymore (DES, RC2 and IDEA too)
+# SWEET32 (https://sweet32.info/). Birthday attacks on 64-bit block ciphers.
+# In a nutshell: don't use 3DES ciphers anymore (DES, RC2 and IDEA too)
 run_sweet32() {
      local -i sclient_success=0
      # DES, RC2 and IDEA are missing
