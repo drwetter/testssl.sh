@@ -3926,7 +3926,7 @@ run_protocols() {
                     add_tls_offered "ssl2"
                     ;;
                7)   fileout "sslv2" "INFO" "SSLv2 is not tested due to lack of local support"
-                    ;;                                                     # no local support
+                    ;;                                      # no local support
           esac
      fi
 
@@ -3951,8 +3951,13 @@ run_protocols() {
                     prln_svrty_critical "server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "sslv3" "CRITICAL" "SSLv3: server responded with higher version number ($detected_version_string) than requested by client"
                else
-                    prln_svrty_critical "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                    fileout "sslv3" "CRITICAL" "SSLv3: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    if [[ ${#DETECTED_TLS_VERSION} -eq 4 ]]; then
+                         prln_svrty_critical "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                         fileout "sslv3" "CRITICAL" "SSLv3: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    else
+                         prln_svrty_medium "strange, server ${DETECTED_TLS_VERSION}"
+                         fileout "sslv3" "MEDIUM" "SSLv3: strange, server ${DETECTED_TLS_VERSION}"
+                    fi
                fi
                ;;
           5)   pr_svrty_high "$supported_no_ciph2"
@@ -3962,7 +3967,7 @@ run_protocols() {
                ;;
           7)   prln_warning "SSLv3 seems locally not supported"
                fileout "sslv3" "WARN" "SSLv3 is not tested due to lack of local support"
-               ;;                                                            # no local support
+               ;;                                           # no local support
      esac
 
      pr_bold " TLS 1      ";
@@ -3997,8 +4002,13 @@ run_protocols() {
                     prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
                     fileout "tls1" "CRITICAL" "TLSv1.0: server responded with higher version number ($detected_version_string) than requested by client"
                else
-                    prln_svrty_critical " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
-                    fileout "tls1" "CRITICAL" "TLSv1.0: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    if [[ ${#DETECTED_TLS_VERSION} -eq 4 ]]; then
+                         prln_svrty_critical "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                         fileout "tls1" "CRITICAL" "TLSv1.0: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    else
+                         prln_svrty_medium " -- strange, server ${DETECTED_TLS_VERSION}"
+                         fileout "tls1" "MEDIUM" "TLSv1.0: server ${DETECTED_TLS_VERSION}"
+                    fi
                fi
                ;;
           5)   outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
@@ -4045,8 +4055,13 @@ run_protocols() {
                     prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client (NOT ok)"
                     fileout "tls1_1" "CRITICAL" "TLSv1.1 is not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
-                    prln_svrty_critical " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                    fileout "tls1_1" "CRITICAL" "TLSv1.1: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    if [[ ${#DETECTED_TLS_VERSION} -eq 4 ]]; then
+                         prln_svrty_critical "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                         fileout "tls1_1" "CRITICAL" "TLSv1.1: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    else
+                         prln_svrty_medium " -- strange, server ${DETECTED_TLS_VERSION}"
+                         fileout "tls1_1" "MEDIUM" "TLSv1.1: server ${DETECTED_TLS_VERSION}"
+                    fi
                fi
                ;;
           5)   outln "$supported_no_ciph1"
@@ -4104,8 +4119,13 @@ run_protocols() {
                     prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
                     fileout "tls1_2" "CRITICAL" "TLSv1.2 is not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
-                    prln_svrty_critical " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
-                    fileout "tls1_2" "CRITICAL" "TLSv1.2: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    if [[ ${#DETECTED_TLS_VERSION} -eq 4 ]]; then
+                         prln_svrty_critical "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
+                         fileout "tls1_2" "CRITICAL" "TLSv1.2: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    else
+                         prln_svrty_medium " -- strange, server ${DETECTED_TLS_VERSION}"
+                         fileout "tls1_2" "MEDIUM" "TLSv1.2: server ${DETECTED_TLS_VERSION}"
+                    fi
                fi
                ;;
           5)   outln "$supported_no_ciph1"
@@ -8089,13 +8109,16 @@ parse_tls_serverhello() {
 
      if [[ $tls_serverhello_ascii_len -eq 0 ]]; then
           debugme echo "server hello empty, TCP connection closed"
+          DETECTED_TLS_VERSION="closed TCP connection "
           tmpfile_handle $FUNCNAME.txt
           return 1              # no server hello received
      elif [[ $tls_serverhello_ascii_len -lt 76 ]]; then
+          DETECTED_TLS_VERSION="reply malformed"
           debugme echo "Malformed response"
           return 1
      elif [[ "${tls_handshake_ascii:0:2}" != "02" ]]; then
           # the ServerHello MUST be the first handshake message
+          DETECTED_TLS_VERSION="reply contained no ServerHello"
           debugme tmln_warning "The first handshake protocol message is not a ServerHello."
           return 1
      fi
@@ -9903,7 +9926,7 @@ run_breach() {
      local cwe="CWE-310"
      local hint=""
 
-     [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH" return 7
+     [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH" && return 7
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
