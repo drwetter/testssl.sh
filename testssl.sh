@@ -838,8 +838,8 @@ json_header() {
           JSONHEADER=false
      else
           [[ -e "$JSONFILE" ]] && fatal "\"$JSONFILE\" exists. Either use \"--append\" or (re)move it" 1
-          "$do_json" && printf "[\n" > "$JSONFILE"
-          "$do_pretty_json" && printf "{\n" > "$JSONFILE"
+          "$do_json" && echo "[" > "$JSONFILE"
+          "$do_pretty_json" && echo "{\n" > "$JSONFILE"
      fi
      #FIRST_FINDING=false
      return 0
