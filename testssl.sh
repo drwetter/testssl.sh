@@ -10385,6 +10385,9 @@ run_logjam() {
                # Example: '<<< TLS 1.0 Handshake [length 010b], ServerKeyExchange'
                # get line with ServerKeyExchange, cut from the beginning to "length ". cut from the end to ']'
                str="$(awk '/<<< TLS 1.[0-2].*ServerKeyExchange$/' $TMPFILE)"
+               if [[ -z "$str" ]] ; then
+                    str="$(awk '/<<< SSL [2-3].*ServerKeyExchange$/' $TMPFILE)"
+               fi
                str="${str#<*length }"
                str="${str%]*}"
                server_key_exchange_len=$(hex2dec "$str")
@@ -10414,7 +10417,7 @@ run_logjam() {
           else
                dh_p="$(toupper "$dh_p")"
                # In the previous line of the match is bascially the hint we want to echo
-               # the most elegant thing to get the previous line [ awk '/regex/ { print x }; { x=$0 }' ] doesn't work with GNU grep
+               # the most elegant thing to get the previous line [ awk '/regex/ { print x }; { x=$0 }' ] doesn't work with gawk
                lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
                if [[ "$lineno_matched" -ne 0 ]]; then
                     comment="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
