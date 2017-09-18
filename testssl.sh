@@ -281,6 +281,7 @@ HAS_MYSQL=false
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
+rDNS=""
 CORRECT_SPACES=""                       # used for IPv6 and proper output formatting
 IPADDRs=""
 IP46ADDRs=""
@@ -12421,15 +12422,25 @@ determine_service() {
                               fi
                               STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # small hack -- instead of changing calls all over the place
                               # see http://xmpp.org/rfcs/rfc3920.html
+                         else
+                              if is_ipv4addr "$NODE"; then
+                                   # XMPP needs a jabber domainname
+                                   if [[ -n "$rDNS" ]]; then
+                                        prln_warning " IP address doesn't work for XMPP, trying PTR record $rDNS"
+                                        # remove trailing .
+                                        NODE=${rDNS%%.}
+                                        NODEIP=${rDNS%%.}
+                                   else
+                                        fatal "No DNS supplied and no PTR record available which I can try for XMPP" -1
+                                   fi
+                              fi
                          fi
-                    fi
-                    if [[ "$protocol" == postgres ]]; then
+                    elif [[ "$protocol" == postgres ]]; then
                          # Check if openssl version supports postgres.
                          if ! "$HAS_POSTGRES"; then
                               fatal "Your $OPENSSL does not support the \"-starttls postgres\" option" -5
                          fi
-                    fi
-                    if [[ "$protocol" == mysql ]]; then
+                    elif [[ "$protocol" == mysql ]]; then
                          # Check if openssl version supports mysql.
                          if ! "$HAS_MYSQL"; then
                               fatal "Your $OPENSSL does not support the \"-starttls mysql\" option" -5
