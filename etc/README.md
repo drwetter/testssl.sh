@@ -12,15 +12,16 @@ The certificate stores were retrieved by
   This store was destilled from three different windows installations via
   "certmgr.msc". It's a PKCS7 export of "Trusted Root Certification Authorities"
   and the Third Party Store.
-  Feedback is welcome, see #317.
+  Feedback is welcome, see #825.
   It's still behind what MS publishes what [should be included](http://social.technet.microsoft.com/wiki/contents/articles/31634.microsoft-trusted-root-certificate-program-participants-v-2016-april.aspx).
   Unfortunately there doesn't seem to be store to DL. Let me know if
   you have a pointer
-* Apple: It comes from Apple OS X keychain app.  Open Keychain Access.
-  In the Finder window, under Favorites --> "Applications" --> "Utilities"
+* Apple: It comes from Apple OS X keychain app.  Open Keychain Access utility, i.e.
+  In the Finder window, under Favorites --> "Applications" --> "Utilities" 
+  (OR perform a Spotlight Search for Keychain Access)
   --> "Keychain Access" (2 click). In that window --> "Keychains" --> "System"
   --> "Category" --> "All Items"
-  Select all CA certificates,  "File" --> "Export Items"
+  Select all CA certificates except for Developer ID Certification Authority,  "File" --> "Export Items"
 
 In this directory you can also save e.g. your company Root CA(s) in PEM
 format, extension ``pem``. This has two catches momentarily: You will still
@@ -34,7 +35,7 @@ your Root CA will fail, too. This will be fixed in the future, see #230.
 * ``cipher-mapping.txt`` contains information about all of the cipher suites defined for SSL/TLS
 
 * ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs. Use
-   ~/utils/create_ca_hashes.sh for an update
+   ``~/utils/create_ca_hashes.sh`` for an update
 
 * ``common-primes.txt`` is used for LOGJAM
 
