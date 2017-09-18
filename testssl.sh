@@ -1416,7 +1416,7 @@ run_http_header() {
                out ", redirecting to \""; pr_url "$redirect"; out "\""
                if [[ $redirect == "http://"* ]]; then
                     pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
-                    fileout "HTTP_STATUS_CODE" "HIGH" \, "Redirect to insecure URL. Url: \"$redirect\""
+                    fileout "insecure_redirect" "HIGH" "Redirect to insecure URL. Url: \"$redirect\""
                fi
                fileout "HTTP_STATUS_CODE" "INFO" \
                     "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter, redirecting to \"$redirect\""
