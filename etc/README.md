@@ -12,7 +12,7 @@ The certificate stores were retrieved by
   This store was destilled from three different windows installations via
   "certmgr.msc". It's a PKCS7 export of "Trusted Root Certification Authorities"
   and the Third Party Store.
-  Feedback is welcome, see #317.
+  Feedback is welcome, see #825.
   It's still behind what MS publishes what [should be included](http://social.technet.microsoft.com/wiki/contents/articles/31634.microsoft-trusted-root-certificate-program-participants-v-2016-april.aspx).
   Unfortunately there doesn't seem to be store to DL. Let me know if
   you have a pointer
