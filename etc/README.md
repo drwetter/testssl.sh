@@ -33,7 +33,8 @@ your Root CA will fail, too. This will be fixed in the future, see #230.
 
 * ``cipher-mapping.txt`` contains information about all of the cipher suites defined for SSL/TLS
 
-* ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs
+* ``ca_hashes.txt`` is used for HPKP test in order to have a fast comparison with known CAs. Use
+   ~/utils/create_ca_hashes.sh for an update
 
 * ``common-primes.txt`` is used for LOGJAM
 
