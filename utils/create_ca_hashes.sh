@@ -7,7 +7,6 @@
 # Bundles in etc (etc/*.pem)
 
 TEMPDIR="/tmp"
-OPENSSL="bin/openssl.Darwin.x86_64 "
 
 # Check if we are in the right directory
 if [[ ! -e etc ]]; then
@@ -26,14 +25,14 @@ for bundle_fname in etc/*.pem; do
 	echo "CA Bundle: $bundle_name"
    	# Split up the certificate bundle
    	awk -v n=-1 "BEGIN {start=1}
-    	/-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} } 
+    	/-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
         inc { print >> (\"$TEMPDIR/$bundle_name.\" n \".$$.crt\") ; close (\"$TEMPDIR/$bundle_name.\" n \".$$.crt\") }
         /---END CERTIFICATE-----/{ inc=0 }" $bundle_fname
    	for cert_fname in $TEMPDIR/$bundle_name.*.$$.crt; do
    		echo -n "."
-        hpkp_key_ca="$( ( $OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | $OPENSSL base64 -d |
-            $OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64 ) 2>/dev/null )"
-		hpkp_name=$( $OPENSSL x509 -in "$cert_fname" -subject -noout 2>/dev/null | sed "s/^subject= //")
+        hpkp_key_ca="$( ( openssl x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | openssl base64 -d |
+            openssl dgst -sha256 -binary | openssl enc -base64 ) 2>/dev/null )"
+		hpkp_name=$( openssl x509 -in "$cert_fname" -subject -noout 2>/dev/null | sed "s/^subject= //")
 		if [[ $(echo $hpkp_name|grep 'CN='|wc -l) -eq 1 ]]; then
 			hpkp_name=$(echo -n $hpkp_name|sed 's/^.*CN=//'|sed 's/\/.*$//')
 		fi
