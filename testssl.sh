@@ -562,7 +562,7 @@ set_color_functions() {
      underline=""
      italic=""
 
-     which tput &>/dev/null || return 0      # Hey wait, do we actually have tput / ncurses ?
+     type -p tput &>/dev/null || return 0      # Hey wait, do we actually have tput / ncurses ?
      tput cols &>/dev/null || return 0       # tput under BSDs and GNUs doesn't work either (TERM undefined?)
      tput sgr0 &>/dev/null || ncurses_tput=false
      if [[ "$COLOR" -eq 2 ]]; then
@@ -11205,7 +11205,7 @@ get_install_dir() {
      fi
 
      # we haven't found the cipher file yet...
-     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && type -p readlink &>/dev/null ; then
           readlink -f ls &>/dev/null && \
                TESTSSL_INSTALL_DIR="$(readlink -f "$(basename "${BASH_SOURCE[0]}")")" || \
                TESTSSL_INSTALL_DIR="$(readlink "$(basename "${BASH_SOURCE[0]}")")"
@@ -11216,14 +11216,14 @@ get_install_dir() {
      fi
 
      # still no cipher mapping file:
-     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which realpath &>/dev/null ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && type -p realpath &>/dev/null ; then
           TESTSSL_INSTALL_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
           CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
 
      # still no cipher mapping file (and realpath is not present):
-     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && which readlink &>/dev/null ; then
+     if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && type -p readlink &>/dev/null ; then
          readlink -f ls &>/dev/null && \
               TESTSSL_INSTALL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || \
               TESTSSL_INSTALL_DIR="$(dirname "$(readlink "${BASH_SOURCE[0]}")")"
@@ -11289,14 +11289,14 @@ find_openssl_binary() {
           tmln_out " Looking some place else ..."
      elif [[ -x "$OPENSSL" ]]; then
           :    # 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
-     elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(which openssl)")"; then
+     elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(type -p openssl)")"; then
           # 2. otherwise, only if on Bash on Windows, use system binaries only.
           SYSTEM2="WSL"
      elif test_openssl_suffix "$TESTSSL_INSTALL_DIR"; then
           :    # 3. otherwise try openssl in path of testssl.sh
      elif test_openssl_suffix "$TESTSSL_INSTALL_DIR/bin"; then
           :    # 4. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
-     elif test_openssl_suffix "$(dirname "$(which openssl)")"; then
+     elif test_openssl_suffix "$(dirname "$(type -p openssl)")"; then
           :    # 5. we tried hard and failed, so now we use the system binaries
      fi
 
@@ -11328,7 +11328,7 @@ find_openssl_binary() {
 
      initialize_engine
 
-     openssl_location="$(which $OPENSSL)"
+     openssl_location="$(type -p $OPENSSL)"
      [[ -n "$GIT_REL" ]] && \
           cwd="$(/bin/pwd)" || \
           cwd="$RUN_DIR"
@@ -11380,7 +11380,7 @@ find_openssl_binary() {
           HAS_MYSQL=true
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
-          if which timeout 2>&1 >/dev/null ; then
+          if type -p timeout 2>&1 >/dev/null ; then
                # there are different "timeout". Check whether --preserve-status is supported
                if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
                     OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
@@ -11645,7 +11645,7 @@ USLEEP_SND $USLEEP_SND
 USLEEP_REC $USLEEP_REC
 
 EOF
-          which locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
+          type -p locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
           $OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'  &>$TEMPDIR/all_local_ciphers.txt
      fi
      # see also $TEMPDIR/s_client_has.txt from find_openssl_binary
@@ -11984,7 +11984,7 @@ get_local_a() {
 }
 
 check_resolver_bins() {
-     if ! which dig &> /dev/null && ! which host &> /dev/null && ! which drill &> /dev/null && ! which nslookup &>/dev/null; then
+     if ! type -p dig &> /dev/null && ! type -p host &> /dev/null && ! type -p drill &> /dev/null && ! type -p nslookup &>/dev/null; then
           fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" "-3"
      fi
      return 0
@@ -12000,29 +12000,29 @@ get_a_record() {
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
-          if which avahi-resolve &>/dev/null; then
+          if type -p avahi-resolve &>/dev/null; then
                ip4=$(filter_ip4_address $(avahi-resolve -4 -n "$1" 2>/dev/null | awk '{ print $2 }'))
-          elif which dig &>/dev/null; then
+          elif type -p dig &>/dev/null; then
                ip4=$(filter_ip4_address $(dig @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
           else
                fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable." -3
           fi
      fi
      if [[ -z "$ip4" ]]; then
-          if which dig &> /dev/null ; then
+          if type -p dig &> /dev/null ; then
                ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | awk '/^[0-9]/'))
           fi
      fi
      if [[ -z "$ip4" ]]; then
-          which host &> /dev/null && \
+          type -p host &> /dev/null && \
                ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | awk '/address/ { print $NF }'))
      fi
      if [[ -z "$ip4" ]]; then
-          which drill &> /dev/null && \
+          type -p drill &> /dev/null && \
                ip4=$(filter_ip4_address $(drill a "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
      fi
      if [[ -z "$ip4" ]]; then
-          if which nslookup &>/dev/null; then
+          if type -p nslookup &>/dev/null; then
                ip4=$(filter_ip4_address $(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/ { getline; print $NF }'))
           fi
      fi
@@ -12041,20 +12041,20 @@ get_aaaa_record() {
      check_resolver_bins
      if [[ -z "$ip6" ]]; then
           if [[ "$NODE" == *.local ]]; then
-               if which avahi-resolve &>/dev/null; then
+               if type -p avahi-resolve &>/dev/null; then
                     ip6=$(filter_ip6_address $(avahi-resolve -6 -n "$1" 2>/dev/null | awk '{ print $2 }'))
-               elif which dig &>/dev/null; then
+               elif type -p dig &>/dev/null; then
                     ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
                else
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable." -3
                fi
-          elif which host &> /dev/null ; then
+          elif type -p host &> /dev/null ; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
-          elif which dig &> /dev/null; then
+          elif type -p dig &> /dev/null; then
                ip6=$(filter_ip6_address $(dig +short -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/'))
-          elif which drill &> /dev/null; then
+          elif type -p drill &> /dev/null; then
                ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
-          elif which nslookup &>/dev/null; then
+          elif type -p nslookup &>/dev/null; then
                ip6=$(filter_ip6_address $(nslookup -type=aaaa "$1" 2>/dev/null | awk '/'"^${a}"'.*AAAA/ { print $NF }'))
           fi
      fi
@@ -12081,17 +12081,17 @@ get_caa_rr_record() {
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
      check_resolver_bins
-     if which dig &> /dev/null; then
+     if type -p dig &> /dev/null; then
           raw_caa="$(dig $1 type257 +short)"
           # empty if no CAA record
-     elif which drill &> /dev/null; then
+     elif type -p drill &> /dev/null; then
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
-     elif which host &> /dev/null; then
+     elif type -p host &> /dev/null; then
           raw_caa="$(host -t type257 $1)"
           if egrep -wvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
                raw_caa="$(sed -e 's/^.*has CAA record //' -e 's/^.*has TYPE257 record //' <<< "$raw_caa")"
           fi
-     elif which nslookup &> /dev/null; then
+     elif type -p nslookup &> /dev/null; then
           raw_caa="$(nslookup -type=type257 $1 | grep -w rdata_257)"
           if [[ -n "$raw_caa" ]]; then
                raw_caa="$(sed 's/^.*rdata_257 = //' <<< "$raw_caa")"
@@ -12139,13 +12139,13 @@ get_mx_record() {
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
      # we need the last two columns here
-     if which host &> /dev/null; then
+     if type -p host &> /dev/null; then
           mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
-     elif which dig &> /dev/null; then
+     elif type -p dig &> /dev/null; then
           mxs="$(dig +short -t MX "$1" 2>/dev/null | awk '/^[0-9]/')"
-     elif which drill &> /dev/null; then
+     elif type -p drill &> /dev/null; then
           mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
-     elif which nslookup &> /dev/null; then
+     elif type -p nslookup &> /dev/null; then
           mxs="$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')"
      else
           fatal "No dig, host, drill or nslookup" -3
@@ -12229,18 +12229,18 @@ determine_rdns() {
      OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
-          if which avahi-resolve &>/dev/null; then
+          if type -p avahi-resolve &>/dev/null; then
                rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
-          elif which dig &>/dev/null; then
+          elif type -p dig &>/dev/null; then
                rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
           fi
-     elif which dig &> /dev/null; then
+     elif type -p dig &> /dev/null; then
           rDNS=$(dig -x $nodeip +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
-     elif which host &> /dev/null; then
+     elif type -p host &> /dev/null; then
           rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
-     elif which drill &> /dev/null; then
+     elif type -p drill &> /dev/null; then
           rDNS=$(drill -x ptr $nodeip 2>/dev/null | awk '/ANSWER SECTION/ { getline; print $NF }')
-     elif which nslookup &> /dev/null; then
+     elif type -p nslookup &> /dev/null; then
           rDNS=$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
@@ -12796,7 +12796,7 @@ run_mass_testing() {
           draw_line "=" $((TERM_WIDTH / 2)); outln;
           outln "$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
           # we call ourselves here. $do_mass_testing is the parent, $CHILD_MASS_TESTING... you figured
-          if [[ -z "$(which "$0")" ]]; then
+          if [[ -z "$(type -p "$0")" ]]; then
                CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}"
           else
                CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}"
@@ -12869,7 +12869,7 @@ run_mass_testing_parallel() {
           # if the JSON file doesn't already exist.
           "$JSONHEADER" && >"$TEMPDIR/jsonfile_$(printf "%08d" $NR_PARALLEL_TESTS).json"
           PARALLEL_TESTING_CMDLINE[NR_PARALLEL_TESTS]="$(create_cmd_line_string "$0" "${MASS_TESTING_CMDLINE[@]}")"
-          if [[ -z "$(which "$0")" ]]; then
+          if [[ -z "$(type -p "$0")" ]]; then
                CHILD_MASS_TESTING=true "$RUN_DIR/$PROG_NAME" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" 2>&1 &
           else
                CHILD_MASS_TESTING=true "$0" "${MASS_TESTING_CMDLINE[@]}" > "$TEMPDIR/term_output_$(printf "%08d" $NR_PARALLEL_TESTS).log" 2>&1 &
