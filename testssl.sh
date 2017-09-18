@@ -5948,8 +5948,6 @@ certificate_info() {
      fi
 
      if [[ -n "$sni_used" ]]; then
-          # no cipher suites specified here. We just want the default vhost subject
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO") 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
           if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
                cn_nosni="$(get_cn_from_cert "$HOSTCERT.nosni")"
                [[ -z "$cn_nosni" ]] && cn_nosni="no CN field in subject"
@@ -6393,6 +6391,7 @@ run_server_defaults() {
                     success[n]=$?
                fi
                if [[ ${success[n]} -eq 0 ]]; then
+                    [[ $n -ge 8 ]] && [[ ! -e $HOSTCERT.nosni ]] && cp $HOSTCERT $HOSTCERT.nosni
                     cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
                     >$ERRFILE
                     if [[ -z "$sessticket_lifetime_hint" ]]; then
@@ -6576,6 +6575,11 @@ run_server_defaults() {
      fi
 
      tls_time
+
+     if [[ -n "$SNI" ]] && [[ $certs_found -ne 0 ]] && [[ ! -e $HOSTCERT.nosni ]]; then
+          # no cipher suites specified here. We just want the default vhost subject
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO") 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+     fi
 
      for (( i=1; i <= certs_found; i++ )); do
           echo "${previous_hostcert[i]}" > $HOSTCERT
