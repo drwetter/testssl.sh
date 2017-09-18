@@ -11380,7 +11380,7 @@ find_openssl_binary() {
           HAS_MYSQL=true
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
-          if which timeout >&2 2>/dev/null ; then
+          if which timeout 2>&1 >/dev/null ; then
                # there are different "timeout". Check whether --preserve-status is supported
                if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
                     OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
