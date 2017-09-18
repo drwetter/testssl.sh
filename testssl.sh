@@ -1416,51 +1416,33 @@ run_http_header() {
                out ", redirecting to \""; pr_url "$redirect"; out "\""
                if [[ $redirect == "http://"* ]]; then
                     pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
-                    fileout "insecure_redirect" "HIGH" "Redirect to insecure URL. Url: \"$redirect\""
+                    fileout "insecure_redirect" "HIGH" "Redirect to insecure URL: \"$redirect\""
                fi
-               fileout "HTTP_STATUS_CODE" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter, redirecting to \"$redirect\""
+               fileout "HTTP_STATUS_CODE" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested)"
                ;;
-          200)
-               fileout "HTTP_STATUS_CODE" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
-               ;;
-          204)
-               fileout "HTTP_STATUS_CODE" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
+          200|204|403|405)
+               fileout "HTTP_STATUS_CODE" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested)"
                ;;
           206)
-               out " -- WTF?"
-               fileout "HTTP_STATUS_CODE" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter -- WTF?"
+               out " -- WHAT?"
+               fileout "HTTP_STATUS_CODE" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- WHAT?"
+               # partial content shouldn't happen
                ;;
           400)
                pr_cyan " (Hint: better try another URL)"
-               fileout "HTTP_STATUS_CODE" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter (Hint: better try another URL)"
+               fileout "HTTP_STATUS_CODE" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- better try another URL"
                ;;
           401)
                grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; out "$(strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)")"
-               fileout "HTTP_STATUS_CODE" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter $(grep -a "^WWW-Authenticate" $HEADERFILE)"
-               ;;
-          403)
-               fileout "HTTP_STATUS_CODE" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- $(grep -a "^WWW-Authenticate" $HEADERFILE)"
                ;;
           404)
                out " (Hint: supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\")"
-               fileout "HTTP_STATUS_CODE" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter (Hint: supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\")"
-               ;;
-          405)
-               fileout "HTTP_STATUS_CODE" "INFO" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- better supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\""
                ;;
           *)
                pr_warning ". Oh, didn't expect \"$HTTP_STATUS_CODE$msg_thereafter\""
-               fileout "HTTP_STATUS_CODE" "DEBUG" \
-                    "Testing HTTP header response @ \"$URL_PATH\", $HTTP_STATUS_CODE$msg_thereafter. Oh, didn't expect a $HTTP_STATUS_CODE$msg_thereafter"
+               fileout "HTTP_STATUS_CODE" "DEBUG" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- Oops, didn't expect a \"$HTTP_STATUS_CODE$msg_thereafter\""
                ;;
      esac
      outln
