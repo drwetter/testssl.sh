@@ -30,7 +30,7 @@ cryptographic flaws.
 
 You can download testssl.sh by cloning this git repository:
 
-    git clone --depth 1 https://github.com/drwetter/testssl.sh.git 
+    git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
 Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl.sh/archive/2.9dev.zip. Then ``testssl.sh --help`` will give you some help upfront. More help: see doc directory. Older sample runs are at https://testssl.sh/.
 
@@ -38,32 +38,34 @@ Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl
 #### Status
 
 Here in the _2.9dev branch you find the development version_ of the software
--- with new features and maybe some bugs -- albeit we try our best before 
+-- with new features and maybe some bugs -- albeit we try our best before
 committing to test changes. For the previous stable version please see
-[testssl.sh](https://testssl.sh/ "Go to the site with the stable version") 
-or download 2.8 from here.
+[testssl.sh](https://testssl.sh/ "Go to the site with the stable version")
+or download 2.8 from here. This project also release an interim release
+[2.9.5](https://github.com/drwetter/testssl.sh/tree/2.9.5) which is
+is the successor of 2.8 and stable enough for day-to-day work.
 
 #### Compatibility
 
 testssl.sh is working on every Linux/BSD distribution out of the box. In 2.9dev most
 of the limitations of disabled features from the openssl client are gone due to bash-socket-based
 checks. testssl.sh also works on otherunixoid system out of the box, supposed they have
-`/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU versions
-of grep and sed installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL
-version >= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to
+`/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU
+grep installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL
+version  version >= 1.0.2 is recommended for better LOGJAM checks and to
 display bit strengths for key exchanges.
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 #### Features implemented in [2.9dev](Readme.md#devel)
-* Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
+* Using bash sockets where ever possible --> better detection of ciphers, independend on the openssl version used.
 * TLS 1.2 protocol check via socket in production
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
 * Finding more TLS extensions via sockets
-* Using bash sockets where ever possible
 * TLS Supported Groups Registry (RFC 7919), key shares extension
 * Non-flat JSON support
 * File output (CSV, JSON flat, JSON non-flat) supports a minimum severity level (only above supplied level there will be output)
+* Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
 * Native HTML support instead going through 'aha'
 * Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * LUCKY13 and SWEET32 checks
@@ -73,6 +75,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * Check for OCSP must staple
 * Check for Certificate Transparency
 * Check for session resumption (Ticket, ID)
+* TLS Robustness check (GREASE)
 * Better formatting of output (indentation)
 * Choice showing the RFC naming scheme only
 * Parallel mass testing

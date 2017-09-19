@@ -33,9 +33,10 @@
   - seperate check for curves
   - RFC 7919, key shares extension
   - parallel mass testing!
-  - RFC <--> OpenSSL cipher name space switches for the command line 
+  - RFC <--> OpenSSL cipher name space switches for the command line
   - numerous fixes
- 
+  - GREASE support
+
  * Steven Danneman
    - Postgres and MySQL STARTTLS support
 
