@@ -638,6 +638,7 @@ fileout_json_section() {
            8) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
            9) echo -e ",\n                    \"cipherTests\"       : [" ;;
           10) echo -e ",\n                    \"browserSimulations\": [" ;;
+          11) echo -e ",\n                    \"grease\"            : [" ;;
            *) echo "invalid section" ;;
      esac
 }
@@ -11178,6 +11179,338 @@ run_tls_truncation() {
         :
 }
 
+# Test for various server implementation errors that aren't tested for elsewhere.
+# Inspired by https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
+run_grease() {
+     local -i success
+     local bug_found=false
+     local normal_hello_ok=false
+     local cipher_list proto selected_cipher selected_cipher_hex="" extn rnd_bytes
+     local alpn_proto alpn alpn_list_len_hex extn_len_hex
+     local selected_alpn_protocol grease_selected_alpn_protocol
+     local ciph list temp curve_found
+     local -i i j rnd alpn_list_len extn_len
+     # Note: The folowing values were taken from https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
+     # These arrays may need to be updated if the values change in the final version of this document.
+     local -a -r grease_cipher_suites=( "0a,0a" "1a,1a" "2a,2a" "3a,3a" "4a,4a" "5a,5a" "6a,6a" "7a,7a" "8a,8a" "9a,9a" "aa,aa" "ba,ba" "ca,ca" "da,da" "ea,ea" "fa,fa" )
+     local -a -r grease_supported_groups=( "0a,0a" "1a,1a" "2a,2a" "3a,3a" "4a,4a" "5a,5a" "6a,6a" "7a,7a" "8a,8a" "9a,9a" "aa,aa" "ba,ba" "ca,ca" "da,da" "ea,ea" "fa,fa" )
+     local -a -r grease_extn_values=( "0a,0a" "1a,1a" "2a,2a" "3a,3a" "4a,4a" "5a,5a" "6a,6a" "7a,7a" "8a,8a" "9a,9a" "aa,aa" "ba,ba" "ca,ca" "da,da" "ea,ea" "fa,fa" )
+     local -r ecdhe_ciphers="cc,14, cc,13, c0,30, c0,2c, c0,28, c0,24, c0,14, c0,0a, c0,9b, cc,a9, cc,a8, c0,af, c0,ad, c0,77, c0,73, c0,19, cc,ac, c0,38, c0,36, c0,49, c0,4d, c0,5d, c0,61, c0,71, c0,87, c0,8b, c0,2f, c0,2b, c0,27, c0,23, c0,13, c0,09, c0,ae, c0,ac, c0,76, c0,72, c0,18, c0,37, c0,35, c0,9a, c0,48, c0,4c, c0,5c, c0,60, c0,70, c0,86, c0,8a, c0,11, c0,07, c0,16, c0,33, c0,12, c0,08, c0,17, c0,34, c0,10, c0,06, c0,15, c0,3b, c0,3a, c0,39"
+
+     outln; pr_headline " Testing for server implementation bugs "; outln "\n"
+
+     # Many of the following checks work by modifying the "basic" call to
+     # tls_sockets() and assuming the tested-for bug is present if the 
+     # connection fails. However, this only works if the connection succeeds
+     # with the "basic" call. So, keep trying different "basic" calls until
+     # one is found that succeeds.
+     for (( i=0; i < 5; i++ )); do
+          case $i in
+               0) proto="03" ; cipher_list="$TLS12_CIPHER" ;;
+               1) proto="03" ; cipher_list="$TLS12_CIPHER_2ND_TRY" ;;
+               2) proto="02" ; cipher_list="$TLS_CIPHER" ;;
+               3) proto="01" ; cipher_list="$TLS_CIPHER" ;;
+               4) proto="00" ; cipher_list="$TLS_CIPHER" ;;
+          esac
+          tls_sockets "$proto" "$cipher_list"
+          success=$?
+          if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
+               break
+          fi
+     done
+     if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
+          selected_cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+          if [[ $TLS_NR_CIPHERS -ne 0 ]]; then
+               for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+                    [[ "$selected_cipher" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && selected_cipher_hex="${TLS_CIPHER_HEXCODE[i]}" && break
+               done
+          elif "$HAS_SSL2"; then
+               selected_cipher_hex="$($OPENSSL ciphers -V -tls1 'ALL:COMPLEMENTOFALL' | awk '/'" $selected_cipher "'/ { print $1 }')"
+          else
+               selected_cipher_hex="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | awk '/'" $selected_cipher "'/ { print $1 }')"
+          fi
+          if [[ -n "$selected_cipher_hex" ]]; then
+               normal_hello_ok=true
+               selected_cipher_hex="${selected_cipher_hex:2:2},${selected_cipher_hex:7:2}"
+          fi
+     else
+          proto="03"
+     fi
+
+     # Test for yaSSL bug - server only looks at second byte of each cipher
+     # suite listed in ClientHello (see issue #793). First check to see if
+     # server ignores the ciphers in the ClientHello entirely, then check to
+     # see if server only looks at second byte of each offered cipher.
+
+     # Send a list of non-existent ciphers where the second byte does not match
+     # any existing cipher.
+     debugme echo -e "\nSending ClientHello with non-existent ciphers."
+     tls_sockets "$proto" "de,d0, de,d1, d3,d2, de,d3, 00,ff"
+     success=$?
+     if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
+          prln_svrty_medium " Server claims to support non-existent cipher suite."
+          fileout "grease" "CRITICAL" "Server claims to support non-existent cipher suite."
+          bug_found=true
+     elif grep -q "The ServerHello specifies a cipher suite that wasn't included in the ClientHello" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ; then
+          prln_svrty_medium " Server responded with a ServerHello rather than an alert even though it doesn't support any of the client-offered cipher suites."
+          fileout "grease" "CRITICAL" "Server responded with a ServerHello rather than an alert even though it doesn't support any of the client-offered cipher suites."
+          bug_found=true
+     else
+           # Send a list of non-existent ciphers such that for each cipher that
+           # is defined, there is one in the list that matches in the second byte
+           # (but make sure list contains at more 127 ciphers).
+           debugme echo -e "\nSending ClientHello with non-existent ciphers, but that match existing ciphers in second byte."
+           tls_sockets "$proto" "de,01, de,02, de,03, de,04, de,05, de,06, de,07, de,08, de,09, de,0a, de,0b, de,0c, de,0d, de,0e, de,0f, de,10, de,11, de,12, de,13, de,14, de,15, de,16, de,17, de,18, de,19, de,1a, de,1b, de,23, de,24, de,25, de,26, de,27, de,28, de,29, de,2a, de,2b, de,2c, de,2d, de,2e, de,2f, de,30, de,31, de,32, de,33, de,34, de,35, de,36, de,37, de,38, de,39, de,3a, de,3b, de,3c, de,3d, de,3e, de,3f, de,40, de,41, de,42, de,43, de,44, de,45, de,46, de,60, de,61, de,62, de,63, de,64, de,65, de,66, de,67, de,68, de,69, de,6a, de,6b, de,6c, de,6d, de,72, de,73, de,74, de,75, de,76, de,77, de,78, de,79, de,84, de,85, de,86, de,87, de,88, de,89, de,96, de,97, de,98, de,99, de,9a, de,9b, de,9c, de,9d, de,9e, de,9f, de,a0, de,a1, de,a2, de,a3, de,a4, de,a5, de,a6, de,a7, de,ba, de,bb, de,bc, de,bd, de,be, de,bf, de,c0, de,c1, de,c2, de,c3, de,c4, de,c5, 00,ff"
+           success=$?
+           if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
+                prln_svrty_medium " Server claims to support non-existent cipher suite."
+                fileout "grease" "CRITICAL" "Server claims to support non-existent cipher suite."
+                bug_found=true
+           elif grep -q " The ServerHello specifies a cipher suite that wasn't included in the ClientHello" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ; then
+               prln_svrty_medium " Server only compares against second byte in each cipher suite in ClientHello."
+               fileout "grease" "CRITICAL" "Server only compares against second byte in each cipher suite in ClientHello."
+               bug_found=true
+          fi
+     fi
+
+     # Check that server ignores unrecognized extensions
+     # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+     if "$normal_hello_ok" && [[ "$proto" != "00" ]]; then
+          # Try multiple different randomly-generated GREASE extensions,
+          # but make final test use zero-length extension value, just to
+          # be sure that works before testing server with a zero-length
+          # extension as the final extension.
+          for (( i=1; i <= 5; i++ )); do
+               # Create a random extension using one of the GREASE values.
+               rnd=$RANDOM%${#grease_extn_values[@]}
+               extn="${grease_extn_values[rnd]}"
+               if [[ $i -eq 5 ]]; then
+                    extn_len=0
+               else
+                    # Not sure what a good upper bound is here, but a key_share
+                    # extension with an ffdhe8192 would be over 1024 bytes.
+                    extn_len=$RANDOM%1024
+               fi
+               extn_len_hex=$(printf "%04x" $extn_len)
+               extn+=",${extn_len_hex:0:2},${extn_len_hex:2:2}"
+               for (( j=0; j <= extn_len-2; j=j+2 )); do
+                    rnd_bytes="$(printf "%04x" $RANDOM)"
+                    extn+=",${rnd_bytes:0:2},${rnd_bytes:2:2}"
+               done
+               if [[ $j -lt $extn_len ]]; then
+                    rnd_bytes="$(printf "%04x" $RANDOM)"
+                    extn+=",${rnd_bytes:0:2}"
+               fi
+               if [[ $DEBUG -ge 2 ]]; then
+                    echo -en "\nSending ClientHello with unrecognized extension"
+                    [[ $DEBUG -ge 3 ]] && echo -n ": $extn"
+                    echo ""
+               fi
+               tls_sockets "$proto" "$cipher_list" "" "$extn"
+               success=$?
+               if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+                    break
+               fi
+          done
+          if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+               prln_svrty_medium " Server fails if ClientHello contains an unrecognized extension."
+               outln "    extension used in failed test: $extn"
+               fileout "grease" "CRITICAL" "Server fails if ClientHello contains an unrecognized extension: $extn"
+               bug_found=true
+          else
+               # Check for inability to handle empty last extension (see PR #792 and
+               # https://www.ietf.org/mail-archive/web/tls/current/msg19720.html).
+               # (Since this test also uses an unrecognized extension, only run this
+               # test if the previous test passed, and use the final exension value
+               # from that test to ensure that the only difference is the location
+               # of the extension.)
+
+               # The "extra extensions" parameter needs to include the padding and
+               # heartbeat extensions, since otherwise socksend_tls_clienthello()
+               # will add these extensions to the end of the ClientHello.
+               debugme echo -e "\nSending ClientHello with empty last extension."
+               tls_sockets "$proto" "$cipher_list" "" "
+                 00,0f, 00,01, 01,
+                 00,15, 00,56,
+                   00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,
+                   00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,
+                   00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,
+                   00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,00,
+                 $extn"
+               success=$?
+               if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+                    prln_svrty_medium " Server fails if last extension in ClientHello is empty."
+                    fileout "grease" "CRITICAL" "Server fails if last extension in ClientHello is empty."
+                    bug_found=true
+               fi
+          fi
+     fi
+
+     # Check for SERVER_SIZE_LIMIT_BUG.
+     # Send a ClientHello with 129 cipher suites (including 0x00,0xff) to see
+     # if adding a 129th cipher to the list causes a failure.
+     if "$normal_hello_ok" && [[ "$proto" == "03" ]]; then
+          debugme echo -e "\nSending ClientHello with 129 cipher suites."
+          tls_sockets "$proto" "00,27, $cipher_list"
+          success=$?
+          if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+               prln_svrty_medium " Server fails if ClientHello includes more than 128 cipher suites."
+               fileout "grease" "CRITICAL" "Server fails if ClientHello includes more than 128 cipher suites."
+               SERVER_SIZE_LIMIT_BUG=true
+               bug_found=true
+          fi
+     fi
+
+     # Check for ClientHello size bug. According to RFC 7586 "at least one TLS
+     # implementation is known to hang the connection when [a] ClientHello 
+     # record [with a length between 256 and 511 bytes] is received."
+     # If the length of the host name is more than 75 bytes (which would make
+     # $SNI more than 87 bytes), then the ClientHello would be more than 511
+     # bytes if the server_name extension were included. Removing the SNI
+     # extension, however, may not be an option, since the server may reject the
+     # connection attempt for that reason.
+     if "$normal_hello_ok" && [[ "$proto" != "00" ]] && [[ ${#SNI} -le 87 ]]; then
+          # Normally socksend_tls_clienthello() will add a padding extension with a length
+          # that will make the ClientHello be 512 bytes in length. Providing an "extra
+          # extensions" parameter with a short padding extension prevents that.
+          debugme echo -e "\nSending ClientHello with length between 256 and 511 bytes."
+          tls_sockets "$proto" "$cipher_list" "" "00,15,00,01,00"
+          success=$?
+          if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+               prln_svrty_medium " Server fails if ClientHello is between 256 and 511 bytes in length."
+               fileout "grease" "CRITICAL" "Server fails if ClientHello is between 256 and 511 bytes in length."
+               bug_found=true
+          fi
+     fi
+
+     # Check that server ignores unrecognized cipher suite values
+     # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+     if "$normal_hello_ok"; then
+          list=""
+          for ciph in "${grease_cipher_suites[@]}"; do
+               list+=", $ciph"
+          done
+          debugme echo -e "\nSending ClientHello with unrecognized cipher suite values."
+          tls_sockets "$proto" "${list:2}, $selected_cipher_hex, 00,ff"
+          success=$?
+          if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+               prln_svrty_medium " Server fails if ClientHello contains unrecognized cipher suite values."
+               fileout "grease" "CRITICAL" "Server fails if ClientHello contains unrecognized cipher suite values."
+               bug_found=true
+          fi
+     fi
+
+     # Check that servers that support ECDHE cipher suites ignore
+     # unrecognized named group values.
+     # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+     if [[ "$proto" != "00" ]]; then
+          # Send a ClientHello that lists all of the ECDHE cipher suites
+          tls_sockets "$proto" "$ecdhe_ciphers" "ephemeralkey"
+          success=$?
+          if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
+               # Send the same ClientHello as before but with an unrecognized
+               # named group value added. Make the unrecognized value the first
+               # one in the list replacing one of the values in the original list,
+               # but don't replace the value that was selected by the server.
+               rnd=$RANDOM%${#grease_supported_groups[@]}
+               temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+               curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
+               [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+               if [[ "$curve_found" == "B-571" ]]; then
+                    extn="
+                    00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
+                    00, 3e, 00, 3c,            # lengths
+                    ${grease_supported_groups[rnd]}, 00, 0e, 00, 19, 00, 1c, 00, 1e, 00, 0b, 00, 0c, 00, 1b,
+                    00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
+                    00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
+                    00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
+               else
+                    extn="
+                    00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
+                    00, 3e, 00, 3c,            # lengths
+                    ${grease_supported_groups[rnd]}, 00, 0d, 00, 19, 00, 1c, 00, 1e, 00, 0b, 00, 0c, 00, 1b,
+                    00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
+                    00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
+                    00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
+               fi
+               debugme echo -e "\nSending ClientHello with unrecognized named group value in supported_groups extension."
+               tls_sockets "$proto" "$ecdhe_ciphers" "" "$extn"
+               success=$?
+               if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+                    prln_svrty_medium " Server fails if ClientHello contains a supported_groups extension with an unrecognized named group value (${grease_supported_groups[rnd]})."
+                    fileout "grease" "CRITICAL" "Server fails if ClientHello contains a supported_groups extension with an unrecognized named group value (${grease_supported_groups[rnd]})."
+                    bug_found=true
+               fi
+          fi
+     fi
+
+     # Check that servers that support the ALPN extension ignore
+     # unrecognized ALPN values.
+     # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+     if "$normal_hello_ok" && [[ -z $STARTTLS ]] && [[ "$proto" != "00" ]]; then
+          for alpn_proto in $ALPN_PROTOs; do
+               alpn+=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")"
+          done
+          alpn_list_len=${#alpn}/3
+          alpn_list_len_hex=$(printf "%04x" $alpn_list_len)
+          extn_len=$alpn_list_len+2
+          extn_len_hex=$(printf "%04x" $extn_len)
+          tls_sockets "$proto" "$cipher_list" "all" "00,10,${extn_len_hex:0:2},${extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
+          success=$?
+          if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+               prln_svrty_medium " Server fails if ClientHello contains an application_layer_protocol_negotiation extension."
+               fileout "grease" "CRITICAL" "Server fails if ClientHello contains an application_layer_protocol_negotiation extension."
+               bug_found=true
+          else
+               selected_alpn_protocol="$(grep "ALPN protocol:" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/ALPN protocol:  //')"
+               # If using a "normal" ALPN extension worked, then add an unrecognized
+               # ALPN value to the beginning of the extension and try again.
+               alpn_proto="ignore/$selected_alpn_protocol"
+               alpn=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")$alpn"
+               alpn_list_len=${#alpn}/3
+               alpn_list_len_hex=$(printf "%04x" $alpn_list_len)
+               extn_len=$alpn_list_len+2
+               extn_len_hex=$(printf "%04x" $extn_len)
+               debugme echo -e "\nSending ClientHello with unrecognized ALPN value in application_layer_protocol_negotiation extension."
+               tls_sockets "$proto" "$cipher_list" "all" "00,10,${extn_len_hex:0:2},${extn_len_hex:2:2},${alpn_list_len_hex:0:2},${alpn_list_len_hex:2:2}$alpn"
+               success=$?
+               if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+                    prln_svrty_medium " Server fails if ClientHello contains an application_layer_protocol_negotiation extension with an unrecognized ALPN value."
+                    fileout "grease" "CRITICAL" "erver fails if ClientHello contains an application_layer_protocol_negotiation extension with an unrecognized ALPN value."
+                    bug_found=true
+               else
+                    grease_selected_alpn_protocol="$(grep "ALPN protocol:" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/ALPN protocol:  //')"
+                    if [[ -z "$grease_selected_alpn_protocol" ]] && [[ -n "$selected_alpn_protocol" ]]; then
+                         prln_svrty_medium " Server did not ignore unrecognized ALPN value in the application_layer_protocol_negotiation extension."
+                         fileout "grease" "CRITICAL" "Server did not ignore unrecognized ALPN value in the application_layer_protocol_negotiation extension."
+                         bug_found=true
+                    elif [[ "$grease_selected_alpn_protocol" =~ ignore/ ]]; then
+                         prln_svrty_medium " Server selected \"ignore/\" ALPN value in the application_layer_protocol_negotiation extension."
+                         fileout "grease" "CRITICAL" "Server selected \"ignore/\" ALPN value in the application_layer_protocol_negotiation extension."
+                         bug_found=true
+                    fi
+               fi
+          fi
+     fi
+
+     # TODO: For servers that support TLSv1.3, check that servers ignore
+     # an unrecognized named group value along with a corresponding
+     # unrecognized key share
+     # see https://www.ietf.org/mail-archive/web/tls/current/msg22322.html
+     # and https://www.ietf.org/mail-archive/web/tls/current/msg22319.html
+
+     # TODO: For servers that support TLSv1.3, check that servers ignore unrecognized
+     # values in the supported_versions extension.
+     # see https://www.ietf.org/mail-archive/web/tls/current/msg22319.html
+
+     if ! "$bug_found"; then
+          outln " No bugs found."
+          fileout "grease" "OK" "No bugs found."
+          return 0
+     else
+          return 1
+     fi
+}
 
 old_fart() {
      out "Get precompiled bins or compile "
@@ -11501,6 +11834,7 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -D, --drown                   tests for DROWN vulnerability
      -f, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
+     -g, --grease                  test for server implementation bugs (see https://datatracker.ietf.org/doc/draft-ietf-tls-grease)
 
 tuning / connect options (most also can be preset via environment variables):
      --fast                        omits some checks: using openssl for all ciphers (-e), show only first
@@ -13012,6 +13346,7 @@ initialize_globals() {
      do_pfs=false
      do_protocols=false
      do_rc4=false
+     do_grease=false
      do_renego=false
      do_std_cipherlists=false
      do_server_defaults=false
@@ -13060,7 +13395,7 @@ query_globals() {
      local true_nr=0
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
@@ -13073,7 +13408,7 @@ debug_globals() {
      local gbl
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
@@ -13294,6 +13629,9 @@ parse_cmd_line() {
                     ;;
                -f|--pfs|--fs|--nsa)
                     do_pfs=true
+                    ;;
+               -g|--grease)
+                    do_grease=true
                     ;;
                --devel) ### this development feature will soon disappear
                     HEX_CIPHER="$TLS12_CIPHER"
@@ -13635,6 +13973,8 @@ lets_roll() {
      fileout_section_header $section_number true && ((section_number++))
      $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); time_right_align run_client_simulation; }
 
+     fileout_section_header $section_number true && ((section_number++))
+     "$do_grease" && { run_grease; ret=$(($? + ret)); time_right_align run_grease; }
      fileout_section_footer true
 
      outln
