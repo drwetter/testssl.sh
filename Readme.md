@@ -58,7 +58,7 @@ usage before taking the next step in the development of this project.
 2.9.5 has less bugs and has evolved considerably since 2.8.
 
 
-#### Features implemented in [2.9.5](Readme.md#devel)
+#### Features implemented in 2.9.5
 * TLS 1.2 protocol check via socket in production
 * Way better coverage of ciphers as most checks are done via sockets, using bash sockets where ever possible
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
@@ -82,10 +82,6 @@ usage before taking the next step in the development of this project.
 * File input for mass testing can be also in nmap grep(p)able (-oG) format
 * Postgres und MySQL STARTTLS support
 * Man page
-
-#### Further features planned in 2.9dev
-
-https://github.com/drwetter/testssl.sh/issues?q=is%3Aopen+is%3Aissue+milestone%3A2.9dev
 
 #### Contributions
 
