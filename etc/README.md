@@ -5,17 +5,7 @@ The certificate stores were retrieved by
 
 * Mozilla; see https://curl.haxx.se/docs/caextract.html
 * Linux: Just copied from an up-to-date Linux machine
-* Microsoft: For Windows >= 7/2008 Microsoft decided not to provide
-  a full certificate store by default or via update as all other OS do.
-  It's being populated with time -- supposed you use e.g. IE while browsing.
-  Thus this file is smaller as the others.
-  This store was destilled from three different windows installations via
-  "certmgr.msc". It's a PKCS7 export of "Trusted Root Certification Authorities"
-  and the Third Party Store.
-  Feedback is welcome, see #825.
-  It's still behind what MS publishes what [should be included](http://social.technet.microsoft.com/wiki/contents/articles/31634.microsoft-trusted-root-certificate-program-participants-v-2016-april.aspx).
-  Unfortunately there doesn't seem to be store to DL. Let me know if
-  you have a pointer
+* Microsoft: Following command pulls all certificates from Windows Update services: (see also http://aka.ms/RootCertDownload, https://technet.microsoft.com/en-us/library/dn265983(v=ws.11).aspx#BKMK_CertUtilOptions):  ``CertUtil -syncWithWU -f -f . ``. 
 * Apple: It comes from Apple OS X keychain app.  Open Keychain Access utility, i.e.
   In the Finder window, under Favorites --> "Applications" --> "Utilities" 
   (OR perform a Spotlight Search for Keychain Access)
