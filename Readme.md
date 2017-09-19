@@ -30,45 +30,48 @@ cryptographic flaws.
 
 You can download testssl.sh by cloning this git repository:
 
-    git clone --depth 1 https://github.com/drwetter/testssl.sh.git 
+    git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
-Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl.sh/archive/2.9dev.zip. Then ``testssl.sh --help`` will give you some help upfront. More help: see doc directory. Older sample runs are at https://testssl.sh/.
-
-
-#### Status
-
-Here in the _2.9dev branch you find the development version_ of the software
--- with new features and maybe some bugs -- albeit we try our best before 
-committing to test changes. For the previous stable version please see
-[testssl.sh](https://testssl.sh/ "Go to the site with the stable version") 
-or download 2.8 from here.
+Or help yourself downloading the ZIP archive
+https://github.com/drwetter/testssl.sh/archive/2.9.5.zip. Then ``testssl.sh
+--help`` will give you some help upfront. More help: see doc directory. Older
+sample runs are at https://testssl.sh/.
 
 #### Compatibility
 
-testssl.sh is working on every Linux/BSD distribution out of the box. In 2.9dev most
+testssl.sh is working on every Linux/BSD distribution out of the box. In 2.9.5 most
 of the limitations of disabled features from the openssl client are gone due to bash-socket-based
-checks. testssl.sh also works on otherunixoid system out of the box, supposed they have
+checks. testssl.sh also works on other unixoid system out of the box, supposed they have
 `/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU versions
-of grep and sed installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL
-version >= 1 is a must.  OpenSSL version >= 1.0.2 is needed for better LOGJAM checks and to
-display bit strengths for key exchanges.
+of grep installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL
+version >= 1.0.2 is recommended, you will get further with earlier openssl versions in
+this interim release though as most of the checks in 2.9 are done via sockets.
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
-#### Features implemented in [2.9dev](Readme.md#devel)
-* Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
+#### Status
+
+2.9.5 is an interim release snapshot from the current 2.9dev version. It
+has reached a point which is considered to be mature enough for day-to-day
+usage before taking the next step in the development of this project.
+
+2.9.5 has less bugs and has evolved considerably since 2.8.
+
+
+#### Features implemented in [2.9.5](Readme.md#devel)
 * TLS 1.2 protocol check via socket in production
+* Way better coverage of ciphers as most checks are done via sockets, using bash sockets where ever possible
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
+* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * Finding more TLS extensions via sockets
-* Using bash sockets where ever possible
 * TLS Supported Groups Registry (RFC 7919), key shares extension
-* Non-flat JSON support
+* Non-flat JSON output support
 * File output (CSV, JSON flat, JSON non-flat) supports a minimum severity level (only above supplied level there will be output)
 * Native HTML support instead going through 'aha'
-* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * LUCKY13 and SWEET32 checks
 * Ticketbleed check
 * LOGJAM: now checking also for known DH parameters
+* Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
 * Check for CAA RR
 * Check for OCSP must staple
 * Check for Certificate Transparency
@@ -93,12 +96,6 @@ changes thouroughly as reliability is important for this project.
 There's a [coding guideline](https://github.com/drwetter/testssl.sh/wiki/Coding-Style).
 
 Please file bug reports @ https://github.com/drwetter/testssl.sh/issues.
-
-#### Documentation
-
-For a start see the
-[wiki](https://github.com/drwetter/testssl.sh/wiki/Man-Page).
-Help is needed here. Will Hunt provides a good [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/) for version 2.8, including useful background info.
 
 #### Bug reports
 
