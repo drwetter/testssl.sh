@@ -108,7 +108,7 @@ readonly VERSION="2.9.5"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
-     SWURL="https://testssl.sh/    "
+     SWURL="https://testssl.sh/"
 
 readonly PROG_NAME="$(basename "$0")"
 readonly RUN_DIR="$(dirname "$0")"
@@ -563,7 +563,7 @@ set_color_functions() {
      italic=""
 
      type -p tput &>/dev/null || return 0      # Hey wait, do we actually have tput / ncurses ?
-     tput cols &>/dev/null || return 0       # tput under BSDs and GNUs doesn't work either (TERM undefined?)
+     tput cols &>/dev/null || return 0         # tput under BSDs and GNUs doesn't work either (TERM undefined?)
      tput sgr0 &>/dev/null || ncurses_tput=false
      if [[ "$COLOR" -eq 2 ]]; then
           if $ncurses_tput; then
