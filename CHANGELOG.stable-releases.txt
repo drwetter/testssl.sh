@@ -12,7 +12,7 @@
   * (HTTP) proxy support! Also with sockets -- thx @jnewbigin
   * Extended validation certificate detection
   * Run in default mode through all ciphers at the end of a default run
-  * will test multiple IP adresses of one supplied server name in one shot, --ip= restricts it accordingly
+  * will test multiple IP addresses of one supplied server name in one shot, --ip= restricts it accordingly
   * new mass testing file option --file option where testssl.sh commands are being read from, see https://twitter.com/drwetter/status/627619848344989696
   * TLS time and HTTP time stamps
   * TLS time displayed also for STARTTLS protocols
@@ -69,7 +69,7 @@ Full changelog @  https://github.com/drwetter/testssl.sh/commits/2.2/testssl.sh
   * tests ciphers per protocol 
   * HSTS
   * web and application server banner 
-  * server prefereences
+  * server preferences
   * TLS server extensions
   * server key size
   * cipher suite mapping from openssl to RFC 
@@ -83,10 +83,10 @@ Details:
 - IPv6 display fix
 
 1.111
-- NEW: tested unter FreeBSD (works with exception of xxd in CCS)
+- NEW: tested under FreeBSD (works with exception of xxd in CCS)
 - getent now works under Linux and FreeBSD
 - sed -i in hsts sacrificed for compatibility
-- reomved query for IP for finishing banner, is now called once in parse_hn_port
+- removed query for IP for finishing banner, is now called once in parse_hn_port
 - GOST warning after banner
 - empty build date is not displayed anymore
 - long build date strings minimized
@@ -176,7 +176,7 @@ Details:
 1.91
 - replaced most lcyan to brown (=not really bad but somehow)
 - empty server string better displayed
-- prefered CBC TLS 1.2 cipher is now brown (lucky13)
+- preferred CBC TLS 1.2 cipher is now brown (lucky13)
 
 1.90
 - fix for netweaver banner (server is lowercase)
@@ -186,7 +186,7 @@ Details:
 
 1.89
 - reordered! : protocols + cipher come first
-- colorized prefered server preference (e.g. CBC+RC4 is light red now, TLSv1.2 green)
+- colorized preferred server preference (e.g. CBC+RC4 is light red now, TLSv1.2 green)
 - SSLv3 is now light cyan
 - NEW: -P|--preference now in help menu
 - light cyan is more appropriate than red for HSTS
@@ -221,10 +221,10 @@ Details:
 - headline of -V / PFS+RC4 ciphers unified
 
 1.82
-- NEW: output for -V now better (bits seperate, spacing improved)
+- NEW: output for -V now better (bits separate, spacing improved)
 
 1.81
-- output for RC4+PFS now better (with headline, bits seperate, spacing improved)
+- output for RC4+PFS now better (with headline, bits separate, spacing improved)
 - both also sorted by encr. strength .. umm ..err bits!
 
 1.80
@@ -251,7 +251,7 @@ Details:
 - removed legacy code (PROD_REL var)
 
 1.76
-- bash was gone!! desaster for Ubuntu, fixed
+- bash was gone!! disaster for Ubuntu, fixed
 - starttls+rc4 check: bottom line was wrong
 - starttls had too much output (certificate) at first a/v check
 
@@ -259,7 +259,7 @@ Details:
 - location is now https://testssl.sh
 - be nice: banner, version, help also works for BSD folks (on dash)
 - bug in server banner fixed
-- sneaky referer and user agent possible
+- sneaky referrer and user agent possible
 
 1.74
 - Debian 7 fix
@@ -356,13 +356,13 @@ Details:
 * bugfix
 
 1.18
-* Rearragement of arguments: URL comes now always last!
+* Rearrangement of arguments: URL comes now always last!
 * small code cleanups for readability
 * individual cipher test is now with bold headline, not blue
 * NOPARANOID flag tells whether medium grade ciphers are ok. NOW they are (=<1.17 was paranoid)
 
 1.17
-* SSL tests now for renegotiation vulnerabilty!
+* SSL tests now for renegotiation vulnerability!
 * version detection of testssl.sh
 * program has a banner
 * fixed bug leading to a file named "1"
