@@ -30,7 +30,7 @@
   - testssl.sh -e/-E: testing with a mixture of openssl + sockets
   - finding more TLS extensions via sockets
   - extensive CN+SAN <--> hostname check
-  - seperate check for curves
+  - separate check for curves
   - RFC 7919, key shares extension
   - parallel mass testing!
   - RFC <--> OpenSSL cipher name space switches for the command line
