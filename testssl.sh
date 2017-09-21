@@ -2084,6 +2084,138 @@ run_application_banner() {
      return 0
 }
 
+
+
+# arg1: IP:port,   arg2: what kind of cookie,   arg3: cookiename or whole line
+     output() {
+          printf "%-48s %-38s %-0s%-0s\n" "   $1" "| $2" "| ${3}=" "$4"
+     }
+
+
+# first some conversion functions, see
+# 	description: https://github.com/dnkolegov/bigipsecurity
+#	meta code: https://support.f5.com/csp/article/K6917
+#    code: https://github.com/rapid7/metasploit-framework/blob/master/modules/auxiliary/gather/f5_bigip_cookie_disclosure.rb
+#    code: http://penturalabs.wordpress.com/2011/03/29/how-to-decode-big-ip-f5-persistence-cookie-values/
+
+     hex2ip() {
+          debugme echo "$1"
+          echo $((16#${1:0:2})).$((16#${1:2:2})).$((16#${1:4:2})).$((16#${1:6:2}))
+     }
+     hex2ip6() {
+          debugme echo "$1"
+          echo "[${1:0:4}:${1:4:4}:${1:8:4}:${1:12:4}.${1:16:4}:${1:20:4}:${1:24:4}:${1:28:4}]"
+     }
+
+     determine_routeddomain() {
+          local tmp
+
+          tmp="${1%%o*}"
+          echo "${tmp/rd/}"
+     }
+
+     ip_oldstyle() {
+          local tmp
+          local a b c d
+
+          tmp="${1/%.*}"					# until first dot
+          tmp="$(printf "%x8" "$tmp")"		# convert the whole thing to hex, now back to ip (reversed notation:
+          tmp="$(hex2ip $tmp)"			# transform to ip with reversed notation
+          IFS="." read -r a b c d <<< "$tmp" # reverse it
+          echo $d.$c.$b.$a
+     }
+
+     port_decode() {
+          local tmp
+
+          tmp="${1/.0000/}"				# to be sure remove trailing zeros with a dot
+          tmp="${tmp#*.}"				# get the port
+          tmp="$(printf "%04x" "${tmp}")"	# to hex
+          if [ ${#tmp} -eq 4 ] ; then
+               :
+          elif [ ${#tmp} -eq 3 ]; then		# fill it up with leading zeros if needed
+               tmp=0{$tmp}
+          elif [ ${#tmp} -eq 2 ]; then
+               tmp=00{$tmp}
+          fi
+          echo $((16#${tmp:2:2}${tmp:0:2}))  # reverse order and convert it from hex to dec
+     }
+
+
+# arg1: multiline string w cookies
+bigip_check() {
+     local allcookies="$1"
+     local ip port cookievalue cookiename
+     local savedcookies=""
+     local i=0
+
+     # taken from https://github.com/drwetter/F5-BIGIP-Decoder, more details see there
+
+     debugme echo -e "all cookies: >> $allcookies <<\n"
+     # first non-default routed domains --> routed domains
+     while true; do IFS='=' read cookiename cookievalue
+          [[ -z "$cookievalue" ]] && break
+          cookievalue=${cookievalue/;/}
+          debugme echo $cookiename : $cookievalue
+          grep -q -E '[0-9]{9,10}\.[0-9]{3,5}\.0000' <<< "$cookievalue" && \
+               ip="$(ip_oldstyle "$cookievalue")" && \
+               port="$(port_decode $cookievalue)" &&  \
+               output "${ip}:${port}" "default IPv4 pool members" "$cookiename" "$cookievalue" && \
+               savedcookies="${savedcookies}    ${cookiename}=${cookievalue}\n" && \
+               i=$((i +1)) && \
+               continue
+          grep -q -E '^rd[0-9]{1,2}o0{20}f{4}[a-f0-9]{8}o[0-9]{1,5}' <<< "$cookievalue" && \
+               routed_domain="$(determine_routeddomain "$cookievalue")" && \
+               offset=$(( 2 + ${#routed_domain} + 1 + 24))  && \
+               port="${cookievalue##*o}" && \
+               ip="$(hex2ip "${cookievalue:$offset:8}")" && \
+               output "${ip}:${port}" "IPv4 pool members in routed domains" "$cookiename" "$cookievalue" && \
+               savedcookies="${savedcookies}    ${cookiename}=${cookievalue}\n" && \
+               i=$((i +1)) && \
+               continue
+          grep -q -E '^vi[a-f0-9]{32}\.[0-9]{1,5}' <<< "$cookievalue" && \
+               ip="$(hex2ip6 ${cookievalue:2:32})" && \
+               port="${cookievalue##*.}" && \
+               port=$(port_decode "$port") && \
+               output "${ip}:${port}" "IPv6 pool members" "$cookiename" "$cookievalue" && \
+               savedcookies="${savedcookies}    ${cookiename}=${cookievalue}\n" && \
+               i=$((i +1)) && \
+               continue
+          grep -q -E '^rd[0-9]{1,2}o[a-f0-9]{32}o[0-9]{1,5}' <<< "$cookievalue" && \
+               routed_domain="$(determine_routeddomain "$cookievalue")" && \
+               offset=$(( 2 + ${#routed_domain} + 1 ))  && \
+               port="${cookievalue##*o}" && \
+               ip="$(hex2ip6 ${cookievalue:$offset:32})" && \
+               output "${ip}:${port}" "IPv6 pool members in routed domains" "$cookiename" "$cookievalue" && \
+               savedcookies="${savedcookies}    ${cookiename}=${cookievalue}\n" && \
+               i=$((i +1)) && \
+               continue
+          grep -q -E '^\!.*=$' <<< "$cookievalue" && \
+               if [[ "${#cookievalue}" -eq 81 ]] ; then
+                    savedcookies="${savedcookies}     ${cookiename}=${cookievalue:1:79}"
+                    i=$((i +1))
+               fi
+               continue
+     done <<< "$allcookies"
+
+     if [[ $DEBUG -ge 2 ]]; then
+          echo "${i}x BIG IP cookie found"
+          [[ $i -ne 0 ]] && echo -e "$savedcookies"
+     fi
+
+
+     ### bottom line output
+     nr_cookies=$(count_lines "$1")
+     named_bigip=$(grep -ci 'BIGipServer' <<< "$allcookies")
+     if [ -n $named_bigip ] ; then
+          echo
+          echo "In total:"
+          echo "$nr_cookies cookies -- $((i)) F5 BIG IP cookie(s) of which $named_bigip cookie(s) named \"BIGipServer\""
+          echo
+     fi
+}
+
+
 run_cookie_flags() {     # ARG1: Path
      local -i nr_cookies
      local -i nr_httponly nr_secure
@@ -2106,7 +2238,10 @@ run_cookie_flags() {     # ARG1: Path
 
      pr_bold " Cookie(s)                    "
      grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
-     if [[ $? -eq 0 ]]; then
+     if [[ $? -ne 0 ]]; then
+          outln "(none issued at \"$1\")$msg302"
+          fileout "cookie_count" "INFO" "No cookies issued at \"$1\"$msg302_"
+     else
           nr_cookies=$(count_lines "$(cat $TMPFILE)")
           out "$nr_cookies issued: "
           fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\"$msg302_"
@@ -2137,12 +2272,10 @@ run_cookie_flags() {     # ARG1: Path
           else
                fileout "cookie_httponly" "INFO" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
           fi
-          out "$msg302"
-     else
-          out "(none issued at \"$1\")$msg302"
-          fileout "cookie_count" "INFO" "No cookies issued at \"$1\"$msg302_"
+          outln "$msg302"
+          allcookies="$(awk '/[Ss][Ee][Tt]-[Cc][Oo][Oo][Kk][Ii][Ee]:/ { print $2 }' "$TMPFILE")"
+          bigip_check "$allcookies"
      fi
-     outln
 
      tmpfile_handle $FUNCNAME.txt
      return 0
