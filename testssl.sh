@@ -3654,7 +3654,7 @@ run_client_simulation() {
            if [[ -n "$STARTTLS_PROTOCOL" ]]; then
                client_service=$(toupper "${STARTTLS_PROTOCOL%s}")    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           else
-               outln "Could not determine which protocol was started, only simulating generic clients."
+               outln "Could not determine the protocol, only simulating generic clients."
                client_service="undetermined"
           fi
      fi
