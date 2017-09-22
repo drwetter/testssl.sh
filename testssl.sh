@@ -6509,7 +6509,7 @@ run_server_defaults() {
      # ciphers_to_test[7]: cipher suites using certificates with GOST R 34.10 (either 2001 or 94) public keys
      ciphers_to_test[1]=""
      ciphers_to_test[2]=""
-     for ciph in $(colon_to_spaces $($OPENSSL ciphers "aRSA")); do
+     for ciph in $(colon_to_spaces $($OPENSSL ciphers "aRSA" 2>>$ERRFILE)); do
           if grep -q "\-RSA\-" <<<$ciph; then
                ciphers_to_test[1]="${ciphers_to_test[1]}:$ciph"
           else
@@ -7565,13 +7565,13 @@ get_pub_key_size() {
      local tmppubkeyfile
 
      # OpenSSL displays the number of bits for RSA and ECC
-     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -text 2> $ERRFILE | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
+     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
      if [[ -n $pubkeybits ]]; then
           echo "Server public key is $pubkeybits" >> $TMPFILE
      else
           # This extracts the public key for DSA, DH, and GOST
           tmppubkeyfile=$(mktemp $TEMPDIR/pubkey.XXXXXX) || return 7
-          $OPENSSL x509 -noout -pubkey -in $HOSTCERT | $OPENSSL pkey -pubin -outform DER -out "$tmppubkeyfile" 2> $ERRFILE
+          $OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -outform DER -out "$tmppubkeyfile" 2>>$ERRFILE
           pubkey=$(hexdump -v -e '16/1 "%02X"' "$tmppubkeyfile")
           rm $tmppubkeyfile
           [[ -z "$pubkey" ]] && return 1
@@ -8564,8 +8564,8 @@ parse_tls_serverhello() {
           echo "===============================================================================" >> $TMPFILE
           echo "---" >> $TMPFILE
           echo "Certificate chain" >> $TMPFILE
-          subjectDN="$($OPENSSL x509 -in $HOSTCERT -noout -subject)"
-          issuerDN="$($OPENSSL x509 -in $HOSTCERT -noout -issuer)"
+          subjectDN="$($OPENSSL x509 -in $HOSTCERT -noout -subject 2>>$ERRFILE)"
+          issuerDN="$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>>$ERRFILE)"
           echo " $nr_certs s:${subjectDN:9}" >> $TMPFILE
           echo "   i:${issuerDN:8}" >> $TMPFILE
           cat "$HOSTCERT" >> $TMPFILE
@@ -8596,8 +8596,8 @@ parse_tls_serverhello() {
                     return 1
                fi
                nr_certs+=1
-               CAsubjectDN="$($OPENSSL x509 -in $tmp_pem_certfile -noout -subject)"
-               CAissuerDN="$($OPENSSL x509 -in $tmp_pem_certfile -noout -issuer)"
+               CAsubjectDN="$($OPENSSL x509 -in $tmp_pem_certfile -noout -subject 2>>$ERRFILE)"
+               CAissuerDN="$($OPENSSL x509 -in $tmp_pem_certfile -noout -issuer 2>>$ERRFILE)"
                echo " $nr_certs s:${CAsubjectDN:9}" >> $TMPFILE
                echo "   i:${CAissuerDN:8}" >> $TMPFILE
                cat "$tmp_pem_certfile"  >> $TMPFILE
@@ -11841,7 +11841,7 @@ find_openssl_binary() {
          OPENSSL_LOCATION="$openssl_location"
      fi
 
-     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL')")
+     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL' 2>/dev/null)")
 
      $OPENSSL s_client -ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_SSL2=true
