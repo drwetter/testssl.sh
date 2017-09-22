@@ -261,6 +261,7 @@ NW_STR=""
 LEN_STR=""
 SNI=""
 POODLE=""                               # keep vulnerability status for TLS_FALLBACK_SCSV
+OSSL_NAME=""                            # openssl name, in case of LibreSSL it's LibreSSL
 OSSL_VER=""                             # openssl version, will be auto-determined
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
@@ -548,7 +549,14 @@ pr_boldurl() { tm_bold "$1"; html_out "<a href="$1" style=\"font-weight:bold;col
 set_color_functions() {
      local ncurses_tput=true
 
-     # empty vars if we have COLOR=0 equals no escape code:
+     if [[ $(uname) == OpenBSD ]] && grep -q xterm-256 <<< "$TERM"; then
+          export TERM=xterm
+          # openBSD can't handle 256 colors (yet) in xterm which might lead to ugly errors
+          # like "tput: not enough arguments (3) for capability `AF'". Not our fault but
+          # before we get blamed we fix it here.
+     fi
+
+     # empty all vars if we have COLOR=0 equals no escape code:
      red=""
      green=""
      brown=""
@@ -565,6 +573,7 @@ set_color_functions() {
      type -p tput &>/dev/null || return 0      # Hey wait, do we actually have tput / ncurses ?
      tput cols &>/dev/null || return 0         # tput under BSDs and GNUs doesn't work either (TERM undefined?)
      tput sgr0 &>/dev/null || ncurses_tput=false
+     tput sgr 0 1 &>/dev/null || ncurses_tput=false    # OpenBSD succeed the previous one but fails here
      if [[ "$COLOR" -eq 2 ]]; then
           if $ncurses_tput; then
                red=$(tput setaf 1)
@@ -590,7 +599,7 @@ set_color_functions() {
      if [[ "$COLOR" -ge 1 ]]; then
           if $ncurses_tput; then
                bold=$(tput bold)
-               underline=$(tput sgr 0 1)
+               underline=$(tput sgr 0 1 2>/dev/null)
                italic=$(tput sitm)
                italic_end=$(tput ritm)
                off=$(tput sgr0)
@@ -728,7 +737,7 @@ fileout_pretty_json_banner() {
         echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
           \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
-          \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
+          \"openssl\"     : \"$OSSL_NAME $OSSL_VER from $OSSL_BUILD_DATE\",
           \"startTime\"   : \"$START_TIME\",
           \"scanResult\"  : ["
      else
@@ -740,7 +749,7 @@ fileout_pretty_json_banner() {
         echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
           \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
-          \"openssl\"     : \"$OSSL_VER from $OSSL_BUILD_DATE\",
+          \"openssl\"     : \"$OSSL_NAME $OSSL_VER from $OSSL_BUILD_DATE\",
           \"target host\" : \"$target\",
           \"port\"        : \"$PORT\",
           \"startTime\"   : \"$START_TIME\",
@@ -943,7 +952,7 @@ html_banner() {
           html_out "## Scan started as: \"$PROG_NAME $CMDLINE\"\n"
           html_out "## at $HNAME:$OPENSSL_LOCATION\n"
           html_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\n"
-          html_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n\n"
+          html_out "## version openssl: \"$OSSL_NAME $OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n\n"
      fi
 }
 
@@ -11641,13 +11650,13 @@ find_openssl_binary() {
      fi
 
      # http://www.openssl.org/news/openssl-notes.html
+     OSSL_NAME=$($OPENSSL version 2>/dev/null | awk '{ print $1 }')
      OSSL_VER=$($OPENSSL version 2>/dev/null | awk -F' ' '{ print $2 }')
      OSSL_VER_MAJOR=$(sed 's/\..*$//' <<< "$OSSL_VER")
      OSSL_VER_MINOR=$(sed -e 's/^.\.//' <<< "$OSSL_VER" | tr -d '[a-zA-Z]-')
      OSSL_VER_APPENDIX=$(tr -d '0-9.' <<< "$OSSL_VER")
      OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
-     OSSL_BUILD_DATE=$($OPENSSL version -a  2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
-     grep -q "not available" <<< "$OSSL_BUILD_DATE" && OSSL_BUILD_DATE=""
+     OSSL_BUILD_DATE=$($OPENSSL version -a 2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
 
      # see #190, reverting logic: unless otherwise proved openssl has no dh bits
      case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
@@ -11655,9 +11664,11 @@ find_openssl_binary() {
      esac
      # libressl does not have "Server Temp Key" (SSL_get_server_tmp_key)
 
-     if $OPENSSL version 2>/dev/null | grep -qi LibreSSL; then
-          outln
-          pr_warning "Please note: LibreSSL is not a good choice for testing INSECURE features!"
+     if grep -qi LibreSSL <<< "$OSSL_NAME"; then
+          if "$SSL_NATIVE"; then
+               outln
+               pr_warning "LibreSSL in native ssl mode is not a good choice for testing INSECURE features!"
+          fi
      fi
 
      initialize_engine
@@ -11674,7 +11685,7 @@ find_openssl_binary() {
          OPENSSL_LOCATION="$openssl_location"
      fi
 
-     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>/dev/null)")
+     OPENSSL_NR_CIPHERS=$(count_ciphers "$($OPENSSL ciphers 'ALL:COMPLEMENTOFALL')")
 
      $OPENSSL s_client -ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_SSL2=true
@@ -12126,12 +12137,12 @@ fatal() {
 initialize_engine(){
      grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null && return 0        # have been here already
 
-     if ! $OPENSSL engine gost -vvvv -t -c 2>/dev/null >/dev/null; then
+     if $OPENSSL engine gost -v 2>&1 | grep -q 'invalid command'; then
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
           return 1
-     elif $OPENSSL engine gost -vvvv -t -c 2>&1 | grep -iq "No such" ; then
+     elif ! $OPENSSL engine gost -vvvv -t -c 2>/dev/null >/dev/null; then
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
