@@ -214,6 +214,7 @@ DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, thre
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
 DNS_VIA_PROXY=${DNS_VIA_PROXY:-false}   # don't do DNS lookups via proxy. --ip=proxy reverses this
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
+NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (external) openssl engine set this to true
 readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test for PFS
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
@@ -5103,12 +5104,14 @@ determine_trust() {
      # and the output should should be indented by two more spaces.
      [[ -n $json_prefix ]] && spaces="                                "
 
-     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && \
-          [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]] && \
-          [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1" ]]; then
-          addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
-          fileout "${json_prefix}chain_of_trust_Problem" "WARN" "$addtl_warning"
-     fi
+     case $OSSL_VER_MAJOR.$OSSL_VER_MINOR in
+          1.0.2|1.1.0|1.1.1|2.3.*|2.2.*|2.1.*)                # 2.x is LibreSSL. 2.1.1 was tested to work, below is not sure
+              :
+          ;;
+          *)   addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
+               fileout "${json_prefix}chain_of_trust_Problem" "WARN" "$addtl_warning"
+          ;;
+     esac
      debugme tmln_out
 
      # if you run testssl.sh from a different path /you can set either TESTSSL_INSTALL_DIR or CA_BUNDLES_PATH to find the CA BUNDLES
@@ -11662,9 +11665,8 @@ find_openssl_binary() {
      case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
           1.0.2|1.1.0|1.1.1) HAS_DH_BITS=true ;;
      esac
-     # libressl does not have "Server Temp Key" (SSL_get_server_tmp_key)
-
-     if grep -qi LibreSSL <<< "$OSSL_NAME"; then
+     if [[ "$OSSL_NAME" =~ LibreSSL ]]; then
+          [[ ${OSSL_VER//./} -ge 210 ]] && HAS_DH_BITS=true
           if "$SSL_NATIVE"; then
                outln
                pr_warning "LibreSSL in native ssl mode is not a good choice for testing INSECURE features!"
@@ -12137,7 +12139,9 @@ fatal() {
 initialize_engine(){
      grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null && return 0        # have been here already
 
-     if $OPENSSL engine gost -v 2>&1 | grep -q 'invalid command'; then
+     if "$NO_ENGINE"; then
+          return 1
+     elif $OPENSSL engine gost -v 2>&1 | egrep -q 'invalid command|no such engine'; then
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
