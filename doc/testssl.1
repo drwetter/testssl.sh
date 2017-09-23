@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "TESTSSL" "1" "August 2017" "" ""
+.TH "TESTSSL" "1" "September 2017" "" ""
 .
 .SH "NAME"
 \fBtestssl\fR
@@ -245,7 +245,7 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
 .IP "" 0
 .
 .SS "VULNERABILITIES"
-\fB\-U, \-\-vulnerable\fR Just tests all (following) vulnerabilities\. The environment variable \fBVULN_THRESHLD\fR determines after which value a separate headline for each vulnerability is being displayed\. Default is \fB1\fR which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed \-\- in addition to the vulnerability and the result\. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerability and test result\. A vulnerability section is comprised of more than one check, e\.g\. the renegotiation vulnerability check has two checks, so has Logjam\.
+\fB\-U, \-\-vulnerable\fR Just tests all (following) vulnerabilities\. The environment variable \fBVULN_THRESHLD\fR determines after which value a separate headline for each vulnerability is being displayed\. Default is \fB1\fR which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed \-\- in addition to the vulnerability and the result\. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result\. A vulnerability section is comprised of more than one check, e\.g\. the renegotiation vulnerability check has two checks, so has Logjam\.
 .
 .P
 \fB\-H, \-\-heartbleed\fR Checks for Heartbleed, a memory leakage in openssl\. Unless the server side doesn\'t support the heartbeat extension it is likely that this check runs into a timeout\. The seconds to wait for a reply can be adjusted with \fBHEARTBLEED_MAX_WAITSOCK\fR\. 8 is the default (unit: seconds)
@@ -294,6 +294,9 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
 .
 .P
 \fB\-4, \-\-rc4, \-\-appelbaum\fR Checks which RC4 stream ciphers are being offered\.
+.
+.P
+\fB\-g, \-\-grease\fR test for server implementation bugs, see https://datatracker\.ietf\.org/doc/draft\-ietf\-tls\-grease
 .
 .SS "OUTPUT OPTIONS"
 \fB\-\-warnings <batch|off>\fR The warnings parameter determines how testssl\.sh will deal with situations where user input will normally be necessary\. There are a couple of options here\. \fBbatch\fR doesn\'t wait for a confirming keypress\. This is automatically being chosen for mass testing (\fB\-\-file\fR)\. \fB\-false\fR just skips the warning AND the confirmation\. Please note that there are conflicts where testssl\.sh will still ask for confirmation\. Those are ones which would have a drastic impact on the results\. The same can be achieved by setting the environment variable \fBWARNINGS\fR\.
@@ -458,6 +461,9 @@ ALL_CLIENTS runs a client simulation with all (currently) 117 clients
 .
 .IP "\(bu" 4
 UNBRACKTD_IPV6: needs to be set to true for some versions of OpenSSL (like from Gentoo) which don\'t support [bracketed] IPv6 addresses
+.
+.IP "\(bu" 4
+NO_ENGINE: if you have problems with garbled output containing the word \'engine\' you might want to set this to true\. It forces testssl\.sh not try to configure openssl\'s engine or a non existing one from libressl
 .
 .IP "\(bu" 4
 HEADER_MAXSLEEP: To wait how long before killing the process to retrieve a service banner / HTTP header

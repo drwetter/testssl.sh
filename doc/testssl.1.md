@@ -201,6 +201,8 @@ If the server provides no matching record in Subject Alternative Name (SAN) but 
 
 `-4, --rc4, --appelbaum`        Checks which RC4 stream ciphers are being offered.
 
+`-g, --grease`                  test for server implementation bugs, see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+
 
 ### OUTPUT OPTIONS
 
@@ -307,6 +309,7 @@ Except the environment variables mentioned above which replace command line opti
 [comment]: # * EXPERIMENTAL
 * ALL_CLIENTS runs a client simulation with all (currently) 117 clients
 * UNBRACKTD_IPV6: needs to be set to true for some versions of OpenSSL (like from Gentoo) which don't support [bracketed] IPv6 addresses
+* NO_ENGINE: if you have problems with garbled output containing the word 'engine' you might want to set this to true. It forces testssl.sh not try to configure openssl's engine or a non existing one from libressl
 * HEADER_MAXSLEEP: To wait how long before killing the process to retrieve a service banner / HTTP header
 * MAX_WAITSOCK:    It instructs testssl.sh to wait until the specified time before declaring a socket connection dead. Don't change this unless you're absolutely sure what you're doing. Value is in seconds.
 * CCS_MAX_WAITSOCK Is the similar to above but applies only to the CCS handshakes, for both of the two the two CCS payload. Don't change this unless you're absolutely sure what you're doing. Value is in seconds.
