@@ -11819,7 +11819,7 @@ help() {
                                    Alternatively: nmap output in greppable format (-oG) (1x port per line allowed)
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
 
-single check as <options>  ("$PROG_NAME  URI" does everything except -E):
+single check as <options>  ("$PROG_NAME  URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
      -s, --std, --standard         tests certain lists of cipher suites by strength
@@ -11848,7 +11848,7 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E):
      -D, --drown                   tests for DROWN vulnerability
      -f, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
-     -g, --grease                  test for server implementation bugs (see https://datatracker.ietf.org/doc/draft-ietf-tls-grease)
+     -g, --grease                  tests several server implementation bugs like GREASE and size limitations
 
 tuning / connect options (most also can be preset via environment variables):
      --fast                        omits some checks: using openssl for all ciphers (-e), show only first

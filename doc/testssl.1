@@ -296,7 +296,7 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
 \fB\-4, \-\-rc4, \-\-appelbaum\fR Checks which RC4 stream ciphers are being offered\.
 .
 .P
-\fB\-g, \-\-grease\fR test for server implementation bugs, see https://datatracker\.ietf\.org/doc/draft\-ietf\-tls\-grease
+\fB\-g, \-\-grease\fR Checks several server implementation bugs like GREASE and size limitations,see https://www\.ietf\.org/archive/id/draft\-ietf\-tls\-grease\-00\.txt
 .
 .SS "OUTPUT OPTIONS"
 \fB\-\-warnings <batch|off>\fR The warnings parameter determines how testssl\.sh will deal with situations where user input will normally be necessary\. There are a couple of options here\. \fBbatch\fR doesn\'t wait for a confirming keypress\. This is automatically being chosen for mass testing (\fB\-\-file\fR)\. \fB\-false\fR just skips the warning AND the confirmation\. Please note that there are conflicts where testssl\.sh will still ask for confirmation\. Those are ones which would have a drastic impact on the results\. The same can be achieved by setting the environment variable \fBWARNINGS\fR\.

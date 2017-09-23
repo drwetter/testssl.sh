@@ -201,7 +201,7 @@ If the server provides no matching record in Subject Alternative Name (SAN) but 
 
 `-4, --rc4, --appelbaum`        Checks which RC4 stream ciphers are being offered.
 
-`-g, --grease`                  test for server implementation bugs, see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+`-g, --grease`                  Checks several server implementation bugs like GREASE and size limitations,see https://www.ietf.org/archive/id/draft-ietf-tls-grease-00.txt
 
 
 ### OUTPUT OPTIONS
