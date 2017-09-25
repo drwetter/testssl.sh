@@ -81,6 +81,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * Parallel mass testing
 * File input for mass testing can be also in nmap grep(p)able (-oG) format
 * Postgres und MySQL STARTTLS support
+* Decodes BIG IP F5 Cookie
 * Man page
 
 #### Further features planned in 2.9dev
