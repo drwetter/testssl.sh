@@ -547,6 +547,7 @@ pr_boldurl() { tm_bold "$1"; html_out "<a href="$1" style=\"font-weight:bold;col
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                          http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
+### no ouput support for HTML!
 set_color_functions() {
      local ncurses_tput=true
 
@@ -612,6 +613,8 @@ set_color_functions() {
                reverse=$(tput mr)
                off=$(tput me)
           fi
+     # italic doesn't work under Linux, FreeBSD (9). But both work under OpenBSD.
+     # alternatively we could use escape codes
      fi
 }
 
@@ -1098,6 +1101,52 @@ is_ipv6addr() {
      return 0
 }
 
+# now some function for the integrated BIGIP F5 Cookie detector (see https://github.com/drwetter/F5-BIGIP-Decoder)
+
+f5_hex2ip() {
+     debugme echo "$1"
+     echo $((16#${1:0:2})).$((16#${1:2:2})).$((16#${1:4:2})).$((16#${1:6:2}))
+}
+f5_hex2ip6() {
+     debugme echo "$1"
+     echo "[${1:0:4}:${1:4:4}:${1:8:4}:${1:12:4}.${1:16:4}:${1:20:4}:${1:24:4}:${1:28:4}]"
+}
+
+f5_determine_routeddomain() {
+     local tmp
+     tmp="${1%%o*}"
+     echo "${tmp/rd/}"
+}
+
+f5_ip_oldstyle() {
+     local tmp
+     local a b c d
+
+     tmp="${1/%.*}"                     # until first dot
+     tmp="$(printf "%x8" "$tmp")"       # convert the whole thing to hex, now back to ip (reversed notation:
+     tmp="$(f5_hex2ip $tmp)"               # transform to ip with reversed notation
+     IFS="." read -r a b c d <<< "$tmp" # reverse it
+     echo $d.$c.$b.$a
+}
+
+f5_port_decode() {
+     local tmp
+
+     tmp="$(strip_lf "$1")"             # remove lf if there is one
+     tmp="${tmp/.0000/}"                # to be sure remove trailing zeros with a dot
+     tmp="${tmp#*.}"                    # get the port
+     tmp="$(printf "%04x" "${tmp}")"    # to hex
+     if [[ ${#tmp} -eq 4 ]]; then
+          :
+     elif [[ ${#tmp} -eq 3 ]]; then          # fill it up with leading zeros if needed
+          tmp=0{$tmp}
+     elif [[ ${#tmp} -eq 2 ]]; then
+          tmp=00{$tmp}
+     fi
+     echo $((16#${tmp:2:2}${tmp:0:2}))  # reverse order and convert it from hex to dec
+}
+
+
 
 ###### END helper function definitions ######
 
@@ -1208,13 +1257,13 @@ http_get() {
 
      "$SNEAKY" && useragent="$UA_SNEAKY"
 
-	IFS=/ read proto z node query <<< "$1"
+     IFS=/ read proto z node query <<< "$1"
 
-	exec 33<>/dev/tcp/$node/80
-	printf "GET /$query HTTP/1.1\r\nHost: $node\r\nUser-Agent: $useragent\r\nConnection: Close\r\nAccept: */*\r\n\r\n" >&33
-	cat <&33 | \
-		tr -d '\r' | sed '1,/^$/d' >$dl
-	# HTTP header stripped now, closing fd:
+     exec 33<>/dev/tcp/$node/80
+     printf "GET /$query HTTP/1.1\r\nHost: $node\r\nUser-Agent: $useragent\r\nConnection: Close\r\nAccept: */*\r\n\r\n" >&33
+     cat <&33 | \
+          tr -d '\r' | sed '1,/^$/d' >$dl
+     # HTTP header stripped now, closing fd:
      exec 33<&-
      [[ -s "$2" ]] && return 0 || return 1
 }
@@ -1244,17 +1293,17 @@ wait_kill(){
 
 # parse_date date format input-format
 if "$HAS_GNUDATE"; then  # Linux and NetBSD
-	parse_date() {
-		LC_ALL=C date -d "$1" "$2"
-	}
+     parse_date() {
+          LC_ALL=C date -d "$1" "$2"
+     }
 elif "$HAS_FREEBSDDATE"; then # FreeBSD and OS X
-	parse_date() {
-		LC_ALL=C date -j -f "$3"  "$2" "$1"
-	}
+     parse_date() {
+          LC_ALL=C date -j -f "$3"  "$2" "$1"
+     }
 else
-	parse_date() {
-		LC_ALL=C date -j "$2" "$1"
-	}
+     parse_date() {
+          LC_ALL=C date -j "$2" "$1"
+     }
 fi
 
 # arg1: An ASCII-HEX string
@@ -1513,9 +1562,9 @@ detect_ipv4() {
                     else
                          first=false
                     fi
-                    pr_svrty_high "$result"
+                    pr_svrty_medium "$result"
                     outln "\n$spaces$your_ip_msg"
-                    fileout "ip_in_header_$count" "HIGH" "IPv4 address in header  $result $your_ip_msg"
+                    fileout "ip_in_header_$count" "MEDIUM" "IPv4 address in header  $result $your_ip_msg"
                fi
                count=$count+1
           done < $HEADERFILE
@@ -2094,11 +2143,65 @@ run_application_banner() {
      return 0
 }
 
+
+
+# arg1: multiline string w cookies
+f5_bigip_check() {
+     local allcookies="$1"
+     local ip port cookievalue cookiename
+     local routed_domain offset
+     local savedcookies=""
+     local spaces="$2"
+
+     # taken from https://github.com/drwetter/F5-BIGIP-Decoder, more details see there
+
+     debugme echo -e "all cookies: >> $allcookies <<\n"
+     while true; do IFS='=' read cookiename cookievalue
+          [[ -z "$cookievalue" ]] && break
+          cookievalue=${cookievalue/;/}
+          debugme echo $cookiename : $cookievalue
+          if grep -q -E '[0-9]{9,10}\.[0-9]{3,5}\.0000' <<< "$cookievalue"; then
+               ip="$(f5_ip_oldstyle "$cookievalue")"
+               port="$(f5_port_decode $cookievalue)"
+               out "${spaces}F5 cookie (default IPv4 pool member): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
+               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv4 pool member ${ip}:${port}"
+          elif grep -q -E '^rd[0-9]{1,2}o0{20}f{4}[a-f0-9]{8}o[0-9]{1,5}' <<< "$cookievalue"; then
+               routed_domain="$(f5_determine_routeddomain "$cookievalue")"
+               offset=$(( 2 + ${#routed_domain} + 1 + 24))
+               port="${cookievalue##*o}"
+               ip="$(f5_hex2ip "${cookievalue:$offset:8}")"
+               out "${spaces}F5 cookie (IPv4 pool in routed domain "; pr_svrty_medium "$routed_domain"; out "): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
+               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is IPv4 pool member in routed domain $routed_domain ${ip}:${port}"
+          elif grep -q -E '^vi[a-f0-9]{32}\.[0-9]{1,5}' <<< "$cookievalue"; then
+               ip="$(f5_hex2ip6 ${cookievalue:2:32})"
+               port="${cookievalue##*.}"
+               port=$(f5_port_decode "$port")
+               out "${spaces}F5 cookie (default IPv6 pool member): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
+               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv6 pool member ${ip}:${port}"
+          elif grep -q -E '^rd[0-9]{1,2}o[a-f0-9]{32}o[0-9]{1,5}' <<< "$cookievalue"; then
+               routed_domain="$(f5_determine_routeddomain "$cookievalue")"
+               offset=$(( 2 + ${#routed_domain} + 1 ))
+               port="${cookievalue##*o}"
+               ip="$(f5_hex2ip6 ${cookievalue:$offset:32})"
+               out "${spaces}F5 cookie (IPv6 pool in routed domain "; pr_svrty_medium "$routed_domain"; out "): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
+               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is IPv6 pool member in routed domain $routed_domain ${ip}:${port}"
+          elif grep -q -E '^\!.*=$' <<< "$cookievalue"; then
+               if [[ "${#cookievalue}" -eq 81 ]] ; then
+                    savedcookies="${savedcookies}     ${cookiename}=${cookievalue:1:79}"
+                    out "${spaces}Encrypted F5 cookie named "; pr_italic "${cookiename}"; outln " detected"
+                    fileout "cookie_bigip_f5" "INFO" "encrypted F5 cookie named ${cookiename} detected"
+               fi
+          fi
+     done <<< "$allcookies"
+}
+
+
 run_cookie_flags() {     # ARG1: Path
      local -i nr_cookies
      local -i nr_httponly nr_secure
      local negative_word
      local msg302="" msg302_=""
+     local spaces="                              "
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3
@@ -2116,7 +2219,10 @@ run_cookie_flags() {     # ARG1: Path
 
      pr_bold " Cookie(s)                    "
      grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
-     if [[ $? -eq 0 ]]; then
+     if [[ $? -ne 0 ]]; then
+          outln "(none issued at \"$1\")$msg302"
+          fileout "cookie_count" "INFO" "No cookies issued at \"$1\"$msg302_"
+     else
           nr_cookies=$(count_lines "$(cat $TMPFILE)")
           out "$nr_cookies issued: "
           fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\"$msg302_"
@@ -2147,12 +2253,10 @@ run_cookie_flags() {     # ARG1: Path
           else
                fileout "cookie_httponly" "INFO" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
           fi
-          out "$msg302"
-     else
-          out "(none issued at \"$1\")$msg302"
-          fileout "cookie_count" "INFO" "No cookies issued at \"$1\"$msg302_"
+          outln "$msg302"
+          allcookies="$(awk '/[Ss][Ee][Tt]-[Cc][Oo][Oo][Kk][Ii][Ee]:/ { print $2 }' "$TMPFILE")"
+          f5_bigip_check "$allcookies" "$spaces"
      fi
-     outln
 
      tmpfile_handle $FUNCNAME.txt
      return 0
@@ -5066,34 +5170,34 @@ verify_retcode_helper() {
      local ret=0
      local -i retcode=$1
 
-	case $retcode in
-		# codes from ./doc/apps/verify.pod | verify(1ssl)
-		26) tm_out "(unsupported certificate purpose)" ;; 	# X509_V_ERR_INVALID_PURPOSE
-		24) tm_out "(certificate unreadable)" ;;          	# X509_V_ERR_INVALID_CA
-		23) tm_out "(certificate revoked)" ;; 		          # X509_V_ERR_CERT_REVOKED
-		21) tm_out "(chain incomplete, only 1 cert provided)" ;; 	# X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
-		20) tm_out "(chain incomplete)" ;;			          # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
-		19) tm_out "(self signed CA in chain)" ;;	          # X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
-		18) tm_out "(self signed)" ;;				          # X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
-		10) tm_out "(expired)" ;;				          # X509_V_ERR_CERT_HAS_EXPIRED
-		9)  tm_out "(not yet valid)" ;;		               # X509_V_ERR_CERT_NOT_YET_VALID
-		2)  tm_out "(issuer cert missing)" ;;                  # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
-		*) ret=1 ; tm_out " (unknown, pls report) $1" ;;
-	esac
+     case $retcode in
+          # codes from ./doc/apps/verify.pod | verify(1ssl)
+          26) tm_out "(unsupported certificate purpose)" ;;      # X509_V_ERR_INVALID_PURPOSE
+          24) tm_out "(certificate unreadable)" ;;               # X509_V_ERR_INVALID_CA
+          23) tm_out "(certificate revoked)" ;;                  # X509_V_ERR_CERT_REVOKED
+          21) tm_out "(chain incomplete, only 1 cert provided)" ;;    # X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
+          20) tm_out "(chain incomplete)" ;;                     # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+          19) tm_out "(self signed CA in chain)" ;;              # X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
+          18) tm_out "(self signed)" ;;                          # X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
+          10) tm_out "(expired)" ;;                              # X509_V_ERR_CERT_HAS_EXPIRED
+          9)  tm_out "(not yet valid)" ;;                        # X509_V_ERR_CERT_NOT_YET_VALID
+          2)  tm_out "(issuer cert missing)" ;;                  # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
+          *) ret=1 ; tm_out " (unknown, pls report) $1" ;;
+     esac
      return $ret
 }
 
 # arg1: number of certificate if provided >1
 determine_trust() {
-	local json_prefix=$1
-	local -i i=1
-	local -i num_ca_bundles=0
-	local bundle_fname=""
-	local -a certificate_file verify_retcode trust
-	local ok_was=""
-	local notok_was=""
-	local all_ok=true
-	local some_ok=false
+     local json_prefix=$1
+     local -i i=1
+     local -i num_ca_bundles=0
+     local bundle_fname=""
+     local -a certificate_file verify_retcode trust
+     local ok_was=""
+     local notok_was=""
+     local all_ok=true
+     local some_ok=false
      local code
      local ca_bundles=""
      local spaces="                              "
@@ -5120,63 +5224,63 @@ determine_trust() {
      else
           ca_bundles="$CA_BUNDLES_PATH/*.pem"
      fi
-	for bundle_fname in $ca_bundles; do
-		certificate_file[i]=$(basename ${bundle_fname//.pem})
+     for bundle_fname in $ca_bundles; do
+          certificate_file[i]=$(basename ${bundle_fname//.pem})
           if [[ ! -r $bundle_fname ]]; then
                prln_warning "\"$bundle_fname\" cannot be found / not readable"
                return 7
           fi
-		debugme printf -- " %-12s" "${certificate_file[i]}"
-		# set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
-		(export SSL_CERT_DIR="/dev/null; export SSL_CERT_FILE=/dev/null"
-		if [[ $certificates_provided -ge 2 ]]; then
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
-		else
-		     $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
-		fi)
-		verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1)
-		[[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
-		if [[ ${verify_retcode[i]} -eq 0 ]]; then
-			trust[i]=true
-			some_ok=true
-			debugme tm_done_good "Ok   "
-			debugme tmln_out "${verify_retcode[i]}"
-		else
-			trust[i]=false
-			all_ok=false
-			debugme tm_svrty_high "not trusted "
-			debugme tmln_out "${verify_retcode[i]}"
-		fi
-		i=$((i + 1))
-	done
-	num_ca_bundles=$((i - 1))
+          debugme printf -- " %-12s" "${certificate_file[i]}"
+          # set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
+          (export SSL_CERT_DIR="/dev/null; export SSL_CERT_FILE=/dev/null"
+          if [[ $certificates_provided -ge 2 ]]; then
+               $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+          else
+               $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+          fi)
+          verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1)
+          [[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
+          if [[ ${verify_retcode[i]} -eq 0 ]]; then
+               trust[i]=true
+               some_ok=true
+               debugme tm_done_good "Ok   "
+               debugme tmln_out "${verify_retcode[i]}"
+          else
+               trust[i]=false
+               all_ok=false
+               debugme tm_svrty_high "not trusted "
+               debugme tmln_out "${verify_retcode[i]}"
+          fi
+          i=$((i + 1))
+     done
+     num_ca_bundles=$((i - 1))
      debugme tm_out " "
-	if $all_ok; then
-	     # all stores ok
-		pr_done_good "Ok   "; pr_warning "$addtl_warning"
+     if $all_ok; then
+          # all stores ok
+          pr_done_good "Ok   "; pr_warning "$addtl_warning"
           # we did to stdout the warning above already, so we could stay here with INFO:
           fileout "${json_prefix}chain_of_trust" "OK" "All certificate trust checks passed. $addtl_warning"
-	else
-	     # at least one failed
-		pr_svrty_critical "NOT ok"
-		if ! $some_ok; then
-		     # all failed (we assume with the same issue), we're displaying the reason
+     else
+          # at least one failed
+          pr_svrty_critical "NOT ok"
+          if ! $some_ok; then
+               # all failed (we assume with the same issue), we're displaying the reason
                out " "
                code="$(verify_retcode_helper "${verify_retcode[1]}")"
-			if [[ "$code" =~ "pls report" ]]; then
-				pr_warning "$code"
-			else
-				out "$code"
-			fi
+               if [[ "$code" =~ "pls report" ]]; then
+                    pr_warning "$code"
+               else
+                    out "$code"
+               fi
                fileout "${json_prefix}chain_of_trust" "CRITICAL" "All certificate trust checks failed: $code. $addtl_warning"
-		else
-			# is one ok and the others not ==> display the culprit store
-			if $some_ok ; then
-				pr_svrty_critical ":"
-				for ((i=1;i<=num_ca_bundles;i++)); do
-					if ${trust[i]}; then
-						ok_was="${certificate_file[i]} $ok_was"
-					else
+          else
+               # is one ok and the others not ==> display the culprit store
+               if $some_ok ; then
+                    pr_svrty_critical ":"
+                    for ((i=1;i<=num_ca_bundles;i++)); do
+                         if ${trust[i]}; then
+                              ok_was="${certificate_file[i]} $ok_was"
+                         else
                               #code="$(verify_retcode_helper ${verify_retcode[i]})"
                               #notok_was="${certificate_file[i]} $notok_was"
                               pr_svrty_high " ${certificate_file[i]} "
@@ -5186,21 +5290,21 @@ determine_trust() {
                               else
                                    out "$code"
                               fi
-			               notok_was="${certificate_file[i]} $code $notok_was"
-               		fi
-				done
-				#pr_svrty_high "$notok_was "
+                              notok_was="${certificate_file[i]} $code $notok_was"
+                         fi
+                    done
+                    #pr_svrty_high "$notok_was "
                     #outln "$code"
                     outln
-				# lf + green ones
+                    # lf + green ones
                     [[ "$DEBUG" -eq 0 ]] && tm_out "$spaces"
-				pr_done_good "OK: $ok_was"
+                    pr_done_good "OK: $ok_was"
                fi
                fileout "${json_prefix}chain_of_trust" "CRITICAL" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
           fi
           [[ -n "$addtl_warning" ]] && out "\n$spaces" && pr_warning "$addtl_warning"
-	fi
-	outln
+     fi
+     outln
      return 0
 }
 
