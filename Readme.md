@@ -49,7 +49,8 @@ is the successor of 2.8 and stable enough for day-to-day work.
 
 testssl.sh is working on every Linux/BSD distribution out of the box. In 2.9dev most
 of the limitations of disabled features from the openssl client are gone due to bash-socket-based
-checks. testssl.sh also works on otherunixoid system out of the box, supposed they have
+checks. As a result you can also use e.g. LibreSSL.
+testssl.sh also works on otherunixoid system out of the box, supposed they have
 `/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU
 grep installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL
 version  version >= 1.0.2 is recommended for better LOGJAM checks and to
@@ -81,6 +82,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * TLS Robustness check (GREASE)
 * Postgres und MySQL STARTTLS support, MongoDB support
 * Decodes BIG IP F5 Cookie
+* Better OpenBSD, better LibreSSL support
 * Man page
 
 #### Further features planned in 2.9dev
