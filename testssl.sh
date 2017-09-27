@@ -10874,9 +10874,9 @@ run_beast(){
                     done
                     ciphers_found[i]=true
                     if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
-                         detected_cbc_ciphers+=" ${ciph[i]}"
+                         detected_cbc_ciphers+="${ciph[i]} "
                     else
-                         detected_cbc_ciphers+=" ${rfc_ciph[i]}"
+                         detected_cbc_ciphers+="${rfc_ciph[i]} "
                     fi
                     vuln_beast=true
                     if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
