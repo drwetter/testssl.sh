@@ -30,11 +30,10 @@ cryptographic flaws.
 
 You can download testssl.sh by cloning this git repository:
 
-    git clone --depth 1 https://github.com/drwetter/testssl.sh.git
+    git clone --depth 1 --branch 2.9.5 https://github.com/drwetter/testssl.sh.git
 
-Or help yourself downloading the ZIP archive
-https://github.com/drwetter/testssl.sh/archive/2.9.5.zip. Then ``testssl.sh
---help`` will give you some help upfront. More help: see doc directory. Older
+Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl.sh/archive/v2.9.5-1.zip.
+Then ``testssl.sh --help`` will give you some help upfront. More help: see doc directory. Older
 sample runs are at https://testssl.sh/.
 
 #### Compatibility
@@ -59,10 +58,10 @@ usage before taking the next step in the development of this project.
 
 
 #### Features implemented in 2.9.5
-* TLS 1.2 protocol check via socket in production
 * Way better coverage of ciphers as most checks are done via sockets, using bash sockets where ever possible
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
 * Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
+* TLS 1.2 protocol check via sockets in production
 * Finding more TLS extensions via sockets
 * TLS Supported Groups Registry (RFC 7919), key shares extension
 * Non-flat JSON output support
@@ -72,13 +71,13 @@ usage before taking the next step in the development of this project.
 * Ticketbleed check
 * LOGJAM: now checking also for known DH parameters
 * Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
+* Parallel mass testing
 * Check for CAA RR
 * Check for OCSP must staple
 * Check for Certificate Transparency
 * Check for session resumption (Ticket, ID)
 * Better formatting of output (indentation)
 * Choice showing the RFC naming scheme only
-* Parallel mass testing
 * File input for mass testing can be also in nmap grep(p)able (-oG) format
 * Postgres und MySQL STARTTLS support
 * Man page
