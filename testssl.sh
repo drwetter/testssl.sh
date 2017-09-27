@@ -3968,13 +3968,12 @@ run_prototest_openssl() {
 # idempotent function to add SSL/TLS protocols. It should ease testing
 # PROTOS_OFFERED's content is in openssl terminology
 add_tls_offered() {
-     grep -qw "$1" <<< "$PROTOS_OFFERED" || PROTOS_OFFERED+="$1 "
+     [[ "$PROTOS_OFFERED" =~ "$1 " ]] || PROTOS_OFFERED+="$1 "
 }
 
 # function which checks whether SSLv2 - TLS 1.2 is being offereed
 has_server_protocol() {
-     [[ -z "$PROTOS_OFFERED" ]] && return 1  # if empty return 1, hinting to the caller to check at additional cost/connect
-     if grep -qw "$1" <<< "$PROTOS_OFFERED"; then
+     if [[ "$PROTOS_OFFERED" =~ "$1 " ]]; then
           return 0
      fi
      return 1
@@ -4848,6 +4847,7 @@ run_server_preference() {
                          cipher[i]=""
                     fi
                fi
+               [[ -n "${cipher[i]}" ]] && add_tls_offered "$proto"
                i=$((i + 1))
           done
 
@@ -4964,7 +4964,7 @@ cipher_pref_check() {
 
      pr_bold " Cipher order"
 
-     tm_out " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n" | while read p proto_hex proto; do
+     while read p proto_hex proto; do
           order=""; ciphers_found_with_sockets=false
           if [[ $p == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
                out "\n    SSLv3:     "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
@@ -5135,12 +5135,13 @@ cipher_pref_check() {
           fi
 
           if [[ -n "$order" ]]; then
+               add_tls_offered "$p"
                outln
                out "$(printf "    %-10s " "$proto: ")"
                out "$(out_row_aligned_max_width "$order" "               " $TERM_WIDTH)"
                fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
           fi
-     done
+     done <<< "$(tm_out " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n")"
      outln
 
      outln
@@ -10775,9 +10776,17 @@ run_beast(){
 
      # first determine whether it's mitigated by higher protocols
      for proto in tls1_1 tls1_2; do
-          $OPENSSL s_client -state -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>>$ERRFILE >$TMPFILE </dev/null
-          if sclient_connect_successful $? $TMPFILE; then
-               higher_proto_supported="$higher_proto_supported $(get_protocol $TMPFILE)"
+          if $(has_server_protocol "$proto"); then
+               case $proto in
+                    tls1_1) higher_proto_supported+=" TLSv1.1" ;;
+                    tls1_2) higher_proto_supported+=" TLSv1.2" ;;
+               esac
+          else
+               $OPENSSL s_client -state -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>>$ERRFILE >$TMPFILE </dev/null
+               if sclient_connect_successful $? $TMPFILE; then
+                    higher_proto_supported+=" $(get_protocol $TMPFILE)"
+                    add_tls_offered "$proto"
+               fi
           fi
      done
 
@@ -10787,14 +10796,18 @@ run_beast(){
                out "                                           "
                continue
           fi
-          if [[ "$proto" != "ssl3" ]] || "$HAS_SSL3"; then
-               [[ ! "$proto" =~ ssl ]] && sni="$SNI" || sni=""
+          [[ ! "$proto" =~ ssl ]] && sni="$SNI" || sni=""
+          if $(has_server_protocol "$proto"); then
+               sclient_success=0
+          elif [[ "$proto" != "ssl3" ]] || "$HAS_SSL3"; then
                $OPENSSL s_client -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
+               sclient_success=$?
           else
                tls_sockets "00" "$TLS_CIPHER"
+               sclient_success=$?
           fi
-          if [[ $? -ne 0 ]]; then                                # protocol supported?
+          if [[ $sclient_success -ne 0 ]]; then                  # protocol supported?
                if "$continued"; then                             # second round: we hit TLS1
                     if "$HAS_SSL3" || "$using_sockets"; then
                          prln_done_good "no SSL3 or TLS1 (OK)"
@@ -10809,6 +10822,7 @@ run_beast(){
                     continue       # protocol not supported, so we do not need to check each cipher with that protocol
                fi
           fi # protocol succeeded
+          add_tls_offered "$proto"
 
           # now we test in one shot with the precompiled ciphers
           if "$using_sockets"; then
