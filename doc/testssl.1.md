@@ -156,12 +156,13 @@ If the server provides no matching record in Subject Alternative Name (SAN) but 
 * HTTP Public Key Pinning (HPKP)
 * Server banner
 * HTTP date+time
+* Server banner like Linux or other Unix vendor headers
 * Application banner (PHP, RoR, OWA, SharePoint, Wordpress, etc)
 * Reverse proxy headers
-* Linux or other Unix vendor headers
-* Web server module
-* IPv4 address
+* Web server modules
+* IPv4 address in header
 * Cookie (including Secure/HTTPOnly flags)
+* Decodes BIG IP F5 cookies
 * Security headers (X-Frame-Options, X-XSS-Protection, ..., CSP headers)
 
 
@@ -349,7 +350,7 @@ implicitly does a STARTTLS handshake on the plain text port, then check the IPs 
 
         testssl.sh --starttls=imap imap.gmx.net:143
 
-does the same on the plain text IMAP port. Please note that for plain TLS-encrypted ports you must not specify the protocol option: `testssl.sh smtp.gmail.com:465` tests the encryption on the SMTPS port, `testssl.sh imap.gmx.net:993` on the IMAPS port.
+does the same on the plain text IMAP port. Please note that for plain TLS-encrypted ports you must not specify the protocol option: `testssl.sh smtp.gmail.com:465` tests the encryption on the SMTPS port, `testssl.sh imap.gmx.net:993` on the IMAPS port. Also MongoDB which provides TLS support can be tested.
 
 
 ## RFCs and other standards

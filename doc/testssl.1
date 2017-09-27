@@ -222,22 +222,25 @@ Server banner
 HTTP date+time
 .
 .IP "\(bu" 4
+Server banner like Linux or other Unix vendor headers
+.
+.IP "\(bu" 4
 Application banner (PHP, RoR, OWA, SharePoint, Wordpress, etc)
 .
 .IP "\(bu" 4
 Reverse proxy headers
 .
 .IP "\(bu" 4
-Linux or other Unix vendor headers
+Web server modules
 .
 .IP "\(bu" 4
-Web server module
-.
-.IP "\(bu" 4
-IPv4 address
+IPv4 address in header
 .
 .IP "\(bu" 4
 Cookie (including Secure/HTTPOnly flags)
+.
+.IP "\(bu" 4
+Decodes BIG IP F5 cookies
 .
 .IP "\(bu" 4
 Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
@@ -543,7 +546,7 @@ implicitly does a STARTTLS handshake on the plain text port, then check the IPs 
 .IP "" 0
 .
 .P
-does the same on the plain text IMAP port\. Please note that for plain TLS\-encrypted ports you must not specify the protocol option: \fBtestssl\.sh smtp\.gmail\.com:465\fR tests the encryption on the SMTPS port, \fBtestssl\.sh imap\.gmx\.net:993\fR on the IMAPS port\.
+does the same on the plain text IMAP port\. Please note that for plain TLS\-encrypted ports you must not specify the protocol option: \fBtestssl\.sh smtp\.gmail\.com:465\fR tests the encryption on the SMTPS port, \fBtestssl\.sh imap\.gmx\.net:993\fR on the IMAPS port\. Also MongoDB which provides TLS support can be tested\.
 .
 .SH "RFCs and other standards"
 .
