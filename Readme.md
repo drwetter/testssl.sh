@@ -58,16 +58,19 @@ display bit strengths for key exchanges.
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 #### Features implemented in [2.9dev](Readme.md#devel)
-* Using bash sockets where ever possible --> better detection of ciphers, independend on the openssl version used.
-* TLS 1.2 protocol check via socket in production
-* Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
+* Using bash sockets where ever possible --> better detection of ciphers, independent on the openssl version used.
+* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but additional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
+* Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness), TLS 1.2 protocol check via socket in production
 * Finding more TLS extensions via sockets
 * TLS Supported Groups Registry (RFC 7919), key shares extension
 * Non-flat JSON support
 * File output (CSV, JSON flat, JSON non-flat) supports a minimum severity level (only above supplied level there will be output)
 * Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
+* Parallel mass testing (!)
+* File input for serial or parallel mass testing can be also in nmap grep(p)able (-oG) format
 * Native HTML support instead going through 'aha'
-* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but additional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
+* Better formatting of output (indentation)
+* Choice showing the RFC naming scheme only
 * LUCKY13 and SWEET32 checks
 * Ticketbleed check
 * LOGJAM: now checking also for known DH parameters
@@ -76,11 +79,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * Check for Certificate Transparency
 * Check for session resumption (Ticket, ID)
 * TLS Robustness check (GREASE)
-* Better formatting of output (indentation)
-* Choice showing the RFC naming scheme only
-* Parallel mass testing
-* File input for mass testing can be also in nmap grep(p)able (-oG) format
-* Postgres und MySQL STARTTLS support
+* Postgres und MySQL STARTTLS support, MongoDB support
 * Decodes BIG IP F5 Cookie
 * Man page
 
