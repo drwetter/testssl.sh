@@ -1398,6 +1398,8 @@ service_detection() {
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq FTP && SERVICE=FTP
           [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqi "jabber|xmpp" && SERVICE=XMPP
           [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
+          # MongoDB port 27017 will respond to a GET request with a mocked HTTP response
+          [[ "$SERVICE" == HTTP ]] && head $TMPFILE | egrep -aqw "MongoDB" && SERVICE=MongoDB
           debugme head -50 $TMPFILE | sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<\?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d'
      fi
 
@@ -1408,7 +1410,7 @@ service_detection() {
                fileout "service" "INFO" "Service detected: $SERVICE"
                ret=0
                ;;
-          IMAP|POP|SMTP|NNTP)
+          IMAP|POP|SMTP|NNTP|MongoDB)
                out " $SERVICE, thus skipping HTTP specific checks"
                fileout "service" "INFO" "Service detected: $SERVICE, thus skipping HTTP specific checks"
                ret=0
