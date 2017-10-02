@@ -5543,7 +5543,7 @@ get_server_certificate() {
      $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
      sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE >$TEMPDIR/tlsext.txt
      for proto in $protocols_to_try; do
-          # we could know here which protcols are supported
+          [[ 1 -eq $(has_server_protocol $proto) ]] && continue
           addcmd=""
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status") </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
