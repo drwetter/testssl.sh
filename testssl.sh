@@ -251,7 +251,7 @@ HOSTCERT=""
 HEADERFILE=""
 HEADERVALUE=""
 HTTP_STATUS_CODE=""
-PROTOS_OFFERED=""
+PROTOS_OFFERED=""                       # this is a global to keep the info which protocol is being offered. See has_server_protocol()
 TLS_EXTENSIONS=""
 BAD_SERVER_HELLO_CIPHER=false           # reserved for cases where a ServerHello doesn't contain a cipher offered in the ClientHello
 GOST_STATUS_PROBLEM=false
@@ -2418,8 +2418,7 @@ std_cipherlists() {
                sclient_success=$?
                [[ $sclient_success -eq 2 ]] && sclient_success=0
           fi
-          # FIXME #759 if [[ $sclient_success -ne 0 ]] &&  && has_server_protocol "ssl2"; then
-          if [[ $sclient_success -ne 0 ]]; then
+          if [[ $sclient_success -ne 0 ]] && [[ 0 -eq $(has_server_protocol ssl2) ]]; then
                if ( [[ -z "$6" ]] || "$FAST" ) && "$HAS_SSL2" && listciphers "$1" -ssl2; then
                     $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY -ssl2 2>$ERRFILE >$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE
@@ -3238,8 +3237,8 @@ run_cipher_per_proto() {
                continue
           fi
           outln
-#FIXME: see #759
-          #has_server_protocol "${proto:1}" || continue
+
+          [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
 
           # get a list of all the cipher suites to test
           nr_ciphers=0
@@ -3947,9 +3946,9 @@ run_prototest_openssl() {
      debugme egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
      if ! locally_supported "$1" "$2" ; then
           ret=7
-     else                                    # we remove SNI for SSLv2 and v3:
-          [[ "$1" =~ ssl ]] && sni=""        # newer openssl throw an error if SNI is supplied with SSLv2,
-                                             # SSLv3 doesn't have SNI (openssl doesn't complain though -- yet)
+     else                                                   # we remove SNI for SSLv2 and v3:
+          [[ "$1" =~ ssl ]] && sni=""                       # newer openssl throw an error if SNI is supplied with SSLv2,
+                                                            # SSLv3 doesn't have SNI (openssl doesn't complain though -- yet)
           $OPENSSL s_client -state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $sni >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           ret=$?
@@ -3965,19 +3964,43 @@ run_prototest_openssl() {
      # 7: no local support
 }
 
-# idempotent function to add SSL/TLS protocols. It should ease testing
-# PROTOS_OFFERED's content is in openssl terminology
+# idempotent function to add SSL/TLS protocols. It should accelerate testing.
+# PROTOS_OFFERED can be e.g. "ssl2:no ssl3:no tls1_2:yes" which means tha
+# SSLv2 and SSLv3 was tested but not available, TLS 1.2 was tested and available
+# TLS 1.0 and TLS 1.2 not tested yet
+#
+# arg1: protocol
+# arg2: available (yes) or not (no)
 add_tls_offered() {
-     grep -qw "$1" <<< "$PROTOS_OFFERED" || PROTOS_OFFERED+="$1 "
+     if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
+          # the ":" is mandatory here (and @ other palces), otherwise e.g. tls1 will match tls1_2
+          :
+     else
+           PROTOS_OFFERED+="${1}:$2 "
+     fi
 }
 
-# function which checks whether SSLv2 - TLS 1.2 is being offereed
+# function which checks whether SSLv2 - TLS 1.2 is being offereed, see add_tls_offered()
 has_server_protocol() {
-     [[ -z "$PROTOS_OFFERED" ]] && return 1  # if empty return 1, hinting to the caller to check at additional cost/connect
-     if grep -qw "$1" <<< "$PROTOS_OFFERED"; then
+     local proto_val_pair
+
+     if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
+          for proto_val_pair in $PROTOS_OFFERED; do
+               if [[ $proto_val_pair =~ $1: ]]; then
+                    if [[ ${proto_val_pair#*:} == "yes" ]]; then
+                         echo 0
+                         return 0
+                    else
+                         echo 1
+                         return 0
+                    fi
+               fi
+          done
+     else
+          # if empty echo 2, hinting to the caller to check at additional cost/connect
+          echo 2
           return 0
      fi
-     return 1
 }
 
 
@@ -4019,17 +4042,19 @@ run_protocols() {
                1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
                     prln_done_best "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered"
+                    add_tls_offered ssl2 no
                     ;;
                0) # reset
                     prln_done_best "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered"
+                    add_tls_offered ssl2 no
                     ;;
                3) # everything else
                     lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
                     [[ "$DEBUG" -ge 2 ]] && tm_out "  ($lines lines)  "
                     if [[ "$lines" -gt 1 ]]; then
                          nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
-                         add_tls_offered "ssl2"
+                         add_tls_offered ssl2 yes
                          if [[ 0 -eq "$nr_ciphers_detected" ]]; then
                               prln_svrty_high "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
                               fileout "sslv2" "HIGH" "SSLv2 is offered, vulnerable to CVE-2015-3197"
@@ -4046,14 +4071,15 @@ run_protocols() {
           case $? in
                0)   prln_svrty_critical   "offered (NOT ok)"
                     fileout "sslv2" "CRITICAL" "SSLv2 is offered"
-                    add_tls_offered "ssl2"
+                    add_tls_offered ssl2 yes
                     ;;
                1)   prln_done_best "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered"
+                    add_tls_offered ssl2 no
                     ;;
                5)   pr_svrty_high "CVE-2015-3197: $supported_no_ciph2";
                     fileout "sslv2" "HIGH" "CVE-2015-3197: SSLv2 is $supported_no_ciph2"
-                    add_tls_offered "ssl2"
+                    add_tls_offered ssl2 yes
                     ;;
                7)   fileout "sslv2" "INFO" "SSLv2 is not tested due to lack of local support"
                     ;;                                      # no local support
@@ -4071,10 +4097,11 @@ run_protocols() {
                fileout "sslv3" "HIGH" "SSLv3 is offered"
                latest_supported="0300"
                latest_supported_string="SSLv3"
-               add_tls_offered "ssl3"
+               add_tls_offered ssl3 yes
                ;;
           1)   prln_done_best "not offered (OK)"
                fileout "sslv3" "OK" "SSLv3 is not offered"
+               add_tls_offered ssl3 no
                ;;
           2)   if [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
@@ -4093,7 +4120,7 @@ run_protocols() {
           5)   pr_svrty_high "$supported_no_ciph2"
                fileout "sslv3" "HIGH" "SSLv3 is $supported_no_ciph1"
                outln "(may need debugging)"
-               add_tls_offered "ssl3"
+               add_tls_offered ssl3 yes
                ;;
           7)   prln_warning "SSLv3 seems locally not supported"
                fileout "sslv3" "WARN" "SSLv3 is not tested due to lack of local support"
@@ -4111,9 +4138,10 @@ run_protocols() {
                fileout "tls1" "INFO" "TLSv1.0 is offered"
                latest_supported="0301"
                latest_supported_string="TLSv1.0"
-               add_tls_offered "tls1"
+               add_tls_offered tls1 yes
                ;;                                           # nothing wrong with it -- per se
           1)   out "not offered"
+               add_tls_offered tls1 no
                if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
                     fileout "tls1" "INFO" "TLSv1.0 is not offered" # neither good or bad
@@ -4123,6 +4151,7 @@ run_protocols() {
                fi
                ;;
           2)   pr_svrty_medium "not offered"
+               add_tls_offered tls1 no
                if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
                     [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
                     outln
@@ -4143,7 +4172,7 @@ run_protocols() {
                ;;
           5)   outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
                fileout "tls1" "INFO" "TLSv1.0 is $supported_no_ciph1"
-               add_tls_offered "tls1"
+               add_tls_offered tls1 yes
                ;;
           7)   prln_warning "TLSv1.0 seems locally not supported"
                fileout "tlsv1" "WARN" "TLSv1.0 is not tested due to lack of local support"
@@ -4161,9 +4190,10 @@ run_protocols() {
                fileout "tls1_1" "INFO" "TLSv1.1 is offered"
                latest_supported="0302"
                latest_supported_string="TLSv1.1"
-               add_tls_offered "tls1_1"
+               add_tls_offered tls1_1 yes
                ;;                                            # nothing wrong with it
           1)   out "not offered"
+               add_tls_offered tls1_1 no
                if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
                     fileout "tls1_1" "INFO" "TLSv1.1 is not offered"  # neither good or bad
@@ -4173,6 +4203,7 @@ run_protocols() {
                fi
                ;;
           2)   out "not offered"
+               add_tls_offered tls1_1 no
                if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
                     [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
                     outln
@@ -4196,7 +4227,7 @@ run_protocols() {
                ;;
           5)   outln "$supported_no_ciph1"
                fileout "tls1_1" "INFO" "TLSv1.1 is $supported_no_ciph1"
-               add_tls_offered "tls1_1"
+               add_tls_offered tls1_1 yes
                ;;                                                # protocol ok, but no cipher
           7)   prln_warning "TLSv1.1 seems locally not supported"
                fileout "tls1_1" "WARN" "TLSv1.1 is not tested due to lack of local support"
@@ -4221,9 +4252,10 @@ run_protocols() {
                fileout "tls1_2" "OK" "TLSv1.2 is offered"
                latest_supported="0303"
                latest_supported_string="TLSv1.2"
-               add_tls_offered "tls1_2"
+               add_tls_offered tls1_2 yes
                ;;                                  # GCM cipher in TLS 1.2: very good!
           1)   pr_svrty_medium "not offered"
+               add_tls_offered tls1_2 no
                if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
                     fileout "tls1_2" "MEDIUM" "TLSv1.2 is not offered" # no GCM, penalty
@@ -4233,6 +4265,7 @@ run_protocols() {
                fi
                ;;
           2)   pr_svrty_medium "not offered"
+               add_tls_offered tls1_2 no
                if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
                     detected_version_string="SSLv3"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
@@ -4260,7 +4293,7 @@ run_protocols() {
                ;;
           5)   outln "$supported_no_ciph1"
                fileout "tls1_2" "INFO" "TLSv1.2 is $supported_no_ciph1"
-               add_tls_offered "tls1_2"
+               add_tls_offered tls1_2 yes
                ;;                                # protocol ok, but no cipher
           7)   prln_warning "TLSv1.2 seems locally not supported"
                fileout "tls1_2" "WARN" "TLSv1.2 is not tested due to lack of local support"
@@ -4970,8 +5003,8 @@ cipher_pref_check() {
                out "\n    SSLv3:     "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
                continue
           fi
-# FIXME: #759
-          # has_server_protocol "$p" || continue
+
+          [[ $(has_server_protocol "$p") -eq 1 ]] && continue
 
           if [[ $p != ssl3 ]] || "$HAS_SSL3"; then
                # with the supplied binaries SNI works also for SSLv3
@@ -9265,21 +9298,21 @@ run_heartbleed(){
           return 0
      fi
 
-     if $(has_server_protocol "tls1"); then
+     if [[ 0 -eq $(has_server_protocol tls1) ]]; then
           tls_hexcode="x03, x01"
-     elif $(has_server_protocol "tls1_1"); then
+     elif [[ 0 -eq $(has_server_protocol tls1_1) ]]; then
           tls_hexcode="x03, x02"
-     elif $(has_server_protocol "tls1_2"); then
+     elif [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
           tls_hexcode="x03, x03"
-     elif $(has_server_protocol "ssl3"); then
+     elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
           tls_hexcode="x03, x00"
      else # no protcol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
-               *1.2)  tls_hexcode="x03, x03" ;;
-               *1.1)  tls_hexcode="x03, x02" ;;
-               TLSv1) tls_hexcode="x03, x01" ;;
-               SSLv3) tls_hexcode="x03, x00" ;;
+               *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
+               *1.1)  tls_hexcode="x03, x02" ; add_tls_offered tls1_1 yes ;;
+               TLSv1) tls_hexcode="x03, x01" ; add_tls_offered tls1 yes ;;
+               SSLv3) tls_hexcode="x03, x00" ; add_tls_offered ssl3 yes ;;
           esac
      fi
      debugme echo "using protocol $tls_hexcode"
@@ -9423,21 +9456,21 @@ run_ccs_injection(){
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CCS injection vulnerability " && outln
      pr_bold " CCS"; out " ($cve)                       "
 
-     if $(has_server_protocol "tls1"); then
+     if [[ 0 -eq $(has_server_protocol tls1) ]]; then
           tls_hexcode="x03, x01"
-     elif $(has_server_protocol "tls1_1"); then
+     elif [[ 0 -eq $(has_server_protocol tls1_1) ]]; then
           tls_hexcode="x03, x02"
-     elif $(has_server_protocol "tls1_2"); then
+     elif [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
           tls_hexcode="x03, x03"
-     elif $(has_server_protocol "ssl3"); then
+     elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
           tls_hexcode="x03, x00"
-     else # no protocol defined for some reason, determine TLS versions offered with a new handshake
+     else # no protcol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
-               *1.2)  tls_hexcode="x03, x03" ;;
-               *1.1)  tls_hexcode="x03, x02" ;;
-               TLSv1) tls_hexcode="x03, x01" ;;
-               SSLv3) tls_hexcode="x03, x00" ;;
+               *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
+               *1.1)  tls_hexcode="x03, x02" ; add_tls_offered tls1_1 yes ;;
+               TLSv1) tls_hexcode="x03, x01" ; add_tls_offered tls1 yes ;;
+               SSLv3) tls_hexcode="x03, x00" ; add_tls_offered ssl3 yes ;;
           esac
      fi
      debugme echo "using protocol $tls_hexcode"
@@ -9619,21 +9652,21 @@ run_ticketbleed() {
           return 0
      fi
 
-     if $(has_server_protocol "tls1"); then
+     if [[ 0 -eq $(has_server_protocol tls1) ]]; then
           tls_hexcode="x03, x01"
-     elif $(has_server_protocol "tls1_1"); then
+     elif [[ 0 -eq $(has_server_protocol tls1_1) ]]; then
           tls_hexcode="x03, x02"
-     elif $(has_server_protocol "tls1_2"); then
+     elif [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
           tls_hexcode="x03, x03"
-     elif $(has_server_protocol "ssl3"); then
+     elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
           tls_hexcode="x03, x00"
-     else # no protocol for some reason defined, determine TLS versions offered with a new handshake
-          $OPENSSL s_client $BUGS $OPTIMAL_PROTO -connect $NODEIP:$PORT $PROXY $SNI >$TMPFILE 2>$ERRFILE </dev/null
+     else # no protcol for some reason defined, determine TLS versions offered with a new handshake
+          $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
-               *1.2)  tls_hexcode="x03, x03" ;;
-               *1.1)  tls_hexcode="x03, x02" ;;
-               TLSv1) tls_hexcode="x03, x01" ;;
-               SSLv3) tls_hexcode="x03, x00" ;;
+               *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
+               *1.1)  tls_hexcode="x03, x02" ; add_tls_offered tls1_1 yes ;;
+               TLSv1) tls_hexcode="x03, x01" ; add_tls_offered tls1 yes ;;
+               SSLv3) tls_hexcode="x03, x00" ; add_tls_offered ssl3 yes ;;
           esac
      fi
      debugme echo "using protocol $tls_hexcode"
@@ -10874,9 +10907,9 @@ run_beast(){
                     done
                     ciphers_found[i]=true
                     if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
-                         detected_cbc_ciphers+="${ciph[i]} "
+                         detected_cbc_ciphers+=" ${ciph[i]}"
                     else
-                         detected_cbc_ciphers+="${rfc_ciph[i]} "
+                         detected_cbc_ciphers+=" ${rfc_ciph[i]}"
                     fi
                     vuln_beast=true
                     if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
@@ -12797,9 +12830,9 @@ determine_optimal_proto() {
                          tmp=${tmp/\./_}
                          tmp=${tmp/v/}
                          tmp="$(tolower $tmp)"
-                         add_tls_offered "$tmp"
+                         add_tls_offered "${tmp}" yes
                     else
-                         add_tls_offered "${OPTIMAL_PROTO/-/}"
+                         add_tls_offered "${OPTIMAL_PROTO/-/}" yes
                     fi
                     debugme echo "one proto determined: $tmp"
                     all_failed=false
