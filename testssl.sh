@@ -3972,21 +3972,16 @@ run_prototest_openssl() {
 # arg1: protocol
 # arg2: available (yes) or not (no)
 add_tls_offered() {
-<<<<<<< HEAD
      if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
           # the ":" is mandatory here (and @ other palces), otherwise e.g. tls1 will match tls1_2
           :
      else
            PROTOS_OFFERED+="${1}:$2 "
      fi
-=======
-     [[ "$PROTOS_OFFERED" =~ "$1 " ]] || PROTOS_OFFERED+="$1 "
->>>>>>> af15bd0f002c0523579b3807949fa54c05c793e3
 }
 
 # function which checks whether SSLv2 - TLS 1.2 is being offereed, see add_tls_offered()
 has_server_protocol() {
-<<<<<<< HEAD
      local proto_val_pair
 
      if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
@@ -4004,9 +3999,6 @@ has_server_protocol() {
      else
           # if empty echo 2, hinting to the caller to check at additional cost/connect
           echo 2
-=======
-     if [[ "$PROTOS_OFFERED" =~ "$1 " ]]; then
->>>>>>> af15bd0f002c0523579b3807949fa54c05c793e3
           return 0
      fi
 }
