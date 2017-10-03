@@ -3644,8 +3644,21 @@ client_simulation_sockets() {
      tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
 
+     # Check if the response is a HelloRetryRequest.
+     resend_if_hello_retry_request "$tls_hello_ascii" "$cipher_list_2send" "$4" "$process_full"
+     ret=$?
+     if [[ $ret -eq 2 ]]; then
+          tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+          tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
+     elif [[ $ret -eq 1 ]] || [[ $ret -eq 6 ]]; then
+          close_socket
+          TMPFILE=$SOCK_REPLY_FILE
+          tmpfile_handle $FUNCNAME.dd
+          return $ret
+     fi
+
      if [[ "${tls_hello_ascii:0:1}" != "8" ]]; then
-          check_tls_serverhellodone "$tls_hello_ascii"
+          check_tls_serverhellodone "$tls_hello_ascii" "ephemeralkey"
           hello_done=$?
      fi
 
@@ -3674,7 +3687,7 @@ client_simulation_sockets() {
                cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
                rm "$sock_reply_file3"
 
-               check_tls_serverhellodone "$tls_hello_ascii"
+               check_tls_serverhellodone "$tls_hello_ascii" "ephemeralkey"
                hello_done=$?
           fi
      done
@@ -7915,15 +7928,21 @@ parse_sslv2_serverhello() {
      return $ret
 }
 
-# Return 0 if arg1 contains the entire server response, 1 if it does not, and 2 if the response is malformed.
-# Return 3 if the response version is TLS 1.3 and the entire ServerHello has been received, since any remaining
-# portion of the response will be encrypted.
+# Return:
+#     0 if arg1 contains the entire server response.
+#     1 if arg1 does not contain the entire server response.
+#     2 if the response is malformed.
+#     3 if (a) the response version is TLSv1.3;
+#          (b) arg1 contains the entire ServerHello (and appears to contain the entire response); and
+#          (c) the entire response is supposed to be parsed
 # arg1: ASCII-HEX encoded reply
+# arg2: whether to process the full request ("all") or just the basic request plus the ephemeral key if any ("ephemeralkey").
 check_tls_serverhellodone() {
      local tls_hello_ascii="$1"
+     local process_full="$2"
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len
-     local -i msg_len remaining
+     local -i msg_len remaining tls_serverhello_ascii_len
      local tls_content_type tls_protocol tls_handshake_type tls_msg_type
      local tls_err_level
 
@@ -7943,7 +7962,7 @@ check_tls_serverhellodone() {
                [[ "$tls_content_type" != "17" ]] && return 2
           i=$i+2
           tls_protocol="${tls_hello_ascii:i:4}"
-          [[ -z "$DETECTED_TLS_VERSION" ]] && DETECTED_TLS_VERSION=$tls_protocol
+          [[ -z "$DETECTED_TLS_VERSION" ]] && DETECTED_TLS_VERSION="$tls_protocol"
           [[ "${tls_protocol:0:2}" != "03" ]] && return 2
           i=$i+4
           msg_len=2*$(hex2dec "${tls_hello_ascii:i:4}")
@@ -7958,12 +7977,12 @@ check_tls_serverhellodone() {
                [[ $tls_handshake_ascii_len -ge 2 ]] && [[ "${tls_handshake_ascii:0:2}" != "02" ]] && return 2
                if [[ $tls_handshake_ascii_len -ge 12 ]]; then
                     DETECTED_TLS_VERSION="${tls_handshake_ascii:8:4}"
-                    if [[ 0x"$DETECTED_TLS_VERSION" -ge "0x0304" ]]; then
-                         tls_handshake_ascii_len=2*$(hex2dec "${tls_handshake_ascii:2:6}")
-                         if [[ $tls_handshake_ascii_len+8 -gt $remaining ]]; then
-                              return 1 # Not all of the ServerHello message has been received
-                         else
-                              return 3
+                    # A version of {0x7F, xx} represents an implementation of a draft version of TLS 1.3
+                    [[ "${DETECTED_TLS_VERSION:0:2}" == "7F" ]] && DETECTED_TLS_VERSION="0304"
+                    if [[ 0x$DETECTED_TLS_VERSION -ge 0x0304 ]] && [[ "$process_full" == "ephemeralkey" ]]; then
+                         tls_serverhello_ascii_len=2*$(hex2dec "${tls_handshake_ascii:2:6}")
+                         if [[ $tls_handshake_ascii_len -ge $tls_serverhello_ascii_len+8 ]]; then
+                              return 0 # The entire ServerHello message has been received (and the rest isn't needed)
                          fi
                     fi
                fi
@@ -7998,7 +8017,12 @@ check_tls_serverhellodone() {
           [[ $tls_msg_type == "0E" ]] && return 0
           [[ $tls_msg_type == "14" ]] && return 0
      done
-
+     # If the response is TLSv1.3 and the full response is to be processed,
+     # then return 3 if the entire ServerHello has been received.
+     if [[ "$DETECTED_TLS_VERSION" == "0304" ]] && [[ "$process_full" == "all" ]] && \
+        [[ $tls_handshake_ascii_len -gt 0 ]]; then
+           return 3
+     fi
      # If we haven't encoountered a fatal alert or a server hello done,
      # then there must be more data to retrieve.
      return 1
@@ -8024,15 +8048,15 @@ parse_tls_serverhello() {
      local -i tls_sid_len offset extns_offset nr_certs=0
      local tls_msg_type tls_content_type tls_protocol tls_protocol2 tls_hello_time
      local tls_err_level tls_err_descr tls_cipher_suite rfc_cipher_suite tls_compression_method
-     local tls_extensions="" extension_type named_curve_str=""
+     local tls_extensions="" extension_type named_curve_str="" named_curve_oid
      local -i i j extension_len tls_extensions_len ocsp_response_len ocsp_response_list_len
      local -i certificate_list_len certificate_len cipherlist_len
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
      local tmp_der_certfile tmp_pem_certfile hostcert_issuer="" ocsp_response=""
-     local key_bitstring=""
-     local dh_p ephemeral_param rfc7919_param
-     local -i dh_p_len
+     local len1 len2 len3 key_bitstring="" tmp_der_key_file
+     local dh_p dh_param ephemeral_param rfc7919_param
+     local -i dh_p_len dh_param_len
 
      TLS_TIME=""
      DETECTED_TLS_VERSION=""
@@ -8125,7 +8149,6 @@ parse_tls_serverhello() {
                debugme tm_out  "     tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
                case $tls_err_descr in
                     00) tls_alert_descrip="close notify" ;;
-                    01) tls_alert_descrip="end of early data" ;;
                     0A) tls_alert_descrip="unexpected message" ;;
                     14) tls_alert_descrip="bad record mac" ;;
                     15) tls_alert_descrip="decryption failed" ;;
@@ -8215,7 +8238,8 @@ parse_tls_serverhello() {
                     01) tmln_out " (client_hello)" ;;
                     02) tmln_out " (server_hello)" ;;
                     03) tmln_out " (hello_verify_request)" ;;
-                    04) tmln_out " (NewSessionTicket)" ;;
+                    04) tmln_out " (new_session_ticket)" ;;
+                    05) tmln_out " (end_of_early_data)" ;;
                     06) tmln_out " (hello_retry_request)" ;;
                     08) tmln_out " (encrypted_extensions)" ;;
                     0B) tmln_out " (certificate)" ;;
@@ -8229,6 +8253,7 @@ parse_tls_serverhello() {
                     16) tmln_out " (certificate_status)" ;;
                     17) tmln_out " (supplemental_data)" ;;
                     18) tmln_out " (key_update)" ;;
+                    FE) tmln_out " (message_hash)" ;;
                     *) tmln_out ;;
                esac
                echo "     msg_len:                $((msg_len/2))"
@@ -8302,6 +8327,7 @@ parse_tls_serverhello() {
      # byte 37+sid-len:     compression method:  00: none, 01: deflate, 64: LZS
      # byte 38+39+sid-len:  extension length
      tls_protocol2="${tls_serverhello_ascii:0:4}"
+     [[ "${tls_protocol2:0:2}" == "7F" ]] && tls_protocol2="0304"
      if [[ "${tls_protocol2:0:2}" != "03" ]]; then
           debugme tmln_warning "server_version.major in ServerHello is not 03."
           return 1
@@ -8406,13 +8432,81 @@ parse_tls_serverhello() {
                     0018) tls_extensions+="TLS server extension  \"token binding\" (id=24), len=$extension_len\n" ;;
                     0019) tls_extensions+="TLS server extension  \"cached info\" (id=25), len=$extension_len\n" ;;
                     0023) tls_extensions+="TLS server extension \"session ticket\" (id=35), len=$extension_len\n" ;;
-                    0028) tls_extensions+="TLS server extension  \"key share\" (id=40), len=$extension_len\n" ;;
+                    0028) tls_extensions+="TLS server extension  \"key share\" (id=40), len=$extension_len\n"
+                          if [[ $extension_len -lt 4  ]]; then
+                               debugme tmln_warning "Malformed key share extension."
+                               return 1
+                          fi
+                          let offset=$extns_offset+12+$i
+                          named_curve=$(hex2dec "${tls_serverhello_ascii:offset:4}")
+                          let offset=$extns_offset+16+$i
+                          msg_len=2*"$(hex2dec "${tls_serverhello_ascii:offset:4}")"
+                          if [[ $msg_len -ne $extension_len-8 ]]; then
+                               debugme tmln_warning "Malformed key share extension."
+                               return 1
+                          fi
+                          case $named_curve in
+                               23) dh_bits=256 ; named_curve_str="P-256" ; named_curve_oid="06082a8648ce3d030107" ;;
+                               24) dh_bits=384 ; named_curve_str="P-384" ; named_curve_oid="06052b81040022" ;;
+                               25) dh_bits=521 ; named_curve_str="P-521" ; named_curve_oid="06052b81040023" ;;
+                               29) dh_bits=253 ; named_curve_str="X25519" ;;
+                               30) dh_bits=448 ; named_curve_str="X448" ;;
+                               256) dh_bits=2048 ; named_curve_str="ffdhe2048" ;;
+                               257) dh_bits=3072 ; named_curve_str="ffdhe3072" ;;
+                               258) dh_bits=4096 ; named_curve_str="ffdhe4096" ;;
+                               259) dh_bits=6144 ; named_curve_str="ffdhe6144" ;;
+                               260) dh_bits=8192 ; named_curve_str="ffdhe8192" ;;
+                               *) named_curve_str="" ; named_curve_oid="" ;;
+                          esac
+                          let offset=$extns_offset+20+$i
+                          if [[ $named_curve -eq 29 ]]; then
+                               key_bitstring="302a300506032b656e032100${tls_serverhello_ascii:offset:msg_len}"
+                          elif [[ $named_curve -eq 30 ]]; then
+                               key_bitstring="3042300506032b656f033900${tls_serverhello_ascii:offset:msg_len}"
+                          elif [[ $named_curve -lt 256 ]] && [[ -n "$named_curve_oid" ]]; then
+                               len1="$(printf "%02x" $(($msg_len/2+1)))"
+                               [[ "0x${len1}" -ge "0x80" ]] && len1="81${len1}"
+                               key_bitstring="03${len1}00${tls_serverhello_ascii:offset:msg_len}"
+                               len2="$(printf "%02x" $((${#named_curve_oid}/2+9)))"
+                               len3="$(printf "%02x" $((${#named_curve_oid}/2+${#key_bitstring}/2+11)))"
+                               [[ "0x${len3}" -ge "0x80" ]] && len3="81${len3}"
+                               key_bitstring="30${len3}30${len2}06072a8648ce3d0201${named_curve_oid}${key_bitstring}"
+                          elif [[ "$named_curve_str" =~ "ffdhe" ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ "BEGIN" ]]; then
+                               dh_param="$($OPENSSL pkey -pubout -outform DER <<< "${TLS13_KEY_SHARES[named_curve]}" | hexdump -v -e '16/1 "%02X"')"
+
+                               # First is the length of the public-key SEQUENCE, and it is always encoded in four bytes (3082xxxx)
+                               # Next is the length of the parameters SEQUENCE, and it is also always encoded in four bytes (3082xxxx)
+                               dh_param_len=8+2*"$(hex2dec "${dh_param:12:4}")"
+                               dh_param="${dh_param:8:dh_param_len}"
+                               if [[ "0x${tls_serverhello_ascii:offset:2}" -ge 0x80 ]]; then
+                                    key_bitstring="00${tls_serverhello_ascii:offset:msg_len}"
+                                    msg_len+=2
+                               else
+                                    key_bitstring="${tls_serverhello_ascii:offset:msg_len}"
+                               fi
+                               len1="$(printf "%04x" $(($msg_len/2)))"
+                               key_bitstring="0282${len1}$key_bitstring"
+                               len1="$(printf "%04x" $((${#key_bitstring}/2+1)))"
+                               key_bitstring="${dh_param}0382${len1}00$key_bitstring"
+                               len1="$(printf "%04x" $((${#key_bitstring}/2)))"
+                               key_bitstring="3082${len1}$key_bitstring"
+                          fi
+                          if [[ -n "$key_bitstring" ]]; then
+                               tmp_der_key_file=$(mktemp $TEMPDIR/pub_key_der.XXXXXX) || return 1
+                               asciihex_to_binary_file "$key_bitstring" "$tmp_der_key_file"
+                               key_bitstring="$($OPENSSL pkey -pubin -in $tmp_der_key_file -inform DER 2>$ERRFILE)"
+                               rm $tmp_der_key_file
+                          fi
+                          ;;
                     0029) tls_extensions+="TLS server extension  \"pre-shared key\" (id=41), len=$extension_len\n" ;;
                     002A) tls_extensions+="TLS server extension  \"early data\" (id=42), len=$extension_len\n" ;;
                     002B) tls_extensions+="TLS server extension  \"supported versions\" (id=43), len=$extension_len\n" ;;
                     002C) tls_extensions+="TLS server extension  \"cookie\" (id=44), len=$extension_len\n" ;;
                     002D) tls_extensions+="TLS server extension  \"psk key exchange modes\" (id=45), len=$extension_len\n" ;;
                     002E) tls_extensions+="TLS server extension  \"ticket early data info\" (id=46), len=$extension_len\n" ;;
+                    002F) tls_extensions+="TLS server extension  \"certificate authorities\" (id=47), len=$extension_len\n" ;;
+                    0030) tls_extensions+="TLS server extension  \"oid filters\" (id=48), len=$extension_len\n" ;;
+                    0031) tls_extensions+="TLS server extension  \"post handshake auth\" (id=49), len=$extension_len\n" ;;
                     3374) tls_extensions+="TLS server extension  \"next protocol\" (id=13172), len=$extension_len\n"
                           local -i protocol_len
                           echo -n "Protocols advertised by server: " >> $TMPFILE
@@ -8457,6 +8551,21 @@ parse_tls_serverhello() {
           rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')"
      fi
      echo "Cipher    : $rfc_cipher_suite" >> $TMPFILE
+     if [[ $dh_bits -ne 0 ]]; then
+          if [[ "$named_curve_str" =~ "ffdhe" ]]; then
+               echo "Server Temp Key: DH, $named_curve_str, $dh_bits bits" >> $TMPFILE
+          elif [[ "$named_curve_str" == "X25519" ]] || [[ "$named_curve_str" == "X448" ]]; then
+               echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
+          else
+               echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
+          fi
+     fi
+     if [[ -n "$key_bitstring" ]]; then
+          echo "$key_bitstring" >> $TMPFILE
+          [[ "${TLS13_KEY_SHARES[named_curve]}" =~ "BEGIN" ]] && \
+               echo "${TLS13_KEY_SHARES[named_curve]}" >> $TMPFILE
+     fi
+     echo "===============================================================================" >> $TMPFILE
      if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
           case $tls_compression_method in
                00) echo "Compression: NONE" >> $TMPFILE ;;
@@ -8478,7 +8587,21 @@ parse_tls_serverhello() {
                echo -n "     tls_hello_time:         0x$tls_hello_time "
                parse_date "$TLS_TIME" "+%Y-%m-%d %r" "%s"
           fi
-          echo "     tls_cipher_suite:       0x$tls_cipher_suite"
+          echo -n "     tls_cipher_suite:       0x$tls_cipher_suite"
+          if [[ -n "$rfc_cipher_suite" ]]; then
+               echo " ($rfc_cipher_suite)"
+          else
+               echo ""
+          fi
+          if [[ $dh_bits -ne 0 ]]; then
+               if [[ "$named_curve_str" =~ "ffdhe" ]]; then
+                    echo "     dh_bits:                DH, $named_curve_str, $dh_bits bits"
+               elif [[ "$named_curve_str" == "X25519" ]] || [[ "$named_curve_str" == "X448" ]]; then
+                    echo "     dh_bits:                $named_curve_str, $dh_bits bits"
+               else
+                    echo "     dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
+               fi
+          fi
           if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
                echo -n "     tls_compression_method: 0x$tls_compression_method "
                case $tls_compression_method in
@@ -8869,13 +8992,71 @@ sslv2_sockets() {
      return $ret
 }
 
+# arg1: supported groups extension
+# arg2: "all" - process full response (including Certificate and certificate_status handshake messages)
+#       "ephemeralkey" - extract the server's ephemeral key (if any)
+# Given the supported groups extension, create a key_share extension that includes a key share for
+# each group listed in the supported groups extension.
+generate_key_share_extension() {
+     local supported_groups
+     local -i i len supported_groups_len group
+     local extn_len list_len
+     local key_share key_shares=""
+
+     supported_groups="${1//\\x/}"
+     [[ "${supported_groups:0:4}" != "000a" ]] && return 1
+
+     supported_groups_len=${#supported_groups}
+     [[ $supported_groups_len -lt 16 ]] && return 1
+
+     len=2*$(hex2dec "${supported_groups:4:4}")
+     [[ $len+8 -ne $supported_groups_len ]] && return 1
+
+     len=2*$(hex2dec "${supported_groups:8:4}")
+     [[ $len+12 -ne $supported_groups_len ]] && return 1
+
+     for (( i=12; i<supported_groups_len; i=i+4 )); do
+          group=$(hex2dec "${supported_groups:i:4}")
+          # If the Supported groups extensions lists more than one group,
+          # then don't include the larger key shares in the extension.
+          [[ $i -gt 12 ]] && [[ $group -gt 256 ]] && continue
+
+          # Versions of OpenSSL prior to 1.1.0 cannot perform operations
+          # with X25519 keys, so don't include the X25519 key share
+          # if the server's response needs to be decrypted and an
+          # older version of OpenSSL is being used.
+          [[ $i -gt 12 ]] && [[ $group -eq 29 ]] && [[ "$2" == "all" ]] && \
+               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0"* ]] && \
+               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1"* ]] && \
+               continue
+
+          # NOTE: The public keys could be extracted from the private keys
+          # (TLS13_KEY_SHARES) using $OPENSSL, but only OpenSSL 1.1.0 can
+          # extract the public key from an X25519 private key.
+          key_share="${TLS13_PUBLIC_KEY_SHARES[group]}"
+          if [[ ${#key_share} -gt 4 ]]; then
+               key_shares+=",$key_share"
+          fi
+     done
+     [[ -z "$key_shares" ]] && tm_out "" && return 0
+
+     len=${#key_shares}/3
+     list_len="$(printf "%04x" "$len")"
+     len+=2
+     extn_len="$(printf "%04x" "$len")"
+     tm_out "00,28,${extn_len:0:2},${extn_len:2:2},${list_len:0:2},${list_len:2:2}$key_shares"
+     return 0
+}
 
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # ARG2: CIPHER_SUITES string (lowercase, and in the format output by code2network())
-# ARG3: (optional) additional request extensions
-# ARG4: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
+# ARG3: "all" - process full response (including Certificate and certificate_status handshake messages)
+#       "ephemeralkey" - extract the server's ephemeral key (if any)
+# ARG4: (optional) additional request extensions
+# ARG5: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
 socksend_tls_clienthello() {
-     local tls_low_byte="$1"
+     local tls_low_byte="$1" tls_legacy_version="$1"
+     local process_full="$3"
      local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301 -- except: SSLv3
      local servername_hexstr len_servername len_servername_hex
      local hexdump_format_str part1 part2
@@ -8888,11 +9069,12 @@ socksend_tls_clienthello() {
      local extension_signature_algorithms extension_heartbeat
      local extension_session_ticket extension_next_protocol extension_padding
      local extension_supported_groups="" extension_supported_point_formats=""
-     local extra_extensions extra_extensions_list=""
+     local extensions_key_share="" extn_type supported_groups_c2n=""
+     local extra_extensions extra_extensions_list="" extension_supported_versions=""
      local offer_compression=false compression_methods
 
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
-     [[ "$4" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
+     [[ "$5" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
 
      cipher_suites="$2"                      # we don't have the leading \x here so string length is two byte less, see next
      len_ciph_suites_byte=${#cipher_suites}
@@ -8908,34 +9090,39 @@ socksend_tls_clienthello() {
           # Add extensions
 
           # Check to see if any ECC cipher suites are included in cipher_suites
-          for (( i=0; i<len_ciph_suites_byte; i=i+8 )); do
-               j=$i+4
-               part1="0x${cipher_suites:$i:2}"
-               part2="0x${cipher_suites:$j:2}"
-               if [[ "$part1" == "0xc0" ]]; then
-                    if [[ "$part2" -ge "0x01" ]] && [[ "$part2" -le "0x19" ]]; then
-                         ecc_cipher_suite_found=true && break
-                    elif [[ "$part2" -ge "0x23" ]] && [[ "$part2" -le "0x3b" ]]; then
-                         ecc_cipher_suite_found=true && break
-                    elif [[ "$part2" -ge "0x48" ]] && [[ "$part2" -le "0x4f" ]]; then
-                         ecc_cipher_suite_found=true && break
-                    elif [[ "$part2" -ge "0x5c" ]] && [[ "$part2" -le "0x63" ]]; then
-                         ecc_cipher_suite_found=true && break
-                    elif [[ "$part2" -ge "0x70" ]] && [[ "$part2" -le "0x79" ]]; then
-                         ecc_cipher_suite_found=true && break
-                    elif [[ "$part2" -ge "0x86" ]] && [[ "$part2" -le "0x8d" ]]; then
-                         ecc_cipher_suite_found=true && break
-                    elif [[ "$part2" -ge "0x9a" ]] && [[ "$part2" -le "0x9b" ]]; then
-                         ecc_cipher_suite_found=true && break
-                    elif [[ "$part2" -ge "0xac" ]] && [[ "$part2" -le "0xaf" ]]; then
-                         ecc_cipher_suite_found=true && break
+          # (not needed for TLSv1.3)
+          if [[ "0x$tls_low_byte" -le "0x03" ]]; then
+               for (( i=0; i<len_ciph_suites_byte; i=i+8 )); do
+                    j=$i+4
+                    part1="0x${cipher_suites:$i:2}"
+                    part2="0x${cipher_suites:$j:2}"
+                    if [[ "$part1" == "0xc0" ]]; then
+                         if [[ "$part2" -ge "0x01" ]] && [[ "$part2" -le "0x19" ]]; then
+                              ecc_cipher_suite_found=true && break
+                         elif [[ "$part2" -ge "0x23" ]] && [[ "$part2" -le "0x3b" ]]; then
+                              ecc_cipher_suite_found=true && break
+                         elif [[ "$part2" -ge "0x48" ]] && [[ "$part2" -le "0x4f" ]]; then
+                              ecc_cipher_suite_found=true && break
+                         elif [[ "$part2" -ge "0x5c" ]] && [[ "$part2" -le "0x63" ]]; then
+                              ecc_cipher_suite_found=true && break
+                         elif [[ "$part2" -ge "0x70" ]] && [[ "$part2" -le "0x79" ]]; then
+                              ecc_cipher_suite_found=true && break
+                         elif [[ "$part2" -ge "0x86" ]] && [[ "$part2" -le "0x8d" ]]; then
+                              ecc_cipher_suite_found=true && break
+                         elif [[ "$part2" -ge "0x9a" ]] && [[ "$part2" -le "0x9b" ]]; then
+                              ecc_cipher_suite_found=true && break
+                         elif [[ "$part2" -ge "0xac" ]] && [[ "$part2" -le "0xaf" ]]; then
+                              ecc_cipher_suite_found=true && break
+                         fi
+                    elif [[ "$part1" == "0xcc" ]]; then
+                         if [[ "$part2" == "0xa8" ]] || [[ "$part2" == "0xa9" ]] || \
+                            [[ "$part2" == "0xac" ]] || [[ "$part2" == "0x13" ]] || \
+                            [[ "$part2" == "0x14" ]]; then
+                              ecc_cipher_suite_found=true && break
+                         fi
                     fi
-               elif [[ "$part1" == "0xcc" ]]; then
-                    if [[ "$part2" == "0xa8" ]] || [[ "$part2" == "0xa9" ]] || [[ "$part2" == "0xac" ]] || [[ "$part2" == "0x13" ]] || [[ "$part2" == "0x14" ]]; then
-                         ecc_cipher_suite_found=true && break
-                    fi
-               fi
-          done
+               done
+          fi
 
           if [[ -n "$SNI" ]]; then
                #formatted example for SNI
@@ -8954,11 +9141,19 @@ socksend_tls_clienthello() {
                len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
           fi
 
-          extension_signature_algorithms="
-          00, 0d,                    # Type: signature_algorithms , see RFC 5246
-          00, 20,                    # len
-          00,1e, 06,01, 06,02, 06,03, 05,01, 05,02, 05,03,
-          04,01, 04,02, 04,03, 03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
+          if [[ 0x$tls_low_byte -le 0x03 ]]; then
+               extension_signature_algorithms="
+               00, 0d,                    # Type: signature_algorithms , see RFC 5246
+               00, 20, 00,1e,             # lengths
+               06,01, 06,02, 06,03, 05,01, 05,02, 05,03, 04,01, 04,02, 04,03,
+               03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
+          else
+               extension_signature_algorithms="
+               00, 0d,                    # Type: signature_algorithms , see draft-ietf-tls-tls13
+               00, 1c, 00, 1a,            # lengths
+               04,03, 05,03, 06,03, 08,04, 08,05, 08,06,
+               04,01, 05,01, 06,01, 08,07, 08,08, 02,01, 02,03"
+          fi
 
           extension_heartbeat="
           00, 0f, 00, 01, 01"
@@ -8978,7 +9173,32 @@ socksend_tls_clienthello() {
                00, 18, 00, 09, 00, 0a, 00, 1a, 00, 16, 00, 17, 00, 1d, 00, 08,
                00, 06, 00, 07, 00, 14, 00, 15, 00, 04, 00, 05, 00, 12, 00, 13,
                00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
-               # Supported Point Formats Extension
+          elif [[ 0x$tls_low_byte -gt 0x03 ]]; then
+               # Supported Groups Extension
+               if [[ "$process_full" != "all" ]] || \
+                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || \
+                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
+                    extension_supported_groups="
+                    00,0a,                      # Type: Supported Groups, see draft-ietf-tls-tls13
+                    00,0e, 00,0c,               # lengths
+                    00,1d, 00,17, 00,18, 00,19,
+                    01,00, 01,01"
+               else
+                    # OpenSSL prior to 1.1.0 does not support X25519, so list it as the least
+                    # preferred option if the response needs to be decrypted.
+                    extension_supported_groups="
+                    00,0a,                      # Type: Supported Groups, see draft-ietf-tls-tls13
+                    00,0e, 00,0c,               # lengths
+                    00,17, 00,18, 00,19,
+                    01,00, 01,01, 00,1d"
+               fi
+
+               code2network "$extension_supported_groups"
+               supported_groups_c2n="$NW_STR"
+          fi
+
+          if "$ecc_cipher_suite_found" || [[ 0x$tls_low_byte -gt 0x03 ]]; then
+               # Supported Point Formats Extension.
                extension_supported_point_formats="
                00, 0b,                    # Type: Supported Point Formats , see RFC 4492
                00, 02,                    # len
@@ -8988,16 +9208,25 @@ socksend_tls_clienthello() {
           # Each extension should appear in the ClientHello at most once. So,
           # find out what extensions were provided as an argument and only use
           # the provided values for those extensions.
-          extra_extensions="$(tolower "$3")"
+          extra_extensions="$(tolower "$4")"
           code2network "$extra_extensions"
           len_all=${#extra_extensions}
           for (( i=0; i < len_all; i=i+16+4*0x$len_extension_hex )); do
                part2=$i+4
-               extra_extensions_list+=" ${NW_STR:i:2}${NW_STR:part2:2} "
+               extn_type="${NW_STR:i:2}${NW_STR:part2:2}"
+               extra_extensions_list+=" $extn_type "
                j=$i+8
                part2=$j+4
                len_extension_hex="${NW_STR:j:2}${NW_STR:part2:2}"
+               if [[ "$extn_type" == "000a" ]] && [[ 0x$tls_low_byte -gt 0x03 ]]; then
+                    j=14+4*0x$len_extension_hex
+                    supported_groups_c2n="${NW_STR:i:j}"
+               fi
           done
+          if [[ 0x$tls_low_byte -gt 0x03 ]]; then
+               extensions_key_share="$(generate_key_share_extension "$supported_groups_c2n" "$process_full")"
+               [[ $? -ne 0 ]] && return 1
+          fi
 
           if [[ -n "$SNI" ]] && [[ ! "$extra_extensions_list" =~ " 0000 " ]]; then
                all_extensions="
@@ -9007,6 +9236,24 @@ socksend_tls_clienthello() {
                ,00                      # server_name type (hostname)
                ,00, $len_servername_hex # server_name length. We assume len(hostname) < FF - 9
                ,$servername_hexstr"     # server_name target
+          fi
+          if [[ 0x$tls_low_byte -ge 0x04 ]] && [[ ! "$extra_extensions_list" =~ " 002b " ]]; then
+               # Add supported_versions extension listing all TLS/SSL versions
+               # from the one specified in $tls_low_byte to SSLv3.
+               for (( i=0x$tls_low_byte; i >=0; i=i-1 )); do
+                    if [[ 0x$i -eq 4 ]]; then
+                         # FIXME: The ClientHello currently indicates support
+                         # for drafts 18, 19, 20, and 21 of TLSv1.3 in addition
+                         # to the final version of TLSv1.3. In the future, the
+                         # draft versions should be removed.
+                         extension_supported_versions+=", 03, 04, 7f, 15, 7f, 14, 7f, 13, 7f, 12"
+                    else
+                         extension_supported_versions+=", 03, $(printf "%02x" $i)"
+                    fi
+               done
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               # FIXME: Adjust the lengths ("+11" and "+9") when the draft versions of TLSv1.3 are removed.
+               all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+11))), $(printf "%02x" $((2*0x$tls_low_byte+10)))$extension_supported_versions"
           fi
 
           if [[ ! "$extra_extensions_list" =~ " 0023 " ]]; then
@@ -9031,6 +9278,12 @@ socksend_tls_clienthello() {
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_supported_groups"
           fi
+
+          if [[ -n "$extensions_key_share" ]] && [[ ! "$extra_extensions_list" =~ " 0028 " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extensions_key_share"
+          fi
+
           if [[ -n "$extension_supported_point_formats" ]] && [[ ! "$extra_extensions_list" =~ " 000b " ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_supported_point_formats"
@@ -9105,6 +9358,8 @@ socksend_tls_clienthello() {
      # if we have SSLv3, the first occurence of TLS protocol -- record layer -- is SSLv3, otherwise TLS 1.0
      [[ $tls_low_byte == "00" ]] && tls_word_reclayer="03, 00"
 
+     [[ 0x$tls_legacy_version -ge 0x04 ]] && tls_legacy_version="03"
+
      if "$offer_compression"; then
           # See http://www.iana.org/assignments/comp-meth-ids/comp-meth-ids.xhtml#comp-meth-ids-2
           compression_methods="03,01,40,00" # Offer NULL, DEFLATE, and LZS compression
@@ -9119,7 +9374,7 @@ socksend_tls_clienthello() {
      # Handshake header:
      ,01                      # Type (x01 for ClientHello)
      ,00, $len_client_hello_word   # Length ClientHello
-     ,03, $tls_low_byte       # TLS version ClientHello
+     ,03, $tls_legacy_version # TLS version ClientHello
      ,54, 51, 1e, 7a          # Unix time since  see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
      ,de, ad, be, ef          # Random 28 bytes
      ,31, 33, 07, 00, 00, 00, 00, 00
@@ -9141,6 +9396,172 @@ socksend_tls_clienthello() {
      return 0
 }
 
+# arg1: The server's response
+# arg2: CIPHER_SUITES string (lowercase, and in the format output by code2network())
+# arg3: (optional) additional request extensions
+# arg4: "all" - process full response (including Certificate and certificate_status handshake messages)
+#       "ephemeralkey" - extract the server's ephemeral key (if any)
+# Return 0 if the response is not a HelloRetryRequest.
+# Return 1 if the response is a malformed HelloRetryRequest or if a new ClientHello cannot be sent.
+# Return 2 if the response is a HelloRetryRequest, and sending a new ClientHello succeeded.
+# Return 6 if the response is a HelloRetryRequest, and sending a new ClientHello failed.
+resend_if_hello_retry_request() {
+     local tls_hello_ascii="$1"
+     local cipher_list_2send="$2"
+     local process_full="$4"
+     local tls_low_byte server_version cipher_suite rfc_cipher_suite
+     local -i i j msg_len tls_hello_ascii_len
+     local -i extns_offset hrr_extns_len extra_extensions_len len_extn
+     local extra_extensions extn_type part2 new_extra_extns="" new_key_share temp
+
+     tls_hello_ascii_len=${#tls_hello_ascii}
+     # A HelloRetryRequest is at least 13 bytes long
+     [[ $tls_hello_ascii_len -lt 26 ]] && return 0
+     # A HelloRetryRequest is a handshake message (16) with a major record version of 03.
+     [[ "${tls_hello_ascii:0:4}" != "1603" ]] && return 0
+     # The handshake type for hello_retry_request is 06.
+     [[ "${tls_hello_ascii:10:2}" != "06" ]] && return 0
+
+     # This appears to be a HelloRetryRequest messsage.
+     debugme echo "reading hello retry request... "
+     if [[ "$DEBUG" -ge 4 ]]; then
+          hexdump -C $SOCK_REPLY_FILE | head -6
+          echo
+     fi
+
+     # Check the length of the handshake message
+     msg_len=2*$(hex2dec "${tls_hello_ascii:6:4}")
+     if [[ $msg_len -ne $tls_hello_ascii_len-10 ]]; then
+          debugme echo "malformed HelloRetryRequest"
+          return 1
+     fi
+
+     # Check the length of the HelloRetryRequest message.
+     msg_len=2*$(hex2dec "${tls_hello_ascii:12:6}")
+     if [[ $msg_len -ne $tls_hello_ascii_len-18 ]]; then
+          debugme echo "malformed HelloRetryRequest"
+          return 1
+     fi
+
+     server_version="${tls_hello_ascii:18:4}"
+     if [[ "$server_version" == "0304" ]] || [[ 0x$server_version -ge 0x7f13 ]]; then
+          # Starting with TLSv1.3 draft 19, a HelloRetryRequest is at least 15 bytes long
+          [[ $tls_hello_ascii_len -lt 30 ]] && return 0
+          cipher_suite="${tls_hello_ascii:22:2},${tls_hello_ascii:24:2}"
+          extns_offset=26
+     else
+         extns_offset=22
+     fi
+
+     # Check the length of the extensions.
+     hrr_extns_len=2*$(hex2dec "${tls_hello_ascii:extns_offset:4}")
+     if [[ $hrr_extns_len -ne $tls_hello_ascii_len-$extns_offset-4 ]]; then
+          debugme echo "malformed HelloRetryRequest"
+          return 1
+     fi
+
+     if [[ "${server_version:0:2}" == "7F" ]]; then
+          tls_low_byte="04"
+     else
+          tls_low_byte="${server_version:2:2}"
+     fi
+     if [[ $DEBUG -ge 3 ]]; then
+          echo "TLS message fragments:"
+          echo "     tls_protocol (reclyr):  0x${tls_hello_ascii:2:4}"
+          echo "     tls_content_type:       0x16 (handshake)"
+          echo "     msg_len:                $(hex2dec "${tls_hello_ascii:6:4}")"
+          echo
+          echo "TLS handshake message:"
+          echo "     handshake type:         0x06 (hello_retry_request)"
+          echo "     msg_len:                $(hex2dec "${tls_hello_ascii:12:6}")"
+          echo
+          echo "TLS hello retry request message:"
+          echo "     server version:         $server_version"
+          if [[ "$server_version" == "0304" ]] || [[ 0x$server_version -ge 0x7f13 ]]; then
+               echo -n "     cipher suite:           $cipher_suite"
+               if [[ $TLS_NR_CIPHERS -ne 0 ]]; then
+                    if [[ "${cipher_suite:0:2}" == "00" ]]; then
+                         rfc_cipher_suite="$(show_rfc_style "x${cipher_suite:3:2}")"
+                    else
+                         rfc_cipher_suite="$(show_rfc_style "x${cipher_suite:0:2}${cipher_suite:3:2}")"
+                    fi
+               else
+                    rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${cipher_suite:0:2},0x${cipher_suite:3:2} " | awk '{ print $3 }')"
+               fi
+               if [[ -n "$rfc_cipher_suite" ]]; then
+                    echo " ($rfc_cipher_suite)"
+               else
+                    echo ""
+               fi
+          fi
+     fi
+
+     # Parse HelloRetryRequest extensions
+     for (( i=extns_offset+4; i < tls_hello_ascii_len; i=i+8+$len_extn )); do
+          extn_type="${tls_hello_ascii:i:4}"
+          j=$i+4
+          len_extn=2*$(hex2dec "${tls_hello_ascii:j:4}")
+          j+=4
+          if [[ $len_extn -gt $tls_hello_ascii_len-$j ]]; then
+               debugme echo "malformed HelloRetryRequest"
+               return 1
+          fi
+          # If the HRR includes a cookie extension, then it needs to be
+          # included in the next ClientHello.
+          if [[ "$extn_type" == "002C" ]]; then
+               j=8+$len_extn
+               new_extra_extns+="${tls_hello_ascii:i:j}"
+          fi
+          # If the HRR includes a key_share extension, then it specifies the
+          # group to be used in the next ClientHello. So, create a key_share
+          # extension that specifies this group.
+          if [[ "$extn_type" == "0028" ]]; then
+               if [[ $len_extn -ne 4 ]]; then
+                    debugme echo "malformed key share extension in HelloRetryRequest"
+                    return 1
+               fi
+               [[ $DEBUG -ge 3 ]] && echo "     key share:              0x${tls_hello_ascii:j:4}"
+               new_key_share="$(generate_key_share_extension "000a00040002${tls_hello_ascii:j:4}" "$process_full")"
+               new_extra_extns+="${new_key_share//,/}"
+          fi
+     done
+     debugme echo ""
+     if [[ -n "$new_extra_extns" ]]; then
+          temp="$new_extra_extns"
+          extra_extensions_len=${#temp}
+          new_extra_extns=""
+          for (( i=0 ; i < extra_extensions_len; i=i+2 )); do
+               new_extra_extns+=",${temp:i:2}"
+          done
+          new_extra_extns="${new_extra_extns:1}"
+     fi
+
+     # Include any extra extensions that were included in the first ClientHello,
+     # except key_share and cookie.
+     extra_extensions="$(strip_spaces "$(tolower "$3")")"
+     extra_extensions_len=${#extra_extensions}
+     for (( i=0; i < extra_extensions_len; i=i+12+$len_extn )); do
+          part2=$i+3
+          extn_type="${extra_extensions:i:2}${extra_extensions:part2:2}"
+          j=$i+6
+          part2=$j+3
+          len_extn=3*$(hex2dec "${extra_extensions:j:2}${extra_extensions:part2:2}")
+          if [[ "$extn_type" != "0028" ]] && [[ "$extn_type" != "002c" ]]; then
+               j=12+$len_extn
+               new_extra_extns+=",${extra_extensions:i:j}"
+          fi
+     done
+
+     debugme echo -en "\nsending second client hello... "
+     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns"
+     if [[ $? -ne 0 ]]; then
+          debugme echo "stuck on sending: $ret"
+          return 6
+     fi
+     sockread_serverhello 32768
+     return 2
+}
+
 # arg1: TLS version low byte
 #       (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # arg2: (optional) list of cipher suites
@@ -9157,8 +9578,9 @@ tls_sockets() {
      local tls_low_byte
      local cipher_list_2send
      local sock_reply_file2 sock_reply_file3
-     local tls_hello_ascii next_packet hello_done=0
-     local process_full="$3" offer_compression=false
+     local tls_hello_ascii next_packet
+     local process_full="$3" offer_compression=false skip=false
+     local -i hello_done=0
 
      [[ "$5" == "true" ]] && offer_compression=true
      tls_low_byte="$1"
@@ -9175,7 +9597,7 @@ tls_sockets() {
      cipher_list_2send="$NW_STR"
 
      debugme echo -en "\nsending client hello... "
-     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$4" "$offer_compression"
+     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$4" "$offer_compression"
      ret=$?                             # 6 means opening socket didn't succeed, e.g. timeout
 
      # if sending didn't succeed we don't bother
@@ -9186,41 +9608,60 @@ tls_sockets() {
           tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
           tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
 
-          # The server's response may span more than one packet. So,
-          # check if response appears to be complete, and if it isn't
-          # then try to get another packet from the server.
+          # Check if the response is a HelloRetryRequest.
+          resend_if_hello_retry_request "$tls_hello_ascii" "$cipher_list_2send" "$4" "$process_full"
+          ret=$?
+          if [[ $ret -eq 2 ]]; then
+               tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+               tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
+          elif [[ $ret -eq 1 ]] || [[ $ret -eq 6 ]]; then
+               close_socket
+               TMPFILE=$SOCK_REPLY_FILE
+               tmpfile_handle $FUNCNAME.dd
+               return $ret
+          fi
+
+          # The server's response may span more than one packet. If only the
+          # first part of the response needs to be processed, this isn't an
+          # issue. However, if the entire response needs to be processed or
+          # if the ephemeral key is needed (which comes last for TLS 1.2 and
+          # below), then we need to check if response appears to be complete,
+          # and if it isn't then try to get another packet from the server.
           if [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]]; then
-               check_tls_serverhellodone "$tls_hello_ascii"
-               hello_done=$?
-               [[ "$hello_done" -eq 3 ]] && process_full="ephemeralkey"
+               hello_done=1; skip=true
           fi
           for (( 1 ; hello_done==1; 1 )); do
-               sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
-               mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+               if ! "$skip"; then
+                    sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+                    mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
 
-               debugme echo -n "requesting more server hello data... "
-               socksend "" $USLEEP_SND
-               sockread_serverhello 32768
+                    debugme echo -n "requesting more server hello data... "
+                    socksend "" $USLEEP_SND
+                    sockread_serverhello 32768
 
-               next_packet=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
-               next_packet="${next_packet%%[!0-9A-F]*}"
-               if [[ ${#next_packet} -eq 0 ]]; then
-                    # This shouldn't be necessary. However, it protects against
-                    # getting into an infinite loop if the server has nothing
-                    # left to send and check_tls_serverhellodone doesn't
-                    # correctly catch it.
-                    mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
-                    hello_done=0
-               else
-                    tls_hello_ascii+="$next_packet"
+                    next_packet=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+                    next_packet="${next_packet%%[!0-9A-F]*}"
 
-                    sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
-                    mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
-                    mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
-                    cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
-                    rm "$sock_reply_file3"
+                    if [[ ${#next_packet} -eq 0 ]]; then
+                         # This shouldn't be necessary. However, it protects against
+                         # getting into an infinite loop if the server has nothing
+                         # left to send and check_tls_serverhellodone doesn't
+                         # correctly catch it.
+                         mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+                         hello_done=0
+                    else
+                         tls_hello_ascii+="$next_packet"
 
-                    check_tls_serverhellodone "$tls_hello_ascii"
+                         sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+                         mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
+                         mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+                         cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
+                         rm "$sock_reply_file3"
+                    fi
+               fi
+               skip=false
+               if [[ $hello_done -eq 1 ]]; then
+                    check_tls_serverhellodone "$tls_hello_ascii" "$process_full"
                     hello_done=$?
                     [[ "$hello_done" -eq 3 ]] && process_full="ephemeralkey"
                fi
