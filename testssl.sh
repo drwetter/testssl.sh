@@ -402,8 +402,8 @@ safe_echo()  { printf -- "%b" "${1//%/%%}"; }
 tm_out()     { printf -- "%b" "${1//%/%%}"; }
 tmln_out()   { printf -- "%b" "${1//%/%%}\n"; }
 
-out() { printf -- "%b" "${1//%/%%}"; html_out "$1"; }
-outln() { printf -- "%b" "${1//%/%%}\n"; html_out "$1"; }
+out()   { printf -- "%b" "${1//%/%%}"; html_out "$1"; }
+outln() { printf -- "%b" "${1//%/%%}\n"; html_out "$1\n"; }
 
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
