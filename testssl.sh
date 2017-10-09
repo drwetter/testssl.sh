@@ -85,6 +85,8 @@ readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 DEBUGTIME=${DEBUGTIME:-false}
 DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for testssl.sh and bash3's default
                                                   # false: needed for performance analysis or useful for just having an extra file
+DEBUG_ALLINONE=${SETX=-false}                     # SETX as a shortcut for old style debugging, overriding DEBUG_ALLINONE
+
 
 if grep -q xtrace <<< "$SHELLOPTS"; then
      if "$DEBUGTIME"; then
@@ -3793,7 +3795,6 @@ run_client_simulation() {
           fileout "client_simulation_Problem" "WARN" "You shouldn't run this with \"--ssl-native\" as you will get false results"
      fi
      outln
-
      debugme echo
 
      if "$WIDE"; then
@@ -3814,7 +3815,7 @@ run_client_simulation() {
      for name in "${short[@]}"; do
           if ${current[i]} || "$ALL_CLIENTS" ; then
                # for ANY we test this service or if the service we determined from STARTTLS matches
-               if [[ "${service[i]}" == "ANY" ]] || grep -q "$client_service" <<< "${service[i]}"; then
+               if [[ "${service[i]}" == "ANY" ]] || [[ "${service[i]}" =~ $client_service ]]; then
                     out " $(printf -- "%-29s" "${names[i]}")"
                     if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
                          client_simulation_sockets "${handshakebytes[i]}"
@@ -3838,7 +3839,8 @@ run_client_simulation() {
                          temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")        # extract line
                          what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
                          bits=$(awk -F',' '{ print $3 }' <<< $temp)
-                         if grep -q bits <<< $bits; then
+                         # formatting
+                         if [[ "$bits" =~ bits ]]; then
                               curve="$(strip_spaces "$(awk -F',' '{ print $2 }' <<< $temp)")"
                          else
                               curve=""
@@ -4550,7 +4552,7 @@ read_dhbits_from_file() {
      what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
      bits=$(awk -F',' '{ print $3 }' <<< $temp)
      # RH's backport has the DH bits in second arg after comma
-     if grep -q bits <<< $bits; then
+     if [[ "$bits" =~ bits ]]; then
           curve="$(strip_spaces "$(awk -F',' '{ print $2 }' <<< $temp)")"
      else
           bits=$(awk -F',' '{ print $2 }' <<< $temp)
@@ -6520,7 +6522,7 @@ run_server_defaults() {
      ciphers_to_test[1]=""
      ciphers_to_test[2]=""
      for ciph in $(colon_to_spaces $($OPENSSL ciphers "aRSA" 2>>$ERRFILE)); do
-          if grep -q "\-RSA\-" <<<$ciph; then
+          if [[ "$ciph" =~ -RSA- ]]; then
                ciphers_to_test[1]="${ciphers_to_test[1]}:$ciph"
           else
                ciphers_to_test[2]="${ciphers_to_test[2]}:$ciph"
@@ -9731,7 +9733,7 @@ run_heartbleed(){
      pr_bold " Heartbleed"; out " ($cve)                "
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
-     if ! grep -q heartbeat <<< "$TLS_EXTENSIONS"; then
+     if [[ ! "${TLS_EXTENSIONS}" =~ heartbeat ]]; then
           pr_done_best "not vulnerable (OK)"
           outln ", no heartbeat extension"
           fileout "heartbleed" "OK" "Heartbleed: not vulnerable, no heartbeat extension" "$cve" "$cwe"
@@ -10085,7 +10087,7 @@ run_ticketbleed() {
 
      # highly unlikely that it is NOT supported. We may loose time here but it's more solid
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
-     if ! grep -q 'session ticket' <<< "$TLS_EXTENSIONS"; then
+     if [[ ! "${TLS_EXTENSIONS}" =~ "session ticket" ]]; then
           pr_done_best "not vulnerable (OK)"
           outln ", no session ticket extension"
           fileout "ticketbleed" "OK" "Ticketbleed: no session ticket extension" "$cve" "$cwe"
@@ -10262,7 +10264,7 @@ run_ticketbleed() {
                     echo "Session ID:                ${sid_detected[i]}"
                     echo "memory:                    ${memory[i]}"
                     echo -n "$sid_input in SID:       " ;
-                         grep -q $sid_input <<< "${sid_detected[i]}" && echo "yes" || echo "no"
+                         [[ "${sid_detected[i]}"  =~ $sid_input ]] && echo "yes" || echo "no"
                fi
                [[ "$DEBUG" -ge 1 ]] && echo $tls_hello_ascii >$TEMPDIR/$FUNCNAME.tls_hello_ascii${i}.txt
           else
@@ -10284,7 +10286,7 @@ run_ticketbleed() {
      if ! "$early_exit"; then
           # here we test the replys if a TLS server hello was received >1x
           for i in 1 2 3 ; do
-               if grep -q $sid_input <<< "${sid_detected[i]}"; then
+               if [[ "${sid_detected[i]}" =~ $sid_input ]]; then
                     # was our faked TLS SID returned?
                     nr_sid_detected+=1
                fi
@@ -12621,7 +12623,7 @@ prepare_arrays() {
                elif [[ $OSSL_VER_MAJOR -lt 1 ]]; then
                     [[ ":${ossl_supported_sslv2}:" =~ ":${TLS_CIPHER_OSSL_NAME[i]}:" ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                else
-                    grep -qw "$hexc" <<< "$ossl_supported_sslv2" && TLS_CIPHER_OSSL_SUPPORTED[i]=true
+                    [[ "$ossl_supported_sslv2" =~ $hexc ]] && TLS_CIPHER_OSSL_SUPPORTED[i]=true
                fi
                i+=1
           done < "$CIPHERS_BY_STRENGTH_FILE"
@@ -13688,8 +13690,8 @@ nmap_to_plain_file() {
      # Line x+1: "Host: AAA.BBB.CCC.DDD (<FQDN>) Ports: 443/open/tcp//https///"
      # (or):      Host: AAA.BBB.CCC.DDD (<FQDN>) Ports: 22/open/tcp//ssh//<banner>/, 25/open/tcp//smtp//<banner>/, 443/open/tcp//ssl|http//<banner>
      while read -r hosttxt ip round_brackets tmp ports_specs; do
-          grep -q "Status: " <<< "$ports_specs" && continue             # we don't need this
-          grep -q '\/open\/tcp\/' <<< "$ports_specs" || continue        # no open tcp at all for this IP --> move on
+          [[ "$ports_specs" =~ "Status: "  ]] && continue             # we don't need this
+          [[ "$ports_specs" =~ '/open/tcp/' ]] || continue            # no open tcp at all for this IP --> move
           host_spec="$ip"
           fqdn="${round_brackets/\(/}"
           fqdn="${fqdn/\)/}"
@@ -13702,7 +13704,7 @@ nmap_to_plain_file() {
           fi
           while read -r oneline; do
                # 25/open/tcp//smtp//<banner>/,
-               grep -q '\/open\/tcp\/' <<< "$oneline" || continue          # no open tcp for this port on this IP --> move on
+               [[ "$oneline" =~ '/open/tcp/' ]] || continue                # no open tcp for this port on this IP --> move on
                IFS=/ read -r port dontcare protocol dontcare1 <<< "$oneline"
                starttls="$(ports2starttls $port)"
                [[ $? -eq 1 ]] && continue                                  # nmap got a port but we don't know how to speak to
