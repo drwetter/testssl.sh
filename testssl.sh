@@ -2415,7 +2415,7 @@ std_cipherlists() {
                sclient_success=$?
                [[ $sclient_success -eq 2 ]] && sclient_success=0
           fi
-          if [[ $sclient_success -ne 0 ]] && [[ 0 -eq $(has_server_protocol ssl2) ]]; then
+          if [[ $sclient_success -ne 0 ]] && [[ 1 -ne $(has_server_protocol ssl2) ]]; then
                if ( [[ -z "$6" ]] || "$FAST" ) && "$HAS_SSL2" && listciphers "$1" -ssl2; then
                     $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY -ssl2 2>$ERRFILE >$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE
@@ -11181,7 +11181,7 @@ run_beast(){
      local hexc dash cbc_cipher sslvers auth mac export sni
      local -a ciph hexcode normalized_hexcode kx enc export2
      local proto proto_hex
-     local -i i nr_ciphers=0 sclient_success=0
+     local -i i ret nr_ciphers=0 sclient_success=0
      local detected_cbc_ciphers="" ciphers_to_test
      local higher_proto_supported=""
      local vuln_beast=false
@@ -11248,12 +11248,13 @@ run_beast(){
 
      # first determine whether it's mitigated by higher protocols
      for proto in tls1_1 tls1_2; do
-          if [[ $(has_server_protocol "$proto") -eq 0 ]]; then
+          ret=$(has_server_protocol "$proto")
+          if [[ $ret -eq 0 ]]; then
                case $proto in
                     tls1_1) higher_proto_supported+=" TLSv1.1" ;;
                     tls1_2) higher_proto_supported+=" TLSv1.2" ;;
                esac
-          else
+          elif [[ $ret -eq 2 ]]; then
                $OPENSSL s_client -state -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI 2>>$ERRFILE >$TMPFILE </dev/null
                if sclient_connect_successful $? $TMPFILE; then
                     higher_proto_supported+=" $(get_protocol $TMPFILE)"
@@ -11269,8 +11270,11 @@ run_beast(){
                continue
           fi
           [[ ! "$proto" =~ ssl ]] && sni="$SNI" || sni=""
-          if [[ $(has_server_protocol "$proto") -eq 0 ]]; then
+          ret=$(has_server_protocol "$proto")
+          if [[ $ret -eq 0 ]]; then
                sclient_success=0
+          elif [[ $ret -eq 1 ]]; then
+               sclient_success=1
           elif [[ "$proto" != "ssl3" ]] || "$HAS_SSL3"; then
                $OPENSSL s_client -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $sni >$TMPFILE 2>>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
