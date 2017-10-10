@@ -273,6 +273,7 @@ CLIENT_PROB_NO=1
 HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
 HAS_SSL2=false
 HAS_SSL3=false
+HAS_TLS13=false
 HAS_NO_SSL2=false
 HAS_NOSERVERNAME=false
 HAS_ALPN=false
@@ -1039,6 +1040,33 @@ count_ciphers() {
 
 actually_supported_ciphers() {
      $OPENSSL ciphers "$1" 2>/dev/null || echo ""
+}
+
+# Given a protocol (arg1) and a list of ciphers (arg2) that is formatted as
+# ", xx,xx, xx,xx, xx,xx, xx,xx" remove any TLSv1.3 ciphers if the protocol
+# is less than 04 and remove any TLSv1.2-only ciphers if the protocol is less
+# than 03.
+strip_inconsistent_ciphers() {
+     local -i proto=0x$1
+     local cipherlist="$2"
+
+     [[ $proto -lt 4 ]] && cipherlist="${cipherlist//, 13,0[0-9a-fA-F]/}"
+     if [[ $proto -lt 3 ]]; then
+          cipherlist="${cipherlist//, 00,3[b-fB-F]/}"
+          cipherlist="${cipherlist//, 00,40/}"
+          cipherlist="${cipherlist//, 00,6[7-9a-dA-D]/}"
+          cipherlist="${cipherlist//, 00,9[c-fC-F]/}"
+          cipherlist="${cipherlist//, 00,[abAB][0-9a-fA-F]/}"
+          cipherlist="${cipherlist//, 00,[cC][0-5]/}"
+          cipherlist="${cipherlist//, 16,[bB][7-9aA]/}"
+          cipherlist="${cipherlist//, [cC]0,2[3-9a-fA-F]/}"
+          cipherlist="${cipherlist//, [cC]0,3[01278a-fA-F]/}"
+          cipherlist="${cipherlist//, [cC]0,[4-9aA][0-9a-fA-F]/}"
+          cipherlist="${cipherlist//, [cC][cC],1[345]/}"
+          cipherlist="${cipherlist//, [cC][cC],[aA][89a-eA-E]/}"
+     fi
+     echo "$cipherlist"
+     return 0
 }
 
 newline_to_spaces() {
@@ -2407,7 +2435,7 @@ listciphers() {
 # argv[6]: SSLv2 cipher list to test (hexcodes), if using sockets
 std_cipherlists() {
      local -i i len sclient_success
-     local sslv2_cipherlist detected_ssl2_ciphers
+     local cipherlist sslv2_cipherlist detected_ssl2_ciphers
      local singlespaces
      local proto=""
      local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
@@ -2416,14 +2444,45 @@ std_cipherlists() {
      pr_bold "$2    "                   # to be indented equal to server preferences
      if [[ -n "$5" ]] || listciphers "$1" $proto; then
           if [[ -z "$5" ]] || ( "$FAST" && listciphers "$1" -tls1 ); then
-               $OPENSSL s_client $(s_client_options "-cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI -no_ssl2") 2>$ERRFILE >$TMPFILE </dev/null
-               sclient_connect_successful $? $TMPFILE
-               sclient_success=$?
-               debugme cat $ERRFILE
+               for proto in -no_ssl2 -tls1_2 -tls1_1 -tls1 -ssl3; do
+                    if [[ "$proto" == "-tls1_2" ]]; then
+                         # If $OPENSSL doesn't support TLSv1.3 or if no TLSv1.3
+                         # ciphers are being tested, then a TLSv1.2 ClientHello
+                         # was tested in the first iteration.
+                         ! "$HAS_TLS13"  && continue
+                         [[ ! "$($OPENSSL ciphers "$1")" =~ TLS13 ]] && continue
+                    fi
+                    ! "$HAS_SSL3" && [[ "$proto" == "-ssl3" ]] && continue
+                    if [[ "$proto" != "-no_ssl2" ]]; then
+                         "$FAST" && continue
+                         [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
+                    fi
+                    # FIXME: This check won't be needed once PR #827 is approved. At that point just the "else" statement will be needed.
+                    if "$HAS_TLS13" && [[ "$proto" == "-no_ssl2" ]] && [[ ! "$($OPENSSL ciphers "$1")" =~ TLS13 ]]; then
+                         $OPENSSL s_client $(s_client_options "-cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $proto -no_tls1_3") 2>$ERRFILE >$TMPFILE </dev/null
+                    else
+                         $OPENSSL s_client $(s_client_options "-cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $proto") 2>$ERRFILE >$TMPFILE </dev/null
+                    fi
+                    sclient_connect_successful $? $TMPFILE
+                    sclient_success=$?
+                    debugme cat $ERRFILE
+                    [[ $sclient_success -eq 0 ]] && break
+               done
           else
-               tls_sockets "03" "$5"
-               sclient_success=$?
-               [[ $sclient_success -eq 2 ]] && sclient_success=0
+               for proto in 04 03 02 01 00; do
+                    # If $cipherlist doesn't contain any TLSv1.3 ciphers, then there is
+                    # no reason to try a TLSv1.3 ClientHello.
+                    [[ "$proto" == "04" ]] && [[ ! "$5" =~ "13,0" ]] && continue
+                    [[ $(has_server_protocol "$proto") -eq 1 ]] && continue
+                    cipherlist="$(strip_inconsistent_ciphers "$proto" ", $5")"
+                    cipherlist="${cipherlist:2}"
+                    if [[ -n "$cipherlist" ]] && [[ "$cipherlist" != "00,ff" ]]; then
+                         tls_sockets "$proto" "$cipherlist"
+                         sclient_success=$?
+                         [[ $sclient_success -eq 2 ]] && sclient_success=0
+                         [[ $sclient_success -eq 0 ]] && break
+                    fi
+               done
           fi
           if [[ $sclient_success -ne 0 ]] && [[ 1 -ne $(has_server_protocol ssl2) ]]; then
                if ( [[ -z "$6" ]] || "$FAST" ) && "$HAS_SSL2" && listciphers "$1" -ssl2; then
@@ -4012,11 +4071,21 @@ add_tls_offered() {
 
 # function which checks whether SSLv2 - TLS 1.2 is being offereed, see add_tls_offered()
 has_server_protocol() {
+     local proto
      local proto_val_pair
 
-     if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
+     case "$1" in
+          04) proto="tls1_3" ;;
+          03) proto="tls1_2" ;;
+          02) proto="tls1_1" ;;
+          01) proto="tls1" ;;
+          00) proto="ssl3" ;;
+           *) proto="$1" ;;
+     esac
+
+     if [[ "$PROTOS_OFFERED" =~ $proto: ]]; then
           for proto_val_pair in $PROTOS_OFFERED; do
-               if [[ $proto_val_pair =~ $1: ]]; then
+               if [[ $proto_val_pair =~ $proto: ]]; then
                     if [[ ${proto_val_pair#*:} == "yes" ]]; then
                          echo 0
                          return 0
@@ -4365,7 +4434,7 @@ run_std_cipherlists() {
      local high_ciphers="c0,28, c0,24, c0,14, c0,0a, c0,22, c0,21, c0,20, 00,b7, 00,b3, 00,91, c0,9b, c0,99, c0,97, 00,af, c0,95, 00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87, 00,86, 00,85, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, 00,3d, 00,35, 00,c0, c0,38, c0,36, 00,84, 00,95, 00,8d, c0,3d, c0,3f, c0,41, c0,43, c0,45, c0,49, c0,4b, c0,4d, c0,4f, c0,65, c0,67, c0,69, c0,71, 00,80, 00,81, ff,00, ff,01, ff,02, ff,03, ff,85, c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,45, 00,44, 00,43, 00,42, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,3c, 00,2f, 00,ba, c0,37, c0,35, 00,b6, 00,b2, 00,90, 00,41, c0,9a, c0,98, c0,96, 00,ae, c0,94, 00,94, 00,8c, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,48, c0,4a, c0,4c, c0,4e, c0,64, c0,66, c0,68, c0,70"
      # no SSLv2 here and in strong
   # ~ equivalent to 'grep AEAD etc/cipher-mapping.txt | grep -v Au=None'
-     local strong_ciphers="cc,14, cc,13, cc,15, c0,30, c0,2c, 00,a5, 00,a3, 00,a1, 00,9f, cc,a9, cc,a8, cc,aa, c0,af, c0,ad, c0,a3, c0,9f, 00,ad, 00,ab, cc,ae, cc,ad, cc,ac, c0,ab, c0,a7, c0,32, c0,2e, 00,9d, c0,a1, c0,9d, 00,a9, cc,ab, c0,a9, c0,a5, c0,51, c0,53, c0,55, c0,57, c0,59, c0,5d, c0,5f, c0,61, c0,63, c0,6b, c0,6d, c0,6f, c0,7b, c0,7d, c0,7f, c0,81, c0,83, c0,87, c0,89, c0,8b, c0,8d, c0,8f, c0,91, c0,93, 16,b7, 16,b8, 16,b9, 16,ba, c0,2f, c0,2b, 00,a4, 00,a2, 00,a0, 00,9e, c0,ae, c0,ac, c0,a2, c0,9e, 00,ac, 00,aa, c0,aa, c0,a6, c0,a0, c0,9c, 00,a8, c0,a8, c0,a4, c0,31, c0,2d, 00,9c, c0,50, c0,52, c0,54, c0,56, c0,58, c0,5c, c0,5e, c0,60, c0,62, c0,6a, c0,6c, c0,6e, c0,7a, c0,7c, c0,7e, c0,80, c0,82, c0,86, c0,88, c0,8a, c0,8c, c0,8e, c0,90, c0,92, 00,ff"
+     local strong_ciphers="13,01, 13,02, 13,03, 13,04, 13,05, cc,14, cc,13, cc,15, c0,30, c0,2c, 00,a5, 00,a3, 00,a1, 00,9f, cc,a9, cc,a8, cc,aa, c0,af, c0,ad, c0,a3, c0,9f, 00,ad, 00,ab, cc,ae, cc,ad, cc,ac, c0,ab, c0,a7, c0,32, c0,2e, 00,9d, c0,a1, c0,9d, 00,a9, cc,ab, c0,a9, c0,a5, c0,51, c0,53, c0,55, c0,57, c0,59, c0,5d, c0,5f, c0,61, c0,63, c0,6b, c0,6d, c0,6f, c0,7b, c0,7d, c0,7f, c0,81, c0,83, c0,87, c0,89, c0,8b, c0,8d, c0,8f, c0,91, c0,93, 16,b7, 16,b8, 16,b9, 16,ba, c0,2f, c0,2b, 00,a4, 00,a2, 00,a0, 00,9e, c0,ae, c0,ac, c0,a2, c0,9e, 00,ac, 00,aa, c0,aa, c0,a6, c0,a0, c0,9c, 00,a8, c0,a8, c0,a4, c0,31, c0,2d, 00,9c, c0,50, c0,52, c0,54, c0,56, c0,58, c0,5c, c0,5e, c0,60, c0,62, c0,6a, c0,6c, c0,6e, c0,7a, c0,7c, c0,7e, c0,80, c0,82, c0,86, c0,88, c0,8a, c0,8c, c0,8e, c0,90, c0,92, 00,ff"
 
      "$SSL_NATIVE" && using_sockets=false
      if ! "$using_sockets"; then
@@ -12339,6 +12408,9 @@ find_openssl_binary() {
      $OPENSSL s_client -ssl3 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_SSL3=true
 
+     $OPENSSL s_client -tls1_3 -connect x 2>&1 | grep -aq "unknown option" || \
+          HAS_TLS13=true
+
      $OPENSSL s_client -no_ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_NO_SSL2=true
 
@@ -12592,6 +12664,7 @@ OPENSSL_CONF: $OPENSSL_CONF
 HAS_IPv6: $HAS_IPv6
 HAS_SSL2: $HAS_SSL2
 HAS_SSL3: $HAS_SSL3
+HAS_TLS13: $HAS_TLS13
 HAS_NO_SSL2: $HAS_NO_SSL2
 HAS_SPDY: $HAS_SPDY
 HAS_ALPN: $HAS_ALPN
