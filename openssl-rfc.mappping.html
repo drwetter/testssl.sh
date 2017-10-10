@@ -88,9 +88,9 @@ td { border:1px solid #999; }
 <tr><td> [0x2b]</td><td>     EXP-KRB5-RC4-MD5             </td><td> KRB5     </td><td>   RC4     </td><td>  40, export    </td><td> TLS_KRB5_EXPORT_WITH_RC4_40_MD5         </td></tr>
 
 <!-- RFC 4785 -->
-<tr><td> [0x2c]</td><td>     EXP-KRB5-RC4-MD5             </td><td> PSK     </td><td>   None     </td><td>  None        </td><td> TLS_PSK_WITH_NULL_SHA         </td></tr>
-<tr><td> [0x2d]</td><td>     EXP-KRB5-RC4-MD5             </td><td> DH/PSK     </td><td>   None     </td><td> None      </td><td> TLS_DHE_PSK_WITH_NULL_SHA         </td></tr>
-<tr><td> [0x2e]</td><td>     EXP-KRB5-RC4-MD5             </td><td> RSA/PSK     </td><td>   None     </td><td>   None   </td><td> TLS_RSA_PSK_WITH_NULL_SHA         </td></tr>
+<tr><td> [0x2c]</td><td>     PSK-NULL-SHA                 </td><td> PSK     </td><td>   None     </td><td>  None        </td><td> TLS_PSK_WITH_NULL_SHA         </td></tr>
+<tr><td> [0x2d]</td><td>     DHE-PSK-NULL-SHA             </td><td> DH/PSK     </td><td>   None     </td><td> None      </td><td> TLS_DHE_PSK_WITH_NULL_SHA         </td></tr>
+<tr><td> [0x2e]</td><td>     RSA-PSK-NULL-SHA             </td><td> RSA/PSK     </td><td>   None     </td><td>   None   </td><td> TLS_RSA_PSK_WITH_NULL_SHA         </td></tr>
 
 <!-- RFC 5246 -->
 <tr><td> [0x2f]</td><td>     AES128-SHA                   </td><td> RSA      </td><td>   AES     </td><td>  128          </td><td> TLS_RSA_WITH_AES_128_CBC_SHA            </td></tr>
@@ -416,9 +416,10 @@ xB9  TLS_RSA_PSK_WITH_NULL_SHA384
 <tr><td> [0xc0ae]</td><td>   ECDHE-ECDSA-AES128-CCM8      </td><td> ECDH     </td><td>   AESCCM  </td><td>  128          </td><td> TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8  </td></tr>
 <tr><td> [0xc0af]</td><td>   ECDHE-ECDSA-AES256-CCM8      </td><td> ECDH     </td><td>   AESCCM  </td><td>  256          </td><td> TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8  </td></tr>
 
-<tr><td> [0xcc13]</td><td>   ECDHE-RSA-CHACHA20-POLY1305  </td><td> ECDH     </td><td>   ChaCha20-Poly1305</td><td>    </td><td> TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256</td></tr>
-<tr><td> [0xcc14]</td><td>   ECDHE-ECDSA-CHACHA20-POLY1305</td><td> ECDH     </td><td>   ChaCha20-Poly1305</td><td>     </td><td> TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256</td></tr>
-<tr><td> [0xcc15]</td><td>   DHE-RSA-CHACHA20-POLY1305    </td><td> DH       </td><td>   ChaCha20-Poly1305</td><td>     </td><td> TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256</td></tr>
+<!-- OLD CHACHA POLY CIPHERS, per agreement with Peter Mosmans we use the names like SSLlabs -->
+<tr><td> [0xcc13]</td><td>   ECDHE-RSA-CHACHA20-POLY1305-OLD  </td><td> ECDH     </td><td>   ChaCha20-Poly1305</td><td>    </td><td> TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD</td></tr>
+<tr><td> [0xcc14]</td><td>   ECDHE-ECDSA-CHACHA20-POLY1305-OLD</td><td> ECDH     </td><td>   ChaCha20-Poly1305</td><td>    </td><td> TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256_OLD</td></tr>
+<tr><td> [0xcc15]</td><td>   DHE-RSA-CHACHA20-POLY1305-OLD    </td><td> DH       </td><td>   ChaCha20-Poly1305</td><td>    </td><td> TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD</td></tr>
 
 <tr><td> [0xff00]</td><td>   GOST-MD5                     </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td><td>TLS_GOSTR341094_RSA_WITH_28147_CNT_MD5</td></tr>
 <tr><td> [0xff01]</td><td>   GOST-GOST94                  </td><td> RSA      </td><td>   GOST89  </td><td>  256    </td><td>TLS_RSA_WITH_28147_CNT_GOST94</td></tr>
@@ -427,9 +428,9 @@ xB9  TLS_RSA_PSK_WITH_NULL_SHA384
 
 <!-- http://www-archive.mozilla.org/projects/security/pki/nss/ssl/fips-ssl-ciphersuites.html -->
 <tr><td> [0xfefe]</td><td>                                </td><td> RSA      </td><td>   DES     </td><td>  56    </td><td>SSL_RSA_FIPS_WITH_DES_CBC_SHA</td></tr>
-<tr><td> [0xfeff]</td><td>                                </td><td> RSA      </td><td>   3DES     </td><td> 168    </td><td>SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA</td></tr>
+<tr><td> [0xfeff]</td><td>                                </td><td> RSA      </td><td>   3DES     </td><td> 168   </td><td>SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA</td></tr>
 <!-- were thought to be of use only "locally" to certain specific U.S. government customers. (same as above) -->
-<tr><td> [0xfee0]</td><td>                                </td><td> RSA      </td><td>   3DES     </td><td> 168    </td><td>SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA</td></tr>
+<tr><td> [0xfee0]</td><td>                                </td><td> RSA      </td><td>   3DES     </td><td> 168   </td><td>SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA</td></tr>
 <tr><td> [0xfee1]</td><td>                                </td><td> RSA      </td><td>   DES     </td><td>  56    </td><td>SSL_RSA_FIPS_WITH_DES_CBC_SHA</td></tr>
 
 <tr><td> [0x010080]</td><td> RC4-MD5                      </td><td> RSA      </td><td>   RC4     </td><td>  128          </td><td> SSL_CK_RC4_128_WITH_MD5              </td></tr>
