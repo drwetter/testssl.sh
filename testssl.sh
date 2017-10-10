@@ -3662,8 +3662,10 @@ client_simulation_sockets() {
      fi
 
      for(( 1 ; hello_done==1; 1 )); do
-          sock_reply_file2=${SOCK_REPLY_FILE}.2
-          mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+          if [[ $DEBUG -ge 1 ]]; then
+               sock_reply_file2=${SOCK_REPLY_FILE}.2
+               mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+          fi
 
           debugme echo -n "requesting more server hello data... "
           socksend "" $USLEEP_SND
@@ -3676,15 +3678,17 @@ client_simulation_sockets() {
                # getting into an infinite loop if the server has nothing
                # left to send and check_tls_serverhellodone doesn't
                # correctly catch it.
-               mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+               [[ $DEBUG -ge 1 ]] && mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
                hello_done=0
           else
                tls_hello_ascii+="$next_packet"
-               sock_reply_file3=${SOCK_REPLY_FILE}.3
-               mv "$SOCK_REPLY_FILE" "$sock_reply_file3"    #FIXME: we moved that already
-               mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
-               cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
-               rm "$sock_reply_file3"
+               if [[ $DEBUG -ge 1 ]]; then
+                    sock_reply_file3=${SOCK_REPLY_FILE}.3
+                    mv "$SOCK_REPLY_FILE" "$sock_reply_file3"    #FIXME: we moved that already
+                    mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+                    cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
+                    rm "$sock_reply_file3"
+               fi
 
                check_tls_serverhellodone "$tls_hello_ascii" "ephemeralkey"
                hello_done=$?
@@ -9631,8 +9635,10 @@ tls_sockets() {
           fi
           for (( 1 ; hello_done==1; 1 )); do
                if ! "$skip"; then
-                    sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
-                    mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+                    if [[ $DEBUG -ge 1 ]]; then
+                         sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+                         mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+                    fi
 
                     debugme echo -n "requesting more server hello data... "
                     socksend "" $USLEEP_SND
@@ -9646,16 +9652,18 @@ tls_sockets() {
                          # getting into an infinite loop if the server has nothing
                          # left to send and check_tls_serverhellodone doesn't
                          # correctly catch it.
-                         mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+                         [[ $DEBUG -ge 1 ]] && mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
                          hello_done=0
                     else
                          tls_hello_ascii+="$next_packet"
 
-                         sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
-                         mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
-                         mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
-                         cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
-                         rm "$sock_reply_file3"
+                         if [[ $DEBUG -ge 1 ]]; then
+                              sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+                              mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
+                              mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+                              cat "$sock_reply_file3" >> "$SOCK_REPLY_FILE"
+                              rm "$sock_reply_file3"
+                         fi
                     fi
                fi
                skip=false
