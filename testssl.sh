@@ -85,7 +85,7 @@ readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 DEBUGTIME=${DEBUGTIME:-false}
 DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for testssl.sh and bash3's default
                                                   # false: needed for performance analysis or useful for just having an extra file
-DEBUG_ALLINONE=${SETX=-false}                     # SETX as a shortcut for old style debugging, overriding DEBUG_ALLINONE
+DEBUG_ALLINONE=${SETX:-false}                     # SETX as a shortcut for old style debugging, overriding DEBUG_ALLINONE
 
 
 if grep -q xtrace <<< "$SHELLOPTS"; then
