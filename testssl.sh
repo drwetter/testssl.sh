@@ -389,8 +389,16 @@ declare TLS_CIPHER_OSSL_SUPPORTED=()
 
 # For HTML output, replace any HTML reserved characters with the entity name
 html_reserved(){
+     local output
      "$do_html" || return 0
-     sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" <<< "$1"
+     #sed  -e 's/\&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" <<< "$1"
+     output="${1//\&/\&amp;}"
+     output="${output//</\&lt;}"
+     output="${output//>/\&gt;}"
+     output="${output//\"/\&quot;}"
+     output="${output//\'/\&apos;}"
+     tm_out "$output"
+     return 0
 }
 
 html_out() {
@@ -1238,7 +1246,7 @@ tmpfile_handle() {
 #FIXME: make sure/find out if we do not need $TEMPDIR/$NODEIP.$1" if debug=0. We would save fs access here
      mv $savefile "$TEMPDIR/$NODEIP.$1" 2>/dev/null
      [[ $ERRFILE =~ dev.null ]] && return 0 || \
-          mv $ERRFILE "$TEMPDIR/$NODEIP.$(sed 's/\.txt//g' <<<"$1").errorlog" 2>/dev/null
+          mv $ERRFILE "$TEMPDIR/$NODEIP.${1//.txt/}.errorlog" 2>/dev/null
 }
 
 # arg1: line with comment sign, tabs and so on
@@ -1359,7 +1367,7 @@ s_client_options() {
      local options="$1"
 
      # Don't include the -servername option for an SSLv2 or SSLv3 ClientHello.
-     [[ -n "$SNI" ]] && [[ " $options " =~ \ -ssl[2|3]\  ]] && options="$(sed "s/$SNI//" <<< "$options")"
+     [[ -n "$SNI" ]] && [[ " $options " =~ \ -ssl[2|3]\  ]] && options="${options//$SNI/}"
 
      # The server_name extension should not be included in the ClientHello unless
      # the -servername option is provided. However, OpenSSL 1.1.1 will include the
@@ -1372,7 +1380,7 @@ s_client_options() {
      # remove any -no_ssl2 option if the option isn't supported. (Since versions of
      # OpenSSL that don't support -no_ssl2 also don't support SSLv2, the option
      # isn't needed for these versions of OpenSSL.)
-     ! "$HAS_NO_SSL2" && options="$(sed 's/-no_ssl2//' <<< "$options")"
+     ! "$HAS_NO_SSL2" && options="${options//-no_ssl2/}"
 
      tm_out "$options"
 }
@@ -2636,7 +2644,13 @@ neat_list(){
           fi
           return 0
      fi
-     read what_dh bits <<< "$kx"
+     if [[ "$kx" =~ " " ]]; then
+          what_dh="${kx%% *}"
+          bits="${kx##* }"
+     else
+          what_dh="$kx"
+          bits=""
+     fi
      len=${#kx}
      if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
           out "$(printf -- " %-7s %-49s " "$hexcode" "$tls_cipher")"
@@ -3841,7 +3855,7 @@ run_client_simulation() {
                     if [[ $sclient_success -eq 0 ]]; then
                          # If an ephemeral DH key was used, check that the number of bits is within range.
                          temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")        # extract line
-                         what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
+                         what_dh="${temp%%,*}"
                          bits=$(awk -F',' '{ print $3 }' <<< $temp)
                          # formatting
                          if [[ "$bits" =~ bits ]]; then
@@ -4553,7 +4567,7 @@ read_dhbits_from_file() {
      local old_fart=" (your $OPENSSL cannot show DH bits)"
 
      temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")        # extract line
-     what_dh=$(awk -F',' '{ print $1 }' <<< $temp)
+     what_dh="${temp%%,*}"
      bits=$(awk -F',' '{ print $3 }' <<< $temp)
      # RH's backport has the DH bits in second arg after comma
      if [[ "$bits" =~ bits ]]; then
@@ -7005,7 +7019,7 @@ run_pfs() {
                     $OPENSSL s_client -cipher "${ecdhe_cipher_list:1}" -curves "${curves_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI &>$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE || break
                     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")
-                    curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
+                    curve_found="${temp%%,*}"
                     [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
                     for (( i=low; i < high; i++ )); do
                          ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
@@ -7028,7 +7042,7 @@ run_pfs() {
                sclient_success=$?
                [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
                temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
-               curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
+               curve_found="${temp%%,*}"
                [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
                for (( i=0; i < nr_curves; i++ )); do
                     ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
@@ -12033,7 +12047,7 @@ run_grease() {
                # but don't replace the value that was selected by the server.
                rnd=$RANDOM%${#grease_supported_groups[@]}
                temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
-               curve_found="$(awk -F',' '{ print $1 }' <<< $temp)"
+               curve_found="${temp%%,*}"
                [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
                if [[ "$curve_found" == "B-571" ]]; then
                     extn="
