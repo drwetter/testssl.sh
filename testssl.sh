@@ -3856,13 +3856,13 @@ run_client_simulation() {
                          # If an ephemeral DH key was used, check that the number of bits is within range.
                          temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")        # extract line
                          what_dh="${temp%%,*}"
-                         bits=$(awk -F',' '{ print $3 }' <<< $temp)
+                         bits="${temp##*, }"
                          # formatting
-                         if [[ "$bits" =~ bits ]]; then
-                              curve="$(strip_spaces "$(awk -F',' '{ print $2 }' <<< $temp)")"
-                         else
+                         curve="${temp#*, }"
+                         if [[ "$curve" == "$bits" ]]; then
                               curve=""
-                              bits=$(awk -F',' '{ print $2 }' <<< $temp)
+                         else
+                              curve="${curve%%,*}"
                          fi
                          bits="${bits/bits/}"
                          bits="${bits// /}"
@@ -4568,12 +4568,12 @@ read_dhbits_from_file() {
 
      temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")        # extract line
      what_dh="${temp%%,*}"
-     bits=$(awk -F',' '{ print $3 }' <<< $temp)
-     # RH's backport has the DH bits in second arg after comma
-     if [[ "$bits" =~ bits ]]; then
-          curve="$(strip_spaces "$(awk -F',' '{ print $2 }' <<< $temp)")"
+     bits="${temp##*, }"
+     curve="${temp#*, }"
+     if [[ "$curve" == "$bits" ]]; then
+          curve=""
      else
-          bits=$(awk -F',' '{ print $2 }' <<< $temp)
+          curve="${curve%%,*}"
      fi
      bits="${bits/bits/}"
      bits="${bits// /}"
@@ -7020,7 +7020,10 @@ run_pfs() {
                     sclient_connect_successful $? $TMPFILE || break
                     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")
                     curve_found="${temp%%,*}"
-                    [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+                    if [[ "$curve_found" == "ECDH" ]]; then
+                         curve_found="${temp#*, }"
+                         curve_found="${curve_found%%,*}"
+                    fi
                     for (( i=low; i < high; i++ )); do
                          ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
                     done
@@ -7043,7 +7046,10 @@ run_pfs() {
                [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
                temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                curve_found="${temp%%,*}"
-               [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+               if [[ "$curve_found" == "ECDH" ]]; then
+                    curve_found="${temp#*, }"
+                    curve_found="${curve_found%%,*}"
+               fi
                for (( i=0; i < nr_curves; i++ )); do
                     ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
                done
@@ -7087,7 +7093,8 @@ run_pfs() {
                     sclient_success=$?
                     [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
                     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
-                    curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+                    curve_found="${temp#*, }"
+                    curve_found="${curve_found%%,*}"
                     [[ ! "$curve_found" =~ ffdhe ]] && break
                     for (( i=0; i < nr_curves; i++ )); do
                          ! "${supported_curve[i]}" && [[ "${ffdhe_groups_output[i]}" == "$curve_found" ]] && break
@@ -12048,7 +12055,10 @@ run_grease() {
                rnd=$RANDOM%${#grease_supported_groups[@]}
                temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                curve_found="${temp%%,*}"
-               [[ "$curve_found" == "ECDH" ]] && curve_found="$(awk -F', ' '{ print $2 }' <<< $temp)"
+               if [[ "$curve_found" == "ECDH" ]]; then
+                    curve_found="${temp#*, }"
+                    curve_found="${curve_found%%,*}"
+               fi
                if [[ "$curve_found" == "B-571" ]]; then
                     extn="
                     00, 0a,                    # Type: Supported Elliptic Curves , see RFC 4492
