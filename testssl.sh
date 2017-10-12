@@ -10616,12 +10616,13 @@ run_breach() {
 # SWEET32 (https://sweet32.info/). Birthday attacks on 64-bit block ciphers.
 # In a nutshell: don't use 3DES ciphers anymore (DES, RC2 and IDEA too)
 run_sweet32() {
-     local -i sclient_success=0
+     local -i sclient_success=1
      # DES, RC2 and IDEA are missing
      local sweet32_ciphers="ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA"
      local sweet32_ciphers_hex="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,17, 00,1b, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0"
 # proper parsing to be clarified: 07,00,c0
 
+     local proto
      local cve="CVE-2016-2183, CVE-2016-6329"
      local cwe="CWE-327"
      local hint=""
@@ -10635,16 +10636,29 @@ run_sweet32() {
      # The openssl binary distributed has almost everything we need (PSK, KRB5 ciphers and feff, ffe0 are typically missing).
      # Measurements show that there's little impact whether we use sockets or TLS here, so the default is sockets here
      if "$using_sockets"; then
-          tls_sockets "03" "${sweet32_ciphers_hex}"
-          sclient_success=$?
-          [[ "$sclient_success" -eq 2 ]] && sclient_success=0
+          for proto in 03 02 01 00; do
+               "$FAST" && [[ "$proto" != "03" ]] && break
+               ! "$FAST" && [[ $(has_server_protocol "$proto") -eq 1 ]] && continue
+               tls_sockets "$proto" "${sweet32_ciphers_hex}"
+               sclient_success=$?
+               [[ $sclient_success -eq 2 ]] && sclient_success=0
+               [[ $sclient_success -eq 0 ]] && break
+          done
      else
           nr_sweet32_ciphers=$(count_ciphers $sweet32_ciphers)
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $sweet32_ciphers))
-          $OPENSSL s_client $STARTTLS $BUGS -cipher $sweet32_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE $SNI 2>$ERRFILE </dev/null
-          sclient_connect_successful $? $TMPFILE
-          sclient_success=$?
-          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          for proto in -no_ssl2 -tls1_1 -tls1 -ssl3; do
+               ! "$HAS_SSL3" && [[ "$proto" == "-ssl3" ]] && continue
+               if [[ "$proto" != "-no_ssl2" ]]; then
+                    "$FAST" && break
+                    [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
+               fi
+               $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $proto -cipher $sweet32_ciphers -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+               sclient_connect_successful $? $TMPFILE
+               sclient_success=$?
+               [[ $DEBUG -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+               [[ $sclient_success -eq 0 ]] && break
+          done
      fi
      if [[ $sclient_success -eq 0 ]]; then
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers"
