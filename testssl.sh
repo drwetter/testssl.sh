@@ -3302,7 +3302,7 @@ run_cipher_per_proto() {
      fi
      outln
      neat_header
-     echo -e " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2" | while read proto proto_hex proto_text; do
+     echo -e " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2\n -tls1_3 04 TLS 1.3" | while read proto proto_hex proto_text; do
           pr_underline "$(printf "%s" "$proto_text")"
           out "  ";                                    # for local problem if it happens
           if ! "$using_sockets" && ! locally_supported "$proto"; then
@@ -3365,24 +3365,20 @@ run_cipher_per_proto() {
                     ossl_ciphers_proto="-tls1"
                fi
                while read hexc n ciph[nr_ciphers] sslvers kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
-                    if [[ "$proto_text" == "TLS 1.2" ]] || \
-                       ( [[ "${ciph[nr_ciphers]}" != *"-SHA256" ]] && [[ "${ciph[nr_ciphers]}" != *"-SHA384" ]] && \
-                         [[ "${ciph[nr_ciphers]}" != *"-CCM" ]] && [[ "${ciph[nr_ciphers]}" != *"-CCM8" ]] && \
-                         [[ ! "${ciph[nr_ciphers]}" =~ -CHACHA20-POLY1305 ]] ); then
-                         ciphers_found[nr_ciphers]=false
-                         if [[ ${#hexc} -eq 9 ]]; then
-                              if [[ "${hexc:2:2}" == "00" ]]; then
-                                   normalized_hexcode[nr_ciphers]="x${hexc:7:2}"
-                              else
-                                   normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}"
-                              fi
-                         else
-                              normalized_hexcode[nr_ciphers]="$(tolower "x${hexc:2:2}${hexc:7:2}${hexc:12:2}")"
-                         fi
-                         sigalg[nr_ciphers]=""
-                         ossl_supported[nr_ciphers]=true
-                         nr_ciphers+=1
+                    if [[ "$proto_text" == "TLS 1.3" ]]; then
+                         [[ "${ciph[nr_ciphers]}" == TLS13* ]] || continue
+                    elif [[ "$proto_text" == "TLS 1.2" ]]; then
+                         [[ "${ciph[nr_ciphers]}" != TLS13* ]] || continue
+                    elif [[ "${ciph[nr_ciphers]}" == *"-SHA256" ]] || [[ "${ciph[nr_ciphers]}" == *"-SHA384" ]] || \
+                         [[ "${ciph[nr_ciphers]}" == *"-CCM" ]] || [[ "${ciph[nr_ciphers]}" == *"-CCM8" ]] || \
+                         [[ "${ciph[nr_ciphers]}" =~ CHACHA20-POLY1305 ]]; then
+                         continue
                     fi
+                    ciphers_found[nr_ciphers]=false
+                    normalized_hexcode[nr_ciphers]="$(normalize_ciphercode "$hexc")"
+                    sigalg[nr_ciphers]=""
+                    ossl_supported[nr_ciphers]=true
+                    nr_ciphers+=1
                done < <($OPENSSL ciphers $ossl_ciphers_proto -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
           fi
 
@@ -3458,12 +3454,13 @@ run_cipher_per_proto() {
                                         done
                                         i=${index[i]}
                                         ciphers_found[i]=true
+                                        [[ "$proto_text" == "TLS 1.3" ]] && kx[i]="$(read_dhtype_from_file $TMPFILE)"
                                         if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
                                              dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                                              kx[i]="${kx[i]} $dhlen"
                                         fi
                                         "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
-                                             sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
+                                             sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                                    fi
                               fi
                          fi
@@ -3520,10 +3517,7 @@ run_cipher_per_proto() {
                                    done
                                    i=${index[i]}
                                    ciphers_found[i]=true
-                                   if [[ "$proto_text" == "TLS 1.3" ]]; then
-                                        temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")        # extract line
-                                        kx[i]="Kx=$(awk -F',' '{ print $1 }' <<< $temp)"
-                                   fi
+                                   [[ "$proto_text" == "TLS 1.3" ]] && kx[i]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
                                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
                                         dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
                                         kx[i]="${kx[i]} $dhlen"
@@ -4620,6 +4614,18 @@ pr_cipher_quality() {
                return 5
                ;;
      esac
+}
+
+# arg1: file with input for grepping the type of ephemeral DH key (DH ECDH)
+read_dhtype_from_file() {
+     local temp kx
+
+     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$1")        # extract line
+     kx="Kx=${temp%%,*}"
+     [[ "$kx" == "Kx=X25519" ]] && kx="Kx=ECDH"
+     [[ "$kx" == "Kx=X448" ]] && kx="Kx=ECDH"
+     tm_out "$kx"
+     return 0
 }
 
 # arg1: certificate file
@@ -9760,7 +9766,15 @@ tls_sockets() {
                if [[ $hello_done -eq 1 ]]; then
                     check_tls_serverhellodone "$tls_hello_ascii" "$process_full"
                     hello_done=$?
-                    [[ "$hello_done" -eq 3 ]] && process_full="ephemeralkey"
+                    if [[ "$hello_done" -eq 3 ]]; then
+                         # The following three lines are temporary until the code
+                         # to decrypt TLSv1.3 responses has been added, at which point
+                         # parse_tls_serverhello() will be called with process_full="all"
+                         # and parse_tls_serverhello() will populate these files.
+                         process_full="ephemeralkey"
+                         [[ -e "$HOSTCERT" ]] && rm "$HOSTCERT"
+                         [[ -e "$TEMPDIR/intermediatecerts.pem" ]] && rm "$TEMPDIR/intermediatecerts.pem"
+                    fi
                fi
           done
 
