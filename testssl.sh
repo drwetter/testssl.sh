@@ -11647,7 +11647,7 @@ run_rc4() {
      local -i i
      local -a ciphers_found ciphers_found2 hexcode2 ciph2 sslvers2 rfc_ciph2
      local -i -a index
-     local dhlen available="" ciphers_to_test supported_sslv2_ciphers
+     local dhlen available="" ciphers_to_test supported_sslv2_ciphers proto
      local has_dh_bits="$HAS_DH_BITS" rc4_detected=""
      local using_sockets=true
      local cve="CVE-2013-2566, CVE-2015-2808"
@@ -11761,34 +11761,33 @@ run_rc4() {
           fi
      done
 
-     for (( success=0; success==0 ; 1 )); do
-          ciphers_to_test=""
-          for (( i=0; i < nr_ossl_ciphers; i++ )); do
-               ! "${ciphers_found2[i]}" && ciphers_to_test+=":${ciph2[i]}"
-          done
-          success=1
-          if [[ -n "$ciphers_to_test" ]]; then
-               $OPENSSL s_client $(s_client_options "-no_ssl2 -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-               sclient_connect_successful "$?" "$TMPFILE"
-               if [[ "$?" -eq 0 ]]; then
-                    cipher=$(get_cipher $TMPFILE)
-                    if [[ -n "$cipher" ]]; then
-                         success=0
-                         rc4_offered=1
-                         for (( i=0; i < nr_ossl_ciphers; i++ )); do
-                              [[ "$cipher" == "${ciph2[i]}" ]] && ciphers_found2[i]=true && break
-                         done
-                         i=${index[i]}
-                         ciphers_found[i]=true
-                         if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
-                              dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                              kx[i]="${kx[i]} $dhlen"
-                         fi
-                         "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
-                              sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
-                    fi
+     for proto in -no_ssl2 -tls1_1 -tls1 -ssl3; do
+          [[ "$proto" != "-no_ssl2" ]] && [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
+          ! "$HAS_SSL3" && [[ "$proto" == "-ssl3" ]] && continue
+          while true; do
+               ciphers_to_test=""
+               for (( i=0; i < nr_ossl_ciphers; i++ )); do
+                    ! "${ciphers_found2[i]}" && ciphers_to_test+=":${ciph2[i]}"
+               done
+               [[ -z "$ciphers_to_test" ]] && break
+               $OPENSSL s_client $(s_client_options "$proto -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+               sclient_connect_successful "$?" "$TMPFILE" || break
+               cipher=$(get_cipher $TMPFILE)
+               [[ -z "$cipher" ]] && break
+               for (( i=0; i < nr_ossl_ciphers; i++ )); do
+                    [[ "$cipher" == "${ciph2[i]}" ]] && ciphers_found2[i]=true && break
+               done
+               [[ $i -eq $nr_ossl_ciphers ]] && break
+               rc4_offered=1
+               i=${index[i]}
+               ciphers_found[i]=true
+               if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                    dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                    kx[i]="${kx[i]} $dhlen"
                fi
-          fi
+               "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                    sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+          done
      done
 
      if "$using_sockets"; then
@@ -11804,36 +11803,36 @@ run_rc4() {
           done
      fi
 
-     for (( success=0; success==0 ; 1 )); do
-          ciphers_to_test=""
-          for (( i=0; i < nr_nonossl_ciphers; i++ )); do
-               ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode2[i]}"
-          done
-          success=1
-          if [[ -n "$ciphers_to_test" ]]; then
+     for proto in 03 02 01 00; do
+          [[ $(has_server_protocol "$proto") -eq 1 ]] && continue
+          while true; do
+               ciphers_to_test=""
+               for (( i=0; i < nr_nonossl_ciphers; i++ )); do
+                    ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode2[i]}"
+               done
+               [[ -z "$ciphers_to_test" ]] && break
                if "$WIDE" && "$SHOW_SIGALGO"; then
-                    tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "all"
+                    tls_sockets "$proto" "${ciphers_to_test:2}, 00,ff" "all"
                else
-                    tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+                    tls_sockets "$proto" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
                fi
                ret=$?
-               if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
-                    success=0
-                    rc4_offered=1
-                    cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
-                    for (( i=0; i < nr_nonossl_ciphers; i++ )); do
-                         [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
-                    done
-                    i=${index[i]}
-                    ciphers_found[i]=true
-                    if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
-                         dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
-                         kx[i]="${kx[i]} $dhlen"
-                    fi
-                    "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
-                         sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               [[ $ret -ne 0 ]] && [[ $ret -ne 2 ]] && break
+               cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+               for (( i=0; i < nr_nonossl_ciphers; i++ )); do
+                    [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
+               done
+               [[ $i -eq $nr_nonossl_ciphers ]] && break
+               rc4_offered=1
+               i=${index[i]}
+               ciphers_found[i]=true
+               if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                    dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
+                    kx[i]="${kx[i]} $dhlen"
                fi
-          fi
+               "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
+                    sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+          done
      done
 
      if [[ $rc4_offered -eq 1 ]]; then
