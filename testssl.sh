@@ -5984,7 +5984,7 @@ certificate_info() {
      local days2warn2=$DAYS2WARN2
      local days2warn1=$DAYS2WARN1
      local provides_stapling=false
-     local caa_node=""
+     local caa_node="" all_caa="" caa_property_name="" caa_property_value=""
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -6576,10 +6576,21 @@ certificate_info() {
           [[ $caa_node =~ '.'$ ]] || caa_node+="."
           caa_node=${caa_node#*.}
      done
-
      if [[ -n "$caa" ]]; then
-          pr_done_good "OK"; out " (" ; pr_italic "$caa"; out ")"
-          fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : \"$caa\" "
+          pr_done_good "available"; out " - please check for match with \"Issuer\" above"
+          if [[ $(count_lines "$caa") -eq 1 ]]; then
+               out ": "
+          else
+               outln; out "$spaces"
+          fi
+          while read caa; do
+               if [[ -n "$caa" ]]; then
+                    all_caa+="$caa, "
+               fi
+          done <<< "$caa"
+          all_caa=${all_caa%, }                 # strip trailing comma
+          pr_italic "$(out_row_aligned_max_width "$all_caa" "$indent                              " $TERM_WIDTH)"
+          fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 (check for match): \"$all_caa\" "
      elif "$NODNS"; then
           pr_warning "(was instructed to not use DNS)"
           fileout "${json_prefix}CAA_record" "WARN" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : test skipped as instructed"
@@ -13160,6 +13171,7 @@ get_caa_rr_record() {
      local caa_property_name
      local caa_property_value
      local saved_openssl_conf="$OPENSSL_CONF"
+     local all_caa=""
 
      "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
@@ -13192,28 +13204,39 @@ get_caa_rr_record() {
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
      debugme echo $raw_caa
 
-     # '# 19' for google.com is the tag length probably --> we use this also to identify the binary format
-     if [[ "$raw_caa" =~ \#\ [0-9][0-9]\ [A-F0-9]+$ ]]; then
-          raw_caa=$(awk '{ print $NF }' <<< $raw_caa)       # caa_length would be awk '{ print $(NF-1) }' but we don't need it
-          if [[ "${raw_caa:0:2}" == "00" ]]; then           # probably the flag
-               caa_flag="0"
-               len_caa_property=${raw_caa:2:2}              # implicit type casting, for google we have 05 here as a string
-               len_caa_property=$((len_caa_property*2))     # =>word! Now get name from 4th and value from 4th+len position...
-               caa_property_name=$(hex2ascii ${raw_caa:4:$len_caa_property})
-               caa_property_value=$(hex2ascii ${raw_caa:$((4+len_caa_property)):100})
-          else
-               outln "please report unknown CAA flag $caa_flag @ $NODE"
-          fi
+     if [[ "$raw_caa" =~ \#\ [0-9][0-9] ]]; then
+          # for posteo we get this binary format returned e.g. for old dig versions:
+          # \# 19 0005697373756567656F74727573742E636F6D
+          # \# 23 0009697373756577696C6467656F74727573742E636F6D
+          # \# 34 0005696F6465666D61696C746F3A686F73746D617374657240706F73 74656F2E6465
+          #  # len caaflag <more_see_below>                       @ p o s  t e o . d e
+          while read hash len line ;do
+               if [[ "${line:0:2}" == "00" ]]; then                             # probably the caa flag, always 00, so we don't keep this
+                    len_caa_property=$(printf "%0d" "$((10#${line:2:2}))")      # get len and do type casting, for posteo we have 05 or 09 here as a string
+                    len_caa_property=$((len_caa_property*2))                    # =>word! Now get name from 4th and value from 4th+len position...
+                    line="${line/ /}"                                           # especially with iodefs there's a blank in the string which we just skip
+                    caa_property_name="$(hex2ascii ${line:4:$len_caa_property})"
+                    caa_property_value="$(hex2ascii "${line:$((4+len_caa_property)):100}")"
+                    # echo "${caa_property_name}=${caa_property_value}"
+                    all_caa+="${caa_property_name}=${caa_property_value}\n"
+               else
+                    outln "please report unknown CAA RR $line with flag  @ $NODE"
+                    return 7
+               fi
+          done <<< "$raw_caa"
+          safe_echo "$all_caa"
+          return 0
      elif grep -q '"' <<< $raw_caa; then
-          raw_caa=${raw_caa//\"/}                           # strip " first. Now we should have flag, name, value
-          caa_flag=$(awk '{ print $1 }' <<< $raw_caa)
-          caa_property_name=$(awk '{ print $2 }' <<< $raw_caa)
-          caa_property_value=$(awk '{ print $3 }' <<< $raw_caa)
+          raw_caa=${raw_caa//\"/}                           # strip all ". Now we should have flag, name, value
+          #caa_flag="$(awk '{ print $1 }' <<< "$raw_caa")"
+          #caa_property_name="$(awk '{ print $2 }' <<< "$raw_caa")"
+          #caa_property_value="$(awk '{ print $3 }' <<< "$raw_caa")"
+          safe_echo "$(awk '{ print $2"="$3 }' <<< "$raw_caa")"
+          return 0
      else
           # no caa record
           return 1
      fi
-     echo "$caa_property_name: $caa_property_value"
 
 # to do:
 #    4: check whether $1 is a CNAME and take this
