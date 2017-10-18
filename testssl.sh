@@ -5984,6 +5984,7 @@ certificate_info() {
      local days2warn2=$DAYS2WARN2
      local days2warn1=$DAYS2WARN1
      local provides_stapling=false
+     local caa_node=""
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -6567,7 +6568,13 @@ certificate_info() {
      must_staple "$json_prefix" "$provides_stapling"
 
      out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
-     caa="$(get_caa_rr_record $NODE)"
+
+     caa_node="$NODE."
+     caa=""
+     while ( [[ -z "$caa" ]] && [[ ! -z "$caa_node" ]] ); do
+          caa="$(get_caa_rr_record $caa_node)"
+          caa_node="$(echo "$caa_node."|cut -f 2- -d '.'|sed 's/\.$//')"
+     done
      if [[ -n "$caa" ]]; then
           pr_done_good "OK"; out " (" ; pr_italic "$caa"; out ")"
           fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : \"$caa\" "
