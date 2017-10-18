@@ -6571,9 +6571,10 @@ certificate_info() {
 
      caa_node="$NODE"
      caa=""
-     while ( [[ -z "$caa" ]] && [[ ! -z "$caa_node" ]] ); do
+     while ( [[ -z "$caa" ]] && [[ "$caa_node" != "." ]] ); do
           caa="$(get_caa_rr_record $caa_node)"
-          caa_node="$(echo "$caa_node."|cut -f 2- -d '.'|sed 's/\.$//')"
+          caa_node+="."
+          caa_node=${caa_node#*.}
      done
 
      if [[ -n "$caa" ]]; then
