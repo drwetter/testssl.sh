@@ -6569,12 +6569,13 @@ certificate_info() {
 
      out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
 
-     caa_node="$NODE."
+     caa_node="$NODE"
      caa=""
      while ( [[ -z "$caa" ]] && [[ ! -z "$caa_node" ]] ); do
           caa="$(get_caa_rr_record $caa_node)"
           caa_node="$(echo "$caa_node."|cut -f 2- -d '.'|sed 's/\.$//')"
      done
+
      if [[ -n "$caa" ]]; then
           pr_done_good "OK"; out " (" ; pr_italic "$caa"; out ")"
           fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : \"$caa\" "
