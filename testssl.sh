@@ -13228,6 +13228,7 @@ get_caa_rr_record() {
           return 1
           # No dig, drill, host, or nslookup --> complaint was elsewhere already
      fi
+     raw_caa=$(echo $raw_caa|sort)
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
      debugme echo $raw_caa
 
