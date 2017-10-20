@@ -3,6 +3,10 @@
 # see #807 and #806 (especially
 # https://github.com/drwetter/testssl.sh/issues/806#issuecomment-318686374)
 
+# All 5 ciphers defined for TLS 1.3
+readonly TLS13_CIPHER="
+13,01, 13,02, 13,03, 13,04, 13,05"
+
 # 123 standard cipher + 4x GOST for TLS 1.2 and SPDY/NPN HTTP2/ALPN
 readonly TLS12_CIPHER="
 c0,30, c0,2c, c0,28, c0,24, c0,14, c0,0a, 00,9f, 00,6b,

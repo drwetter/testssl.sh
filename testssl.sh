@@ -4754,7 +4754,7 @@ run_server_preference() {
      local default_cipher default_cipher_ossl default_proto
      local limitedsense supported_sslv2_ciphers
      local -a cipher proto
-     local proto i
+     local proto_ossl proto_txt proto_hex cipherlist i
      local -i ret=0 j
      local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256"
      # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
@@ -4844,6 +4844,10 @@ run_server_preference() {
      fi
      default_proto=$(get_protocol $TMPFILE)
      case "$default_proto" in
+          *TLSv1.3)
+               prln_done_best $default_proto
+               fileout "order_proto" "OK" "Default protocol TLS1.3"
+               ;;
           *TLSv1.2)
                prln_done_best $default_proto
                fileout "order_proto" "OK" "Default protocol TLS1.2"
@@ -4918,8 +4922,8 @@ run_server_preference() {
      else
           pr_bold " Negotiated cipher per proto"; outln " $limitedsense"
           i=1
-          for proto in ssl2 ssl3 tls1 tls1_1 tls1_2; do
-               if [[ $proto == ssl2 ]] && ! "$HAS_SSL2"; then
+          for proto_ossl in ssl2 ssl3 tls1 tls1_1 tls1_2 tls1_3; do
+               if [[ $proto_ossl == ssl2 ]] && ! "$HAS_SSL2"; then
                     if ! "$using_sockets" || [[ $TLS_NR_CIPHERS -eq 0 ]]; then
                          out "     (SSLv2: "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl2\""; outln ")";
                          continue
@@ -4949,15 +4953,20 @@ run_server_preference() {
                               cipher[i]=""
                          fi
                     fi
-               elif [[ $proto == ssl3 ]] && ! "$HAS_SSL3"; then
+               elif ( [[ $proto_ossl == ssl3 ]] && ! "$HAS_SSL3" ) || ( [[ $proto_ossl == tls1_3 ]] && ! "$HAS_TLS13" ); then
+                    if [[ $proto_ossl == ssl3 ]]; then
+                         proto_txt="SSLv3" ; proto_hex="00" ; cipherlist="$TLS_CIPHER"
+                    else
+                         proto_txt="TLSv1.3" ; proto_hex="04" ; cipherlist="$TLS13_CIPHER"
+                    fi
                     if ! "$using_sockets"; then
-                         out "     (SSLv3: "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"" ; outln ")";
+                         out "     ($proto_txt: "; pr_local_problem "$OPENSSL doesn't support \"s_client -$proto_ossl\"" ; outln ")";
                          continue
                     else
-                         tls_sockets "00" "$TLS_CIPHER"
+                         tls_sockets "$proto_hex" "$cipherlist"
                          if [[ $? -eq 0 ]]; then
-                              proto[i]="SSLv3"
-                              cipher1=$(awk '/Cipher *:/ { print $3 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                              proto[i]="$proto_txt"
+                              cipher1=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                               cipher[i]="$cipher1"
                               if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
                                    cipher[i]="$(rfc2openssl "$cipher1")"
@@ -4970,8 +4979,8 @@ run_server_preference() {
                          fi
                     fi
                else
-                    [[ "$proto" =~ ssl ]] && sni="" || sni="$SNI"
-                    $OPENSSL s_client $STARTTLS -"$proto" $BUGS -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
+                    [[ "$proto_ossl" =~ ssl ]] && sni="" || sni="$SNI"
+                    $OPENSSL s_client $STARTTLS -"$proto_ossl" $BUGS -connect $NODEIP:$PORT $PROXY $sni </dev/null 2>>$ERRFILE >$TMPFILE
                     if sclient_connect_successful $? $TMPFILE; then
                          proto[i]=$(get_protocol $TMPFILE)
                          cipher[i]=$(get_cipher $TMPFILE)
@@ -4986,7 +4995,7 @@ run_server_preference() {
                          cipher[i]=""
                     fi
                fi
-               [[ -n "${cipher[i]}" ]] && add_tls_offered "$proto" yes
+               [[ -n "${cipher[i]}" ]] && add_tls_offered "$proto_ossl" yes
                i=$((i + 1))
           done
 
@@ -5112,7 +5121,7 @@ cipher_pref_check() {
 
           [[ $(has_server_protocol "$p") -eq 1 ]] && continue
 
-          if [[ $p != ssl3 ]] || "$HAS_SSL3"; then
+          if ( [[ $p != tls1_3 ]] || "$HAS_TLS13" ) && ( [[ $p != ssl3 ]] || "$HAS_SSL3" ); then
                # with the supplied binaries SNI works also for SSLv3
                [[ "$p" =~ ssl ]] && sni="" || sni=$SNI
 
@@ -5280,7 +5289,7 @@ cipher_pref_check() {
                out "$(out_row_aligned_max_width "$order" "               " $TERM_WIDTH)"
                fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
           fi
-     done <<< "$(tm_out " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n")"
+     done <<< "$(tm_out " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
      outln
 
      outln
