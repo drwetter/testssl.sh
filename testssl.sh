@@ -12629,15 +12629,16 @@ output options (can also be preset via environment variables):
 
 file output options (can also be preset via environment variables)
      --log, --logging              logs stdout to <NODE>-p<port#><YYYYMMDD-HHMM>.log in current working directory (cwd)
-     --logfile <logfile>           logs stdout to <dir/NODE>-p<port#><YYYYMMDD-HHMM>.log if <logfile> is a dir or to a specified <logfile>
+     --logfile|-oL <logfile>       logs stdout to <dir/NODE>-p<port#><YYYYMMDD-HHMM>.log if <logfile> is a dir or to a specified <logfile>
      --json                        additional output of findings to flat JSON file <NODE>-p<port#><YYYYMMDD-HHMM>.json in cwd
-     --jsonfile <jsonfile>         additional output to the specified flat JSON file or directory, similar to --logfile
+     --jsonfile|-oj <jsonfile>     additional output to the specified flat JSON file or directory, similar to --logfile
      --json-pretty                 additional JSON structured output of findings to a file <NODE>-p<port#><YYYYMMDD-HHMM>.json in cwd
-     --jsonfile-pretty <jsonfile>  additional JSON structured output to the specified file or directory, similar to --logfile
+     --jsonfile-pretty|-oJ <jsonfile>  additional JSON structured output to the specified file or directory, similar to --logfile
      --csv                         additional output of findings to CSV file <NODE>-p<port#><YYYYMMDD-HHMM>.csv in cwd or directory
-     --csvfile <csvfile>           additional output as CSV to the specified file or directory, similar to --logfile
+     --csvfile|-oC <csvfile>       additional output as CSV to the specified file or directory, similar to --logfile
      --html                        additional output as HTML to file <NODE>-p<port#><YYYYMMDD-HHMM>.html
-     --htmlfile <htmlfile>         additional output as HTML to the specifed file or directory, similar to --logfile
+     --htmlfile|-oH <htmlfile>     additional output as HTML to the specifed file or directory, similar to --logfile
+     -oa/-oA <basename>            similar to nmap it outputs a LOG,JSON,CSV,HTML file. -oA: JSON pretty, -oa: flat JSON
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists rather append then overwrite. Omits any header
@@ -13733,7 +13734,7 @@ create_mass_testing_cmdline() {
                nr_cmds+=1
           else
                case "$cmd" in
-                    --jsonfile|--jsonfile=*)
+                    --jsonfile|--jsonfile=*|-oj|-oj=*)
                          # If <jsonfile> is a file, then have provide a different
                          # file name to each child process. If <jsonfile> is a
                          # directory, then just pass it on to the child processes.
@@ -13745,7 +13746,7 @@ create_mass_testing_cmdline() {
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
                          ;;
-                    --jsonfile-pretty|--jsonfile-pretty=*)
+                    --jsonfile-pretty|--jsonfile-pretty=*|-oJ|-oJ=*)
                          if "$JSONHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_${test_number}.json"
                               [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
@@ -13753,7 +13754,7 @@ create_mass_testing_cmdline() {
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
                          ;;
-                    --csvfile|--csvfile=*)
+                    --csvfile|--csvfile=*|-oC|-oC=*)
                          if "$CSVHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--csvfile=$TEMPDIR/csvfile_${test_number}.csv"
                               [[ "$cmd" == --csvfile ]] && skip_next=true
@@ -13761,7 +13762,7 @@ create_mass_testing_cmdline() {
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
                          ;;
-                    --htmlfile|--htmlfile=*)
+                    --htmlfile|--htmlfile=*|-oH|-oH=*)
                          if "$HTMLHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile=$TEMPDIR/htmlfile_${test_number}.html"
                               [[ "$cmd" == --htmlfile ]] && skip_next=true
@@ -14506,7 +14507,7 @@ parse_cmd_line() {
                     do_logging=true
                     ;;   # DEFINITION of LOGFILE if no arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
-               --logfile|--logfile=*)
+               --logfile|--logfile=*|-oL|-oL=*)
                     LOGFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_logging=true
@@ -14516,7 +14517,7 @@ parse_cmd_line() {
                     do_json=true
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
-               --jsonfile|--jsonfile=*)
+               --jsonfile|--jsonfile=*|-oj|-oj=*)
                     $do_pretty_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
@@ -14526,7 +14527,7 @@ parse_cmd_line() {
                     $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
                     do_pretty_json=true
                     ;;
-               --jsonfile-pretty|--jsonfile-pretty=*)
+               --jsonfile-pretty|--jsonfile-pretty=*|-oJ|-oJ=*)
                     $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
@@ -14543,7 +14544,7 @@ parse_cmd_line() {
                     do_csv=true
                     ;;   # DEFINITION of CSVFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
-               --csvfile|--csvfile=*)
+               --csvfile|--csvfile=*|-oC|-oC=*)
                     CSVFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
@@ -14552,10 +14553,32 @@ parse_cmd_line() {
                     do_html=true
                     ;;  # DEFINITION of HTMLFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a file location additionally
-               --htmlfile|--htmlfile=*)
+               --htmlfile|--htmlfile=*|-oH|-oH=*)
                     HTMLFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_html=true
+                    ;;
+               --outFile|--outFile|-oa|-oa=*)
+                    HTMLFILE="$(parse_opt_equal_sign "$1" "$2").html"
+                    CSVFILE="$(parse_opt_equal_sign "$1" "$2").csv"
+                    JSONFILE="$(parse_opt_equal_sign "$1" "$2").json"
+                    LOGFILE="$(parse_opt_equal_sign "$1" "$2").log"
+                    [[ $? -eq 0 ]] && shift
+                    do_html=true
+                    do_json=true
+                    do_csv=true
+                    do_logging=true
+                    ;;
+               --outfile|--outfile|-oA|-oA=*)
+                    HTMLFILE="$(parse_opt_equal_sign "$1" "$2").html"
+                    CSVFILE="$(parse_opt_equal_sign "$1" "$2").csv"
+                    JSONFILE="$(parse_opt_equal_sign "$1" "$2").json"
+                    LOGFILE="$(parse_opt_equal_sign "$1" "$2").log"
+                    [[ $? -eq 0 ]] && shift
+                    do_html=true
+                    do_pretty_json=true
+                    do_csv=true
+                    do_logging=true
                     ;;
                --append)
                     APPEND=true

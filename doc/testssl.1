@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "TESTSSL" "1" "September 2017" "" ""
+.TH "TESTSSL" "1" "October 2017" "" ""
 .
 .SH "NAME"
 \fBtestssl\fR
@@ -366,31 +366,34 @@ whole 9 yards
 \fB\-\-log, \-\-logging\fR Logs stdout also to \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.log\fR in current working directory of the shell\. Depending on the color output option (see above) the output file will contain color and other markup escape codes\. \fBcat\fR and \-\- if properly configured \fBless\fR \-\- will show the output properly formatted on your terminal\. The output shows a banner with the almost the same information as on the screen\. In addition it shows the command line of the testssl\.sh instance\. Please note that the resulting log file is formatted according to the width of your screen while running testssl\.sh\.
 .
 .P
-\fB\-\-logfile <logfile>\fR Instead of the previous option you may want to use this one if you want to log into a directory or if you rather want to specify the log file name yourself\. If \fB<logfile>\fR is a directory the output will put into \fB<logfile>/<NODE>\-p<port#><YYYYMMDD\-HHMM>\.log\fR\. If \fB<logfile>\fRis a file it will use that file name, an absolute path is also permitted here\. LOGFILE is the variable you need to set if you prefer to work environment variables instead\. Please note that the resulting log file is formatted according to the width of your screen while running testssl\.sh\.
+\fB\-\-logfile <logfile>\fR or \fB\-oL <logfile>\fR Instead of the previous option you may want to use this one if you want to log into a directory or if you rather want to specify the log file name yourself\. If \fB<logfile>\fR is a directory the output will put into \fB<logfile>/<NODE>\-p<port#><YYYYMMDD\-HHMM>\.log\fR\. If \fB<logfile>\fRis a file it will use that file name, an absolute path is also permitted here\. LOGFILE is the variable you need to set if you prefer to work environment variables instead\. Please note that the resulting log file is formatted according to the width of your screen while running testssl\.sh\.
 .
 .P
 \fB\-\-json\fR Logs additionally to JSON file \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.json\fR in the current working directory of the shell\. The resulting JSON file is opposed to \fB\-\-json\-pretty\fR flat \-\- which means each section is self contained and has an identifier for each single check, the hostname/IP address, the port, severity and the finding\. For vulnerabilities it may contain a cve and cwe entry too\. The output doesn\'t contain a banner or a footer\.
 .
 .P
-\fB\-\-jsonfile <jsonfile>\fR Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself\. If \fB<jsonfile>\fR is a directory the output will put into \fB<logfile>/<NODE>\-p<port#><YYYYMMDD\-HHMM>\.json\fR\. If \fB<jsonfile>\fRis a file it will use that file name, an absolute path is also permitted here\. JSONFILE is the variable you need to set if you prefer to work environment variables instead\.
+\fB\-\-jsonfile <jsonfile>\fR or \fB\-oj <jsonfile>\fR Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself\. If \fB<jsonfile>\fR is a directory the output will put into \fB<logfile>/<NODE>\-p<port#><YYYYMMDD\-HHMM>\.json\fR\. If \fB<jsonfile>\fRis a file it will use that file name, an absolute path is also permitted here\. JSONFILE is the variable you need to set if you prefer to work environment variables instead\.
 .
 .P
 \fB\-\-json\-pretty\fR Logs additionally to JSON file \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.json\fR in the current working directory of the shell\. The resulting JSON file is opposed to \fB\-\-json\fR non\-flat \-\- which means it is structured\. The structure contains a header similar to the banner on the screen (with the epoch of the start time) and then for every test section of testssl\.sh it contains a separate JSON object/section\. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding\. For vulnerabilities it may contain a cve and cwe entry too\. The footer lists the scan time in seconds\.
 .
 .P
-\fB\-\-jsonfile\-pretty <jsonfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in pretty JSON format (see \fB\-\-json\-pretty\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB`\-\-logfile\fR\. \fBJSONFILE\fR is the variable you need to set if you prefer to work environment with variables instead\.
+\fB\-\-jsonfile\-pretty <jsonfile>\fR or \fB\-oJ <jsonfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in pretty JSON format (see \fB\-\-json\-pretty\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB`\-\-logfile\fR\. \fBJSONFILE\fR is the variable you need to set if you prefer to work environment with variables instead\.
 .
 .P
 \fB\-\-csv\fR Logs additionally to a CSV file \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.csv\fR in the current working directory of the shell\. The output contains a header with the keys, the values are the same as in the flat JSON format (identifier for each single check, the hostname/IP address, the port, severity,the finding and for vulnerabilities a cve and cwe too)\.
 .
 .P
-\fB\-\-csvfile <csvfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in CSV format (see \fB\-\-cvs\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB`\-\-logfile\fR\. \fBCSVFILE\fR is the variable you need to set if you prefer to work environment with variables instead\.
+\fB\-\-csvfile <csvfile>\fR or \fB\-oC <csvfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in CSV format (see \fB\-\-cvs\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB`\-\-logfile\fR\. \fBCSVFILE\fR is the variable you need to set if you prefer to work environment with variables instead\.
 .
 .P
 \-\-html Logs additionally to an HTML file \fB<NODE>\-p<port#><YYYYMMDD\-HHMM>\.html\fR in the current working directory of the shell\. It contains a 1:1 output of the console\. In former versions there was a non\-native option to use "aha" (Ansi HTML Adapter: github\.com/theZiz/aha) like \fBtestssl\.sh <options> <URI> | aha >output\.html\fR \. This is not necessary anymore\.
 .
 .P
-\fB\-\-htmlfile <htmlfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in HTML format (see \fB\-\-html\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB\-\-logfile\fR\. \fBHTMLFILE\fR is the variable you need to set if you prefer to work with environment variables instead\.
+\fB\-\-htmlfile <htmlfile>\fR or \fB\-oH <htmlfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in HTML format (see \fB\-\-html\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB\-\-logfile\fR\. \fBHTMLFILE\fR is the variable you need to set if you prefer to work with environment variables instead\.
+.
+.P
+\fB\-oA <basename>\fR / \fB\-oa <basename>\fR Similar to nmap it does a file output to all available file formats: LOG,JSON,CSV,HTML\. \fB\-oA\fR does JSON pretty, \fB\-oa\fR flat JSON
 .
 .P
 \fB\-\-hints\fR This option is not in use yet\. This option is meant to give hints how to fix a finding or at least a help to improve something\. GIVE_HINTS is the environment variable for this\.
