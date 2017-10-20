@@ -13251,14 +13251,14 @@ get_caa_rr_record() {
                     return 7
                fi
           done <<< "$raw_caa"
-          safe_echo "$all_caa"
+          sort <<< "$(safe_echo "$all_caa")"
           return 0
-     elif grep -q '"' <<< $raw_caa; then
+     elif grep -q '"' <<< "$raw_caa"; then
           raw_caa=${raw_caa//\"/}                           # strip all ". Now we should have flag, name, value
           #caa_flag="$(awk '{ print $1 }' <<< "$raw_caa")"
           #caa_property_name="$(awk '{ print $2 }' <<< "$raw_caa")"
           #caa_property_value="$(awk '{ print $3 }' <<< "$raw_caa")"
-          safe_echo "$(awk '{ print $2"="$3 }' <<< "$raw_caa")"
+          safe_echo "$(sort <<< "$(awk '{ print $2"="$3 }' <<< "$raw_caa")")"
           return 0
      else
           # no caa record
