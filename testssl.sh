@@ -6374,7 +6374,7 @@ certificate_info() {
      # See issue #733.
      if [[ -z "$sni_used" ]]; then
           trustfinding_nosni=""
-     elif ( [[ $trust_sni -eq $trust_sni ]] && [[ "$has_dns_sans" == "$has_dns_sans_nosni" ]] ) || \
+     elif ( [[ $trust_sni -eq $trust_nosni ]] && [[ "$has_dns_sans" == "$has_dns_sans_nosni" ]] ) || \
           ( [[ $trust_sni -eq 0 ]] && [[ $trust_nosni -eq 0 ]] ); then
           trustfinding_nosni=" (same w/o SNI)"
      elif [[ $trust_nosni -eq 0 ]]; then
