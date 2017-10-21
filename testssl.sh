@@ -164,7 +164,7 @@ fi
 TERM_CURRPOS=0                                              # custom line wrapping needs alter the current horizontal cursor pos
 
 ## CONFIGURATION PART ##
-# following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <host>
+# following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <URI>
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch, see --help
 declare -x OPENSSL OPENSSL_TIMEOUT
 FAST_SOCKET=${FAST_SOCKET:-false}       # EXPERIMENTAL feature to accelerate sockets -- DO NOT USE it for production
