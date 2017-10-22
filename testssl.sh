@@ -1393,6 +1393,7 @@ string_to_asciihex() {
 # Adjust options to $OPENSSL s_client based on OpenSSL version and protocol version
 s_client_options() {
      local options="$1"
+     local ciphers
 
      # Don't include the -servername option for an SSLv2 or SSLv3 ClientHello.
      [[ -n "$SNI" ]] && [[ " $options " =~ \ -ssl[2|3]\  ]] && options="${options//$SNI/}"
@@ -1409,6 +1410,19 @@ s_client_options() {
      # OpenSSL that don't support -no_ssl2 also don't support SSLv2, the option
      # isn't needed for these versions of OpenSSL.)
      ! "$HAS_NO_SSL2" && options="${options//-no_ssl2/}"
+
+     # If $OPENSSL is compiled with TLSv1.3 support and s_client is called without
+     # specifying a protocol, but specifying a list of ciphers that doesn't include
+     # any TLSv1.3 ciphers, then the command will always fail. So, if $OPENSSL supports
+     # TLSv1.3 and a cipher list is provided, but no protocol is specified, then add
+     # -no_tls1_3 if the list of ciphers doesn't include any TLSv1.3 ciphers.
+     if "$HAS_TLS13" && [[ " $options " =~ " -cipher " ]] && \
+          [[ ! " $options " =~ \ -ssl[2|3]\  ]] && \
+          [[ ! " $options " =~ \ -tls1\  ]] && [[ ! " $options " =~ \ -tls1_[1|2|3]\  ]]; then
+          ciphers="${options#* -cipher }"
+          ciphers="${ciphers%% *}"
+          [[ ! "$($OPENSSL ciphers "$ciphers")" =~ TLS13 ]] && options+=" -no_tls1_3"
+     fi
 
      tm_out "$options"
 }
@@ -2457,12 +2471,7 @@ std_cipherlists() {
                          "$FAST" && continue
                          [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
                     fi
-                    # FIXME: This check won't be needed once PR #827 is approved. At that point just the "else" statement will be needed.
-                    if "$HAS_TLS13" && [[ "$proto" == "-no_ssl2" ]] && [[ ! "$($OPENSSL ciphers "$1")" =~ TLS13 ]]; then
-                         $OPENSSL s_client $(s_client_options "-cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $proto -no_tls1_3") 2>$ERRFILE >$TMPFILE </dev/null
-                    else
-                         $OPENSSL s_client $(s_client_options "-cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $proto") 2>$ERRFILE >$TMPFILE </dev/null
-                    fi
+                    $OPENSSL s_client $(s_client_options "-cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $proto") 2>$ERRFILE >$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE
                     sclient_success=$?
                     debugme cat $ERRFILE
