@@ -14263,6 +14263,7 @@ parse_cmd_line() {
                     ;;
                -b|--banner|-v|--version)
                     maketempf
+                    get_install_dir
                     find_openssl_binary
                     prepare_debug
                     mybanner
