@@ -60,16 +60,16 @@ Options are either short or long options. All options requiring a value can be c
 
 `-v, --version`     same as before
 
-`-V <pattern> , --local <pattern>`  pretty print all local ciphers supported by openssl version. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or RFC), key exchange, encryption, bits. It does a word pattern match for non-numbers, for number just a normal match applies. Numbers here are defined as [0-9,A-F]. This means (attention: catch) that the pattern CBC is matched as non-word, but AES as word.
+`-V [pattern] , --local [pattern]`  pretty print all local ciphers supported by openssl version. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or RFC), key exchange, encryption, bits. It does a word pattern match for non-numbers, for number just a normal match applies. Numbers here are defined as [0-9,A-F]. This means (attention: catch) that the pattern CBC is matched as non-word, but AES as word.
 
 ### INPUT PARAMETERS
 
-`<URI>`     can be a hostname, an IPv4 or IPv6 address (restriction see below) or an URL. IPv6 addresses need to be in square brackets. For any given parameter port 443 is assumed unless specified by appending a colon and a port number. The only preceding protocol specifier allowed is `https`. You need to be aware that checks for an IP address might not hit the vhost you want. DNS resolution (A/AAAA record) is being performed unless you have an `/etc/hosts` entry for the hostname.
+`URI`     can be a hostname, an IPv4 or IPv6 address (restriction see below) or an URL. IPv6 addresses need to be in square brackets. For any given parameter port 443 is assumed unless specified by appending a colon and a port number. The only preceding protocol specifier allowed is `https`. You need to be aware that checks for an IP address might not hit the vhost you want. DNS resolution (A/AAAA record) is being performed unless you have an `/etc/hosts` entry for the hostname.
 
 `--file <fname>` is the mass testing option. Per default it implicitly turns on `--warnings batch`.
-In its first incarnation the mass testing option reads command lines from `<fname>`. `<fname>` consists of command lines of testssl, one line per instance. Comments after `#` are ignored, `EOF` signals the end of <fname> any subsequent lines will be ignored too. You can also supply additional options which will be inherited to each child, e.g.  When invoking `testssl.sh --wide --log --file <fname>` . Each single line in `<fname>` is parsed upon execution. If there's a conflicting option and serial mass testing option is being performed the check will be aborted at the time it occurs and depending on the output option potentially leaving you with an output file without footer. In parallel mode the mileage varies.
+In its first incarnation the mass testing option reads command lines from `fname`. `fname` consists of command lines of testssl, one line per instance. Comments after `#` are ignored, `EOF` signals the end of fname any subsequent lines will be ignored too. You can also supply additional options which will be inherited to each child, e.g.  When invoking `testssl.sh --wide --log --file <fname>` . Each single line in `fname` is parsed upon execution. If there's a conflicting option and serial mass testing option is being performed the check will be aborted at the time it occurs and depending on the output option potentially leaving you with an output file without footer. In parallel mode the mileage varies.
 
-Alternatively `<fname>` can be in `nmap`'s grep(p)able output format (`-oG`). Only open ports will be considered. Multiple ports per line are allowed. The ports can be different and will be tested by testssl.sh according to common practice in the internet, .i.e. if nmap shows in its output an open port 25, automatically `-t smtp` will be added before the URI whereas port 465 will be treated as a plain TLS/SSL port, not requiring an STARTTLS SMTP handshake upfront. This is done by an internal table which correlates nmap's open port to the STARTTLS/plain text decision from testssl.sh.
+Alternatively `fname` can be in `nmap`'s grep(p)able output format (`-oG`). Only open ports will be considered. Multiple ports per line are allowed. The ports can be different and will be tested by testssl.sh according to common practice in the internet, .i.e. if nmap shows in its output an open port 25, automatically `-t smtp` will be added before the URI whereas port 465 will be treated as a plain TLS/SSL port, not requiring an STARTTLS SMTP handshake upfront. This is done by an internal table which correlates nmap's open port to the STARTTLS/plain text decision from testssl.sh.
 
 The nmap output always returns IP addresses and -- only if there's a PTR DNS record available -- a hostname. As it is not checked by nmap whether the hostname matches the IP (A or AAAA record), testssl.sh does this for you. If the A record of the hostname matches the IP address, the hostname is used and not the IP address. Watch out as stated above checks against an IP address might not hit the vhost you maybe were aiming at.
 
@@ -84,7 +84,7 @@ host.example.com:631
 -t ftp 10.10.12.11:21
 10.10.12.11:8443
 ```
-Please note that `<fname>` has to be in Unix format. DOS carriage returns won't be accepted. Instead of the command line switch the environment variable FNAME will be honored too.
+Please note that the content of `fname` has to be in Unix format. DOS carriage returns won't be accepted. Instead of the command line switch the environment variable FNAME will be honored too.
 
 
 `--mode <serial|parallel>`. Mass testing to be done serial (default) or parallel (`--parallel` is shortcut for the latter, `--serial` is the opposite option). Per default mass testing is being run in serial mode, i.e. one line after the other is processed and invoked. The variable `MASS_TESTING_MODE` can be defined to be either equal `serial` or `parallel`.
@@ -92,7 +92,7 @@ Please note that `<fname>` has to be in Unix format. DOS carriage returns won't 
 
 ### SPECIAL INVOCATIONS
 
-`-t <protocol>, --starttls <protocol>`    does a default run against a STARTTLS enabled `<protocol>`. `<protocol>` is one of `ftp`, `smtp`, `pop3`, `imap`, `xmpp`, `telnet`, `ldap`, `postgres`, `mysql`. For the latter four you need e.g. the supplied openssl.
+`-t <protocol>, --starttls <protocol>`    does a default run against a STARTTLS enabled `protocol`. `protocol` must be one of `ftp`, `smtp`, `pop3`, `imap`, `xmpp`, `telnet`, `ldap`, `postgres`, `mysql`. For the latter four you need e.g. the supplied openssl. MongoDB doesn't need a STARTTLS handshake.
 
 `--xmpphost <jabber_domain>`   is an additional option for STARTTLS enabled XMPP: It expects as a parameter the jabber domain. This is only needed if the domain is different from the URI supplied.
 
@@ -112,12 +112,12 @@ Please note that `<fname>` has to be in Unix format. DOS carriage returns won't 
 
 `--bugs`                    does some workarounds for buggy servers like padding for old F5 devices. The option is passed as `-bug` to openssl when needed, see `s_client(1)`. For the socket part testssl.sh tries its best also without that option to cope with broken server implementations (environment preset via `BUGS="-bugs"`)
 
-`--assuming-http`           testssl.sh does upfront a protocol detection on the application layer. In cases where for some reasons the usage of HTTP cannot be automatically detected you may want to use this option. It helps you to tell testssl.sh not to skip HTTP specific tests and to run the client simulation with browsers. Sometimes also the severity depends on the application protocol, e.g. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server.
+`--assuming-http`           testssl.sh does upfront a protocol detection on the application layer. In cases where for some reasons the usage of HTTP cannot be automatically detected you may want to use this option. It tells testssl.sh not to skip HTTP specific tests and to run the client simulation with browsers. Sometimes also the severity depends on the application protocol, e.g. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server.
 
 
 * `-n, --no-dns` instructs testssl.sh to not do any DNS lookups. This is useful if you either can't or are not willing to perform DNS lookups. The latter applies e.g. to some pentests, the former could e.g. help you to avoid timeouts by DNS lookups. `NODNS=true` has the same effect.
 
-* `--sneaky` as a friendly feature for the server side testssl.sh uses a user agent `TLS tester from ${URL}` (HTTP). With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
+* `--sneaky` as a friendly feature for the server side testssl.sh uses a HTTP user agent `TLS tester from ${URL}`. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
 
 
 ### SINGLE CHECK OPTIONS
@@ -148,7 +148,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 `-S, --server_defaults`         displays information from the server hello(s): available TLS extensions, TLS ticket + session information/capabilities and several certificate info including revocation info (CRL, OCSP, OCSP stapling/must staple), Certification Authority Authorization (CAA) record and: trust (CN, SAN, Chain of trust, expiration of certificate). For trust chain check there are 4 certificate stores provided (see section `FILES` below). If the trust is confirmed or not confirmed and the same in all four certificate stores there will be only one line of output with the appropriate result. If there are different results, each store is listed and for the one where there's no trust there's an indication what the failure is. Additional certificate stores for e.g. an intranet CA an be put into __etc/__ with the extension __pem__. In that case there will be a complaint about a missing trust with the other stores, in the opposite case -- i.e. if trust will be checked against hosts having a certificate issued by a different CA -- there will be a complaint by a missing trust in this additional store.
 If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be clearly indicated as this is deprecated. Possible fingerprinting is possible by the results in TLS clock skew: Only a few servers nowadays still have and TLS/SSL implementation which returns the local clock `gmt_unix_time` (e.g. IIS, openssl < 1.0.1f). In addition to the HTTP date you could derive that there are different hosts where your TLS and your HTTP request ended -- if the time deltas differ significantly. Also multiple server certificates are being checked for as well as the certificate reply to a non-SNI (Server Name Indication) client hello to the IP address.
 
-`-x <pattern>, --single-cipher <pattern>` tests matched `<pattern>` of ciphers against a server. Patterns are similar to `-V <pattern> , --local <pattern>`
+`-x <pattern>, --single-cipher <pattern>` tests matched `pattern` of ciphers against a server. Patterns are similar to `-V pattern , --local pattern`
 
 `-h, --header, --headers`       if the service is HTTP (either by detection or by enforcing via `--assume-http`. It tests several HTTP headers like
 
@@ -162,7 +162,7 @@ If the server provides no matching record in Subject Alternative Name (SAN) but 
 * Web server modules
 * IPv4 address in header
 * Cookie (including Secure/HTTPOnly flags)
-* Decodes BIG IP F5 cookies
+* Decodes BIG IP F5 non-encrypted cookies
 * Security headers (X-Frame-Options, X-XSS-Protection, ..., CSP headers)
 
 
@@ -210,7 +210,7 @@ If the server provides no matching record in Subject Alternative Name (SAN) but 
 `--warnings <batch|off>`     The warnings parameter determines how testssl.sh will deal with situations where user input will normally be necessary. There are a couple of options here.  `batch` doesn't wait for a confirming keypress. This is automatically being chosen for mass testing (`--file`). `-false` just skips the warning AND the confirmation. Please note that there are conflicts where testssl.sh will still ask for confirmation. Those are ones which would have a drastic impact on the results.
 The same can be achieved by setting the environment variable `WARNINGS`.
 
-`--openssl-timeout <seconds>` This is especially useful for all connects using openssl and practically useful for mass testing. It avoids the openssl connect to hang for ~2 minutes. The expected parameter `<seconds>` instructs testssl.sh to wait before the openssl connect will be terminated. The option is only available if your OS has a timeout binary installed. As there are different implementations of `timeout`: It automatically calls the binary with the right parameters.
+`--openssl-timeout <seconds>` This is especially useful for all connects using openssl and practically useful for mass testing. It avoids the openssl connect to hang for ~2 minutes. The expected parameter `seconds` instructs testssl.sh to wait before the openssl connect will be terminated. The option is only available if your OS has a timeout binary installed. As there are different implementations of `timeout`: It automatically calls the binary with the right parameters.
 
 `-q, --quiet`                      Normally testssl.sh displays a banner on stdout with several version information, usage rights and a warning. This option suppresses it. Please note that by choosing this option you acknowledge usage terms and the warning normally appearing in the banner.
 
@@ -246,23 +246,23 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 ### FILE OUTPUT OPTIONS
 
-`--log, --logging`      Logs stdout also to `<NODE>-p<port#><YYYYMMDD-HHMM>.log` in current working directory of the shell. Depending on the color output option (see above) the output file will contain color and other markup escape codes. `cat` and -- if properly configured `less` -- will show the output properly formatted on your terminal. The output shows a banner with the almost the same information as on the screen. In addition it shows the command line of the testssl.sh instance. Please note that the resulting log file is formatted according to the width of your screen while running testssl.sh.
+`--log, --logging`      Logs stdout also to `${NODE}-p${port}${YYYYMMDD-HHMM}.log` in current working directory of the shell. Depending on the color output option (see above) the output file will contain color and other markup escape codes. `cat` and -- if properly configured `less` -- will show the output properly formatted on your terminal. The output shows a banner with the almost the same information as on the screen. In addition it shows the command line of the testssl.sh instance. Please note that the resulting log file is formatted according to the width of your screen while running testssl.sh.
 
-`--logfile <logfile>` or `-oL <logfile>`  Instead of the previous option you may want to use this one if you want to log into a directory or if you rather want to specify the log file name yourself. If `<logfile>` is a directory the output will put into `<logfile>/<NODE>-p<port#><YYYYMMDD-HHMM>.log`. If `<logfile>`is a file it will use that file name, an absolute path is also permitted here. LOGFILE is the variable you need to set if you prefer to work environment variables instead. Please note that the resulting log file is formatted according to the width of your screen while running testssl.sh.
+`--logfile <logfile>` or `-oL <logfile>`  Instead of the previous option you may want to use this one if you want to log into a directory or if you rather want to specify the log file name yourself. If `logfile` is a directory the output will put into `logfile/${NODE}-p${port}${YYYYMMDD-HHMM}.log`. If `logfile`is a file it will use that file name, an absolute path is also permitted here. LOGFILE is the variable you need to set if you prefer to work environment variables instead. Please note that the resulting log file is formatted according to the width of your screen while running testssl.sh. You can override the width with the environment variable TERM_WIDTH.
 
-`--json`                Logs additionally to JSON file `<NODE>-p<port#><YYYYMMDD-HHMM>.json` in the current working directory of the shell. The resulting JSON file is opposed to `--json-pretty` flat -- which means each section is self contained and has an identifier for each single check, the hostname/IP address, the port, severity and the finding. For vulnerabilities it may contain a cve and cwe entry too. The output doesn't contain a banner or a footer.
+`--json`                Logs additionally to JSON file `${NODE}-p${port}${YYYYMMDD-HHMM}.json` in the current working directory of the shell. The resulting JSON file is opposed to `--json-pretty` flat -- which means each section is self contained and has an identifier for each single check, the hostname/IP address, the port, severity and the finding. For vulnerabilities it may contain a cve and cwe entry too. The output doesn't contain a banner or a footer.
 
-`--jsonfile <jsonfile>` or `-oj <jsonfile>` Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself. If `<jsonfile>` is a directory the output will put into `<logfile>/<NODE>-p<port#><YYYYMMDD-HHMM>.json`. If `<jsonfile>`is a file it will use that file name, an absolute path is also permitted here. JSONFILE is the variable you need to set if you prefer to work environment variables instead.
+`--jsonfile <jsonfile>` or `-oj <jsonfile>` Instead of the previous option you may want to use this one if you want to log the JSON out put into a directory or if you rather want to specify the log file name yourself. If `jsonfile` is a directory the output will put into `logfile/${NODE}-p${port}${YYYYMMDD-HHMM}.json. If `jsonfile` is a file it will use that file name, an absolute path is also permitted here. JSONFILE is the variable you need to set if you prefer to work environment variables instead.
 
-`--json-pretty`         Logs additionally to JSON file `<NODE>-p<port#><YYYYMMDD-HHMM>.json` in the current working directory of the shell. The resulting JSON file is opposed to `--json` non-flat -- which means it is structured. The structure contains a header similar to the banner on the screen (with the epoch of the start time) and then for every test section of testssl.sh it contains a separate JSON object/section. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding. For vulnerabilities it may contain a cve and cwe entry too.  The footer lists the scan time in seconds.
+`--json-pretty`         Logs additionally to JSON file `${NODE}-p${port}${YYYYMMDD-HHMM}.json in the current working directory of the shell. The resulting JSON file is opposed to `--json` non-flat -- which means it is structured. The structure contains a header similar to the banner on the screen (with the epoch of the start time) and then for every test section of testssl.sh it contains a separate JSON object/section. Each finding has a key/value pair identifier with the identifier for each single check, the severity and the finding. For vulnerabilities it may contain a cve and cwe entry too.  The footer lists the scan time in seconds.
 
-`--jsonfile-pretty <jsonfile>` or `-oJ <jsonfile>`  Similar to  the aforementioned `--jsonfile` or `--logfile` it logs the output in pretty JSON format (see `--json-pretty`) additionally into a file or a directory. For further explanation see `--jsonfile` or ``--logfile`. `JSONFILE` is the variable you need to set if you prefer to work environment with variables instead.
+`--jsonfile-pretty <jsonfile>` or `-oJ <jsonfile>`  Similar to the aforementioned `--jsonfile` or `--logfile` it logs the output in pretty JSON format (see `--json-pretty`) additionally into a file or a directory. For further explanation see `--jsonfile` or ``--logfile`. `JSONFILE` is the variable you need to set if you prefer to work environment with variables instead.
 
-`--csv`                         Logs additionally to a CSV file `<NODE>-p<port#><YYYYMMDD-HHMM>.csv` in the current working directory of the shell. The output contains a header with the keys, the values are the same as in the flat JSON format (identifier for each single check, the hostname/IP address, the port, severity,the finding and for vulnerabilities a cve and cwe too).
+`--csv`                         Logs additionally to a CSV file `${NODE}-p${port}${YYYYMMDD-HHMM}.csv` in the current working directory of the shell. The output contains a header with the keys, the values are the same as in the flat JSON format (identifier for each single check, the hostname/IP address, the port, severity,the finding and for vulnerabilities a cve and cwe too).
 
 `--csvfile <csvfile>` or `-oC <csvfile>`          Similar to  the aforementioned `--jsonfile` or `--logfile` it logs the output in CSV format (see `--cvs`) additionally into a file or a directory. For further explanation see `--jsonfile` or ``--logfile`. `CSVFILE` is the variable you need to set if you prefer to work environment with variables instead.
 
---html                          Logs additionally to an HTML file `<NODE>-p<port#><YYYYMMDD-HHMM>.html` in the current working directory of the shell. It contains a 1:1 output of the console. In former versions there was a non-native option to use "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like `testssl.sh <options> <URI> | aha >output.html` . This is not necessary anymore.
+--html                          Logs additionally to an HTML file `${NODE}-p${port}${YYYYMMDD-HHMM}.html` in the current working directory of the shell. It contains a 1:1 output of the console. In former versions there was a non-native option to use "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like `testssl.sh [options] <URI> | aha >output.html`. This is not necessary anymore.
 
 `--htmlfile <htmlfile>` or `-oH <htmlfile>`         Similar to  the aforementioned `--jsonfile` or `--logfile` it logs the output in HTML format (see `--html`) additionally into a file or a directory. For further explanation see `--jsonfile` or `--logfile`. `HTMLFILE` is the variable you need to set if you prefer to work with environment variables instead.
 
@@ -270,7 +270,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--hints`			This option is not in use yet. This option is meant to give hints how to fix a finding or at least a help to improve something. GIVE_HINTS is the environment variable for this.
 
-`--severity <severity>`         For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the `<severity>` value specified. Allowed are `<LOW|MEDIUM|HIGH|CRITICAL>`
+`--severity <severity>`         For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the `severity` value specified. Allowed are `<LOW|MEDIUM|HIGH|CRITICAL>`
 
 `--append`                      If an output file exists it will append to this file, without a header. The environment variable APPEND does the same. If the file exists and you don't use `--append` testssl.sh will exit with an error. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
 
@@ -304,6 +304,7 @@ What is labeled as "light" above appears as such on the screen but is technicall
 
 Except the environment variables mentioned above which replace command line options here a some which cannot be set otherwise. Variables used for tuning are preset with reasonable values. There should be no reason to change them unless you use testssl.sh under special conditions.
 
+* TERM_WIDTH is a variable which overrides the autodetermined terminal width size. Setting this variable normally only makes sense if you log the output to a file using the `--log`, `--logfile` or `-oL` option.
 [comment]: # * DEBUGTIME
 [comment]: # * DEBUG_ALLINONE
 [comment]: # * FAST_SOCKET

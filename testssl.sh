@@ -12649,15 +12649,15 @@ output options (can also be preset via environment variables):
      --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
 
 file output options (can also be preset via environment variables)
-     --log, --logging              logs stdout to <NODE>-p<port#><YYYYMMDD-HHMM>.log in current working directory (cwd)
-     --logfile|-oL <logfile>       logs stdout to <dir/NODE>-p<port#><YYYYMMDD-HHMM>.log if <logfile> is a dir or to a specified <logfile>
-     --json                        additional output of findings to flat JSON file <NODE>-p<port#><YYYYMMDD-HHMM>.json in cwd
+     --log, --logging              logs stdout to '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.log' in current working directory (cwd)
+     --logfile|-oL <logfile>       logs stdout to 'dir/\${NODE}-p\${port}\${YYYYMMDD-HHMM}.log'. If 'logfile' is a dir or to a specified 'logfile'
+     --json                        additional output of findings to flat JSON file '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.json' in cwd
      --jsonfile|-oj <jsonfile>     additional output to the specified flat JSON file or directory, similar to --logfile
-     --json-pretty                 additional JSON structured output of findings to a file <NODE>-p<port#><YYYYMMDD-HHMM>.json in cwd
+     --json-pretty                 additional JSON structured output of findings to a file '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.json' in cwd
      --jsonfile-pretty|-oJ <jsonfile>  additional JSON structured output to the specified file or directory, similar to --logfile
-     --csv                         additional output of findings to CSV file <NODE>-p<port#><YYYYMMDD-HHMM>.csv in cwd or directory
+     --csv                         additional output of findings to CSV file '\${NODE}-p${port}\${YYYYMMDD-HHMM}.csv' in cwd or directory
      --csvfile|-oC <csvfile>       additional output as CSV to the specified file or directory, similar to --logfile
-     --html                        additional output as HTML to file <NODE>-p<port#><YYYYMMDD-HHMM>.html
+     --html                        additional output as HTML to file '\${NODE}-p${port}\${YYYYMMDD-HHMM}.html'
      --htmlfile|-oH <htmlfile>     additional output as HTML to the specifed file or directory, similar to --logfile
      -oa/-oA <basename>            similar to nmap it outputs a LOG,JSON,CSV,HTML file. -oA: JSON pretty, -oa: flat JSON
      --hints                       additional hints to findings
