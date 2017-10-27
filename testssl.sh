@@ -2850,7 +2850,7 @@ run_cipher_match(){
                     sslv2_sockets "${ciphers_to_test:2}" "true"
                     if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
                          supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
-                         "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$HOSTCERT")"
                          for (( i=0 ; i<nr_ciphers; i++ )); do
                               if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
                                    ciphers_found[i]=true
@@ -2871,7 +2871,7 @@ run_cipher_match(){
                     sclient_connect_successful "$?" "$TMPFILE"
                     if [[ "$?" -eq 0 ]]; then
                          supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
-                         "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$TMPFILE")"
                          for (( i=0 ; i<nr_ciphers; i++ )); do
                               if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${ciph[i]} ]]; then
                                    ciphers_found[i]=true
@@ -2928,7 +2928,7 @@ run_cipher_match(){
                          kx[i]="${kx[i]} $dhlen"
                     fi
                     "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
-                         sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                done
           done
 
@@ -2986,7 +2986,7 @@ run_cipher_match(){
                          kx[i]="${kx[i]} $dhlen"
                     fi
                     "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
-                          sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                          sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
                done
           done
 
@@ -3099,7 +3099,7 @@ run_allciphers() {
           sslv2_sockets "${sslv2_ciphers:2}" "true"
           if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
                supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
-               "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$HOSTCERT")"
                for (( i=0 ; i<nr_ciphers; i++ )); do
                     if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
                          ciphers_found[i]=true
@@ -3112,7 +3112,7 @@ run_allciphers() {
           sclient_connect_successful "$?" "$TMPFILE"
           if [[ "$?" -eq 0 ]]; then
                supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
-               "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$TMPFILE")"
                for (( i=0 ; i<nr_ciphers; i++ )); do
                     if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${ciph[i]} ]]; then
                          ciphers_found[i]=true
@@ -3201,7 +3201,7 @@ run_allciphers() {
                          kx[i]="${kx[i]} $dhlen"
                     fi
                     "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
-                         sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                done
           done
      done
@@ -3266,7 +3266,7 @@ run_allciphers() {
                          dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
                          kx[i]="${kx[i]} $dhlen"
                     fi
-                    "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                    "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
                done
           done
      done
@@ -3413,7 +3413,7 @@ run_cipher_per_proto() {
                     sslv2_sockets "${sslv2_ciphers:2}" "true"
                     if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
                          supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
-                         "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$HOSTCERT")"
                          for (( i=0 ; i<nr_ciphers; i++ )); do
                               if [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
                                    ciphers_found[i]=true
@@ -3426,7 +3426,7 @@ run_cipher_per_proto() {
                     sclient_connect_successful "$?" "$TMPFILE"
                     if [[ "$?" -eq 0 ]]; then
                          supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
-                         "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$TMPFILE")"
                          for (( i=0 ; i<nr_ciphers; i++ )); do
                               if [[ "$supported_sslv2_ciphers" =~ ${ciph[i]} ]]; then
                                    ciphers_found[i]=true
@@ -11512,7 +11512,7 @@ run_beast(){
                     kx[i]="${kx[i]} $dhlen"
                fi
                "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
-                    sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                    sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
           done
           if "$using_sockets"; then
                while true; do
@@ -11543,7 +11543,7 @@ run_beast(){
                          kx[i]="${kx[i]} $dhlen"
                     fi
                     "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
-                         sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                         sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
                done
           fi
 
@@ -11781,7 +11781,7 @@ run_rc4() {
           sslv2_sockets "${sslv2_ciphers_hex:2}" "true"
           if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
                supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
-               "$WIDE" && "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               "$WIDE" && "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$HOSTCERT")"
                for (( i=0 ; i<nr_ciphers; i++ )); do
                     if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${normalized_hexcode[i]}" ]]; then
                          ciphers_found[i]=true
@@ -11795,7 +11795,7 @@ run_rc4() {
           sclient_connect_successful "$?" "$TMPFILE"
           if [[ "$?" -eq 0 ]]; then
                supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
-               "$WIDE" && "$SHOW_SIGALGO" && s="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+               "$WIDE" && "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$TMPFILE")"
                for (( i=0 ; i<nr_ciphers; i++ )); do
                     if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${ciph[i]}" ]]; then
                          ciphers_found[i]=true
@@ -11841,7 +11841,7 @@ run_rc4() {
                     kx[i]="${kx[i]} $dhlen"
                fi
                "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
-                    sigalg[i]="$($OPENSSL x509 -noout -text -in $TMPFILE | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                    sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
           done
      done
 
@@ -11886,7 +11886,7 @@ run_rc4() {
                     kx[i]="${kx[i]} $dhlen"
                fi
                "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
-                    sigalg[i]="$($OPENSSL x509 -noout -text -in "$HOSTCERT" | awk -F':' '/Signature Algorithm/ { print $2 }' | head -1)"
+                    sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
           done
      done
 
