@@ -2757,6 +2757,7 @@ run_cipher_match(){
      local -i nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0
      local -i num_bundles mod_check bundle_size bundle end_of_bundle
      local dhlen has_dh_bits="$HAS_DH_BITS"
+     local cipher proto protos_to_try
      local available
      local -i sclient_success
      local re='^[0-9A-Fa-f]+$'
@@ -2909,37 +2910,51 @@ run_cipher_match(){
                [[ $mod_check -ne 0 ]] && bundle_size+=1
           fi
 
-          for (( bundle=0; bundle < num_bundles; bundle++ )); do
-               end_of_bundle=$bundle*$bundle_size+$bundle_size
-               [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
-               while true; do
-                    ciphers_to_test=""
-                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
-                         ! "${ciphers_found2[i]}" && ciphers_to_test+=":${ciph2[i]}"
+          if "$HAS_TLS13"; then
+               protos_to_try="-no_ssl2 -tls1_2 -tls1_1 -tls1"
+          else
+               protos_to_try="-no_ssl2 -tls1_1 -tls1"
+          fi
+          "$HAS_SSL3" && protos_to_try+=" -ssl3"
+
+          for proto in $protos_to_try; do
+               if [[ "$proto" == "-tls1_1" ]]; then
+                    num_bundles=1
+                    bundle_size=$nr_ossl_ciphers
+               fi
+               for (( bundle=0; bundle < num_bundles; bundle++ )); do
+                    end_of_bundle=$bundle*$bundle_size+$bundle_size
+                    [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
+                    while true; do
+                         ciphers_to_test=""
+                         for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                              ! "${ciphers_found2[i]}" && ciphers_to_test+=":${ciph2[i]}"
+                         done
+                         [[ -z "$ciphers_to_test" ]] && break
+                         $OPENSSL s_client $(s_client_options "$proto -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+                         sclient_connect_successful "$?" "$TMPFILE" || break
+                         cipher=$(get_cipher $TMPFILE)
+                         [[ -z "$cipher" ]] && break
+                         for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                              [[ "$cipher" == "${ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                         done
+                         [[ $i -eq $end_of_bundle ]] && break
+                         i=${index[i]}
+                         ciphers_found[i]=true
+                         [[ "$cipher" == TLS13* ]] && kx[i]="$(read_dhtype_from_file $TMPFILE)"
+                         if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                              dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
+                              kx[i]="${kx[i]} $dhlen"
+                         fi
+                         "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                              sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                     done
-                    [[ -z "$ciphers_to_test" ]] && break
-                    $OPENSSL s_client $(s_client_options "-no_ssl2 -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-                    sclient_connect_successful "$?" "$TMPFILE" || break
-                    cipher=$(get_cipher $TMPFILE)
-                    [[ -z "$cipher" ]] && break
-                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
-                         [[ "$cipher" == "${ciph2[i]}" ]] && ciphers_found2[i]=true && break
-                    done
-                    [[ $i -eq $end_of_bundle ]] && break
-                    i=${index[i]}
-                    ciphers_found[i]=true
-                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
-                         dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                         kx[i]="${kx[i]} $dhlen"
-                    fi
-                    "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
-                         sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
                done
           done
 
           if "$using_sockets"; then
                for (( i=0; i < nr_ciphers; i++ )); do
-                    if ! "${ciphers_found[i]}" && [[ "${sslvers[i]}" != "SSLv2" ]] && [[ "${hexcode[i]}" != "13"* ]]; then
+                    if ! "${ciphers_found[i]}" && [[ "${sslvers[i]}" != "SSLv2" ]]; then
                          ciphers_found2[nr_nonossl_ciphers]=false
                          hexcode2[nr_nonossl_ciphers]="${hexcode[i]}"
                          rfc_ciph2[nr_nonossl_ciphers]="${rfc_ciph[i]}"
@@ -2963,35 +2978,41 @@ run_cipher_match(){
                [[ $mod_check -ne 0 ]] && bundle_size+=1
           fi
 
-          for (( bundle=0; bundle < num_bundles; bundle++ )); do
-               end_of_bundle=$bundle*$bundle_size+$bundle_size
-               [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
-               while true; do
-                    ciphers_to_test=""
-                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
-                         ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode2[i]}"
+          for proto in 04 03 02 01 00; do
+               for (( bundle=0; bundle < num_bundles; bundle++ )); do
+                    end_of_bundle=$bundle*$bundle_size+$bundle_size
+                    [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
+                    while true; do
+                         ciphers_to_test=""
+                         for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                              ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode2[i]}"
+                         done
+                         [[ -z "$ciphers_to_test" ]] && break
+                         [[ "$proto" == "04" ]] && [[ ! "${ciphers_to_test:2}" =~ ,\ 13,[0-9a-f][0-9a-f] ]] && break
+                         ciphers_to_test="$(strip_inconsistent_ciphers "$proto" "$ciphers_to_test")"
+                         [[ -z "$ciphers_to_test" ]] && break
+                         if "$SHOW_SIGALGO"; then
+                              tls_sockets "$proto" "${ciphers_to_test:2}, 00,ff" "all"
+                         else
+                              tls_sockets "$proto" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+                         fi
+                         sclient_success=$?
+                         [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
+                         cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                         for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
+                              [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
+                         done
+                         [[ $i -eq $end_of_bundle ]] && break
+                         i=${index[i]}
+                         ciphers_found[i]=true
+                         [[ "${kx[i]}" == "Kx=any" ]] && kx[i]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+                         if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                              dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
+                              kx[i]="${kx[i]} $dhlen"
+                         fi
+                         "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
+                               sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
                     done
-                    [[ -z "$ciphers_to_test" ]] && break
-                    if "$SHOW_SIGALGO"; then
-                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "all"
-                    else
-                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
-                    fi
-                    sclient_success=$?
-                    [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
-                    cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
-                    for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
-                         [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
-                    done
-                    [[ $i -eq $end_of_bundle ]] && break
-                    i=${index[i]}
-                    ciphers_found[i]=true
-                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
-                         dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
-                         kx[i]="${kx[i]} $dhlen"
-                    fi
-                    "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
-                          sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
                done
           done
 
