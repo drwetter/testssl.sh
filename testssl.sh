@@ -1421,7 +1421,7 @@ s_client_options() {
           [[ ! " $options " =~ \ -tls1\  ]] && [[ ! " $options " =~ \ -tls1_[1|2|3]\  ]]; then
           ciphers="${options#* -cipher }"
           ciphers="${ciphers%% *}"
-          [[ ! "$($OPENSSL ciphers "$ciphers")" =~ TLS13 ]] && options+=" -no_tls1_3"
+          [[ ! "$($OPENSSL ciphers "$ciphers" 2>/dev/null)" =~ TLS13 ]] && options+=" -no_tls1_3"
      fi
 
      tm_out "$options"
@@ -1858,9 +1858,9 @@ run_hpkp() {
                get_host_cert || return 1
           fi
 
-          hpkp_spki_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout | grep -v PUBLIC | \
-               $OPENSSL base64 -d | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)"
-          hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
+          hpkp_spki_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout 2>/dev/null | grep -v PUBLIC | \
+               $OPENSSL base64 -d 2>/dev/null | $OPENSSL dgst -sha256 -binary 2>/dev/null | $OPENSSL base64 2>/dev/null)"
+          hpkp_ca="$($OPENSSL x509 -in $HOSTCERT -issuer -noout 2>/dev/null |sed 's/^.*CN=//' | sed 's/\/.*$//')"
 
           # Get keys/hashes from intermediate certificates
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT $SNI")  </dev/null >$TMPFILE 2>$ERRFILE
@@ -1877,11 +1877,11 @@ run_hpkp() {
           printf ""> "$TEMPDIR/intermediate.hashes"
           if [[ nrsaved -ge 2 ]]; then
                for cert_fname in $TEMPDIR/level?.crt; do
-                    hpkp_spki_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout | grep -v PUBLIC | $OPENSSL base64 -d |
-                         $OPENSSL dgst -sha256 -binary | $OPENSSL enc -base64)"
+                    hpkp_spki_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout 2>/dev/null | grep -v PUBLIC | $OPENSSL base64 -d 2>/dev/null |
+                         $OPENSSL dgst -sha256 -binary 2>/dev/null | $OPENSSL enc -base64 2>/dev/null)"
                     hpkp_name="$(get_cn_from_cert $cert_fname)"
-                    hpkp_ca="$($OPENSSL x509 -in $cert_fname -issuer -noout|sed 's/^.*CN=//' | sed 's/\/.*$//')"
-                    [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout | sed 's/^subject= //')
+                    hpkp_ca="$($OPENSSL x509 -in $cert_fname -issuer -noout 2>/dev/null |sed 's/^.*CN=//' | sed 's/\/.*$//')"
+                    [[ -n $hpkp_name ]] || hpkp_name=$($OPENSSL x509 -in "$cert_fname" -subject -noout 2>/dev/null | sed 's/^subject= //')
                     echo "$hpkp_spki_ca $hpkp_name" >> "$TEMPDIR/intermediate.hashes"
                done
           fi
@@ -2463,8 +2463,8 @@ std_cipherlists() {
                          # If $OPENSSL doesn't support TLSv1.3 or if no TLSv1.3
                          # ciphers are being tested, then a TLSv1.2 ClientHello
                          # was tested in the first iteration.
-                         ! "$HAS_TLS13"  && continue
-                         [[ ! "$($OPENSSL ciphers "$1")" =~ TLS13 ]] && continue
+                         ! "$HAS_TLS13" && continue
+                         [[ ! "$($OPENSSL ciphers "$1" 2>/dev/null)" =~ TLS13 ]] && continue
                     fi
                     ! "$HAS_SSL3" && [[ "$proto" == "-ssl3" ]] && continue
                     if [[ "$proto" != "-no_ssl2" ]]; then
@@ -4659,7 +4659,7 @@ read_dhtype_from_file() {
 
 # arg1: certificate file
 read_sigalg_from_file() {
-     $OPENSSL x509 -noout -text -in "$1" | awk -F':' '/Signature Algorithm/ { print $2; exit; }'
+     $OPENSSL x509 -noout -text -in "$1" 2>/dev/null | awk -F':' '/Signature Algorithm/ { print $2; exit; }'
 }
 
 
@@ -8620,7 +8620,7 @@ parse_tls_serverhello() {
                                [[ "0x${len3}" -ge "0x80" ]] && len3="81${len3}"
                                key_bitstring="30${len3}30${len2}06072a8648ce3d0201${named_curve_oid}${key_bitstring}"
                           elif [[ "$named_curve_str" =~ "ffdhe" ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ "BEGIN" ]]; then
-                               dh_param="$($OPENSSL pkey -pubout -outform DER <<< "${TLS13_KEY_SHARES[named_curve]}" | hexdump -v -e '16/1 "%02X"')"
+                               dh_param="$($OPENSSL pkey -pubout -outform DER 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | hexdump -v -e '16/1 "%02X"')"
 
                                # First is the length of the public-key SEQUENCE, and it is always encoded in four bytes (3082xxxx)
                                # Next is the length of the parameters SEQUENCE, and it is also always encoded in four bytes (3082xxxx)
@@ -8696,7 +8696,7 @@ parse_tls_serverhello() {
                rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:0:4}")"
           fi
      else
-          rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')"
+          rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' 2>>$ERRFILE | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')"
      fi
      echo "Cipher    : $rfc_cipher_suite" >> $TMPFILE
      if [[ $dh_bits -ne 0 ]]; then
@@ -9040,8 +9040,8 @@ parse_tls_serverhello() {
                esac
                [[ -z "$key_bitstring" ]] && named_curve=0 && named_curve_str=""
                if [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ BEGIN ]]; then
-                    ephemeral_param="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | grep -A 1000 "prime:")"
-                    rfc7919_param="$($OPENSSL pkey -text -noout <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -A 1000 "prime:")"
+                    ephemeral_param="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | grep -A 1000 "prime:")"
+                    rfc7919_param="$($OPENSSL pkey -text -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -A 1000 "prime:")"
                     [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
                fi
 
@@ -9634,7 +9634,7 @@ resend_if_hello_retry_request() {
                          rfc_cipher_suite="$(show_rfc_style "x${cipher_suite:0:2}${cipher_suite:3:2}")"
                     fi
                else
-                    rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${cipher_suite:0:2},0x${cipher_suite:3:2} " | awk '{ print $3 }')"
+                    rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' 2>/dev/null | grep -i " 0x${cipher_suite:0:2},0x${cipher_suite:3:2} " | awk '{ print $3 }')"
                fi
                if [[ -n "$rfc_cipher_suite" ]]; then
                     echo " ($rfc_cipher_suite)"
@@ -11172,7 +11172,7 @@ run_logjam() {
 
      # now the final test for common primes
      if [[ -n "$key_bitstring" ]]; then
-          dh_p="$($OPENSSL pkey -pubin -text -noout <<< "$key_bitstring" | awk '/prime:/,/generator:/' | egrep -v "prime|generator")"
+          dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:/,/generator:/' | egrep -v "prime|generator")"
           dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
           [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
           len_dh_p="$((4*${#dh_p}))"
