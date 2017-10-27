@@ -2686,6 +2686,11 @@ neat_list(){
 
      kx="${3//Kx=/}"
      enc="${4//Enc=/}"
+     # In two cases LibreSSL uses very long names for encryption algorithms
+     # and doesn't include the number of bits.
+     [[ "$enc" == "ChaCha20-Poly1305" ]] && enc="CHACHA20(256)"
+     [[ "$enc" == "GOST-28178-89-CNT" ]] && enc="GOST(256)"
+
      strength="${enc//\)/}"             # retrieve (). first remove traling ")"
      strength="${strength#*\(}"         # exfiltrate (VAL
      enc="${enc%%\(*}"
