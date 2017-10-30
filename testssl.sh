@@ -4753,6 +4753,7 @@ read_dhbits_from_file() {
 # arg1: ID or empty. if empty resumption by ticket will be tested
 # return: 0: it has resumption, 1:nope, 2: can't tell
 sub_session_resumption() {
+     local ret ret1 ret2
      local tmpfile=$(mktemp $TEMPDIR/session_resumption.$NODEIP.XXXXXX)
      local sess_data=$(mktemp $TEMPDIR/sub_session_data_resumption.$NODEIP.XXXXXX)
      local -a rw_line
@@ -4764,10 +4765,14 @@ sub_session_resumption() {
           local byID=false
           local addcmd=""
      fi
+     "$CLIENT_AUTH" && return 2
      "$HAS_NO_SSL2" && addcmd+=" -no_ssl2" || addcmd+=" $OPTIMAL_PROTO"
 
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>/dev/null
+     ret1=$?
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_in $sess_data") </dev/null >$tmpfile 2>$ERRFILE
+     ret2=$?
+     debugme echo "$ret1, $ret2, [[ -s "$sess_data" ]]"
      # now get the line and compare the numbers read" and "writen" as a second criteria.
      rw_line="$(awk '/^SSL handshake has read/ { print $5" "$(NF-1) }' "$tmpfile" )"
      rw_line=($rw_line)
@@ -4777,7 +4782,7 @@ sub_session_resumption() {
           new_sid2=false
      fi
      debugme echo "${rw_line[0]}, ${rw_line[1]}"
-     #grep -aq "^New" "$tmpfile" && new_sid=true || new_sid=false
+     #   grep -aq "^New" "$tmpfile" && new_sid=true || new_sid=false
      grep -aq "^Reused" "$tmpfile" && new_sid=false || new_sid=true
      if "$new_sid2" && "$new_sid"; then
           debugme echo -n "No session resumption "
@@ -4786,8 +4791,8 @@ sub_session_resumption() {
           debugme echo -n "Session resumption "
           ret=0
      else
-          debugme echo -n "unclear status: "$new_sid, "$new_sid2 -- "
-          ret=2
+          debugme echo -n "unclear status: $ret1, $ret2, $new_sid, $new_sid2  -- "
+          ret=7
      fi
      if [[ $DEBUG -ge 2 ]]; then
           "$byID" && echo "byID" || echo "by ticket"
@@ -6876,7 +6881,11 @@ run_server_defaults() {
              out "Tickets no, "
              fileout "session_resumption_ticket" "INFO" "Session resumption via Session Tickets is not supported"
              ;;
-          2) SESS_RESUMPTION[2]="ticket=noclue"
+          2) SESS_RESUMPTION[2]="ticket=clientauth"
+             pr_warning "Client Auth: Ticket resumption test not supported / "
+             fileout "session_resumption_ticket" "WARN" "resumption test for TLS Session Tickets couldn't be performed because client authentication is missing"
+             ;;
+          7) SESS_RESUMPTION[2]="ticket=noclue"
              pr_warning "Ticket resumption test failed, pls report / "
              fileout "session_resumption_ticket" "WARN" "resumption test for TLS Session Tickets failed, pls report"
              ;;
@@ -6897,7 +6906,12 @@ run_server_defaults() {
                   outln "ID: no"
                   fileout "session_resumption_id" "INFO" "Session resumption via Session ID is not supported"
                   ;;
-               2) SESS_RESUMPTION[1]="ID=noclue"
+               2) SESS_RESUMPTION[1]="ID=clientauth"
+                  [[ ${SESS_RESUMPTION[2]} =~ clientauth ]] || pr_warning "Client Auth: "
+                  prln_warning "ID resumption resumption test not supported"
+                  fileout "session_resumption_ID" "WARN" "resumption test via Session ID couldn't be performed because client authentication is missing"
+                  ;;
+               7) SESS_RESUMPTION[1]="ID=noclue"
                   prln_warning "ID resumption test failed, pls report"
                   fileout "session_resumption_ID" "WARN" "resumption test via Session ID failed, pls report"
                   ;;
