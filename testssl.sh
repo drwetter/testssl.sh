@@ -2315,7 +2315,7 @@ run_cookie_flags() {     # ARG1: Path
 
 
 run_more_flags() {
-     local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only"
+     local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
      local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible Referrer-Policy X-UA-Compatible"
      local f2t line
      local first=true
