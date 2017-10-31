@@ -305,8 +305,9 @@ STARTTLS_PROTOCOL=""
 OPTIMAL_PROTO=""                        # we need this for IIS6 (sigh) and OpenSSL 1.0.2, otherwise some handshakes
                                         # will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 STARTTLS_OPTIMAL_PROTO=""               # same for STARTTLS, see https://github.com/drwetter/testssl.sh/issues/188
-TLS_TIME=""
-TLS_NOW=""
+TLS_TIME=""                             # to keep the value of TLS server timestamp
+TLS_NOW=""                              # similar
+TLS_DIFFTIME_SET=false                  # tells TLS functions to measure the TLS difftime or not
 NOW_TIME=""
 HTTP_TIME=""
 GET_REQ11=""
@@ -5512,14 +5513,15 @@ tls_time() {
      local now difftime
      local spaces="               "
 
+     pr_bold " TLS clock skew" ; out "$spaces"
+     TLS_DIFFTIME_SET=true                                       # this is a switch whether we want to measure the remote TLS_TIME
      tls_sockets "01" "$TLS_CIPHER"                              # try first TLS 1.0 (most frequently used protocol)
      [[ -z "$TLS_TIME" ]] && tls_sockets "03" "$TLS12_CIPHER"    #           TLS 1.2
      [[ -z "$TLS_TIME" ]] && tls_sockets "02" "$TLS_CIPHER"      #           TLS 1.1
      [[ -z "$TLS_TIME" ]] && tls_sockets "00" "$TLS_CIPHER"      #           SSL 3
 
-     pr_bold " TLS clock skew" ; out "$spaces"
      if [[ -n "$TLS_TIME" ]]; then                               # nothing returned a time!
-          difftime=$(( TLS_TIME -  TLS_NOW))                     # TLS_NOW is being set in tls_sockets()
+          difftime=$((TLS_TIME -  TLS_NOW))                      # TLS_NOW has been set in tls_sockets()
           if [[ "${#difftime}" -gt 5 ]]; then
                # openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
                out "Random values, no fingerprinting possible "
@@ -5535,6 +5537,7 @@ tls_time() {
           prln_warning "SSLv3 through TLS 1.2 didn't return a timestamp"
           fileout "tls_time" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
      fi
+     TLS_DIFFTIME_SET=false                                      # reset the switch to save calls to date and friend in tls_sockets()
      return 0
 }
 
@@ -8241,7 +8244,6 @@ parse_tls_serverhello() {
      local dh_p dh_param ephemeral_param rfc7919_param
      local -i dh_p_len dh_param_len
 
-     TLS_TIME=""
      DETECTED_TLS_VERSION=""
      [[ -n "$tls_hello_ascii" ]] && echo "CONNECTED(00000003)" > $TMPFILE
 
@@ -8519,7 +8521,7 @@ parse_tls_serverhello() {
 
      if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
           tls_hello_time="${tls_serverhello_ascii:4:8}"
-          TLS_TIME=$(hex2dec "$tls_hello_time")
+          [[ "$TLS_DIFFTIME_SET" || "$DEBUG" ]] && TLS_TIME=$(hex2dec "$tls_hello_time")
           tls_sid_len_hex="${tls_serverhello_ascii:68:2}"
           tls_sid_len=2*$(hex2dec "$tls_sid_len_hex")
           let offset=70+$tls_sid_len
@@ -8768,7 +8770,7 @@ parse_tls_serverhello() {
           fi
           if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
                echo -n "     tls_hello_time:         0x$tls_hello_time "
-               parse_date "$TLS_TIME" "+%Y-%m-%d %r" "%s"
+               parse_date "$TLS_TIME" "+%Y-%m-%d %r" "%s"                  # in debugging mode we don't mind the cycles and don't use TLS_DIFFTIME_SET
           fi
           echo -n "     tls_cipher_suite:       0x$tls_cipher_suite"
           if [[ -n "$rfc_cipher_suite" ]]; then
@@ -9786,7 +9788,7 @@ tls_sockets() {
      # if sending didn't succeed we don't bother
      if [[ $ret -eq 0 ]]; then
           sockread_serverhello 32768
-          TLS_NOW=$(LC_ALL=C date "+%s")
+          "$TLS_DIFFTIME_SET" && TLS_NOW=$(LC_ALL=C date "+%s")
 
           tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
           tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
