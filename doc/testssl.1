@@ -160,10 +160,10 @@ Please note that the content of \fBfname\fR has to be in Unix format\. DOS carri
 Any single check switch supplied as an argument prevents testssl\.sh from doing a default run\. It just takes this and if supplied other options and runs them \- in the order they would also appear in the default run\.
 .
 .P
-\fB\-e, \-\-each\-cipher\fR checks each of the local 359 cipher (openssl + sockets) remotely on the server and reports back the result in wide mode\. If you want to display each cipher tested you need to add \fB\-\-show\-each\fR\. The default is here to list the following parameter: \fBhexcode\fR, \fBOpenSSL cipher suite name\fR,i \fBkey exchange\fR, \fBencryption bits\fR, \fBRFC cipher suite name (RFC)\fR\. Please note the \fB\-\-mapping\fR parameter changes what cipher suite names you will see here and at which position\. Also please note that the \fBbit\fR length for the encryption is shown and not the \fBsecurity\fR length\. For 3DES due to the Meet\-in\-the\-Middle problem the bit size of 168 bits is equivalent to the security size of 112 bits\.
+\fB\-e, \-\-each\-cipher\fR checks each of the local 364 ciphers (openssl + sockets) remotely on the server and reports back the result in wide mode\. If you want to display each cipher tested you need to add \fB\-\-show\-each\fR\. Per default it lists the following parameter: \fBhexcode\fR, \fBOpenSSL cipher suite name\fR,i \fBkey exchange\fR, \fBencryption bits\fR, \fBRFC cipher suite name (RFC)\fR\. Please note the \fB\-\-mapping\fR parameter changes what cipher suite names you will see here and at which position\. Also please note that the \fBbit\fR length for the encryption is shown and not the \fBsecurity\fR length\. For 3DES due to the Meet\-in\-the\-Middle problem the bit size of 168 bits is equivalent to the security size of 112 bits\. The output is sorted by security strength, it lists the encryption bits though\.
 .
 .P
-\fB\-E, \-\-cipher\-per\-proto\fR checks each of the possible ciphers per protocol\. If you want to display each cipher tested you need to add \fB\-\-show\-each\fR
+\fB\-E, \-\-cipher\-per\-proto\fR similar to \fB\-e, \-\-each\-cipher\fR it checks each of the possible ciphers, here: per protocol\. If you want to display each cipher tested you need to add \fB\-\-show\-each\fR\. The output is sorted by security strength, it lists the encryption bits though\.
 .
 .P
 \fB\-s, \-\-std, \-\-standard\fR tests certain lists of cipher suites by strength\. Those lists are (\fBopenssl ciphers $LIST\fR, $LIST from below:)

@@ -124,10 +124,10 @@ Please note that the content of `fname` has to be in Unix format. DOS carriage r
 
 Any single check switch supplied as an argument prevents testssl.sh from doing a default run. It just takes this and if supplied other options and runs them - in the order they would also appear in the default run.
 
-`-e, --each-cipher` checks each of the local 359 cipher (openssl + sockets) remotely on the server and reports back the result in wide mode. If you want to display each cipher tested you need to add `--show-each`. The default is here to list the following parameter: `hexcode`, `OpenSSL cipher suite name`,i `key exchange`, `encryption bits`, `RFC cipher suite name (RFC)`. Please note the `--mapping` parameter changes what cipher suite names you will see here and at which position. Also please note that the __bit__ length for the encryption is shown and not the __security__ length. For 3DES due to the Meet-in-the-Middle problem the bit size of 168 bits is equivalent to the security size of 112 bits.
+`-e, --each-cipher` checks each of the local 364 ciphers (openssl + sockets) remotely on the server and reports back the result in wide mode. If you want to display each cipher tested you need to add `--show-each`. Per default it lists the following parameter: `hexcode`, `OpenSSL cipher suite name`,i `key exchange`, `encryption bits`, `RFC cipher suite name (RFC)`. Please note the `--mapping` parameter changes what cipher suite names you will see here and at which position. Also please note that the __bit__ length for the encryption is shown and not the __security__ length. For 3DES due to the Meet-in-the-Middle problem the bit size of 168 bits is equivalent to the security size of 112 bits. The output is sorted by security strength, it lists the encryption bits though.
 
 
-`-E, --cipher-per-proto`  checks each of the possible ciphers per protocol. If you want to display each cipher tested you need to add `--show-each`
+`-E, --cipher-per-proto`  similar to `-e, --each-cipher` it checks each of the possible ciphers, here: per protocol. If you want to display each cipher tested you need to add `--show-each`. The output is sorted by security strength, it lists the encryption bits though.
 
 `-s, --std, --standard`   tests certain lists of cipher suites by strength. Those lists are (`openssl ciphers $LIST`, $LIST from below:)
 
