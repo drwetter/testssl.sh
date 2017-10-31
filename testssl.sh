@@ -1576,7 +1576,7 @@ run_http_header() {
                ;;
           *)
                pr_warning ". Oh, didn't expect \"$HTTP_STATUS_CODE$msg_thereafter\""
-               fileout "HTTP_STATUS_CODE" "DEBUG" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- Oops, didn't expect a \"$HTTP_STATUS_CODE$msg_thereafter\""
+               fileout "HTTP_STATUS_CODE" "WARN" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- Oops, didn't expect a \"$HTTP_STATUS_CODE$msg_thereafter\""
                ;;
      esac
      outln
@@ -5454,7 +5454,7 @@ determine_trust() {
      done
      num_ca_bundles=$((i - 1))
      debugme tm_out " "
-     if $all_ok; then
+     if "$all_ok"; then
           # all stores ok
           pr_done_good "Ok   "; pr_warning "$addtl_warning"
           # we did to stdout the warning above already, so we could stay here with INFO:
@@ -5462,7 +5462,7 @@ determine_trust() {
      else
           # at least one failed
           pr_svrty_critical "NOT ok"
-          if ! $some_ok; then
+          if ! "$some_ok"; then
                # all failed (we assume with the same issue), we're displaying the reason
                out " "
                code="$(verify_retcode_helper "${verify_retcode[1]}")"
@@ -5474,7 +5474,7 @@ determine_trust() {
                fileout "${json_prefix}chain_of_trust" "CRITICAL" "All certificate trust checks failed: $code. $addtl_warning"
           else
                # is one ok and the others not ==> display the culprit store
-               if $some_ok ; then
+               if "$some_ok"; then
                     pr_svrty_critical ":"
                     for ((i=1;i<=num_ca_bundles;i++)); do
                          if ${trust[i]}; then
@@ -5534,7 +5534,7 @@ tls_time() {
           debugme tm_out "$TLS_TIME"
           outln
      else
-          prln_warning "SSLv3 through TLS 1.2 didn't return a timestamp"
+          outln "SSLv3 through TLS 1.2 didn't return a timestamp"
           fileout "tls_time" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
      fi
      TLS_DIFFTIME_SET=false                                      # reset the switch to save calls to date and friend in tls_sockets()
@@ -10228,12 +10228,12 @@ run_ccs_injection(){
      elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != "03" ]]; then
           pr_warning "test failed"
           out ", probably read buffer too small (${tls_hello_ascii:0:14})"
-          fileout "ccs" "WARN" "CCS: test failed, probably read buffer too small (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
+          fileout "ccs" "DEBUG" "CCS: test failed, probably read buffer too small (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
           ret=7
      else
           pr_warning "test failed "
           out "around line $LINENO (debug info: ${tls_hello_ascii:0:12},$byte6)"
-          fileout "ccs" "WARN" "CCS: test failed, around line $LINENO, debug info (${tls_hello_ascii:0:12},$byte6)" "$cve" "$cwe" "$hint"
+          fileout "ccs" "DEBUG" "CCS: test failed, around line $LINENO, debug info (${tls_hello_ascii:0:12},$byte6)" "$cve" "$cwe" "$hint"
           ret=7
      fi
      outln
@@ -10469,7 +10469,7 @@ run_ticketbleed() {
                ret=7
                pr_warning "test failed"
                out " around line $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})"
-               fileout "ticketbleed" "WARN" "Ticketbleed: test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
+               fileout "ticketbleed" "DEBUG" "Ticketbleed: test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
                break
           fi
           debugme echo "sending close_notify..."
@@ -10506,7 +10506,7 @@ run_ticketbleed() {
                     pr_warning "test failed, non reproducible results!"
                     out " Please run again w \"--debug=2\"  (# of faked TLS SIDs detected: $nr_sid_detected)"
                fi
-               fileout "ticketbleed" "WARN" "Ticketbleed: # of TLS Session IDs detected: $nr_sid_detected, ${sid_detected[1]},${sid_detected[2]},${sid_detected[3]}" "$cve" "$cwe"
+               fileout "ticketbleed" "DEBUG" "Ticketbleed: # of TLS Session IDs detected: $nr_sid_detected, ${sid_detected[1]},${sid_detected[2]},${sid_detected[3]}" "$cve" "$cwe"
                ret=7
           fi
      fi
@@ -10738,7 +10738,7 @@ run_breach() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
      if "$CLIENT_AUTH"; then
-          prln_warning "cannot be tested (server side requires x509 authentication)"
+          outln "cannot be tested (server side requires x509 authentication)"
           fileout "breach" "INFO" "BREACH: cannot be tested (server side requires x509 authentication)" "$cve" "$cwe"
           return 7
      fi
