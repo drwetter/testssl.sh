@@ -12697,11 +12697,11 @@ file output options (can also be preset via environment variables)
      --jsonfile|-oj <jsonfile>     additional output to the specified flat JSON file or directory, similar to --logfile
      --json-pretty                 additional JSON structured output of findings to a file '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.json' in cwd
      --jsonfile-pretty|-oJ <jsonfile>  additional JSON structured output to the specified file or directory, similar to --logfile
-     --csv                         additional output of findings to CSV file '\${NODE}-p${port}\${YYYYMMDD-HHMM}.csv' in cwd or directory
+     --csv                         additional output of findings to CSV file '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.csv' in cwd or directory
      --csvfile|-oC <csvfile>       additional output as CSV to the specified file or directory, similar to --logfile
-     --html                        additional output as HTML to file '\${NODE}-p${port}\${YYYYMMDD-HHMM}.html'
+     --html                        additional output as HTML to file '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.html'
      --htmlfile|-oH <htmlfile>     additional output as HTML to the specifed file or directory, similar to --logfile
-     -oa/-oA <basename>            similar to nmap it outputs a LOG,JSON,CSV,HTML file. -oA: JSON pretty, -oa: flat JSON
+     --out(f,F)ile|-oa/-oA <fname> log to a LOG,JSON,CSV,HTML file (see nmap). -oA/-oa: pretty/flat JSON. "auto" uses '\${NODE}-p\${port}\${YYYYMMDD-HHMM}'
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists rather append then overwrite. Omits any header
@@ -14291,6 +14291,10 @@ create_cmd_line_string() {
 }
 
 parse_cmd_line() {
+     local outfile_arg=""
+     local cipher_mapping
+     local -i retvat=0
+
      CMDLINE="$(create_cmd_line_string "${CMDLINE_ARRAY[@]}")"
 
      # Show usage if no options were specified
@@ -14620,22 +14624,28 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_html=true
                     ;;
-               --outFile|--outFile|-oa|-oa=*)
-                    HTMLFILE="$(parse_opt_equal_sign "$1" "$2").html"
-                    CSVFILE="$(parse_opt_equal_sign "$1" "$2").csv"
-                    JSONFILE="$(parse_opt_equal_sign "$1" "$2").json"
-                    LOGFILE="$(parse_opt_equal_sign "$1" "$2").log"
+               --outfile|--outfile|-oa|-oa=*)
+                    outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
+                    if [[ "$outfile_arg" != "auto" ]]; then
+                         HTMLFILE="$outfile_arg.html"
+                         CSVFILE="$outfile_arg.csv"
+                         JSONFILE="$outfile_arg.json"
+                         LOGFILE="$outfile_arg.log"
+                    fi
                     [[ $? -eq 0 ]] && shift
                     do_html=true
                     do_json=true
                     do_csv=true
                     do_logging=true
                     ;;
-               --outfile|--outfile|-oA|-oA=*)
-                    HTMLFILE="$(parse_opt_equal_sign "$1" "$2").html"
-                    CSVFILE="$(parse_opt_equal_sign "$1" "$2").csv"
-                    JSONFILE="$(parse_opt_equal_sign "$1" "$2").json"
-                    LOGFILE="$(parse_opt_equal_sign "$1" "$2").log"
+               --outFile|--outFile|foA|-oA=*)
+                    outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
+                    if [[ "$outfile_arg" != "auto" ]]; then
+                         HTMLFILE="$outfile_arg.html"
+                         CSVFILE="$outfile_arg.csv"
+                         JSONFILE="$outfile_arg.json"
+                         LOGFILE="$outfile_arg.log"
+                    fi
                     [[ $? -eq 0 ]] && shift
                     do_html=true
                     do_pretty_json=true
@@ -14654,7 +14664,6 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     ;;
                --mapping|--mapping=*)
-                    local cipher_mapping
                     cipher_mapping="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case "$cipher_mapping" in

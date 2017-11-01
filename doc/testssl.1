@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "TESTSSL" "1" "October 2017" "" ""
+.TH "TESTSSL" "1" "November 2017" "" ""
 .
 .SH "NAME"
 \fBtestssl\fR
@@ -393,7 +393,10 @@ whole 9 yards
 \fB\-\-htmlfile <htmlfile>\fR or \fB\-oH <htmlfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in HTML format (see \fB\-\-html\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB\-\-logfile\fR\. \fBHTMLFILE\fR is the variable you need to set if you prefer to work with environment variables instead\.
 .
 .P
-\fB\-oA <basename>\fR / \fB\-oa <basename>\fR Similar to nmap it does a file output to all available file formats: LOG,JSON,CSV,HTML\. \fB\-oA\fR does JSON pretty, \fB\-oa\fR flat JSON
+\fB\-oA <filename>\fR / \fB\-\-outFile <filename>\fR Similar to nmap it does a file output to all available file formats: LOG,JSON pretty,CSV,HTML\. If the filename supplied is equal \fBauto\fR the filename is automatically generated using \'\e${NODE}\-p${port}\e${YYYYMMDD\-HHMM}\.\e${EXT}\' with the according extension\.
+.
+.P
+\fB\-oa <filename>\fR / \fB\-\-outfile <filename>\fR Does the same as the previous option but uses flat JSON instead\.
 .
 .P
 \fB\-\-hints\fR This option is not in use yet\. This option is meant to give hints how to fix a finding or at least a help to improve something\. GIVE_HINTS is the environment variable for this\.

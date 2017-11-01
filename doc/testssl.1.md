@@ -266,7 +266,9 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--htmlfile <htmlfile>` or `-oH <htmlfile>`         Similar to  the aforementioned `--jsonfile` or `--logfile` it logs the output in HTML format (see `--html`) additionally into a file or a directory. For further explanation see `--jsonfile` or `--logfile`. `HTMLFILE` is the variable you need to set if you prefer to work with environment variables instead.
 
-`-oA <basename>` / `-oa <basename>`    Similar to nmap it does a file output to all available file formats: LOG,JSON,CSV,HTML. `-oA` does JSON pretty, `-oa` flat JSON
+`-oA <filename>` / `--outFile <filename>`    Similar to nmap it does a file output to all available file formats: LOG,JSON pretty,CSV,HTML. If the filename supplied is equal `auto` the filename is automatically generated using '\${NODE}-p${port}\${YYYYMMDD-HHMM}.\${EXT}' with the according extension.
+
+`-oa <filename>` / `--outfile <filename>`     Does the same as the previous option but uses flat JSON instead.
 
 `--hints`			This option is not in use yet. This option is meant to give hints how to fix a finding or at least a help to improve something. GIVE_HINTS is the environment variable for this.
 
