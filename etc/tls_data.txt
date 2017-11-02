@@ -60,7 +60,16 @@ c0,0d, c0,03, 00,0a, 00,63, 00,15, 00,12, 00,0f, 00,0c,
 
 readonly -a TLS13_KEY_SHARES=(
  "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "a" "b" "c" "d" "e" "f"
-  "10" "11" "12" "13" "14" "15" "16"
+  "10" "11" "12" "13" "14"
+"-----BEGIN EC PARAMETERS-----
+BgUrgQQAIQ==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MGgCAQEEHC8WEqbfOOQ1MfH86LnVfxLqdZ71D8nPZPKjruCgBwYFK4EEACGhPAM6
+AAR2uBbfubYkb0UkaigsichnMJNSfeh8NB1nXMHaOkW82gKLxrydB1PZfyRZwhkU
+kKeLdXY4eWKxUw==
+-----END EC PRIVATE KEY-----
+" "16"
 "-----BEGIN EC PARAMETERS-----
 BggqhkjOPQMBBw==
 -----END EC PARAMETERS-----
