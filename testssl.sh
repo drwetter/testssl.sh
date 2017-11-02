@@ -2633,6 +2633,33 @@ rfc2openssl() {
      return 0
 }
 
+openssl2hexcode() {
+     local hexc=""
+     local -i i
+
+     if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
+          hexc="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | grep " $1 " | awk ' { print $1 }')"
+     else
+          for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+               [[ "$1" == "${TLS_CIPHER_OSSL_NAME[i]}" ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
+          done
+     fi
+     [[ -z "$hexc" ]] && return 1
+     tm_out "$hexc"
+     return 0
+}
+
+rfc2hexcode() {
+     local hexc=""
+     local -i i
+
+     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+          [[ "$1" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
+     done
+     [[ -z "$hexc" ]] && return 1
+     tm_out "$hexc"
+     return 0
+}
 
 show_rfc_style(){
      local rfcname="" hexcode
@@ -4156,6 +4183,8 @@ run_protocols() {
      local latest_supported=""  # version.major and version.minor of highest version supported by the server.
      local detected_version_string latest_supported_string
      local lines nr_ciphers_detected
+     local tls13_ciphers_to_test=""
+     local drafts_offered=""
      local -i ret
 
      outln; pr_headline " Testing protocols "
@@ -4441,6 +4470,110 @@ run_protocols() {
                ;;                                # protocol ok, but no cipher
           7)   prln_warning "TLSv1.2 seems locally not supported"
                fileout "tls1_2" "WARN" "TLSv1.2 is not tested due to lack of local support"
+               ;;                                # no local support
+     esac
+
+     pr_bold " TLS 1.3    ";
+     if "$using_sockets"; then
+          # Need to ensure that at most 128 ciphers are included in ClientHello.
+          # If the TLSv1.2 test was successful, then use the 5 TLSv1.3 ciphers
+          # plus the cipher selected in the TLSv1.2 test. If the TLSv1.2 test was
+          # not successful, then just use the 5 TLSv1.3 ciphers plus the list of
+          # ciphers used in all of the previous tests ($TLS_CIPHER).
+          if [[ $ret -eq 0 ]] || [[ $req -eq 2 ]]; then
+               tls13_ciphers_to_test="$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+               if [[ "$tls13_ciphers_to_test" == TLS_* ]] || [[ "$tls13_ciphers_to_test" == SSL_* ]]; then
+                    tls13_ciphers_to_test="$(rfc2hexcode "$tls13_ciphers_to_test")"
+               else
+                    tls13_ciphers_to_test="$(openssl2hexcode "$tls13_ciphers_to_test")"
+               fi
+          fi
+          if [[ ${#tls13_ciphers_to_test} -eq 9 ]]; then
+               tls13_ciphers_to_test="$TLS13_CIPHER, ${tls13_ciphers_to_test:2:2},${tls13_ciphers_to_test:7:2}"
+          else
+               tls13_ciphers_to_test="$TLS13_CIPHER,$TLS_CIPHER"
+          fi
+          tls_sockets "04" "$tls13_ciphers_to_test"
+     else
+          run_prototest_openssl "-tls1_3"
+     fi
+     case $? in
+          0)   if ! "$using_sockets"; then
+                    outln "offered (OK)"
+                    fileout "tls1_3" "OK" "TLSv1.3 is offered"
+               else
+                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 12"
+                    [[ $? -eq 0 ]] && drafts_offered="draft 18 offered"
+                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 13"
+                    if [[ $? -eq 0 ]]; then
+                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
+                         drafts_offered+="draft 19 offered"
+                    fi
+                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 14"
+                    if [[ $? -eq 0 ]]; then
+                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
+                         drafts_offered+="draft 20 offered"
+                    fi
+                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 15"
+                    if [[ $? -eq 0 ]]; then
+                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
+                         drafts_offered+="draft 21 offered"
+                    fi
+                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 03, 04"
+                    if [[ $? -eq 0 ]]; then
+                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
+                         drafts_offered+="final offered"
+                    fi
+                    if [[ -n "$drafts_offered" ]]; then
+                         outln "$drafts_offered"
+                         fileout "tls1_3" "OK" "TLSv1.3 $drafts_offered"
+                    else
+                         prln_warning "Unexpected results"
+                         fileout "tls1_3" "WARN" "TLSv1.3 unexpected results"
+                    fi
+               fi
+               latest_supported="0304"
+               latest_supported_string="TLSv1.3"
+               add_tls_offered tls1_3 yes
+               ;;
+          1)   out "not offered"
+               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
+                    outln
+                    fileout "tls1_3" "INFO" "TLSv1.3 is not offered"
+               else
+                    prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string"
+                    fileout "tls1_3" "CRITICAL" "TLSv1.3: connection failed rather than downgrading to $latest_supported_string"
+               fi
+               add_tls_offered tls1_3 no
+               ;;
+          2)   out "not offered"
+               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+                    detected_version_string="SSLv3"
+               elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
+                    detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
+               fi
+               if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
+                    [[ $DEBUG -eq 1 ]] && out " -- downgraded"
+                    outln
+                    fileout "tls1_3" "INFO" "TLSv1.3 is not offered and downgraded to a weaker protocol"
+               elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
+                    prln_svrty_critical " -- server supports $latest_supported_string, but downgraded to $detected_version_string"
+                    fileout "tls1_3" "CRITICAL" "TLSv1.3 is not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
+               elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0304 ]]; then
+                    prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
+                    fileout "tls1_3" "CRITICAL" "TLSv1.3 is not offered, server responded with higher version number ($detected_version_string) than requested by client"
+               else
+                    prln_svrty_critical " -- server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    fileout "tls1_3" "CRITICAL" "TLSv1.3: server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+               fi
+               add_tls_offered tls1_3 no
+               ;;
+          5)   outln "$supported_no_ciph1"
+               fileout "tls1_3" "INFO" "TLSv1.3 is $supported_no_ciph1"
+               add_tls_offered tls1_3 yes
+               ;;                                # protocol ok, but no cipher
+          7)   prln_warning "TLSv1.3 seems locally not supported"
+               fileout "tls1_3" "INFO" "TLSv1.3 is not tested due to lack of local support"
                ;;                                # no local support
      esac
      debugme echo "PROTOS_OFFERED: $PROTOS_OFFERED"
