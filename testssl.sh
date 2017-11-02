@@ -1393,7 +1393,7 @@ string_to_asciihex() {
 
 # Adjust options to $OPENSSL s_client based on OpenSSL version and protocol version
 s_client_options() {
-     local options="$1"
+     local options=" $1"
      local ciphers
 
      # Don't include the -servername option for an SSLv2 or SSLv3 ClientHello.
@@ -6951,10 +6951,11 @@ get_san_dns_from_cert() {
 run_pfs() {
      local -i sclient_success
      local pfs_offered=false ecdhe_offered=false ffdhe_offered=false
-     local hexc dash pfs_cipher sslvers auth mac export curve dhlen
+     local pfs_tls13_offered=false
+     local protos_to_try proto hexc dash pfs_cipher sslvers auth mac export curve dhlen
      local -a hexcode normalized_hexcode ciph rfc_ciph kx enc ciphers_found sigalg ossl_supported
      # generated from 'kEECDH:kEDH:!aNULL:!eNULL:!DES:!3DES:!RC4' with openssl 1.0.2i and openssl 1.1.0
-     local pfs_cipher_list="DHE-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA:DHE-DSS-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA:DHE-DSS-SEED-SHA:DHE-RSA-AES128-CCM8:DHE-RSA-AES128-CCM:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-CCM8:DHE-RSA-AES256-CCM:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-RSA-CHACHA20-POLY1305-OLD:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-SEED-SHA:ECDHE-ECDSA-AES128-CCM8:ECDHE-ECDSA-AES128-CCM:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-CCM8:ECDHE-ECDSA-AES256-CCM:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305-OLD:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-RSA-CHACHA20-POLY1305-OLD:ECDHE-RSA-CHACHA20-POLY1305"
+     local pfs_cipher_list="TLS13-AES-128-GCM-SHA256:TLS13-AES-256-GCM-SHA384:TLS13-CHACHA20-POLY1305-SHA256:TLS13-AES-128-CCM-SHA256:TLS13-AES-128-CCM-8-SHA256:DHE-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA:DHE-DSS-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA:DHE-DSS-SEED-SHA:DHE-RSA-AES128-CCM8:DHE-RSA-AES128-CCM:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-CCM8:DHE-RSA-AES256-CCM:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-RSA-CHACHA20-POLY1305-OLD:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-SEED-SHA:ECDHE-ECDSA-AES128-CCM8:ECDHE-ECDSA-AES128-CCM:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-CCM8:ECDHE-ECDSA-AES256-CCM:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305-OLD:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-RSA-CHACHA20-POLY1305-OLD:ECDHE-RSA-CHACHA20-POLY1305"
      local pfs_hex_cipher_list="" ciphers_to_test
      local ecdhe_cipher_list="" ecdhe_cipher_list_hex="" ffdhe_cipher_list_hex=""
      local curves_hex=("00,01" "00,02" "00,03" "00,04" "00,05" "00,06" "00,07" "00,08" "00,09" "00,0a" "00,0b" "00,0c" "00,0d" "00,0e" "00,0f" "00,10" "00,11" "00,12" "00,13" "00,14" "00,15" "00,16" "00,17" "00,18" "00,19" "00,1a" "00,1b" "00,1c" "00,1d" "00,1e")
@@ -6987,10 +6988,10 @@ run_pfs() {
      if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                pfs_cipher="${TLS_CIPHER_RFC_NAME[i]}"
-               if ( [[ "$pfs_cipher" == "TLS_DHE_"* ]] || [[ "$pfs_cipher" == "TLS_ECDHE_"* ]] ) && \
+               hexc="${TLS_CIPHER_HEXCODE[i]}"
+               if ( [[ "$pfs_cipher" == "TLS_DHE_"* ]] || [[ "$pfs_cipher" == "TLS_ECDHE_"* ]] || [[ "${hexc:2:2}" == "13" ]] ) && \
                   [[ ! "$pfs_cipher" =~ NULL ]] && [[ ! "$pfs_cipher" =~ DES ]] && [[ ! "$pfs_cipher" =~ RC4 ]] && \
                   [[ ! "$pfs_cipher" =~ PSK ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
-                    hexc="${TLS_CIPHER_HEXCODE[i]}"
                     pfs_hex_cipher_list+=", ${hexc:2:2},${hexc:7:2}"
                     ciph[nr_supported_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
                     rfc_ciph[nr_supported_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
@@ -7024,8 +7025,11 @@ run_pfs() {
      fi
      export=""
 
-     if "$using_sockets"; then
-          tls_sockets "03" "${pfs_hex_cipher_list:2}"
+     if [[ $(has_server_protocol "tls1_3") -eq 0 ]]; then
+          # All TLSv1.3 cipher suites offer robust PFS.
+          sclient_success=0
+     elif "$using_sockets"; then
+          tls_sockets "04" "${pfs_hex_cipher_list:2}"
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
      else
@@ -7059,52 +7063,75 @@ run_pfs() {
           else
                out "          "
           fi
-          while true; do
-               ciphers_to_test=""
-               for (( i=0; i < nr_supported_ciphers; i++ )); do
-                    ! "${ciphers_found[i]}" && "${ossl_supported[i]}" && ciphers_to_test+=":${ciph[i]}"
-               done
-               [[ -z "$ciphers_to_test" ]] && break
-               $OPENSSL s_client $(s_client_options "-cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") &>$TMPFILE </dev/null
-               sclient_connect_successful $? $TMPFILE || break
-               pfs_cipher=$(get_cipher $TMPFILE)
-               [[ -z "$pfs_cipher" ]] && break
-               for (( i=0; i < nr_supported_ciphers; i++ )); do
-                    [[ "$pfs_cipher" == "${ciph[i]}" ]] && break
-               done
-               ciphers_found[i]=true
-               if "$WIDE"; then
-                    dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
-                    kx[i]="${kx[i]} $dhlen"
-               fi
-               "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
-                    sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
-          done
-          if "$using_sockets"; then
+          if "$HAS_TLS13"; then
+               protos_to_try="-no_ssl2 -no_tls1_3"
+          else
+               protos_to_try="-no_ssl2"
+          fi
+
+          for proto in $protos_to_try; do
                while true; do
                     ciphers_to_test=""
                     for (( i=0; i < nr_supported_ciphers; i++ )); do
-                         ! "${ciphers_found[i]}" && ciphers_to_test+=", ${hexcode[i]}"
+                         ! "${ciphers_found[i]}" && "${ossl_supported[i]}" && ciphers_to_test+=":${ciph[i]}"
                     done
                     [[ -z "$ciphers_to_test" ]] && break
-                    if "$WIDE" && "$SHOW_SIGALGO"; then
-                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "all"
-                    else
-                         tls_sockets "03" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
-                    fi
-                    sclient_success=$?
-                    [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
-                    pfs_cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    $OPENSSL s_client $(s_client_options "$proto -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") &>$TMPFILE </dev/null
+                    sclient_connect_successful $? $TMPFILE || break
+                    pfs_cipher=$(get_cipher $TMPFILE)
+                    [[ -z "$pfs_cipher" ]] && break
                     for (( i=0; i < nr_supported_ciphers; i++ )); do
-                         [[ "$pfs_cipher" == "${rfc_ciph[i]}" ]] && break
+                         [[ "$pfs_cipher" == "${ciph[i]}" ]] && break
                     done
+                    [[ $i -eq $nr_supported_ciphers ]] && break
                     ciphers_found[i]=true
+                    if [[ "$pfs_cipher" == TLS13* ]]; then
+                         pfs_tls13_offered=true
+                         "$WIDE" && kx[i]="$(read_dhtype_from_file $TMPFILE)"
+                    fi
                     if "$WIDE"; then
-                         dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
+                         dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                          kx[i]="${kx[i]} $dhlen"
                     fi
-                    "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
-                         sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
+                    "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                         sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
+               done
+          done
+          if "$using_sockets"; then
+               for proto in 04 03; do
+                    while true; do
+                         ciphers_to_test=""
+                         for (( i=0; i < nr_supported_ciphers; i++ )); do
+                              ! "${ciphers_found[i]}" && ciphers_to_test+=", ${hexcode[i]}"
+                         done
+                         [[ -z "$ciphers_to_test" ]] && break
+                         [[ "$proto" == "04" ]] && [[ ! "${ciphers_to_test:2}" =~ ,\ 13,[0-9a-f][0-9a-f] ]] && break
+                         ciphers_to_test="$(strip_inconsistent_ciphers "$proto" "$ciphers_to_test")"
+                         [[ -z "$ciphers_to_test" ]] && break
+                         if "$WIDE" && "$SHOW_SIGALGO"; then
+                              tls_sockets "$proto" "${ciphers_to_test:2}, 00,ff" "all"
+                         else
+                              tls_sockets "$proto" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+                         fi
+                         sclient_success=$?
+                         [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
+                         pfs_cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                         for (( i=0; i < nr_supported_ciphers; i++ )); do
+                              [[ "$pfs_cipher" == "${rfc_ciph[i]}" ]] && break
+                         done
+                         [[ $i -eq $nr_supported_ciphers ]] && break
+                         ciphers_found[i]=true
+                         if [[ "${kx[i]}" == "Kx=any" ]]; then
+                              pfs_tls13_offered=true
+                              "$WIDE" && kx[i]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+                         fi
+                         if "$WIDE"; then
+                              dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
+                              kx[i]="${kx[i]} $dhlen"
+                         fi
+                         "$WIDE" && "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
+                              sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
+                    done
                done
           fi
           for (( i=0; i < nr_supported_ciphers; i++ )); do
@@ -7117,12 +7144,12 @@ run_pfs() {
                     fi
                     pfs_ciphers+="$pfs_cipher "
 
-                    if [[ "${ciph[i]}" == "ECDHE-"* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_ECDHE_"* ]] ); then
+                    if [[ "${ciph[i]}" == "ECDHE-"* ]] || [[ "${ciph[i]}" == TLS13* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_ECDHE_"* ]] ); then
                          ecdhe_offered=true
                          ecdhe_cipher_list_hex+=", ${hexcode[i]}"
                          [[ "${ciph[i]}" != "-" ]] && ecdhe_cipher_list+=":$pfs_cipher"
                     fi
-                    if [[ "${ciph[i]}" == "DHE-"* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_DHE_"* ]] ); then
+                    if [[ "${ciph[i]}" == "DHE-"* ]] || [[ "${ciph[i]}" == TLS13* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_DHE_"* ]] ); then
                          ffdhe_offered=true
                          ffdhe_cipher_list_hex+=", ${hexcode[i]}"
                     fi
@@ -7130,7 +7157,7 @@ run_pfs() {
                if "$WIDE"; then
                     neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
                     if "$SHOW_EACH_C"; then
-                         if ${ciphers_found[i]}; then
+                         if "${ciphers_found[i]}"; then
                               pr_done_best "available"
                          else
                               pr_deemphasize "not a/v"
@@ -7172,51 +7199,71 @@ run_pfs() {
                          low=$nr_curves/2; high=$nr_curves
                     fi
                fi
+               if "$HAS_TLS13"; then
+                    if "$pfs_tls13_offered"; then
+                         protos_to_try="-no_ssl2 -no_tls1_3"
+                    else
+                         protos_to_try="-no_tls1_3"
+                    fi
+               else
+                    protos_to_try="-no_ssl2"
+               fi
+
+               for proto in $protos_to_try; do
+                    while true; do
+                         curves_to_test=""
+                         for (( i=low; i < high; i++ )); do
+                              "${ossl_supported[i]}" && ! "${supported_curve[i]}" && curves_to_test+=":${curves_ossl[i]}"
+                         done
+                         [[ -z "$curves_to_test" ]] && break
+                         $OPENSSL s_client $(s_client_options "$proto -cipher "${ecdhe_cipher_list:1}" -curves "${curves_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") &>$TMPFILE </dev/null
+                         sclient_connect_successful $? $TMPFILE || break
+                         temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")
+                         curve_found="${temp%%,*}"
+                         if [[ "$curve_found" == "ECDH" ]]; then
+                              curve_found="${temp#*, }"
+                              curve_found="${curve_found%%,*}"
+                         fi
+                         for (( i=low; i < high; i++ )); do
+                              ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
+                         done
+                         [[ $i -eq $high ]] && break
+                         supported_curve[i]=true
+                    done
+               done
+          done
+     fi
+     if "$ecdhe_offered" && "$using_sockets"; then
+          protos_to_try="03"
+          "$pfs_tls13_offered" && protos_to_try="04 03"
+          for proto in $protos_to_try; do
+               if [[ "$proto" == "03" ]]; then
+                    ecdhe_cipher_list_hex="$(strip_inconsistent_ciphers "03" "$ecdhe_cipher_list_hex")"
+                    [[ -z "$ecdhe_cipher_list_hex" ]] && continue
+               fi
                while true; do
                     curves_to_test=""
-                    for (( i=low; i < high; i++ )); do
-                         "${ossl_supported[i]}" && ! "${supported_curve[i]}" && curves_to_test+=":${curves_ossl[i]}"
+                    for (( i=0; i < nr_curves; i++ )); do
+                         ! "${supported_curve[i]}" && curves_to_test+=", ${curves_hex[i]}"
                     done
                     [[ -z "$curves_to_test" ]] && break
-                    $OPENSSL s_client $(s_client_options "-cipher "${ecdhe_cipher_list:1}" -curves "${curves_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") &>$TMPFILE </dev/null
-                    sclient_connect_successful $? $TMPFILE || break
-                    temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")
+                    len1=$(printf "%02x" "$((2*${#curves_to_test}/7))")
+                    len2=$(printf "%02x" "$((2*${#curves_to_test}/7+2))")
+                    tls_sockets "$proto" "${ecdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
+                    sclient_success=$?
+                    [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
+                    temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     curve_found="${temp%%,*}"
                     if [[ "$curve_found" == "ECDH" ]]; then
                          curve_found="${temp#*, }"
                          curve_found="${curve_found%%,*}"
                     fi
-                    for (( i=low; i < high; i++ )); do
+                    for (( i=0; i < nr_curves; i++ )); do
                          ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
                     done
-                    [[ $i -eq $high ]] && break
+                    [[ $i -eq $nr_curves ]] && break
                     supported_curve[i]=true
                done
-          done
-     fi
-     if "$ecdhe_offered" && "$using_sockets"; then
-          while true; do
-               curves_to_test=""
-               for (( i=0; i < nr_curves; i++ )); do
-                    ! "${supported_curve[i]}" && curves_to_test+=", ${curves_hex[i]}"
-               done
-               [[ -z "$curves_to_test" ]] && break
-               len1=$(printf "%02x" "$((2*${#curves_to_test}/7))")
-               len2=$(printf "%02x" "$((2*${#curves_to_test}/7+2))")
-               tls_sockets "03" "${ecdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
-               sclient_success=$?
-               [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
-               temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
-               curve_found="${temp%%,*}"
-               if [[ "$curve_found" == "ECDH" ]]; then
-                    curve_found="${temp#*, }"
-                    curve_found="${curve_found%%,*}"
-               fi
-               for (( i=0; i < nr_curves; i++ )); do
-                    ! "${supported_curve[i]}" && [[ "${curves_ossl_output[i]}" == "$curve_found" ]] && break
-               done
-               [[ $i -eq $nr_curves ]] && break
-               supported_curve[i]=true
           done
      fi
      if "$ecdhe_offered"; then
@@ -7231,18 +7278,28 @@ run_pfs() {
                fileout "ecdhe_curves" "INFO" "Elliptic curves offered $curves_offered"
           fi
      fi
-     outln
-     if "$ffdhe_offered" && "$using_sockets" && "$EXPERIMENTAL"; then
-          # Check to see whether RFC 7919 is supported (see Section 4 of RFC 7919)
-          tls_sockets "03" "${ffdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, 04, 00, 02, 01, fb"
-          sclient_success=$?
-          if [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]]; then
-               # find out what groups from RFC 7919 are supported.
-               nr_curves=0
-               for curve in "${ffdhe_groups_output[@]}"; do
-                    supported_curve[nr_curves]=false
-                    nr_curves+=1
-               done
+     if "$using_sockets" && ( "$pfs_tls13_offered" || ( "$ffdhe_offered" && "$EXPERIMENTAL" ) ); then
+          # find out what groups from RFC 7919 are supported.
+          nr_curves=0
+          for curve in "${ffdhe_groups_output[@]}"; do
+               supported_curve[nr_curves]=false
+               nr_curves+=1
+          done
+          protos_to_try=""
+          "$pfs_tls13_offered" && protos_to_try="04"
+          if "$ffdhe_offered" && "$EXPERIMENTAL"; then
+               # Check to see whether RFC 7919 is supported (see Section 4 of RFC 7919)
+               tls_sockets "03" "${ffdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, 04, 00, 02, 01, fb"
+               sclient_success=$?
+               if [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]]; then
+                    if "$pfs_tls13_offered"; then
+                         protos_to_try="04 03"
+                    else
+                         protos_to_try="03"
+                    fi
+               fi
+          fi
+          for proto in $protos_to_try; do
                while true; do
                     curves_to_test=""
                     for (( i=0; i < nr_curves; i++ )); do
@@ -7251,7 +7308,7 @@ run_pfs() {
                     [[ -z "$curves_to_test" ]] && break
                     len1=$(printf "%02x" "$((2*${#curves_to_test}/7))")
                     len2=$(printf "%02x" "$((2*${#curves_to_test}/7+2))")
-                    tls_sockets "03" "${ffdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
+                    tls_sockets "$proto" "${ffdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
                     sclient_success=$?
                     [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
                     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
@@ -7273,8 +7330,9 @@ run_pfs() {
                     outln "$curves_offered"
                     fileout "rfc7919_groups" "INFO" "RFC 7919 DH groups offered $curves_offered"
                fi
-          fi
+          done
      fi
+     outln
 
      tmpfile_handle $FUNCNAME.txt
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
@@ -8631,6 +8689,7 @@ parse_tls_serverhello() {
                                return 1
                           fi
                           case $named_curve in
+                               21) dh_bits=224 ; named_curve_str="P-224" ; named_curve_oid="06052b81040021" ;;
                                23) dh_bits=256 ; named_curve_str="P-256" ; named_curve_oid="06082a8648ce3d030107" ;;
                                24) dh_bits=384 ; named_curve_str="P-384" ; named_curve_oid="06052b81040022" ;;
                                25) dh_bits=521 ; named_curve_str="P-521" ; named_curve_oid="06052b81040023" ;;
@@ -9707,6 +9766,8 @@ resend_if_hello_retry_request() {
                fi
                [[ $DEBUG -ge 3 ]] && echo "     key share:              0x${tls_hello_ascii:j:4}"
                new_key_share="$(generate_key_share_extension "000a00040002${tls_hello_ascii:j:4}" "$process_full")"
+               [[ $? -ne 0 ]] && return 1
+               [[ -z "$new_key_share" ]] && return 1
                new_extra_extns+="${new_key_share//,/}"
           fi
      done
