@@ -2638,7 +2638,7 @@ openssl2hexcode() {
      local -i i
 
      if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
-          hexc="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | grep " $1 " | awk ' { print $1 }')"
+          hexc="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | awk '/ '"$1"' / { print $1 }')"
      else
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                [[ "$1" == "${TLS_CIPHER_OSSL_NAME[i]}" ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
@@ -4503,30 +4503,30 @@ run_protocols() {
                     fileout "tls1_3" "OK" "TLSv1.3 is offered"
                else
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 12"
-                    [[ $? -eq 0 ]] && drafts_offered="draft 18 offered"
+                    [[ $? -eq 0 ]] && drafts_offered="draft 18"
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 13"
                     if [[ $? -eq 0 ]]; then
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 19 offered"
+                         drafts_offered+="draft 19"
                     fi
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 14"
                     if [[ $? -eq 0 ]]; then
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 20 offered"
+                         drafts_offered+="draft 20"
                     fi
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 15"
                     if [[ $? -eq 0 ]]; then
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 21 offered"
+                         drafts_offered+="draft 21"
                     fi
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 03, 04"
                     if [[ $? -eq 0 ]]; then
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="final offered"
+                         drafts_offered+="final"
                     fi
                     if [[ -n "$drafts_offered" ]]; then
-                         outln "$drafts_offered"
-                         fileout "tls1_3" "OK" "TLSv1.3 $drafts_offered"
+                         pr_done_best "offered (OK)"; outln ": $drafts_offered"
+                         fileout "tls1_3" "OK" "TLSv1.3 offered: $drafts_offered"
                     else
                          prln_warning "Unexpected results"
                          fileout "tls1_3" "WARN" "TLSv1.3 unexpected results"
