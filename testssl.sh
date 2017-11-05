@@ -13209,11 +13209,9 @@ parse_hn_port() {
      local tmp_port
 
      NODE="$1"
-     # strip "https" and trailing urlpath supposed it was supplied additionally
-     grep -q 'https://' <<< "$NODE" && NODE=$(sed -e 's/^https\:\/\///' <<< "$NODE")
-
-     # strip trailing urlpath
-     NODE=$(sed -e 's/\/.*$//' <<< "$NODE")
+     NODE="${NODE/https\:\/\//}"        # strip "https"
+     NODE="${NODE%%/*}"                 # strip trailing urlpath
+     NODE="${NODE%%.}"                  # strip trailing "." if supplied
 
      # if there's a trailing ':' probably a starttls/application protocol was specified
      if grep -q ':$' <<< "$NODE"; then
