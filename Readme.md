@@ -124,9 +124,8 @@ respective projects
 #### Mass scanner w parallel scans and elastic searching the results
 * https://github.com/TKCERT/testssl.sh-masscan
 
-#### Ready-to-go docker images are available at:
+#### A ready-to-go docker image is at:
 * https://quay.io/repository/jumanjiman/testssl
-* https://hub.docker.com/r/mvance/testssl/
 
 #### Brew package
 
