@@ -9948,6 +9948,7 @@ resend_if_hello_retry_request() {
 #                   "ephemeralkey" - extract the server's ephemeral key (if any)
 # arg4: (optional) additional request extensions
 # arg5: (optional) "true" if ClientHello should advertise compression methods other than "NULL"
+# arg6: (optional) "false" if the connection should not be closed before the function returns.
 # return: 0: successful connect   | 1: protocol or cipher not available | 2: as (0) but downgraded
 #         6: couldn't open socket | 7: couldn't open temp file
 tls_sockets() {
@@ -9959,9 +9960,11 @@ tls_sockets() {
      local sock_reply_file2 sock_reply_file3
      local tls_hello_ascii next_packet
      local process_full="$3" offer_compression=false skip=false
+     local close_connection=true
      local -i hello_done=0
 
      [[ "$5" == "true" ]] && offer_compression=true
+     [[ "$6" == "false" ]] && close_connection=false
      tls_low_byte="$1"
      if [[ -n "$2" ]]; then             # use supplied string in arg2 if there is one
           cipher_list_2send="$2"
@@ -10067,7 +10070,7 @@ tls_sockets() {
           parse_tls_serverhello "$tls_hello_ascii" "$process_full" "$cipher_list_2send"
           save=$?
 
-          if [[ $save == 0 ]]; then
+          if "$close_connection" && [[ $save == 0 ]]; then
                debugme echo "sending close_notify..."
                if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
                     socksend ",x15, x03, x00, x00, x02, x02, x00" 0
@@ -10098,7 +10101,7 @@ tls_sockets() {
           debugme echo "stuck on sending: $ret"
      fi
 
-     close_socket
+     "$close_connection" && close_socket
      tmpfile_handle $FUNCNAME.dd $SOCK_REPLY_FILE
      return $ret
 }
@@ -10112,8 +10115,8 @@ tls_sockets() {
 
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 run_heartbleed(){
-     local tls_proto_offered tls_hexcode
-     local heartbleed_payload client_hello
+     local tls_hexcode
+     local heartbleed_payload
      local -i n ret lines_returned
      local append=""
      local tls_hello_ascii=""
@@ -10152,68 +10155,9 @@ run_heartbleed(){
      debugme echo "using protocol $tls_hexcode"
 
      heartbleed_payload=", x18, $tls_hexcode, x00, x03, x01, x40, x00"
+     tls_sockets "${tls_hexcode:6:2}" "" "" "" "" "false"
 
-     client_hello="
-     # TLS header ( 5 bytes)
-     ,x16,                      # content type (x16 for handshake)
-     x03, x01,                  # TLS record layer version
-     x00, xdc,                  # length
-     # Handshake header
-     x01,                       # type (x01 for ClientHello)
-     x00, x00, xd8,             # length
-     $tls_hexcode,              # TLS version
-     # Random (32 byte)
-     x53, x43, x5b, x90, x9d, x9b, x72, x0b,
-     xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
-     xcf, xbd, x39, x04, xcc, x16, x0a, x85,
-     x03, x90, x9f, x77, x04, x33, xd4, xde,
-     x00,                       # session ID length
-     x00, x66,                  # cipher suites length
-                                # cipher suites (51 suites)
-     xc0, x14, xc0, x0a, xc0, x22, xc0, x21,
-     x00, x39, x00, x38, x00, x88, x00, x87,
-     xc0, x0f, xc0, x05, x00, x35, x00, x84,
-     xc0, x12, xc0, x08, xc0, x1c, xc0, x1b,
-     x00, x16, x00, x13, xc0, x0d, xc0, x03,
-     x00, x0a, xc0, x13, xc0, x09, xc0, x1f,
-     xc0, x1e, x00, x33, x00, x32, x00, x9a,
-     x00, x99, x00, x45, x00, x44, xc0, x0e,
-     xc0, x04, x00, x2f, x00, x96, x00, x41,
-     xc0, x11, xc0, x07, xc0, x0c, xc0, x02,
-     x00, x05, x00, x04, x00, x15, x00, x12,
-     x00, x09, x00, x14, x00, x11, x00, x08,
-     x00, x06, x00, x03, x00, xff,
-     x01,                       # compression methods length
-     x00,                       # compression method (x00 for NULL)
-     x00, x49,                  # extensions length
-     # extension: ec_point_formats
-     x00, x0b, x00, x04, x03, x00, x01, x02,
-     # extension: elliptic_curves
-     x00, x0a, x00, x34, x00, x32, x00, x0e,
-     x00, x0d, x00, x19, x00, x0b, x00, x0c,
-     x00, x18, x00, x09, x00, x0a, x00, x16,
-     x00, x17, x00, x08, x00, x06, x00, x07,
-     x00, x14, x00, x15, x00, x04, x00, x05,
-     x00, x12, x00, x13, x00, x01, x00, x02,
-     x00, x03, x00, x0f, x00, x10, x00, x11,
-     # extension: session ticket TLS
-     x00, x23, x00, x00,
-     # extension: heartbeat
-     x00, x0f, x00, x01, x01"
-
-     fd_socket 5 || return 6
-     debugme echo -en "\nsending client hello... "
-     socksend "$client_hello" 1
-
-     debugme echo "reading server hello...  "
-     sockread_serverhello 32768
-     if [[ $DEBUG -ge 4 ]]; then
-          hexdump -C "$SOCK_REPLY_FILE" | head -20
-          tmln_out "[...]"
-          tmln_out "\nsending payload with TLS version $tls_hexcode:"
-     fi
-     rm "$SOCK_REPLY_FILE"
-
+     [[ $DEBUG -ge 4 ]] && tmln_out "\nsending payload with TLS version $tls_hexcode:"
      socksend "$heartbleed_payload" 1
      sockread_serverhello 16384 $HEARTBLEED_MAX_WAITSOCK
      if [[ $? -eq 3 ]]; then
@@ -10276,7 +10220,7 @@ ok_ids(){
      return 0
 }
 
-#FIXME: At a certain point heartbleed and ccs needs to be changed and make use of code2network using a file, then tls_sockets
+#FIXME: At a certain point ccs needs to be changed and make use of code2network using a file, then tls_sockets
 run_ccs_injection(){
      local tls_hexcode ccs_message client_hello byte6 sockreply
      local -i retval ret
