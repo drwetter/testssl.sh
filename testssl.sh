@@ -2449,7 +2449,7 @@ listciphers() {
 # argv[5]: non-SSLv2 cipher list to test (hexcodes), if using sockets
 # argv[6]: SSLv2 cipher list to test (hexcodes), if using sockets
 std_cipherlists() {
-     local -i i len sclient_success
+     local -i i len sclient_success=1
      local cipherlist sslv2_cipherlist detected_ssl2_ciphers
      local singlespaces
      local proto=""
