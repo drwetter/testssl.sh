@@ -60,8 +60,9 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 #### Features implemented in [2.9dev](Readme.md#devel)
 * Using bash sockets where ever possible --> better detection of ciphers, independent on the openssl version used.
-* Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but additional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
-* Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness), TLS 1.2 protocol check via socket in production
+* Testing 364 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but additional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
+* Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness),
+* TLS 1.2 protocol check via socket in production
 * Finding more TLS extensions via sockets
 * TLS Supported Groups Registry (RFC 7919), key shares extension
 * Non-flat JSON support
@@ -74,16 +75,22 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * Choice showing the RFC naming scheme only
 * LUCKY13 and SWEET32 checks
 * Ticketbleed check
+* Decoding of unencrypted BIG IP cookies
 * LOGJAM: now checking also for known DH parameters
 * Check for CAA RR
 * Check for OCSP must staple
 * Check for Certificate Transparency
+* Expect-CT Header Detection
 * Check for session resumption (Ticket, ID)
 * TLS Robustness check (GREASE)
 * Postgres und MySQL STARTTLS support, MongoDB support
 * Decodes BIG IP F5 Cookie
 * Better OpenBSD, better LibreSSL support
+* Missing SAN warning
 * Man page
+* Better error msg suppression (not fully installed OpenSSL)
+* DNS over Proxy and other proxy improvements
+* TLS 1.3 support
 
 #### Further features planned in 2.9dev
 
@@ -126,6 +133,9 @@ respective projects
 
 #### A ready-to-go docker image is at:
 * https://quay.io/repository/jumanjiman/testssl
+
+#### Privacy checker using testssl.sh
+* https://privacyscore.org
 
 #### Brew package
 
