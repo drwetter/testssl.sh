@@ -192,7 +192,7 @@ JSONFILE="${JSONFILE:-""}"              # jsonfile if used
 CSVFILE="${CSVFILE:-""}"                # csvfile if used
 HTMLFILE="${HTMLFILE:-""}"              # HTML if used
 FNAME=${FNAME:-""}                      # file name to read commands from
-FNAME_PREFIX=${FNAME_PREFIX:-""}
+FNAME_PREFIX=${FNAME_PREFIX:-""}        # output filename prefix, see --outprefix
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 NODNS=${NODNS:-false}                   # always do DNS lookups per default. For some pentests it might save time to set this to true
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
@@ -6743,8 +6743,8 @@ certificate_info() {
                provides_stapling=true
           else
                if $GOST_STATUS_PROBLEM; then
-                    outln "(GOST servers make problems here, sorry)"
-                    fileout "${json_prefix}ocsp_stapling" "OK" "OCSP stapling : (GOST servers make problems here, sorry)"
+                    pr_warning "(GOST servers make problems here, sorry)"
+                    fileout "${json_prefix}ocsp_stapling" "WARN" "OCSP stapling : (GOST servers make problems here, sorry)"
                     ret=0
                else
                     out "(response status unknown)"
@@ -12844,7 +12844,7 @@ file output options (can also be preset via environment variables)
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists rather append then overwrite. Omits any header
-     --prefix <out_fname_prefix>   before  '\${NODE}.' above prepend <out_fname_prefix>
+     --outprefix <fname_prefix>    before  '\${NODE}.' above prepend <fname_prefix>
 
 
 Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
@@ -14792,6 +14792,10 @@ parse_cmd_line() {
                     ;;
                --append)
                     APPEND=true
+                    ;;
+               --outprefix)
+                    FNAME_PREFIX="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
                     ;;
                --openssl|--openssl=*)
                     OPENSSL="$(parse_opt_equal_sign "$1" "$2")"
