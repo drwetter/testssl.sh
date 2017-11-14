@@ -192,6 +192,7 @@ JSONFILE="${JSONFILE:-""}"              # jsonfile if used
 CSVFILE="${CSVFILE:-""}"                # csvfile if used
 HTMLFILE="${HTMLFILE:-""}"              # HTML if used
 FNAME=${FNAME:-""}                      # file name to read commands from
+FNAME_PREFIX=${FNAME_PREFIX:-""}
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 NODNS=${NODNS:-false}                   # always do DNS lookups per default. For some pentests it might save time to set this to true
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
@@ -848,16 +849,16 @@ json_header() {
      elif "$do_mass_testing"; then
           :
      elif "$do_mx_all_ips"; then
-          fname_prefix="mx-$URI"
+          fname_prefix="${FNAME_PREFIX}.mx-${URI}"
      else
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          fname_prefix="${NODE}"_p"${PORT}"
+          fname_prefix="${FNAME_PREFIX}.${NODE}"_p"${PORT}"
      fi
      if [[ -z "$JSONFILE" ]]; then
           JSONFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".json)"
      elif [[ -d "$JSONFILE" ]]; then
-          JSONFILE="$JSONFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".json)"
+          JSONFILE="$JSONFILE/${fname_prefix}-$(date +"%Y%m%d-%H%M".json)"
      fi
      if "$APPEND"; then
           JSONHEADER=false
@@ -887,17 +888,17 @@ csv_header() {
      elif "$do_mass_testing"; then
           :
      elif "$do_mx_all_ips"; then
-          fname_prefix="mx-$URI"
+          fname_prefix="${FNAME_PREFIX}.mx-$URI"
      else
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          fname_prefix="${NODE}"_p"${PORT}"
+          fname_prefix="${FNAME_PREFIX}.${NODE}"_p"${PORT}"
      fi
 
      if [[ -z "$CSVFILE" ]]; then
-          CSVFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".csv)"
+          CSVFILE="${fname_prefix}-$(date +"%Y%m%d-%H%M".csv)"
      elif [[ -d "$CSVFILE" ]]; then
-          CSVFILE="$CSVFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".csv)"
+          CSVFILE="$CSVFILE/${fname_prefix}-$(date +"%Y%m%d-%H%M".csv)"
      fi
      if "$APPEND"; then
           CSVHEADER=false
@@ -930,11 +931,11 @@ html_header() {
      elif "$do_mass_testing"; then
           :
      elif "$do_mx_all_ips"; then
-          fname_prefix="mx-$URI"
+          fname_prefix="${FNAME_PREFIX}.mx-$URI"
      else
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          fname_prefix="${NODE}"_p"${PORT}"
+          fname_prefix="${FNAME_PREFIX}.${NODE}"_p"${PORT}"
      fi
 
      if [[ -z "$HTMLFILE" ]]; then
@@ -12843,6 +12844,7 @@ file output options (can also be preset via environment variables)
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists rather append then overwrite. Omits any header
+     --prefix <out_fname_prefix>   before  '\${NODE}.' above prepend <out_fname_prefix>
 
 
 Options requiring a value can also be called with '=' e.g. testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>.
@@ -13204,7 +13206,7 @@ prepare_logging() {
      "$do_mass_testing" && ! "$filename_provided" && return 0
      "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
 
-     [[ -z "$fname_prefix" ]] && fname_prefix="${NODE}"_p"${PORT}"
+     [[ -z "$fname_prefix" ]] && fname_prefix="${FNAME_PREFIX}.${NODE}"_p"${PORT}"
 
      if [[ -z "$LOGFILE" ]]; then
           LOGFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".log)"
@@ -13843,7 +13845,7 @@ run_mx_all_ips() {
      if [[ -n "$LOGFILE" ]]; then
           prepare_logging
      else
-          prepare_logging "mx-$1"
+          prepare_logging "${FNAME_PREFIX}.mx-$1"
      fi
      if [[ -n "$mxs" ]] && [[ "$mxs" != ' ' ]]; then
           [[ $mxport == "465" ]] && \

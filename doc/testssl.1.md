@@ -276,6 +276,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--append`                      If an output file exists it will append to this file, without a header. The environment variable APPEND does the same. If the file exists and you don't use `--append` testssl.sh will exit with an error. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
 
+`--prefix <out_fname_prefix>`   Prepend output filename prefix <out_fname_prefix> before '\${NODE}.'. You can use as well the environment variable FNAME_PREFIX.
 
 A few file output options can also be preset via environment variables.
 
