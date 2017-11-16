@@ -2604,7 +2604,7 @@ socksend() {
      else
           data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      fi
-     [[ $DEBUG -ge 4 ]] && echo -e "\n\"$data\""
+     [[ $DEBUG -ge 4 ]] && safe_echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $2
 }
