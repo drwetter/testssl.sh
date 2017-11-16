@@ -1,6 +1,6 @@
 FROM debian:latest
 
-RUN apt-get update && apt-get install -y git bsdmainutils dnsutils ldnsutils host
+RUN apt-get update && apt-get install -y git bsdmainutils ldnsutils procps
 
 RUN git clone --depth=1 https://github.com/drwetter/testssl.sh.git /testssl.sh/
 
