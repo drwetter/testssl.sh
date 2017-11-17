@@ -849,11 +849,11 @@ json_header() {
      elif "$do_mass_testing"; then
           :
      elif "$do_mx_all_ips"; then
-          fname_prefix="${FNAME_PREFIX}.mx-${URI}"
+          fname_prefix="${FNAME_PREFIX}mx-${URI}"
      else
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          fname_prefix="${FNAME_PREFIX}.${NODE}"_p"${PORT}"
+          fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
      fi
      if [[ -z "$JSONFILE" ]]; then
           JSONFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".json)"
@@ -888,11 +888,11 @@ csv_header() {
      elif "$do_mass_testing"; then
           :
      elif "$do_mx_all_ips"; then
-          fname_prefix="${FNAME_PREFIX}.mx-$URI"
+          fname_prefix="${FNAME_PREFIX}mx-$URI"
      else
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          fname_prefix="${FNAME_PREFIX}.${NODE}"_p"${PORT}"
+          fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
      fi
 
      if [[ -z "$CSVFILE" ]]; then
@@ -931,11 +931,11 @@ html_header() {
      elif "$do_mass_testing"; then
           :
      elif "$do_mx_all_ips"; then
-          fname_prefix="${FNAME_PREFIX}.mx-$URI"
+          fname_prefix="${FNAME_PREFIX}mx-$URI"
      else
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          fname_prefix="${FNAME_PREFIX}.${NODE}"_p"${PORT}"
+          fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
      fi
 
      if [[ -z "$HTMLFILE" ]]; then
@@ -13207,7 +13207,7 @@ prepare_logging() {
      "$do_mass_testing" && ! "$filename_provided" && return 0
      "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
 
-     [[ -z "$fname_prefix" ]] && fname_prefix="${FNAME_PREFIX}.${NODE}"_p"${PORT}"
+     [[ -z "$fname_prefix" ]] && fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
 
      if [[ -z "$LOGFILE" ]]; then
           LOGFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".log)"
@@ -13846,7 +13846,7 @@ run_mx_all_ips() {
      if [[ -n "$LOGFILE" ]]; then
           prepare_logging
      else
-          prepare_logging "${FNAME_PREFIX}.mx-$1"
+          prepare_logging "${FNAME_PREFIX}mx-$1"
      fi
      if [[ -n "$mxs" ]] && [[ "$mxs" != ' ' ]]; then
           [[ $mxport == "465" ]] && \
@@ -14796,7 +14796,7 @@ parse_cmd_line() {
                     ;;
                --outprefix)
                     FNAME_PREFIX="$(parse_opt_equal_sign "$1" "$2")"
-                    [[ $? -eq 0 ]] && shift
+                    [[ $? -eq 0 ]] && shift && FNAME_PREFIX="${FNAME_PREFIX}."
                     ;;
                --openssl|--openssl=*)
                     OPENSSL="$(parse_opt_equal_sign "$1" "$2")"
