@@ -2604,7 +2604,7 @@ socksend() {
      else
           data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      fi
-     [[ $DEBUG -ge 4 ]] && safe_echo "\"$data\""
+     [[ $DEBUG -ge 4 ]] && echo && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $2
 }
@@ -3783,7 +3783,7 @@ client_simulation_sockets() {
      code2network "${data}"
      data="$NW_STR"
      fd_socket 5 || return 6
-     [[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
+     [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
 
@@ -7932,7 +7932,7 @@ socksend_sslv2_clienthello() {
 
      code2network "$1"
      data="$NW_STR"
-     [[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
+     [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
 }
@@ -9768,7 +9768,7 @@ socksend_tls_clienthello() {
 
      code2network "$TLS_CLIENT_HELLO$all_extensions"
      data="$NW_STR"
-     [[ "$DEBUG" -ge 4 ]] && echo "\"$data\""
+     [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
 
