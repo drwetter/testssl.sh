@@ -6192,6 +6192,7 @@ certificate_info() {
      fi
 
      cert_sig_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
+     cert_sig_algo="${cert_sig_algo%% *}"
      cert_key_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2 }' | sort -u )
 
      out "$indent" ; pr_bold " Signature Algorithm          "
