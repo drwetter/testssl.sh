@@ -3,7 +3,13 @@
 docker run -t testssl.sh example.com
 ```
 
-Ability to pull image from docker hub:
+Or pull image from docker hub, then run:
 ```
-docker run -t dr4y/testssl.sh example.com
+docker run -t drwetter/testssl.sh example.com
 ```
+
+This is a experimental version with Debian Linux. Don\'t rely on it!
+Things will break.
+
+Besides the "latest" branch supported tags are currently "2.9dev" (equal to "latest"), and
+"2.9.5" = "stable": ``docker run -t drwetter/testssl.sh:stable example.com``.
