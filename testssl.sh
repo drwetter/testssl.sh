@@ -6191,9 +6191,10 @@ certificate_info() {
           spaces="                              "
      fi
 
-     cert_sig_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep "Signature Algorithm" | sed 's/^.*Signature Algorithm: //' | sort -u )
-     cert_sig_algo="${cert_sig_algo%% *}"
-     cert_key_algo=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2 }' | sort -u )
+     cert_sig_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Signature Algorithm/ { print $2; if (++Match >= 1) exit; }')"
+     cert_sig_algo="${cert_sig_algo// /}"
+     cert_key_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2; if (++Match >= 1) exit; }')"
+     cert_key_algo="${cert_key_algo// /}"
 
      out "$indent" ; pr_bold " Signature Algorithm          "
      case $cert_sig_algo in
@@ -6314,7 +6315,7 @@ certificate_info() {
                *ecdsa*|*ecPublicKey)    out "ECDSA ";;
                *GOST*|*gost*)           out "GOST ";;
                *dh*|*DH*)               out "DH " ;;
-               *)                       pr_fixme: "don't know $cert_key_algo " ;;
+               *)                       pr_fixme "don't know $cert_key_algo " ;;
           esac
           # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
           # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
