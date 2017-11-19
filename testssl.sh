@@ -10158,7 +10158,7 @@ run_heartbleed(){
      debugme echo "using protocol $tls_hexcode"
 
      heartbleed_payload=", x18, $tls_hexcode, x00, x03, x01, x40, x00"
-     tls_sockets "${tls_hexcode:6:2}" "" "" "" "" "false"
+     tls_sockets "${tls_hexcode:6:2}" "" "ephemeralkey" "" "" "false"
 
      [[ $DEBUG -ge 4 ]] && tmln_out "\nsending payload with TLS version $tls_hexcode:"
      socksend "$heartbleed_payload" 1
