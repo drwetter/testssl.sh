@@ -6732,10 +6732,10 @@ certificate_info() {
      out "$indent"; pr_bold " OCSP stapling                "
      if grep -a "OCSP response" <<< "$ocsp_response" | grep -q "no response sent" ; then
           if [[ -n "$ocsp_uri" ]]; then
-               pr_svrty_low "--"
+               pr_svrty_low "not offered"
                fileout "${json_prefix}ocsp_stapling" "LOW" "OCSP stapling : not offered"
           else
-               out "--"
+               out "not offered"
                fileout "${json_prefix}ocsp_stapling" "INFO" "OCSP stapling : not offered"
           fi
      else
@@ -6789,7 +6789,7 @@ certificate_info() {
           pr_warning "(was instructed to not use DNS)"
           fileout "${json_prefix}CAA_record" "WARN" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : test skipped as instructed"
      else
-          pr_svrty_low "--"
+          pr_svrty_low "not offered"
           fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
      fi
      outln
