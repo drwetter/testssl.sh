@@ -639,14 +639,13 @@ strip_quote() {
 
 #################### JSON FILE FORMATING ####################
 
-fileout_pretty_json_footer() {
-    echo -e "          ],
-          \"scanTime\"  : \"$SCAN_TIME\"\n}"
-}
-
 fileout_json_footer() {
-     "$do_json" && printf "]\n" >> "$JSONFILE"
-     "$do_pretty_json" && (printf "$(fileout_pretty_json_footer)") >> "$JSONFILE"
+     if "$do_json"; then
+          fileout_json_finding "scanTime" "INFO" "$SCAN_TIME" "" "" ""
+          printf "]\n" >> "$JSONFILE"
+     fi
+     "$do_pretty_json" && echo -e "          ],
+          \"scanTime\"  : \"$SCAN_TIME\"\n}" >> "$JSONFILE"
 }
 
 fileout_json_section() {
@@ -695,6 +694,7 @@ fileout_json_print_parameter() {
 
 fileout_json_finding() {
      local target
+     local finding="$3"            # FIXME: dealing with locals and globals in fileout()
 
      if "$do_json"; then
           "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
@@ -2598,12 +2598,28 @@ std_cipherlists() {
 # ARG1: hexbyte with a leading comma (!!), separated by commas
 # ARG2: sleep
 socksend() {
+     local data
+
      # the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
      if "$HAS_SED_E"; then
           data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      else
           data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      fi
+     [[ $DEBUG -ge 4 ]] && echo && echo "\"$data\""
+     printf -- "$data" >&5 2>/dev/null &
+     sleep $2
+}
+
+socksend2() {
+     local data line
+
+     # read line per line and strip comments (bash internal func can't handle multiline statements
+     data="$(while read line; do
+          printf  "${line%\#*}"
+     done <<< "$1" )"
+     data="${data// /}"        # strip ' '
+     data="${data//,/\\}"     # s&r , by \
      [[ $DEBUG -ge 4 ]] && echo && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $2
@@ -12322,7 +12338,7 @@ run_grease() {
      fi
 
      # Check for ClientHello size bug. According to RFC 7586 "at least one TLS
-     # implementation is known to hang the connection when [a] ClientHello 
+     # implementation is known to hang the connection when [a] ClientHello
      # record [with a length between 256 and 511 bytes] is received."
      # If the length of the host name is more than 75 bytes (which would make
      # $SNI more than 87 bytes), then the ClientHello would be more than 511
