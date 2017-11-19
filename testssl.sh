@@ -641,7 +641,8 @@ strip_quote() {
 
 fileout_json_footer() {
      if "$do_json"; then
-          fileout_json_finding "scanTime" "INFO" "$SCAN_TIME" "" "" ""
+          # no scan time in --severity=low and above, also needed for Travis. Bit hackish...
+          [[ $SEVERITY_LEVEL -lt $LOW ]] && fileout_json_finding "scanTime" "INFO" "$SCAN_TIME" "" "" ""
           printf "]\n" >> "$JSONFILE"
      fi
      "$do_pretty_json" && echo -e "          ],
