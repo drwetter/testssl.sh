@@ -2598,7 +2598,7 @@ std_cipherlists() {
 # sockets inspired by http://blog.chris007.de/?p=238
 # ARG1: hexbyte with a leading comma (!!), separated by commas
 # ARG2: sleep
-socksend() {
+socksend2() {
      local data
 
      # the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
@@ -2612,12 +2612,12 @@ socksend() {
      sleep $2
 }
 
-socksend2() {
+socksend() {
      local data line
 
      # read line per line and strip comments (bash internal func can't handle multiline statements
      data="$(while read line; do
-          printf  "${line%\#*}"
+          printf  "${line%%\#*}"
      done <<< "$1" )"
      data="${data// /}"        # strip ' '
      data="${data//,/\\}"     # s&r , by \
