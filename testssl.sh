@@ -12698,15 +12698,18 @@ find_openssl_binary() {
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
           if type -p timeout 2>&1 >/dev/null ; then
-               # there are different "timeout". Check whether --preserve-status is supported
-               if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
-                    OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
-               else
-                    OPENSSL="timeout $OPENSSL_TIMEOUT $OPENSSL"
+               if ! "$do_mass_testing"; then
+                    # there are different "timeout". Check whether --preserve-status is supported
+                    if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
+                         OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
+                    else
+                         OPENSSL="timeout $OPENSSL_TIMEOUT $OPENSSL"
+                    fi
                fi
           else
                outln
-               ignore_no_or_lame " Neccessary binary \"timeout\" not found. Continue without timeout? " "y"
+               prln_warning " Necessary binary \"timeout\" not found."
+               ignore_no_or_lame " Continue without timeout? " "yes"
                [[ $? -ne 0 ]] && exit -2
                unset OPENSSL_TIMEOUT
           fi
