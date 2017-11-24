@@ -4203,6 +4203,7 @@ run_protocols() {
      local lines nr_ciphers_detected
      local tls13_ciphers_to_test=""
      local drafts_offered=""
+     local debug_recomm=", rerun with DEBUG>=2"
      local -i ret
 
      outln; pr_headline " Testing protocols "
@@ -4226,7 +4227,7 @@ run_protocols() {
           case $? in
                7) # strange reply, couldn't convert the cipher spec length to a hex number
                     pr_cyan "strange v2 reply "
-                    outln " (rerun with DEBUG >=2)"
+                    outln "$debug_recomm"
                     [[ $DEBUG -ge 3 ]] && hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" | head -1
                     fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
                     ;;
@@ -4239,6 +4240,9 @@ run_protocols() {
                     prln_done_best "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered"
                     add_tls_offered ssl2 no
+                    ;;
+               4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
+                    fileout "sslv2" "WARN" "SSLv2: received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
                     ;;
                3) # everything else
                     lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
@@ -4308,6 +4312,9 @@ run_protocols() {
                     fi
                fi
                ;;
+          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "sslv3" "WARN" "SSLv3: received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+               ;;
           5)   pr_svrty_high "$supported_no_ciph2"
                fileout "sslv3" "HIGH" "SSLv3 is $supported_no_ciph1"
                outln "(may need debugging)"
@@ -4315,13 +4322,13 @@ run_protocols() {
                ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
-                    prln_warning "strange reply, maybe a client side problem with SSLv3"
+                    pr_warning "strange reply, maybe a client side problem with SSLv3"; outln "$debug_recomm"
                else
                     # warning on screen came already from locally_supported()
                     fileout "sslv3" "WARN" "SSLv3 is not tested due to lack of local support"
                fi
                ;;
-          *)   prln_fixme "unexpected value around line $((LINENO))"
+          *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
                ;;
      esac
 
@@ -4368,19 +4375,22 @@ run_protocols() {
                     fi
                fi
                ;;
+          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "tls1" "WARN" "TLSv1.0: received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+               ;;
           5)   outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
                fileout "tls1" "INFO" "TLSv1.0 is $supported_no_ciph1"
                add_tls_offered tls1 yes
                ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
-                    prln_warning "strange reply, maybe a client side problem with TLS 1.0"
+                    pr_warning "strange reply, maybe a client side problem with TLS 1.0"; outln "$debug_recomm"
                else
                     # warning on screen came already from locally_supported()
                     fileout "tls1" "WARN" "TLSv1.0 is not tested due to lack of local support"
                fi
                ;;
-          *)   prln_fixme "unexpected value around line $((LINENO))"
+          *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
                ;;
      esac
 
@@ -4430,19 +4440,22 @@ run_protocols() {
                     fi
                fi
                ;;
+          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "tls1_1" "WARN" "TLSv1.1: received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+               ;;
           5)   outln "$supported_no_ciph1"
                fileout "tls1_1" "INFO" "TLSv1.1 is $supported_no_ciph1"
                add_tls_offered tls1_1 yes
                ;;                                                # protocol ok, but no cipher
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
-                    prln_warning "strange reply, maybe a client side problem with TLS 1.1"
+                    pr_warning "strange reply, maybe a client side problem with TLS 1.1"; outln "$debug_recomm"
                else
                     # warning on screen came already from locally_supported()
                     fileout "tls1_1" "WARN" "TLSv1.1 is not tested due to lack of local support"
                fi
                ;;
-          *)   prln_fixme "unexpected value around line $((LINENO))"
+          *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
                ;;
      esac
 
@@ -4503,19 +4516,22 @@ run_protocols() {
                     fi
                fi
                ;;
+          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "tls1_2" "WARN" "TLSv1.2: received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+               ;;
           5)   outln "$supported_no_ciph1"
                fileout "tls1_2" "INFO" "TLSv1.2 is $supported_no_ciph1"
                add_tls_offered tls1_2 yes
                ;;                                # protocol ok, but no cipher
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
-                    prln_warning "strange reply, maybe a client side problem with TLS 1.2"
+                    pr_warning "strange reply, maybe a client side problem with TLS 1.2"; outln "$debug_recomm"
                else
                     # warning on screen came already from locally_supported()
                     fileout "tls1_2" "WARN" "TLSv1.2 is not tested due to lack of local support"
                fi
                ;;
-          *)   prln_fixme "unexpected value around line $((LINENO))"
+          *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
                ;;
      esac
 
@@ -4574,7 +4590,7 @@ run_protocols() {
                          pr_done_best "offered (OK)"; outln ": $drafts_offered"
                          fileout "tls1_3" "OK" "TLSv1.3 offered: $drafts_offered"
                     else
-                         prln_warning "Unexpected results"
+                         pr_warning "Unexpected results"; outln "$debug_recomm"
                          fileout "tls1_3" "WARN" "TLSv1.3 unexpected results"
                     fi
                fi
@@ -4614,21 +4630,25 @@ run_protocols() {
                fi
                add_tls_offered tls1_3 no
                ;;
+          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "tls1_3" "WARN" "TLSv1.3: received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+               ;;
           5)   outln "$supported_no_ciph1"
                fileout "tls1_3" "INFO" "TLSv1.3 is $supported_no_ciph1"
                add_tls_offered tls1_3 yes
                ;;                                # protocol ok, but no cipher
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
-                    prln_warning "strange reply, maybe a client side problem with TLS 1.3"
+                    prln_warning "strange reply, maybe a client side problem with TLS 1.3"; outln "$debug_recomm"
                else
                     # warning on screen came already from locally_supported()
                     fileout "tls1_3" "WARN" "TLSv1.3 is not tested due to lack of local support"
                fi
                ;;
-          *)   prln_fixme "unexpected value around line $((LINENO))"
+          *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
                ;;
      esac
+
      debugme echo "PROTOS_OFFERED: $PROTOS_OFFERED"
      if [[ ! "$PROTOS_OFFERED" =~ yes ]]; then
           outln
@@ -8306,8 +8326,12 @@ parse_sslv2_serverhello() {
           V2_HELLO_CIPHERSPEC_LENGTH=$(printf "%d\n" "0x$v2_hello_cipherspec_length" 2>/dev/null)
           [[ $? -ne 0 ]] && ret=7
 
-          if [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
-               ret=1
+          if [[ "${v2_hello_ascii:0:2}" == "35" ]] && "$do_starttls"; then
+               # this could be a 500/5xx for some weird reason where the STARTTLS handshake failed
+               debugme echo "$(hex2ascii "$v2_hello_ascii")"
+               ret=4
+          elif [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
+               ret=8
                if [[ $DEBUG -ge 2 ]]; then
                     echo "no correct server hello"
                     echo "SSLv2 server init byte:    0x0$v2_hello_initbyte"
@@ -8537,9 +8561,14 @@ parse_tls_serverhello() {
                echo "     msg_len:                $((msg_len/2))"
                tmln_out
           fi
-          if [[ $tls_content_type != "15" ]] && [[ $tls_content_type != "16" ]] && [[ $tls_content_type != "17" ]]; then
+
+          if [[ $tls_content_type == "35" ]] && "$do_starttls"; then
+               # this could be a 500/5xx for some weird reason where the STARTTLS handshake failed
+               debugme echo "$(hex2ascii "$tls_hello_ascii")"
+               return 4
+          elif [[ $tls_content_type != "15" ]] && [[ $tls_content_type != "16" ]] && [[ $tls_content_type != "17" ]]; then
                debugme tmln_warning "Content type other than alert, handshake, or application data detected."
-               return 1
+               return 8
           elif [[ "${tls_protocol:0:2}" != "03" ]]; then
                debugme tmln_warning "Protocol record_version.major is not 03."
                return 1
@@ -8549,11 +8578,10 @@ parse_tls_serverhello() {
           if [[ $msg_len -gt $tls_hello_ascii_len-$i ]]; then
                if [[ "$process_full" == "all" ]]; then
                     debugme tmln_warning "Malformed message."
-                    return 1
+                    return 7
                else
-                    # This could just be a result of the server's response being
-                    # split across two or more packets. Just grab the part that
-                    # is available.
+                    # This could just be a result of the server's response being split
+                    # across two or more packets. Just grab the part that is available.
                     msg_len=$tls_hello_ascii_len-$i
                fi
           fi
@@ -10143,6 +10171,12 @@ tls_sockets() {
           # determine the return value for higher level, so that they can tell what the result is
           if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
                ret=1          # NOT available
+          elif [[ $save -eq 8 ]]; then
+               # odd return, we just pass this from parse_tls_serverhello() back
+               ret=8
+          elif [[ $save -eq 4 ]]; then
+               # STARTTLS problem passing back
+               ret=4
           else
                if [[ 03$tls_low_byte -eq $DETECTED_TLS_VERSION ]]; then
                     ret=0     # protocol available, TLS version returned equal to the one send
