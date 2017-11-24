@@ -4595,7 +4595,7 @@ run_protocols() {
                ;;                                # no local support
      esac
      debugme echo "PROTOS_OFFERED: $PROTOS_OFFERED"
-     if [[ -z "$PROTOS_OFFERED" ]]; then
+     if [[ ! "$PROTOS_OFFERED" =~ yes ]]; then
           outln
           ignore_no_or_lame "You should not proceed as no protocol was detected. If you still really really want to, say \"YES\"" "YES"
           [[ $? -ne 0 ]] && exit -2
