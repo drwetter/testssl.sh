@@ -10491,6 +10491,7 @@ run_ticketbleed() {
      local early_exit=true
      local ret=0
 
+     [[ -n "$STARTTLS" ]] && return 0
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
 
