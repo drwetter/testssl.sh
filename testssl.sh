@@ -4152,7 +4152,7 @@ run_prototest_openssl() {
 # arg2: available (yes) or not (no)
 add_tls_offered() {
      if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
-          # the ":" is mandatory here (and @ other palces), otherwise e.g. tls1 will match tls1_2
+          # the ":" is mandatory here (and @ other places), otherwise e.g. tls1 will match tls1_2
           :
      else
            PROTOS_OFFERED+="${1}:$2 "
@@ -4313,9 +4313,16 @@ run_protocols() {
                outln "(may need debugging)"
                add_tls_offered ssl3 yes
                ;;
-          7)   prln_warning "SSLv3 seems locally not supported"
-               fileout "sslv3" "WARN" "SSLv3 is not tested due to lack of local support"
-               ;;                                           # no local support
+          7)   if "$using_sockets" ; then
+                    # can only happen in debug mode
+                    prln_warning "strange reply, maybe a client side problem with SSLv3"
+               else
+                    # warning on screen came already from locally_supported()
+                    fileout "sslv3" "WARN" "SSLv3 is not tested due to lack of local support"
+               fi
+               ;;
+          *)   prln_fixme "unexpected value around line $((LINENO))"
+               ;;
      esac
 
      pr_bold " TLS 1      ";
@@ -4365,9 +4372,16 @@ run_protocols() {
                fileout "tls1" "INFO" "TLSv1.0 is $supported_no_ciph1"
                add_tls_offered tls1 yes
                ;;
-          7)   prln_warning "TLSv1.0 seems locally not supported"
-               fileout "tlsv1" "WARN" "TLSv1.0 is not tested due to lack of local support"
-               ;;                                                          # no local support
+          7)   if "$using_sockets" ; then
+                    # can only happen in debug mode
+                    prln_warning "strange reply, maybe a client side problem with TLS 1.0"
+               else
+                    # warning on screen came already from locally_supported()
+                    fileout "tls1" "WARN" "TLSv1.0 is not tested due to lack of local support"
+               fi
+               ;;
+          *)   prln_fixme "unexpected value around line $((LINENO))"
+               ;;
      esac
 
      pr_bold " TLS 1.1    ";
@@ -4420,9 +4434,16 @@ run_protocols() {
                fileout "tls1_1" "INFO" "TLSv1.1 is $supported_no_ciph1"
                add_tls_offered tls1_1 yes
                ;;                                                # protocol ok, but no cipher
-          7)   prln_warning "TLSv1.1 seems locally not supported"
-               fileout "tls1_1" "WARN" "TLSv1.1 is not tested due to lack of local support"
-               ;;                                                # no local support
+          7)   if "$using_sockets" ; then
+                    # can only happen in debug mode
+                    prln_warning "strange reply, maybe a client side problem with TLS 1.1"
+               else
+                    # warning on screen came already from locally_supported()
+                    fileout "tls1_1" "WARN" "TLSv1.1 is not tested due to lack of local support"
+               fi
+               ;;
+          *)   prln_fixme "unexpected value around line $((LINENO))"
+               ;;
      esac
 
      pr_bold " TLS 1.2    ";
@@ -4486,9 +4507,16 @@ run_protocols() {
                fileout "tls1_2" "INFO" "TLSv1.2 is $supported_no_ciph1"
                add_tls_offered tls1_2 yes
                ;;                                # protocol ok, but no cipher
-          7)   prln_warning "TLSv1.2 seems locally not supported"
-               fileout "tls1_2" "WARN" "TLSv1.2 is not tested due to lack of local support"
-               ;;                                # no local support
+          7)   if "$using_sockets" ; then
+                    # can only happen in debug mode
+                    prln_warning "strange reply, maybe a client side problem with TLS 1.2"
+               else
+                    # warning on screen came already from locally_supported()
+                    fileout "tls1_2" "WARN" "TLSv1.2 is not tested due to lack of local support"
+               fi
+               ;;
+          *)   prln_fixme "unexpected value around line $((LINENO))"
+               ;;
      esac
 
      pr_bold " TLS 1.3    ";
@@ -4590,9 +4618,16 @@ run_protocols() {
                fileout "tls1_3" "INFO" "TLSv1.3 is $supported_no_ciph1"
                add_tls_offered tls1_3 yes
                ;;                                # protocol ok, but no cipher
-          7)   prln_warning "TLSv1.3 seems locally not supported"
-               fileout "tls1_3" "INFO" "TLSv1.3 is not tested due to lack of local support"
-               ;;                                # no local support
+          7)   if "$using_sockets" ; then
+                    # can only happen in debug mode
+                    prln_warning "strange reply, maybe a client side problem with TLS 1.3"
+               else
+                    # warning on screen came already from locally_supported()
+                    fileout "tls1_3" "WARN" "TLSv1.3 is not tested due to lack of local support"
+               fi
+               ;;
+          *)   prln_fixme "unexpected value around line $((LINENO))"
+               ;;
      esac
      debugme echo "PROTOS_OFFERED: $PROTOS_OFFERED"
      if [[ ! "$PROTOS_OFFERED" =~ yes ]]; then
