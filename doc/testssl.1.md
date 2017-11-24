@@ -276,7 +276,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--append`                      If an output file exists it will append to this file, without a header. The environment variable APPEND does the same. If the file exists and you don't use `--append` testssl.sh will exit with an error. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
 
-`--prefix <out_fname_prefix>`   Prepend output filename prefix <out_fname_prefix> before '\${NODE}.'. You can use as well the environment variable FNAME_PREFIX.
+`--outprefix <fname_prefix>`   Prepend output filename prefix <fname_prefix> before '\${NODE}.'. You can use as well the environment variable FNAME_PREFIX.
 
 A few file output options can also be preset via environment variables.
 
@@ -414,7 +414,7 @@ does the same on the plain text IMAP port. Please note that for plain TLS-encryp
 
 ## AUTHORS
 
-Developed by Dirk Wetter and others, see https://github.com/drwetter/testssl.sh/blob/master/CREDITS.md
+Developed by Dirk Wetter, David Cooper and many others, see https://github.com/drwetter/testssl.sh/blob/master/CREDITS.md
 
 
 ## COPYRIGHT
