@@ -7558,12 +7558,6 @@ run_pfs() {
 
 
 spdy_pre(){
-     if [[ -n "$STARTTLS" ]] || [[ "$SERVICE" != HTTP ]]; then
-          [[ -n "$1" ]] && out "$1"
-          out "(SPDY is an HTTP protocol and thus not tested here)"
-          fileout "spdy_npn" "INFO" "SPDY/NPN : (SPY is an HTTP protocol and thus not tested here)"
-          return 1
-     fi
      if [[ -n "$PROXY" ]]; then
           [[ -n "$1" ]] && pr_warning "$1"
           pr_warning "not tested as proxies do not support proxying it"
@@ -7579,12 +7573,6 @@ spdy_pre(){
 }
 
 http2_pre(){
-     if [[ -n "$STARTTLS" ]] || [[ "$SERVICE" != HTTP ]]; then
-          [[ -n "$1" ]] && out "$1"
-          outln "(HTTP/2 is a HTTP protocol and thus not tested here)"
-          fileout "https_alpn" "INFO" "HTTP2/ALPN : HTTP/2 is and HTTP protocol and thus not tested"
-          return 1
-     fi
      if [[ -n "$PROXY" ]]; then
           [[ -n "$1" ]] && pr_warning " $1 "
           pr_warning "not tested as proxies do not support proxying it"
@@ -7603,6 +7591,7 @@ run_spdy() {
      local tmpstr
      local -i ret=0
 
+     [[ -n "$STARTTLS" ]] && return 0
      pr_bold " SPDY/NPN   "
      if ! spdy_pre; then
           outln
@@ -7641,6 +7630,7 @@ run_http2() {
      local had_alpn_proto=false
      local alpn_finding=""
 
+     [[ -n "$STARTTLS" ]] && return 0
      pr_bold " HTTP2/ALPN "
      if ! http2_pre; then
           outln
