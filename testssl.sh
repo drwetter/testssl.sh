@@ -1603,7 +1603,7 @@ detect_ipv4() {
      fi
 
      # white list some headers as they are mistakenly identified as ipv4 address. Issues 158, 323,o facebook has a CSP rule for 127.0.0.1
-     if egrep -vi "$whitelisted_header" $HEADERFILE | grep -iqE "$ipv4address"; then
+     if egrep -vai "$whitelisted_header" $HEADERFILE | grep -iqE "$ipv4address"; then
           pr_bold " IPv4 address in header       "
           count=0
           while read line; do
@@ -13792,10 +13792,7 @@ determine_service() {
           $SNEAKY && \
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
-          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          # HEAD_REQ11="HEAD $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
-          # GET_REQ10="GET $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nConnection: Close\r\nAccept: text/*\r\n\r\n"
-          # HEAD_REQ10="HEAD $URL_PATH HTTP/1.0\r\nUser-Agent: $ua\r\nAccept: text/*\r\n\r\n"
+          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
           service_detection $OPTIMAL_PROTO
      else                          # STARTTLS
           if [[ "$1" == postgres ]]; then
