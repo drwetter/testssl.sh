@@ -1,11 +1,11 @@
 ## Usage:
 ```
-docker run -t testssl.sh example.com
+docker run --user=nobody -t testssl.sh example.com
 ```
 
 Or pull image from docker hub, then run:
 ```
-docker run -t drwetter/testssl.sh example.com
+docker run --user=nobody -t drwetter/testssl.sh example.com
 ```
 
 This is a experimental version with Debian Linux. Don\'t rely on it!
