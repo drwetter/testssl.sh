@@ -5013,11 +5013,11 @@ sub_session_resumption() {
 
 run_server_preference() {
      local cipher1 cipher2 prev_cipher=""
-     local default_cipher default_cipher_ossl default_proto
+     local default_cipher="" default_proto
      local limitedsense supported_sslv2_ciphers
      local -a cipher proto
      local proto_ossl proto_txt proto_hex cipherlist i
-     local -i ret=0 j
+     local -i ret=0 j sclient_success
      local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256"
      # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
      local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
@@ -5092,13 +5092,29 @@ run_server_preference() {
      outln
 
      pr_bold " Negotiated protocol          "
-     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>>$ERRFILE >$TMPFILE
-     if ! sclient_connect_successful $? $TMPFILE; then
-          # 2 second try with $OPTIMAL_PROTO especially for intolerant IIS6 servers:
-          $OPENSSL s_client $(s_client_options "$STARTTLS $OPTIMAL_PROTO $BUGS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
-          sclient_connect_successful $? $TMPFILE || pr_warning "Handshake error!"
+     sclient_success=1
+     if "$using_sockets" && ! "$HAS_TLS13" && [[ $(has_server_protocol "tls1_3") -ne 1 ]]; then
+          # Send same list of cipher suites as OpenSSL 1.1.1 sends.
+          tls_sockets "04" \
+                      "c0,2c, c0,30, 00,9f, cc,a9, cc,a8, cc,aa, c0,2b, c0,2f,
+                       00,9e, c0,24, c0,28, 00,6b, c0,23, c0,27, 00,67, c0,0a,
+                       c0,14, 00,39, c0,09, c0,13, 00,33, 00,9d, 00,9c, 13,02,
+                       13,03, 13,01, 00,3d, 00,3c, 00,35, 00,2f, 00,ff" \
+                      "ephemeralkey"
+          sclient_success=$?
+          [[ $sclient_success -eq 2 ]] && sclient_success=0
+          [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+     fi
+     if [[ $sclient_success -ne  0 ]]; then
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>>$ERRFILE >$TMPFILE
+          if ! sclient_connect_successful $? $TMPFILE; then
+               # 2 second try with $OPTIMAL_PROTO especially for intolerant IIS6 servers:
+               $OPENSSL s_client $(s_client_options "$STARTTLS $OPTIMAL_PROTO $BUGS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
+               sclient_connect_successful $? $TMPFILE || pr_warning "Handshake error!"
+          fi
      fi
      default_proto=$(get_protocol $TMPFILE)
+     [[ "$default_proto" == "TLSv1.0" ]] && default_proto="TLSv1"
      case "$default_proto" in
           *TLSv1.3)
                prln_done_best $default_proto
@@ -5140,13 +5156,13 @@ run_server_preference() {
      esac
 
      pr_bold " Negotiated cipher            "
-     default_cipher_ossl=$(get_cipher $TMPFILE)
-     if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
-          default_cipher="$default_cipher_ossl"
-     else
-          default_cipher="$(openssl2rfc "$default_cipher_ossl")"
-          [[ -z "$default_cipher" ]] && default_cipher="$default_cipher_ossl"
+     cipher1=$(get_cipher $TMPFILE)
+     if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$cipher1" == TLS_* ]] || [[ "$cipher1" == SSL_* ]] ); then
+          default_cipher="$(rfc2openssl "$cipher1")"
+     elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$cipher1" != TLS_* ]] && [[ "$cipher1" != SSL_* ]]; then
+          default_cipher="$(openssl2rfc "$cipher1")"
      fi
+     [[ -z "$default_cipher" ]] && default_cipher="$cipher1"
      pr_cipher_quality "$default_cipher"
      case $? in
           1)   fileout "order_cipher" "CRITICAL" "Default cipher: $default_cipher$(read_dhbits_from_file "$TMPFILE" "string") $limitedsense"
