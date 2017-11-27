@@ -4225,11 +4225,19 @@ run_protocols() {
      if ! "$SSL_NATIVE"; then
           sslv2_sockets
           case $? in
+               6) # couldn't open socket
+                    prln_fixme "couldn't open socket"
+                    fileout "sslv2" "WARN" "SSLv2 couldn't be tested, socket problem"
+                    ;;
                7) # strange reply, couldn't convert the cipher spec length to a hex number
                     pr_cyan "strange v2 reply "
                     outln "$debug_recomm"
                     [[ $DEBUG -ge 3 ]] && hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" | head -1
                     fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
+                    ;;
+               8) # no correct server hello
+                    outln "no proper SSLv2 server hello, can't tell"
+                    fileout "sslv2" "INFO" "server sent no proper reply, unsure"
                     ;;
                1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
                     prln_done_best "not offered (OK)"
@@ -4244,8 +4252,7 @@ run_protocols() {
                4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
                     fileout "sslv2" "WARN" "SSLv2: received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
                     ;;
-               3) # everything else
-                    lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
+               3)   lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
                     [[ "$DEBUG" -ge 2 ]] && tm_out "  ($lines lines)  "
                     if [[ "$lines" -gt 1 ]]; then
                          nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
@@ -4258,7 +4265,10 @@ run_protocols() {
                               outln " -- $nr_ciphers_detected ciphers"
                               fileout "sslv2" "CRITICAL" "SSLv2 offered, vulnerable to DROWN attack.  Detected ciphers: $nr_ciphers_detected"
                          fi
-                    fi ;;
+                    fi
+                    ;;
+               *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
+                    ;;
           esac
           debugme tmln_out
      else
