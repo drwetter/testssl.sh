@@ -4236,8 +4236,9 @@ run_protocols() {
                     fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
                     ;;
                8) # no correct server hello
-                    outln "no proper SSLv2 server hello, can't tell"
-                    fileout "sslv2" "INFO" "server sent no proper reply, unsure"
+                    prln_cyan "no valid SSLv2 server hello"
+                    fileout "sslv2" "WARN" "server sent no valid reply"
+                    add_tls_offered ssl2 no
                     ;;
                1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
                     prln_done_best "not offered (OK)"
