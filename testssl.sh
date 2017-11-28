@@ -8887,19 +8887,19 @@ parse_tls_serverhello() {
                     0000) tls_extensions+="TLS server extension \"server name\" (id=0), len=$extension_len\n" ;;
                     0001) tls_extensions+="TLS server extension \"max fragment length\" (id=1), len=$extension_len\n" ;;
                     0002) tls_extensions+="TLS server extension \"client certificate URL\" (id=2), len=$extension_len\n" ;;
-                    0003) tls_extensions+="TLS server extension  \"trusted CA keys\" (id=3, len=$extension_len\n)" ;;
-                    0004) tls_extensions+="TLS server extension  \"truncated HMAC\" (id=4), len=$extension_len\n" ;;
-                    0005) tls_extensions+="TLS server extension  \"status request\" (id=5), len=$extension_len\n" ;;
-                    0006) tls_extensions+="TLS server extension  \"user mapping\" (id=6), len=$extension_len\n" ;;
-                    0007) tls_extensions+="TLS server extension  \"client authz\" (id=7), len=$extension_len\n" ;;
-                    0008) tls_extensions+="TLS server extension  \"server authz\" (id=8), len=$extension_len\n" ;;
-                    0009) tls_extensions+="TLS server extension  \"cert type\" (id=9), len=$extension_len\n" ;;
-                    000A) tls_extensions+="TLS server extension  \"supported_groups\" (id=10), len=$extension_len\n" ;;
+                    0003) tls_extensions+="TLS server extension \"trusted CA keys\" (id=3, len=$extension_len\n)" ;;
+                    0004) tls_extensions+="TLS server extension \"truncated HMAC\" (id=4), len=$extension_len\n" ;;
+                    0005) tls_extensions+="TLS server extension \"status request\" (id=5), len=$extension_len\n" ;;
+                    0006) tls_extensions+="TLS server extension \"user mapping\" (id=6), len=$extension_len\n" ;;
+                    0007) tls_extensions+="TLS server extension \"client authz\" (id=7), len=$extension_len\n" ;;
+                    0008) tls_extensions+="TLS server extension \"server authz\" (id=8), len=$extension_len\n" ;;
+                    0009) tls_extensions+="TLS server extension \"cert type\" (id=9), len=$extension_len\n" ;;
+                    000A) tls_extensions+="TLS server extension \"supported_groups\" (id=10), len=$extension_len\n" ;;
                     000B) tls_extensions+="TLS server extension \"EC point formats\" (id=11), len=$extension_len\n" ;;
-                    000C) tls_extensions+="TLS server extension  \"SRP\" (id=12), len=$extension_len\n" ;;
-                    000D) tls_extensions+="TLS server extension  \"signature algorithms\" (id=13), len=$extension_len\n" ;;
-                    000E) tls_extensions+="TLS server extension  \"use SRTP\" (id=14), len=$extension_len\n" ;;
-                    000F) tls_extensions+="TLS server extension  \"heartbeat\" (id=15), len=$extension_len\n" ;;
+                    000C) tls_extensions+="TLS server extension \"SRP\" (id=12), len=$extension_len\n" ;;
+                    000D) tls_extensions+="TLS server extension \"signature algorithms\" (id=13), len=$extension_len\n" ;;
+                    000E) tls_extensions+="TLS server extension \"use SRTP\" (id=14), len=$extension_len\n" ;;
+                    000F) tls_extensions+="TLS server extension \"heartbeat\" (id=15), len=$extension_len\n" ;;
                     0010) tls_extensions+="TLS server extension \"application layer protocol negotiation\" (id=16), len=$extension_len\n"
                           if [[ $extension_len -lt 4 ]]; then
                                debugme echo "Malformed application layer protocol negotiation extension."
@@ -8923,17 +8923,17 @@ parse_tls_serverhello() {
                           echo "" >> $TMPFILE
                           echo "===============================================================================" >> $TMPFILE
                           ;;
-                    0011) tls_extensions+="TLS server extension  \"certificate status version 2\" (id=17), len=$extension_len\n" ;;
+                    0011) tls_extensions+="TLS server extension \"certificate status version 2\" (id=17), len=$extension_len\n" ;;
                     0012) tls_extensions+="TLS server extension \"signed certificate timestamps\" (id=18), len=$extension_len\n" ;;
-                    0013) tls_extensions+="TLS server extension  \"client certificate type\" (id=19), len=$extension_len\n" ;;
-                    0014) tls_extensions+="TLS server extension  \"server certificate type\" (id=20), len=$extension_len\n" ;;
-                    0015) tls_extensions+="TLS server extension  \"TLS padding\" (id=21), len=$extension_len\n" ;;
-                    0016) tls_extensions+="TLS server extension  \"encrypt-then-mac\" (id=22), len=$extension_len\n" ;;
+                    0013) tls_extensions+="TLS server extension \"client certificate type\" (id=19), len=$extension_len\n" ;;
+                    0014) tls_extensions+="TLS server extension \"server certificate type\" (id=20), len=$extension_len\n" ;;
+                    0015) tls_extensions+="TLS server extension \"TLS padding\" (id=21), len=$extension_len\n" ;;
+                    0016) tls_extensions+="TLS server extension \"encrypt-then-mac\" (id=22), len=$extension_len\n" ;;
                     0017) tls_extensions+="TLS server extension \"extended master secret\" (id=23), len=$extension_len\n" ;;
-                    0018) tls_extensions+="TLS server extension  \"token binding\" (id=24), len=$extension_len\n" ;;
-                    0019) tls_extensions+="TLS server extension  \"cached info\" (id=25), len=$extension_len\n" ;;
+                    0018) tls_extensions+="TLS server extension \"token binding\" (id=24), len=$extension_len\n" ;;
+                    0019) tls_extensions+="TLS server extension \"cached info\" (id=25), len=$extension_len\n" ;;
                     0023) tls_extensions+="TLS server extension \"session ticket\" (id=35), len=$extension_len\n" ;;
-                    0028) tls_extensions+="TLS server extension  \"key share\" (id=40), len=$extension_len\n"
+                    0028) tls_extensions+="TLS server extension \"key share\" (id=40), len=$extension_len\n"
                           if [[ $extension_len -lt 4  ]]; then
                                debugme tmln_warning "Malformed key share extension."
                                return 1
@@ -9000,16 +9000,16 @@ parse_tls_serverhello() {
                                rm $tmp_der_key_file
                           fi
                           ;;
-                    0029) tls_extensions+="TLS server extension  \"pre-shared key\" (id=41), len=$extension_len\n" ;;
-                    002A) tls_extensions+="TLS server extension  \"early data\" (id=42), len=$extension_len\n" ;;
-                    002B) tls_extensions+="TLS server extension  \"supported versions\" (id=43), len=$extension_len\n" ;;
-                    002C) tls_extensions+="TLS server extension  \"cookie\" (id=44), len=$extension_len\n" ;;
-                    002D) tls_extensions+="TLS server extension  \"psk key exchange modes\" (id=45), len=$extension_len\n" ;;
-                    002E) tls_extensions+="TLS server extension  \"ticket early data info\" (id=46), len=$extension_len\n" ;;
-                    002F) tls_extensions+="TLS server extension  \"certificate authorities\" (id=47), len=$extension_len\n" ;;
-                    0030) tls_extensions+="TLS server extension  \"oid filters\" (id=48), len=$extension_len\n" ;;
-                    0031) tls_extensions+="TLS server extension  \"post handshake auth\" (id=49), len=$extension_len\n" ;;
-                    3374) tls_extensions+="TLS server extension  \"next protocol\" (id=13172), len=$extension_len\n"
+                    0029) tls_extensions+="TLS server extension \"pre-shared key\" (id=41), len=$extension_len\n" ;;
+                    002A) tls_extensions+="TLS server extension \"early data\" (id=42), len=$extension_len\n" ;;
+                    002B) tls_extensions+="TLS server extension \"supported versions\" (id=43), len=$extension_len\n" ;;
+                    002C) tls_extensions+="TLS server extension \"cookie\" (id=44), len=$extension_len\n" ;;
+                    002D) tls_extensions+="TLS server extension \"psk key exchange modes\" (id=45), len=$extension_len\n" ;;
+                    002E) tls_extensions+="TLS server extension \"ticket early data info\" (id=46), len=$extension_len\n" ;;
+                    002F) tls_extensions+="TLS server extension \"certificate authorities\" (id=47), len=$extension_len\n" ;;
+                    0030) tls_extensions+="TLS server extension \"oid filters\" (id=48), len=$extension_len\n" ;;
+                    0031) tls_extensions+="TLS server extension \"post handshake auth\" (id=49), len=$extension_len\n" ;;
+                    3374) tls_extensions+="TLS server extension \"next protocol\" (id=13172), len=$extension_len\n"
                           local -i protocol_len
                           echo -n "Protocols advertised by server: " >> $TMPFILE
                           let offset=$extns_offset+12+$i
@@ -9032,7 +9032,7 @@ parse_tls_serverhello() {
                           echo "===============================================================================" >> $TMPFILE
                           ;;
                     FF01) tls_extensions+="TLS server extension \"renegotiation info\" (id=65281), len=$extension_len\n" ;;
-                       *) tls_extensions+="TLS server extension  \"unrecognized extension\" (id=$(printf "%d\n\n" "0x$extension_type")), len=$extension_len\n" ;;
+                       *) tls_extensions+="TLS server extension \"unrecognized extension\" (id=$(printf "%d\n\n" "0x$extension_type")), len=$extension_len\n" ;;
                esac
           done
      fi
