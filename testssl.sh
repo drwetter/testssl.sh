@@ -9556,9 +9556,11 @@ generate_key_share_extension() {
 #       "ephemeralkey" - extract the server's ephemeral key (if any)
 # ARG4: (optional) additional request extensions
 # ARG5: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
+# ARG6: (optional): "false" if socksend_tls_clienthello() should not open a new socket
 socksend_tls_clienthello() {
      local tls_low_byte="$1" tls_legacy_version="$1"
      local process_full="$3"
+     local new_socket=true
      local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301 -- except: SSLv3
      local servername_hexstr len_servername len_servername_hex
      local hexdump_format_str part1 part2
@@ -9577,6 +9579,7 @@ socksend_tls_clienthello() {
 
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
      [[ "$5" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
+     [[ "$6" == "false" ]] && new_socket=false
 
      cipher_suites="$2"                      # we don't have the leading \x here so string length is two byte less, see next
      len_ciph_suites_byte=${#cipher_suites}
@@ -9887,7 +9890,9 @@ socksend_tls_clienthello() {
      ,$cipher_suites
      ,$compression_methods"
 
-     fd_socket 5 || return 6
+     if "$new_socket"; then
+          fd_socket 5 || return 6
+     fi
 
      code2network "$TLS_CLIENT_HELLO$all_extensions"
      data="$NW_STR"
@@ -10057,7 +10062,7 @@ resend_if_hello_retry_request() {
      done
 
      debugme echo -en "\nsending second client hello... "
-     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns"
+     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false"
      if [[ $? -ne 0 ]]; then
           debugme echo "stuck on sending: $ret"
           return 6
