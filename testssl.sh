@@ -4235,11 +4235,6 @@ run_protocols() {
                     [[ $DEBUG -ge 3 ]] && hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" | head -1
                     fileout "sslv2" "WARN" "SSLv2: received a strange SSLv2 reply (rerun with DEBUG>=2)"
                     ;;
-               8) # no correct server hello
-                    prln_cyan "no valid SSLv2 server hello"
-                    fileout "sslv2" "WARN" "server sent no valid reply"
-                    add_tls_offered ssl2 no
-                    ;;
                1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
                     prln_done_best "not offered (OK)"
                     fileout "sslv2" "OK" "SSLv2 is not offered"
@@ -8299,12 +8294,21 @@ get_dh_ephemeralkey() {
 
 # arg1: name of file with socket reply
 # arg2: true if entire server hello should be parsed
+# return values: 0=no SSLv2 (reset)
+#                1=no SSLv2 (plaintext reply like it happens with OLS webservers)
+#                3=SSLv2 supported (in $TEMPDIR/$NODEIP.sslv2_sockets.dd is reply for further processing
+#                  --> there could be checked whether ciphers e.g have been returned at all (or anything else)
+#                4=looks like an STARTTLS 5xx message
+#                6=socket coudln't be opened
+#                7=strange reply we can't deal with
 parse_sslv2_serverhello() {
      local ret v2_hello_ascii v2_hello_initbyte v2_hello_length
      local v2_hello_handshake v2_cert_type v2_hello_cert_length
      local v2_hello_cipherspec_length tmp_der_certfile
      local -i certificate_len nr_ciphers_detected offset i
-     # server hello:                                             in hex representation, see below
+     local ret=3
+     local parse_complete="false"
+     # SSLv2 server hello:                                             in hex representation, see below
      # byte 1+2: length of server hello                          0123
      # 3:        04=Handshake message, server hello              45
      # 4:        session id hit or not (boolean: 00=false, this  67
@@ -8317,8 +8321,8 @@ parse_sslv2_serverhello() {
      # [certificate length] ==> certificate
      # [cipher spec length] ==> ciphers GOOD: HERE ARE ALL CIPHERS ALREADY!
 
-     local ret=3
-     local parse_complete="false"
+     # Note: recent SSL/TLS stacks reply with a TLS alert on a SSLv2 client hello.
+     # The TLS error message is different and could be used for fingerprinting.
 
      if [[ "$2" == "true" ]]; then
           parse_complete=true
@@ -8347,8 +8351,18 @@ parse_sslv2_serverhello() {
                # this could be a 500/5xx for some weird reason where the STARTTLS handshake failed
                debugme echo "$(hex2ascii "$v2_hello_ascii")"
                ret=4
+          elif [[ "${v2_hello_ascii:0:4}" == "1503" ]]; then
+               # Cloudflare does this, OpenSSL 1.1.1 and picoTLS. With different alert messages
+               # Just in case somebody's interested in the exact error, we deliver it ;-)
+               debugme echo -n ">TLS< alert message discovered: ${v2_hello_ascii} "
+               case "${v2_hello_ascii:10:2}" in
+                    01) debugme echo "(01/warning: 0x"${v2_hello_ascii:12:2}"/$(tls_alert "${v2_hello_ascii:12:2}"))" ;;
+                    02) debugme echo "(02/fatal: 0x"${v2_hello_ascii:12:2}"/$(tls_alert "${v2_hello_ascii:12:2}"))" ;;
+                    *)  debugme echo "("${v2_hello_ascii:10:2}" : "${v2_hello_ascii:12:2}"))" ;;
+               esac
+               ret=0
           elif [[ $v2_hello_initbyte != "8" ]] || [[ $v2_hello_handshake != "04" ]]; then
-               ret=8
+               ret=1
                if [[ $DEBUG -ge 2 ]]; then
                     echo "no correct server hello"
                     echo "SSLv2 server init byte:    0x0$v2_hello_initbyte"
@@ -8501,6 +8515,52 @@ check_tls_serverhellodone() {
      return 1
 }
 
+# arg1: tls alert error/warning code
+# returns: description
+tls_alert() {
+     local tls_alert_text=""
+
+     case "$1" in
+          00) tls_alert_text="close notify" ;;
+          0A) tls_alert_text="unexpected message" ;;
+          14) tls_alert_text="bad record mac" ;;
+          15) tls_alert_text="decryption failed" ;;
+          16) tls_alert_text="record overflow" ;;
+          1E) tls_alert_text="decompression failure" ;;
+          28) tls_alert_text="handshake failure" ;;
+          29) tls_alert_text="no certificate RESERVED" ;;
+          2A) tls_alert_text="bad certificate" ;;
+          2B) tls_alert_text="unsupported certificate" ;;
+          2C) tls_alert_text="certificate revoked" ;;
+          2D) tls_alert_text="certificate expired" ;;
+          2E) tls_alert_text="certificate unknown" ;;
+          2F) tls_alert_text="illegal parameter" ;;
+          30) tls_alert_text="unknown ca" ;;
+          31) tls_alert_text="access denied" ;;
+          32) tls_alert_text="decode error" ;;
+          33) tls_alert_text="decrypt error" ;;
+          3C) tls_alert_text="export restriction RESERVED" ;;
+          46) tls_alert_text="protocol version" ;;
+          47) tls_alert_text="insufficient security" ;;
+          50) tls_alert_text="internal error" ;;
+          56) tls_alert_text="inappropriate fallback" ;;
+          5A) tls_alert_text="user canceled" ;;
+          64) tls_alert_text="no renegotiation" ;;
+          6D) tls_alert_text="missing extension" ;;
+          6E) tls_alert_text="unsupported extension" ;;
+          6F) tls_alert_text="certificate unobtainable" ;;
+          70) tls_alert_text="unrecognized name" ;;
+          71) tls_alert_text="bad certificate status response" ;;
+          72) tls_alert_text="bad certificate hash value" ;;
+          73) tls_alert_text="unknown psk identity" ;;
+          74) tls_alert_text="certificate required" ;;
+          78) tls_alert_text="no application protocol" ;;
+           *) tls_alert_text="$(hex2dec "$1")";;
+     esac
+     echo "$tls_alert_text"
+     return 0
+}
+
 # arg1: ASCII-HEX encoded reply
 # arg2: (optional): "all" -  process full response (including Certificate and certificate_status handshake messages)
 #                   "ephemeralkey" - extract the server's ephemeral key (if any)
@@ -8520,7 +8580,7 @@ parse_tls_serverhello() {
      local tls_alert_descrip tls_sid_len_hex issuerDN subjectDN CAissuerDN CAsubjectDN
      local -i tls_sid_len offset extns_offset nr_certs=0
      local tls_msg_type tls_content_type tls_protocol tls_protocol2 tls_hello_time
-     local tls_err_level tls_err_descr tls_cipher_suite rfc_cipher_suite tls_compression_method
+     local tls_err_level tls_err_descr_no tls_cipher_suite rfc_cipher_suite tls_compression_method
      local tls_extensions="" extension_type named_curve_str="" named_curve_oid
      local -i i j extension_len tls_extensions_len ocsp_response_len ocsp_response_list_len
      local -i certificate_list_len certificate_len cipherlist_len
@@ -8616,50 +8676,15 @@ parse_tls_serverhello() {
           debugme tmln_warning "Malformed message."
           return 1
      fi
+#FIXME: can't we skip the tls alert handling if we have $DEBUG -ne 0?
      if [[ $tls_alert_ascii_len -gt 0 ]]; then
           debugme echo "TLS alert messages:"
           for (( i=0; i+3 < tls_alert_ascii_len; i=i+4 )); do
                tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
                j=$i+2
-               tls_err_descr=${tls_alert_ascii:j:2}
-               debugme tm_out  "     tls_err_descr:          0x${tls_err_descr} / = $(hex2dec ${tls_err_descr})"
-               case $tls_err_descr in
-                    00) tls_alert_descrip="close notify" ;;
-                    0A) tls_alert_descrip="unexpected message" ;;
-                    14) tls_alert_descrip="bad record mac" ;;
-                    15) tls_alert_descrip="decryption failed" ;;
-                    16) tls_alert_descrip="record overflow" ;;
-                    1E) tls_alert_descrip="decompression failure" ;;
-                    28) tls_alert_descrip="handshake failure" ;;
-                    29) tls_alert_descrip="no certificate RESERVED" ;;
-                    2A) tls_alert_descrip="bad certificate" ;;
-                    2B) tls_alert_descrip="unsupported certificate" ;;
-                    2C) tls_alert_descrip="certificate revoked" ;;
-                    2D) tls_alert_descrip="certificate expired" ;;
-                    2E) tls_alert_descrip="certificate unknown" ;;
-                    2F) tls_alert_descrip="illegal parameter" ;;
-                    30) tls_alert_descrip="unknown ca" ;;
-                    31) tls_alert_descrip="access denied" ;;
-                    32) tls_alert_descrip="decode error" ;;
-                    33) tls_alert_descrip="decrypt error" ;;
-                    3C) tls_alert_descrip="export restriction RESERVED" ;;
-                    46) tls_alert_descrip="protocol version" ;;
-                    47) tls_alert_descrip="insufficient security" ;;
-                    50) tls_alert_descrip="internal error" ;;
-                    56) tls_alert_descrip="inappropriate fallback" ;;
-                    5A) tls_alert_descrip="user canceled" ;;
-                    64) tls_alert_descrip="no renegotiation" ;;
-                    6D) tls_alert_descrip="missing extension" ;;
-                    6E) tls_alert_descrip="unsupported extension" ;;
-                    6F) tls_alert_descrip="certificate unobtainable" ;;
-                    70) tls_alert_descrip="unrecognized name" ;;
-                    71) tls_alert_descrip="bad certificate status response" ;;
-                    72) tls_alert_descrip="bad certificate hash value" ;;
-                    73) tls_alert_descrip="unknown psk identity" ;;
-                    74) tls_alert_descrip="certificate required" ;;
-                    78) tls_alert_descrip="no application protocol" ;;
-                     *) tls_alert_descrip="$(hex2dec "$tls_err_descr")";;
-               esac
+               tls_err_descr_no=${tls_alert_ascii:j:2}
+               debugme tm_out  "     tls_err_descr_no:       0x${tls_err_descr_no} / = $(hex2dec ${tls_err_descr_no})"
+               tls_alert_descrip="$(tls_alert "$tls_err_descr_no")"
                if [[ $DEBUG -ge 2 ]]; then
                     tmln_out " ($tls_alert_descrip)"
                     tm_out  "     tls_err_level:          ${tls_err_level}"
