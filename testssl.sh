@@ -8629,7 +8629,7 @@ parse_tls_serverhello() {
      local -i dh_p_len dh_param_len
 
      DETECTED_TLS_VERSION=""
-     [[ -n "$tls_hello_ascii" ]] && echo "CONNECTED(00000003)" > $TMPFILE
+     [[ $DEBUG -ge 1 ]] && echo > $TMPFILE
 
      [[ "$DEBUG" -ge 5 ]] && echo $tls_hello_ascii      # one line without any blanks
 
@@ -8649,6 +8649,7 @@ parse_tls_serverhello() {
                if [[ "$process_full" == "all" ]]; then
                     # The entire server response should have been retrieved.
                     debugme tmln_warning "Malformed message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -8680,13 +8681,16 @@ parse_tls_serverhello() {
           if [[ $tls_content_type == "35" ]] && "$do_starttls"; then
                # this could be a 500/5xx for some weird reason where the STARTTLS handshake failed
                debugme echo "$(hex2ascii "$tls_hello_ascii")"
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                return 4
           elif [[ $tls_content_type != "14" ]] && [[ $tls_content_type != "15" ]] && \
                [[ $tls_content_type != "16" ]] && [[ $tls_content_type != "17" ]]; then
                debugme tmln_warning "Content type other than alert, handshake, change cipher spec, or application data detected."
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                return 8
           elif [[ "${tls_protocol:0:2}" != "03" ]]; then
                debugme tmln_warning "Protocol record_version.major is not 03."
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                return 1
           fi
           DETECTED_TLS_VERSION=$tls_protocol
@@ -8694,6 +8698,7 @@ parse_tls_serverhello() {
           if [[ $msg_len -gt $tls_hello_ascii_len-$i ]]; then
                if [[ "$process_full" == "all" ]]; then
                     debugme tmln_warning "Malformed message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 7
                else
                     # This could just be a result of the server's response being split
@@ -8713,36 +8718,40 @@ parse_tls_serverhello() {
      tls_alert_ascii_len=${#tls_alert_ascii}
      if [[ "$process_full" == "all" ]] && [[ $tls_alert_ascii_len%4 -ne 0 ]]; then
           debugme tmln_warning "Malformed message."
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
           return 1
      fi
-#FIXME: can't we skip the tls alert handling if we have $DEBUG -ne 0?
+
      if [[ $tls_alert_ascii_len -gt 0 ]]; then
           debugme echo "TLS alert messages:"
           for (( i=0; i+3 < tls_alert_ascii_len; i=i+4 )); do
                tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
                j=$i+2
                tls_err_descr_no=${tls_alert_ascii:j:2}
-               debugme tm_out  "     tls_err_descr_no:       0x${tls_err_descr_no} / = $(hex2dec ${tls_err_descr_no})"
-               tls_alert_descrip="$(tls_alert "$tls_err_descr_no")"
-               if [[ $DEBUG -ge 2 ]]; then
-                    tmln_out " ($tls_alert_descrip)"
-                    tm_out  "     tls_err_level:          ${tls_err_level}"
+               if [[ $DEBUG -ge 1 ]]; then
+                    debugme tm_out  "     tls_err_descr_no:       0x${tls_err_descr_no} / = $(hex2dec ${tls_err_descr_no})"
+                    tls_alert_descrip="$(tls_alert "$tls_err_descr_no")"
+                    if [[ $DEBUG -ge 2 ]]; then
+                         tmln_out " ($tls_alert_descrip)"
+                         tm_out  "     tls_err_level:          ${tls_err_level}"
+                    fi
+                    case $tls_err_level in
+                         01) echo -n "warning " >> $TMPFILE
+                             debugme tmln_out " (warning)" ;;
+                         02) echo -n "fatal " >> $TMPFILE
+                             debugme tmln_out " (fatal)" ;;
+                    esac
+                    echo "alert $tls_alert_descrip" >> $TMPFILE
+                    echo "===============================================================================" >> $TMPFILE
                fi
-               case $tls_err_level in
-                    01) echo -n "warning " >> $TMPFILE
-                        debugme tmln_out " (warning)" ;;
-                    02) echo -n "fatal " >> $TMPFILE
-                        debugme tmln_out " (fatal)" ;;
-               esac
-               echo "alert $tls_alert_descrip" >> $TMPFILE
-               echo "===============================================================================" >> $TMPFILE
 
                if [[ "$tls_err_level" != "01" ]] && [[ "$tls_err_level" != "02" ]]; then
                     debugme tmln_warning "Unexpected AlertLevel (0x$tls_err_level)."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                elif [[ "$tls_err_level" == "02" ]]; then
                     # Fatal alert
-                    tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
           done
@@ -8759,6 +8768,7 @@ parse_tls_serverhello() {
                if [[ "$process_full" == "all" ]]; then
                     # The entire server response should have been retrieved.
                     debugme tmln_warning "Malformed message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -8802,6 +8812,7 @@ parse_tls_serverhello() {
           if [[ $msg_len -gt $tls_handshake_ascii_len-$i ]]; then
                if [[ "$process_full" == "all" ]]; then
                     debugme tmln_warning "Malformed message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -8814,6 +8825,7 @@ parse_tls_serverhello() {
           if [[ "$tls_msg_type" == "02" ]]; then
                if [[ -n "$tls_serverhello_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one ServerHello handshake message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -8821,6 +8833,7 @@ parse_tls_serverhello() {
           elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "0B" ]]; then
                if [[ -n "$tls_certificate_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one Certificate handshake message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
                tls_certificate_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -8828,6 +8841,7 @@ parse_tls_serverhello() {
           elif ( [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]] ) && [[ "$tls_msg_type" == "0C" ]]; then
                if [[ -n "$tls_serverkeyexchange_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one ServerKeyExchange handshake message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
                tls_serverkeyexchange_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -8835,6 +8849,7 @@ parse_tls_serverhello() {
           elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "16" ]]; then
                if [[ -n "$tls_certificate_status_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one certificate_status handshake message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
                tls_certificate_status_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -8845,17 +8860,24 @@ parse_tls_serverhello() {
      if [[ $tls_serverhello_ascii_len -eq 0 ]]; then
           debugme echo "server hello empty, TCP connection closed"
           DETECTED_TLS_VERSION="closed TCP connection "
-          tmpfile_handle $FUNCNAME.txt
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
           return 1              # no server hello received
      elif [[ $tls_serverhello_ascii_len -lt 76 ]]; then
           DETECTED_TLS_VERSION="reply malformed"
           debugme echo "Malformed response"
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
           return 1
      elif [[ "${tls_handshake_ascii:0:2}" != "02" ]]; then
           # the ServerHello MUST be the first handshake message
           DETECTED_TLS_VERSION="reply contained no ServerHello"
           debugme tmln_warning "The first handshake protocol message is not a ServerHello."
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
           return 1
+     fi
+     if [[ $DEBUG -eq 0 ]]; then
+          echo "CONNECTED(00000003)" > $TMPFILE
+     else
+          echo "CONNECTED(00000003)" >> $TMPFILE
      fi
 
      # First parse the server hello handshake message
@@ -8871,6 +8893,7 @@ parse_tls_serverhello() {
      [[ "${DETECTED_TLS_VERSION:0:2}" == "7F" ]] && DETECTED_TLS_VERSION="0304"
      if [[ "${DETECTED_TLS_VERSION:0:2}" != "03" ]]; then
           debugme tmln_warning "server_version.major in ServerHello is not 03."
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
           return 1
      fi
 
@@ -8882,6 +8905,7 @@ parse_tls_serverhello() {
           let offset=70+$tls_sid_len
           if [[ $tls_serverhello_ascii_len -lt 76+$tls_sid_len ]]; then
                debugme echo "Malformed response"
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                return 1
           fi
      else
@@ -8903,16 +8927,19 @@ parse_tls_serverhello() {
           ( [[ "$process_full" == "ephemeralkey" ]] && [[ "0x${DETECTED_TLS_VERSION:2:2}" -gt "0x03" ]] ) ); then
           if [[ $tls_serverhello_ascii_len -lt $extns_offset+4 ]]; then
                debugme echo "Malformed response"
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                return 1
           fi
           tls_extensions_len=$(hex2dec "${tls_serverhello_ascii:extns_offset:4}")*2
           if [[ $tls_extensions_len -ne $tls_serverhello_ascii_len-$extns_offset-4 ]]; then
                debugme tmln_warning "Malformed message."
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                return 1
           fi
           for (( i=0; i<tls_extensions_len; i=i+8+extension_len )); do
                if [[  $tls_extensions_len-$i -lt 8 ]]; then
                     debugme echo "Malformed response"
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
                let offset=$extns_offset+4+$i
@@ -8921,6 +8948,7 @@ parse_tls_serverhello() {
                extension_len=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
                if [[  $extension_len -gt $tls_extensions_len-$i-8 ]]; then
                     debugme echo "Malformed response"
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
                case $extension_type in
@@ -8944,6 +8972,7 @@ parse_tls_serverhello() {
                           if [[ "$process_full" == "all" ]]; then
                                if [[ $extension_len -lt 4 ]]; then
                                     debugme echo "Malformed application layer protocol negotiation extension."
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                                     return 1
                                fi
                                echo -n "ALPN protocol:  " >> $TMPFILE
@@ -8951,12 +8980,14 @@ parse_tls_serverhello() {
                                j=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
                                if [[ $extension_len -ne $j+4 ]] || [[ $j -lt 2 ]]; then
                                     debugme echo "Malformed application layer protocol negotiation extension."
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                                     return 1
                                fi
                                let offset=$offset+4
                                j=2*$(hex2dec "${tls_serverhello_ascii:offset:2}")
                                if [[ $extension_len -ne $j+6 ]]; then
                                     debugme echo "Malformed application layer protocol negotiation extension."
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                                     return 1
                                fi
                                let offset=$offset+2
@@ -8979,6 +9010,7 @@ parse_tls_serverhello() {
                           if [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]]; then
                                if [[ $extension_len -lt 4  ]]; then
                                     debugme tmln_warning "Malformed key share extension."
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                                     return 1
                                fi
                                let offset=$extns_offset+12+$i
@@ -8987,6 +9019,7 @@ parse_tls_serverhello() {
                                msg_len=2*"$(hex2dec "${tls_serverhello_ascii:offset:4}")"
                                if [[ $msg_len -ne $extension_len-8 ]]; then
                                     debugme tmln_warning "Malformed key share extension."
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                                     return 1
                                fi
                                case $named_curve in
@@ -9070,11 +9103,13 @@ parse_tls_serverhello() {
                                for (( j=0; j<extension_len; j=j+protocol_len+2 )); do
                                     if [[ $extension_len -lt $j+2 ]]; then
                                          debugme echo "Malformed next protocol extension."
+                                         [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                                          return 1
                                     fi
                                     protocol_len=2*$(hex2dec "${tls_serverhello_ascii:offset:2}")
                                     if [[ $extension_len -lt $j+$protocol_len+2 ]]; then
                                          debugme echo "Malformed next protocol extension."
+                                         [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                                          return 1
                                     fi
                                     let offset=$offset+2
@@ -12437,7 +12472,7 @@ run_grease() {
      local alpn_proto alpn alpn_list_len_hex extn_len_hex
      local selected_alpn_protocol grease_selected_alpn_protocol
      local ciph list temp curve_found
-     local -i i j rnd alpn_list_len extn_len
+     local -i i j rnd alpn_list_len extn_len debug_level="$DEBUG"
      # Note: The folowing values were taken from https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
      # These arrays may need to be updated if the values change in the final version of this document.
      local -a -r grease_cipher_suites=( "0a,0a" "1a,1a" "2a,2a" "3a,3a" "4a,4a" "5a,5a" "6a,6a" "7a,7a" "8a,8a" "9a,9a" "aa,aa" "ba,ba" "ca,ca" "da,da" "ea,ea" "fa,fa" )
@@ -12492,6 +12527,12 @@ run_grease() {
 
      # Send a list of non-existent ciphers where the second byte does not match
      # any existing cipher.
+
+     # Need to ensure that $TEMPDIR/$NODEIP.parse_tls_serverhello.txt contains the results of the
+     # most recent calls to tls_sockets even if tls_sockets is not successful. Setting $DEBUG to
+     # a non-zero value ensures this. Setting it to 1 prevents any extra information from being
+     # displayed.
+     [[ $DEBUG -eq 0 ]] && DEBUG=1
      debugme echo -e "\nSending ClientHello with non-existent ciphers."
      tls_sockets "$proto" "de,d0, de,d1, d3,d2, de,d3, 00,ff"
      success=$?
@@ -12520,6 +12561,7 @@ run_grease() {
                bug_found=true
           fi
      fi
+     DEBUG="$debug_level"
 
      # Check that server ignores unrecognized extensions
      # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
