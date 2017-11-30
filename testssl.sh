@@ -13869,7 +13869,13 @@ determine_optimal_proto() {
      >$ERRFILE
      if [[ -n "$1" ]]; then
           # starttls workaround needed see https://github.com/drwetter/testssl.sh/issues/188 -- kind of odd
-          for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
+          for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -tls1_3 -ssl2; do
+               case $STARTTLS_OPTIMAL_PROTO in
+                    -tls1_3) "$HAS_TLS13" || continue ;;
+                    -ssl3)   "$HAS_SSL3" || continue ;;
+                    -ssl2)   "$HAS_SSL2" || continue ;;
+                    *) ;;
+               esac
                $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg -starttls $1") </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
                     all_failed=false
@@ -13880,7 +13886,13 @@ determine_optimal_proto() {
           "$all_failed" && STARTTLS_OPTIMAL_PROTO=""
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
-          for OPTIMAL_PROTO in '' -tls1_2 -tls1 -ssl3 -tls1_1 -ssl2; do
+          for OPTIMAL_PROTO in '' -tls1_2 -tls1 -tls1_3 -ssl3 -tls1_1 -ssl2; do
+               case $OPTIMAL_PROTO in
+                    -tls1_3) "$HAS_TLS13" || continue ;;
+                    -ssl3)   "$HAS_SSL3" || continue ;;
+                    -ssl2)   "$HAS_SSL2" || continue ;;
+                    *) ;;
+               esac
                $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
                     # we use the successful handshake at least to get one valid protocol supported -- it saves us time later
