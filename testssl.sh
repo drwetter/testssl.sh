@@ -9992,14 +9992,25 @@ socksend_tls_clienthello() {
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
 
-     if [[ "$tls_low_byte" -gt 0x03 ]]; then
-          TLS_CLIENT_HELLO="$(echo -n "$NW_STR" | tr 'A-F' 'a-f' | \
-               sed -e 's/\\x0\\/\\x00\\/g' -e 's/\\x1\\/\\x01\\/g' \
-               -e 's/\\x2\\/\\x02\\/g' -e 's/\\x3\\/\\x03\\/g' -e 's/\\x4\\/\\x04\\/g' \
-               -e 's/\\x5\\/\\x05\\/g' -e 's/\\x6\\/\\x06\\/g' -e 's/\\x7\\/\\x07\\/g' \
-               -e 's/\\x8\\/\\x08\\/g' -e 's/\\x9\\/\\x09\\/g' -e 's/\\xa\\/\\x0a\\/g' \
-               -e 's/\\xb\\/\\x0b\\/g' -e 's/\\xc\\/\\x0c\\/g' -e 's/\\xd\\/\\x0d\\/g' \
-               -e 's/\\xe\\/\\x0e\\/g' -e 's/\\xf\\/\\x0f\\/g' -e 's/\\x//g')"
+     if [[ "$tls_low_byte" -gt 0x03 ]]; then               
+          TLS_CLIENT_HELLO="$(tolower "$NW_STR")"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x0\\/\\x00\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x1\\/\\x01\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x2\\/\\x02\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x3\\/\\x03\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x4\\/\\x04\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x5\\/\\x05\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x6\\/\\x06\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x7\\/\\x07\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x8\\/\\x08\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x9\\/\\x09\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xa\\/\\x0a\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xb\\/\\x0b\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xc\\/\\x0c\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xd\\/\\x0d\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xe\\/\\x0e\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xf\\/\\x0f\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x/}"
           TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO:10}"
      fi
 
