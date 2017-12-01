@@ -1668,12 +1668,12 @@ detect_header() {
      local spaces="$3"
      local -i nr=0
 
-     nr=$(grep -Faciw "$key:" $HEADERFILE)
+     nr=$(grep -Eaicw "^ *$key:" $HEADERFILE)
      if [[ $nr -eq 0 ]]; then
           HEADERVALUE=""
           return 0
      elif [[ $nr -eq 1 ]]; then
-          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE)
+          HEADERVALUE=$(grep -Eiaw "^ *$key:" $HEADERFILE)
           HEADERVALUE=${HEADERVALUE#*:}                        # remove leading part=key to colon
           HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           return 1
@@ -2319,7 +2319,7 @@ run_cookie_flags() {     # ARG1: Path
 
 run_more_flags() {
      local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
-     local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By X-UA-Compatible Referrer-Policy X-UA-Compatible"
+     local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible"
      local f2t line
      local first=true
      local spaces="                              "
