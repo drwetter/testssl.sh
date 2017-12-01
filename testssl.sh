@@ -3945,14 +3945,14 @@ run_client_simulation() {
 
      if [[ $SERVICE != "" ]];  then
           client_service="$SERVICE"
-     else
+     elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
           # Can we take the service from STARTTLS?
-           if [[ -n "$STARTTLS_PROTOCOL" ]]; then
-               client_service=$(toupper "${STARTTLS_PROTOCOL%s}")    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
-          else
-               outln "Could not determine the protocol, only simulating generic clients."
-               client_service="undetermined"
-          fi
+          client_service=$(toupper "${STARTTLS_PROTOCOL%s}")    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+     elif "$ASSUME_HTTP"; then
+          client_service="HTTP"
+     else
+          outln "Could not determine the protocol, only simulating generic clients."
+          client_service="undetermined"
      fi
 
      outln
@@ -6237,7 +6237,7 @@ certificate_transparency() {
           fi
      fi
 
-     if [[ $SERVICE != "HTTP" ]]; then
+     if [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH"; then
           # At the moment Certificate Transparency only applies to HTTPS.
           tm_out "N/A"
      else
@@ -6299,7 +6299,7 @@ certificate_info() {
      case $cert_sig_algo in
           sha1WithRSAEncryption)
                pr_svrty_medium "SHA1 with RSA"
-               if [[ "$SERVICE" == HTTP ]]; then
+               if [[ "$SERVICE" == HTTP ]] || "$ASSUME_HTTP"; then
                     out " -- besides: users will receive a "; pr_svrty_high "strong browser WARNING"
                fi
                outln
@@ -6547,7 +6547,7 @@ certificate_info() {
           prln_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
-          if [[ $SERVICE == "HTTP" ]]; then
+          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
                pr_svrty_high "missing (NOT ok)"; outln " -- Browsers are complaining"
                fileout "${json_prefix}san" "HIGH" "subjectAltName (SAN) : -- Browsers are complaining"
           else
@@ -6639,7 +6639,7 @@ certificate_info() {
           pr_svrty_high "$trustfinding"
           trust_sni_finding="HIGH"
      elif ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
-          if [[ $SERVICE == "HTTP" ]]; then
+          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
                # https://bugs.chromium.org/p/chromium/issues/detail?id=308330
                # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
                # https://www.chromestatus.com/feature/4981025180483584
@@ -6704,7 +6704,7 @@ certificate_info() {
      fi
      if [[ -n "$sni_used" ]] || [[ $trust_nosni -eq 0 ]] || ( [[ $trust_nosni -ne 4 ]] && [[ $trust_nosni -ne 8 ]] ); then
           outln "$trustfinding_nosni"
-     elif [[ $SERVICE == "HTTP" ]]; then
+     elif [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
           prln_svrty_high "$trustfinding_nosni"
      else
           prln_svrty_medium "$trustfinding_nosni"
@@ -8867,14 +8867,14 @@ parse_tls_serverhello() {
      # byte 37+sid-len:     compression method:  00: none, 01: deflate, 64: LZS
      # byte 38+39+sid-len:  extension length
      tls_protocol2="${tls_serverhello_ascii:0:4}"
-     [[ "${tls_protocol2:0:2}" == "7F" ]] && tls_protocol2="0304"
-     if [[ "${tls_protocol2:0:2}" != "03" ]]; then
+     DETECTED_TLS_VERSION="$tls_protocol2"
+     [[ "${DETECTED_TLS_VERSION:0:2}" == "7F" ]] && DETECTED_TLS_VERSION="0304"
+     if [[ "${DETECTED_TLS_VERSION:0:2}" != "03" ]]; then
           debugme tmln_warning "server_version.major in ServerHello is not 03."
           return 1
      fi
-     DETECTED_TLS_VERSION="$tls_protocol2"
 
-     if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
+     if [[ "0x${DETECTED_TLS_VERSION:2:2}" -le "0x03" ]]; then
           tls_hello_time="${tls_serverhello_ascii:4:8}"
           [[ "$TLS_DIFFTIME_SET" || "$DEBUG" ]] && TLS_TIME=$(hex2dec "$tls_hello_time")
           tls_sid_len_hex="${tls_serverhello_ascii:68:2}"
@@ -8890,7 +8890,7 @@ parse_tls_serverhello() {
 
      tls_cipher_suite="${tls_serverhello_ascii:offset:4}"
 
-     if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
+     if [[ "0x${DETECTED_TLS_VERSION:2:2}" -le "0x03" ]]; then
           let offset=74+$tls_sid_len
           tls_compression_method="${tls_serverhello_ascii:offset:2}"
           let extns_offset=76+$tls_sid_len
@@ -8899,8 +8899,8 @@ parse_tls_serverhello() {
      fi
 
      if [[ $tls_serverhello_ascii_len -gt $extns_offset ]] && \
-        ( [[ "$process_full" == "all" ]] || [[ "$tls_protocol2" == "0303" ]] || \
-          ( [[ "$process_full" == "ephemeralkey" ]] && [[ "0x${tls_protocol2:2:2}" -gt "0x03" ]] ) ); then
+        ( [[ "$process_full" == "all" ]] || [[ "$DETECTED_TLS_VERSION" == "0303" ]] || \
+          ( [[ "$process_full" == "ephemeralkey" ]] && [[ "0x${DETECTED_TLS_VERSION:2:2}" -gt "0x03" ]] ) ); then
           if [[ $tls_serverhello_ascii_len -lt $extns_offset+4 ]]; then
                debugme echo "Malformed response"
                return 1
@@ -9053,8 +9053,8 @@ parse_tls_serverhello() {
                           fi
                           let offset=$extns_offset+12+$i
                           tls_protocol2="${tls_serverhello_ascii:offset:4}"
-                          [[ "${tls_protocol2:0:2}" == "7F" ]] && tls_protocol2="0304"
-                           DETECTED_TLS_VERSION="$tls_protocol2"
+                          DETECTED_TLS_VERSION="$tls_protocol2"
+                          [[ "${DETECTED_TLS_VERSION:0:2}" == "7F" ]] && DETECTED_TLS_VERSION="0304"
                           ;;
                     002C) tls_extensions+="TLS server extension \"cookie\" (id=44), len=$extension_len\n" ;;
                     002D) tls_extensions+="TLS server extension \"psk key exchange modes\" (id=45), len=$extension_len\n" ;;
@@ -9092,10 +9092,10 @@ parse_tls_serverhello() {
           done
      fi
 
-     if [[ "$tls_protocol2" == "0300" ]]; then
+     if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
           echo "Protocol  : SSLv3" >> $TMPFILE
      else
-          echo "Protocol  : TLSv1.$((0x$tls_protocol2-0x0301))" >> $TMPFILE
+          echo "Protocol  : TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))" >> $TMPFILE
      fi
      echo "===============================================================================" >> $TMPFILE
      if [[ $TLS_NR_CIPHERS -ne 0 ]]; then
@@ -9123,7 +9123,7 @@ parse_tls_serverhello() {
                echo "${TLS13_KEY_SHARES[named_curve]}" >> $TMPFILE
      fi
      echo "===============================================================================" >> $TMPFILE
-     if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
+     if [[ "0x${DETECTED_TLS_VERSION:2:2}" -le "0x03" ]]; then
           case $tls_compression_method in
                00) echo "Compression: NONE" >> $TMPFILE ;;
                01) echo "Compression: zlib compression" >> $TMPFILE ;;
@@ -9138,9 +9138,9 @@ parse_tls_serverhello() {
           echo "TLS server hello message:"
           if [[ $DEBUG -ge 4 ]]; then
                echo "     tls_protocol:           0x$tls_protocol2"
-               [[ "0x${tls_protocol2:2:2}" -le "0x03" ]] && echo "     tls_sid_len:            0x$tls_sid_len_hex / = $((tls_sid_len/2))"
+               [[ "0x${DETECTED_TLS_VERSION:2:2}" -le "0x03" ]] && echo "     tls_sid_len:            0x$tls_sid_len_hex / = $((tls_sid_len/2))"
           fi
-          if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
+          if [[ "0x${DETECTED_TLS_VERSION:2:2}" -le "0x03" ]]; then
                echo -n "     tls_hello_time:         0x$tls_hello_time "
                parse_date "$TLS_TIME" "+%Y-%m-%d %r" "%s"                  # in debugging mode we don't mind the cycles and don't use TLS_DIFFTIME_SET
           fi
@@ -9159,7 +9159,7 @@ parse_tls_serverhello() {
                     echo "     dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
                fi
           fi
-          if [[ "0x${tls_protocol2:2:2}" -le "0x03" ]]; then
+          if [[ "0x${DETECTED_TLS_VERSION:2:2}" -le "0x03" ]]; then
                echo -n "     tls_compression_method: 0x$tls_compression_method "
                case $tls_compression_method in
                     00) echo "(NONE)" ;;
@@ -9201,6 +9201,37 @@ parse_tls_serverhello() {
                tmpfile_handle $FUNCNAME.txt
                return 1
           fi
+     fi
+
+     # If the ClientHello included a supported_versions extension, then check that the
+     # $DETECTED_TLS_VERSION appeared in the list offered in the ClientHello.
+     if [[ "${TLS_CLIENT_HELLO:0:2}" == "01" ]]; then
+          # get position of cipher lists (just after session id)
+          offset=78+2*$(hex2dec "${TLS_CLIENT_HELLO:76:2}")
+          # get position of compression methods
+          offset+=4+2*$(hex2dec "${TLS_CLIENT_HELLO:offset:4}")
+          # get position of extensions
+          extns_offset=$offset+6+2*$(hex2dec "${TLS_CLIENT_HELLO:offset:2}")
+          len1=${#TLS_CLIENT_HELLO}
+          for (( i=extns_offset; i < len1; i=i+8+extension_len )); do
+               extension_type="${TLS_CLIENT_HELLO:i:4}"
+               offset=4+$i
+               extension_len=2*$(hex2dec "${TLS_CLIENT_HELLO:offset:4}")
+               if [[ "$extension_type" == "002b" ]]; then
+                    offset+=6
+                    tls_protocol2="$(tolower "$tls_protocol2")"
+                    for (( j=0; j < extension_len-2; j=j+4 )); do
+                         [[ "${TLS_CLIENT_HELLO:offset:4}" == "$tls_protocol2" ]] && break
+                         offset+=4
+                    done
+                    if [[ $j -eq $extension_len-2 ]]; then
+                         debugme echo "The ServerHello specifies a version that wasn't offered in the ClientHello."
+                         tmpfile_handle $FUNCNAME.txt
+                         return 1
+                    fi
+                    break
+               fi
+          done
      fi
 
      # Now parse the Certificate message.
@@ -9963,6 +9994,28 @@ socksend_tls_clienthello() {
      [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
+
+     if [[ "$tls_low_byte" -gt 0x03 ]]; then               
+          TLS_CLIENT_HELLO="$(tolower "$NW_STR")"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x0\\/\\x00\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x1\\/\\x01\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x2\\/\\x02\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x3\\/\\x03\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x4\\/\\x04\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x5\\/\\x05\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x6\\/\\x06\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x7\\/\\x07\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x8\\/\\x08\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x9\\/\\x09\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xa\\/\\x0a\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xb\\/\\x0b\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xc\\/\\x0c\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xd\\/\\x0d\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xe\\/\\x0e\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\xf\\/\\x0f\\}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x/}"
+          TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO:10}"
+     fi
 
      return 0
 }
@@ -11044,7 +11097,7 @@ run_crime() {
           fi
           ret=0
      else
-          if [[ $SERVICE == "HTTP" ]]; then
+          if [[ $SERVICE == "HTTP" ]] || "$CLIENT_AUTH"; then
                pr_svrty_high "VULNERABLE (NOT ok)"
                fileout "crime" "HIGH" "CRIME, TLS: VULNERABLE" "$cve" "$cwe" "$hint"
           else
