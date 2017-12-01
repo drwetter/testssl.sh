@@ -3945,14 +3945,14 @@ run_client_simulation() {
 
      if [[ $SERVICE != "" ]];  then
           client_service="$SERVICE"
-     else
+     elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
           # Can we take the service from STARTTLS?
-           if [[ -n "$STARTTLS_PROTOCOL" ]]; then
-               client_service=$(toupper "${STARTTLS_PROTOCOL%s}")    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
-          else
-               outln "Could not determine the protocol, only simulating generic clients."
-               client_service="undetermined"
-          fi
+          client_service=$(toupper "${STARTTLS_PROTOCOL%s}")    # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
+     elif "$ASSUME_HTTP"; then
+          client_service="HTTP"
+     else
+          outln "Could not determine the protocol, only simulating generic clients."
+          client_service="undetermined"
      fi
 
      outln
@@ -6237,7 +6237,7 @@ certificate_transparency() {
           fi
      fi
 
-     if [[ $SERVICE != "HTTP" ]]; then
+     if [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH"; then
           # At the moment Certificate Transparency only applies to HTTPS.
           tm_out "N/A"
      else
@@ -6299,7 +6299,7 @@ certificate_info() {
      case $cert_sig_algo in
           sha1WithRSAEncryption)
                pr_svrty_medium "SHA1 with RSA"
-               if [[ "$SERVICE" == HTTP ]]; then
+               if [[ "$SERVICE" == HTTP ]] || "$ASSUME_HTTP"; then
                     out " -- besides: users will receive a "; pr_svrty_high "strong browser WARNING"
                fi
                outln
@@ -6547,7 +6547,7 @@ certificate_info() {
           prln_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
           fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
      else
-          if [[ $SERVICE == "HTTP" ]]; then
+          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
                pr_svrty_high "missing (NOT ok)"; outln " -- Browsers are complaining"
                fileout "${json_prefix}san" "HIGH" "subjectAltName (SAN) : -- Browsers are complaining"
           else
@@ -6639,7 +6639,7 @@ certificate_info() {
           pr_svrty_high "$trustfinding"
           trust_sni_finding="HIGH"
      elif ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
-          if [[ $SERVICE == "HTTP" ]]; then
+          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
                # https://bugs.chromium.org/p/chromium/issues/detail?id=308330
                # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
                # https://www.chromestatus.com/feature/4981025180483584
@@ -6704,7 +6704,7 @@ certificate_info() {
      fi
      if [[ -n "$sni_used" ]] || [[ $trust_nosni -eq 0 ]] || ( [[ $trust_nosni -ne 4 ]] && [[ $trust_nosni -ne 8 ]] ); then
           outln "$trustfinding_nosni"
-     elif [[ $SERVICE == "HTTP" ]]; then
+     elif [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
           prln_svrty_high "$trustfinding_nosni"
      else
           prln_svrty_medium "$trustfinding_nosni"
@@ -11096,7 +11096,7 @@ run_crime() {
           fi
           ret=0
      else
-          if [[ $SERVICE == "HTTP" ]]; then
+          if [[ $SERVICE == "HTTP" ]] || "$CLIENT_AUTH"; then
                pr_svrty_high "VULNERABLE (NOT ok)"
                fileout "crime" "HIGH" "CRIME, TLS: VULNERABLE" "$cve" "$cwe" "$hint"
           else
