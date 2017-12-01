@@ -1090,10 +1090,10 @@ strip_spaces() {
 
 # https://web.archive.org/web/20121022051228/http://codesnippets.joyent.com/posts/show/1816
 strip_leading_space() {
-     echo "${1#"${1%%[\![:space:]]*}"}"
+     printf "%s" "${1#"${1%%[![:space:]]*}"}"
 }
 strip_trailing_space() {
-     echo "${1%"${1##*[![:space:]]}"}"
+     printf "%s" "${1%"${1##*[![:space:]]}"}"
 }
 
 
