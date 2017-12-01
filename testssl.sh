@@ -204,7 +204,7 @@ HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the p
 MAX_WAITSOCK=${MAX_WAITSOCK:-10}        # waiting at max 10 seconds for socket reply. There shouldn't be any reason to change this.
 CCS_MAX_WAITSOCK=${CCS_MAX_WAITSOCK:-5} # for the two CCS payload (each). There shouldn't be any reason to change this.
 HEARTBLEED_MAX_WAITSOCK=${HEARTBLEED_MAX_WAITSOCK:-8}      # for the heartbleed payload. There shouldn't be any reason to change this.
-STARTTLS_SLEEP=${STARTTLS_SLEEP:-10}    # max time to wait on a socket reply for STARTTLS
+STARTTLS_SLEEP=${STARTTLS_SLEEP:-10}    # max time wait on a socket for STARTTLS. MySQL has a fixed value of 1 which can't be overwritten (#914)
 FAST_STARTTLS=${FAST_STARTTLS:-true}    # at the cost of reliabilty decrease the handshakes for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
@@ -7897,6 +7897,7 @@ starttls_mysql_dialog() {
      00, 00, 00, 00, 00, 00, 00, 00,
      00, 00, 00, 00, 00, 00, 00"
      code2network "${login_request}"
+     # 1 is the timeout value which only MySQL needs
      starttls_just_read 1                   && debugme echo -e "\nreceived server greeting" &&
      starttls_just_send2 "$NW_STR"          && debugme echo "initiated STARTTLS"
      # TODO: We could detect if the server supports STARTTLS via the "Server Capabilities"
