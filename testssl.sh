@@ -4828,11 +4828,11 @@ pr_cipher_quality() {
           if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
                # We have the OpenSSL name and can't convert it to the RFC name
                case "$cipher" in
-                    *NULL*|*EXP*)
+                    *NULL*|*EXP*|ADH*)
                          pr_svrty_critical "$text"
                          return 1
                          ;;
-                    *RC4*)
+                    *RC4*|*RC2*)
                          pr_svrty_high "$text"
                          return 2
                          ;;
@@ -4858,11 +4858,11 @@ pr_cipher_quality() {
      fi
 
      case "$cipher" in
-          *NULL*|*EXP*|*RC2*|*_DES_*|*_DES40_*)
+          *NULL*|*EXP*|*RC2*|*_DES_*|*_DES40_*|*anon*)
                pr_svrty_critical "$text"
                return 1
                ;;
-          *RC4*)
+          *RC4*|*RC2*)
                pr_svrty_high "$text"
                return 2
                ;;
