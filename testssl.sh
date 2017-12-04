@@ -117,7 +117,7 @@ readonly RUN_DIR="$(dirname "$0")"
 TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR
 CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # or CA_BUNDLES_PATH to find the CA BUNDLES. TESTSSL_INSTALL_DIR helps you to find the RFC mapping also
 CIPHERS_BY_STRENGTH_FILE=""
-TLS_DATA_FILE=""                                  # mandatory file for socket based handdhakes
+TLS_DATA_FILE=""                                  # mandatory file for socket-based handdhakes
 OPENSSL_LOCATION=""
 HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
@@ -1468,9 +1468,9 @@ service_detection() {
                ret=0
                ;;
           *)   if "$CLIENT_AUTH"; then
-                    out "certificate based authentication => skipping all HTTP checks"
-                    echo "certificate based authentication => skipping all HTTP checks" >$TMPFILE
-                    fileout "client_auth" "INFO" "certificate based authentication => skipping all HTTP checks"
+                    out " certificate-based authentication => skipping all HTTP checks"
+                    echo "certificate-based authentication => skipping all HTTP checks" >$TMPFILE
+                    fileout "client_auth" "INFO" "certificate-based authentication => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
                     if "$ASSUME_HTTP"; then
@@ -5781,7 +5781,7 @@ sclient_connect_successful() {
      [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]] && return 0
      # second check saved like
      # fgrep 'Cipher is (NONE)' "$2" &> /dev/null && return 1
-     # what's left now is: master key empty and Session-ID not empty ==> probably client based auth with x509 certificate
+     # what's left now is: master key empty and Session-ID not empty ==> probably client-based auth with x509 certificate
      return 1
 }
 
@@ -7748,13 +7748,13 @@ starttls_line() {
      return 0
 }
 
-# Line based send with newline characters appended
+# Line-based send with newline characters appended
 starttls_just_send(){
      debugme echo -e "C: $1"
      echo -ne "$1\r\n" >&5
 }
 
-# Stream based send
+# Stream-based send
 starttls_just_send2(){
      debugme echo -e "C: $1"
      echo -ne "$1" >&5
@@ -12871,7 +12871,7 @@ get_install_dir() {
 
      TLS_DATA_FILE="$TESTSSL_INSTALL_DIR/etc/tls_data.txt"
      if [[ ! -r "$TLS_DATA_FILE" ]]; then
-          prln_warning "\nATTENTION: No TLS data file found -- needed for socket based handshakes"
+          prln_warning "\nATTENTION: No TLS data file found -- needed for socket-based handshakes"
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
