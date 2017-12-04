@@ -1224,7 +1224,7 @@ out_row_aligned_max_width() {
                # text up to that space character the next line to print.
                line="${text:0:max_width}"
                line="${line% *}"
-               i=${#line}
+               i="${#line}"
                if [[ $i -eq $max_width ]]; then
                     # If there are no space characters in the first $max_width
                     # characters of the remaining text, then make the text up
@@ -1673,8 +1673,9 @@ detect_header() {
           HEADERVALUE=""
           return 0
      elif [[ $nr -eq 1 ]]; then
-          HEADERVALUE=$(grep -Eiaw "^ *$key:" $HEADERFILE)
-          HEADERVALUE=${HEADERVALUE#*:}                        # remove leading part=key to colon
+          HEADERVALUE="$(grep -Eiaw "^ *$key:" $HEADERFILE)"
+          HEADERVALUE="${HEADERVALUE#*:}"                        # remove leading part=key to colon
+          HEADERVALUE="$(strip_lf "$HEADERVALUE")"
           HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           return 1
      else
@@ -1683,8 +1684,9 @@ detect_header() {
           pr_svrty_medium " ${nr}x"
           out " -- checking first one only"
           out "\n$spaces"
-          HEADERVALUE=$(grep -Faiw "$key:" $HEADERFILE | head -1)
-          HEADERVALUE=${HEADERVALUE#*:}
+          HEADERVALUE="$(grep -Faiw "$key:" $HEADERFILE | head -1)"
+          HEADERVALUE="${HEADERVALUE#*:}"
+          HEADERVALUE="$(strip_lf "$HEADERVALUE")"
           HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
           [[ $DEBUG -ge 2 ]] && tm_italic "$HEADERVALUE" && tm_out "\n$spaces"
           fileout "${2}_multiple" "MEDIUM" "Multiple $2 headers. Using first header: $HEADERVALUE"
@@ -2320,7 +2322,7 @@ run_cookie_flags() {     # ARG1: Path
 run_more_flags() {
      local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
      local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible"
-     local f2t line
+     local f2t
      local first=true
      local spaces="                              "
 
@@ -2339,8 +2341,7 @@ run_more_flags() {
                     first=false
                fi
                pr_done_good "$f2t"
-               line="$(out_row_aligned_max_width "$f2t$HEADERVALUE" "$spaces" $TERM_WIDTH)"
-               outln " ${line#* }"
+               outln " $(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
                fileout "$f2t" "OK" "$f2t: $HEADERVALUE"
           fi
      done
