@@ -4877,18 +4877,18 @@ pr_cipher_quality() {
                          pr_svrty_high "$text"
                          return 2
                          ;;
-                    *CBC*)
-                         pr_svrty_medium "$text"
-                         return 3
-                         ;; # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
                     *GCM*|*CHACHA20*)
                          pr_done_best "$text"
                          return 7
                          ;; #best ones
-                    ECDHE*AES*)
+                    ECDHE*AES*|DHE*AES*SHA*|*CAMELLIA*SHA)
                          pr_svrty_low "$text"
                          return 4
                          ;; # it's CBC. --> lucky13
+                    *CBC*)
+                         pr_svrty_medium "$text"
+                         return 3
+                         ;; # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
                     *)
                          out "$text"
                          return 5
@@ -4907,7 +4907,7 @@ pr_cipher_quality() {
                pr_svrty_high "$text"
                return 2
                ;;
-          *ECDHE*AES*CBC*)
+          *ECDHE*AES*CBC*|*DHE*AES*SHA*|*RSA*AES*SHA*|*CAMELLIA*SHA*)
                pr_svrty_low "$text"
                return 4
                ;;
