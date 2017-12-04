@@ -168,7 +168,7 @@ TERM_CURRPOS=0                                              # custom line wrappi
 # 0 means (normally) true here. Some of the variables are also accessible with a command line switch, see --help
 declare -x OPENSSL OPENSSL_TIMEOUT
 FAST_SOCKET=${FAST_SOCKET:-false}       # EXPERIMENTAL feature to accelerate sockets -- DO NOT USE it for production
-COLOR=${COLOR:-2}                       # 2: Full color, 1: b/w+positioning, 0: no ESC at all
+COLOR=${COLOR:-2}                       # 3: extra color, 2: Full color, 1: b/w+positioning, 0: no ESC at all
 COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the output
 SHOW_EACH_C=${SHOW_EACH_C:-false}       # where individual ciphers are tested show just the positively ones tested
 SHOW_SIGALGO=${SHOW_SIGALGO:-false}     # "secret" switch whether testssl.sh shows the signature algorithm for -E / -e
@@ -421,36 +421,36 @@ outln() { printf -- "%b" "${1//%/%%}\n"; html_out "$1\n"; }
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
 # color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
-tm_liteblue()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;32m$1" || tm_out "\033[0;34m$1" ) || tm_out "$1"; tm_off; }    # not yet used
-pr_liteblue()   { tm_liteblue "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+tm_liteblue()   { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;32m$1" || tm_out "\033[0;34m$1" ) || tm_out "$1"; tm_off; }    # not yet used
+pr_liteblue()   { tm_liteblue "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
 tmln_liteblue() { tm_liteblue "$1"; tmln_out; }
 prln_liteblue() { pr_liteblue "$1"; outln; }
 
-tm_blue()       { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;32m$1" || tm_out "\033[1;34m$1" ) || tm_out "$1"; tm_off; }    # used for head lines of single tests
-pr_blue()       { tm_blue "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+tm_blue()       { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;32m$1" || tm_out "\033[1;34m$1" ) || tm_out "$1"; tm_off; }    # used for head lines of single tests
+pr_blue()       { tm_blue "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
 tmln_blue()     { tm_blue "$1"; tmln_out; }
 prln_blue()     { pr_blue "$1"; outln; }
 
 # we should be able to use aliases here
-tm_warning()    { [[ "$COLOR" -eq 2 ]] && tm_out "\033[0;35m$1" || tm_underline "$1"; tm_off; }                   # some local problem: one test cannot be done
+tm_warning()    { [[ "$COLOR" -ge 2 ]] && tm_out "\033[0;35m$1" || tm_underline "$1"; tm_off; }                   # some local problem: one test cannot be done
 tmln_warning()  { tm_warning "$1"; tmln_out; }                                                                    # litemagenta
-pr_warning()    { tm_warning "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#cd00cd;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<u>$(html_reserved "$1")</u>" || html_out "$(html_reserved "$1")" ); }
+pr_warning()    { tm_warning "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:#cd00cd;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<u>$(html_reserved "$1")</u>" || html_out "$(html_reserved "$1")" ); }
 prln_warning()  { pr_warning "$1"; outln; }
 
-tm_magenta()    { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;35m$1" || tm_underline "$1"; tm_off; }                   # fatal error: quitting because of this!
+tm_magenta()    { [[ "$COLOR" -ge 2 ]] && tm_out "\033[1;35m$1" || tm_underline "$1"; tm_off; }                   # fatal error: quitting because of this!
 tmln_magenta()  { tm_magenta "$1"; tmln_out; }
 # different as warning above?
-pr_magenta()    { tm_magenta "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:magenta;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<u>$(html_reserved "$1")</u>" || html_out "$(html_reserved "$1")" ); }
+pr_magenta()    { tm_magenta "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:magenta;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<u>$(html_reserved "$1")</u>" || html_out "$(html_reserved "$1")" ); }
 prln_magenta()  { pr_magenta "$1"; outln; }
 
-tm_litecyan()   { [[ "$COLOR" -eq 2 ]] && tm_out "\033[0;36m$1" || tm_out "$1"; tm_off; }                         # not yet used
+tm_litecyan()   { [[ "$COLOR" -ge 2 ]] && tm_out "\033[0;36m$1" || tm_out "$1"; tm_off; }                         # not yet used
 tmln_litecyan() { tm_litecyan "$1"; tmln_out; }
-pr_litecyan()   { tm_litecyan "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#00cdcd;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+pr_litecyan()   { tm_litecyan "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:#00cdcd;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 prln_litecyan() { pr_litecyan "$1"; outln; }
 
-tm_cyan()       { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;36m$1" || tm_out "$1"; tm_off; }                         # additional hint
+tm_cyan()       { [[ "$COLOR" -ge 2 ]] && tm_out "\033[1;36m$1" || tm_out "$1"; tm_off; }                         # additional hint
 tmln_cyan()     { tm_cyan "$1"; tmln_out; }
-pr_cyan()       { tm_cyan "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:cyan;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+pr_cyan()       { tm_cyan "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:cyan;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 prln_cyan()     { pr_cyan "$1"; outln; }
 
 tm_litegrey()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[0;37m$1" || tm_out "$1"; tm_off; }                        # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
@@ -463,33 +463,33 @@ pr_grey()       { tm_grey "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"
 tmln_grey()     { tm_grey "$1"; tmln_out; }
 prln_grey()     { pr_grey "$1"; outln; }
 
-tm_done_good()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;34m$1" || tm_out "\033[0;32m$1" ) || tm_out "$1"; tm_off; }   # litegreen (liteblue), This is good
+tm_done_good()   { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;34m$1" || tm_out "\033[0;32m$1" ) || tm_out "$1"; tm_off; }   # litegreen (liteblue), This is good
 tmln_done_good() { tm_done_good "$1"; tmln_out; }
-pr_done_good()   { tm_done_good "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+pr_done_good()   { tm_done_good "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
 prln_done_good() { pr_done_good "$1"; outln; }
 
-tm_done_best()   { [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;34m$1" || tm_out "\033[1;32m$1" ) ||  tm_out "$1"; tm_off; }  # green (blue), This is the best
+tm_done_best()   { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;34m$1" || tm_out "\033[1;32m$1" ) ||  tm_out "$1"; tm_off; }  # green (blue), This is the best
 tmln_done_best() { tm_done_best "$1"; tmln_out; }
-pr_done_best()   { tm_done_best "$1"; [[ "$COLOR" -eq 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+pr_done_best()   { tm_done_best "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
 prln_done_best() { pr_done_best "$1"; outln; }
 
-tm_svrty_low()     { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;33m$1" || tm_out "$1"; tm_off; }         # yellow brown | academic or minor problem
+tm_svrty_low()     { [[ "$COLOR" -ge 2 ]] && tm_out "\033[1;33m$1" || tm_out "$1"; tm_off; }         # yellow brown | academic or minor problem
 tmln_svrty_low()   { tm_svrty_low "$1"; tmln_out; }
-pr_svrty_low()     { tm_svrty_low "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#cdcd00;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+pr_svrty_low()     { tm_svrty_low "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:#cdcd00;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 prln_svrty_low()   { pr_svrty_low "$1"; outln; }
 
-tm_svrty_medium()  { [[ "$COLOR" -eq 2 ]] && tm_out "\033[0;33m$1" || tm_out "$1"; tm_off; }       # brown | it is not a bad problem but you shouldn't do this
-pr_svrty_medium()  { tm_svrty_medium "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#cd8000;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
+tm_svrty_medium()  { [[ "$COLOR" -ge 2 ]] && tm_out "\033[0;33m$1" || tm_out "$1"; tm_off; }       # brown | it is not a bad problem but you shouldn't do this
+pr_svrty_medium()  { tm_svrty_medium "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:#cd8000;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 tmln_svrty_medium(){ tm_svrty_medium "$1"; tmln_out; }
 prln_svrty_medium(){ pr_svrty_medium "$1"; outln; }
 
-tm_svrty_high()    { [[ "$COLOR" -eq 2 ]] && tm_out "\033[0;31m$1" || tm_bold "$1"; tm_off; }               # litered
-pr_svrty_high()    { tm_svrty_high "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:#cd0000;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")" ); }
+tm_svrty_high()    { [[ "$COLOR" -ge 2 ]] && tm_out "\033[0;31m$1" || tm_bold "$1"; tm_off; }               # litered
+pr_svrty_high()    { tm_svrty_high "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:#cd0000;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")" ); }
 tmln_svrty_high()  { tm_svrty_high "$1"; tmln_out; }
 prln_svrty_high()  { pr_svrty_high "$1"; outln; }
 
-tm_svrty_critical()   { [[ "$COLOR" -eq 2 ]] && tm_out "\033[1;31m$1" || tm_bold "$1"; tm_off; }           # red
-pr_svrty_critical()   { tm_svrty_critical "$1"; [[ "$COLOR" -eq 2 ]] && html_out "<span style=\"color:red;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")" ); }
+tm_svrty_critical()   { [[ "$COLOR" -ge 2 ]] && tm_out "\033[1;31m$1" || tm_bold "$1"; tm_off; }           # red
+pr_svrty_critical()   { tm_svrty_critical "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:red;font-weight:bold;\">$(html_reserved "$1")</span>" || ( [[ "$COLOR" -eq 1 ]] && html_out "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")" ); }
 tmln_svrty_critical() { tm_svrty_critical "$1"; tmln_out; }
 prln_svrty_critical() { pr_svrty_critical "$1"; outln; }
 
@@ -529,7 +529,7 @@ pr_reverse_bold() { tm_reverse_bold "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<spa
 #pr_headline() { pr_blue "$1"; }
 #http://misc.flogisoft.com/bash/tip_colors_and_formatting
 
-#pr_headline() { [[ "$COLOR" -eq 2 ]] && out "\033[1;30m\033[47m$1" || out "$1"; tm_off; }
+#pr_headline() { [[ "$COLOR" -ge 2 ]] && out "\033[1;30m\033[47m$1" || out "$1"; tm_off; }
 tm_headline()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[1m\033[4m$1" || tm_out "$1"; tm_off; }
 tmln_headline() { tm_headline "$1"; tmln_out; }
 pr_headline()   { tm_headline "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"text-decoration:underline;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
@@ -586,7 +586,7 @@ set_color_functions() {
      tput cols &>/dev/null || return 0         # tput under BSDs and GNUs doesn't work either (TERM undefined?)
      tput sgr0 &>/dev/null || ncurses_tput=false
      tput sgr 0 1 &>/dev/null || ncurses_tput=false    # OpenBSD succeed the previous one but fails here
-     if [[ "$COLOR" -eq 2 ]]; then
+     if [[ "$COLOR" -ge 2 ]]; then
           if $ncurses_tput; then
                red=$(tput setaf 1)
                green=$(tput setaf 2)
@@ -1267,6 +1267,18 @@ out_row_aligned_max_width_by_entry() {
         out " "
         prev_entry="$entry"
     done <<< "$resp"
+}
+
+print_fixed_width() {
+     local text="$1"
+     local -i i len width="$2"
+     local print_function="$3"
+
+     len=${#text}
+     $print_function "$text"
+     for (( i=len; i <= width; i++ )); do
+          out " "
+     done
 }
 
 # saves $TMPFILE or file supplied in $2 under name "$TEMPDIR/$NODEIP.$1".
@@ -2771,11 +2783,19 @@ neat_list(){
           what_dh="$kx"
           bits=""
      fi
-     len=${#kx}
-     if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
-          out "$(printf -- " %-7s %-49s " "$hexcode" "$tls_cipher")"
+     if [[ "$COLOR" -le 2 ]]; then
+          if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
+               out "$(printf -- " %-7s %-49s " "$hexcode" "$tls_cipher")"
+          else
+               out "$(printf -- " %-7s %-33s " "$hexcode" "$ossl_cipher")"
+          fi
      else
-          out "$(printf -- " %-7s %-33s " "$hexcode" "$ossl_cipher")"
+          out "$(printf -- " %-7s " "$hexcode")"
+          if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
+               print_fixed_width "$tls_cipher" 49 pr_cipher_quality
+          else
+               print_fixed_width "$ossl_cipher" 33 pr_cipher_quality
+          fi
      fi
      out "$what_dh"
      if [[ -n "$bits" ]]; then
@@ -2785,14 +2805,24 @@ neat_list(){
                pr_ecdh_quality "$bits" " $bits"
           fi
      fi
+     len=${#kx}
      for (( i=len; i<10; i++ )); do
           out " "
      done
-     out "$(printf -- " %-12s%-8s" "$enc" "$strength")"
-     if [[ "$DISPLAY_CIPHERNAMES" == rfc ]]; then
-          out "$(printf -- " %-33s${SHOW_EACH_C:+  %-0s}" "$ossl_cipher")"
-     elif [[ "$DISPLAY_CIPHERNAMES" == openssl ]]; then
-          out "$(printf -- " %-49s${SHOW_EACH_C:+  %-0s}" "$tls_cipher")"
+     out "$(printf -- " %-12s%-8s " "$enc" "$strength")"
+     if [[ "$COLOR" -le 2 ]]; then
+          if [[ "$DISPLAY_CIPHERNAMES" == rfc ]]; then
+               out "$(printf -- "%-33s${SHOW_EACH_C:+  %-0s}" "$ossl_cipher")"
+          elif [[ "$DISPLAY_CIPHERNAMES" == openssl ]]; then
+               out "$(printf -- "%-49s${SHOW_EACH_C:+  %-0s}" "$tls_cipher")"
+          fi
+     else
+          if [[ "$DISPLAY_CIPHERNAMES" == rfc ]]; then
+               print_fixed_width "$ossl_cipher" 32 pr_cipher_quality
+          elif [[ "$DISPLAY_CIPHERNAMES" == openssl ]]; then
+               print_fixed_width "$tls_cipher" 48 pr_cipher_quality
+          fi
+          out "$(printf -- "${SHOW_EACH_C:+  %-0s}")"
      fi
 }
 
@@ -4062,12 +4092,23 @@ run_client_simulation() {
                               cipher="$(openssl2rfc "$cipher")"
                               [[ -z "$cipher" ]] && cipher=$(get_cipher $TMPFILE)
                          fi
-                         if ! "$WIDE"; then
-                              out "$proto $cipher"
-                         elif [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
-                              out "$(printf -- "%-7s   %-34s" "$proto" "$cipher")"
+                         out "$proto "
+                         "$WIDE" && out "  "
+                         if [[ "$COLOR" -le 2 ]]; then
+                              out "$cipher"
                          else
-                              out "$(printf -- "%-7s   %-50s" "$proto" "$cipher")"
+                              pr_cipher_quality "$cipher"
+                         fi
+                         if "$WIDE"; then
+                              if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
+                                   for (( j=${#cipher}; j < 34; j++ )); do
+                                        out " "
+                                   done
+                              else
+                                   for (( j=${#cipher}; j < 50; j++ )); do
+                                        out " "
+                                   done
+                              fi
                          fi
                          if ! "$WIDE"; then
                               "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
@@ -5029,7 +5070,7 @@ run_server_preference() {
      local limitedsense supported_sslv2_ciphers
      local -a cipher proto
      local proto_ossl proto_txt proto_hex cipherlist i
-     local -i ret=0 j sclient_success
+     local -i ret=0 j sclient_success str_len
      local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256"
      # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
      local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
@@ -5288,15 +5329,28 @@ run_server_preference() {
                if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
                      if [[ -z "$prev_cipher" ]] || [[ "$prev_cipher" != "${cipher[i]}" ]]; then
                          [[ -n "$prev_cipher" ]] && outln
-                         if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
-                              out "$(printf -- "     %-30s %s" "${cipher[i]}:" "${proto[i]}")"     # print out both
+                         str_len=${#cipher[i]}
+                         out "     "
+                         if [[ "$COLOR" -le 2 ]]; then
+                              out "${cipher[i]}"
                          else
-                              out "$(printf -- "     %-51s %s" "${cipher[i]}:" "${proto[i]}")"     # print out both
+                              pr_cipher_quality "${cipher[i]}"
+                         fi
+                         out ":"
+                         if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
+                              for (( 1; str_len < 30; str_len++ )); do
+                                   out " "
+                              done
+                         else
+                              for (( 1; str_len < 51; str_len++ )); do
+                                   out " "
+                              done
                          fi
                     else
-                         out ", ${proto[i]}"           # same cipher --> only print out protocol behind it
-                   fi
-                   prev_cipher="${cipher[i]}"
+                         out ", "           # same cipher --> only print out protocol behind it
+                    fi
+                    out "${proto[i]}"
+                    prev_cipher="${cipher[i]}"
                fi
                fileout "order_${proto[i]}_cipher" "INFO" "Default cipher on ${proto[i]}: ${cipher[i]} $limitedsense"
           done
@@ -5568,7 +5622,11 @@ cipher_pref_check() {
                add_tls_offered "$p" yes
                outln
                out "$(printf "    %-10s " "$proto: ")"
-               out "$(out_row_aligned_max_width "$order" "               " $TERM_WIDTH)"
+               if [[ "$COLOR" -le 2 ]]; then
+                    out "$(out_row_aligned_max_width "$order" "               " $TERM_WIDTH)"
+               else
+                    out_row_aligned_max_width_by_entry "$order" "               " $TERM_WIDTH pr_cipher_quality
+               fi
                fileout "order_$p" "INFO" "Default cipher order for protocol $p: $order"
           fi
      done <<< "$(tm_out " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
@@ -7394,7 +7452,7 @@ run_pfs() {
                     neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
                     if "$SHOW_EACH_C"; then
                          if "${ciphers_found[i]}"; then
-                              pr_done_best "available"
+                              pr_cipher_quality "${rfc_ciph[i]}" "available"
                          else
                               pr_deemphasize "not a/v"
                          fi
@@ -7402,7 +7460,13 @@ run_pfs() {
                     outln "${sigalg[i]}"
                fi
           done
-          ! "$WIDE" && out "$(out_row_aligned_max_width "$pfs_ciphers" "                              " $TERM_WIDTH)"
+          if ! "$WIDE"; then
+               if [[ "$COLOR" -le 2 ]]; then
+                    out "$(out_row_aligned_max_width "$pfs_ciphers" "                              " $TERM_WIDTH)"
+               else
+                    out_row_aligned_max_width_by_entry "$pfs_ciphers" "                              " $TERM_WIDTH pr_cipher_quality
+               fi
+          fi
           debugme echo $pfs_offered
           "$WIDE" || outln
           fileout "pfs_ciphers" "INFO" "(Perfect) Forward Secrecy Ciphers: $pfs_ciphers"
@@ -13161,7 +13225,7 @@ output options (can also be preset via environment variables):
                 rfc|                 rfc: use the RFC cipher suite name as the primary name cipher suite name form
                 no-openssl|          no-openssl: don't display the OpenSSL cipher suite name, display RFC names only
                 no-rfc>              no-rfc: don't display the RFC cipher suite name, display OpenSSL names only
-     --color <0|1|2>               0: no escape or other codes,  1: b/w escape codes,  2: color (default)
+     --color <0|1|2|3>             0: no escape or other codes,  1: b/w escape codes,  2: color (default), 3: extra color (color all ciphers)
      --colorblind                  swap green and blue in the output
      --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
 
@@ -15043,9 +15107,9 @@ parse_cmd_line() {
                     COLOR="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case $COLOR in
-                         [0-2]) ;;
+                         [0-3]) ;;
                          *)   COLOR=2
-                              tmln_magenta "\nunrecognized color: \"$1\", must be between 0..2" 1>&2
+                              tmln_magenta "\nunrecognized color: \"$1\", must be between 0..3" 1>&2
                               help 1
                     esac
                     ;;
