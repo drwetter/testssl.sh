@@ -14436,7 +14436,7 @@ nmap_to_plain_file() {
      #FIXME: IPv6 is missing here
 
      # Ok, since we are here we are sure to have an nmap file. To avoid questions we make sure it's the right format too
-     if [[ "$(head -1 "$FNAME")" =~ ( -oG )(.*) ]]; then
+     if [[ "$(head -1 "$FNAME")" =~ ( -oG )(.*) ]] || [[ "$(head -1 "$FNAME")" =~ ( -oA )(.*) ]] ; then
           # yes, greppable
           if [[ $(grep -c Status "$FNAME") -ge 1 ]]; then
                [[ $(grep -c  '\/open\/' "$FNAME")  -eq 0 ]] && \
@@ -14445,7 +14445,7 @@ nmap_to_plain_file() {
                fatal "strange, nmap grepable misses \"Status\"" -1
           fi
      else
-          fatal "Nmap file $FNAME is not in grep(p)able format (-oG filename.gmap)" -1
+          fatal "Nmap file $FNAME is not in grep(p)able format (-oG filename.g(n)map)" -1
      fi
      # strip extension and create output file *.txt in same folder
      target_fname="${FNAME%.*}.txt"
