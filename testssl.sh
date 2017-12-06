@@ -14556,6 +14556,7 @@ get_next_message_testing_parallel_result() {
                # produced some JSON output.
                "$FIRST_JSON_OUTPUT" || fileout_separator                     # this is needed for appended output, see #687
                FIRST_JSON_OUTPUT=false
+               FIRST_FINDING=false
                cat "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" >> "$JSONFILE"
           fi
           "$CSVHEADER" && cat "$TEMPDIR/csvfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).csv" >> "$CSVFILE"
