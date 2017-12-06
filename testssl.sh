@@ -14534,6 +14534,7 @@ run_mass_testing() {
                "$first" || fileout_separator                         # this is needed for appended output, see #687
                first=false
                cat "$TEMPDIR/jsonfile_child.json" >> "$JSONFILE"
+               FIRST_FINDING=false
           fi
      done < "${FNAME}"
      return $?
