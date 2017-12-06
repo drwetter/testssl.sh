@@ -7840,7 +7840,7 @@ starttls_just_read(){
 }
 
 starttls_full_read(){
-     starttls_read_data=()
+     local starttls_read_data=()
      local one_line=""
      local ret=0
      local cont_pattern="$1"
@@ -7863,6 +7863,11 @@ starttls_full_read(){
                fi
           fi
           starttls_read_data+=("${one_line}")
+          if [[ $DEBUG -ge 4 ]]; then
+               echo "one_line: ${one_line}"
+               echo "end_pattern: ${end_pattern}"
+               echo "cont_pattern: ${cont_pattern}"
+          fi
           if [[ ${one_line} =~ ${end_pattern} ]]; then
                debugme echo "=== full read finished ==="
                IFS="${oldIFS}"
@@ -7907,9 +7912,9 @@ starttls_smtp_dialog(){
 
 starttls_pop3_dialog() {
      debugme echo "=== starting pop3 STARTTLS dialog ==="
-     starttls_full_read '$^' '^+OK'                        && debugme echo "received server greeting" &&
+     starttls_full_read '^\+OK' '^\+OK'                    && debugme echo "received server greeting" &&
      starttls_just_send 'STLS'                             && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '$^' '^+OK'                        && debugme echo "received ack for STARTTLS"
+     starttls_full_read '^\+OK' '^\+OK'                    && debugme echo "received ack for STARTTLS"
      local ret=$?
      debugme echo "=== finished pop3 STARTTLS dialog with ${ret} ==="
      return $ret
@@ -8060,8 +8065,9 @@ EOF
                     fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" -4
           esac
      fi
-
-     return 0
+     [[ $? -eq 0 ]] && return 0
+     prln_warning "STARTTLS handshake failed"
+     return 1
 }
 
 
