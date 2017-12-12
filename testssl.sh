@@ -8119,7 +8119,6 @@ sockread_fast() {
 get_pub_key_size() {
      local pubkey pubkeybits
      local -i i len1 len
-     local tmppubkeyfile
 
      # OpenSSL displays the number of bits for RSA and ECC
      pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
@@ -8127,10 +8126,7 @@ get_pub_key_size() {
           echo "Server public key is $pubkeybits" >> $TMPFILE
      else
           # This extracts the public key for DSA, DH, and GOST
-          tmppubkeyfile=$(mktemp $TEMPDIR/pubkey.XXXXXX) || return 7
-          $OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -outform DER -out "$tmppubkeyfile" 2>>$ERRFILE
-          pubkey=$(hexdump -v -e '16/1 "%02X"' "$tmppubkeyfile")
-          rm $tmppubkeyfile
+          pubkey=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')
           [[ -z "$pubkey" ]] && return 1
           # Skip over tag and length of subjectPublicKeyInfo
           i=2
@@ -8223,7 +8219,7 @@ get_pub_key_size() {
 get_dh_ephemeralkey() {
      local tls_serverkeyexchange_ascii="$1"
      local -i tls_serverkeyexchange_ascii_len offset
-     local dh_p dh_g dh_y dh_param len1 key_bitstring tmp_der_key_file
+     local dh_p dh_g dh_y dh_param len1 key_bitstring
      local -i i dh_p_len dh_g_len dh_y_len dh_param_len
 
      tls_serverkeyexchange_ascii_len=${#tls_serverkeyexchange_ascii}
@@ -8363,10 +8359,7 @@ get_dh_ephemeralkey() {
           len1="82$(printf "%04x" $((i/2)))"
      fi
      key_bitstring="30${len1}${dh_param}${dh_y}"
-     tmp_der_key_file=$(mktemp $TEMPDIR/pub_key_der.XXXXXX) || return 1
-     asciihex_to_binary_file "$key_bitstring" "$tmp_der_key_file"
-     key_bitstring="$($OPENSSL pkey -pubin -in $tmp_der_key_file -inform DER 2> $ERRFILE)"
-     rm $tmp_der_key_file
+     key_bitstring="$(asciihex_to_binary_file "$key_bitstring" "/dev/stdout" | $OPENSSL pkey -pubin -inform DER 2> $ERRFILE)"
      [[ -z "$key_bitstring" ]] && return 1
      tm_out "$key_bitstring"
      return 0
@@ -8384,7 +8377,7 @@ get_dh_ephemeralkey() {
 parse_sslv2_serverhello() {
      local ret v2_hello_ascii v2_hello_initbyte v2_hello_length
      local v2_hello_handshake v2_cert_type v2_hello_cert_length
-     local v2_hello_cipherspec_length tmp_der_certfile
+     local v2_hello_cipherspec_length
      local -i certificate_len nr_ciphers_detected offset i
      local ret=3
      local parse_complete="false"
@@ -8469,14 +8462,12 @@ parse_sslv2_serverhello() {
           certificate_len=2*$(hex2dec "$v2_hello_cert_length")
 
           if [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
-               tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return $ret
-               asciihex_to_binary_file "${v2_hello_ascii:26:certificate_len}" "$tmp_der_certfile"
-               $OPENSSL x509 -inform DER -in $tmp_der_certfile -outform PEM -out $HOSTCERT 2>$ERRFILE
+               asciihex_to_binary_file "${v2_hello_ascii:26:certificate_len}" "/dev/stdout" | \
+                    $OPENSSL x509 -inform DER -outform PEM -out $HOSTCERT 2>$ERRFILE
                if [[ $? -ne 0 ]]; then
                     debugme echo "Malformed certificate in ServerHello."
                     return 1
                fi
-               rm $tmp_der_certfile
                get_pub_key_size
                echo "======================================" >> $TMPFILE
           fi
@@ -8691,12 +8682,12 @@ parse_tls_serverhello() {
      local tls_msg_type tls_content_type tls_protocol tls_protocol2 tls_hello_time
      local tls_err_level tls_err_descr_no tls_cipher_suite rfc_cipher_suite tls_compression_method
      local tls_extensions="" extension_type named_curve_str="" named_curve_oid
-     local -i i j extension_len tls_extensions_len ocsp_response_len ocsp_response_list_len
+     local -i i j extension_len tls_extensions_len ocsp_response_len=0 ocsp_response_list_len ocsp_resp_offset
      local -i certificate_list_len certificate_len cipherlist_len
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
-     local tmp_der_certfile tmp_pem_certfile hostcert_issuer="" ocsp_response=""
-     local len1 len2 len3 key_bitstring="" tmp_der_key_file
+     local hostcert_issuer=""
+     local len1 len2 len3 key_bitstring="" pem_certificate
      local dh_p dh_param ephemeral_param rfc7919_param
      local -i dh_p_len dh_param_len
 
@@ -9142,10 +9133,7 @@ parse_tls_serverhello() {
                                     key_bitstring="3082${len1}$key_bitstring"
                                fi
                                if [[ -n "$key_bitstring" ]]; then
-                                    tmp_der_key_file=$(mktemp $TEMPDIR/pub_key_der.XXXXXX) || return 1
-                                    asciihex_to_binary_file "$key_bitstring" "$tmp_der_key_file"
-                                    key_bitstring="$($OPENSSL pkey -pubin -in $tmp_der_key_file -inform DER 2>$ERRFILE)"
-                                    rm $tmp_der_key_file
+                                    key_bitstring="$(asciihex_to_binary_file "$key_bitstring" "/dev/stdout" | $OPENSSL pkey -pubin -inform DER 2>$ERRFILE)"
                                fi
                           fi
                           ;;
@@ -9368,16 +9356,13 @@ parse_tls_serverhello() {
                tmpfile_handle $FUNCNAME.txt
                return 1
           fi
-          tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return 1
-          asciihex_to_binary_file "${tls_certificate_ascii:12:certificate_len}" "$tmp_der_certfile"
-          $OPENSSL x509 -inform DER -in "$tmp_der_certfile" -outform PEM -out "$HOSTCERT" 2>$ERRFILE
+          asciihex_to_binary_file "${tls_certificate_ascii:12:certificate_len}" "/dev/stdout" | \
+               $OPENSSL x509 -inform DER -outform PEM -out "$HOSTCERT" 2>$ERRFILE
           if [[ $? -ne 0 ]]; then
                debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
-               rm "$tmp_der_certfile"
                tmpfile_handle $FUNCNAME.txt
                return 1
           fi
-          rm "$tmp_der_certfile"
           get_pub_key_size
           echo "===============================================================================" >> $TMPFILE
           echo "---" >> $TMPFILE
@@ -9403,28 +9388,23 @@ parse_tls_serverhello() {
                     tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
-               tmp_der_certfile=$(mktemp $TEMPDIR/der_cert.XXXXXX) || return 1
-               asciihex_to_binary_file "${tls_certificate_ascii:i:certificate_len}" "$tmp_der_certfile"
-               tmp_pem_certfile=$(mktemp $TEMPDIR/pem_cert.XXXXXX) || return 1
-               $OPENSSL x509 -inform DER -in "$tmp_der_certfile" -outform PEM -out "$tmp_pem_certfile" 2>$ERRFILE
+               pem_certificate="$(asciihex_to_binary_file "${tls_certificate_ascii:i:certificate_len}" "/dev/stdout" | \
+                                  $OPENSSL x509 -inform DER -outform PEM 2>$ERRFILE)"
                if [[ $? -ne 0 ]]; then
                     debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
-                    rm "$tmp_der_certfile" "$tmp_pem_certfile"
                     tmpfile_handle $FUNCNAME.txt
                     return 1
                fi
                nr_certs+=1
-               CAsubjectDN="$($OPENSSL x509 -in $tmp_pem_certfile -noout -subject 2>>$ERRFILE)"
-               CAissuerDN="$($OPENSSL x509 -in $tmp_pem_certfile -noout -issuer 2>>$ERRFILE)"
+               CAsubjectDN="$($OPENSSL x509 -noout -subject 2>>$ERRFILE <<< "$pem_certificate")"
+               CAissuerDN="$($OPENSSL x509 -noout -issuer 2>>$ERRFILE <<< "$pem_certificate")"
                echo " $nr_certs s:${CAsubjectDN:9}" >> $TMPFILE
                echo "   i:${CAissuerDN:8}" >> $TMPFILE
-               cat "$tmp_pem_certfile"  >> $TMPFILE
-               cat "$tmp_pem_certfile" >> "$TEMPDIR/intermediatecerts.pem"
-               rm "$tmp_der_certfile"
-               if [[ -n "$hostcert_issuer" ]] || [[ $tls_certificate_status_ascii_len -eq 0 ]]; then
-                    rm "$tmp_pem_certfile"
-               else
-                    hostcert_issuer="$tmp_pem_certfile"
+               echo "$pem_certificate"  >> $TMPFILE
+               echo "$pem_certificate" >> "$TEMPDIR/intermediatecerts.pem"
+               if [[ -z "$hostcert_issuer" ]] && [[ $tls_certificate_status_ascii_len -ne 0 ]]; then
+                    hostcert_issuer=$(mktemp $TEMPDIR/pem_cert.XXXXXX) || return 1
+                    echo "$pem_certificate" > "$hostcert_issuer"
                fi
           done
           echo "---" >> $TMPFILE
@@ -9447,8 +9427,7 @@ parse_tls_serverhello() {
                tmpfile_handle $FUNCNAME.txt
                return 1
           fi
-          ocsp_response=$(mktemp $TEMPDIR/ocsp_response.XXXXXX) || return 1
-          asciihex_to_binary_file "${tls_certificate_status_ascii:8:ocsp_response_len}" "$ocsp_response"
+          ocsp_resp_offset=8
      elif [[ $tls_certificate_status_ascii_len -ne 0 ]] && [[ "${tls_certificate_status_ascii:0:2}" == "02" ]]; then
           # This is a list of OCSP responses, but only the first one is needed
           # since the first one corresponds to the server's certificate.
@@ -9464,17 +9443,18 @@ parse_tls_serverhello() {
                tmpfile_handle $FUNCNAME.txt
                return 1
           fi
-          ocsp_response=$(mktemp $TEMPDIR/ocsp_response.XXXXXX) || return 1
-          asciihex_to_binary_file "${tls_certificate_status_ascii:14:ocsp_response_len}" "$ocsp_response"
+          ocsp_resp_offset=14
      fi
-     if [[ -n "$ocsp_response" ]]; then
+     if [[ $ocsp_response_len -ne 0 ]]; then
           echo "OCSP response:" >> $TMPFILE
           echo "===============================================================================" >> $TMPFILE
           if [[ -n "$hostcert_issuer" ]]; then
-               $OPENSSL ocsp -no_nonce -CAfile $TEMPDIR/intermediatecerts.pem -issuer $hostcert_issuer -cert $HOSTCERT -respin $ocsp_response -resp_text >> $TMPFILE 2>$ERRFILE
+               asciihex_to_binary_file "${tls_certificate_status_ascii:ocsp_resp_offset:ocsp_response_len}" "/dev/stdout" | \
+                    $OPENSSL ocsp -no_nonce -CAfile $TEMPDIR/intermediatecerts.pem -issuer $hostcert_issuer -cert $HOSTCERT -respin /dev/stdin -resp_text >> $TMPFILE 2>$ERRFILE
                rm "$hostcert_issuer"
           else
-               $OPENSSL ocsp -respin $ocsp_response -resp_text >> $TMPFILE 2>$ERRFILE
+               asciihex_to_binary_file "${tls_certificate_status_ascii:ocsp_resp_offset:ocsp_response_len}" "/dev/stdout" | \
+                    $OPENSSL ocsp -respin /dev/stdin -resp_text >> $TMPFILE 2>$ERRFILE
           fi
           echo "===============================================================================" >> $TMPFILE
      elif [[ "$process_full" == "all" ]]; then
