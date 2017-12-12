@@ -260,6 +260,9 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
 \fB\-T, \-\-ticketbleed\fR Checks for Ticketbleed memory leakage in BigIP loadbalancers\.
 .
 .P
+\fB\-BB, \-\-robot\fR Checks for vulnerability to Bleichenbacher attacks\.
+.
+.P
 \fB\-R, \-\-renegotiation\fR Tests renegotiation vulnerabilities\. Currently there\'s a check for "Secure Renegotiation" and for "Secure Client\-Initiated Renegotiation"\. Please be aware that vulnerable servers to the latter can likely be DoSed very easily (HTTP)\. A check for "Insecure Client\-Initiated Renegotiation" is not yet implemented\.
 .
 .P
