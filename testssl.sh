@@ -275,6 +275,7 @@ HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
 HAS_SSL2=false
 HAS_SSL3=false
 HAS_TLS13=false
+HAS_PKUTIL=false
 HAS_NO_SSL2=false
 HAS_NOSERVERNAME=false
 HAS_ALPN=false
@@ -12899,6 +12900,12 @@ run_robot() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability " && outln
      pr_bold " ROBOT                                     "
 
+     if [[ ! "$HAS_PKUTIL" ]]; then
+          prln_local_problem "Your $OPENSSL does not support the pkeyutl utility."
+          fileout "ROBOT" "WARN" "Your $OPENSSL does not support the pkeyutl utility."
+          return 7
+     fi
+
      if [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
           tls_hexcode="03"
      elif [[ 0 -eq $(has_server_protocol tls1_1) ]]; then
@@ -13006,8 +13013,8 @@ run_robot() {
                          socksend ",x15, x03, x01, x00, x02, x02, x00" 0
                     fi
                     close_socket
-                    prln_local_problem "Your $OPENSSL does not support the pkeyutl utility."
-                    fileout "ROBOT" "WARN" "Your $OPENSSL does not support the pkeyutl utility."
+                    prln_fixme "Conversion of public key failed around line $((LINENO - 9))"
+                    fileout "ROBOT" "WARN" "Conversion of public key failed around line $((LINENO - 10)) "
                     return 1
                fi
 
@@ -13300,6 +13307,9 @@ find_openssl_binary() {
 
      $OPENSSL s_client -noservername -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_NOSERVERNAME=true
+
+     $OPENSSL pkeyutl 2>&1 | grep -q Error || \
+          HAS_PKUTIL=true
 
      $OPENSSL s_client -help 2>$s_client_has
 
