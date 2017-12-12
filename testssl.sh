@@ -12876,6 +12876,252 @@ run_grease() {
      fi
 }
 
+# If the server supports any non-PSK cipher suites that use RSA key transport,
+# check if the server is vulnerable to Bleichenbacher's Oracle Threat (ROBOT) attacks.
+# See "Return Of Bleichenbacher's Oracle Threat Or how we signed a Message with
+# Facebook's Private Key" by Hanno Böck, Juraj Somorovsky, and Craig Young.
+run_robot() {
+     local tls_hexcode="03"
+     # A list of all non-PSK cipher suites that use RSA key transport
+     local cipherlist="00,9d, c0,a1, c0,9d, 00,3d, 00,35, 00,c0, 00,84, c0,3d, c0,51, c0,7b, ff,00, ff,01, ff,02, ff,03, c0,a0, c0,9c, 00,9c, 00,3c, 00,2f, 00,ba, 00,96, 00,41, 00,07, c0,3c, c0,50, c0,7a, 00,05, 00,04, 00,0a, fe,ff, ff,e0, 00,62, 00,09, 00,61, fe,fe, ff,e1, 00,64, 00,60, 00,08, 00,06, 00,03, 00,3b, 00,02, 00,01"
+     # A list of all non-PSK cipher suites that use RSA key transport and that use AES in either GCM or CBC mode.
+     local aes_gcm_cbc_cipherlist="00,9d, 00,9c, 00,3d, 00,35, 00,3c, 00,2f"
+     local padded_pms encrypted_pms cke_prefix client_key_exchange rnd_pad
+     local rnd_pms="aa112233445566778899112233445566778899112233445566778899112233445566778899112233445566778899"
+     local change_cipher_spec finished resp
+     local -a response
+     local -i i ret len iteration testnum pubkeybits pubkeybytes
+     local vulnerable=false send_ccs_finished=true
+     local -i start_time end_time timeout=$MAX_WAITSOCK
+     local cve=""
+     local cwe=""
+
+     [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability " && outln
+     pr_bold " ROBOT                                     "
+
+     if [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
+          tls_hexcode="03"
+     elif [[ 0 -eq $(has_server_protocol tls1_1) ]]; then
+          tls_hexcode="02"
+     elif [[ 0 -eq $(has_server_protocol tls1) ]]; then
+          tls_hexcode="01"
+     elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
+          tls_hexcode="00"
+     fi
+
+     # Some hosts are only vulnerable with GCM. First send a list of
+     # ciphers that use AES in GCM or CBC mode, with the GCM ciphers
+     # listed first, and then try all ciphers that use RSA key transport
+     # if there is no connection on the first try.
+     tls_sockets "$tls_hexcode" "$aes_gcm_cbc_cipherlist"
+     ret=$?
+     if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
+          cipherlist="$aes_gcm_cbc_cipherlist"
+          tls_hexcode="${DETECTED_TLS_VERSION:2:2}"
+     else
+          if [[ "$tls_hexcode" != "03" ]]; then
+               cipherlist="$(strip_inconsistent_ciphers "$tls_hexcode" ", $cipherlist")"
+               cipherlist="${cipherlist:2}"
+          fi
+          tls_sockets "$tls_hexcode" "$cipherlist"
+          ret=$?
+          if [[ $ret -eq 2 ]]; then
+               tls_hexcode="${DETECTED_TLS_VERSION:2:2}"
+               cipherlist="$(strip_inconsistent_ciphers "$tls_hexcode" ", $cipherlist")"
+               cipherlist="${cipherlist:2}"
+          elif [[ $ret -ne 0 ]]; then
+               prln_done_best "Server does not support any cipher suites that use RSA key transport"
+               fileout "ROBOT" "OK" "ROBOT: not vulnerable (server does not support any cipher suites that use RSA key transport)"
+               return 0
+          fi
+     fi
+
+     # Run the tests in two iterations. In iteration 0, send 5 different client
+     # key exchange (CKE) messages followed by change cipher spec (CCS) and
+     # Finished messages, and check whether the server provided the same
+     # response in each case. If the server didn't provide the same response
+     # for all five messages in iteration 0, then it is vulnerable. Otherwise
+     # try a second time (iteration 1) with the same CKE messages, but without
+     # sending the CCS or Finished messages.
+     # Iterations 0 and 1 are run with a short timeout waiting for the server
+     # to respond to the CKE message. If the server was found to be potentially
+     # vulnerable in iteration 0 or 1 and testssl.sh timed out waiting for a
+     # response in some cases, then retry the test using a longer timeout value.
+     for (( iteration=0; iteration < 3; iteration++ )); do
+          if [[ $iteration -eq 1 ]]; then
+               # If the server was found to be vulnerable in iteration 0, then
+               # there's no need to try the alternative message flow.
+               "$vulnerable" && continue
+               send_ccs_finished=false
+          elif [[ $iteration -eq 2 ]]; then
+               # The tests are being rerun, so reset the vulnerable flag.
+               vulnerable=false
+          fi
+          for (( testnum=0; testnum < 5; testnum++ )); do
+               response[testnum]="untested"
+          done
+          for (( testnum=0; testnum < 5; testnum++ )); do
+               tls_sockets "$tls_hexcode" "$cipherlist" "all" "" "" "false"
+
+               # Create the padded premaster secret to encrypt. The padding should be
+               # of the form "00 02 <random> 00 <TLS version> <premaster secret>."
+               # However, for each test except testnum=0 the padding will be
+               # made incorrect in some way, as specified below.
+
+               # Determine the length of the public key and create the <random> bytes.
+               # <random> should be a length that makes total length of $padded_pms
+               # the same as the length of the public key. <random> should contain no 00 bytes.
+               pubkeybits="$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | \
+                             $OPENSSL pkey -pubin -text 2>>$ERRFILE | grep -aw "Public-Key:" | \
+                             sed -e 's/.*(//' -e 's/ bit)//')"
+               pubkeybytes=$pubkeybits/8
+               [[ $((pubkeybits%8)) -ne 0 ]] && pubkeybytes+=1
+               rnd_pad=""
+               for (( len=0; len < pubkeybytes-52; len=len+2 )); do
+                    rnd_pad+="abcd"
+               done
+               [[ $len -eq $pubkeybytes-52 ]] && rnd_pad+="ab"
+
+               case "$testnum" in
+                    # correct padding
+                    0) padded_pms="0002${rnd_pad}00${DETECTED_TLS_VERSION}${rnd_pms}" ;;
+                    # wrong first two bytes
+                    1) padded_pms="4117${rnd_pad}00${DETECTED_TLS_VERSION}${rnd_pms}" ;;
+                    # 0x00 on a wrong position
+                    2) padded_pms="0002${rnd_pad}11${rnd_pms}0011" ;;
+                    # no 0x00 in the middle
+                    3) padded_pms="0002${rnd_pad}111111${rnd_pms}" ;;
+                    # wrong version number (according to Klima / Pokorny / Rosa paper)
+                    4) padded_pms="0002${rnd_pad}000202${rnd_pms}" ;;
+               esac
+
+               # Encrypt the padded premaster secret using the server's public key.
+               encrypted_pms="$(asciihex_to_binary_file "$padded_pms" "/dev/stdout" | \
+                    $OPENSSL pkeyutl -encrypt -certin -inkey $HOSTCERT -pkeyopt rsa_padding_mode:none 2>/dev/null | \
+                    hexdump -v -e '16/1 "%02x"')"
+               if [[ -z "$encrypted_pms" ]]; then
+                    if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+                         socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+                    else
+                         socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+                    fi
+                    close_socket
+                    prln_local_problem "Your $OPENSSL does not support the pkeyutl utility."
+                    fileout "ROBOT" "WARN" "Your $OPENSSL does not support the pkeyutl utility."
+                    return 1
+               fi
+
+               # Create the client key exchange message.
+               len=${#encrypted_pms}/2
+               cke_prefix="16${DETECTED_TLS_VERSION}$(printf "%04x" $((len+6)))10$(printf "%06x" $((len+2)))$(printf "%04x" $len)"
+               encrypted_pms="$cke_prefix$encrypted_pms"
+               len=${#encrypted_pms}
+               client_key_exchange=""
+               for (( i=0; i<len; i=i+2 )); do
+                   client_key_exchange+=", x${encrypted_pms:i:2}"
+               done
+
+               # The contents of change cipher spec are fixed.
+               change_cipher_spec=", x14, x${DETECTED_TLS_VERSION:0:2}, x${DETECTED_TLS_VERSION:2:2}, x00, x01, x01"
+
+               # Send an arbitrary Finished message.
+               finished=", x16, x${DETECTED_TLS_VERSION:0:2}, x${DETECTED_TLS_VERSION:2:2}
+                         , x00, x40, x6e, x49, x65, x68, x00, x46, x79, xfd, x5a, x57, xdc
+                         , x3e, xef, xb2, xd2, xac, xe0, x8c, x54, x2d, x5f, x00, x87, xdb
+                         , xb6, xe3, x77, x2c, x9d, x88, x27, x38, x98, x7d, xcd, x7e, xac
+                         , xdd, x5d, x72, xbe, x24, x0d, x20, x36, x14, x0e, x94, x51, xde
+                         , xa0, xb6, xc7, x56, x28, xd8, xa1, xcb, x24, xb9, x03, xd0, x7c, x50"
+
+               if "$send_ccs_finished"; then
+                    debugme echo -en "\nsending client key exchange, change cipher spec, finished... "
+                    socksend "$client_key_exchange$change_cipher_spec$finished" $USLEEP_SND
+               else
+                    debugme echo -en "\nsending client key exchange... "
+                    socksend "$client_key_exchange" $USLEEP_SND
+               fi
+               debugme echo "reading server error response..."
+               start_time=$(LC_ALL=C date "+%s")
+               sockread_serverhello 32768 $timeout
+               ret=$?
+               if [[ $ret -eq 0 ]]; then
+                    end_time=$(LC_ALL=C date "+%s")
+                    resp=$(hexdump -v -e '16/1 "%02x"' "$SOCK_REPLY_FILE")
+                    response[testnum]="${resp%%[!0-9A-F]*}"
+                    # The first time a response is received to a client key
+                    # exchange message, measure the amount of time it took to
+                    # receive a response and set the timeout value for future
+                    # tests to 2 seconds longer than it took to receive a response.
+                    [[ $iteration -ne 2 ]] && [[ $timeout -eq $MAX_WAITSOCK ]] && \
+                         [[ $((end_time-start_time)) -lt $((MAX_WAITSOCK-2)) ]] && \
+                         timeout=$((end_time-start_time+2))
+               else
+                    response[testnum]="Timeout waiting for alert"
+               fi
+               debugme echo -e "\nresponse[$testnum] = ${response[testnum]}"
+               [[ $DEBUG -ge 3 ]] && [[ $ret -eq 0 ]] && parse_tls_serverhello "${response[testnum]}"
+               close_socket
+
+               # Don't continue testing if it has already been determined that
+               # tests need to be rerun with a longer timeout.
+               if [[ $iteration -ne 2 ]]; then
+                    for (( i=1; i <= testnum; i++ )); do
+                         if [[ "${response[i]}" != "${response[$((i-1))]}" ]] && \
+                            ( [[ "${response[i]}" == "Timeout waiting for alert" ]] || \
+                              [[ "${response[$((i-1))]}" == "Timeout waiting for alert" ]] ); then
+                              vulnerable=true
+                              break
+                         fi
+                    done
+                    "$vulnerable" && break
+               fi
+               # Don't continue testing if it has already been determined that the server is
+               # stronly vulnerable.
+               if [[ $testnum -eq 2 ]]; then
+                    [[ "${response[1]}" != "${response[2]}" ]] && break
+               elif [[ $testnum -eq 3 ]]; then
+                    [[ "${response[2]}" != "${response[3]}" ]] && break
+                    [[ "${response[0]}" != "${response[1]}" ]] && break
+               fi
+          done
+          # If the server provided the same error message for all tests, then this
+          # is an indication that the server is not vulnerable.
+          if [[ "${response[0]}" != "${response[1]}" ]] || [[ "${response[1]}" != "${response[2]}" ]] || \
+             [[ "${response[2]}" != "${response[3]}" ]] || [[ "${response[3]}" != "${response[4]}" ]]; then
+               vulnerable=true
+
+               # If the test was run with a short timeout and was found to be
+               # potentially vulnerable due to some tests timing out, then
+               # verify the results by rerunning with a longer timeout.
+               if [[ $timeout -eq $MAX_WAITSOCK ]]; then
+                    break
+               elif [[ "${response[0]}" == "Timeout waiting for alert" ]] || \
+                    [[ "${response[1]}" == "Timeout waiting for alert" ]] || \
+                    [[ "${response[2]}" == "Timeout waiting for alert" ]] || \
+                    [[ "${response[3]}" == "Timeout waiting for alert" ]] || \
+                    [[ "${response[4]}" == "Timeout waiting for alert" ]]; then
+                    timeout=10
+               else
+                    break
+               fi
+          fi
+          ! "$vulnerable" && [[ $iteration -eq 1 ]] && break
+     done
+
+     if "$vulnerable"; then
+          if [[ "${response[1]}" == "${response[2]}" ]] && [[ "${response[2]}" == "${response[3]}" ]]; then
+               pr_svrty_medium "VULNERABLE (NOT ok)"; outln " - weakly vulnerable as the attack would take too long"
+               fileout "ROBOT" "MEDIUM" "ROBOT: VULNERABLE, but the attack would take too long"
+          else
+               prln_svrty_critical "VULNERABLE (NOT ok)"
+               fileout "ROBOT" "CRITICAL" "ROBOT: VULNERABLE"
+          fi
+     else
+          prln_done_best "not vulnerable (OK)"
+          fileout "ROBOT" "OK" "ROBOT: not vulnerable"
+     fi
+     return 0
+}
+
 old_fart() {
      out "Get precompiled bins or compile "
      pr_url "https://github.com/PeterMosmans/openssl"
@@ -13192,6 +13438,7 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E and -g):
      -H, --heartbleed              tests for Heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -T, --ticketbleed             tests for Ticketbleed vulnerability in BigIP loadbalancers
+     -BB, --robot                  tests for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability
      -R, --renegotiation           tests for renegotiation vulnerabilities
      -C, --compression, --crime    tests for CRIME vulnerability (TLS compression issue)
      -B, --breach                  tests for BREACH vulnerability (HTTP compression issue)
@@ -14724,6 +14971,7 @@ initialize_globals() {
      do_breach=false
      do_ccs_injection=false
      do_ticketbleed=false
+     do_robot=false
      do_cipher_per_proto=false
      do_crime=false
      do_freak=false
@@ -14766,6 +15014,7 @@ set_scanning_defaults() {
      do_heartbleed=true
      do_ccs_injection=true
      do_ticketbleed=true
+     do_robot=true
      do_crime=true
      do_freak=true
      do_logjam=true
@@ -14790,7 +15039,7 @@ query_globals() {
      local true_nr=0
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_robot do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
@@ -14803,7 +15052,7 @@ debug_globals() {
      local gbl
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_robot do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
@@ -14952,6 +15201,7 @@ parse_cmd_line() {
                     do_heartbleed=true
                     do_ccs_injection=true
                     do_ticketbleed=true
+                    do_robot=true
                     do_renego=true
                     do_crime=true
                     do_breach=true
@@ -14977,6 +15227,9 @@ parse_cmd_line() {
                -T|--ticketbleed)
                     do_ticketbleed=true
                     let "VULN_COUNT++"
+                    ;;
+               -BB|--robot)
+                    do_robot=true
                     ;;
                -R|--renegotiation)
                     do_renego=true
@@ -15384,6 +15637,7 @@ lets_roll() {
      $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); time_right_align run_heartbleed; }
      $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); time_right_align run_ccs_injection; }
      $do_ticketbleed && { run_ticketbleed; ret=$(($? + ret)); time_right_align run_ticketbleed; }
+     $do_robot && { run_robot; ret=$(($? + ret)); time_right_align run_robot; }
      $do_renego && { run_renego; ret=$(($? + ret)); time_right_align run_renego; }
      $do_crime && { run_crime; ret=$(($? + ret)); time_right_align run_crime; }
      $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret));  time_right_align run_breach; }

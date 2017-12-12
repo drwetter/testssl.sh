@@ -176,6 +176,8 @@ If the server provides no matching record in Subject Alternative Name (SAN) but 
 
 `-T, --ticketbleed`		Checks for Ticketbleed memory leakage in BigIP loadbalancers.
 
+`-BB, --robot`		Checks for vulnerability to Bleichenbacher attacks.
+
 `-R, --renegotiation`           Tests renegotiation vulnerabilities. Currently there's a check for "Secure Renegotiation" and for "Secure Client-Initiated Renegotiation". Please be aware that vulnerable servers to the latter can likely be DoSed very easily (HTTP). A check for "Insecure Client-Initiated Renegotiation" is not yet implemented.
 
 `-C, --compression, --crime`    Checks for CRIME ("Compression Ratio Info-leak Made Easy") vulnerability in TLS. CRIME in SPDY is not yet being checked for.

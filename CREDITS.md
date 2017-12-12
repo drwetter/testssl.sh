@@ -15,6 +15,7 @@
   - numerous fixes
   - better error msg suppression (not fully installed openssl
   - GREASE support
+  - Bleichenbacher vulnerability test
   - TLS 1.3 support
 
 ##### Credits also to

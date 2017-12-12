@@ -74,6 +74,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * Better formatting of output (indentation)
 * Choice showing the RFC naming scheme only
 * LUCKY13 and SWEET32 checks
+* Check for vulnerability to Bleichenbacher attacks
 * Ticketbleed check
 * Decoding of unencrypted BIG IP cookies
 * LOGJAM: now checking also for known DH parameters
