@@ -12878,8 +12878,8 @@ run_grease() {
 
 # If the server supports any non-PSK cipher suites that use RSA key transport,
 # check if the server is vulnerable to Bleichenbacher's Oracle Threat (ROBOT) attacks.
-# See "Return Of Bleichenbacher's Oracle Threat Or how we signed a Message with
-# Facebook's Private Key" by Hanno Böck, Juraj Somorovsky, and Craig Young.
+# See "Return Of Bleichenbacher's Oracle Threat (ROBOT)" by Hanno Böck,
+# Juraj Somorovsky, and Craig Young (https://robotattack.org).
 run_robot() {
      local tls_hexcode="03"
      # A list of all non-PSK cipher suites that use RSA key transport
