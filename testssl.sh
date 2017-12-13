@@ -5950,7 +5950,7 @@ get_server_certificate() {
      local success
      local npn_params="" line
      local savedir
-     local nrsaved
+     local nrsaved=0
 
      "$HAS_SPDY" && [[ -z "$STARTTLS" ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
 
@@ -5975,7 +5975,7 @@ get_server_certificate() {
                   /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
                   inc { print > ("level" n ".crt") }
                   /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
-               nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
+               [[ -s level0.crt ]] && nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
                if [[ $nrsaved -eq 0 ]]; then
                     success=1
                else
@@ -6039,7 +6039,7 @@ get_server_certificate() {
              /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
              inc { print > ("level" n ".crt") }
              /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
-     nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
+     [[ -s level0.crt ]] && nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
      if [[ $nrsaved -eq 0 ]]; then
          success=1
      else
