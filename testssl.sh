@@ -276,6 +276,7 @@ HAS_SSL2=false
 HAS_SSL3=false
 HAS_TLS13=false
 HAS_PKUTIL=false
+HAS_PKEY=false
 HAS_NO_SSL2=false
 HAS_NOSERVERNAME=false
 HAS_ALPN=false
@@ -8120,6 +8121,8 @@ get_pub_key_size() {
      local pubkey pubkeybits
      local -i i len1 len
 
+     "$HAS_PKEY" || return 1
+
      # OpenSSL displays the number of bits for RSA and ECC
      pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
      if [[ -n $pubkeybits ]]; then
@@ -8221,6 +8224,8 @@ get_dh_ephemeralkey() {
      local -i tls_serverkeyexchange_ascii_len offset
      local dh_p dh_g dh_y dh_param len1 key_bitstring
      local -i i dh_p_len dh_g_len dh_y_len dh_param_len
+
+     "$HAS_PKEY" || return 1
 
      tls_serverkeyexchange_ascii_len=${#tls_serverkeyexchange_ascii}
      dh_p_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:0:4}")
@@ -9100,7 +9105,10 @@ parse_tls_serverhello() {
                                     *) named_curve_str="" ; named_curve_oid="" ;;
                                esac
                                let offset=$extns_offset+20+$i
-                               if [[ $named_curve -eq 29 ]]; then
+                               if ! "$HAS_PKEY"; then
+                                    # The key can't be extracted without the pkey utility.
+                                    key_bitstring=""
+                               elif [[ $named_curve -eq 29 ]]; then
                                     key_bitstring="302a300506032b656e032100${tls_serverhello_ascii:offset:msg_len}"
                                elif [[ $named_curve -eq 30 ]]; then
                                     key_bitstring="3042300506032b656f033900${tls_serverhello_ascii:offset:msg_len}"
@@ -9566,7 +9574,7 @@ parse_tls_serverhello() {
                        *) named_curve=0;   named_curve_str="" ;;
                esac
                [[ -z "$key_bitstring" ]] && named_curve=0 && named_curve_str=""
-               if [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ BEGIN ]]; then
+               if "$HAS_PKEY" && [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ BEGIN ]]; then
                     ephemeral_param="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | grep -A 1000 "prime:")"
                     rfc7919_param="$($OPENSSL pkey -text -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -A 1000 "prime:")"
                     [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
@@ -12884,6 +12892,10 @@ run_robot() {
           prln_local_problem "Your $OPENSSL does not support the pkeyutl utility."
           fileout "ROBOT" "WARN" "Your $OPENSSL does not support the pkeyutl utility."
           return 7
+     elif ! "$HAS_PKEY"; then
+          prln_local_problem "Your $OPENSSL does not support the pkey utility."
+          fileout "ROBOT" "WARN" "Your $OPENSSL does not support the pkey utility."
+          return 7
      fi
 
      if [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
@@ -13287,6 +13299,9 @@ find_openssl_binary() {
 
      $OPENSSL s_client -noservername -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_NOSERVERNAME=true
+
+     $OPENSSL pkey -help 2>&1 | grep -q Error || \
+          HAS_PKEY=true
 
      $OPENSSL pkeyutl 2>&1 | grep -q Error || \
           HAS_PKUTIL=true
