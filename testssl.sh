@@ -12874,7 +12874,7 @@ run_robot() {
      local -i i ret len iteration testnum pubkeybits pubkeybytes
      local vulnerable=false send_ccs_finished=true
      local -i start_time end_time timeout=$MAX_WAITSOCK
-     local cve=""
+     local cve="CVE-2017-17382 CVE-2017-17427 CVE-2017-17428 CVE-2017-13098 CVE-2017-1000385 CVE-2017-13099 CVE-2016-6883 CVE-2012-5081"
      local cwe=""
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability " && outln
