@@ -276,7 +276,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--severity <severity>`         For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the `severity` value specified. Allowed are `<LOW|MEDIUM|HIGH|CRITICAL>`
 
-`--append`                      If an output file exists it will append to this file, without a header. The environment variable APPEND does the same. If the file exists and you don't use `--append` testssl.sh will exit with an error. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
+`--append`                      Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file exit with an error. `--append` however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
 
 `--outprefix <fname_prefix>`   Prepend output filename prefix <fname_prefix> before '\${NODE}.'. You can use as well the environment variable FNAME_PREFIX.
 

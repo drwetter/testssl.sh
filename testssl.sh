@@ -866,7 +866,7 @@ json_header() {
      if "$APPEND"; then
           JSONHEADER=false
      else
-          [[ -e "$JSONFILE" ]] && fatal "\"$JSONFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -s "$JSONFILE" ]] && fatal "non-empty \"$JSONFILE\" exists. Either use \"--append\" or (re)move it" 1
           "$do_json" && echo "[" > "$JSONFILE"
           "$do_pretty_json" && echo "{" > "$JSONFILE"
      fi
@@ -906,7 +906,7 @@ csv_header() {
      if "$APPEND"; then
           CSVHEADER=false
      else
-          [[ -e "$CSVFILE" ]] && fatal "\"$CSVFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -s "$CSVFILE" ]] && fatal "non-empty \"$CSVFILE\" exists. Either use \"--append\" or (re)move it" 1
           echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
      fi
      return 0
@@ -949,7 +949,7 @@ html_header() {
      if "$APPEND"; then
           HTMLHEADER=false
      else
-          [[ -e "$HTMLFILE" ]] && fatal "\"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -s "$HTMLFILE" ]] && fatal "non-empty \"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" 1
           html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
           html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
           html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
@@ -13501,7 +13501,7 @@ file output options (can also be preset via environment variables)
      --out(f,F)ile|-oa/-oA <fname> log to a LOG,JSON,CSV,HTML file (see nmap). -oA/-oa: pretty/flat JSON. "auto" uses '\${NODE}-p\${port}\${YYYYMMDD-HHMM}'
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
-     --append                      if <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists rather append then overwrite. Omits any header
+     --append                      if (non-empty) <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists, append to file. Omits any header
      --outprefix <fname_prefix>    before  '\${NODE}.' above prepend <fname_prefix>
 
 
@@ -13876,7 +13876,7 @@ prepare_logging() {
      fi
 
      if ! "$APPEND"; then
-          [[ -e "$LOGFILE" ]] && fatal "\"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -s "$LOGFILE" ]] && fatal "non-empty \"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
      fi
      tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>"$LOGFILE"
      tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>"$LOGFILE"
