@@ -8491,6 +8491,257 @@ parse_sslv2_serverhello() {
      return $ret
 }
 
+# arg1: hash function
+# arg2: key
+# arg3: text 
+hmac() {
+     local hash_fn="$1"
+     local key="$2" text="$3" output
+     local -i ret
+
+     output="$(asciihex_to_binary_file "$text" "/dev/stdout" | $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
+     ret=$?
+     tm_out "$(awk  '/=/ { print $2 }' <<< "$output")"
+     return $ret
+}
+
+# arg1: hash function
+# arg2: pseudorandom key (PRK)
+# arg2: info
+# arg3: length of output keying material in octets
+# See RFC 5869, Section 2.3
+hkdf-expand() {
+     local hash_fn="$1"
+     local prk="$2" info="$3" output=""
+     local -i out_len="$4"
+     local -i i n mod_check hash_len ret
+     local counter
+     local ti tim1 # T(i) and T(i-1)
+
+     case "$hash_fn" in
+          "-sha256") hash_len=32 ;;
+          "-sha384") hash_len=48 ;;
+          *) return 7
+     esac
+
+     n=$out_len/$hash_len
+     mod_check=$out_len%$hash_len
+     [[ $mod_check -ne 0 ]] && n+=1
+
+     tim1=""
+     for (( i=1; i <= n; i++ )); do
+          counter="$(printf "%02X\n" $i)"
+          ti="$(hmac "$hash_fn" "$prk" "$tim1$info$counter")"
+          [[ $? -ne 0 ]] && return 7
+          output+="$ti"
+          tim1="$ti"
+     done
+     out_len=2*$out_len
+     tm_out "${output:0:out_len}"
+     return 0
+}
+
+# arg1: hash function
+# arg2: secret
+# arg3: label
+# arg4: context
+# arg5: length
+# See draft-ietf-tls-tls13, Section 7.1
+hkdf-expand-label() {
+     local hash_fn="$1"
+     local secret="$2" label="$3"
+     local context="$4"
+     local -i length="$5"
+     local hkdflabel hkdflabel_label hkdflabel_context
+     local hkdflabel_length
+     local -i len
+
+     hkdflabel_length="$(printf "%04X\n" $length)"
+     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+          # "544c5320312e332c20" = "TLS 1.3, "
+          hkdflabel_label="544c5320312e332c20$label"
+     else
+          # "746c73313320" = "tls13 "
+          hkdflabel_label="746c73313320$label"
+     fi
+     len=${#hkdflabel_label}/2
+     hkdflabel_label="$(printf "%02X\n" $len)$hkdflabel_label"
+     len=${#context}/2
+     hkdflabel_context="$(printf "%02X\n" $len)$context"
+     hkdflabel="$hkdflabel_length$hkdflabel_label$hkdflabel_context"
+
+     hkdf-expand "$hash_fn" "$secret" "$hkdflabel" "$length"
+     return $?
+}
+
+# arg1: hash function
+# arg2: secret
+# arg3: label
+# arg4: ASCII-HEX of messages
+# See draft-ietf-tls-tls13, Section 7.1
+derive-secret() {
+     local hash_fn="$1"
+     local secret="$2" label="$3" messages="$4"
+     local hash_messages
+     local -i hash_len retcode
+
+     case "$hash_fn" in
+          "-sha256") hash_len=32 ;;
+          "-sha384") hash_len=48 ;;
+          *) return 7
+     esac
+
+     hash_messages="$(asciihex_to_binary_file "$messages" "/dev/stdout" | $OPENSSL dgst "$hash_fn" 2>/dev/null | awk  '/=/ { print $2 }')"
+     hkdf-expand-label "$hash_fn" "$secret" "$label" "$hash_messages" "$hash_len"
+     return $?
+}
+
+# arg1: hash function
+# arg2: private key file
+# arg3: file containing server's ephemeral public key
+# arg4: ASCII-HEX of messages (ClientHello...ServerHello)
+# See key derivation schedule diagram in Section 7.1 of draft-ietf-tls-tls13
+derive-handshake-traffic-secret() {
+     local hash_fn="$1"
+     local priv_file="$2" pub_file="$3"
+     local messages="$4"
+     local -i i ret
+     local early_secret derived_secret shared_secret handshake_secret
+
+     "$HAS_PKUTIL" || return 1
+
+     # early_secret="$(hmac "$hash_fn" "000...000" "000...000")"
+     case "$hash_fn" in
+          "-sha256") early_secret="33ad0a1c607ec03b09e6cd9893680ce210adf300aa1f2660e1b22e10f170f92a"
+                     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+                          # "6465726976656420736563726574" = "derived secret"
+                          # derived_secret="$(derive-secret "$hash_fn" "$early_secret" "6465726976656420736563726574" "")"
+                          derived_secret="c1c0c36bf8fb1d1afa949fbd360e71af69a6244a4c2eaef5bbbb6442a7277d2c"
+                     else
+                          # "64657269766564" = "derived"
+                          # derived_secret="$(derive-secret "$hash_fn" "$early_secret" "64657269766564" "")"
+                          derived_secret="6f2615a108c702c5678f54fc9dbab69716c076189c48250cebeac3576c3611ba"
+                     fi
+                     ;;
+          "-sha384") early_secret="7ee8206f5570023e6dc7519eb1073bc4e791ad37b5c382aa10ba18e2357e716971f9362f2c2fe2a76bfd78dfec4ea9b5"
+                     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+                           # "6465726976656420736563726574" = "derived secret"
+                           # derived_secret="$(derive-secret "$hash_fn" "$early_secret" "6465726976656420736563726574" "")"
+                          derived_secret="54c80fa05ee9e0532ce3db8ddeca37a0365683bcd3b27bdc88d2b9fdc115ca4ebc8edc1f0b72a6a0861e803fc34761ef"
+                     else
+                          # "64657269766564" = "derived"
+                          # derived_secret="$(derive-secret "$hash_fn" "$early_secret" "64657269766564" "")"
+                          derived_secret="1591dac5cbbf0330a4a84de9c753330e92d01f0a88214b4464972fd668049e93e52f2b16fad922fdc0584478428f282b"
+                     fi
+                     ;;
+          *) return 7
+     esac
+
+     shared_secret="$($OPENSSL pkeyutl -derive -inkey "$priv_file" -peerkey "$pub_file" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+
+     # For draft 18 use $early_secret rather than $derived_secret.
+     if [[ "${TLS_SERVER_HELLO:8:4}" == "7F12" ]]; then
+          handshake_secret="$(hmac "$hash_fn" "$early_secret" "${shared_secret%%[!0-9A-F]*}")"
+     else
+          handshake_secret="$(hmac "$hash_fn" "$derived_secret" "${shared_secret%%[!0-9A-F]*}")"
+     fi
+     [[ $? -ne 0 ]] && return 7
+
+     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+          # "7365727665722068616e647368616b65207472616666696320736563726574" = "server handshake traffic secret"
+          derived_secret="$(derive-secret "$hash_fn" "$handshake_secret" "7365727665722068616e647368616b65207472616666696320736563726574" "$messages")"
+     else
+          # "732068732074726166666963" = "s hs traffic"
+          derived_secret="$(derive-secret "$hash_fn" "$handshake_secret" "732068732074726166666963" "$messages")"
+     fi
+     [[ $? -ne 0 ]] && return 7
+     tm_out "$derived_secret"
+     return 0
+}
+
+# arg1: hash function
+# arg2: secret (created by derive-handshake-traffic-secret)
+# arg3: purpose ("key" or "iv")
+# arg4: length of the key
+# See draft-ietf-tls-tls13, Section 7.3
+derive-traffic-key() {
+     local hash_fn="$1"
+     local secret="$2" purpose="$3"
+     local -i key_length="$4"
+     local key
+
+     key="$(hkdf-expand-label "$hash_fn" "$secret" "$purpose" "" "$key_length")"
+     [[ $? -ne 0 ]] && return 7
+     tm_out "$key"
+     return 0
+}
+
+#arg1: TLS cipher
+#arg2: file containing cipher name, public key, and private key
+#arg3: First ClientHello, if response was a HelloRetryRequest
+#arg4: HelloRetryRequest, if one was sent
+#arg5: Final (or only) ClientHello
+#arg6: ServerHello
+derive-handshake-traffic-keys() {
+     local cipher="$1"
+     local tmpfile="$2"
+     local clienthello1="$3" hrr="$4" clienthello2="$5" serverhello="$6"
+     local hash_clienthello1
+     local -i key_len
+     local -i retcode
+     local hash_fn
+     local pub_file priv_file tmpfile
+
+     if [[ "$cipher" == *SHA256 ]]; then
+          hash_fn="-sha256"
+     elif [[ "$cipher" == *SHA384 ]]; then
+          hash_fn="-sha384" 
+     else
+          return 1
+     fi
+     if [[ "$cipher" == *AES_128* ]]; then
+          key_len=16
+     elif ( [[ "$cipher" == *AES_256* ]] || [[ "$cipher" == *CHACHA20_POLY1305* ]] ); then
+          key_len=32
+     else
+          return 1
+     fi
+     pub_file="$(mktemp "$TEMPDIR/pubkey.XXXXXX")" || return 7
+     awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' \
+          "$tmpfile" > "$pub_file"
+     [[ ! -s "$pub_file" ]] && return 1
+
+     priv_file="$(mktemp "$TEMPDIR/privkey.XXXXXX")" || return 7
+     if grep -q "\-\-\-\-\-BEGIN EC PARAMETERS" "$tmpfile"; then
+          awk '/-----BEGIN EC PARAMETERS/,/-----END EC PRIVATE KEY/ { print $0 }' \
+               "$tmpfile" > "$priv_file"
+     else
+          awk '/-----BEGIN PRIVATE KEY/,/-----END PRIVATE KEY/ { print $0 }' \
+               "$tmpfile" > "$priv_file"
+     fi
+     [[ ! -s "$priv_file" ]] && return 1
+
+     if [[ -n "$hrr" ]] && [[ "${serverhello:8:4}" == "7F12" ]]; then
+          derived_secret="$(derive-handshake-traffic-secret "$hash_fn" "$priv_file" "$pub_file" "$clienthello1$hrr$clienthello2$serverhello")"
+     elif [[ -n "$hrr" ]]; then
+          hash_clienthello1="$(asciihex_to_binary_file "$clienthello1" "/dev/stdout" | $OPENSSL dgst "$hash_fn" 2>/dev/null | awk  '/=/ { print $2 }')"
+          derived_secret="$(derive-handshake-traffic-secret "$hash_fn" "$priv_file" "$pub_file" "FE0000$(printf "%02x" $((${#hash_clienthello1}/2)))$hash_clienthello1$hrr$clienthello2$serverhello")"
+     else
+          derived_secret="$(derive-handshake-traffic-secret "$hash_fn" "$priv_file" "$pub_file" "$clienthello2$serverhello")"
+     fi
+     retcode=$?
+     rm $pub_file $priv_file
+     [[ $retcode -ne 0 ]] && return 1
+     # "6b6579" = "key"
+     server_write_key="$(derive-traffic-key "$hash_fn" "$derived_secret" "6b6579" "$key_len")"
+     [[ $? -ne 0 ]] && return 1
+     # "6976" = "iv"
+     server_write_iv="$(derive-traffic-key "$hash_fn" "$derived_secret" "6976" "12")"
+     [[ $? -ne 0 ]] && return 1
+     tm_out "$server_write_key $server_write_iv"
+     return 0
+}
+
 # Return:
 #     0 if arg1 contains the entire server response.
 #     1 if arg1 does not contain the entire server response.
@@ -9142,6 +9393,13 @@ parse_tls_serverhello() {
                                fi
                                if [[ -n "$key_bitstring" ]]; then
                                     key_bitstring="$(asciihex_to_binary_file "$key_bitstring" "/dev/stdout" | $OPENSSL pkey -pubin -inform DER 2>$ERRFILE)"
+                                    if [[ -z "$key_bitstring" ]] && [[ $DEBUG -ge 2 ]]; then
+                                         if [[ -n "$named_curve_str" ]]; then
+                                              prln_warning "Your $OPENSSL doesn't support $named_curve_str"
+                                         else
+                                              prln_warning "Your $OPENSSL doesn't support named curve $named_curve"
+                                         fi
+                                    fi
                                fi
                           fi
                           ;;
@@ -9585,6 +9843,8 @@ parse_tls_serverhello() {
           fi
      fi
      tmpfile_handle $FUNCNAME.txt
+
+     TLS_SERVER_HELLO="02$(printf "%06x" $(($tls_serverhello_ascii_len/2)))${tls_serverhello_ascii}"
      return 0
 }
 
@@ -10090,7 +10350,7 @@ socksend_tls_clienthello() {
      printf -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
 
-     if [[ "$tls_low_byte" -gt 0x03 ]]; then               
+     if [[ "$tls_low_byte" -gt 0x03 ]]; then
           TLS_CLIENT_HELLO="$(tolower "$NW_STR")"
           TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x0\\/\\x00\\}"
           TLS_CLIENT_HELLO="${TLS_CLIENT_HELLO//\\x1\\/\\x01\\}"
@@ -10338,9 +10598,11 @@ tls_sockets() {
      local cipher_list_2send
      local sock_reply_file2 sock_reply_file3
      local tls_hello_ascii next_packet
+     local clienthello1 hrr=""
      local process_full="$3" offer_compression=false skip=false
      local close_connection=true
      local -i hello_done=0
+     local cipher="" key_and_iv=""
 
      [[ "$5" == "true" ]] && offer_compression=true
      [[ "$6" == "false" ]] && close_connection=false
@@ -10363,6 +10625,7 @@ tls_sockets() {
 
      # if sending didn't succeed we don't bother
      if [[ $ret -eq 0 ]]; then
+          clienthello1="$TLS_CLIENT_HELLO"
           sockread_serverhello 32768
           "$TLS_DIFFTIME_SET" && TLS_NOW=$(LC_ALL=C date "+%s")
 
@@ -10373,6 +10636,7 @@ tls_sockets() {
           resend_if_hello_retry_request "$tls_hello_ascii" "$cipher_list_2send" "$4" "$process_full"
           ret=$?
           if [[ $ret -eq 2 ]]; then
+               hrr="${tls_hello_ascii:10}"
                tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
                tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
           elif [[ $ret -eq 1 ]] || [[ $ret -eq 6 ]]; then
@@ -10429,6 +10693,20 @@ tls_sockets() {
                     check_tls_serverhellodone "$tls_hello_ascii" "$process_full"
                     hello_done=$?
                     if [[ "$hello_done" -eq 3 ]]; then
+                         debugme echo "reading server hello..."
+                         parse_tls_serverhello "$tls_hello_ascii" "ephemeralkey"
+                         ret=$?
+                         if [[ "$ret" -eq 0 ]] || [[ "$ret" -eq 2 ]]; then
+                              cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                              if [[ -n "$hrr" ]]; then
+                                   key_and_iv="$(derive-handshake-traffic-keys "$cipher" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" "$clienthello1" "$hrr" "$TLS_CLIENT_HELLO" "$TLS_SERVER_HELLO")"
+                              else
+                                   key_and_iv="$(derive-handshake-traffic-keys "$cipher" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" "" "" "$TLS_CLIENT_HELLO" "$TLS_SERVER_HELLO")"
+                              fi
+                              [[ $? -ne 0 ]] && hello_done=2
+                         else
+                              hello_done=2
+                         fi
                          # The following three lines are temporary until the code
                          # to decrypt TLSv1.3 responses has been added, at which point
                          # parse_tls_serverhello() will be called with process_full="all"
