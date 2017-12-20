@@ -11815,18 +11815,20 @@ run_ticketbleed() {
 
 run_renego() {
 # no SNI here. Not needed as there won't be two different SSL stacks for one IP
-     local legacycmd=""
+     local legacycmd="" proto="$OPTIMAL_PROTO"
      local insecure_renogo_str="Secure Renegotiation IS NOT"
      local sec_renego sec_client_renego
      local cve="CVE-2009-3555"
      local cwe="CWE-310"
      local hint=""
 
+     "$HAS_TLS13" && [[ -z "$proto" ]] && proto="-no_tls1_3"
+
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Renegotiation vulnerabilities " && outln
 
      pr_bold " Secure Renegotiation "; out "($cve)      "    # and RFC 5746, OSVDB 59968-59974
                                                              # community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
-     $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI $PROXY") 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
+     $OPENSSL s_client $(s_client_options "$proto $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI $PROXY") 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
      if sclient_connect_successful $? $TMPFILE; then
           grep -iaq "$insecure_renogo_str" $TMPFILE
           sec_renego=$?                                                    # 0= Secure Renegotiation IS NOT supported
@@ -11865,7 +11867,7 @@ run_renego() {
           1.0.1*|1.0.2*)
                legacycmd="-legacy_renegotiation"
                ;;
-          0.9.9*|1.0*)
+          0.9.9*|1.0*|1.1*)
                ;;   # all ok
      esac
 
@@ -11876,7 +11878,7 @@ run_renego() {
      else
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
           # msg enables us to look deeper into it while debugging
-          echo R | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $SNI $PROXY") >$TMPFILE 2>>$ERRFILE &
+          echo R | $OPENSSL s_client $(s_client_options "$proto $BUGS $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $SNI $PROXY") >$TMPFILE 2>>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
           if [[ $? -eq 3 ]]; then
                pr_done_good "likely not vulnerable (OK)"; outln ", timed out"        # it hung
@@ -11884,7 +11886,7 @@ run_renego() {
                sec_client_renego=1
           else
                # second try in the foreground as we are sure now it won't hang
-               echo R | $OPENSSL s_client $(s_client_options "$legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $SNI $PROXY") >$TMPFILE 2>>$ERRFILE
+               echo R | $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $SNI $PROXY") >$TMPFILE 2>>$ERRFILE
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case "$sec_client_renego" in
                     0)   if [[ $SERVICE == "HTTP" ]]; then
