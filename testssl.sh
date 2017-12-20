@@ -9668,7 +9668,40 @@ parse_tls_serverhello() {
                     0007) tls_extensions+="TLS server extension \"client authz\" (id=7), len=$extension_len\n" ;;
                     0008) tls_extensions+="TLS server extension \"server authz\" (id=8), len=$extension_len\n" ;;
                     0009) tls_extensions+="TLS server extension \"cert type\" (id=9), len=$extension_len\n" ;;
-                    000A) tls_extensions+="TLS server extension \"supported_groups\" (id=10), len=$extension_len\n" ;;
+                    000A) tls_extensions+="TLS server extension \"supported_groups\" (id=10), len=$extension_len\n"
+                          if [[ "$process_full" == "all" ]]; then
+                               if [[ $extension_len -lt 4 ]]; then
+                                    debugme tmln_warning "Malformed supported groups extension."
+                                    return 1
+                               fi
+                               echo -n "Supported groups: " >> $TMPFILE
+                               let offset=$extns_offset+12+$i
+                               len1=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
+                               if [[ $extension_len -lt $len1+4 ]] || [[ $len1 -lt 4 ]]; then
+                                    debugme tmln_warning "Malformed supported groups extension."
+                                    return 1
+                               fi
+                               let offset=$offset+4
+                               for (( j=0; j < len1; j=j+4 )); do
+                                    [[ $j -ne 0 ]] && echo -n ", " >> $TMPFILE
+                                    case "${tls_serverhello_ascii:offset:4}" in
+                                         "0017") echo -n "secp256r1" >> $TMPFILE ;;
+                                         "0018") echo -n "secp384r1" >> $TMPFILE ;;
+                                         "0019") echo -n "secp521r1" >> $TMPFILE ;;
+                                         "001D") echo -n "X25519" >> $TMPFILE ;;
+                                         "001E") echo -n "X448" >> $TMPFILE ;;
+                                         "0100") echo -n "ffdhe2048" >> $TMPFILE ;;
+                                         "0101") echo -n "ffdhe3072" >> $TMPFILE ;;
+                                         "0102") echo -n "ffdhe4096" >> $TMPFILE ;;
+                                         "0103") echo -n "ffdhe6144" >> $TMPFILE ;;
+                                         "0104") echo -n "ffdhe8192" >> $TMPFILE ;;
+                                              *) echo -n "unknown (${tls_serverhello_ascii:offset:4})" >> $TMPFILE ;;
+                                    esac
+                                    let offset=$offset+4
+                               done
+                               echo "" >> $TMPFILE
+                          fi
+                          ;;
                     000B) tls_extensions+="TLS server extension \"EC point formats\" (id=11), len=$extension_len\n" ;;
                     000C) tls_extensions+="TLS server extension \"SRP\" (id=12), len=$extension_len\n" ;;
                     000D) tls_extensions+="TLS server extension \"signature algorithms\" (id=13), len=$extension_len\n" ;;
@@ -9991,6 +10024,9 @@ parse_tls_serverhello() {
                         -e 's/,.*$/,/g' -e 's/),$/\"/g' \
                         -e 's/elliptic curves\/#10/supported_groups\/#10/g')"
                echo ""
+               if [[ "$tls_extensions" =~ "supported_groups" ]]; then
+                    echo "     Supported Groups:       $(grep "Supported groups:" "$TMPFILE" | sed 's/Supported groups: //')"
+               fi
                if [[ "$tls_extensions" =~ "application layer protocol negotiation" ]]; then
                     echo "     ALPN protocol:          $(grep "ALPN protocol:" "$TMPFILE" | sed 's/ALPN protocol:  //')"
                fi
