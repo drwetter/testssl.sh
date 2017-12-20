@@ -286,6 +286,9 @@ HAS_PROXY=false
 HAS_XMPP=false
 HAS_POSTGRES=false
 HAS_MYSQL=false
+HAS_CHACHA20=false
+HAS_AES128_GCM=false
+HAS_AES256_GCM=false
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -8742,26 +8745,374 @@ derive-handshake-traffic-keys() {
      return 0
 }
 
+generate-ccm-gcm-keystream() {
+     local icb="$1" icb_msb icb_lsb1
+     local -i i icb_lsb n="$2"
+
+     icb_msb="${icb:0:24}"
+     icb_lsb=0x${icb:24:8}
+
+     for (( i=0; i < n; i=i+1 )); do
+          icb_lsb1="$(printf "%08X" $icb_lsb)"
+          printf "\x${icb_msb:0:2}\x${icb_msb:2:2}\x${icb_msb:4:2}\x${icb_msb:6:2}\x${icb_msb:8:2}\x${icb_msb:10:2}\x${icb_msb:12:2}\x${icb_msb:14:2}\x${icb_msb:16:2}\x${icb_msb:18:2}\x${icb_msb:20:2}\x${icb_msb:22:2}\x${icb_lsb1:0:2}\x${icb_lsb1:2:2}\x${icb_lsb1:4:2}\x${icb_lsb1:6:2}"
+          icb_lsb+=1
+     done
+     return 0
+}
+
+# arg1: an OpenSSL ecb cipher (e.g., -aes-128-ecb)
+# arg2: key
+# arg3: initial counter value (must be 128 bits)
+# arg4: ciphertext
+# See Sections 6.5 and 7.2 of SP 800-38D and Section 6.2 and Appendix A of SP 800-38C
+ccm-gcm-decrypt() {
+     local cipher="$1"
+     local key="$2"
+     local icb="$3"
+     local ciphertext="$4"
+     local -i i i1 i2 i3 i4
+     local -i ciphertext_len n mod_check
+     local y plaintext=""
+
+     [[ ${#icb} -ne 32 ]] && return 7
+
+     ciphertext_len=${#ciphertext}
+     n=$ciphertext_len/32
+     mod_check=$ciphertext_len%32
+     [[ $mod_check -ne 0 ]] && n+=1
+     y="$(generate-ccm-gcm-keystream "$icb" "$n" | $OPENSSL enc "$cipher" -K "$key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+
+     # XOR the ciphertext with the keystream ($y). For efficiency, work in blocks of 16 bytes at a time (but with each XOR operation working on
+     # 32 bits.
+     [[ $mod_check -ne 0 ]] && n=$n-1
+     for (( i=0; i < n; i++ )); do
+          i1=32*$i; i2=$i1+8; i3=$i1+16; i4=$i1+24
+          plaintext+="$(printf "%08X%08X%08X%08X" "$((0x${ciphertext:i1:8} ^ 0x${y:i1:8}))" "$((0x${ciphertext:i2:8} ^ 0x${y:i2:8}))" "$((0x${ciphertext:i3:8} ^ 0x${y:i3:8}))" "$((0x${ciphertext:i4:8} ^ 0x${y:i4:8}))")"
+     done
+     # If the length of the ciphertext is not an even multiple of 16 bytes, then handle the final incomplete block.
+     if [[ $mod_check -ne 0 ]]; then
+          i1=32*$n
+          for (( i=0; i < mod_check; i=i+2 )); do
+               plaintext+="$(printf "%02X" "$((0x${ciphertext:i1:2} ^ 0x${y:i1:2}))")"
+               i1+=2
+          done
+     fi
+     tm_out "$plaintext"
+     return 0
+}
+
+# See RFC 7539, Section 2.1
+chacha20_Qround() {
+     local -i a="0x$1"
+     local -i b="0x$2"
+     local -i c="0x$3"
+     local -i d="0x$4"
+     local -i x y
+
+     a=$(((a+b) & 0xffffffff))
+     d=$((d^a))
+     # rotate d left 16 bits
+     x=$((d & 0xffff0000))
+     x=$((x >> 16))
+     y=$((d & 0x0000ffff))
+     y=$((y << 16))
+     d=$((x | y))
+
+     c=$(((c+d) & 0xffffffff))
+     b=$((b^c))
+     # rotate b left 12 bits
+     x=$((b & 0xfff00000))
+     x=$((x >> 20))
+     y=$((b & 0x000fffff))
+     y=$((y << 12))
+     b=$((x | y))
+
+     a=$(((a+b) & 0xffffffff))
+     d=$((d^a))
+     # rotate d left 8 bits
+     x=$((d & 0xff000000))
+     x=$((x >> 24))
+     y=$((d & 0x00ffffff))
+     y=$((y << 8))
+     d=$((x | y))
+
+     c=$(((c+d) & 0xffffffff))
+     b=$((b^c))
+     # rotate b left 7 bits
+     x=$((b & 0xfe000000))
+     x=$((x >> 25))
+     y=$((b & 0x01ffffff))
+     y=$((y << 7))
+     b=$((x | y))
+
+     tm_out "$(printf "%x" $a) $(printf "%x" $b) $(printf "%x" $c) $(printf "%x" $d)"
+     return 0
+}
+
+# See RFC 7539, Section 2.3.1
+chacha20_inner_block() {
+     local s0="$1" s1="$2" s2="$3" s3="$4"
+     local s4="$5" s5="$6" s6="$7" s7="$8"
+     local s8="$9" s9="${10}" s10="${11}" s11="${12}"
+     local s12="${13}" s13="${14}" s14="${15}" s15="${16}"
+     local res
+
+     res="$(chacha20_Qround "$s0" "$s4" "$s8" "$s12")"
+     read s0 s4 s8 s12 <<< "$res"
+     res="$(chacha20_Qround "$s1" "$s5" "$s9" "$s13")"
+     read s1 s5 s9 s13 <<< "$res"
+     res="$(chacha20_Qround "$s2" "$s6" "$s10" "$s14")"
+     read s2 s6 s10 s14 <<< "$res"
+     res="$(chacha20_Qround "$s3" "$s7" "$s11" "$s15")"
+     read s3 s7 s11 s15 <<< "$res"
+     res="$(chacha20_Qround "$s0" "$s5" "$s10" "$s15")"
+     read s0 s5 s10 s15 <<< "$res"
+     res="$(chacha20_Qround "$s1" "$s6" "$s11" "$s12")"
+     read s1 s6 s11 s12 <<< "$res"
+     res="$(chacha20_Qround "$s2" "$s7" "$s8" "$s13")"
+     read s2 s7 s8 s13 <<< "$res"
+     res="$(chacha20_Qround "$s3" "$s4" "$s9" "$s14")"
+     read s3 s4 s9 s14 <<< "$res"
+
+     tm_out "$s0 $s1 $s2 $s3 $s4 $s5 $s6 $s7 $s8 $s9 $s10 $s11 $s12 $s13 $s14 $s15"
+     return 0
+}
+
+# See RFC 7539, Sections 2.3 and 2.3.1
+chacha20_block() {
+     local key="$1"
+     local counter="$2"
+     local nonce="$3"
+     local s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15
+     local ws0 ws1 ws2 ws3 ws4 ws5 ws6 ws7 ws8 ws9 ws10 ws11 ws12 ws13 ws14 ws15
+     local working_state
+     local -i i
+
+     # create the state variable
+     s0="61707865"; s1="3320646e"; s2="79622d32"; s3="6b206574"
+     s4="${key:6:2}${key:4:2}${key:2:2}${key:0:2}"
+     s5="${key:14:2}${key:12:2}${key:10:2}${key:8:2}"
+     s6="${key:22:2}${key:20:2}${key:18:2}${key:16:2}"
+     s7="${key:30:2}${key:28:2}${key:26:2}${key:24:2}"
+     s8="${key:38:2}${key:36:2}${key:34:2}${key:32:2}"
+     s9="${key:46:2}${key:44:2}${key:42:2}${key:40:2}"
+     s10="${key:54:2}${key:52:2}${key:50:2}${key:48:2}"
+     s11="${key:62:2}${key:60:2}${key:58:2}${key:56:2}"
+     s12="$counter"
+     s13="${nonce:6:2}${nonce:4:2}${nonce:2:2}${nonce:0:2}"
+     s14="${nonce:14:2}${nonce:12:2}${nonce:10:2}${nonce:8:2}"
+     s15="${nonce:22:2}${nonce:20:2}${nonce:18:2}${nonce:16:2}"
+
+     # Initialize working_state to state
+     working_state="$s0 $s1 $s2 $s3 $s4 $s5 $s6 $s7 $s8 $s9 $s10 $s11 $s12 $s13 $s14 $s15"
+
+     # compute the 20 rounds (10 calls to inner block function, each of which
+     # performs 8 quarter rounds).
+     for (( i=0 ; i < 10; i++ )); do
+          working_state="$(chacha20_inner_block $working_state)"
+     done
+     read ws0 ws1 ws2 ws3 ws4 ws5 ws6 ws7 ws8 ws9 ws10 ws11 ws12 ws13 ws14 ws15 <<< "$working_state"
+
+     # Add working state to state
+     s0="$(printf "%08X" $(((0x$s0+0x$ws0) & 0xffffffff)))"
+     s1="$(printf "%08X" $(((0x$s1+0x$ws1) & 0xffffffff)))"
+     s2="$(printf "%08X" $(((0x$s2+0x$ws2) & 0xffffffff)))"
+     s3="$(printf "%08X" $(((0x$s3+0x$ws3) & 0xffffffff)))"
+     s4="$(printf "%08X" $(((0x$s4+0x$ws4) & 0xffffffff)))"
+     s5="$(printf "%08X" $(((0x$s5+0x$ws5) & 0xffffffff)))"
+     s6="$(printf "%08X" $(((0x$s6+0x$ws6) & 0xffffffff)))"
+     s7="$(printf "%08X" $(((0x$s7+0x$ws7) & 0xffffffff)))"
+     s8="$(printf "%08X" $(((0x$s8+0x$ws8) & 0xffffffff)))"
+     s9="$(printf "%08X" $(((0x$s9+0x$ws9) & 0xffffffff)))"
+     s10="$(printf "%08X" $(((0x$s10+0x$ws10) & 0xffffffff)))"
+     s11="$(printf "%08X" $(((0x$s11+0x$ws11) & 0xffffffff)))"
+     s12="$(printf "%08X" $(((0x$s12+0x$ws12) & 0xffffffff)))"
+     s13="$(printf "%08X" $(((0x$s13+0x$ws13) & 0xffffffff)))"
+     s14="$(printf "%08X" $(((0x$s14+0x$ws14) & 0xffffffff)))"
+     s15="$(printf "%08X" $(((0x$s15+0x$ws15) & 0xffffffff)))"
+
+     # serialize the state
+     s0="${s0:6:2}${s0:4:2}${s0:2:2}${s0:0:2}"
+     s1="${s1:6:2}${s1:4:2}${s1:2:2}${s1:0:2}"
+     s2="${s2:6:2}${s2:4:2}${s2:2:2}${s2:0:2}"
+     s3="${s3:6:2}${s3:4:2}${s3:2:2}${s3:0:2}"
+     s4="${s4:6:2}${s4:4:2}${s4:2:2}${s4:0:2}"
+     s5="${s5:6:2}${s5:4:2}${s5:2:2}${s5:0:2}"
+     s6="${s6:6:2}${s6:4:2}${s6:2:2}${s6:0:2}"
+     s7="${s7:6:2}${s7:4:2}${s7:2:2}${s7:0:2}"
+     s8="${s8:6:2}${s8:4:2}${s8:2:2}${s8:0:2}"
+     s9="${s9:6:2}${s9:4:2}${s9:2:2}${s9:0:2}"
+     s10="${s10:6:2}${s10:4:2}${s10:2:2}${s10:0:2}"
+     s11="${s11:6:2}${s11:4:2}${s11:2:2}${s11:0:2}"
+     s12="${s12:6:2}${s12:4:2}${s12:2:2}${s12:0:2}"
+     s13="${s13:6:2}${s13:4:2}${s13:2:2}${s13:0:2}"
+     s14="${s14:6:2}${s14:4:2}${s14:2:2}${s14:0:2}"
+     s15="${s15:6:2}${s15:4:2}${s15:2:2}${s15:0:2}"
+
+     tm_out "$s0$s1$s2$s3$s4$s5$s6$s7$s8$s9$s10$s11$s12$s13$s14$s15"
+     return 0
+}
+
+# See RFC 7539, Section 2.4
+chacha20() {
+     local key="$1"
+     local -i counter=1
+     local nonce="$2"
+     local ciphertext="$3"
+     local -i i ciphertext_len num_blocks mod_check
+     local -i i1 i2 i3 i4 i5 i6 i7 i8 i9 i10 i11 i12 i13 i14 i15 i16
+     local keystream plaintext=""
+
+     ciphertext_len=${#ciphertext}
+     num_blocks=$ciphertext_len/128
+
+     for (( i=0; i < num_blocks; i++)); do
+          i1=128*$i; i2=$i1+8; i3=$i1+16; i4=$i1+24; i5=$i1+32; i6=$i1+40; i7=$i1+48; i8=$i1+56
+          i9=$i1+64; i10=$i1+72; i11=$i1+80; i12=$i1+88; i13=$i1+96; i14=$i1+104; i15=$i1+112; i16=$i1+120
+          keystream="$(chacha20_block "$key" "$(printf "%08X" $counter)" "$nonce")"
+          plaintext+="$(printf "%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X" \
+               "$((0x${ciphertext:i1:8} ^ 0x${keystream:0:8}))" \
+               "$((0x${ciphertext:i2:8} ^ 0x${keystream:8:8}))" \
+               "$((0x${ciphertext:i3:8} ^ 0x${keystream:16:8}))" \
+               "$((0x${ciphertext:i4:8} ^ 0x${keystream:24:8}))" \
+               "$((0x${ciphertext:i5:8} ^ 0x${keystream:32:8}))" \
+               "$((0x${ciphertext:i6:8} ^ 0x${keystream:40:8}))" \
+               "$((0x${ciphertext:i7:8} ^ 0x${keystream:48:8}))" \
+               "$((0x${ciphertext:i8:8} ^ 0x${keystream:56:8}))" \
+               "$((0x${ciphertext:i9:8} ^ 0x${keystream:64:8}))" \
+               "$((0x${ciphertext:i10:8} ^ 0x${keystream:72:8}))" \
+               "$((0x${ciphertext:i11:8} ^ 0x${keystream:80:8}))" \
+               "$((0x${ciphertext:i12:8} ^ 0x${keystream:88:8}))" \
+               "$((0x${ciphertext:i13:8} ^ 0x${keystream:96:8}))" \
+               "$((0x${ciphertext:i14:8} ^ 0x${keystream:104:8}))" \
+               "$((0x${ciphertext:i15:8} ^ 0x${keystream:112:8}))" \
+               "$((0x${ciphertext:i16:8} ^ 0x${keystream:120:8}))")"
+          counter+=1
+     done
+
+     mod_check=$ciphertext_len%128
+     if [[ $mod_check -ne 0 ]]; then
+          keystream="$(chacha20_block "$key" "$(printf "%08X" $counter)" "$nonce")"
+          i1=128*$num_blocks
+          for (( i=0; i < mod_check; i=i+2 )); do
+               plaintext+="$(printf "%02X" "$((0x${ciphertext:i1:2} ^ 0x${keystream:i:2}))")"
+               i1+=2
+          done
+     fi
+     tm_out "$plaintext"
+     return 0
+}
+
+# arg1: TLS cipher
+# arg2: key
+# arg3: nonce (must be 96 bits in length)
+# arg4: ciphertext
+sym-decrypt() {
+     local cipher="$1"
+     local key="$2" nonce="$3"
+     local ciphertext="$4"
+     local ossl_cipher
+     local plaintext
+     local -i ciphertext_len tag_len
+
+     case "$cipher" in
+          *CCM_8*) 
+               tag_len=16 ;;
+          *CCM*|*GCM*|*CHACHA20_POLY1305*)
+               tag_len=32 ;;
+          *)
+               return 7 ;;
+     esac
+
+     # The final $tag_len characters of the ciphertext are the authentication tag
+     ciphertext_len=${#ciphertext}
+     [[ $ciphertext_len -lt $tag_len ]] && return 7
+     ciphertext_len=$ciphertext_len-$tag_len
+
+     if [[ "$cipher" =~ CHACHA20_POLY1305 ]]; then
+          if "$HAS_CHACHA20"; then
+               plaintext="$(asciihex_to_binary_file "${ciphertext:0:ciphertext_len}" "/dev/stdout" | \
+                            $OPENSSL enc -chacha20 -K "$key" -iv "01000000$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+               plaintext="$(strip_spaces "$plaintext")"
+          else
+               plaintext="$(chacha20 "$key" "$nonce" "${ciphertext:0:ciphertext_len}")"
+          fi
+     elif [[ "$cipher" == "TLS_AES_128_GCM_SHA256" ]] && "$HAS_AES128_GCM"; then
+          plaintext="$(asciihex_to_binary_file "${ciphertext:0:ciphertext_len}" "/dev/stdout" | \
+                       $OPENSSL enc -aes-128-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+          plaintext="$(strip_spaces "$plaintext")"
+     elif [[ "$cipher" == "TLS_AES_256_GCM_SHA384" ]] && "$HAS_AES256_GCM"; then
+          plaintext="$(asciihex_to_binary_file "${ciphertext:0:ciphertext_len}" "/dev/stdout" | \
+                       $OPENSSL enc -aes-256-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+          plaintext="$(strip_spaces "$plaintext")"
+     else
+          if [[ "$cipher" =~ AES_128 ]]; then
+               ossl_cipher="-aes-128-ecb"
+          elif [[ "$cipher" =~ AES_256 ]]; then
+               ossl_cipher="-aes-256-ecb"
+          else
+               return 7
+          fi
+          if [[ "$cipher" =~ CCM ]]; then
+               plaintext="$(ccm-gcm-decrypt "$ossl_cipher" "$key" "02${nonce}000001" "${ciphertext:0:ciphertext_len}")"
+          else # GCM
+               plaintext="$(ccm-gcm-decrypt "$ossl_cipher" "$key" "${nonce}00000002" "${ciphertext:0:ciphertext_len}")"
+          fi
+     fi
+     [[ $? -ne 0 ]] && return 7
+
+     tm_out "$plaintext"
+     return 0
+}
+
+# arg1: iv
+# arg2: sequence number
+get-nonce() {
+     local iv="$1"
+     local -i seq_num="$2"
+     local -i len lsb
+     local msb nonce
+
+     len=${#iv}
+     [[ $len -lt 8 ]] && return 7
+     i=$len-8
+     msb="${iv:0:i}"
+     lsb="0x${iv:i:8}"
+     nonce="${msb}$(printf "%08X" "$(($lsb ^ $seq_num))")"
+     tm_out "$nonce"
+     return 0
+}
+
 # Return:
 #     0 if arg1 contains the entire server response.
 #     1 if arg1 does not contain the entire server response.
 #     2 if the response is malformed.
 #     3 if (a) the response version is TLSv1.3;
-#          (b) arg1 contains the entire ServerHello (and appears to contain the entire response); and
-#          (c) the entire response is supposed to be parsed
+#          (b) arg1 contains the entire ServerHello (and appears to contain the entire response);
+#          (c) the entire response is supposed to be parsed; and
+#          (d) the key and IV have not been provided to decrypt the response.
 # arg1: ASCII-HEX encoded reply
 # arg2: whether to process the full request ("all") or just the basic request plus the ephemeral key if any ("ephemeralkey").
+# arg3: TLS cipher for decrypting TLSv1.3 response
+# arg4: key and IV for decrypting TLSv1.3 response
 check_tls_serverhellodone() {
      local tls_hello_ascii="$1"
      local process_full="$2"
+     local cipher="$3"
+     local key_and_iv="$4"
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len
      local -i msg_len remaining tls_serverhello_ascii_len sid_len
      local -i j offset tls_extensions_len extension_len
      local tls_content_type tls_protocol tls_handshake_type tls_msg_type extension_type
      local tls_err_level
+     local key iv
+     local -i seq_num=0 plaintext_len
+     local plaintext decrypted_response=""
 
      DETECTED_TLS_VERSION=""
+
+     [[ -n "$key_and_iv" ]] && read key iv <<< "$key_and_iv"
 
      if [[ -z "$tls_hello_ascii" ]]; then
           return 0              # no server hello received
@@ -8788,6 +9139,7 @@ check_tls_serverhellodone() {
           if [[ "$tls_content_type" == "16" ]]; then
                tls_handshake_ascii+="${tls_hello_ascii:i:msg_len}"
                tls_handshake_ascii_len=${#tls_handshake_ascii}
+               decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $(($msg_len/2)))${tls_hello_ascii:i:msg_len}"
                # the ServerHello MUST be the first handshake message
                [[ $tls_handshake_ascii_len -ge 2 ]] && [[ "${tls_handshake_ascii:0:2}" != "02" ]] && return 2
                if [[ $tls_handshake_ascii_len -ge 12 ]]; then
@@ -8825,12 +9177,35 @@ check_tls_serverhellodone() {
                     if [[ 0x$DETECTED_TLS_VERSION -ge 0x0304 ]] && [[ "$process_full" == "ephemeralkey" ]]; then
                          tls_serverhello_ascii_len=2*$(hex2dec "${tls_handshake_ascii:2:6}")
                          if [[ $tls_handshake_ascii_len -ge $tls_serverhello_ascii_len+8 ]]; then
+                              tm_out ""
                               return 0 # The entire ServerHello message has been received (and the rest isn't needed)
                          fi
                     fi
                fi
           elif [[ "$tls_content_type" == "15" ]]; then   # TLS ALERT
                tls_alert_ascii+="${tls_hello_ascii:i:msg_len}"
+               decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $(($msg_len/2)))${tls_hello_ascii:i:msg_len}"
+          elif [[ "$tls_content_type" == "17" ]] && [[ -n "$key_and_iv" ]]; then # encrypted data
+               nonce="$(get-nonce "$iv" "$seq_num")"
+               [[ $? -ne 0 ]] && return 2
+               plaintext="$(sym-decrypt "$cipher" "$key" "$nonce" "${tls_hello_ascii:i:msg_len}")"
+               [[ $? -ne 0 ]] && return 2
+               seq_num+=1
+
+               # Remove zeros from end of plaintext, if any
+               plaintext_len=${#plaintext}-2
+               while [[ "${plaintext:plaintext_len:2}" == "00" ]]; do
+                    plaintext_len=$plaintext_len-2
+               done
+               tls_content_type="${plaintext:plaintext_len:2}"
+               decrypted_response+="${tls_content_type}0301$(printf "%04X" $(($plaintext_len/2)))${plaintext:0:plaintext_len}"
+               if [[ "$tls_content_type" == "16" ]]; then
+                    tls_handshake_ascii+="${plaintext:0:plaintext_len}"
+               elif [[ "$tls_content_type" == "15" ]]; then
+                    tls_alert_ascii+="${plaintext:0:plaintext_len}"
+               else
+                    return 2
+               fi
           fi
      done
 
@@ -8840,7 +9215,7 @@ check_tls_serverhellodone() {
           remaining=$tls_alert_ascii_len-$i
           [[ $remaining -lt 4 ]] && return 1
           tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
-          [[ $tls_err_level == "02" ]] && DETECTED_TLS_VERSION="" && return 0
+          [[ $tls_err_level == "02" ]] && DETECTED_TLS_VERSION="" && tm_out "" && return 0
      done
 
      # If there is a serverHelloDone or Finished, then we are done.
@@ -8857,14 +9232,15 @@ check_tls_serverhellodone() {
 
           # For SSLv3 - TLS1.2 look for a ServerHelloDone message.
           # For TLS 1.3 look for a Finished message.
-          [[ $tls_msg_type == "0E" ]] && return 0
-          [[ $tls_msg_type == "14" ]] && return 0
+          [[ $tls_msg_type == "0E" ]] && tm_out "" && return 0
+          [[ $tls_msg_type == "14" ]] && tm_out "$decrypted_response" && return 0
      done
-     # If the response is TLSv1.3 and the full response is to be processed,
-     # then return 3 if the entire ServerHello has been received.
+     # If the response is TLSv1.3 and the full response is to be processed, but the
+     # key and IV have not been provided to decrypt the response, then return 3 if
+     # the entire ServerHello has been received.
      if [[ "$DETECTED_TLS_VERSION" == "0304" ]] && [[ "$process_full" == "all" ]] && \
-        [[ $tls_handshake_ascii_len -gt 0 ]]; then
-           return 3
+        [[ -z "$key_and_iv" ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
+          return 3
      fi
      # If we haven't encoountered a fatal alert or a server hello done,
      # then there must be more data to retrieve.
@@ -8931,14 +9307,17 @@ parse_tls_serverhello() {
      local -i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len msg_len
      local tls_serverhello_ascii="" tls_certificate_ascii=""
      local tls_serverkeyexchange_ascii="" tls_certificate_status_ascii=""
+     local tls_encryptedextensions_ascii="" tls_revised_certificate_msg=""
      local -i tls_serverhello_ascii_len=0 tls_certificate_ascii_len=0
      local -i tls_serverkeyexchange_ascii_len=0 tls_certificate_status_ascii_len=0
+     local -i tls_encryptedextensions_ascii_len=0
+     local added_encrypted_extensions=false
      local tls_alert_descrip tls_sid_len_hex issuerDN subjectDN CAissuerDN CAsubjectDN
      local -i tls_sid_len offset extns_offset nr_certs=0
      local tls_msg_type tls_content_type tls_protocol tls_protocol2 tls_hello_time
      local tls_err_level tls_err_descr_no tls_cipher_suite rfc_cipher_suite tls_compression_method
      local tls_extensions="" extension_type named_curve_str="" named_curve_oid
-     local -i i j extension_len tls_extensions_len ocsp_response_len=0 ocsp_response_list_len ocsp_resp_offset
+     local -i i j extension_len extn_len tls_extensions_len ocsp_response_len=0 ocsp_response_list_len ocsp_resp_offset
      local -i certificate_list_len certificate_len cipherlist_len
      local -i curve_type named_curve
      local -i dh_bits=0 msb mask
@@ -9149,6 +9528,14 @@ parse_tls_serverhello() {
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverhello_ascii_len=$msg_len
+          elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "08" ]]; then
+               # Add excrypted extensions (now decrypted) to end of extensions in SeverHello
+               tls_encryptedextensions_ascii="${tls_handshake_ascii:i:msg_len}"
+               tls_encryptedextensions_ascii_len=$msg_len
+               if [[ $msg_len -lt 2 ]]; then
+                    debugme tmln_warning "Response contained a malformed encrypted extensions message"
+                    return 1
+               fi
           elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "0B" ]]; then
                if [[ -n "$tls_certificate_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one Certificate handshake message."
@@ -9450,6 +9837,74 @@ parse_tls_serverhello() {
                     FF01) tls_extensions+="TLS server extension \"renegotiation info\" (id=65281), len=$extension_len\n" ;;
                        *) tls_extensions+="TLS server extension \"unrecognized extension\" (id=$(printf "%d\n\n" "0x$extension_type")), len=$extension_len\n" ;;
                esac
+               # After processing all of the extensions in the ServerHello message,
+               # if it has been determined that the response is TLSv1.3 and the
+               # response was decrypted, then modify $tls_serverhello_ascii by adding
+               # the extensions from the EncryptedExtensions and Certificate messages
+               # and then process them.
+               if ! "$added_encrypted_extensions" && [[ "$DETECTED_TLS_VERSION" == "0304" ]] && \
+                  [[ $((i+8+extension_len)) -eq $tls_extensions_len ]]; then
+                    # Note that the encrypted extensions have been added so that
+                    # the aren't added a second time.
+                    added_encrypted_extensions=true
+                    if [[ -n "$tls_encryptedextensions_ascii" ]]; then
+                         tls_serverhello_ascii_len+=$tls_encryptedextensions_ascii_len-4
+                         tls_extensions_len+=$tls_encryptedextensions_ascii_len-4
+                         tls_encryptedextensions_ascii_len=$tls_encryptedextensions_ascii_len/2-2
+                         let offset=$extns_offset+4
+                         tls_serverhello_ascii="${tls_serverhello_ascii:0:extns_offset}$(printf "%04X" $((0x${tls_serverhello_ascii:extns_offset:4}+$tls_encryptedextensions_ascii_len)))${tls_serverhello_ascii:offset}${tls_encryptedextensions_ascii:4}"
+                    fi
+                    if [[ -n "$tls_certificate_ascii" ]]; then
+                         # In TLS 1.3, the Certificate message begins with a zero length certificate_request_context.
+                         # In addition, certificate_list is now a list of (certificate, extension) pairs rather than
+                         # just certificates. So, extract the extensions and add them to $tls_serverhello_ascii and 
+                         # create a new $tls_certificate_ascii that only contains a list of certificates.
+                         if [[ -n "$tls_certificate_ascii" ]]; then
+                              if [[ "${tls_certificate_ascii:0:2}" != "00" ]]; then
+                                  debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
+                                   tmpfile_handle $FUNCNAME.txt
+                                   return 1
+                              fi
+                              if [[ $tls_certificate_ascii_len -lt 8 ]]; then
+                                   debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
+                                   tmpfile_handle $FUNCNAME.txt
+                                   return 1
+                              fi
+                              certificate_list_len=2*$(hex2dec "${tls_certificate_ascii:2:6}")
+                              if [[ $certificate_list_len -ne $tls_certificate_ascii_len-8 ]]; then
+                                   debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
+                                   tmpfile_handle $FUNCNAME.txt
+                                   return 1
+                              fi
+               
+                              for (( j=8; j < tls_certificate_ascii_len; j=j+extn_len )); do
+                                   if [[ $tls_certificate_ascii_len-$j -lt 6 ]]; then
+                                        debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
+                                        tmpfile_handle $FUNCNAME.txt
+                                        return 1
+                                   fi
+                                   certificate_len=2*$(hex2dec "${tls_certificate_ascii:j:6}")
+                                   if [[ $certificate_len -gt $tls_certificate_ascii_len-$j-6 ]]; then
+                                        debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
+                                        tmpfile_handle $FUNCNAME.txt
+                                        return 1
+                                   fi
+                                   len1=$certificate_len+6
+                                   tls_revised_certificate_msg+="${tls_certificate_ascii:j:len1}"
+                                   j+=$len1
+                                   extn_len=2*$(hex2dec "${tls_certificate_ascii:j:4}")
+                                   j+=4
+                                   # TODO: Should only the extensions associated with the EE certificate be added to $tls_serverhello_ascii?
+                                   tls_serverhello_ascii_len+=$extn_len
+                                   tls_extensions_len+=$extn_len
+                                   let offset=$extns_offset+4
+                                   tls_serverhello_ascii="${tls_serverhello_ascii:0:extns_offset}$(printf "%04X" $((0x${tls_serverhello_ascii:extns_offset:4}+$extn_len/2)))${tls_serverhello_ascii:offset}${tls_certificate_ascii:j:extn_len}"
+                              done
+                              tls_certificate_ascii_len=${#tls_revised_certificate_msg}+6
+                              tls_certificate_ascii="$(printf "%06X" $(($tls_certificate_ascii_len/2-3)))$tls_revised_certificate_msg"
+                         fi
+                    fi
+               fi
           done
      fi
 
@@ -10602,7 +11057,7 @@ tls_sockets() {
      local process_full="$3" offer_compression=false skip=false
      local close_connection=true
      local -i hello_done=0
-     local cipher="" key_and_iv=""
+     local cipher="" key_and_iv="" decrypted_response
 
      [[ "$5" == "true" ]] && offer_compression=true
      [[ "$6" == "false" ]] && close_connection=false
@@ -10690,9 +11145,11 @@ tls_sockets() {
                fi
                skip=false
                if [[ $hello_done -eq 1 ]]; then
-                    check_tls_serverhellodone "$tls_hello_ascii" "$process_full"
+                    decrypted_response="$(check_tls_serverhellodone "$tls_hello_ascii" "$process_full" "$cipher" "$key_and_iv")"
                     hello_done=$?
+                    [[ "$hello_done" -eq 0 ]] && [[ -n "$decrypted_response" ]] && tls_hello_ascii="$(toupper "$decrypted_response")"
                     if [[ "$hello_done" -eq 3 ]]; then
+                         hello_done=1; skip=true
                          debugme echo "reading server hello..."
                          parse_tls_serverhello "$tls_hello_ascii" "ephemeralkey"
                          ret=$?
@@ -10707,13 +11164,6 @@ tls_sockets() {
                          else
                               hello_done=2
                          fi
-                         # The following three lines are temporary until the code
-                         # to decrypt TLSv1.3 responses has been added, at which point
-                         # parse_tls_serverhello() will be called with process_full="all"
-                         # and parse_tls_serverhello() will populate these files.
-                         process_full="ephemeralkey"
-                         [[ -e "$HOSTCERT" ]] && rm "$HOSTCERT"
-                         [[ -e "$TEMPDIR/intermediatecerts.pem" ]] && rm "$TEMPDIR/intermediatecerts.pem"
                     fi
                fi
           done
@@ -13608,6 +14058,15 @@ find_openssl_binary() {
 
      grep -q 'mysql' $s_client_starttls_has && \
           HAS_MYSQL=true
+
+     $OPENSSL enc -chacha20 -K "12345678901234567890123456789012" -iv "01000000123456789012345678901234" > /dev/null 2> /dev/null <<< "test"
+     [[ $? -eq 0 ]] && HAS_CHACHA20=true
+
+     $OPENSSL enc -aes-128-gcm -K 0123456789abcdef0123456789abcdef -iv 0123456789abcdef01234567  > /dev/null 2> /dev/null <<< "test"
+     [[ $? -eq 0 ]] && HAS_AES128_GCM=true
+
+     $OPENSSL enc -aes-256-gcm -K 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef -iv 0123456789abcdef01234567  > /dev/null 2> /dev/null <<< "test"
+     [[ $? -eq 0 ]] && HAS_AES256_GCM=true
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
           if type -p timeout 2>&1 >/dev/null ; then
