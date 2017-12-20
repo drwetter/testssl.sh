@@ -403,7 +403,10 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 <li>MAX_WAITSOCK:    It instructs testssl.sh to wait until the specified time before declaring a socket connection dead. Don't change this unless you're absolutely sure what you're doing. Value is in seconds.</li>
 <li>CCS_MAX_WAITSOCK Is the similar to above but applies only to the CCS handshakes, for both of the two the two CCS payload. Don't change this unless you're absolutely sure what you're doing. Value is in seconds.</li>
 <li>HEARTBLEED_MAX_WAITSOCK  Is the similar to MAX_WAITSOCK but applies only to the ServerHello after sending the Heartbleed payload. Don't change this unless you're absolutely sure what you're doing. Value is in seconds.</li>
-<li>MEASURE_TIME_FILE For seldom cases when you don't want the scan time to be included in the output you can set this to false.</li>
+<li><p>MEASURE_TIME_FILE For seldom cases when you don't want the scan time to be included in the output you can set this to false.</p></li>
+<li><p>CA_BUNDLES_PATH: If you have an own set of CA bundles or you want to point testssl.sh to a specific location of a CA bundle, you can use this variable to set the directory which testssl.sh will
+use. Please note that it overrides completely the builtin path of testssl.sh which means that you will only test against the bundles you point to. Also you might want to use ~/utils/create_ca_hashes.sh
+to create the hashes for HPKP.</p></li>
 </ul>
 
 
