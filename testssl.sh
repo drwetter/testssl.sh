@@ -9663,7 +9663,17 @@ parse_tls_serverhello() {
                     0002) tls_extensions+="TLS server extension \"client certificate URL\" (id=2), len=$extension_len\n" ;;
                     0003) tls_extensions+="TLS server extension \"trusted CA keys\" (id=3, len=$extension_len\n)" ;;
                     0004) tls_extensions+="TLS server extension \"truncated HMAC\" (id=4), len=$extension_len\n" ;;
-                    0005) tls_extensions+="TLS server extension \"status request\" (id=5), len=$extension_len\n" ;;
+                    0005) tls_extensions+="TLS server extension \"status request\" (id=5), len=$extension_len\n"
+                          if [[ $extension_len -gt 0 ]] && [[ "$process_full" == "all" ]]; then
+                               # In TLSv1.3 the status_request extension contains the CertificateStatus message, unlike
+                               # TLSv1.2 and below where CertificateStatus appears in its own handshake message. So, if
+                               # the status_request extension is not empty, extract the value and place it in
+                               # $tls_certificate_status_ascii.
+                               tls_certificate_status_ascii_len=$extension_len
+                               let offset=$extns_offset+12+$i
+                               tls_certificate_status_ascii="${tls_serverhello_ascii:offset:tls_certificate_status_ascii_len}"
+                          fi
+                          ;;
                     0006) tls_extensions+="TLS server extension \"user mapping\" (id=6), len=$extension_len\n" ;;
                     0007) tls_extensions+="TLS server extension \"client authz\" (id=7), len=$extension_len\n" ;;
                     0008) tls_extensions+="TLS server extension \"server authz\" (id=8), len=$extension_len\n" ;;
