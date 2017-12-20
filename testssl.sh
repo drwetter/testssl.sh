@@ -14210,7 +14210,7 @@ help() {
                                    Alternatively: nmap output in greppable format (-oG) (1x port per line allowed)
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
 
-single check as <options>  ("$PROG_NAME  URI" does everything except -E and -g):
+single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
      -s, --std, --standard         tests certain lists of cipher suites by strength
@@ -14241,10 +14241,11 @@ single check as <options>  ("$PROG_NAME  URI" does everything except -E and -g):
      -f, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
      -g, --grease                  tests several server implementation bugs like GREASE and size limitations
+     -9, --full                    includes tests for implementation bugs and cipher per protocol (could disappear)
 
 tuning / connect options (most also can be preset via environment variables):
      --fast                        omits some checks: using openssl for all ciphers (-e), show only first
-                                   preferred cipher
+                                   preferred cipher.
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
@@ -16074,6 +16075,12 @@ parse_cmd_line() {
                -g|--grease)
                     do_grease=true
                     ;;
+               -9|--full)
+                    set_scanning_defaults
+                    do_allciphers=false
+                    do_cipher_per_proto=true
+                    do_grease=true
+                    ;;
                --devel) ### this development feature will soon disappear
                     HEX_CIPHER="$TLS12_CIPHER"
                     # DEBUG=3  ./testssl.sh --devel 03 "cc, 13, c0, 13" google.de                              --> TLS 1.2, old CHACHA/POLY
@@ -16383,6 +16390,8 @@ lets_roll() {
           run_spdy; ret=$(($? + ret)); time_right_align run_spdy;
           run_http2; ret=$(($? + ret)); time_right_align run_http2;
      }
+     fileout_section_header $section_number true && ((section_number++))
+     "$do_grease" && { run_grease; ret=$(($? + ret)); time_right_align run_grease; }
 
      fileout_section_header $section_number true && ((section_number++))
      $do_std_cipherlists && { run_std_cipherlists; ret=$(($? + ret)); time_right_align run_std_cipherlists; }
@@ -16446,8 +16455,6 @@ lets_roll() {
      fileout_section_header $section_number true && ((section_number++))
      $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); time_right_align run_client_simulation; }
 
-     fileout_section_header $section_number true && ((section_number++))
-     "$do_grease" && { run_grease; ret=$(($? + ret)); time_right_align run_grease; }
      fileout_section_footer true
 
      outln
