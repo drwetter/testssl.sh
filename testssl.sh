@@ -14207,7 +14207,7 @@ help() {
                                    protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql> (latter 4 require supplied openssl)
      --xmpphost <to_domain>        For STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
-     --file <fname|fname.gmap>     Mass testing option: Reads command lines from <fname>, one line per instance.
+     --file <fname|fname.gnmap>    Mass testing option: Reads command lines from <fname>, one line per instance.
                                    Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch".
                                    Alternatively: nmap output in greppable format (-oG) (1x port per line allowed)
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
@@ -15495,7 +15495,7 @@ nmap_to_plain_file() {
      target_fname="${FNAME%.*}.txt"
      > "${target_fname}"
      if [[ $? -ne 0 ]]; then
-          # try to just create ${FNAME%.*}.txt in the same dir as the gmap file failed.
+          # try to just create ${FNAME%.*}.txt in the same dir as the gnmap file failed.
           # backup is using one in $TEMPDIR
           target_fname="${target_fname##*\/}"     # strip path (Unix)
           target_fname="${target_fname##*\\}"     # strip path (Dos)
@@ -15539,7 +15539,7 @@ nmap_to_plain_file() {
 run_mass_testing() {
      local cmdline=""
      local first=true
-     local gmapadd=""
+     local gnmapadd=""
      local saved_fname="$FNAME"
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
@@ -15547,11 +15547,11 @@ run_mass_testing() {
      fi
 
      if [[ "$(head -1 "$FNAME")" =~ (Nmap [4-8])(.*)( scan initiated )(.*) ]]; then
-          gmapadd="grep(p)able nmap "
+          gnmapadd="grep(p)able nmap "
           nmap_to_plain_file
      fi
 
-     pr_reverse "====== Running in file batch mode with ${gmapadd}file=\"$saved_fname\" ======"; outln "\n"
+     pr_reverse "====== Running in file batch mode with ${gnmapadd}file=\"$saved_fname\" ======"; outln "\n"
      while read cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
@@ -15612,7 +15612,7 @@ run_mass_testing_parallel() {
      local -i i nr_active_tests=0
      local -a -i start_time=()
      local -i curr_time wait_time
-     local gmapadd=""
+     local gnmapadd=""
      local saved_fname="$FNAME"
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
@@ -15620,11 +15620,11 @@ run_mass_testing_parallel() {
      fi
 
      if [[ "$(head -1 "$FNAME")" =~ (Nmap [4-8])(.*)( scan initiated )(.*) ]]; then
-          gmapadd="grep(p)able nmap "
+          gnmapadd="grep(p)able nmap "
           nmap_to_plain_file
      fi
 
-     pr_reverse "====== Running in file batch mode with ${gmapadd}file=\"$saved_fname\" ======"; outln "\n"
+     pr_reverse "====== Running in file batch mode with ${gnmapadd}file=\"$saved_fname\" ======"; outln "\n"
      while read cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
