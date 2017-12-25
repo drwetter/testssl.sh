@@ -11967,6 +11967,7 @@ run_crime() {
           if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
                addcmd="-comp"
           fi
+          "$HAS_TLS13" && [[ -z "$OPTIMAL_PROTO" ]] && addcmd+=" -no_tls1_3"
           $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null &>$TMPFILE
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
