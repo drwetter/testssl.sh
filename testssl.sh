@@ -720,19 +720,13 @@ fileout_json_finding() {
             if [[ $SERVER_COUNTER -gt 1 ]]; then
                 echo "          ," >> "$JSONFILE"
             fi
-            if "$CHILD_MASS_TESTING" && ! "$JSONHEADER"; then
-                 target="$NODE"
-                 $do_mx_all_ips && target="$URI"
-                 echo -e "          {
+            target="$NODE"
+            $do_mx_all_ips && target="$URI"
+            echo -e "          {
                     \"target host\"     : \"$target\",
+                    \"ip\"              : \"$NODEIP\",
                     \"port\"            : \"$PORT\",
-                    \"service\"         : \"$finding\",
-                    \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
-            else
-                 echo -e "          {
-                    \"service\"         : \"$finding\",
-                    \"ip\"              : \"$NODEIP\","  >> "$JSONFILE"
-            fi
+                    \"service\"         : \"$finding\"," >> "$JSONFILE"
             $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
          else
              ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
@@ -753,28 +747,19 @@ fileout_json_finding() {
 fileout_pretty_json_banner() {
      local target
 
-     if "$do_mass_testing"; then
-        echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
-          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
-          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
-          \"openssl\"     : \"$OSSL_NAME $OSSL_VER from $OSSL_BUILD_DATE\",
-          \"startTime\"   : \"$START_TIME\",
-          \"scanResult\"  : ["
-     else
+     if ! "$do_mass_testing"; then
         [[ -z "$NODE" ]] && parse_hn_port "${URI}"
         # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
         target="$NODE"
         $do_mx_all_ips && target="$URI"
+     fi
 
-        echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
+     echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
           \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
           \"openssl\"     : \"$OSSL_NAME $OSSL_VER from $OSSL_BUILD_DATE\",
-          \"target host\" : \"$target\",
-          \"port\"        : \"$PORT\",
           \"startTime\"   : \"$START_TIME\",
           \"scanResult\"  : ["
-     fi
 }
 
 fileout_banner() {
