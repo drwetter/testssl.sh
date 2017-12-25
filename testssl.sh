@@ -4863,6 +4863,7 @@ pr_ecdh_curve_quality() {
 #   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
 #   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best
 #
+# Please note this section isn't particular spot on. It needs to be reconsidered/redone
 pr_cipher_quality() {
      local cipher="$1"
      local text="$2"
@@ -4882,6 +4883,11 @@ pr_cipher_quality() {
                     *RC4*|*RC2*)
                          pr_svrty_high "$text"
                          return 2
+                         ;;
+                    AES256-GCM-SHA384|AES128-GCM-SHA256|AES256-CCM|AES128-CCM|ARIA256-GCM-SHA384|ARIA128-GCM-SHA256)
+                         # RSA kx and e.g. GCM isn't certainly the best
+                         pr_done_good "$text"
+                         return 6
                          ;;
                     *GCM*|*CCM*|*CHACHA20*)
                          pr_done_best "$text"
@@ -4912,6 +4918,16 @@ pr_cipher_quality() {
           *RC4*|*RC2*)
                pr_svrty_high "$text"
                return 2
+               ;;
+          TLS_RSA_*)
+               if [[ "$cipher" =~ CBC ]]; then
+                    pr_svrty_low "$text"
+                    return 4
+               else
+                    pr_done_good "$text"
+                    # RSA kx and e.g. GCM isn't certainly the best
+                    return 6
+               fi
                ;;
           *GCM*|*CCM*|*CHACHA20*)
                pr_done_best "$text"
