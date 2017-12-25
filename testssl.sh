@@ -4859,6 +4859,7 @@ pr_ecdh_curve_quality() {
 #   0 = $1 is empty
 #   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
 #   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best
+#
 pr_cipher_quality() {
      local cipher="$1"
      local text="$2"
@@ -4869,7 +4870,7 @@ pr_cipher_quality() {
      if [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
           # This must be the OpenSSL name for a cipher
           if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
-               # We have the OpenSSL name and can't convert it to the RFC name
+               # We have an OpenSSL name and can't convert it to the RFC name
                case "$cipher" in
                     *NULL*|*EXP*|ADH*)
                          pr_svrty_critical "$text"
@@ -4879,7 +4880,7 @@ pr_cipher_quality() {
                          pr_svrty_high "$text"
                          return 2
                          ;;
-                    *GCM*|*CHACHA20*)
+                    *GCM*|*CCM*|*CHACHA20*)
                          pr_done_best "$text"
                          return 7
                          ;; #best ones
@@ -4909,6 +4910,10 @@ pr_cipher_quality() {
                pr_svrty_high "$text"
                return 2
                ;;
+          *GCM*|*CCM*|*CHACHA20*)
+               pr_done_best "$text"
+               return 7
+               ;;
           *ECDHE*AES*CBC*|*DHE*AES*SHA*|*RSA*AES*SHA*|*CAMELLIA*SHA*)
                pr_svrty_low "$text"
                return 4
@@ -4916,10 +4921,6 @@ pr_cipher_quality() {
           *CBC*)
                pr_svrty_medium "$text"
                return 3
-               ;;
-          *GCM*|*CHACHA20*)
-               pr_done_best "$text"
-               return 7
                ;;
           *)
                out "$text"
@@ -13736,6 +13737,7 @@ child_error() {
 fatal() {
      outln
      prln_magenta "Fatal error: $1" >&2
+     fileout "fatal_error"  "ERROR" "$1"
      exit $2
      # 1:  cmd line error
      # 2:  secondary/other cmd line error
