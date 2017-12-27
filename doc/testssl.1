@@ -499,6 +499,12 @@ HEARTBLEED_MAX_WAITSOCK Is the similar to MAX_WAITSOCK but applies only to the S
 MEASURE_TIME_FILE For seldom cases when you don\'t want the scan time to be included in the output you can set this to false\.
 .
 .IP "\(bu" 4
+MAX_PARALLEL is the maximum number of tests to run in parallel in parallel mass testing mode\. The default value of 20 may be made larger on systems with faster processors\.
+.
+.IP "\(bu" 4
+MAX_WAIT_TEST is the maximum time (in seconds) to wait for a single test in parallel mass testing mode to complete\. The default is 1200\.
+.
+.IP "\(bu" 4
 CA_BUNDLES_PATH: If you have an own set of CA bundles or you want to point testssl\.sh to a specific location of a CA bundle, you can use this variable to set the directory which testssl\.sh will use\. Please note that it overrides completely the builtin path of testssl\.sh which means that you will only test against the bundles you point to\. Also you might want to use ~/utils/create_ca_hashes\.sh to create the hashes for HPKP\.
 .
 .IP "" 0

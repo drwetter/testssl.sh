@@ -327,6 +327,8 @@ Except the environment variables mentioned above which replace command line opti
 
 [comment]: # STARTTLS_SLEEP
 [comment]: # FAST_STARTTLS
+* MAX_PARALLEL  is the maximum number of tests to run in parallel in parallel mass testing mode. The default value of 20 may be made larger on systems with faster processors.
+* MAX_WAIT_TEST is the maximum time (in seconds) to wait for a single test in parallel mass testing mode to complete. The default is 1200.
 [comment]: # USLEEP_SND
 [comment]: # USLEEP_REC
 [comment]: # HSTS_MIN

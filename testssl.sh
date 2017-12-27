@@ -330,8 +330,8 @@ SERVER_COUNTER=0                        # Counter for multiple servers
 
 ########### Global variables for parallel mass testing
 readonly PARALLEL_SLEEP=1                 # Time to sleep after starting each test
-readonly MAX_WAIT_TEST=1200               # Maximum time (in seconds) to wait for a test to complete
-readonly MAX_PARALLEL=20                  # Maximum number of tests to run in parallel
+MAX_WAIT_TEST=${MAX_WAIT_TEST:-1200}      # Maximum time (in seconds) to wait for a test to complete
+MAX_PARALLEL=${MAX_PARALLEL:-20}          # Maximum number of tests to run in parallel
                                           # This value may be made larger on systems with faster processors
 declare -a -i PARALLEL_TESTING_PID=()     # process id for each child test (or 0 to indicate test has already completed)
 declare -a PARALLEL_TESTING_CMDLINE=()    # command line for each child test
