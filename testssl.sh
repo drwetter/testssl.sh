@@ -14591,7 +14591,15 @@ ignore_no_or_lame() {
      [[ "$WARNINGS" == batch ]] && return 1
      tm_warning "$1 --> "
      read a
-     if [[ "$a" == "$(tolower "$2")" ]]; then
+     if [[ "$2" == "$(toupper "$2")" ]]; then
+          # all uppercase requested
+          if [[ "$a" == "$2" ]];  then
+               return 0
+          else
+               return 1
+          fi
+     elif [[ "$2" == "$(tolower "$a")" ]]; then
+          # we normalize the word to continue
           return 0
      else
           return 1
