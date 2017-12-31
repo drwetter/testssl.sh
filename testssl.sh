@@ -5037,38 +5037,39 @@ sub_session_resumption() {
 
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>/dev/null
      ret1=$?
-     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_in $sess_data") </dev/null >$tmpfile 2>$ERRFILE
-     ret2=$?
-     debugme echo "$ret1, $ret2, [[ -s "$sess_data" ]]"
-     # now get the line and compare the numbers read" and "written" as a second criteria.
-     rw_line="$(awk '/^SSL handshake has read/ { print $5" "$(NF-1) }' "$tmpfile" )"
-     rw_line=($rw_line)
-     if [[ "${rw_line[0]}" -gt "${rw_line[1]}" ]]; then
-          new_sid2=true
-     else
-          new_sid2=false
-     fi
-     debugme echo "${rw_line[0]}, ${rw_line[1]}"
-     #   grep -aq "^New" "$tmpfile" && new_sid=true || new_sid=false
-     grep -aq "^Reused" "$tmpfile" && new_sid=false || new_sid=true
-     if "$new_sid2" && "$new_sid"; then
-          debugme echo -n "No session resumption "
-          ret=1
-     elif ! "$new_sid2" && ! "$new_sid"; then
-          debugme echo -n "Session resumption "
-          ret=0
-     elif "$byID" && [[ $OSSL_VER_MINOR == "1.1" ]] && [[ $OSSL_VER_MAJOR == "1" ]] && [[ ! -s "$sess_data" ]]; then
+     if "$byID" && [[ $OSSL_VER_MINOR == "1.1" ]] && [[ $OSSL_VER_MAJOR == "1" ]] && [[ ! -s "$sess_data" ]]; then
           # it seems OpenSSL indicates no Session ID resumption by just not generating ouput
-          debugme echo -n "No session resumption (empty file) "
+          debugme echo -n "No session resumption byID (empty file)"
           ret=2
      else
-          debugme echo -n "unclear status: $ret1, $ret2, $new_sid, $new_sid2  -- "
-          ret=7
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_in $sess_data") </dev/null >$tmpfile 2>$ERRFILE
+          ret2=$?
+          debugme echo "$ret1, $ret2, [[ -s "$sess_data" ]]"
+          # now get the line and compare the numbers read" and "written" as a second criteria.
+          rw_line="$(awk '/^SSL handshake has read/ { print $5" "$(NF-1) }' "$tmpfile" )"
+          rw_line=($rw_line)
+          if [[ "${rw_line[0]}" -gt "${rw_line[1]}" ]]; then
+               new_sid2=true
+          else
+               new_sid2=false
+          fi
+          debugme echo "${rw_line[0]}, ${rw_line[1]}"
+          #   grep -aq "^New" "$tmpfile" && new_sid=true || new_sid=false
+          grep -aq "^Reused" "$tmpfile" && new_sid=false || new_sid=true
+          if "$new_sid2" && "$new_sid"; then
+               debugme echo -n "No session resumption "
+               ret=1
+          elif ! "$new_sid2" && ! "$new_sid"; then
+               debugme echo -n "Session resumption "
+               ret=0
+          else
+               debugme echo -n "unclear status: $ret1, $ret2, $new_sid, $new_sid2  -- "
+               ret=7
+          fi
+          if [[ $DEBUG -ge 2 ]]; then
+               "$byID" && echo "byID" || echo "by ticket"
+          fi
      fi
-     if [[ $DEBUG -ge 2 ]]; then
-          "$byID" && echo "byID" || echo "by ticket"
-     fi
-
      "$byID" && \
           tmpfile_handle $FUNCNAME.byID.log $tmpfile || \
           tmpfile_handle $FUNCNAME.byticket.log $tmpfile
