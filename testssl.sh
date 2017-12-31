@@ -7213,11 +7213,11 @@ run_server_defaults() {
                2) SESS_RESUMPTION[1]="ID=clientauth"
                   [[ ${SESS_RESUMPTION[2]} =~ clientauth ]] || pr_warning "Client Auth: "
                   prln_warning "ID resumption resumption test not supported"
-                  fileout "session_resumption_ID" "WARN" "resumption test via Session ID couldn't be performed because client authentication is missing"
+                  fileout "session_resumption_id" "WARN" "resumption test via Session ID couldn't be performed because client authentication is missing"
                   ;;
                7) SESS_RESUMPTION[1]="ID=noclue"
                   prln_warning "ID resumption test failed, pls report"
-                  fileout "session_resumption_ID" "WARN" "resumption test via Session ID failed, pls report"
+                  fileout "session_resumption_id" "WARN" "resumption test via Session ID failed, pls report"
                   ;;
           esac
      fi
