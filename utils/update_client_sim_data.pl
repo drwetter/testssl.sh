@@ -4,7 +4,8 @@ use strict;
 use Data::Dumper;
 use JSON;
 
-my $namelength = 30;
+# we get all data from here
+my $json = `curl 'https://api.dev.ssllabs.com/api/v3/getClients'`;
 
 my @spec;
 my %ciphers;
@@ -20,8 +21,8 @@ foreach my $line ( split /\n/, `../bin/openssl.Linux.x86_64 ciphers -V 'ALL:COMP
 	$ciphers{hex "0x$hex"} = $fields[3];
 }
 
+my $namelength = 30;
 # Get the data
-my $json = `curl 'https://api.dev.ssllabs.com/api/v3/getClients'`;
 my $ssllabs = decode_json($json);
 
 my %sims;
@@ -73,6 +74,16 @@ foreach my $client ( @$ssllabs ) {
 				push @ciphers, "ECDHE-ECDSA-CHACHA20-POLY1305"; }
 			elsif ( $suite == "52394" ) {
 				push @ciphers, "DHE-RSA-CHACHA20-POLY1305"; }
+			elsif ( $suite == "4865" ) {
+				push @ciphers, "TLS13-AES-128-GCM-SHA256"; }
+			elsif ( $suite == "4866" ) {
+				push @ciphers, "TLS13-AES-256-GCM-SHA384"; }
+			elsif ( $suite == "4867" ) {
+				push @ciphers, "TLS13-CHACHA20-POLY1305-SHA256"; }
+			elsif ( $suite == "4868" ) {
+				push @ciphers, "TLS13-AES-128-CCM-SHA256"; }
+			elsif ( $suite == "4869" ) {
+				push @ciphers, "TLS13-AES-128-CCM-8-SHA256"; }
 			elsif ( $suite == "14906" ) {
 				if ( $has_matched ) {
 					print " \"$shortname\": ";
@@ -204,6 +215,7 @@ my $sim = {};
 #$sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
 #$sim->{requiresSha2} = "requiresSha2+=(false)";
 
+# example of self generated / provided handshake:
 $sim->{name} = "names+=(\"Thunderbird 45.1.1 OSX 10.11  \")";
 $sim->{shortname} = "short+=(\"thunderbird_45.1.1_osx_101115\")";
 $sim->{ciphers} = "ciphers+=(\"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:AES128-SHA:AES256-SHA:DES-CBC3-SHA\")";
@@ -328,17 +340,21 @@ foreach my $shortname ( reverse sort keys %sims ) {
 	}
 }
 
-open OUT, ">client-simulation_generated.txt" or die "Unable to open client-simulation_generated.txt";
 
-# This file contains client handshake data used in the run_client_simulation function
-# Don't update this file by hand, but run util/update_client_sim_data.pl instead.
-# The one currently distributed with testssl.sh (etc/client-simulation.txt) has been generated
+my $header = <<"EOF";
+# This file contains client handshake data used in the run_client_simulation() function.
+# The file distributed with testssl.sh (etc/client-simulation.txt) has been generated
 # from this script and manually edited (=which UA to show up) and sorted.
-
+#
 # Most clients are taken from Qualys SSL Labs --- From: https://api.dev.ssllabs.com/api/v3/getClients
-";
+
+EOF
+
+open OUT, ">client-simulation_generated.txt" or die "Unable to open client-simulation_generated.txt";
+print OUT "$header";
+
 foreach my $shortname ( sort keys %sims ) {
-	foreach my $k ( qw(name shortname ciphers sni warning handshakebytes protos lowestProtocol highestProtocol service
+	foreach my $k ( qw(name shortname ciphers sni warning handshakebytes protos lowestProtocol highestProtocol service 
 		minDhBits maxDhBits minRsaBits maxRsaBits minEcdsaBits requiresSha2 current) ) {
 		print OUT "     $sims{$shortname}->{$k}\n";
 	}
