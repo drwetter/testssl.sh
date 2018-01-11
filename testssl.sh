@@ -2055,7 +2055,11 @@ emphasize_stuff_in_headers(){
           -e "s/X-Rack-Cache/${yellow}X-Rack-Cache${off}/g" \
           -e "s/X-Runtime/${yellow}X-Runtime${off}/g" \
           -e "s/X-Pingback/${yellow}X-Pingback${off}/g" \
-          -e "s/X-AspNet-Version/${yellow}X-AspNet-Version${off}/g"
+          -e "s/X-AspNet-Version/${yellow}X-AspNet-Version${off}/g" \
+          -e "s/x-note/${yellow}x-note${off}/g" \
+          -e "s/x-global-transaction-id/${yellow}x-global-transaction-id${off}/g" \
+          -e "s/X-Global-Transaction-ID/${yellow}X-Global-Transaction-ID${off}/g" \
+          -e "s/system-wsgw-management-loopback/${yellow}system-wsgw-management-loopback${off}/g"
 
      if "$do_html"; then
           if [[ $COLOR -eq 2 ]]; then
@@ -2095,7 +2099,11 @@ emphasize_stuff_in_headers(){
                     -e "s/X-Runtime/${html_yellow}X-Runtime${html_off}/g" \
                     -e "s/X-Rack-Cache/${html_yellow}X-Rack-Cache${html_off}/g" \
                     -e "s/X-Pingback/${html_yellow}X-Pingback${html_off}/g" \
-                    -e "s/X-AspNet-Version/${html_yellow}X-AspNet-Version${html_off}/g")"
+                    -e "s/X-AspNet-Version/${html_yellow}X-AspNet-Version${html_off}/g")" \
+                    -e "s/x-note/${yellow}x-note${html_off}/g" \
+                    -e "s/X-Global-Transaction-ID/${yellow}X-Global-Transaction-ID${html_off}/g" \
+                    -e "s/x-global-transaction-id/${yellow}x-global-transaction-id${html_off}/g" \
+                    -e "s/system-wsgw-management-loopback/${yellow}system-wsgw-management-loopback${html_off}/g"
           else
                html_out "$(html_reserved "$1")"
           fi
