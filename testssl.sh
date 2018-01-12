@@ -255,6 +255,9 @@ HEADERFILE=""
 HEADERVALUE=""
 HTTP_STATUS_CODE=""
 PROTOS_OFFERED=""                       # this is a global to keep the info which protocol is being offered. See has_server_protocol()
+KEY_SHARE_EXTN_NR="33"                  # The extension number for key_share was changed from 40 to 51 in TLSv1.3 draft 23. In order to
+                                        # support draft 23 in additional to earlier drafts, need to know which extension number to use.
+                                        # Note that it appears that a single ClientHello cannot advertise both draft 23 and earlier drafts.
 TLS_EXTENSIONS=""
 BAD_SERVER_HELLO_CIPHER=false           # reserved for cases where a ServerHello doesn't contain a cipher offered in the ClientHello
 GOST_STATUS_PROBLEM=false
@@ -4242,6 +4245,7 @@ run_protocols() {
      local supported_no_ciph2="supported but couldn't detect a cipher"
      local latest_supported=""  # version.major and version.minor of highest version supported by the server.
      local detected_version_string latest_supported_string
+     local key_share_extn_nr="$KEY_SHARE_EXTN_NR"
      local lines nr_ciphers_detected
      local tls13_ciphers_to_test=""
      local drafts_offered=""
@@ -4612,6 +4616,7 @@ run_protocols() {
                     outln "offered (OK)"
                     fileout "tls1_3" "OK" "TLSv1.3 is offered"
                else
+                    KEY_SHARE_EXTN_NR="28"
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 12"
                     [[ $? -eq 0 ]] && drafts_offered="draft 18"
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 13"
@@ -4634,11 +4639,18 @@ run_protocols() {
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
                          drafts_offered+="draft 22"
                     fi
+                    KEY_SHARE_EXTN_NR="33"
+                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 17"
+                    if [[ $? -eq 0 ]]; then
+                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
+                         drafts_offered+="draft 23"
+                    fi
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 03, 04"
                     if [[ $? -eq 0 ]]; then
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
                          drafts_offered+="final"
                     fi
+                    KEY_SHARE_EXTN_NR="$key_share_extn_nr"
                     if [[ -n "$drafts_offered" ]]; then
                          pr_done_best "offered (OK)"; outln ": $drafts_offered"
                          fileout "tls1_3" "OK" "TLSv1.3 offered: $drafts_offered"
@@ -9772,7 +9784,21 @@ parse_tls_serverhello() {
                     0018) tls_extensions+="TLS server extension \"token binding\" (id=24), len=$extension_len\n" ;;
                     0019) tls_extensions+="TLS server extension \"cached info\" (id=25), len=$extension_len\n" ;;
                     0023) tls_extensions+="TLS server extension \"session ticket\" (id=35), len=$extension_len\n" ;;
-                    0028) tls_extensions+="TLS server extension \"key share\" (id=40), len=$extension_len\n"
+                    0028|0033)
+                          # The key share extension was renumbered from 40 to 51 in TLSv1.3 draft 23 since a few
+                          # implementations have been using 40 for the extended_random extension. Since the
+                          # server's version may not yet have been determined, assume that both values represent the
+                          # key share extension.
+                          if [[ "$extension_type" == "00$KEY_SHARE_EXTN_NR" ]]; then
+                               tls_extensions+="TLS server extension \"key share\""
+                          else
+                               tls_extensions+="TLS server extension \"unrecognized extension\""
+                          fi
+                          if [[ "$extension_type" == "0028" ]]; then
+                               tls_extensions+=" (id=40), len=$extension_len\n"
+                          else
+                               tls_extensions+=" (id=51), len=$extension_len\n"
+                          fi
                           if [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]]; then
                                if [[ $extension_len -lt 4  ]]; then
                                     debugme tmln_warning "Malformed key share extension."
@@ -10505,7 +10531,7 @@ generate_key_share_extension() {
      list_len="$(printf "%04x" "$len")"
      len+=2
      extn_len="$(printf "%04x" "$len")"
-     tm_out "00,28,${extn_len:0:2},${extn_len:2:2},${list_len:0:2},${list_len:2:2}$key_shares"
+     tm_out "00,$KEY_SHARE_EXTN_NR,${extn_len:0:2},${extn_len:2:2},${list_len:0:2},${list_len:2:2}$key_shares"
      return 0
 }
 
@@ -10614,9 +10640,10 @@ socksend_tls_clienthello() {
           else
                extension_signature_algorithms="
                00, 0d,                    # Type: signature_algorithms , see draft-ietf-tls-tls13
-               00, 1c, 00, 1a,            # lengths
+               00, 22, 00, 20,            # lengths
                04,03, 05,03, 06,03, 08,04, 08,05, 08,06,
-               04,01, 05,01, 06,01, 08,07, 08,08, 02,01, 02,03"
+               04,01, 05,01, 06,01, 08,09, 08,0a, 08,0b,
+               08,07, 08,08, 02,01, 02,03"
           fi
 
           extension_heartbeat="
@@ -10706,18 +10733,25 @@ socksend_tls_clienthello() {
                # from the one specified in $tls_low_byte to SSLv3.
                for (( i=0x$tls_low_byte; i >=0; i=i-1 )); do
                     if [[ 0x$i -eq 4 ]]; then
-                         # FIXME: The ClientHello currently indicates support
-                         # for drafts 18, 19, 20, and 21 of TLSv1.3 in addition
-                         # to the final version of TLSv1.3. In the future, the
-                         # draft versions should be removed.
-                         extension_supported_versions+=", 03, 04, 7f, 16, 7f, 15, 7f, 14, 7f, 13, 7f, 12"
+                         # FIXME: The ClientHello currently advertises support for various
+                         # draft versions of TLSv1.3. Eventually it should only adversize
+                         # support for the final version (0304).
+                         if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
+                              extension_supported_versions+=", 7f, 17"
+                         else
+                              extension_supported_versions+=", 7f, 16, 7f, 15, 7f, 14, 7f, 13, 7f, 12"
+                         fi
                     else
                          extension_supported_versions+=", 03, $(printf "%02x" $i)"
                     fi
                done
                [[ -n "$all_extensions" ]] && all_extensions+=","
                # FIXME: Adjust the lengths ("+11" and "+9") when the draft versions of TLSv1.3 are removed.
-               all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+13))), $(printf "%02x" $((2*0x$tls_low_byte+12)))$extension_supported_versions"
+               if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
+                    all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+3))), $(printf "%02x" $((2*0x$tls_low_byte+2)))$extension_supported_versions"
+               else
+                    all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+11))), $(printf "%02x" $((2*0x$tls_low_byte+10)))$extension_supported_versions"
+               fi
           fi
 
           if [[ ! "$extra_extensions_list" =~ " 0023 " ]]; then
@@ -10743,7 +10777,7 @@ socksend_tls_clienthello() {
                all_extensions+="$extension_supported_groups"
           fi
 
-          if [[ -n "$extensions_key_share" ]] && [[ ! "$extra_extensions_list" =~ " 0028 " ]]; then
+          if [[ -n "$extensions_key_share" ]] && [[ ! "$extra_extensions_list" =~ " 00$KEY_SHARE_EXTN_NR " ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extensions_key_share"
           fi
@@ -10994,7 +11028,7 @@ resend_if_hello_retry_request() {
                # included in the next ClientHello.
                j=8+$len_extn
                new_extra_extns+="${tls_hello_ascii:i:j}"
-          elif [[ "$extn_type" == "0028" ]]; then
+          elif [[ "$extn_type" == "00$KEY_SHARE_EXTN_NR" ]]; then
                # If the HRR includes a key_share extension, then it specifies the
                # group to be used in the next ClientHello. So, create a key_share
                # extension that specifies this group.
@@ -11035,7 +11069,7 @@ resend_if_hello_retry_request() {
           j=$i+6
           part2=$j+3
           len_extn=3*$(hex2dec "${extra_extensions:j:2}${extra_extensions:part2:2}")
-          if [[ "$extn_type" != "0028" ]] && [[ "$extn_type" != "002c" ]]; then
+          if [[ "$extn_type" != "00$KEY_SHARE_EXTN_NR" ]] && [[ "$extn_type" != "002c" ]]; then
                j=12+$len_extn
                new_extra_extns+=",${extra_extensions:i:j}"
           fi
@@ -15167,6 +15201,26 @@ determine_optimal_proto() {
           prln_bold "doesn't seem to be a TLS/SSL enabled server";
           ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
           [[ $? -ne 0 ]] && exit -2
+     fi
+
+     # NOTE: The following code is only needed as long as draft versions of TLSv1.3 prior to draft 23
+     # are supported. It is used to determine whether a draft 23 or pre-draft 23 ClientHello should be
+     # sent.
+     if [[ -z "$1" ]]; then
+          KEY_SHARE_EXTN_NR="33"
+          tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f,17"
+          if [[ $? -eq 0 ]]; then
+               add_tls_offered tls1_3 yes
+          else
+               KEY_SHARE_EXTN_NR="28"
+               tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0b, 0a, 7f,16, 7f,15, 7f,14, 7f,13, 7f,12"
+               if [[ $? -eq 0 ]]; then
+                    add_tls_offered tls1_3 yes
+               else
+                    add_tls_offered tls1_3 no
+                    KEY_SHARE_EXTN_NR="33"
+               fi
+          fi
      fi
 
      tmpfile_handle $FUNCNAME.txt
