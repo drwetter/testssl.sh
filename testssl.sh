@@ -661,15 +661,15 @@ fileout_json_section() {
      case $1 in
            1) echo -e    "                    \"singleCipher\"      : [" ;;
            2) echo -e    "                    \"protocols\"         : [" ;;
-           3) echo -e ",\n                    \"ciphers\"           : [" ;;
-           4) echo -e ",\n                    \"pfs\"               : [" ;;
-           5) echo -e ",\n                    \"serverPreferences\" : [" ;;
-           6) echo -e ",\n                    \"serverDefaults\"    : [" ;;
-           7) echo -e ",\n                    \"headerResponse\"    : [" ;;
-           8) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
-           9) echo -e ",\n                    \"cipherTests\"       : [" ;;
-          10) echo -e ",\n                    \"browserSimulations\": [" ;;
-          11) echo -e ",\n                    \"grease\"            : [" ;;
+           3) echo -e ",\n                    \"grease\"            : [" ;;
+           4) echo -e ",\n                    \"ciphers\"           : [" ;;
+           5) echo -e ",\n                    \"pfs\"               : [" ;;
+           6) echo -e ",\n                    \"serverPreferences\" : [" ;;
+           7) echo -e ",\n                    \"serverDefaults\"    : [" ;;
+           8) echo -e ",\n                    \"headerResponse\"    : [" ;;
+           9) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
+          10) echo -e ",\n                    \"cipherTests\"       : [" ;;
+          11) echo -e ",\n                    \"browserSimulations\": [" ;;
            *) echo "invalid section" ;;
      esac
 }
