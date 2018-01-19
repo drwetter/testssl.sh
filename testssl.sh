@@ -1356,7 +1356,7 @@ service_detection() {
           *)   if "$CLIENT_AUTH"; then
                     out "certificate based authentication => skipping all HTTP checks"
                     echo "certificate based authentication => skipping all HTTP checks" >$TMPFILE
-                    fileout "client_auth" "INFO" "certificate based authentication => skipping all HTTP checks"
+                    fileout "service" "INFO" "certificate based authentication => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
                     if "$ASSUME_HTTP"; then
