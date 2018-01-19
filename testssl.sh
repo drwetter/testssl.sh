@@ -193,6 +193,8 @@ CSVFILE="${CSVFILE:-""}"                # csvfile if used
 HTMLFILE="${HTMLFILE:-""}"              # HTML if used
 FNAME=${FNAME:-""}                      # file name to read commands from
 FNAME_PREFIX=${FNAME_PREFIX:-""}        # output filename prefix, see --outprefix
+FNAME_RESULT1=${FNAME_RESULT1:-""}      # filename of a result file used to compute diff, see --diff
+FNAME_RESULT2=${FNAME_RESULT2:-""}      # filename of second result file used to compute diff, see --diff
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
 NODNS=${NODNS:-false}                   # always do DNS lookups per default. For some pentests it might save time to set this to true
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
@@ -14247,8 +14249,8 @@ help() {
      -v, --version                 same as previous
      -V, --local                   pretty print all local ciphers
      -V, --local <pattern>         which local ciphers with <pattern> are available? If pattern is not a number: word match
-
      <pattern>                     is always an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
+     -d, --diff <result1,result2>  computes and outputs the diff between the supplied result files
 
 "$PROG_NAME <URI>", where <URI> is:
 
@@ -14534,6 +14536,9 @@ EOF
      outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 }
 
+compute_diff () {
+    diff --unified $FNAME_RESULT1 $FNAME_RESULT2
+}
 
 cleanup () {
      # If parallel mass testing is being performed, then the child tests need
@@ -15990,6 +15995,13 @@ parse_cmd_line() {
                     find_openssl_binary
                     prepare_debug
                     mybanner
+                    exit 0
+                    ;;
+               -d|--diff|--diff=*)
+                    IFS=',' read -ra NAMES <<< "$(parse_opt_equal_sign "$1" "$2")"
+                    FNAME_RESULT1=${NAMES[0]}
+                    FNAME_RESULT2=${NAMES[1]}
+                    compute_diff
                     exit 0
                     ;;
                --mx)
