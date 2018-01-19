@@ -254,10 +254,11 @@ HOSTCERT=""
 HEADERFILE=""
 HEADERVALUE=""
 HTTP_STATUS_CODE=""
-PROTOS_OFFERED=""                       # this is a global to keep the info which protocol is being offered. See has_server_protocol()
+PROTOS_OFFERED=""                       # This is a global to keep the info which protocol is being offered. See has_server_protocol().
 KEY_SHARE_EXTN_NR="33"                  # The extension number for key_share was changed from 40 to 51 in TLSv1.3 draft 23. In order to
                                         # support draft 23 in additional to earlier drafts, need to know which extension number to use.
                                         # Note that it appears that a single ClientHello cannot advertise both draft 23 and earlier drafts.
+                                        # Preset may help to deal with STARTTLS + TLS 1.3 draft 23 but not earlier.
 TLS_EXTENSIONS=""
 BAD_SERVER_HELLO_CIPHER=false           # reserved for cases where a ServerHello doesn't contain a cipher offered in the ClientHello
 GOST_STATUS_PROBLEM=false
