@@ -1740,17 +1740,17 @@ run_hsts() {
                hsts_age_days=-1
           fi
           if [[ $hsts_age_days -eq -1 ]]; then
-               pr_svrty_medium "HSTS max-age is required but missing. Setting 15552000 s (180 days) or more is recommended"
-               fileout "hsts_time" "MEDIUM" "HSTS max-age missing. 15552000 s (180 days) or more recommnded"
+               pr_svrty_medium "HSTS max-age is required but missing. Setting 15552000 seconds (180 days) or more is recommended"
+               fileout "hsts_time" "MEDIUM" "HSTS max-age missing. 15552000 seconds (180 days) or more recommnded"
           elif [[ $hsts_age_sec -eq 0 ]]; then
                pr_svrty_medium "HSTS max-age is set to 0. HSTS is disabled"
                fileout "hsts_time" "MEDIUM" "HSTS max-age set to 0. HSTS is disabled"
           elif [[ $hsts_age_sec -gt $HSTS_MIN ]]; then
                pr_done_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
-               fileout "hsts_time" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN days"
+               fileout "hsts_time" "OK" "HSTS timeout $hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN seconds"
           else
-               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >=$HSTS_MIN s recommended)"
-               fileout "hsts_time" "MEDIUM" "HSTS timeout too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN days"
+               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >=$HSTS_MIN seconds recommended)"
+               fileout "hsts_time" "MEDIUM" "HSTS timeout too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN seconds"
           fi
           if includeSubDomains "$TMPFILE"; then
                fileout "hsts_subdomains" "OK" "HSTS includes subdomains"
