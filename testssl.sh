@@ -1462,31 +1462,32 @@ service_detection() {
      fi
 
      out " Service detected:      $CORRECT_SPACES"
+     json_prefix="service"
      case $SERVICE in
           HTTP)
                out " $SERVICE"
-               fileout "service" "INFO" "Service detected: $SERVICE"
+               fileout "${json_prefix}" "INFO" "$SERVICE"
                ret=0
                ;;
           IMAP|POP|SMTP|NNTP|MongoDB)
                out " $SERVICE, thus skipping HTTP specific checks"
-               fileout "service" "INFO" "Service detected: $SERVICE, thus skipping HTTP specific checks"
+               fileout "${json_prefix}" "INFO" "$SERVICE, thus skipping HTTP specific checks"
                ret=0
                ;;
           *)   if "$CLIENT_AUTH"; then
                     out " certificate-based authentication => skipping all HTTP checks"
                     echo "certificate-based authentication => skipping all HTTP checks" >$TMPFILE
-                    fileout "service" "INFO" "certificate-based authentication => skipping all HTTP checks"
+                    fileout "${json_prefix}" "INFO" "certificate-based authentication => skipping all HTTP checks"
                else
                     out " Couldn't determine what's running on port $PORT"
                     if "$ASSUME_HTTP"; then
                          SERVICE=HTTP
                          out " -- ASSUME_HTTP set though"
-                         fileout "service" "DEBUG" "Couldn't determine service, --ASSUME_HTTP set"
+                         fileout "${json_prefix}" "DEBUG" "Couldn't determine service -- ASSUME_HTTP set"
                          ret=0
                     else
                          out ", assuming no HTTP service => skipping all HTTP checks"
-                         fileout "service" "DEBUG" "Couldn't determine service, skipping all HTTP checks"
+                         fileout "${json_prefix}" "DEBUG" "Couldn't determine service, skipping all HTTP checks"
                          ret=1
                     fi
                fi
@@ -5715,7 +5716,8 @@ verify_retcode_helper() {
 
 # arg1: number of certificate if provided >1
 determine_trust() {
-     local json_prefix=$1
+     local json_prefix="$1"
+     local json_postfix="$2"
      local -i i=1
      local -i num_ca_bundles=0
      local bundle_fname=""
@@ -5730,16 +5732,17 @@ determine_trust() {
      local -i certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      local addtl_warning
 
-     # If $json_prefix is not empty, then there is more than one certificate
+     # If $json_postfix is not empty, then there is more than one certificate
      # and the output should should be indented by two more spaces.
-     [[ -n $json_prefix ]] && spaces="                                "
+     [[ -n $json_postfix ]] && spaces="                                "
 
      case $OSSL_VER_MAJOR.$OSSL_VER_MINOR in
           1.0.2|1.1.0|1.1.1|2.3.*|2.2.*|2.1.*)                # 2.x is LibreSSL. 2.1.1 was tested to work, below is not sure
               :
           ;;
-          *)   addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
-               fileout "${json_prefix}chain_of_trust_Problem" "WARN" "$addtl_warning"
+          *)   addtl_warning="Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust"
+               fileout "${json_prefix}${json_postfix}" "WARN" "$addtl_warning"
+               addtl_warning="(${addtl_warning})"
           ;;
      esac
      debugme tmln_out
@@ -5784,8 +5787,11 @@ determine_trust() {
      if "$all_ok"; then
           # all stores ok
           pr_done_good "Ok   "; pr_warning "$addtl_warning"
-          # we did to stdout the warning above already, so we could stay here with INFO:
-          fileout "${json_prefix}chain_of_trust" "OK" "All certificate trust checks passed. $addtl_warning"
+          # we did to stdout the warning above already, so we could stay here with OK:
+          [[ -z "$addtl_warning" ]] && \
+               fileout "${json_prefix}${json_postfix}" "OK" "All certificate trust checks passed" || \
+               fileout "${json_prefix}${json_postfix}" "OK" "All certificate trust checks passed. $addtl_warning"
+          # The "." is otherwise confusing
      else
           # at least one failed
           pr_svrty_critical "NOT ok"
@@ -5798,7 +5804,7 @@ determine_trust() {
                else
                     out "$code"
                fi
-               fileout "${json_prefix}chain_of_trust" "CRITICAL" "All certificate trust checks failed: $code. $addtl_warning"
+               fileout "${json_prefix}${json_postfix}" "CRITICAL" "All certificate trust checks failed: $code. $addtl_warning"
           else
                # is one ok and the others not ==> display the culprit store
                if "$some_ok"; then
@@ -5826,7 +5832,7 @@ determine_trust() {
                     [[ "$DEBUG" -eq 0 ]] && tm_out "$spaces"
                     pr_done_good "OK: $ok_was"
                fi
-               fileout "${json_prefix}chain_of_trust" "CRITICAL" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
+               fileout "${json_prefix}${json_postfix}" "CRITICAL" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
           fi
           [[ -n "$addtl_warning" ]] && out "\n$spaces" && pr_warning "$addtl_warning"
      fi
@@ -5834,11 +5840,12 @@ determine_trust() {
      return 0
 }
 
-# not handled: Root CA supplied (contains anchor)
+# not handled: Root CA supplied ("contains anchor" in SSLlabs terminology)
 
 tls_time() {
      local now difftime
      local spaces="               "
+     local json_prefix="TLS_time"
 
      pr_bold " TLS clock skew" ; out "$spaces"
      TLS_DIFFTIME_SET=true                                       # this is a switch whether we want to measure the remote TLS_TIME
@@ -5852,17 +5859,17 @@ tls_time() {
           if [[ "${#difftime}" -gt 5 ]]; then
                # openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
                out "Random values, no fingerprinting possible "
-               fileout "tls_time" "INFO" "Your TLS time seems to be filled with random values to prevent fingerprinting"
+               fileout "${json_prefix}" "INFO" "The server's TLS time seems to be filled with random values to prevent fingerprinting"
           else
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
                out "$difftime"; out " sec from localtime";
-               fileout "tls_time" "INFO" "Your TLS time is skewed from your localtime by $difftime seconds"
+               fileout "${json_prefix}" "INFO" "The server's TLS time is skewed from your localtime by $difftime seconds"
           fi
           debugme tm_out "$TLS_TIME"
           outln
      else
           outln "SSLv3 through TLS 1.2 didn't return a timestamp"
-          fileout "tls_time" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
+          fileout "${json_prefix}" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
      fi
      TLS_DIFFTIME_SET=false                                      # reset the switch to save calls to date and friend in tls_sockets()
      return 0
@@ -6230,7 +6237,8 @@ compare_server_name_to_cert()
 }
 
 must_staple() {
-     local json_prefix="OCSP must staple: "
+     local json_prefix="OCSP_must_staple"
+     local json_postfix="$1"
      local provides_stapling="$2"
      local cert extn
      local -i extn_len
@@ -6266,14 +6274,14 @@ must_staple() {
      if "$supported"; then
           if "$provides_stapling"; then
                prln_done_good "supported"
-               fileout "${json_prefix}ocsp_must_staple" "OK" "OCSP must staple : supported"
+               fileout "${json_prefix}${json_postfix}" "OK" "supported"
           else
                prln_svrty_high "requires OCSP stapling (NOT ok)"
-               fileout "${json_prefix}" "HIGH" "must staple extension detected but no OCSP stapling provided"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "must staple extension detected but no OCSP stapling provided"
           fi
      else
           outln "no"
-          fileout "${json_prefix}ocsp_must_staple" "INFO" "OCSP must staple : no"
+          fileout "${json_prefix}${json_postfix}" "INFO" "no"
      fi
 }
 
@@ -6354,7 +6362,7 @@ certificate_info() {
      local expire days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
-     local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_fingerprint_serial
+     local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial
      local policy_oid
      local spaces=""
      local -i trust_sni=0 trust_nosni=0
@@ -6364,7 +6372,8 @@ certificate_info() {
      local cnfinding trustfinding trustfinding_nosni
      local cnok="OK"
      local expfinding expok="OK"
-     local json_prefix=""     # string to place at beginng of JSON IDs when there is more than one certificate
+     local json_postfix=""                        # string to place at the end of JSON IDs when there is more than one certificate
+     local json_prefix=""                         # string to place at beginning of JSON IDs
      local indent=""
      local days2warn2=$DAYS2WARN2
      local days2warn1=$DAYS2WARN1
@@ -6378,7 +6387,7 @@ certificate_info() {
           pr_headline "Server Certificate #$certificate_number"
           [[ -z "$sni_used" ]] && pr_underline " (in response to request w/o SNI)"
           outln
-          json_prefix="Server Certificate #$certificate_number "
+          json_postfix=" <cert#${certificate_number}>"
           spaces="                                "
      else
           spaces="                              "
@@ -6390,6 +6399,7 @@ certificate_info() {
      cert_key_algo="${cert_key_algo// /}"
 
      out "$indent" ; pr_bold " Signature Algorithm          "
+     json_prefix="cert_sig_algorithm"
      case $cert_sig_algo in
           sha1WithRSAEncryption)
                pr_svrty_medium "SHA1 with RSA"
@@ -6397,110 +6407,111 @@ certificate_info() {
                     out " -- besides: users will receive a "; pr_svrty_high "strong browser WARNING"
                fi
                outln
-               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: SHA1 with RSA"
+               fileout "${json_prefix}${json_postfix}" "MEDIUM" "SHA1 with RSA"
                ;;
           sha224WithRSAEncryption)
                outln "SHA224 with RSA"
-               fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: SHA224 with RSA"
+               fileout "${json_prefix}${json_postfix}" "INFO" "SHA224 with RSA"
                ;;
           sha256WithRSAEncryption)
                prln_done_good "SHA256 with RSA"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA256 with RSA"
+               fileout "${json_prefix}${json_postfix}" "OK" "SHA256 with RSA"
                ;;
           sha384WithRSAEncryption)
                prln_done_good "SHA384 with RSA"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA384 with RSA"
+               fileout "${json_prefix}${json_postfix}" "OK" "SHA384 with RSA"
                ;;
           sha512WithRSAEncryption)
                prln_done_good "SHA512 with RSA"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: SHA512 with RSA"
+               fileout "${json_prefix}${json_postfix}" "OK" "SHA512 with RSA"
                ;;
           ecdsa-with-SHA1)
                prln_svrty_medium "ECDSA with SHA1"
-               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: ECDSA with SHA1"
+               fileout "${json_prefix}${json_postfix}" "MEDIUM" "ECDSA with SHA1"
                ;;
           ecdsa-with-SHA224)
                outln "ECDSA with SHA224"
-               fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: ECDSA with SHA224"
+               fileout "${json_prefix}${json_postfix}" "INFO" "ECDSA with SHA224"
                ;;
           ecdsa-with-SHA256)
                prln_done_good "ECDSA with SHA256"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA256"
+               fileout "${json_prefix}${json_postfix}" "OK" "ECDSA with SHA256"
                ;;
           ecdsa-with-SHA384)
                prln_done_good "ECDSA with SHA384"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA384"
+               fileout "${json_prefix}${json_postfix}" "OK" "ECDSA with SHA384"
                ;;
           ecdsa-with-SHA512)
                prln_done_good "ECDSA with SHA512"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: ECDSA with SHA512"
+               fileout "${json_prefix}${json_postfix}" "OK" "ECDSA with SHA512"
                ;;
           dsaWithSHA1)
                prln_svrty_medium "DSA with SHA1"
-               fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: DSA with SHA1"
+               fileout "${json_prefix}${json_postfix}" "MEDIUM" "DSA with SHA1"
                ;;
           dsa_with_SHA224)
                outln "DSA with SHA224"
-               fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: DSA with SHA224"
+               fileout "${json_prefix}${json_postfix}" "INFO" "DSA with SHA224"
                ;;
           dsa_with_SHA256)
                prln_done_good "DSA with SHA256"
-               fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: DSA with SHA256"
+               fileout "${json_prefix}${json_postfix}" "OK" "DSA with SHA256"
                ;;
           rsassaPss)
                cert_sig_hash_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 1 "Signature Algorithm" | head -2 | tail -1 | sed 's/^.*Hash Algorithm: //')"
                case $cert_sig_hash_algo in
                     sha1)
                          prln_svrty_medium "RSASSA-PSS with SHA1"
-                         fileout "${json_prefix}algorithm" "MEDIUM" "Signature Algorithm: RSASSA-PSS with SHA1"
+                         fileout "${json_prefix}${json_postfix}" "MEDIUM" "RSASSA-PSS with SHA1"
                          ;;
                     sha224)
                          outln "RSASSA-PSS with SHA224"
-                         fileout "${json_prefix}algorithm" "INFO" "Signature Algorithm: RSASSA-PSS with SHA224"
+                         fileout "${json_prefix}${json_postfix}" "INFO" "RSASSA-PSS with SHA224"
                          ;;
                     sha256)
                          prln_done_good "RSASSA-PSS with SHA256"
-                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA256"
+                         fileout "${json_prefix}${json_postfix}" "OK" "RSASSA-PSS with SHA256"
                          ;;
                     sha384)
                          prln_done_good "RSASSA-PSS with SHA384"
-                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA384"
+                         fileout "${json_prefix}${json_postfix}" "OK" "RSASSA-PSS with SHA384"
                          ;;
                     sha512)
                          prln_done_good "RSASSA-PSS with SHA512"
-                         fileout "${json_prefix}algorithm" "OK" "Signature Algorithm: RSASSA-PSS with SHA512"
+                         fileout "${json_prefix}${json_postfix}" "OK" "RSASSA-PSS with SHA512"
                          ;;
                     *)
                          out "RSASSA-PSS with $cert_sig_hash_algo"
                          prln_warning " (Unknown hash algorithm)"
-                         fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: RSASSA-PSS with $cert_sig_hash_algo"
+                         fileout "${json_prefix}${json_postfix}" "DEBUG" "RSASSA-PSS with $cert_sig_hash_algo"
                     esac
                     ;;
           md2*)
                prln_svrty_critical "MD2"
-               fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD2"
+               fileout "${json_prefix}${json_postfix}" "CRITICAL" "MD2"
                ;;
           md4*)
                prln_svrty_critical "MD4"
-               fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD4"
+               fileout "${json_prefix}${json_postfix}" "CRITICAL" "MD4"
                ;;
           md5*)
                prln_svrty_critical "MD5"
-               fileout "${json_prefix}algorithm" "CRITICAL" "Signature Algorithm: MD5"
+               fileout "${json_prefix}${json_postfix}" "CRITICAL" "MD5"
                ;;
           *)
                out "$cert_sig_algo ("
                pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
-               fileout "${json_prefix}algorithm" "DEBUG" "Signature Algorithm: $cert_sig_algo"
+               fileout "${json_prefix}${json_postfix}" "DEBUG" "$cert_sig_algo"
                ;;
      esac
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
      out "$indent"; pr_bold " Server key size              "
+     json_prefix="cert_key_size"
      if [[ -z "$cert_keysize" ]]; then
           outln "(couldn't determine)"
-          fileout "${json_prefix}key_size" "WARN" "Server keys size cannot be determined"
+          fileout "${json_prefix}${json_postfix}" "Server keys size cannot be determined"
      else
           case $cert_key_algo in
                *RSA*|*rsa*)             out "RSA ";;
@@ -6517,22 +6528,22 @@ certificate_info() {
           if [[ $cert_key_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey  ]]; then
                if [[ "$cert_keysize" -le 110 ]]; then       # a guess
                     pr_svrty_critical "$cert_keysize"
-                    fileout "${json_prefix}key_size" "CRITICAL" "Server keys $cert_keysize EC bits"
+                    fileout "${json_prefix}${json_postfix}" "CRITICAL" "Server keys $cert_keysize EC bits"
                elif [[ "$cert_keysize" -le 123 ]]; then    # a guess
                     pr_svrty_high "$cert_keysize"
-                    fileout "${json_prefix}key_size" "HIGH" "Server keys $cert_keysize EC bits"
+                    fileout "${json_prefix}${json_postfix}" "HIGH" "Server keys $cert_keysize EC bits"
                elif [[ "$cert_keysize" -le 163 ]]; then
                     pr_svrty_medium "$cert_keysize"
-                    fileout "${json_prefix}key_size" "MEDIUM" "Server keys $cert_keysize EC bits"
+                    fileout "${json_prefix}${json_postfix}" "MEDIUM" "Server keys $cert_keysize EC bits"
                elif [[ "$cert_keysize" -le 224 ]]; then
                     out "$cert_keysize"
-                    fileout "${json_prefix}key_size" "INFO" "Server keys $cert_keysize EC bits"
+                    fileout "${json_prefix}${json_postfix}" "INFO" "Server keys $cert_keysize EC bits"
                elif [[ "$cert_keysize" -le 533 ]]; then
                     pr_done_good "$cert_keysize"
-                    fileout "${json_prefix}key_size" "OK" "Server keys $cert_keysize EC bits"
+                    fileout "${json_prefix}${json_postfix}" "OK" "Server keys $cert_keysize EC bits"
                else
                     out "keysize: $cert_keysize (not expected, FIXME)"
-                    fileout "${json_prefix}key_size" "DEBUG" "Server keys $cert_keysize bits (not expected)"
+                    fileout "${json_prefix}${json_postfix}" "DEBUG" "Server keys $cert_keysize bits (not expected)"
                fi
                outln " bits"
           elif [[ $cert_key_algo = *RSA* ]] || [[ $cert_key_algo = *rsa* ]] || [[ $cert_key_algo = *dsa* ]] || \
@@ -6540,41 +6551,46 @@ certificate_info() {
                if [[ "$cert_keysize" -le 512 ]]; then
                     pr_svrty_critical "$cert_keysize"
                     outln " bits"
-                    fileout "${json_prefix}key_size" "CRITICAL" "Server keys $cert_keysize bits"
+                    fileout "${json_prefix}${json_postfix}" "CRITICAL" "Server keys $cert_keysize bits"
                elif [[ "$cert_keysize" -le 768 ]]; then
                     pr_svrty_high "$cert_keysize"
                     outln " bits"
-                    fileout "${json_prefix}key_size" "HIGH" "Server keys $cert_keysize bits"
+                    fileout "${json_prefix}${json_postfix}" "HIGH" "Server keys $cert_keysize bits"
                elif [[ "$cert_keysize" -le 1024 ]]; then
                     pr_svrty_medium "$cert_keysize"
                     outln " bits"
-                    fileout "${json_prefix}key_size" "MEDIUM" "Server keys $cert_keysize bits"
+                    fileout "${json_prefix}${json_postfix}" "MEDIUM" "Server keys $cert_keysize bits"
                elif [[ "$cert_keysize" -le 2048 ]]; then
                     outln "$cert_keysize bits"
-                    fileout "${json_prefix}key_size" "INFO" "Server keys $cert_keysize bits"
+                    fileout "${json_prefix}${json_postfix}" "INFO" "Server keys $cert_keysize bits"
                elif [[ "$cert_keysize" -le 4096 ]]; then
                     pr_done_good "$cert_keysize"
-                    fileout "${json_prefix}key_size" "OK" "Server keys $cert_keysize bits"
+                    fileout "${json_prefix}${json_postfix}" "OK" "Server keys $cert_keysize bits"
                     outln " bits"
                else
                     pr_warning "weird key size: $cert_keysize bits"; outln " (could cause compatibility problems)"
-                    fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (Odd)"
+                    fileout "${json_prefix}${json_postfix}" "WARN" "Server keys $cert_keysize bits (Odd)"
                fi
           else
                out "$cert_keysize bits ("
                pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
-               fileout "${json_prefix}key_size" "WARN" "Server keys $cert_keysize bits (unknown signature algorithm)"
+               fileout "${json_prefix}${json_postfix}" "WARN" "Server keys $cert_keysize bits (unknown signature algorithm)"
           fi
      fi
 
      out "$indent"; pr_bold " Fingerprint / Serial         "
      cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g')"
-     cert_fingerprint_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
+     fileout "cert_fingerprint_SHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1//SHA1 /}"
+
      cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
-     outln "$cert_fingerprint_sha1 / $cert_fingerprint_serial"
+     fileout "cert_fingerprint_SHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2//SHA256 /}"
+
+     cert_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
+     outln "$cert_fingerprint_sha1 / $cert_serial"
      outln "$spaces$cert_fingerprint_sha2"
-     fileout "${json_prefix}fingerprint" "INFO" "Fingerprints / Serial: $cert_fingerprint_sha1 / $cert_fingerprint_serial, $cert_fingerprint_sha2"
+
+     fileout "cert_serial${json_postfix}" "INFO" "$cert_serial"
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" ||
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2 $CERT_FINGERPRINT_SHA2"
@@ -6594,6 +6610,8 @@ certificate_info() {
           cnfinding="$cn"
           cnok="INFO"
      fi
+     fileout "cert_CN${json_postfix}" "$cnok" "$cnfinding"
+     cnfinding=""
 
      if [[ -n "$sni_used" ]]; then
           if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
@@ -6605,27 +6623,26 @@ certificate_info() {
           debugme tm_out "\"$NODE\" | \"$cn\""
      fi
 
-#FIXME: check for SSLv3/v2 and look whether it goes to a different CN (probably not polite)
-
      if [[ -z "$sni_used" ]] || [[ "$(toupper "$cn_nosni")" == "$(toupper "$cn")" ]]; then
           outln
+          cnfinding="$cn"
      elif [[ -z "$cn_nosni" ]]; then
           out " (request w/o SNI didn't succeed";
-          cnfinding+=" (request w/o SNI didn't succeed"
+          cnfinding+="request w/o SNI didn't succeed"
           if [[ $cert_sig_algo =~ ecdsa ]]; then
                out ", usual for EC certificates"
                cnfinding+=", usual for EC certificates"
           fi
           outln ")"
-          cnfinding+=")"
+          cnfinding+=""
      elif [[ "$cn_nosni" == *"no CN field"* ]]; then
           outln ", (request w/o SNI: $cn_nosni)"
-          cnfinding+=", (request w/o SNI: $cn_nosni)"
+          cnfinding="$cn_nosni"
      else
           out " (CN in response to request w/o SNI: "; pr_italic "$cn_nosni"; outln ")"
-          cnfinding+=" (CN in response to request w/o SNI: \"$cn_nosni\")"
+          cnfinding="$cn_nosni"
      fi
-     fileout "${json_prefix}cn" "$cnok" "$cnfinding"
+     fileout "cert_CN_without_SNI${json_postfix}" "INFO" "$cnfinding"
 
      sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
           egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
@@ -6633,23 +6650,27 @@ certificate_info() {
               -e 's/ *Registered ID://g' \
               -e 's/ *othername:<unsupported>//g' -e 's/ *X400Name:<unsupported>//g' -e 's/ *EdiPartyName:<unsupported>//g')
 #                   ^^^ CACert
+
      out "$indent"; pr_bold " subjectAltName (SAN)         "
+     json_prefix="cert_SAN"
      if [[ -n "$sans" ]]; then
           while read san; do
                [[ -n "$san" ]] && all_san+="$san "
           done <<< "$sans"
           prln_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
-          fileout "${json_prefix}san" "INFO" "subjectAltName (SAN) : $all_san"
+          fileout "${json_prefix}${json_postfix}" "INFO" "$all_san"
      else
           if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
                pr_svrty_high "missing (NOT ok)"; outln " -- Browsers are complaining"
-               fileout "${json_prefix}san" "HIGH" "subjectAltName (SAN) : -- Browsers are complaining"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "No SAN, browsers are complaining"
           else
                pr_svrty_medium "missing"; outln " -- no SAN is deprecated"
-               fileout "${json_prefix}san" "MEDIUM" "subjectAltName (SAN) : -- no SAN is deprecated"
+               fileout "${json_prefix}${json_postfix}" "MEDIUM" "Providing no SAN is deprecated"
           fi
      fi
+
      out "$indent"; pr_bold " Issuer                       "
+     json_prefix="cert_issuer"
      #FIXME: oid would be better maybe (see above)
      issuer="$($OPENSSL x509 -in  $HOSTCERT -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
@@ -6659,7 +6680,7 @@ certificate_info() {
 
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$cn" ]]; then
           prln_svrty_critical "self-signed (NOT ok)"
-          fileout "${json_prefix}issuer" "CRITICAL" "Issuer: selfsigned"
+          fileout "${json_prefix}${json_postfix}" "CRITICAL" "selfsigned"
      else
           issuerfinding="$issuer_CN"
           pr_italic "$issuer_CN"
@@ -6687,7 +6708,7 @@ certificate_info() {
                out ")"
           fi
           outln
-          fileout "${json_prefix}issuer" "INFO" "Issuer: $issuerfinding"
+          fileout "${json_prefix}${json_postfix}" "INFO" "$issuerfinding"
      fi
 
      out "$indent"; pr_bold " Trust (hostname)             "
@@ -6804,19 +6825,21 @@ certificate_info() {
           prln_svrty_medium "$trustfinding_nosni"
      fi
 
-     fileout "${json_prefix}trust" "$trust_sni_finding" "${trustfinding}${trustfinding_nosni}"
+     fileout "cert_trust${json_postfix}" "$trust_sni_finding" "${trustfinding}${trustfinding_nosni}"
 
      out "$indent"; pr_bold " Chain of trust"; out "               "
+     json_prefix="cert_chain_of_trust"
      if [[ "$issuer_O" =~ StartCom ]] || [[ "$issuer_O" =~ WoSign ]] || [[ "$issuer_CN" =~ StartCom ]] || [[ "$issuer_CN" =~ WoSign ]]; then
           # Shortcut for this special case here.
           pr_italic "WoSign/StartCom"; out " are " ; prln_svrty_critical "not trusted anymore (NOT ok)"
-          fileout "${json_prefix}issuer" "CRITICAL" "Issuer: not trusted anymore (WoSign/StartCom)"
+          fileout "${json_prefix}${json_postfix}" "CRITICAL" "Issuer not trusted anymore (WoSign/StartCom)"
      else
-          determine_trust "$json_prefix" # Also handles fileout
+          determine_trust "$json_prefix" "$json_postfix" # Also handles fileout
      fi
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
+     json_prefix="cert_EV"
      # only the first one, seldom we have two
      policy_oid=$($OPENSSL x509 -in $HOSTCERT -text 2>>$ERRFILE | awk '/ .Policy: / { print $2 }' | awk 'NR < 2')
      if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
@@ -6828,17 +6851,18 @@ certificate_info() {
           [[ 1.3.6.1.4.1.17326.10.8.12.1.2 == "$policy_oid" ]] || \
           [[ 1.3.6.1.4.1.13177.10.1.3.10 == "$policy_oid" ]] ; then
           out "yes "
-          fileout "${json_prefix}ev" "OK" "Extended Validation (EV) (experimental) : yes"
+          fileout "${json_prefix}${json_postfix}" "OK" "yes"
      else
           out "no "
-          fileout "${json_prefix}ev" "INFO" "Extended Validation (EV) (experimental) : no"
+          fileout "${json_prefix}${json_postfix}" "INFO" "no"
      fi
      debugme echo "($(newline_to_spaces "$policy_oid"))"
      outln
-#TODO: use browser OIDs:
+#TODO: check browser OIDs:
 #         https://mxr.mozilla.org/mozilla-central/source/security/certverifier/ExtendedValidation.cpp
 #         http://src.chromium.org/chrome/trunk/src/net/cert/ev_root_ca_metadata.cc
 #         https://certs.opera.com/03/ev-oids.xml
+#         see #967
 
      out "$indent"; pr_bold " Certificate Expiration       "
 
@@ -6854,8 +6878,8 @@ certificate_info() {
 
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! grep -qw not <<< "$expire" ; then
-          pr_svrty_critical "expired!"
-          expfinding="expired!"
+          pr_svrty_critical "expired"
+          expfinding="expired"
           expok="CRITICAL"
      else
           secs2warn=$((24 * 60 * 60 * days2warn2))  # low threshold first
@@ -6872,17 +6896,18 @@ certificate_info() {
                     expok="MEDIUM"
                fi
           else
-               pr_svrty_high "expires < $days2warn2 days ($days2expire) !"
-               expfinding+="expires < $days2warn2 days ($days2expire) !"
+               pr_svrty_high "expires < $days2warn2 days ($days2expire)"
+               expfinding+="expires < $days2warn2 days ($days2expire)"
                expok="HIGH"
           fi
      fi
      outln " ($startdate --> $enddate)"
-     fileout "${json_prefix}expiration" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
+     fileout "cert_expiration_status${json_postfix}" "$expok" "$expfinding"
+     fileout "cert_expiration_startend${json_postfix}" "$expok" "$startdate --> $enddate"
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
-     fileout "${json_prefix}certcount" "INFO" "# of certificates provided :  $certificates_provided"
+     fileout "certchain_count${json_postfix}" "INFO" "${certificates_provided} certificates provided"
 
      # Get both CRL and OCSP URI upfront. If there's none, this is not good. And we need to penalize this in the output
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
@@ -6890,60 +6915,62 @@ certificate_info() {
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
 
      out "$indent"; pr_bold " Certificate Revocation List  "
+     json_prefix="cert_CRL"
      if [[ -z "$crl" ]] ; then
           if [[ -n "$ocsp_uri" ]]; then
                outln "--"
-               fileout "${json_prefix}crl" "INFO" "No CRL provided"
+               fileout "${json_prefix}${json_postfix}" "INFO" "none"
           else
                pr_svrty_high "NOT ok --"
                outln " neither CRL nor OCSP URI provided"
-               fileout "${json_prefix}crl" "HIGH" "Neither CRL nor OCSP URI provided"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "Neither CRL nor OCSP URI provided"
           fi
      else
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
-               fileout "${json_prefix}crl" "INFO" "Certificate Revocation List : $crl"
           else # more than one CRL
                out_row_aligned "$crl" "$spaces"
-               fileout "${json_prefix}crl" "INFO" "Certificate Revocation List : $crl"
           fi
+          fileout "${json_prefix}${json_postfix}" "INFO" "$crl"
      fi
 
      out "$indent"; pr_bold " OCSP URI                     "
+     json_prefix="cert_OCSP_URI"
      if [[ -z "$ocsp_uri" ]]; then
           outln "--"
-          fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : --"
+          fileout "${json_prefix}${json_postfix}" "INFO" "--"
      else
           if [[ $(count_lines "$ocsp_uri") -eq 1 ]]; then
                outln "$ocsp_uri"
           else
                out_row_aligned "$ocsp_uri" "$spaces"
           fi
-          fileout "${json_prefix}ocsp_uri" "INFO" "OCSP URI : $ocsp_uri"
+          fileout "${json_prefix}${json_postfix}" "INFO" "$ocsp_uri"
      fi
 
      out "$indent"; pr_bold " OCSP stapling                "
+     json_prefix="OCSP_stapling"
      if grep -a "OCSP response" <<< "$ocsp_response" | grep -q "no response sent" ; then
           if [[ -n "$ocsp_uri" ]]; then
                pr_svrty_low "not offered"
-               fileout "${json_prefix}ocsp_stapling" "LOW" "OCSP stapling : not offered"
+               fileout "${json_prefix}${json_postfix}" "LOW" "not offered"
           else
                out "not offered"
-               fileout "${json_prefix}ocsp_stapling" "INFO" "OCSP stapling : not offered"
+               fileout "${json_prefix}${json_postfix}" "INFO" "not offered"
           fi
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
                pr_done_good "offered"
-               fileout "${json_prefix}ocsp_stapling" "OK" "OCSP stapling : offered"
+               fileout "${json_prefix}${json_postfix}" "OK" "offered"
                provides_stapling=true
           else
                if $GOST_STATUS_PROBLEM; then
                     pr_warning "(GOST servers make problems here, sorry)"
-                    fileout "${json_prefix}ocsp_stapling" "WARN" "OCSP stapling : (GOST servers make problems here, sorry)"
+                    fileout "${json_prefix}${json_postfix}" "WARN" "(The GOST server made a problem here, sorry)"
                     ret=0
                else
                     out "(response status unknown)"
-                    fileout "${json_prefix}ocsp_stapling" "OK" "OCSP stapling : not sure what's going on here, debug: $ocsp_response"
+                    fileout "${json_prefix}${json_postfix}" "OK" " not sure what's going on here, \'$ocsp_response\'"
                     debugme grep -a -A20 -B2 "OCSP response"  <<<"$ocsp_response"
                     ret=2
                fi
@@ -6952,10 +6979,10 @@ certificate_info() {
      outln
 
      out "$indent"; pr_bold " OCSP must staple             ";
-     must_staple "$json_prefix" "$provides_stapling"
+     must_staple "$json_postfix" "$provides_stapling"
 
      out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
-
+     json_prefix="CAA_record"
      caa_node="$NODE"
      caa=""
      while ( [[ -z "$caa" ]] &&  [[ ! -z "$caa_node" ]] ); do
@@ -6977,23 +7004,23 @@ certificate_info() {
           done <<< "$caa"
           all_caa=${all_caa%, }                 # strip trailing comma
           pr_italic "$(out_row_aligned_max_width "$all_caa" "$indent                              " $TERM_WIDTH)"
-          fileout "${json_prefix}CAA_record" "OK" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 (check for match): \"$all_caa\" "
+          fileout "${json_prefix}${json_postfix}" "OK" "'DNS Certification Authority Authorization (CAA) Resource Record / RFC6844' \'$all_caa\' "
      elif "$NODNS"; then
           pr_warning "(was instructed to not use DNS)"
-          fileout "${json_prefix}CAA_record" "WARN" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : test skipped as instructed"
+          fileout "${json_prefix}${json_postfix}" "WARN" "check skipped as instructed"
      else
           pr_svrty_low "not offered"
-          fileout "${json_prefix}CAA_record" "LOW" "DNS Certification Authority Authorization (CAA) Resource Record / RFC6844 : not offered"
+          fileout "${json_prefix}${json_postfix}" "LOW" "'DNS Certification Authority Authorization (CAA) Resource Record / RFC6844' not offered"
      fi
      outln
 
      out "$indent"; pr_bold " Certificate Transparency     ";
      if [[ "$ct" =~ extension ]]; then
           pr_done_good "yes"; outln " ($ct)"
-          fileout "${json_prefix}certificate_transparency" "OK" "Certificate Transparency: yes ($ct)"
+          fileout "certificate_transparency${json_postfix}" "OK" "yes ($ct)"
      else
           outln "$ct"
-          fileout "${json_prefix}certificate_transparency" "INFO" "Certificate Transparency: $ct"
+          fileout "certificate_transparency${json_postfix}" "INFO" "$ct"
      fi
      outln
      return $ret
@@ -7157,7 +7184,7 @@ run_server_defaults() {
      pr_bold " TLS extensions (standard)    "
      if [[ -z "$TLS_EXTENSIONS" ]]; then
           outln "(none)"
-          fileout "tls_extensions" "INFO" "TLS server extensions (std): (none)"
+          fileout "TLS_extensions" "INFO" "(none)"
      else
 #FIXME: we rather want to have the chance to print each ext in italics or another format.
 # Atm is a string of quoted strings -- that needs to be fixed at the root then
@@ -7171,13 +7198,14 @@ run_server_defaults() {
           tls_extensions="$(out_row_aligned_max_width "$tls_extensions" "                              " $TERM_WIDTH)"
           tls_extensions="${tls_extensions//{/ }"
           outln "$tls_extensions"
-          fileout "tls_extensions" "INFO" "TLS server extensions (std): $TLS_EXTENSIONS"
+          fileout "TLS_extensions" "INFO" "$TLS_EXTENSIONS"
      fi
 
      pr_bold " Session Ticket RFC 5077 hint "
+     json_prefix="session_ticket"
      if [[ -z "$sessticket_lifetime_hint" ]]; then
           outln "(no lifetime advertised)"
-          fileout "session_ticket" "INFO" "TLS session ticket RFC 5077 lifetime: none advertised"
+          fileout "${json_prefix}" "INFO" "No TLS session ticket RFC 5077 lifetime advertised"
           # it MAY be given a hint of the lifetime of the ticket, see https://tools.ietf.org/html/rfc5077#section-5.6 .
           # Sometimes it just does not -- but it then may also support TLS session tickets reuse
      else
@@ -7186,20 +7214,20 @@ run_server_defaults() {
           out "$lifetime $unit"
           if [[ $((3600 * 24)) -lt $lifetime ]]; then
                prln_svrty_low " but: PFS requires session ticket keys to be rotated < daily !"
-               fileout "session_ticket" "LOW" "TLS session ticket RFC 5077 valid for $lifetime $unit but PFS requires session ticket keys to be rotated at least daily!"
+               fileout "${json_prefix}" "LOW" "TLS session ticket RFC 5077 valid for $lifetime $unit but PFS requires session ticket keys to be rotated at least daily!"
           else
                outln ", session tickets keys seems to be rotated < daily"
-               fileout "session_ticket" "INFO" "TLS session ticket RFC 5077 valid for $lifetime $unit only (PFS requires session ticket keys are rotated at least daily)"
+               fileout "${json_prefix}" "INFO" "TLS session ticket RFC 5077 valid for $lifetime $unit only (PFS requires session ticket keys are rotated at least daily)"
           fi
      fi
 
      pr_bold " SSL Session ID support       "
      if "$NO_SSL_SESSIONID"; then
           outln "no"
-          fileout "session_id" "INFO" "SSL session ID support: no"
+          fileout "SSL_session_id_support" "INFO" "no"
      else
           outln "yes"
-          fileout "session_id" "INFO" "SSL session ID support: yes"
+          fileout "SSL_session_id_support" "INFO" "yes"
      fi
 
      pr_bold " Session Resumption           "
