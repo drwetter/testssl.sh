@@ -6352,6 +6352,7 @@ certificate_info() {
      local sni_used=$8
      local ct="$9"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_keyusage cert_ext_keyusage
+     local outok=true
      local expire days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
@@ -6570,33 +6571,55 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " Server key usage             ";
+     outok=true
+     json_prefix="cert_key_usage"
      cert_keyusage=$($OPENSSL x509 -text -noout -in $HOSTCERT 2>>$ERRFILE | grep -A 1 "X509v3 Key Usage:" | tail -n +2 | sed 's/^[ \t]*//')
      if [[ -n "$cert_keyusage" ]]; then
           outln "$cert_keyusage"
           if ( [[ " $cert_type " =~ " RSASig " ]] || [[ " $cert_type " =~ " DSA " ]] || [[ " $cert_type " =~ " ECDSA " ]] ) && \
              [[ ! "$cert_keyusage" =~ "Digital Signature" ]]; then
                prln_svrty_high "$indent                              -- certificate incorrectly used for digital signatures"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "Certificate incorrectly used for digital signatures: \"$cert_keyusage\""
+               outok=false
           fi
           if [[ " $cert_type " =~ " RSAKMK " ]] && [[ ! "$cert_keyusage" =~ "Key Encipherment" ]]; then
                prln_svrty_high "$indent                              -- certificate incorrectly used for key encipherment"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "Certificate incorrectly used for key encipherment: \"$cert_keyusage\""
+               outok=false
           fi
           if ( [[ " $cert_type " =~ " DH " ]] || [[ " $cert_type " =~ " ECDH " ]] ) && \
              [[ ! "$cert_keyusage" =~ "Key Agreement" ]]; then
                prln_svrty_high "$indent                              -- certificate incorrectly used for key agreement"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "Certificate incorrectly used for key agreement: \"$cert_keyusage\""
+               outok=false
           fi
      else
-          outln "(absent)"
+          outln "--"
+          fileout "${json_prefix}key_usage" "INFO" "No server key usage information"
+          outok=false
+     fi
+     if "$outok"; then
+          fileout "${json_prefix}key_usage" "INFO" "Server key usage information: $cert_keyusage"
      fi
 
      out "$indent"; pr_bold " Server extended key usage    ";
+     json_prefix="cert_extended_key_usage"
+     outok=true
      cert_ext_keyusage="$($OPENSSL x509 -noout -text -in $HOSTCERT 2>>$ERRFILE | grep -A 1 "X509v3 Extended Key Usage: " | tail -1 | sed 's/^[ \t]*//')"
      if [[ -n "$cert_ext_keyusage" ]]; then
           outln "$cert_ext_keyusage"
           if [[ ! "$cert_ext_keyusage" =~ "TLS Web Server Authentication" ]] && [[ ! "$cert_ext_keyusage" =~ "Any Extended Key Usage" ]]; then
                prln_svrty_high "$indent                              -- certificate incorrectly used for TLS Web Server Authentication"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "Certificate incorrectly used for TLS Web Server Authentication: \"$cert_ext_keyusage\""
+               outok=false
           fi
      else
-          outln "(absent)"
+          outln "--"
+          fileout "${json_prefix}${json_postfix}" "INFO" "No server extended key usage information"
+          outok=false
+     fi
+     if "$outok"; then
+          fileout "${json_prefix}${json_postfix}" "INFO" "Server extended key usage: \"cert_ext_keyusage\""
      fi
 
      out "$indent"; pr_bold " Fingerprint / Serial         "
