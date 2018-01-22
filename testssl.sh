@@ -12281,6 +12281,7 @@ run_tls_poodle() {
 
 run_tls_fallback_scsv() {
      local -i ret=0
+     local p high_proto="" high_proto_str low_proto="" protos_to_try
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for TLS_FALLBACK_SCSV Protection " && outln
      pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
@@ -12292,66 +12293,118 @@ run_tls_fallback_scsv() {
           prln_local_problem "$OPENSSL lacks TLS_FALLBACK_SCSV support"
           return 4
      fi
-     #TODO: this need some tuning: a) if one protocol is supported only it has practcally no value (theoretical it's interesting though)
-     # b) for IIS6 + openssl 1.0.2 this won't work
-     # c) best to make sure that we hit a specific protocol, see https://alpacapowered.wordpress.com/2014/10/20/ssl-poodle-attack-what-is-this-scsv-thingy/
-     # d) minor: we should do "-state" here
 
-     # first: make sure SSLv3 or some TLS protocol is supported
+     # First determine the highest protocol that the server supports (not including TLSv1.3).
      if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
           prln_svrty_critical "No fallback possible, SSLv2 is the only protocol"
           return 7
      fi
-     # second: make sure we have tls1_2:
-     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2") >$TMPFILE 2>$ERRFILE </dev/null
-     if ! sclient_connect_successful $? $TMPFILE; then
-          pr_done_good "No fallback possible, TLS 1.2 is the only protocol (OK)"
-          ret=7
-     else
-          # ...and do the test (we need to parse the error here!)
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI -no_tls1_2 -fallback_scsv") &>$TMPFILE </dev/null
-          if grep -q "CONNECTED(00" "$TMPFILE"; then
-               if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
-                    if [[ -z "$POODLE" ]]; then
-                         pr_warning "Rerun including POODLE SSL check. "
-                         pr_svrty_medium "Downgrade attack prevention NOT supported"
-                         fileout "fallback_scsv" "WARN" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported. Pls rerun wity POODLE SSL check"
-                         ret=1
-                    elif [[ "$POODLE" -eq 0 ]]; then
-                         pr_svrty_high "Downgrade attack prevention NOT supported and vulnerable to POODLE SSL"
-                         fileout "fallback_scsv" "HIGH" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported and vulnerable to POODLE SSL"
-                         ret=0
-                    else
-                         pr_svrty_medium "Downgrade attack prevention NOT supported"
-                         fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported"
-                         ret=1
-                    fi
-               elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
-                    pr_done_good "Downgrade attack prevention supported (OK)"
-                    fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported"
-                    ret=0
-               elif grep -qa "alert handshake failure" "$TMPFILE"; then
-                    pr_done_good "Probably OK. "
-                    fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Probably oK"
-                    # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
-                    # other case reported by Nicolas was F5 and at costumer of mine: the same
-                    pr_svrty_medium "But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
-                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
-                    ret=2
-               elif grep -qa "ssl handshake failure" "$TMPFILE"; then
-                    pr_svrty_medium "some unexpected \"handshake failure\" instead of \"inappropriate fallback\""
-                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : some unexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely: warning)"
-                    ret=3
-               else
-                    pr_warning "Check failed, unexpected result "
-                    out ", run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
-                    fileout "fallback_scsv" "WARN" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Check failed, unexpected result, run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
-               fi
-          else
-               pr_warning "test failed (couldn't connect)"
-               fileout "fallback_scsv" "WARN" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Check failed. (couldn't connect)"
-               ret=7
+     for p in tls1_2 tls1_1 tls1 ssl3; do
+          [[ $(has_server_protocol "$p") -eq 1 ]] && continue
+          if [[ $(has_server_protocol "$p") -eq 0 ]]; then
+                high_proto="$p"
+                break
           fi
+          $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+          if sclient_connect_successful $? $TMPFILE; then
+               high_proto="$p"
+               break
+          fi
+     done
+     case "$high_proto" in
+          "tls1_2")
+               high_proto_str="TLS 1.2"
+               protos_to_try="tls1_1 tls1 ssl3" ;;
+          "tls1_1")
+               high_proto_str="TLS 1.1"
+               protos_to_try="tls1 ssl3" ;;
+          "tls1")
+               high_proto_str="TLS 1"
+               protos_to_try="ssl3" ;;
+          "ssl3") 
+               prln_svrty_high "No fallback possible, SSLv3 is the only protocol"
+               return 7
+               ;;
+          *)   pr_done_good "No fallback possible, TLS 1.3 is the only protocol (OK)"
+               return 7
+     esac
+
+     # Next find a second protocol that the server supports.
+     for p in $protos_to_try; do
+          [[ $(has_server_protocol "$p") -eq 1 ]] && continue
+          if [[ $(has_server_protocol "$p") -eq 0 ]]; then
+               low_proto="$p"
+               break
+          fi
+          $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+          if sclient_connect_successful $? $TMPFILE; then
+               low_proto="$p"
+               break
+          fi
+     done
+
+     if [[ -z "$low_proto" ]]; then
+          case "$high_proto" in
+               "tls1_2")
+                    pr_done_good "No fallback possible, no protocol below $high_proto_str offered (OK)" ;;
+               *)   out "No fallback possible, no protocol below $high_proto_str offered (OK)" ;;
+          esac
+          return 7
+     fi
+     case "$low_proto" in
+          "tls1_1")
+               p="-no_tls1_2" ;;
+          "tls1")
+               p="-no_tls1_2 -no_tls1_1" ;;
+          "ssl3")
+               p="-no_tls1_2 -no_tls1_1 -no_tls1" ;;
+     esac
+     "$HAS_TLS13" && p+=" -no_tls1_3"
+     debugme echo "Simulating fallback from $high_proto to $low_proto"
+
+     # ...and do the test (we need to parse the error here!)
+     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $p -fallback_scsv") &>$TMPFILE </dev/null
+     if grep -q "CONNECTED(00" "$TMPFILE"; then
+          if grep -qa "BEGIN CERTIFICATE" "$TMPFILE"; then
+               if [[ -z "$POODLE" ]]; then
+                    pr_warning "Rerun including POODLE SSL check. "
+                    pr_svrty_medium "Downgrade attack prevention NOT supported"
+                    fileout "fallback_scsv" "WARN" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported. Pls rerun wity POODLE SSL check"
+                    ret=1
+               elif [[ "$POODLE" -eq 0 ]]; then
+                    pr_svrty_high "Downgrade attack prevention NOT supported and vulnerable to POODLE SSL"
+                    fileout "fallback_scsv" "HIGH" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported and vulnerable to POODLE SSL"
+                    ret=0
+               else
+                    pr_svrty_medium "Downgrade attack prevention NOT supported"
+                    fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507): Downgrade attack prevention NOT supported"
+                    ret=1
+               fi
+          elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
+               pr_done_good "Downgrade attack prevention supported (OK)"
+               fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Downgrade attack prevention supported"
+               ret=0
+          elif grep -qa "alert handshake failure" "$TMPFILE"; then
+               pr_done_good "Probably OK. "
+               fileout "fallback_scsv" "OK" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Probably oK"
+               # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
+               # other case reported by Nicolas was F5 and at costumer of mine: the same
+               pr_svrty_medium "But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
+               fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
+               ret=2
+          elif grep -qa "ssl handshake failure" "$TMPFILE"; then
+               pr_svrty_medium "some unexpected \"handshake failure\" instead of \"inappropriate fallback\""
+               fileout "fallback_scsv" "MEDIUM" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : some unexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely: warning)"
+               ret=3
+          else
+               pr_warning "Check failed, unexpected result "
+               out ", run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
+               fileout "fallback_scsv" "WARN" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Check failed, unexpected result, run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
+          fi
+     else
+          pr_warning "test failed (couldn't connect)"
+          fileout "fallback_scsv" "WARN" "TLS_FALLBACK_SCSV (RFC 7507) (experimental) : Check failed. (couldn't connect)"
+          ret=7
      fi
 
      outln
