@@ -6351,11 +6351,13 @@ certificate_info() {
      local -i number_of_certificates=$2
      local cipher=$3
      local cert_keysize=$4
-     local ocsp_response=$5
-     local ocsp_response_status=$6
-     local sni_used=$7
-     local ct="$8"
-     local cert_sig_algo cert_sig_hash_algo cert_key_algo
+     local cert_type="$5"
+     local ocsp_response=$6
+     local ocsp_response_status=$7
+     local sni_used=$8
+     local ct="$9"
+     local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_keyusage cert_ext_keyusage
+     local outok=true
      local expire days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
@@ -6574,6 +6576,58 @@ certificate_info() {
                outln ")"
                fileout "${json_prefix}${json_postfix}" "WARN" "Server keys $cert_keysize bits (unknown signature algorithm)"
           fi
+     fi
+
+     out "$indent"; pr_bold " Server key usage             ";
+     outok=true
+     json_prefix="cert_key_usage"
+     cert_keyusage=$($OPENSSL x509 -text -noout -in $HOSTCERT 2>>$ERRFILE | grep -A 1 "X509v3 Key Usage:" | tail -n +2 | sed 's/^[ \t]*//')
+     if [[ -n "$cert_keyusage" ]]; then
+          outln "$cert_keyusage"
+          if ( [[ " $cert_type " =~ " RSASig " ]] || [[ " $cert_type " =~ " DSA " ]] || [[ " $cert_type " =~ " ECDSA " ]] ) && \
+             [[ ! "$cert_keyusage" =~ "Digital Signature" ]]; then
+               prln_svrty_high "$indent                              -- certificate incorrectly used for digital signatures"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "Certificate incorrectly used for digital signatures: \"$cert_keyusage\""
+               outok=false
+          fi
+          if [[ " $cert_type " =~ " RSAKMK " ]] && [[ ! "$cert_keyusage" =~ "Key Encipherment" ]]; then
+               prln_svrty_high "$indent                              -- certificate incorrectly used for key encipherment"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "Certificate incorrectly used for key encipherment: \"$cert_keyusage\""
+               outok=false
+          fi
+          if ( [[ " $cert_type " =~ " DH " ]] || [[ " $cert_type " =~ " ECDH " ]] ) && \
+             [[ ! "$cert_keyusage" =~ "Key Agreement" ]]; then
+               prln_svrty_high "$indent                              -- certificate incorrectly used for key agreement"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "Certificate incorrectly used for key agreement: \"$cert_keyusage\""
+               outok=false
+          fi
+     else
+          outln "--"
+          fileout "${json_prefix}key_usage" "INFO" "No server key usage information"
+          outok=false
+     fi
+     if "$outok"; then
+          fileout "${json_prefix}key_usage" "INFO" "Server key usage information: $cert_keyusage"
+     fi
+
+     out "$indent"; pr_bold " Server extended key usage    ";
+     json_prefix="cert_extended_key_usage"
+     outok=true
+     cert_ext_keyusage="$($OPENSSL x509 -noout -text -in $HOSTCERT 2>>$ERRFILE | grep -A 1 "X509v3 Extended Key Usage: " | tail -1 | sed 's/^[ \t]*//')"
+     if [[ -n "$cert_ext_keyusage" ]]; then
+          outln "$cert_ext_keyusage"
+          if [[ ! "$cert_ext_keyusage" =~ "TLS Web Server Authentication" ]] && [[ ! "$cert_ext_keyusage" =~ "Any Extended Key Usage" ]]; then
+               prln_svrty_high "$indent                              -- certificate incorrectly used for TLS Web Server Authentication"
+               fileout "${json_prefix}${json_postfix}" "HIGH" "Certificate incorrectly used for TLS Web Server Authentication: \"$cert_ext_keyusage\""
+               outok=false
+          fi
+     else
+          outln "--"
+          fileout "${json_prefix}${json_postfix}" "INFO" "No server extended key usage information"
+          outok=false
+     fi
+     if "$outok"; then
+          fileout "${json_prefix}${json_postfix}" "INFO" "Server extended key usage: \"cert_ext_keyusage\""
      fi
 
      out "$indent"; pr_bold " Fingerprint / Serial         "
@@ -7029,9 +7083,9 @@ run_server_defaults() {
      local sessticket_lifetime_hint="" lifetime unit
      local -i i n
      local -i certs_found=0
-     local -a previous_hostcert previous_intermediates keysize cipher
+     local -a previous_hostcert previous_hostcert_type previous_intermediates keysize cipher
      local -a ocsp_response ocsp_response_status sni_used tls_version ct
-     local -a ciphers_to_test
+     local -a ciphers_to_test certificate_type
      local -a -i success
      local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
 
@@ -7059,6 +7113,10 @@ run_server_defaults() {
      ciphers_to_test[5]="aECDH"
      ciphers_to_test[6]="aECDSA"
      ciphers_to_test[7]="aGOST"
+     certificate_type[1]="RSASig" ; certificate_type[2]="RSAKMK"
+     certificate_type[3]="DSA"; certificate_type[4]="DH"
+     certificate_type[5]="ECDH" ; certificate_type[6]="ECDSA"
+     certificate_type[7]="GOST"
 
      for (( n=1; n <= 14 ; n++ )); do
           # Some servers use a different certificate if the ClientHello
@@ -7067,7 +7125,7 @@ run_server_defaults() {
           # try again, but only with TLSv1.1 and without SNI.
           if [[ $n -ge 8 ]]; then
                ciphers_to_test[n]=""
-               [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}"
+               [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}" && certificate_type[n]="${certificate_type[n-7]}"
           fi
 
           if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
@@ -7153,6 +7211,9 @@ run_server_defaults() {
                          previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
                          [[ $n -ge 8 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                          tls_version[certs_found]="$DETECTED_TLS_VERSION"
+                         previous_hostcert_type[certs_found]=" ${certificate_type[n]}"
+                    else
+                         previous_hostcert_type[i]+=" ${certificate_type[n]}"
                     fi
                fi
           fi
@@ -7285,7 +7346,7 @@ run_server_defaults() {
      for (( i=1; i <= certs_found; i++ )); do
           echo "${previous_hostcert[i]}" > $HOSTCERT
           echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
-          certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
+          certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
      done
 }
 
