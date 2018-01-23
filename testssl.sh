@@ -14323,6 +14323,7 @@ single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -E, --cipher-per-proto        checks those per protocol
      -s, --std, --standard         tests certain lists of cipher suites by strength
      -p, --protocols               checks TLS/SSL protocols (including SPDY/HTTP2)
+     -g, --grease                  tests several server implementation bugs like GREASE and size limitations
      -S, --server-defaults         displays the server's default picks and certificate info
      -P, --server-preference       displays the server's picks: protocol+cipher
      -x, --single-cipher <pattern> tests matched <pattern> of ciphers
@@ -14348,12 +14349,10 @@ single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -D, --drown                   tests for DROWN vulnerability
      -f, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
      -4, --rc4, --appelbaum        which RC4 ciphers are being offered?
-     -g, --grease                  tests several server implementation bugs like GREASE and size limitations
-     -9, --full                    includes tests for implementation bugs and cipher per protocol (could disappear)
 
 tuning / connect options (most also can be preset via environment variables):
-     --fast                        omits some checks: using openssl for all ciphers (-e), show only first
-                                   preferred cipher.
+     --fast                        omits some checks: using openssl for all ciphers (-e), show only first preferred cipher.
+     -9, --full                    includes tests for implementation bugs and cipher per protocol (could disappear)
      --bugs                        enables the "-bugs" option of s_client, needed e.g. for some buggy F5s
      --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
