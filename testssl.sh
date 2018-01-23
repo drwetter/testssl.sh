@@ -5788,10 +5788,7 @@ determine_trust() {
           # all stores ok
           pr_done_good "Ok   "; pr_warning "$addtl_warning"
           # we did to stdout the warning above already, so we could stay here with OK:
-          [[ -z "$addtl_warning" ]] && \
-               fileout "${json_prefix}${json_postfix}" "OK" "All certificate trust checks passed" || \
-               fileout "${json_prefix}${json_postfix}" "OK" "All certificate trust checks passed. $addtl_warning"
-          # The "." is otherwise confusing
+          fileout "${json_prefix}${json_postfix}" "OK" "passed. $addtl_warning"
      else
           # at least one failed
           pr_svrty_critical "NOT ok"
@@ -5804,7 +5801,7 @@ determine_trust() {
                else
                     out "$code"
                fi
-               fileout "${json_prefix}${json_postfix}" "CRITICAL" "All certificate trust checks failed: $code. $addtl_warning"
+               fileout "${json_prefix}${json_postfix}" "CRITICAL" "failed $code. $addtl_warning"
           else
                # is one ok and the others not ==> display the culprit store
                if "$some_ok"; then
@@ -5832,7 +5829,7 @@ determine_trust() {
                     [[ "$DEBUG" -eq 0 ]] && tm_out "$spaces"
                     pr_done_good "OK: $ok_was"
                fi
-               fileout "${json_prefix}${json_postfix}" "CRITICAL" "Some certificate trust checks failed : OK : $ok_was  NOT ok: $notok_was $addtl_warning"
+               fileout "${json_prefix}${json_postfix}" "CRITICAL" "Some certificate trust checks failed -> $notok_was $addtl_warning, OK -> $ok_was"
           fi
           [[ -n "$addtl_warning" ]] && out "\n$spaces" && pr_warning "$addtl_warning"
      fi
