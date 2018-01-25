@@ -5987,14 +5987,49 @@ determine_tls_extensions() {
      return $success
 }
 
+extract_certificates() {
+     local version="$1"
+     local savedir
+     local -i success nrsaved=0
+
+     # Place the server's certificate in $HOSTCERT and any intermediate
+     # certificates that were provided in $TEMPDIR/intermediatecerts.pem
+     savedir=$(pwd); cd $TEMPDIR
+     # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
+     if [[ "$version" == "ssl2" ]]; then
+          awk -v n=-1 '/Server certificate/ {start=1}
+               /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
+               inc { print > ("level" n ".crt") }
+               /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
+     else
+          awk -v n=-1 '/Certificate chain/ {start=1}
+               /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
+               inc { print > ("level" n ".crt") }
+               /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
+     fi
+     [[ -s level0.crt ]] && nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
+     if [[ $nrsaved -eq 0 ]]; then
+         success=1
+     else
+         success=0
+         mv level0.crt $HOSTCERT
+         if [[ $nrsaved -eq 1 ]]; then
+             echo "" > $TEMPDIR/intermediatecerts.pem
+         else
+             cat level?.crt > $TEMPDIR/intermediatecerts.pem
+             rm level?.crt
+         fi
+     fi
+     cd "$savedir"
+     return $success
+}
+
 # arg1 is "-cipher <OpenSSL cipher>" or empty
 # arg2 is a list of protocols to try (tls1_2, tls1_1, tls1, ssl3) or empty (if all should be tried)
 get_server_certificate() {
      local protocols_to_try proto
      local success
      local npn_params="" line
-     local savedir
-     local nrsaved=0
 
      "$HAS_SPDY" && [[ -z "$STARTTLS" ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
 
@@ -6011,30 +6046,8 @@ get_server_certificate() {
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY -ssl2 </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0
           if [[ $success -eq 0 ]]; then
-               # Place the server's certificate in $HOSTCERT and any intermediate
-               # certificates that were provided in $TEMPDIR/intermediatecerts.pem
-               savedir=$(pwd); cd $TEMPDIR
-               # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
-               awk -v n=-1 '/Server certificate/ {start=1}
-                  /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
-                  inc { print > ("level" n ".crt") }
-                  /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
-               [[ -s level0.crt ]] && nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
-               if [[ $nrsaved -eq 0 ]]; then
-                    success=1
-               else
-                    success=0
-                    mv level0.crt $HOSTCERT
-                    if [[ $nrsaved -eq 1 ]]; then
-                         echo "" > $TEMPDIR/intermediatecerts.pem
-                    else
-                         cat level?.crt > $TEMPDIR/intermediatecerts.pem
-                         rm level?.crt
-                    fi
-                    # generate file with text output -- we need that at several occasions later
-                    $OPENSSL x509 -noout -text -in $HOSTCERT 2>>$ERRFILE >$HOSTCERT_TXT
-               fi
-               cd "$savedir"
+               extract_certificates "ssl2"
+               success=$?
           fi
           tmpfile_handle $FUNCNAME.txt
           return $success
@@ -6076,29 +6089,8 @@ get_server_certificate() {
           "ssl3") DETECTED_TLS_VERSION="0300" ;;
      esac
      extract_new_tls_extensions $TMPFILE
-
-     # Place the server's certificate in $HOSTCERT and any intermediate
-     # certificates that were provided in $TEMPDIR/intermediatecerts.pem
-     savedir=$(pwd); cd $TEMPDIR
-     # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
-     awk -v n=-1 '/Certificate chain/ {start=1}
-             /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
-             inc { print > ("level" n ".crt") }
-             /---END CERTIFICATE-----/{ inc=0 }' $TMPFILE
-     [[ -s level0.crt ]] && nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
-     if [[ $nrsaved -eq 0 ]]; then
-         success=1
-     else
-         success=0
-         mv level0.crt $HOSTCERT
-         if [[ $nrsaved -eq 1 ]]; then
-             echo "" > $TEMPDIR/intermediatecerts.pem
-         else
-             cat level?.crt > $TEMPDIR/intermediatecerts.pem
-             rm level?.crt
-         fi
-     fi
-     cd "$savedir"
+     extract_certificates "$proto"
+     success=$?
 
      tmpfile_handle $FUNCNAME.txt
      return $success
