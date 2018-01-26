@@ -6593,18 +6593,18 @@ certificate_info() {
           outln "$cert_keyusage"
           if ( [[ " $cert_type " =~ " RSASig " ]] || [[ " $cert_type " =~ " DSA " ]] || [[ " $cert_type " =~ " ECDSA " ]] ) && \
              [[ ! "$cert_keyusage" =~ "Digital Signature" ]]; then
-               prln_svrty_high "$indent                              -- certificate incorrectly used for digital signatures"
+               prln_svrty_high "$indent                              Certificate incorrectly used for digital signatures"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for digital signatures: \"$cert_keyusage\""
                outok=false
           fi
           if [[ " $cert_type " =~ " RSAKMK " ]] && [[ ! "$cert_keyusage" =~ "Key Encipherment" ]]; then
-               prln_svrty_high "$indent                              -- certificate incorrectly used for key encipherment"
+               prln_svrty_high "$indent                              Certificate incorrectly used for key encipherment"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for key encipherment: \"$cert_keyusage\""
                outok=false
           fi
           if ( [[ " $cert_type " =~ " DH " ]] || [[ " $cert_type " =~ " ECDH " ]] ) && \
              [[ ! "$cert_keyusage" =~ "Key Agreement" ]]; then
-               prln_svrty_high "$indent                              -- certificate incorrectly used for key agreement"
+               prln_svrty_high "$indent                              Certificate incorrectly used for key agreement"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for key agreement: \"$cert_keyusage\""
                outok=false
           fi
@@ -6625,7 +6625,7 @@ certificate_info() {
      if [[ -n "$cert_ext_keyusage" ]]; then
           outln "$cert_ext_keyusage"
           if [[ ! "$cert_ext_keyusage" =~ "TLS Web Server Authentication" ]] && [[ ! "$cert_ext_keyusage" =~ "Any Extended Key Usage" ]]; then
-               prln_svrty_high "$indent                              -- certificate incorrectly used for TLS Web Server Authentication"
+               prln_svrty_high "$indent                              Certificate incorrectly used for TLS Web Server Authentication"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for TLS Web Server Authentication: \"$cert_ext_keyusage\""
                outok=false
           fi
