@@ -16044,7 +16044,7 @@ initialize_globals() {
      do_rc4=false
      do_grease=false
      do_renego=false
-     do_std_cipherlists=false
+     do_cipherlists=false
      do_server_defaults=false
      do_server_preference=false
      do_ssl_poodle=false
@@ -16079,7 +16079,7 @@ set_scanning_defaults() {
      do_rc4=true
      do_protocols=true
      do_renego=true
-     do_std_cipherlists=true
+     do_cipherlists=true
      do_server_defaults=true
      do_server_preference=true
      do_tls_fallback_scsv=true
@@ -16093,7 +16093,7 @@ query_globals() {
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_robot do_renego \
-               do_std_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
+               do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == "true" ]] && let true_nr++
      done
@@ -16106,7 +16106,7 @@ debug_globals() {
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_robot do_renego \
-               do_std_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
+               do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
