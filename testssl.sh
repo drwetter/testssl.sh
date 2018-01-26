@@ -6522,7 +6522,7 @@ certificate_info() {
           case $cert_key_algo in
                *RSA*|*rsa*)             out "RSA ";;
                *DSA*|*dsa*)             out "DSA ";;
-               *ecdsa*|*ecPublicKey)    out "ECDSA ";;
+               *ecdsa*|*ecPublicKey)    out "EC ";;
                *GOST*|*gost*)           out "GOST ";;
                *dh*|*DH*)               out "DH " ;;
                *)                       pr_fixme "don't know $cert_key_algo " ;;
