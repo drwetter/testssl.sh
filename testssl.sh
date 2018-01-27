@@ -11172,7 +11172,7 @@ resend_if_hello_retry_request() {
           part2=$j+3
           len_extn=3*$(hex2dec "${extra_extensions:j:2}${extra_extensions:part2:2}")
           if [[ "$extn_type" != "00$KEY_SHARE_EXTN_NR" ]] && [[ "$extn_type" != "002c" ]]; then
-               j=12+$len_extn
+               j=11+$len_extn
                new_extra_extns+=",${extra_extensions:i:j}"
           fi
      done
