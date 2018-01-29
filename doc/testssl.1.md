@@ -138,8 +138,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 
 * `NULL encryption ciphers`: 'NULL:eNULL'
 * `Anonymous NULL ciphers`: 'aNULL:ADH'
-* `Export ciphers` (w/o the preceding ones): 'EXPORT:!ADH:!NULL'
-* `LOW` (64 Bit + DES ciphers, without EXPORT ciphers): 'LOW:DES:!ADH:!EXP:!NULL'
+* `Export ciphers` (w/o the preceding ones): 'EXPORT:!ADH:!NULL' * `LOW` (64 Bit + DES ciphers, without EXPORT ciphers): 'LOW:DES:!ADH:!EXP:!NULL'
 * `Weak 128 Bit ciphers`: 'MEDIUM:!aNULL:!AES:!CAMELLIA:!ARIA:!CHACHA20:!3DES'
 * `3DES Ciphers`: '3DES:!aNULL:!ADH'
 * `High grade Ciphers`: 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!AESGCM:!CamelliaGCM:!AESCCM8:!AESCCM'
@@ -150,8 +149,35 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 
 `-P, --preference`              displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher. If there's a cipher order enforced by the server it displays it for each protocol (openssl+sockets). If there's not, it displays instead which ciphers from the server were picked with each protocol (by using openssl only)
 
-`-S, --server_defaults`         displays information from the server hello(s): available TLS extensions, TLS ticket + session information/capabilities and several certificate info including revocation info (CRL, OCSP, OCSP stapling/must staple), Certification Authority Authorization (CAA) record and: trust (CN, SAN, Chain of trust, expiration of certificate). For trust chain check there are 4 certificate stores provided (see section `FILES` below). If the trust is confirmed or not confirmed and the same in all four certificate stores there will be only one line of output with the appropriate result. If there are different results, each store is listed and for the one where there's no trust there's an indication what the failure is. Additional certificate stores for e.g. an intranet CA an be put into __etc/__ with the extension __pem__. In that case there will be a complaint about a missing trust with the other stores, in the opposite case -- i.e. if trust will be checked against hosts having a certificate issued by a different CA -- there will be a complaint by a missing trust in this additional store.
-If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be clearly indicated as this is deprecated. Possible fingerprinting is possible by the results in TLS clock skew: Only a few servers nowadays still have and TLS/SSL implementation which returns the local clock `gmt_unix_time` (e.g. IIS, openssl < 1.0.1f). In addition to the HTTP date you could derive that there are different hosts where your TLS and your HTTP request ended -- if the time deltas differ significantly. Also multiple server certificates are being checked for as well as the certificate reply to a non-SNI (Server Name Indication) client hello to the IP address.
+`-S, --server_defaults`         displays information from the server hello(s):
+available TLS extensions, TLS ticket + session information/capabilities, session resumption
+capabilities, time skew relative to localhost (most server implementations
+return random values) and several certificate info: certificate signature algorithm,
+certificate key size, X509v3 key usage and extended key usage, certificate
+fingerprints and serial, revocation info (CRL, OCSP, OCSP
+stapling/must staple), certificate transparency info (if provided by
+server).  It also displays certificate start and expiration time in GMT.
+In addition testssl.sh checks the trust (CN, SAN, Chain of trust). For the trust chain
+check there are 4 certificate stores provided (see section `FILES` below). If
+the trust is confirmed or not confirmed and the same in all four certificate
+stores there will be only one line of output with the appropriate result. If
+there are different results, each store is listed and for the one where there's
+no trust there's an indication what the failure is. Additional certificate
+stores for e.g. an intranet CA an be put into __etc/__ with the extension
+__pem__. In that case there will be a complaint about a missing trust with the
+other stores, in the opposite case -- i.e. if trust will be checked against
+hosts having a certificate issued by a different CA -- there will be a
+complaint by a missing trust in this additional store.  If the server provides
+no matching record in Subject Alternative Name (SAN) but in Common Name (CN),
+it will be clearly indicated as this is deprecated. Possible fingerprinting is
+possible by the results in TLS clock skew: Only a few servers nowadays still
+have and TLS/SSL implementation which returns the local clock `gmt_unix_time`
+(e.g. IIS, openssl < 1.0.1f). In addition to the HTTP date you could derive
+that there are different hosts where your TLS and your HTTP request ended -- if
+the time deltas differ significantly. Also multiple server certificates are
+being checked for as well as the certificate reply to a non-SNI (Server Name
+Indication) client hello to the IP address.
+Also the Certification Authority Authorization (CAA) record is displayed.
 
 `-x <pattern>, --single-cipher <pattern>` tests matched `pattern` of ciphers against a server. Patterns are similar to `-V pattern , --local pattern`
 
