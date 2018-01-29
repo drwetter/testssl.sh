@@ -1343,7 +1343,7 @@ if "$HAS_GNUDATE"; then  # Linux and NetBSD
      }
 elif "$HAS_FREEBSDDATE"; then # FreeBSD and OS X
      parse_date() {
-          LC_ALL=C date -j -f "$3"  "$2" "$1"
+          LC_ALL=C date -j -f "$3" "$2" "$1"
      }
 else
      parse_date() {
@@ -4984,7 +4984,7 @@ read_sigalg_from_file() {
      local hostcert_txt="${1//pem/txt}"
 
      [[ -r "$hostcert_txt" ]] || $OPENSSL x509 -noout -text -in "$1" 2>/dev/null >$hostcert_txt
-     awk -F':' '/Signature Algorithm/ { print $2; exit; }' < $hostcert_txt
+     awk -F':' '/Signature Algorithm/ { print $2; exit; }' $hostcert_txt
 }
 
 
@@ -5704,6 +5704,7 @@ get_host_cert() {
                 prln_warning "could not retrieve host certificate!"
                 fileout "host_certificate_Problem" "WARN" "Could not retrieve host certificate!"
           fi
+          rm $HOSTCERT_TXT
           return 1
      fi
      #tmpfile_handle $FUNCNAME.txt
@@ -6448,6 +6449,8 @@ certificate_info() {
           spaces="                              "
      fi
 
+     [[ ! -s $HOSTCERT_TXT ]] && $OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE >$HOSTCERT_TXT
+
      cert_sig_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE| awk -F':' '/Signature Algorithm/ { print $2; if (++Match >= 1) exit; }')"
      cert_sig_algo="${cert_sig_algo// /}"
      cert_key_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2; if (++Match >= 1) exit; }')"
@@ -6973,13 +6976,13 @@ certificate_info() {
 #         see #967
 
      out "$indent"; pr_bold " Certificate Expiration       "
-
-     enddate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z" "%b %d %T %Y %Z")
-     startdate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M" "%b %d %T %Y %Z")
-     days2expire=$(( $(parse_date "$enddate" "+%s" "%F %H:%M %z") - $(LC_ALL=C date "+%s") ))    # in seconds
+     enddate="$(strip_leading_space "$(awk -F':' '/Not After/ { print $2":"$3":"$4 }' $HOSTCERT_TXT)")"       # in GMT
+     startdate="$(strip_leading_space "$(awk -F':' '/Not Before/ { print $2":"$3":"$4 }' $HOSTCERT_TXT)")"
+     days2expire=$(( $(parse_date "$enddate" "+%s" $'%b %d %T %Y %Z') - $(LC_ALL=C date "+%s") ))  # first in seconds
      days2expire=$((days2expire  / 3600 / 24 ))
 
-     if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then          # we take the half of the thresholds for LE certificates
+     # we adjust the thresholds by %50 for LE certificates, relaxing those warnings
+     if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then
           days2warn2=$((days2warn2 / 2))
           days2warn1=$((days2warn1 / 2))
      fi
@@ -6990,12 +6993,12 @@ certificate_info() {
           expfinding="expired"
           expok="CRITICAL"
      else
-          secs2warn=$((24 * 60 * 60 * days2warn2))  # low threshold first
+          secs2warn=$((24 * 60 * 60 * days2warn2))          # low threshold first
           expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
-          if echo "$expire" | grep -qw not; then
-               secs2warn=$((24 * 60 * 60 * days2warn1))
+          if grep -qw not <<< "$expire"; then
+               secs2warn=$((24 * 60 * 60 * days2warn1))     # high threshold
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
-               if echo "$expire" | grep -qw not; then
+               if grep -qw not <<< "$expire"; then
                     pr_done_good "$days2expire >= $days2warn1 days"
                     expfinding+="$days2expire >= $days2warn1 days"
                else
