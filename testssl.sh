@@ -4981,7 +4981,10 @@ read_dhtype_from_file() {
 
 # arg1: certificate file
 read_sigalg_from_file() {
-     $OPENSSL x509 -noout -text -in "$1" 2>/dev/null | awk -F':' '/Signature Algorithm/ { print $2; exit; }'
+     local hostcert_txt="${1//pem/txt}"
+
+     [[ -r "$hostcert_txt" ]] || $OPENSSL x509 -noout -text -in "$1" 2>/dev/null >$hostcert_txt
+     awk -F':' '/Signature Algorithm/ { print $2; exit; }' < $hostcert_txt
 }
 
 
@@ -5694,6 +5697,7 @@ get_host_cert() {
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $1") 2>/dev/null </dev/null >$tmpvar
      if sclient_connect_successful $? $tmpvar; then
           awk '/-----BEGIN/,/-----END/ { print $0 }' $tmpvar >$HOSTCERT
+          $OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE >$HOSTCERT_TXT
           return 0
      else
           if [[ -z "$1" ]]; then
@@ -6019,6 +6023,7 @@ extract_certificates() {
      else
          success=0
          mv level0.crt $HOSTCERT
+         $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE >$HOSTCERT_TXT
          if [[ $nrsaved -eq 1 ]]; then
              echo "" > $TEMPDIR/intermediatecerts.pem
          else
@@ -6281,7 +6286,7 @@ must_staple() {
                fileout "${jsonID}${json_postfix}" "OK" "supported"
           else
                prln_svrty_high "requires OCSP stapling (NOT ok)"
-               fileout "${jsonID}${json_postfix}" "HIGH" "must staple extension detected but no OCSP stapling provided"
+               fileout "${jsonID}${json_postfix}" "HIGH" "extension detected but no OCSP stapling provided"
           fi
      else
           outln "no"
@@ -6962,7 +6967,8 @@ certificate_info() {
      fi
      outln " ($startdate --> $enddate)"
      fileout "cert_expiration_status${json_postfix}" "$expok" "$expfinding"
-     fileout "cert_expiration_startend${json_postfix}" "$expok" "$startdate --> $enddate"
+     fileout "cert_expiration_start${json_postfix}" "$expok" "$startdate"
+     fileout "cert_expiration_end${json_postfix}" "$expok" "$enddate"
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
@@ -8596,6 +8602,7 @@ parse_sslv2_serverhello() {
 
      "$parse_complete" || return $ret
 
+     # not sure why we need this
      rm -f $HOSTCERT $TEMPDIR/intermediatecerts.pem
      if [[ $ret -eq 3 ]]; then
           certificate_len=2*$(hex2dec "$v2_hello_cert_length")
@@ -8627,7 +8634,7 @@ parse_sslv2_serverhello() {
 
 # arg1: hash function
 # arg2: key
-# arg3: text 
+# arg3: text
 hmac() {
      local hash_fn="$1"
      local key="$2" text="$3" output
@@ -10064,7 +10071,6 @@ parse_tls_serverhello() {
                                    tmpfile_handle $FUNCNAME.txt
                                    return 1
                               fi
-               
                               for (( j=8; j < tls_certificate_ascii_len; j=j+extn_len )); do
                                    if [[ $tls_certificate_ascii_len-$j -lt 6 ]]; then
                                         debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
@@ -10243,6 +10249,7 @@ parse_tls_serverhello() {
 
      # Now parse the Certificate message.
      if [[ "$process_full" == "all" ]]; then
+          # not sure why we need this
           [[ -e "$HOSTCERT" ]] && rm "$HOSTCERT"
           [[ -e "$TEMPDIR/intermediatecerts.pem" ]] && rm "$TEMPDIR/intermediatecerts.pem"
      fi
