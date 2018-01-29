@@ -17,9 +17,13 @@ testssl.sh is a free command line tool which checks a server's service on any po
 
 The output rates findings by color (screen) or severity (file output) so that you are able to tell whether something is good or bad. The (screen) output has several sections in which classes of checks are being performed. To ease readability on the screen it aligns and indents the output properly.
 
-Except DNS lookups it doesn't use any third parties for checks, it's only you who sees the result and you also can use it internally on your LAN.
+Only you see the result. You also can use it internally on your LAN. Except DNS lookups it doesn't use any other hosts or even third parties for checks.
 
-It is out of the box pretty much portable: testssl.sh runs under any Unix-like stack (Linux, *BSD, MacOS X, WSL=bash on Windows, Cygwin and MSYS2). `bash` (also version 3 is still supported) is a prerequisite as well as standard utilities like awk, sed, tr and head. This can be of BSD, System 5 or GNU flavor whereas grep from System V is not yet supported.
+It is out of the box pretty much portable: testssl.sh runs under any Unix-like
+stack (Linux, *BSD, MacOS X, WSL=bash on Windows, Cygwin and MSYS2). `bash`
+(also version 3 is still supported) is a prerequisite as well as standard
+utilities like awk, sed, tr and head. This can be of BSD, System 5 or GNU
+flavor whereas grep from System V is not yet supported.
 
 
 ## GENERAL
@@ -46,9 +50,10 @@ It is out of the box pretty much portable: testssl.sh runs under any Unix-like s
 
 9) client simulation
 
+
 ## OPTIONS AND PARAMETERS
 
-Options are either short or long options. All options requiring a value can be called with or without  an equal sign '=' e.g. `testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>` is equivalent to `testssl.sh --starttls smtp --wide --openssl /usr/bin/openssl <URI>`. Some command line options can also be preset via ENV variables. `WIDE=true OPENSSL=/usr/bin/openssl testssl.sh --starttls smtp <URI>` would be the equivalent to the aforementioned examples. Preference has the command line over any environment variables.
+Options are either short or long options. Any option requiring a value can be called with or without an equal sign '=' e.g. `testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>` (short option with equal sign) is equivalent to `testssl.sh --starttls smtp --wide --openssl /usr/bin/openssl <URI>` (long option without equal sign). Some command line options can also be preset via ENV variables. `WIDE=true OPENSSL=/usr/bin/openssl testssl.sh --starttls=smtp <URI>` would be the equivalent to the aforementioned examples. Preference has the command line over any environment variables.
 
 `<URI>` or `--file <FILE>` always needs to be the last parameter.
 
@@ -103,7 +108,7 @@ Please note that the content of `fname` has to be in Unix format. DOS carriage r
 
 `--proxy <host>:<port>`    does the whole check via the specified HTTP proxy. `--proxy=auto` inherits the proxy setting from the environment. Proxying via IPv6 addresses is not possible. The hostname supplied will only be resolved to the first A record. Authentication to the proxy is not supported. In addition if you want lookups via proxy you can specify `DNS_VIA_PROXY=true`.
 
-`-6`       does (also) IPv6 checks. This works only with both a supporting openssl binary like the one supplied and IPv6 connectivity. testssl.sh does no connectivity checks for IPv6, it also cannot determine reliably whether the OpenSSL binary you are using has IPv6 support. `HAS_IPv6` is the respective environment variable.
+`-6`       does (also) IPv6 checks. Please note if a supplied URI resolves (also) to an IPv6 address that testssl.sh doesn't do checks on an IPv6 address automatically. This is because testssl.sh does no connectivity checks for IPv6. It also cannot determine reliably whether the OpenSSL binary you are using has IPv6 support. `-6` assumes both is the case. If both conditions are met and you want in general enable IPv6 tests you might as well add `HAS_IPv6` to your shell environment.
 
 `--ssl-native`               instead of using a mixture of bash sockets and openssl s_client connects testssl.sh uses the latter only. This is at the moment faster but provides less accurate results, especially in the client
  simulation and if the openssl binary lacks cipher support. For TLS protocol checks and standard cipher lists and certain other checks you will see a warning if testssl.sh internally can tell if one check cannot be performed or will give you inaccurate results. For e.g. single cipher checks (`--each-cipher` and `--cipher-per-proto`) you might end up getting false negatives without a warning.
@@ -112,7 +117,7 @@ Please note that the content of `fname` has to be in Unix format. DOS carriage r
 
 `--bugs`                    does some workarounds for buggy servers like padding for old F5 devices. The option is passed as `-bug` to openssl when needed, see `s_client(1)`. For the socket part testssl.sh tries its best also without that option to cope with broken server implementations (environment preset via `BUGS="-bugs"`)
 
-`--assuming-http`           testssl.sh does upfront a protocol detection on the application layer. In cases where for some reasons the usage of HTTP cannot be automatically detected you may want to use this option. It tells testssl.sh not to skip HTTP specific tests and to run the client simulation with browsers. Sometimes also the severity depends on the application protocol, e.g. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server.
+`--assuming-http`           testssl.sh does upfront an application protocol detection. In cases where for some reasons the usage of HTTP cannot be automatically detected you may want to use this option. It tells testssl.sh not to skip HTTP specific tests and to run the client simulation with browsers. Sometimes also the severity depends on the application protocol, e.g. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server.
 
 
 * `-n, --no-dns` instructs testssl.sh to not do any DNS lookups. This is useful if you either can't or are not willing to perform DNS lookups. The latter applies e.g. to some pentests, the former could e.g. help you to avoid timeouts by DNS lookups. `NODNS=true` has the same effect.
@@ -141,7 +146,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 * `Strong grade Ciphers` (AEAD): 'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM8:AESCCM'
 
 
-`-p, --protocols`               checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 - TLS1.2 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2
+`-p, --protocols`               checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 - TLS 1.3 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2. For TLS 1.3 several drafts (18-23) and TLS 1.3 final are suuported.
 
 `-P, --preference`              displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher. If there's a cipher order enforced by the server it displays it for each protocol (openssl+sockets). If there's not, it displays instead which ciphers from the server were picked with each protocol (by using openssl only)
 

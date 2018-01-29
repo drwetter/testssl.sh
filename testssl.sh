@@ -6042,6 +6042,38 @@ get_server_certificate() {
      local success
      local npn_params="" line
 
+     if [[ "$1" =~ "-cipher tls1_3" ]]; then
+          [[ $(has_server_protocol "tls1_3") -eq 1 ]] && return 1
+          if "$HAS_TLS13"; then
+               if [[ "$1" =~ "-cipher tls1_3_RSA" ]]; then
+                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -sigalgs PSS+SHA256:PSS+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
+               elif [[ "$1" =~ "-cipher tls1_3_ECDSA" ]]; then
+                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -sigalgs ECDSA+SHA256:ECDSA+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
+               else
+                    return 1
+               fi
+               sclient_connect_successful $? $TMPFILE || return 1
+               DETECTED_TLS_VERSION="0304"
+               extract_certificates "tls1_3"
+               success=$?
+          else
+               if [[ "$1" =~ "-cipher tls1_3_RSA" ]]; then
+                    tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
+               elif [[ "$1" =~ "-cipher tls1_3_ECDSA" ]]; then
+                    tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
+               else
+                    return 1
+               fi
+               success=$?
+               [[ $success -eq 0 ]] || return 1
+               cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+          fi
+          [[ $success -eq 0 ]] && add_tls_offered tls1_3 yes
+          extract_new_tls_extensions $TMPFILE
+          tmpfile_handle $FUNCNAME.txt
+          return $success
+     fi
+
      "$HAS_SPDY" && [[ -z "$STARTTLS" ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
 
      if [[ -n "$2" ]]; then
@@ -6306,6 +6338,7 @@ certificate_transparency() {
      local sni=""
      local ciphers=""
      local hexc n ciph sslver kx auth enc mac export
+     local extra_extns=""
      local -i success
 
      # First check whether signed certificate timestamps (SCT) are included in the
@@ -6331,13 +6364,24 @@ certificate_transparency() {
      fi
 
      if [[ $number_of_certificates -gt 1 ]] && ! "$SSL_NATIVE"; then
-          while read hexc n ciph sslver kx auth enc mac export; do
-               if [[ ${#hexc} -eq 9 ]]; then
-                    ciphers+=", ${hexc:2:2},${hexc:7:2}"
+          if [[ "$tls_version" == "0304" ]]; then
+               ciphers=", 13,01, 13,02, 13,03, 13,04, 13,05"
+               if [[ "$cipher" == "tls1_3_RSA" ]]; then
+                    extra_extns=", 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
+               elif [[ "$cipher" == "tls1_3_ECDSA" ]]; then
+                    extra_extns=", 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
+               else
+                    return 1
                fi
-          done < <($OPENSSL ciphers -V $cipher 2>>$ERRFILE)
+          else
+               while read hexc n ciph sslver kx auth enc mac export; do
+                    if [[ ${#hexc} -eq 9 ]]; then
+                         ciphers+=", ${hexc:2:2},${hexc:7:2}"
+                    fi
+               done < <($OPENSSL ciphers -V $cipher 2>>$ERRFILE)
+          fi
           [[ -z "$sni_used" ]] && sni="$SNI" && SNI=""
-          tls_sockets "${tls_version:2:2}" "${ciphers:2}" "all" "00,12,00,00"
+          tls_sockets "${tls_version:2:2}" "${ciphers:2}" "all" "00,12,00,00$extra_extns"
           success=$?
           [[ -z "$sni_used" ]] && SNI="$sni"
           if ( [[ $success -eq 0 ]] || [[ $success -eq 2 ]] ) && \
@@ -6527,7 +6571,7 @@ certificate_info() {
           case $cert_key_algo in
                *RSA*|*rsa*)             out "RSA ";;
                *DSA*|*dsa*)             out "DSA ";;
-               *ecdsa*|*ecPublicKey)    out "ECDSA ";;
+               *ecdsa*|*ecPublicKey)    out "EC ";;
                *GOST*|*gost*)           out "GOST ";;
                *dh*|*DH*)               out "DH " ;;
                *)                       pr_fixme "don't know $cert_key_algo " ;;
@@ -7128,23 +7172,26 @@ run_server_defaults() {
      ciphers_to_test[5]="aECDH"
      ciphers_to_test[6]="aECDSA"
      ciphers_to_test[7]="aGOST"
+     ciphers_to_test[8]="tls1_3_RSA"
+     ciphers_to_test[9]="tls1_3_ECDSA"
      certificate_type[1]="RSASig" ; certificate_type[2]="RSAKMK"
      certificate_type[3]="DSA"; certificate_type[4]="DH"
      certificate_type[5]="ECDH" ; certificate_type[6]="ECDSA"
-     certificate_type[7]="GOST"
+     certificate_type[7]="GOST" ; certificate_type[8]="RSASig"
+     certificate_type[9]="ECDSA"
 
-     for (( n=1; n <= 14 ; n++ )); do
+     for (( n=1; n <= 16 ; n++ )); do
           # Some servers use a different certificate if the ClientHello
           # specifies TLSv1.1 and doesn't include a server name extension.
           # So, for each public key type for which a certificate was found,
           # try again, but only with TLSv1.1 and without SNI.
-          if [[ $n -ge 8 ]]; then
+          if [[ $n -ge 10 ]]; then
                ciphers_to_test[n]=""
-               [[ ${success[n-7]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-7]}" && certificate_type[n]="${certificate_type[n-7]}"
+               [[ ${success[n-9]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-9]}" && certificate_type[n]="${certificate_type[n-9]}"
           fi
 
-          if [[ -n "${ciphers_to_test[n]}" ]] && [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]]; then
-               if [[ $n -ge 8 ]]; then
+          if [[ -n "${ciphers_to_test[n]}" ]] && ( [[ "${ciphers_to_test[n]}" =~ "tls1_3" ]] || [[ $(count_ciphers $($OPENSSL ciphers "${ciphers_to_test[n]}" 2>>$ERRFILE)) -ge 1 ]] ); then
+               if [[ $n -ge 10 ]]; then
                     sni="$SNI"
                     SNI=""
                     get_server_certificate "-cipher ${ciphers_to_test[n]}" "tls1_1"
@@ -7154,8 +7201,8 @@ run_server_defaults() {
                     get_server_certificate "-cipher ${ciphers_to_test[n]}"
                     success[n]=$?
                fi
-               if [[ ${success[n]} -eq 0 ]]; then
-                    [[ $n -ge 8 ]] && [[ ! -e $HOSTCERT.nosni ]] && cp $HOSTCERT $HOSTCERT.nosni
+               if [[ ${success[n]} -eq 0 ]] && [[ -s "$HOSTCERT" ]]; then
+                    [[ $n -ge 10 ]] && [[ ! -e $HOSTCERT.nosni ]] && cp $HOSTCERT $HOSTCERT.nosni
                     cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
                     >$ERRFILE
                     if [[ -z "$sessticket_lifetime_hint" ]]; then
@@ -7173,7 +7220,7 @@ run_server_defaults() {
                          fi
                          i=$((i + 1))
                     done
-                    if ! "$match_found" && [[ $n -ge 8 ]] && [[ $certs_found -ne 0 ]]; then
+                    if ! "$match_found" && [[ $n -ge 10 ]] && [[ $certs_found -ne 0 ]]; then
                          # A new certificate was found using TLSv1.1 without SNI.
                          # Check to see if the new certificate should be displayed.
                          # It should be displayed if it is either a match for the
@@ -7224,7 +7271,7 @@ run_server_defaults() {
                          ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
                          previous_hostcert[certs_found]=$newhostcert
                          previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
-                         [[ $n -ge 8 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
+                         [[ $n -ge 10 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                          tls_version[certs_found]="$DETECTED_TLS_VERSION"
                          previous_hostcert_type[certs_found]=" ${certificate_type[n]}"
                     else
@@ -7358,7 +7405,29 @@ run_server_defaults() {
 
      if [[ -n "$SNI" ]] && [[ $certs_found -ne 0 ]] && [[ ! -e $HOSTCERT.nosni ]]; then
           # no cipher suites specified here. We just want the default vhost subject
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO") 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+          if ! "$HAS_TLS13" && [[ $(has_server_protocol "tls1_3") -eq 0 ]]; then
+               sni="$SNI" ; SNI=""
+               mv $HOSTCERT $HOSTCERT.save
+               # Send same list of cipher suites as OpenSSL 1.1.1 sends (but with
+               # all 5 TLSv1.3 ciphers offered.
+               tls_sockets "04" \
+                           "c0,2c, c0,30, 00,9f, cc,a9, cc,a8, cc,aa, c0,2b, c0,2f,
+                            00,9e, c0,24, c0,28, 00,6b, c0,23, c0,27, 00,67, c0,0a,
+                            c0,14, 00,39, c0,09, c0,13, 00,33, 00,9d, 00,9c, 13,02,
+                            13,03, 13,01, 13,04, 13,05, 00,3d, 00,3c, 00,35, 00,2f,
+                            00,ff" \
+                            "all"
+               success[0]=$?
+               if [[ ${success[0]} -eq 0 ]] || [[ ${success[0]} -eq 2 ]]; then
+                    mv $HOSTCERT $HOSTCERT.nosni
+               else
+                    echo "" > $HOSTCERT.nosni
+               fi
+               mv $HOSTCERT.save $HOSTCERT
+               SNI="$sni"
+          else
+               $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO") 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+          fi
      fi
 
      for (( i=1; i <= certs_found; i++ )); do
@@ -11179,7 +11248,7 @@ resend_if_hello_retry_request() {
           part2=$j+3
           len_extn=3*$(hex2dec "${extra_extensions:j:2}${extra_extensions:part2:2}")
           if [[ "$extn_type" != "00$KEY_SHARE_EXTN_NR" ]] && [[ "$extn_type" != "002c" ]]; then
-               j=12+$len_extn
+               j=11+$len_extn
                new_extra_extns+=",${extra_extensions:i:j}"
           fi
      done
