@@ -6981,6 +6981,9 @@ certificate_info() {
      days2expire=$(( $(parse_date "$enddate" "+%s" $'%b %d %T %Y %Z') - $(LC_ALL=C date "+%s") ))  # first in seconds
      days2expire=$((days2expire  / 3600 / 24 ))
 
+     enddate="$(strip_trailing_space "${enddate//GMT/}")"
+     startdate="$(strip_trailing_space "${startdate//GMT/}")"
+
      # we adjust the thresholds by %50 for LE certificates, relaxing those warnings
      if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then
           days2warn2=$((days2warn2 / 2))
