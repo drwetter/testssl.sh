@@ -6195,7 +6195,7 @@ certificate_info() {
 
      out "$indent"; pr_bold " Certificate Expiration       "
 
-     enddate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M %z" "%b %d %T %Y %Z")
+     enddate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M" "%b %d %T %Y %Z")
      startdate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M" "%b %d %T %Y %Z")
      days2expire=$(( $(parse_date "$enddate" "+%s" "%F %H:%M %z") - $(LC_ALL=C date "+%s") ))    # in seconds
      days2expire=$((days2expire  / 3600 / 24 ))
@@ -6230,8 +6230,8 @@ certificate_info() {
                expok="HIGH"
           fi
      fi
-     outln " ($startdate --> $enddate)"
-     fileout "${json_prefix}expiration" "$expok" "Certificate Expiration : $expfinding ($startdate --> $enddate)"
+     outln " (UTC: $startdate --> $enddate)"
+     fileout "${json_prefix}expiration" "$expok" "Certificate Expiration : $expfinding (UTC: $startdate --> $enddate)"
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
