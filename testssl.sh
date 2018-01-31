@@ -6322,8 +6322,8 @@ must_staple() {
                fileout "${jsonID}${json_postfix}" "HIGH" "extension detected but no OCSP stapling provided"
           fi
      else
-          outln "no"
-          fileout "${jsonID}${json_postfix}" "INFO" "no"
+          outln "--"
+          fileout "${jsonID}${json_postfix}" "INFO" "--"
      fi
 }
 
@@ -6397,7 +6397,7 @@ certificate_transparency() {
           # At the moment Certificate Transparency only applies to HTTPS.
           tm_out "N/A"
      else
-          tm_out "no"
+          tm_out "--"
      fi
      return 0
 }
@@ -7095,7 +7095,7 @@ certificate_info() {
      fi
      outln
 
-     out "$indent"; pr_bold " OCSP must staple             ";
+     out "$indent"; pr_bold " OCSP must staple extension   ";
      must_staple "$json_postfix" "$provides_stapling"
 
      out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
