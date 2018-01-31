@@ -6976,13 +6976,15 @@ certificate_info() {
 #         see #967
 
      out "$indent"; pr_bold " Certificate Expiration       "
+
+     # FreeBSD + OSX can't swallow the leading blank:
      enddate="$(strip_leading_space "$(awk -F':' '/Not After/ { print $2":"$3":"$4 }' $HOSTCERT_TXT)")"       # in GMT
      startdate="$(strip_leading_space "$(awk -F':' '/Not Before/ { print $2":"$3":"$4 }' $HOSTCERT_TXT)")"
-     days2expire=$(( $(parse_date "$enddate" "+%s" $'%b %d %T %Y %Z') - $(LC_ALL=C date "+%s") ))  # first in seconds
-     days2expire=$((days2expire  / 3600 / 24 ))
+     enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
+     startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
 
-     enddate="$(strip_trailing_space "${enddate//GMT/}")"
-     startdate="$(strip_trailing_space "${startdate//GMT/}")"
+     days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
+     days2expire=$((days2expire  / 3600 / 24 ))
 
      # we adjust the thresholds by %50 for LE certificates, relaxing those warnings
      if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then
@@ -7015,14 +7017,14 @@ certificate_info() {
                expok="HIGH"
           fi
      fi
-     outln " ($startdate --> $enddate)"
+     outln " (UTC: $startdate --> $enddate)"
      fileout "cert_expiration_status${json_postfix}" "$expok" "$expfinding"
-     fileout "cert_expiration_start${json_postfix}" "$expok" "$startdate"
-     fileout "cert_expiration_end${json_postfix}" "$expok" "$enddate"
+     fileout "cert_expirationUTC_start${json_postfix}" "INFO" "$startdate"      # we assume that the certificate has no start time in the future
+     fileout "cert_expirationUTC_end${json_postfix}" "$expok" "$enddate"
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
-     fileout "certchain_count${json_postfix}" "INFO" "${certificates_provided} certificates"
+     fileout "certchain_count${json_postfix}" "INFO" "${certificates_provided}"
 
      # Get both CRL and OCSP URI upfront. If there's none, this is not good. And we need to penalize this in the output
      crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
@@ -7032,14 +7034,8 @@ certificate_info() {
      out "$indent"; pr_bold " Certificate Revocation List  "
      jsonID="cert_CRL"
      if [[ -z "$crl" ]] ; then
-          if [[ -n "$ocsp_uri" ]]; then
-               outln "--"
-               fileout "${jsonID}${json_postfix}" "INFO" "none"
-          else
-               pr_svrty_high "NOT ok --"
-               outln " neither CRL nor OCSP URI provided"
-               fileout "${jsonID}${json_postfix}" "HIGH" "Neither CRL nor OCSP URI provided"
-          fi
+          fileout "${jsonID}${json_postfix}" "INFO" "--"
+          outln "--"
      else
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
@@ -7061,6 +7057,12 @@ certificate_info() {
                out_row_aligned "$ocsp_uri" "$spaces"
           fi
           fileout "${jsonID}${json_postfix}" "INFO" "$ocsp_uri"
+     fi
+     if [[ -z "$ocsp_uri" ]] && [[ -z "$crl" ]]; then
+          out "$spaces"
+          pr_svrty_high "NOT ok --"
+          outln " neither CRL nor OCSP URI provided"
+          fileout "cert_revocation${json_postfix}" "HIGH" "Neither CRL nor OCSP URI provided"
      fi
 
      out "$indent"; pr_bold " OCSP stapling                "
