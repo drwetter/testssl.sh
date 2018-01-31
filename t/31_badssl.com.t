@@ -22,7 +22,7 @@ cmp_ok(@$okjson,'>',10,"We have more then 10 findings"); $tests++;
 # Expiration
 pass("Running testssl against expired.badssl.com"); $tests++;
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 expired.badssl.com`;
-like($out, qr/Certificate Expiration\s+expired/,"The certificate should be expired"); $tests++;
+like($out, qr/Certificate Validity \(UTC\)\s+expired/,"The certificate should be expired"); $tests++;
 $json = json('tmp.json');
 unlink 'tmp.json';
 $found = 0;
@@ -39,7 +39,7 @@ is($found,1,"We had a finding for this in the JSON output"); $tests++;
 # Self signed and not-expired
 pass("Running testssl against self-signed.badssl.com"); $tests++;
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 self-signed.badssl.com`;
-like($out, qr/Certificate Expiration\s+\d+/,"The certificate should not be expired"); $tests++;
+like($out, qr/Certificate Validity \(UTC\)\s+\d+/,"The certificate should not be expired"); $tests++;
 $json = json('tmp.json');
 unlink 'tmp.json';
 $found = 0;
