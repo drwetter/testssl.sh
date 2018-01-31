@@ -6279,7 +6279,7 @@ compare_server_name_to_cert()
 }
 
 must_staple() {
-     local jsonID="OCSP_must_staple"
+     local jsonID="cert_mustStapleExtension"
      local json_postfix="$1"
      local provides_stapling="$2"
      local cert extn
@@ -6451,13 +6451,13 @@ certificate_info() {
 
      [[ ! -s $HOSTCERT_TXT ]] && $OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE >$HOSTCERT_TXT
 
-     cert_sig_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE| awk -F':' '/Signature Algorithm/ { print $2; if (++Match >= 1) exit; }')"
+     cert_sig_algo="$(awk -F':' '/Signature Algorithm/ { print $2; if (++Match >= 1) exit; }' $HOSTCERT_TXT)"
      cert_sig_algo="${cert_sig_algo// /}"
-     cert_key_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | awk -F':' '/Public Key Algorithm:/ { print $2; if (++Match >= 1) exit; }')"
+     cert_key_algo="$(awk -F':' '/Public Key Algorithm:/ { print $2; if (++Match >= 1) exit; }' $HOSTCERT_TXT)"
      cert_key_algo="${cert_key_algo// /}"
 
      out "$indent" ; pr_bold " Signature Algorithm          "
-     jsonID="cert_sig_algorithm"
+     jsonID="cert_signatureAlgorithm"
      case $cert_sig_algo in
           sha1WithRSAEncryption)
                pr_svrty_medium "SHA1 with RSA"
@@ -6516,7 +6516,7 @@ certificate_info() {
                fileout "${jsonID}${json_postfix}" "OK" "DSA with SHA256"
                ;;
           rsassaPss)
-               cert_sig_hash_algo="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A 1 "Signature Algorithm" | head -2 | tail -1 | sed 's/^.*Hash Algorithm: //')"
+               cert_sig_hash_algo="$(grep -A 1 "Signature Algorithm" $HOSTCERT_TXT | head -2 | tail -1 | sed 's/^.*Hash Algorithm: //')"
                case $cert_sig_hash_algo in
                     sha1)
                          prln_svrty_medium "RSASSA-PSS with SHA1"
@@ -6566,7 +6566,7 @@ certificate_info() {
      # old, but interesting: https://blog.hboeck.de/archives/754-Playing-with-the-EFF-SSL-Observatory.html
 
      out "$indent"; pr_bold " Server key size              "
-     jsonID="cert_key_size"
+     jsonID="cert_keySize"
      if [[ -z "$cert_keysize" ]]; then
           outln "(couldn't determine)"
           fileout "${jsonID}${json_postfix}" "cannot be determined"
@@ -6639,8 +6639,8 @@ certificate_info() {
 
      out "$indent"; pr_bold " Server key usage             ";
      outok=true
-     jsonID="cert_key_usage"
-     cert_keyusage="$(strip_leading_space "$($OPENSSL x509 -noout -text -in $HOSTCERT 2>>$ERRFILE | awk '/X509v3 Key Usage:/ { getline; print $0 }')")"
+     jsonID="cert_keyUsage"
+     cert_keyusage="$(strip_leading_space "$(awk '/X509v3 Key Usage:/ { getline; print $0 }' $HOSTCERT_TXT)")"
      if [[ -n "$cert_keyusage" ]]; then
           outln "$cert_keyusage"
           if ( [[ " $cert_type " =~ " RSASig " ]] || [[ " $cert_type " =~ " DSA " ]] || [[ " $cert_type " =~ " ECDSA " ]] ) && \
@@ -6670,10 +6670,9 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " Server extended key usage    ";
-     jsonID="cert_extended_key_usage"
+     jsonID="cert_extKeyUsage"
      outok=true
-     cert_ext_keyusage="$(strip_leading_space "$($OPENSSL x509 -noout -text -in $HOSTCERT 2>>$ERRFILE | awk '/X509v3 Extended Key Usage:/ { getline; print $0 }')")"
-     $OPENSSL x509 -noout -text -in $HOSTCERT 2>>$ERRFILE | awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' | read cert_ext_keyusage
+     cert_ext_keyusage="$(strip_leading_space "$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' $HOSTCERT_TXT)")"
      if [[ -n "$cert_ext_keyusage" ]]; then
           outln "$cert_ext_keyusage"
           if [[ ! "$cert_ext_keyusage" =~ "TLS Web Server Authentication" ]] && [[ ! "$cert_ext_keyusage" =~ "Any Extended Key Usage" ]]; then
@@ -6690,18 +6689,21 @@ certificate_info() {
           fileout "${jsonID}${json_postfix}" "INFO" "cert_ext_keyusage"
      fi
 
-     out "$indent"; pr_bold " Fingerprint / Serial         "
+     out "$indent"; pr_bold " Serial / Fingerprints        "
+     cert_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
+     fileout "cert_serialNumber${json_postfix}" "INFO" "$cert_serial"
+
      cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g')"
-     fileout "cert_fingerprint_SHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1//SHA1 /}"
+     fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1//SHA1 /}"
+     outln "$cert_serial / $cert_fingerprint_sha1"
 
      cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
-     fileout "cert_fingerprint_SHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2//SHA256 /}"
-
-     cert_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
-     outln "$cert_fingerprint_sha1 / $cert_serial"
+     fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2//SHA256 /}"
      outln "$spaces$cert_fingerprint_sha2"
 
-     fileout "cert_serial${json_postfix}" "INFO" "$cert_serial"
+     # " " needs to be converted back to lf
+     fileout "cert" "INFO" "$(< $HOSTCERT)"
+
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" ||
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2 $CERT_FINGERPRINT_SHA2"
@@ -6721,7 +6723,7 @@ certificate_info() {
           cnfinding="$cn"
           cnok="INFO"
      fi
-     fileout "cert_CN${json_postfix}" "$cnok" "$cnfinding"
+     fileout "cert_commonName${json_postfix}" "$cnok" "$cnfinding"
      cnfinding=""
 
      if [[ -n "$sni_used" ]]; then
@@ -6753,9 +6755,9 @@ certificate_info() {
           out " (CN in response to request w/o SNI: "; pr_italic "$cn_nosni"; outln ")"
           cnfinding="$cn_nosni"
      fi
-     fileout "cert_CN_without_SNI${json_postfix}" "INFO" "$cnfinding"
+     fileout "cert_commonName_wo_SNI${json_postfix}" "INFO" "$cnfinding"
 
-     sans=$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
+     sans=$(grep -A2 "Subject Alternative Name" $HOSTCERT_TXT | \
           egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
           sed -e 's/ *DNS://g' -e 's/ *IP Address://g' -e 's/ *email://g' -e 's/ *URI://g' -e 's/ *DirName://g' \
               -e 's/ *Registered ID://g' \
@@ -6763,7 +6765,7 @@ certificate_info() {
 #                   ^^^ CACert
 
      out "$indent"; pr_bold " subjectAltName (SAN)         "
-     jsonID="cert_SAN"
+     jsonID="cert_subjectAltName"
      if [[ -n "$sans" ]]; then
           while read san; do
                [[ -n "$san" ]] && all_san+="$san "
@@ -6781,7 +6783,7 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " Issuer                       "
-     jsonID="cert_issuer"
+     jsonID="cert_caIssuers"
      #FIXME: oid would be better maybe (see above)
      issuer="$($OPENSSL x509 -in  $HOSTCERT -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
@@ -6832,8 +6834,7 @@ certificate_info() {
      #      identifier of CN-ID if the presented identifiers include a DNS-ID,
      #      SRV-ID, URI-ID, or any application-specific identifier types
      #      supported by the client.
-     $OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
-          grep -A2 "Subject Alternative Name" | grep -q "DNS:" && \
+     grep -A2 "Subject Alternative Name" $HOSTCERT_TXT | grep -q "DNS:" && \
           has_dns_sans=true || has_dns_sans=false
 
      case $trust_sni in
@@ -6950,9 +6951,9 @@ certificate_info() {
 
      # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
-     jsonID="cert_EV"
+     jsonID="cert_certificatePolicies_EV"
      # only the first one, seldom we have two
-     policy_oid=$($OPENSSL x509 -in $HOSTCERT -text 2>>$ERRFILE | awk '/ .Policy: / { print $2 }' | awk 'NR < 2')
+     policy_oid=$(awk '/ .Policy: / { print $2 }' $HOSTCERT_TXT | awk 'NR < 2')
      if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
           [[ 2.16.840.1.114028.10.1.2 == "$policy_oid" ]] || \
           [[ 2.16.840.1.114412.1.3.0.2 == "$policy_oid" ]] || \
@@ -6975,7 +6976,7 @@ certificate_info() {
 #         https://certs.opera.com/03/ev-oids.xml
 #         see #967
 
-     out "$indent"; pr_bold " Certificate Expiration       "
+     out "$indent"; pr_bold " Certificate Validity (UTC)   "
 
      # FreeBSD + OSX can't swallow the leading blank:
      enddate="$(strip_leading_space "$(awk -F':' '/Not After/ { print $2":"$3":"$4 }' $HOSTCERT_TXT)")"       # in GMT
@@ -7017,22 +7018,20 @@ certificate_info() {
                expok="HIGH"
           fi
      fi
-     outln " (UTC: $startdate --> $enddate)"
+     outln " ($startdate --> $enddate)"
      fileout "cert_expiration_status${json_postfix}" "$expok" "$expfinding"
-     fileout "cert_expirationUTC_start${json_postfix}" "INFO" "$startdate"      # we assume that the certificate has no start time in the future
-     fileout "cert_expirationUTC_end${json_postfix}" "$expok" "$enddate"
+     fileout "cert_notBefore${json_postfix}" "INFO" "$startdate"      # we assume that the certificate has no start time in the future
+     fileout "cert_notAfter${json_postfix}" "$expok" "$enddate"       # They are in UTC
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
-     fileout "certchain_count${json_postfix}" "INFO" "${certificates_provided}"
+     fileout "certs_countServer${json_postfix}" "INFO" "${certificates_provided}"
 
-     # Get both CRL and OCSP URI upfront. If there's none, this is not good. And we need to penalize this in the output
-     crl="$($OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE | \
-           awk '/X509v3 CRL Distribution/{i=50} i&&i--' | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
-     ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
 
      out "$indent"; pr_bold " Certificate Revocation List  "
-     jsonID="cert_CRL"
+     jsonID="cert_cRLDistributionPoints"
+     # ~ get next 50 lines after pattern , strip until Signature Algorithm and retrieve URIs
+     crl="$(awk '/X509v3 CRL Distribution/{i=50} i&&i--' $HOSTCERT_TXT | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
      if [[ -z "$crl" ]] ; then
           fileout "${jsonID}${json_postfix}" "INFO" "--"
           outln "--"
@@ -7046,7 +7045,8 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " OCSP URI                     "
-     jsonID="cert_OCSP_URI"
+     jsonID="cert_ocspURL"
+     ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      if [[ -z "$ocsp_uri" ]]; then
           outln "--"
           fileout "${jsonID}${json_postfix}" "INFO" "--"
@@ -7099,7 +7099,7 @@ certificate_info() {
      must_staple "$json_postfix" "$provides_stapling"
 
      out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
-     jsonID="CAA_record"
+     jsonID="dns_CAArecord"
      caa_node="$NODE"
      caa=""
      while ( [[ -z "$caa" ]] &&  [[ ! -z "$caa_node" ]] ); do
