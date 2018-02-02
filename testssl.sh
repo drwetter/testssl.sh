@@ -7280,6 +7280,10 @@ run_server_defaults() {
                          [[ $n -ge 10 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                          tls_version[certs_found]="$DETECTED_TLS_VERSION"
                          previous_hostcert_type[certs_found]=" ${certificate_type[n]}"
+                         if [[ $DEBUG -ge 1 ]]; then
+                              echo "${previous_hostcert[certs_found]}" > $TEMPDIR/host_certificate_$certs_found.pem
+                              echo "${previous_hostcert_txt[certs_found]}" > $TEMPDIR/host_certificate_$certs_found.txt
+                         fi
                     else
                          previous_hostcert_type[i]+=" ${certificate_type[n]}"
                     fi
@@ -7435,6 +7439,7 @@ run_server_defaults() {
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO") 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
           fi
      fi
+     [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
 
      for (( i=1; i <= certs_found; i++ )); do
           echo "${previous_hostcert[i]}" > $HOSTCERT
