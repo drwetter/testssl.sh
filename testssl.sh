@@ -12341,7 +12341,7 @@ run_sweet32() {
 # proper parsing to be clarified: 07,00,c0
 
      local proto
-     local cve="CVE-2016-2183, CVE-2016-6329"
+     local cve="CVE-2016-2183 CVE-2016-6329"
      local cwe="CWE-327"
      local hint=""
      local -i nr_sweet32_ciphers=0
@@ -12927,7 +12927,7 @@ run_drown() {
      local nr_ciphers_detected ret
      local spaces="                                          "
      local cert_fingerprint_sha2=""
-     local cve="CVE-2016-0800, CVE-2016-0703"
+     local cve="CVE-2016-0800 CVE-2016-0703"
      local cwe="CWE-310"
      local hint=""
      local jsonID="DROWN"
@@ -13361,7 +13361,7 @@ run_rc4() {
      local dhlen available="" ciphers_to_test supported_sslv2_ciphers proto
      local has_dh_bits="$HAS_DH_BITS" rc4_detected=""
      local using_sockets=true
-     local cve="CVE-2013-2566, CVE-2015-2808"
+     local cve="CVE-2013-2566 CVE-2015-2808"
      local cwe="CWE-310"
      local hint=""
      local jsonID="RC4"
@@ -13974,7 +13974,7 @@ run_robot() {
      local -i i ret len iteration testnum pubkeybits pubkeybytes
      local vulnerable=false send_ccs_finished=true
      local -i start_time end_time timeout=$MAX_WAITSOCK
-     local cve="CVE-2017-17382, CVE-2017-17427, CVE-2017-17428, CVE-2017-13098, CVE-2017-1000385, CVE-2017-13099, CVE-2016-6883, CVE-2012-5081"
+     local cve="CVE-2017-17382 CVE-2017-17427 CVE-2017-17428 CVE-2017-13098 CVE-2017-1000385 CVE-2017-13099 CVE-2016-6883 CVE-2012-5081"
      local cwe=""
      local jsonID="ROBOT"
 
