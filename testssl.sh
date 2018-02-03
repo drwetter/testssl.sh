@@ -251,7 +251,6 @@ ERRFILE=""
 CLIENT_AUTH=false
 NO_SSL_SESSIONID=false
 HOSTCERT=""                             # File with host certificate, without intermediate certificate
-HOSTCERT_TXT=""                         # Text output of that
 HEADERFILE=""
 HEADERVALUE=""
 HTTP_STATUS_CODE=""
@@ -5697,14 +5696,12 @@ get_host_cert() {
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $1") 2>/dev/null </dev/null >$tmpvar
      if sclient_connect_successful $? $tmpvar; then
           awk '/-----BEGIN/,/-----END/ { print $0 }' $tmpvar >$HOSTCERT
-          $OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE >$HOSTCERT_TXT
           return 0
      else
           if [[ -z "$1" ]]; then
                 prln_warning "could not retrieve host certificate!"
                 fileout "host_certificate_Problem" "WARN" "Could not retrieve host certificate!"
           fi
-          rm $HOSTCERT_TXT
           return 1
      fi
      #tmpfile_handle $FUNCNAME.txt
@@ -6024,7 +6021,6 @@ extract_certificates() {
      else
          success=0
          mv level0.crt $HOSTCERT
-         $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE >$HOSTCERT_TXT
          if [[ $nrsaved -eq 1 ]]; then
              echo "" > $TEMPDIR/intermediatecerts.pem
          else
@@ -6278,10 +6274,12 @@ compare_server_name_to_cert()
      return $ret
 }
 
+# NOTE: arg3 must contain the text output of $HOSTCERT.
 must_staple() {
      local jsonID="cert_mustStapleExtension"
      local json_postfix="$1"
      local provides_stapling="$2"
+     local hostcert_txt="$3"
      local cert extn
      local -i extn_len
      local supported=false
@@ -6292,13 +6290,13 @@ must_staple() {
 
      # OpenSSL 1.1.0 supports pretty-printing the "TLS Feature extension." For any
      # previous versions of OpenSSL, OpenSSL can only show if the extension OID is present.
-     if $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE | grep -A 1 "TLS Feature:" | grep -q "status_request"; then
+     if grep -A 1 "TLS Feature:" <<< "$hostcert_txt" | grep -q "status_request"; then
           # FIXME: This will indicate that must staple is supported if the
           # certificate indicates status_request or status_request_v2. This is
           # probably okay, since it seems likely that any TLS Feature extension
           # that includes status_request_v2 will also include status_request.
           supported=true
-     elif $OPENSSL x509 -in "$HOSTCERT" -noout -text 2>>$ERRFILE | grep -q "1.3.6.1.5.5.7.1.24:"; then
+     elif [[ "$hostcert_txt" =~ "1.3.6.1.5.5.7.1.24:" ]]; then
           cert="$($OPENSSL x509 -in "$HOSTCERT" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
           extn="${cert##*06082B06010505070118}"
           # Check for critical bit, and skip over it if present.
@@ -6330,7 +6328,7 @@ must_staple() {
 # TODO: This function checks for Certificate Transparency support based on RFC 6962.
 # It will need to be updated to add checks for Certificate Transparency support based on 6962bis.
 certificate_transparency() {
-     local cert="$1"
+     local cert_txt="$1"
      local ocsp_response="$2"
      local -i number_of_certificates=$3
      local cipher="$4"
@@ -6346,11 +6344,11 @@ certificate_transparency() {
      # server's certificate. If they aren't, check whether the server provided
      # a stapled OCSP response with SCTs. If no SCTs were found in the certificate
      # or OCSP response, check for an SCT TLS extension.
-     if $OPENSSL x509 -noout -text 2>>$ERRFILE <<< "$cert" | egrep -q "CT Precertificate SCTs|1.3.6.1.4.1.11129.2.4.2" ; then
+     if [[ "$cert_txt" =~ "CT Precertificate SCTs" ]] || [[ "$cert_txt" =~ "1.3.6.1.4.1.11129.2.4.2" ]]; then
           tm_out "certificate extension"
           return 0
      fi
-     if egrep -q "CT Certificate SCTs|1.3.6.1.4.1.11129.2.4.5" <<< "$ocsp_response"; then
+     if [[ "$ocsp_response" =~ "CT Certificate SCTs" ]] || [[ "$ocsp_response" =~ "1.3.6.1.4.1.11129.2.4.5" ]]; then
           tm_out "OCSP extension"
           return 0
      fi
@@ -6406,13 +6404,14 @@ certificate_info() {
      local proto
      local -i certificate_number=$1
      local -i number_of_certificates=$2
-     local cipher=$3
-     local cert_keysize=$4
-     local cert_type="$5"
-     local ocsp_response=$6
-     local ocsp_response_status=$7
-     local sni_used=$8
-     local ct="$9"
+     local cert_txt="$3"
+     local cipher=$4
+     local cert_keysize=$5
+     local cert_type="$6"
+     local ocsp_response=$7
+     local ocsp_response_status=$8
+     local sni_used=$9
+     local ct="${10}"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_keyusage cert_ext_keyusage
      local outok=true
      local expire days2expire secs2warn ocsp_uri crl
@@ -6449,11 +6448,9 @@ certificate_info() {
           spaces="                              "
      fi
 
-     [[ ! -s $HOSTCERT_TXT ]] && $OPENSSL x509 -in $HOSTCERT -noout -text 2>>$ERRFILE >$HOSTCERT_TXT
-
-     cert_sig_algo="$(awk -F':' '/Signature Algorithm/ { print $2; if (++Match >= 1) exit; }' $HOSTCERT_TXT)"
+     cert_sig_algo="$(awk -F':' '/Signature Algorithm/ { print $2; if (++Match >= 1) exit; }' <<< "$cert_txt")"
      cert_sig_algo="${cert_sig_algo// /}"
-     cert_key_algo="$(awk -F':' '/Public Key Algorithm:/ { print $2; if (++Match >= 1) exit; }' $HOSTCERT_TXT)"
+     cert_key_algo="$(awk -F':' '/Public Key Algorithm:/ { print $2; if (++Match >= 1) exit; }' <<< "$cert_txt")"
      cert_key_algo="${cert_key_algo// /}"
 
      out "$indent" ; pr_bold " Signature Algorithm          "
@@ -6516,7 +6513,7 @@ certificate_info() {
                fileout "${jsonID}${json_postfix}" "OK" "DSA with SHA256"
                ;;
           rsassaPss)
-               cert_sig_hash_algo="$(grep -A 1 "Signature Algorithm" $HOSTCERT_TXT | head -2 | tail -1 | sed 's/^.*Hash Algorithm: //')"
+               cert_sig_hash_algo="$(grep -A 1 "Signature Algorithm" <<< "$cert_txt" | head -2 | tail -1 | sed 's/^.*Hash Algorithm: //')"
                case $cert_sig_hash_algo in
                     sha1)
                          prln_svrty_medium "RSASSA-PSS with SHA1"
@@ -6640,7 +6637,7 @@ certificate_info() {
      out "$indent"; pr_bold " Server key usage             ";
      outok=true
      jsonID="cert_keyUsage"
-     cert_keyusage="$(strip_leading_space "$(awk '/X509v3 Key Usage:/ { getline; print $0 }' $HOSTCERT_TXT)")"
+     cert_keyusage="$(strip_leading_space "$(awk '/X509v3 Key Usage:/ { getline; print $0 }' <<< "$cert_txt")")"
      if [[ -n "$cert_keyusage" ]]; then
           outln "$cert_keyusage"
           if ( [[ " $cert_type " =~ " RSASig " ]] || [[ " $cert_type " =~ " DSA " ]] || [[ " $cert_type " =~ " ECDSA " ]] ) && \
@@ -6672,7 +6669,7 @@ certificate_info() {
      out "$indent"; pr_bold " Server extended key usage    ";
      jsonID="cert_extKeyUsage"
      outok=true
-     cert_ext_keyusage="$(strip_leading_space "$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' $HOSTCERT_TXT)")"
+     cert_ext_keyusage="$(strip_leading_space "$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' <<< "$cert_txt")")"
      if [[ -n "$cert_ext_keyusage" ]]; then
           outln "$cert_ext_keyusage"
           if [[ ! "$cert_ext_keyusage" =~ "TLS Web Server Authentication" ]] && [[ ! "$cert_ext_keyusage" =~ "Any Extended Key Usage" ]]; then
@@ -6757,7 +6754,7 @@ certificate_info() {
      fi
      fileout "cert_commonName_wo_SNI${json_postfix}" "INFO" "$cnfinding"
 
-     sans=$(grep -A2 "Subject Alternative Name" $HOSTCERT_TXT | \
+     sans=$(grep -A2 "Subject Alternative Name" <<< "$cert_txt" | \
           egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
           sed -e 's/ *DNS://g' -e 's/ *IP Address://g' -e 's/ *email://g' -e 's/ *URI://g' -e 's/ *DirName://g' \
               -e 's/ *Registered ID://g' \
@@ -6834,7 +6831,7 @@ certificate_info() {
      #      identifier of CN-ID if the presented identifiers include a DNS-ID,
      #      SRV-ID, URI-ID, or any application-specific identifier types
      #      supported by the client.
-     grep -A2 "Subject Alternative Name" $HOSTCERT_TXT | grep -q "DNS:" && \
+     grep -A2 "Subject Alternative Name" <<< "$cert_txt" | grep -q "DNS:" && \
           has_dns_sans=true || has_dns_sans=false
 
      case $trust_sni in
@@ -6953,7 +6950,7 @@ certificate_info() {
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
      jsonID="cert_certificatePolicies_EV"
      # only the first one, seldom we have two
-     policy_oid=$(awk '/ .Policy: / { print $2 }' $HOSTCERT_TXT | awk 'NR < 2')
+     policy_oid=$(awk '/ .Policy: / { print $2 }' <<< "$cert_txt" | awk 'NR < 2')
      if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
           [[ 2.16.840.1.114028.10.1.2 == "$policy_oid" ]] || \
           [[ 2.16.840.1.114412.1.3.0.2 == "$policy_oid" ]] || \
@@ -6979,8 +6976,8 @@ certificate_info() {
      out "$indent"; pr_bold " Certificate Validity (UTC)   "
 
      # FreeBSD + OSX can't swallow the leading blank:
-     enddate="$(strip_leading_space "$(awk -F':' '/Not After/ { print $2":"$3":"$4 }' $HOSTCERT_TXT)")"       # in GMT
-     startdate="$(strip_leading_space "$(awk -F':' '/Not Before/ { print $2":"$3":"$4 }' $HOSTCERT_TXT)")"
+     enddate="$(strip_leading_space "$(awk -F':' '/Not After/ { print $2":"$3":"$4 }' <<< "$cert_txt")")"       # in GMT
+     startdate="$(strip_leading_space "$(awk -F':' '/Not Before/ { print $2":"$3":"$4 }' <<< "$cert_txt")")"
      enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
      startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
 
@@ -7031,7 +7028,7 @@ certificate_info() {
      out "$indent"; pr_bold " Certificate Revocation List  "
      jsonID="cert_cRLDistributionPoints"
      # ~ get next 50 lines after pattern , strip until Signature Algorithm and retrieve URIs
-     crl="$(awk '/X509v3 CRL Distribution/{i=50} i&&i--' $HOSTCERT_TXT | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
+     crl="$(awk '/X509v3 CRL Distribution/{i=50} i&&i--' <<< "$cert_txt" | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
      if [[ -z "$crl" ]] ; then
           fileout "${jsonID}${json_postfix}" "INFO" "--"
           outln "--"
@@ -7096,7 +7093,7 @@ certificate_info() {
      outln
 
      out "$indent"; pr_bold " OCSP must staple extension   ";
-     must_staple "$json_postfix" "$provides_stapling"
+     must_staple "$json_postfix" "$provides_stapling" "$cert_txt"
 
      out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
      jsonID="dns_CAArecord"
@@ -7150,7 +7147,7 @@ run_server_defaults() {
      local sessticket_lifetime_hint="" lifetime unit
      local -i i n
      local -i certs_found=0
-     local -a previous_hostcert previous_hostcert_type previous_intermediates keysize cipher
+     local -a previous_hostcert previous_hostcert_txt previous_hostcert_type previous_intermediates keysize cipher
      local -a ocsp_response ocsp_response_status sni_used tls_version ct
      local -a ciphers_to_test certificate_type
      local -a -i success
@@ -7278,10 +7275,15 @@ run_server_defaults() {
                          fi
                          ocsp_response_status[certs_found]=$(grep -a "OCSP Response Status" $TMPFILE)
                          previous_hostcert[certs_found]=$newhostcert
+                         previous_hostcert_txt[certs_found]="$($OPENSSL x509 -noout -text 2>>$ERRFILE <<< "$newhostcert")"
                          previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
                          [[ $n -ge 10 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                          tls_version[certs_found]="$DETECTED_TLS_VERSION"
                          previous_hostcert_type[certs_found]=" ${certificate_type[n]}"
+                         if [[ $DEBUG -ge 1 ]]; then
+                              echo "${previous_hostcert[certs_found]}" > $TEMPDIR/host_certificate_$certs_found.pem
+                              echo "${previous_hostcert_txt[certs_found]}" > $TEMPDIR/host_certificate_$certs_found.txt
+                         fi
                     else
                          previous_hostcert_type[i]+=" ${certificate_type[n]}"
                     fi
@@ -7299,7 +7301,7 @@ run_server_defaults() {
      # Now that all of the server's certificates have been found, determine for
      # each certificate whether certificate transparency information is provided.
      for (( i=1; i <= certs_found; i++ )); do
-          ct[i]="$(certificate_transparency "${previous_hostcert[i]}" "${ocsp_response[i]}" "$certs_found" "${cipher[i]}" "${sni_used[i]}" "${tls_version[i]}")"
+          ct[i]="$(certificate_transparency "${previous_hostcert_txt[i]}" "${ocsp_response[i]}" "$certs_found" "${cipher[i]}" "${sni_used[i]}" "${tls_version[i]}")"
           # If certificate_transparency() called tls_sockets() and found a "signed certificate timestamps" extension, then add it to $TLS_EXTENSIONS,
           # since it may not have been found by determine_tls_extensions().
           [[ $certs_found -gt 1 ]] && [[ "${ct[i]}" == "TLS extension" ]] && extract_new_tls_extensions "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
@@ -7437,11 +7439,14 @@ run_server_defaults() {
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO") 2>>$ERRFILE </dev/null | awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
           fi
      fi
+     [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
 
      for (( i=1; i <= certs_found; i++ )); do
           echo "${previous_hostcert[i]}" > $HOSTCERT
           echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
-          certificate_info "$i" "$certs_found" "${cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
+          certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" \
+               "${cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" \
+               "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
      done
 }
 
@@ -14629,7 +14634,6 @@ maketempf() {
           ERRFILE=$TEMPDIR/errorfile.txt || exit -6
      fi
      HOSTCERT=$TEMPDIR/host_certificate.pem
-     HOSTCERT_TXT=$TEMPDIR/host_certificate.txt        #FIXME: needs to be used later
 }
 
 prepare_debug() {
