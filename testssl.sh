@@ -12353,7 +12353,7 @@ run_sweet32() {
      local using_sockets=true
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SWEET32 (Birthday Attacks on 64-bit Block Ciphers)       " && outln
-     pr_bold " SWEET32"; out " ($cve)    "
+     pr_bold " SWEET32"; out " (${cve// /, })    "
 
      "$SSL_NATIVE" && using_sockets=false
      # The openssl binary distributed has almost everything we need (PSK, KRB5 ciphers and feff, ffe0 are typically missing).
@@ -12943,7 +12943,7 @@ run_drown() {
           outln
      fi
 # if we want to use OPENSSL: check for < openssl 1.0.2g, openssl 1.0.1s if native openssl
-     pr_bold " DROWN"; out " ($cve)      "
+     pr_bold " DROWN"; out " (${cve// /, })      "
 
      # Any fingerprint that is placed in $RSA_CERT_FINGERPRINT_SHA2 is also added to
      # to $CERT_FINGERPRINT_SHA2, so if $CERT_FINGERPRINT_SHA2 is not empty, but
@@ -12972,7 +12972,7 @@ run_drown() {
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$nr_ciphers_detected" ]]; then
                          prln_svrty_high "CVE-2015-3197: SSLv2 supported but couldn't detect a cipher (NOT ok)";
-                         fileout "$jsonID" "HIGH" "SSLv2 offered, but could not detect a cipher (CVE-2015-3197). Make sure you don't use this certificate elsewhere, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe" "$hint"
+                         fileout "$jsonID" "HIGH" "SSLv2 offered, but could not detect a cipher. Make sure you don't use this certificate elsewhere, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve CVE-2015-3197" "$cwe" "$hint"
                     else
                          prln_svrty_critical  "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
                          fileout "$jsonID" "CRITICAL" "VULNERABLE, SSLv2 offered with $nr_ciphers_detected ciphers. Make sure you don't use this certificate elsewhere, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe" "$hint"
@@ -13382,7 +13382,7 @@ run_rc4() {
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
      fi
-     pr_bold " RC4"; out " ($cve)        "
+     pr_bold " RC4"; out " (${cve// /,})        "
 
      # get a list of all the cipher suites to test
      if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
