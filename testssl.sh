@@ -13382,7 +13382,7 @@ run_rc4() {
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
      fi
-     pr_bold " RC4"; out " (${cve// /,})        "
+     pr_bold " RC4"; out " (${cve// /, })        "
 
      # get a list of all the cipher suites to test
      if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
@@ -13604,7 +13604,7 @@ run_rc4() {
 
 run_youknowwho() {
     local cve="CVE-2013-2566"
-    # CVE-2013-2566,
+    local cwe="CWE-310"
     # NOT FIXME as there's no code: http://www.isg.rhul.ac.uk/tls/
     # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
     return 0
