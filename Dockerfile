@@ -1,13 +1,18 @@
-FROM debian:latest
+FROM alpine:latest
 
-RUN apt-get update && apt-get install -y git bsdmainutils ldnsutils procps
+RUN apk update && apk upgrade
+RUN apk add bash procps drill git
 
-RUN git clone --depth=1 https://github.com/drwetter/testssl.sh.git /testssl.sh/
+RUN addgroup testssl
+RUN adduser -G testssl -g "testssl user"  -s /bin/bash -D testssl
 
-RUN ln -s /testssl.sh/testssl.sh /usr/local/bin/
+RUN ln -s /home/testssl/testssl.sh /usr/local/bin/
 
-WORKDIR /testssl.sh/
+USER testssl
+WORKDIR /home/testssl/
 
-ENTRYPOINT ["testssl.sh","--openssl","/testssl.sh/bin/openssl.Linux.x86_64"]
+RUN git clone --depth=1 https://github.com/drwetter/testssl.sh.git .
+
+ENTRYPOINT ["testssl.sh"]
 
 CMD ["--help"]
