@@ -12535,7 +12535,7 @@ run_tls_fallback_scsv() {
                fileout "$jsonID" "HIGH" "only SSLv3 supported"
                return 7
                ;;
-          *)   pr_svrty_good "No fallback possible, TLS 1.3 is the only protocol (OK)"
+          *)   prln_svrty_good "No fallback possible, TLS 1.3 is the only protocol (OK)"
                fileout "$jsonID" "OK" "only TLS 1.3 supported"
                return 7
      esac
@@ -12557,11 +12557,12 @@ run_tls_fallback_scsv() {
      if [[ -z "$low_proto" ]]; then
           case "$high_proto" in
                "tls1_2")
-                    pr_svrty_good "No fallback possible, no protocol below $high_proto_str offered (OK)"
+                    prln_svrty_good "No fallback possible, no protocol below $high_proto_str offered (OK)"
                     ;;
-               *)   out "No fallback possible, no protocol below $high_proto_str offered (OK)"
+               *)   outln "No fallback possible, no protocol below $high_proto_str offered (OK)"
                     ;;
           esac
+          fileout "$jsonID" "OK" "no protocol below $high_proto_str offered"
           return 7
      fi
      case "$low_proto" in
