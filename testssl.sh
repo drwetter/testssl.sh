@@ -472,15 +472,15 @@ pr_grey()       { tm_grey "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"
 tmln_grey()     { tm_grey "$1"; tmln_out; }
 prln_grey()     { pr_grey "$1"; outln; }
 
-tm_done_good()   { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;34m$1" || tm_out "\033[0;32m$1" ) || tm_out "$1"; tm_off; }   # litegreen (liteblue), This is good
-tmln_done_good() { tm_done_good "$1"; tmln_out; }
-pr_done_good()   { tm_done_good "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
-prln_done_good() { pr_done_good "$1"; outln; }
+tm_svrty_good()   { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;34m$1" || tm_out "\033[0;32m$1" ) || tm_out "$1"; tm_off; }   # litegreen (liteblue), This is good
+tmln_svrty_good() { tm_svrty_good "$1"; tmln_out; }
+pr_svrty_good()   { tm_svrty_good "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+prln_svrty_good() { pr_svrty_good "$1"; outln; }
 
-tm_done_best()   { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;34m$1" || tm_out "\033[1;32m$1" ) ||  tm_out "$1"; tm_off; }  # green (blue), This is the best
-tmln_done_best() { tm_done_best "$1"; tmln_out; }
-pr_done_best()   { tm_done_best "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
-prln_done_best() { pr_done_best "$1"; outln; }
+tm_svrty_best()   { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[1;34m$1" || tm_out "\033[1;32m$1" ) ||  tm_out "$1"; tm_off; }  # green (blue), This is the best
+tmln_svrty_best() { tm_svrty_best "$1"; tmln_out; }
+pr_svrty_best()   { tm_svrty_best "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#5c5cff;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:lime;font-weight:bold;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
+prln_svrty_best() { pr_svrty_best "$1"; outln; }
 
 tm_svrty_low()     { [[ "$COLOR" -ge 2 ]] && tm_out "\033[1;33m$1" || tm_out "$1"; tm_off; }         # yellow brown | academic or minor problem
 tmln_svrty_low()   { tm_svrty_low "$1"; tmln_out; }
@@ -1704,7 +1704,7 @@ detect_header() {
 
 includeSubDomains() {
      if grep -aiqw includeSubDomains "$1"; then
-          pr_done_good ", includeSubDomains"
+          pr_svrty_good ", includeSubDomains"
           return 0
      else
           pr_litecyan ", just this domain"
@@ -1714,7 +1714,7 @@ includeSubDomains() {
 
 preload() {
      if grep -aiqw preload "$1"; then
-          pr_done_good ", preload"
+          pr_svrty_good ", preload"
           return 0
      else
           return 1
@@ -1748,7 +1748,7 @@ run_hsts() {
                pr_svrty_medium "HSTS max-age is set to 0. HSTS is disabled"
                fileout "HSTS_time" "MEDIUM" "0. HSTS is disabled"
           elif [[ $hsts_age_sec -gt $HSTS_MIN ]]; then
-               pr_done_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
+               pr_svrty_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "HSTS_time" "OK" "$hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN seconds"
           else
                pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >=$HSTS_MIN seconds recommended)"
@@ -1829,7 +1829,7 @@ run_hpkp() {
                pr_svrty_high "Only one key pinned (NOT ok), means the site may become unavailable in the future, "
                fileout "HPKP_SPKIs" "HIGH" "Only one key pinned"
           else
-               pr_done_good "$hpkp_nr_keys"
+               pr_svrty_good "$hpkp_nr_keys"
                out " keys, "
                fileout "HPKP_SPKIs" "OK" "$hpkp_nr_keys keys pinned in header"
           fi
@@ -1842,7 +1842,7 @@ run_hpkp() {
           fi
           hpkp_age_days=$((hpkp_age_sec / 86400))
           if [[ $hpkp_age_sec -ge $HPKP_MIN ]]; then
-               pr_done_good "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
+               pr_svrty_good "$hpkp_age_days days" ; out "=$hpkp_age_sec s"
                fileout "HPKP_age" "OK" "HPKP age is set to $hpkp_age_days days ($hpkp_age_sec sec)"
           else
                out "$hpkp_age_sec s = "
@@ -1910,7 +1910,7 @@ run_hpkp() {
                     certificate_found=true       # We have a match
                     spki_match=true
                     out "\n$spaces_indented Host cert: "
-                    pr_done_good "$hpkp_spki"
+                    pr_svrty_good "$hpkp_spki"
                     fileout "HPKP_$hpkp_spki" "OK" "SPKI $hpkp_spki matches the host certificate"
                fi
                debugme tm_out "\n  $hpkp_spki | $hpkp_spki_hostcert"
@@ -1923,7 +1923,7 @@ run_hpkp() {
                          certificate_found=true
                          spki_match=true
                          out "\n$spaces_indented Sub CA:    "
-                         pr_done_good "$hpkp_spki"
+                         pr_svrty_good "$hpkp_spki"
                          ca_cn="$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< $"$hpkp_matches" )"
                          pr_italic " $ca_cn"
                          fileout "HPKP_$hpkp_spki" "OK" "SPKI $hpkp_spki matches Intermediate CA \"$ca_cn\" pinned in the HPKP header"
@@ -1946,7 +1946,7 @@ run_hpkp() {
                          ca_cn="$(sed "s/^[a-zA-Z0-9\+\/]*=* *//" <<< $"$hpkp_matches" )"
                          if [[ "$match_ca" == "$hpkp_ca" ]]; then          # part of the chain
                               out "\n$spaces_indented Root CA:   "
-                              pr_done_good "$hpkp_spki"
+                              pr_svrty_good "$hpkp_spki"
                               pr_italic " $ca_cn"
                               fileout "HPKP_$hpkp_spki" "INFO" "SPKI $hpkp_spki matches Root CA \"$ca_cn\" pinned. (Root CA part of the chain)"
                          else                                              # not part of chain
@@ -1977,7 +1977,7 @@ run_hpkp() {
 
           # for i=0 manually do the same as below as there's other indentation here
           if [[ -n "${backup_spki_str[0]}" ]]; then
-               pr_done_good "${backup_spki[0]}"
+               pr_svrty_good "${backup_spki[0]}"
                #out " Root CA: "
                prln_italic " ${backup_spki_str[0]}"
           else
@@ -1987,7 +1987,7 @@ run_hpkp() {
           for ((i=1; i < ${#backup_spki[@]} ;i++ )); do
                if [[ -n "${backup_spki_str[i]}" ]]; then
                     # it's a Root CA outside the chain
-                    pr_done_good "$spaces_indented            ${backup_spki[i]}"
+                    pr_svrty_good "$spaces_indented            ${backup_spki[i]}"
                     #out " Root CA: "
                     prln_italic " ${backup_spki_str[i]}"
                else
@@ -2309,7 +2309,7 @@ run_cookie_flags() {     # ARG1: Path
           nr_secure=$(grep -iac secure $TMPFILE)
           case $nr_secure in
                0) pr_svrty_medium "$negative_word" ;;
-               [123456789]) pr_done_good "$nr_secure/$nr_cookies";;
+               [123456789]) pr_svrty_good "$nr_secure/$nr_cookies";;
           esac
           out " secure, "
           if [[ $nr_cookies -eq $nr_secure ]]; then
@@ -2320,7 +2320,7 @@ run_cookie_flags() {     # ARG1: Path
           nr_httponly=$(grep -cai httponly $TMPFILE)
           case $nr_httponly in
                0) pr_svrty_medium "$negative_word" ;;
-               [123456789]) pr_done_good "$nr_httponly/$nr_cookies";;
+               [123456789]) pr_svrty_good "$nr_httponly/$nr_cookies";;
           esac
           out " HttpOnly"
           if [[ $nr_cookies -eq $nr_httponly ]]; then
@@ -2359,7 +2359,7 @@ run_more_flags() {
                else
                     first=false
                fi
-               pr_done_good "$f2t"
+               pr_svrty_good "$f2t"
                outln " $(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
                fileout "$f2t" "OK" "$HEADERVALUE"
           fi
@@ -2375,7 +2375,7 @@ run_more_flags() {
                     first=false
                fi
                pr_litecyan "$f2t"
-               outln "$HEADERVALUE"     # shouldn't be that long
+               outln " $HEADERVALUE"     # shouldn't be that long
                fileout "$f2t" "INFO" "$f2t: $HEADERVALUE"
           fi
      done
@@ -2549,7 +2549,7 @@ sub_cipherlists() {
                case $3 in
                     2)  if [[ $sclient_success -eq 0 ]]; then
                               # Strong is excellent to offer
-                              pr_done_best "offered (OK)"
+                              pr_svrty_best "offered (OK)"
                               fileout "${jsonID}_$4" "OK" "offered"
                          else
                               pr_svrty_medium "not offered"
@@ -2559,7 +2559,7 @@ sub_cipherlists() {
 
                     1)  if [[ $sclient_success -eq 0 ]]; then
                               # High is good to offer
-                              pr_done_good "offered (OK)"
+                              pr_svrty_good "offered (OK)"
                               fileout "${jsonID}_$4" "OK" "offered"
                          else
                               # FIXME: the rating could be readjusted if we knew the result of STRONG before
@@ -2582,7 +2582,7 @@ sub_cipherlists() {
                               fileout "${jsonID}_$4" "HIGH" "offered"
                          else
                               # need a check for -eq 1 here
-                              pr_done_good "not offered (OK)"
+                              pr_svrty_good "not offered (OK)"
                               fileout "${jsonID}_$4" "OK" "not offered"
                          fi
                          ;;
@@ -2591,7 +2591,7 @@ sub_cipherlists() {
                               pr_svrty_critical "offered (NOT ok)"
                               fileout "${jsonID}_$4" "CRITICAL" "offered"
                          else
-                              pr_done_best "not offered (OK)"
+                              pr_svrty_best "not offered (OK)"
                               fileout "${jsonID}_$4" "OK" "not offered"
                          fi
                          ;;
@@ -4248,7 +4248,7 @@ run_protocols() {
      local using_sockets=true
      local supported_no_ciph1="supported but couldn't detect a cipher (may need debugging)"
      local supported_no_ciph2="supported but couldn't detect a cipher"
-     local latest_supported=""  # version.major and version.minor of highest version supported by the server.
+     local latest_supported=""  # version.major and version.minor of highest version supported by the server
      local detected_version_string latest_supported_string
      local key_share_extn_nr="$KEY_SHARE_EXTN_NR"
      local lines nr_ciphers_detected
@@ -4268,7 +4268,7 @@ run_protocols() {
           if [[ -n "$STARTTLS" ]]; then
                prln_underline "via sockets "
           else
-               prln_underline "via sockets except SPDY+HTTP2 "
+               prln_underline "via sockets except NPN+ALPN "
           fi
      fi
      outln
@@ -4288,12 +4288,12 @@ run_protocols() {
                     fileout "$jsonID" "WARN" "received a strange SSLv2 reply (rerun with DEBUG>=2)"
                     ;;
                1) # no sslv2 server hello returned, like in openlitespeed which returns HTTP!
-                    prln_done_best "not offered (OK)"
+                    prln_svrty_best "not offered (OK)"
                     fileout "$jsonID" "OK" "not offered"
                     add_tls_offered ssl2 no
                     ;;
                0) # reset
-                    prln_done_best "not offered (OK)"
+                    prln_svrty_best "not offered (OK)"
                     fileout "$jsonID" "OK" "not offered"
                     add_tls_offered ssl2 no
                     ;;
@@ -4326,7 +4326,7 @@ run_protocols() {
                     fileout "$jsonID" "CRITICAL" "offered"
                     add_tls_offered ssl2 yes
                     ;;
-               1)   prln_done_best "not offered (OK)"
+               1)   prln_svrty_best "not offered (OK)"
                     fileout "$jsonID" "OK" "not offered"
                     add_tls_offered ssl2 no
                     ;;
@@ -4353,7 +4353,7 @@ run_protocols() {
                latest_supported_string="SSLv3"
                add_tls_offered ssl3 yes
                ;;
-          1)   prln_done_best "not offered (OK)"
+          1)   prln_svrty_best "not offered (OK)"
                fileout "$jsonID" "OK" "not offered"
                add_tls_offered ssl3 no
                ;;
@@ -4535,7 +4535,7 @@ run_protocols() {
           ret=$?
      fi
      case $ret in
-          0)   prln_done_best "offered (OK)"
+          0)   prln_svrty_best "offered (OK)"
                fileout "$jsonID" "OK" "offered"
                latest_supported="0303"
                latest_supported_string="TLSv1.2"
@@ -4663,7 +4663,7 @@ run_protocols() {
                     fi
                     KEY_SHARE_EXTN_NR="$key_share_extn_nr"
                     if [[ -n "$drafts_offered" ]]; then
-                         pr_done_best "offered (OK)"; outln ": $drafts_offered"
+                         pr_svrty_best "offered (OK)"; outln ": $drafts_offered"
                          fileout "$jsonID" "OK" "offered with $drafts_offered"
                     else
                          pr_warning "Unexpected results"; outln "$debug_recomm"
@@ -4809,7 +4809,7 @@ pr_dh_quality() {
      elif [[ "$bits" -le 1280 ]]; then
           pr_svrty_medium "$string"
      elif [[ "$bits" -ge 2048 ]]; then
-          pr_done_good "$string"
+          pr_svrty_good "$string"
      else
           out "$string"
      fi
@@ -4830,7 +4830,7 @@ pr_ecdh_quality() {
      elif [[ "$bits" -le 224 ]]; then
           out "$string"
      elif [[ "$bits" -gt 224 ]]; then
-          pr_done_good "$string"
+          pr_svrty_good "$string"
      else
           out "$string"
      fi
@@ -4879,7 +4879,7 @@ pr_ecdh_curve_quality() {
 # The return value is an indicator of the quality of the cipher in $1:
 #   0 = $1 is empty
 #   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
-#   5 = neither good nor bad, 6 = pr_done_good, 7 = pr_done_best
+#   5 = neither good nor bad, 6 = pr_svrty_good, 7 = pr_svrty_best
 #
 # Please note this section isn't particular spot on. It needs to be reconsidered/redone
 pr_cipher_quality() {
@@ -4904,11 +4904,11 @@ pr_cipher_quality() {
                          ;;
                     AES256-GCM-SHA384|AES128-GCM-SHA256|AES256-CCM|AES128-CCM|ARIA256-GCM-SHA384|ARIA128-GCM-SHA256)
                          # RSA kx and e.g. GCM isn't certainly the best
-                         pr_done_good "$text"
+                         pr_svrty_good "$text"
                          return 6
                          ;;
                     *GCM*|*CCM*|*CHACHA20*)
-                         pr_done_best "$text"
+                         pr_svrty_best "$text"
                          return 7
                          ;; #best ones
                     ECDHE*AES*|DHE*AES*SHA*|*CAMELLIA*SHA)
@@ -4942,13 +4942,13 @@ pr_cipher_quality() {
                     pr_svrty_low "$text"
                     return 4
                else
-                    pr_done_good "$text"
+                    pr_svrty_good "$text"
                     # RSA kx and e.g. GCM isn't certainly the best
                     return 6
                fi
                ;;
           *GCM*|*CCM*|*CHACHA20*)
-               pr_done_best "$text"
+               pr_svrty_best "$text"
                return 7
                ;;
           *ECDHE*AES*CBC*|*DHE*AES*SHA*|*RSA*AES*SHA*|*CAMELLIA*SHA*)
@@ -5185,7 +5185,7 @@ run_server_preference() {
           limitedsense=" (limited sense as client will pick)"
           fileout "$jsonID" "HIGH" "NOT cipher order configured"
      else
-          pr_done_best "yes (OK)"
+          pr_svrty_best "yes (OK)"
           has_cipher_order=true
           limitedsense=""
           fileout "$jsonID" "OK" "sets cipher order"
@@ -5220,15 +5220,15 @@ run_server_preference() {
      [[ "$default_proto" == "TLSv1.0" ]] && default_proto="TLSv1"
      case "$default_proto" in
           *TLSv1.3)
-               prln_done_best $default_proto
+               prln_svrty_best $default_proto
                fileout "$jsonID" "OK" "Default protocol TLS1.3"
                ;;
           *TLSv1.2)
-               prln_done_best $default_proto
+               prln_svrty_best $default_proto
                fileout "$jsonID" "OK" "Default protocol TLS1.2"
                ;;
           *TLSv1.1)
-               prln_done_good $default_proto
+               prln_svrty_good $default_proto
                fileout "$jsonID" "OK" "Default protocol TLS1.1"
                ;;
           *TLSv1)
@@ -5787,7 +5787,7 @@ determine_trust() {
           if [[ ${verify_retcode[i]} -eq 0 ]]; then
                trust[i]=true
                some_ok=true
-               debugme tm_done_good "Ok   "
+               debugme tm_svrty_good "Ok   "
                debugme tmln_out "${verify_retcode[i]}"
           else
                trust[i]=false
@@ -5801,7 +5801,7 @@ determine_trust() {
      debugme tm_out " "
      if "$all_ok"; then
           # all stores ok
-          pr_done_good "Ok   "; pr_warning "$addtl_warning"
+          pr_svrty_good "Ok   "; pr_warning "$addtl_warning"
           # we did to stdout the warning above already, so we could stay here with OK:
           fileout "${jsonID}${json_postfix}" "OK" "passed. $addtl_warning"
      else
@@ -5842,7 +5842,7 @@ determine_trust() {
                     outln
                     # lf + green ones
                     [[ "$DEBUG" -eq 0 ]] && tm_out "$spaces"
-                    pr_done_good "OK: $ok_was"
+                    pr_svrty_good "OK: $ok_was"
                fi
                fileout "${jsonID}${json_postfix}" "CRITICAL" "Some certificate trust checks failed -> $notok_was $addtl_warning, OK -> $ok_was"
           fi
@@ -6235,26 +6235,27 @@ compare_server_name_to_cert()
 
      # Check whether any of the DNS names in the certificate match the servername
      dns_sans="$(get_san_dns_from_cert "$cert")"
-     for san in $dns_sans; do
-          [[ $(toupper "$san") == "$servername" ]] && ret=1 && break
-     done
+     while read san; do
+          [[ -n "$san" ]] && [[ $(toupper "$san") == "$servername" ]] && ret=1 && break
+     done <<< "$dns_sans"
 
      if [[ $ret -eq 0 ]]; then
           # Check whether any of the IP addresses in the certificate match the servername
           ip_sans=$($OPENSSL x509 -in "$cert" -noout -text 2>>$ERRFILE | grep -A2 "Subject Alternative Name" | \
                   tr ',' '\n' | grep "IP Address:" | sed -e 's/IP Address://g' -e 's/ //g')
-          for san in $ip_sans; do
-               [[ "$san" == "$servername" ]] && ret=1 && break
-          done
+          while read san; do
+               [[ -n "$san" ]] && [[ "$san" == "$servername" ]] && ret=1 && break
+          done <<< "$ip_sans"
      fi
 
      # Check whether any of the DNS names in the certificate are wildcard names
      # that match the servername
      if [[ $ret -eq 0 ]]; then
-          for san in $dns_sans; do
+          while read san; do
+               [[ -n "$san" ]] || continue
                wildcard_match "$servername" "$san"
                [[ $? -eq 0 ]] && ret=2 && break
-          done
+          done <<< "$dns_sans"
      fi
 
      cn="$(get_cn_from_cert "$cert")"
@@ -6313,7 +6314,7 @@ must_staple() {
 
      if "$supported"; then
           if "$provides_stapling"; then
-               prln_done_good "supported"
+               prln_svrty_good "supported"
                fileout "${jsonID}${json_postfix}" "OK" "supported"
           else
                prln_svrty_high "requires OCSP stapling (NOT ok)"
@@ -6469,15 +6470,15 @@ certificate_info() {
                fileout "${jsonID}${json_postfix}" "INFO" "SHA224 with RSA"
                ;;
           sha256WithRSAEncryption)
-               prln_done_good "SHA256 with RSA"
+               prln_svrty_good "SHA256 with RSA"
                fileout "${jsonID}${json_postfix}" "OK" "SHA256 with RSA"
                ;;
           sha384WithRSAEncryption)
-               prln_done_good "SHA384 with RSA"
+               prln_svrty_good "SHA384 with RSA"
                fileout "${jsonID}${json_postfix}" "OK" "SHA384 with RSA"
                ;;
           sha512WithRSAEncryption)
-               prln_done_good "SHA512 with RSA"
+               prln_svrty_good "SHA512 with RSA"
                fileout "${jsonID}${json_postfix}" "OK" "SHA512 with RSA"
                ;;
           ecdsa-with-SHA1)
@@ -6489,15 +6490,15 @@ certificate_info() {
                fileout "${jsonID}${json_postfix}" "INFO" "ECDSA with SHA224"
                ;;
           ecdsa-with-SHA256)
-               prln_done_good "ECDSA with SHA256"
+               prln_svrty_good "ECDSA with SHA256"
                fileout "${jsonID}${json_postfix}" "OK" "ECDSA with SHA256"
                ;;
           ecdsa-with-SHA384)
-               prln_done_good "ECDSA with SHA384"
+               prln_svrty_good "ECDSA with SHA384"
                fileout "${jsonID}${json_postfix}" "OK" "ECDSA with SHA384"
                ;;
           ecdsa-with-SHA512)
-               prln_done_good "ECDSA with SHA512"
+               prln_svrty_good "ECDSA with SHA512"
                fileout "${jsonID}${json_postfix}" "OK" "ECDSA with SHA512"
                ;;
           dsaWithSHA1)
@@ -6509,7 +6510,7 @@ certificate_info() {
                fileout "${jsonID}${json_postfix}" "INFO" "DSA with SHA224"
                ;;
           dsa_with_SHA256)
-               prln_done_good "DSA with SHA256"
+               prln_svrty_good "DSA with SHA256"
                fileout "${jsonID}${json_postfix}" "OK" "DSA with SHA256"
                ;;
           rsassaPss)
@@ -6524,15 +6525,15 @@ certificate_info() {
                          fileout "${jsonID}${json_postfix}" "INFO" "RSASSA-PSS with SHA224"
                          ;;
                     sha256)
-                         prln_done_good "RSASSA-PSS with SHA256"
+                         prln_svrty_good "RSASSA-PSS with SHA256"
                          fileout "${jsonID}${json_postfix}" "OK" "RSASSA-PSS with SHA256"
                          ;;
                     sha384)
-                         prln_done_good "RSASSA-PSS with SHA384"
+                         prln_svrty_good "RSASSA-PSS with SHA384"
                          fileout "${jsonID}${json_postfix}" "OK" "RSASSA-PSS with SHA384"
                          ;;
                     sha512)
-                         prln_done_good "RSASSA-PSS with SHA512"
+                         prln_svrty_good "RSASSA-PSS with SHA512"
                          fileout "${jsonID}${json_postfix}" "OK" "RSASSA-PSS with SHA512"
                          ;;
                     *)
@@ -6594,7 +6595,7 @@ certificate_info() {
                     out "$cert_keysize"
                     fileout "${jsonID}${json_postfix}" "INFO" "$cert_keysize EC bits"
                elif [[ "$cert_keysize" -le 533 ]]; then
-                    pr_done_good "$cert_keysize"
+                    pr_svrty_good "$cert_keysize"
                     fileout "${jsonID}${json_postfix}" "OK" "$cert_keysize EC bits"
                else
                     out "keysize: $cert_keysize (not expected, FIXME)"
@@ -6619,7 +6620,7 @@ certificate_info() {
                     outln "$cert_keysize bits"
                     fileout "${jsonID}${json_postfix}" "INFO" "$cert_keysize bits"
                elif [[ "$cert_keysize" -le 4096 ]]; then
-                    pr_done_good "$cert_keysize"
+                    pr_svrty_good "$cert_keysize"
                     fileout "${jsonID}${json_postfix}" "OK" "$cert_keysize bits"
                     outln " bits"
                else
@@ -6876,7 +6877,7 @@ certificate_info() {
                ! "$has_dns_sans" && out " -- CN only match is deprecated"
           fi
      else
-          pr_done_good "$trustfinding"
+          pr_svrty_good "$trustfinding"
           trust_sni_finding="OK"
      fi
 
@@ -7002,7 +7003,7 @@ certificate_info() {
                secs2warn=$((24 * 60 * 60 * days2warn1))     # high threshold
                expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
                if grep -qw not <<< "$expire"; then
-                    pr_done_good "$days2expire >= $days2warn1 days"
+                    pr_svrty_good "$days2expire >= $days2warn1 days"
                     expfinding+="$days2expire >= $days2warn1 days"
                else
                     pr_svrty_medium "expires < $days2warn1 days ($days2expire)"
@@ -7074,7 +7075,7 @@ certificate_info() {
           fi
      else
           if grep -a "OCSP Response Status" <<<"$ocsp_response_status" | grep -q successful; then
-               pr_done_good "offered"
+               pr_svrty_good "offered"
                fileout "${jsonID}${json_postfix}" "OK" "offered"
                provides_stapling=true
           else
@@ -7105,7 +7106,7 @@ certificate_info() {
           caa_node=${caa_node#*.}
      done
      if [[ -n "$caa" ]]; then
-          pr_done_good "available"; out " - please check for match with \"Issuer\" above"
+          pr_svrty_good "available"; out " - please check for match with \"Issuer\" above"
           if [[ $(count_lines "$caa") -eq 1 ]]; then
                out ": "
           else
@@ -7131,7 +7132,7 @@ certificate_info() {
      out "$indent"; pr_bold " Certificate Transparency     ";
      jsonID="certificate_transparency"
      if [[ "$ct" =~ extension ]]; then
-          pr_done_good "yes"; outln " ($ct)"
+          pr_svrty_good "yes"; outln " ($ct)"
           fileout "${jsonID}${json_postfix}" "OK" "yes ($ct)"
      else
           outln "$ct"
@@ -7250,9 +7251,9 @@ run_server_defaults() {
                                    if [[ "$sans_nosni" == "$sans_sni" ]]; then
                                         success[n]=0
                                    else
-                                        for san in $sans_nosni; do
-                                             [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
-                                        done
+                                        while read san; do
+                                             [[ -n "$san" ]] && [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
+                                        done <<< "$sans_nosni"
                                    fi
                               fi
                          fi
@@ -7457,7 +7458,7 @@ get_session_ticket_lifetime_from_serverhello() {
 get_san_dns_from_cert() {
      echo "$($OPENSSL x509 -in "$1" -noout -text 2>>$ERRFILE | \
           grep -A2 "Subject Alternative Name" | tr ',' '\n' | grep "DNS:" | \
-          sed -e 's/DNS://g' -e 's/ //g' | tr '\n' ' ')"
+          sed -e 's/DNS://g' -e 's/ //g')"
 }
 
 
@@ -7571,7 +7572,7 @@ run_pfs() {
           outln
           pfs_offered=true
           pfs_ciphers=""
-          pr_done_good " PFS is offered (OK)"
+          pr_svrty_good " PFS is offered (OK)"
           fileout "$jsonID" "OK" "offered"
           if "$WIDE"; then
                outln ", ciphers follow (client/browser support is important here) \n"
@@ -7871,7 +7872,7 @@ run_pfs() {
 # good start to read: http://en.wikipedia.org/wiki/Transport_Layer_Security#Attacks_against_TLS.2FSSL
 
 
-spdy_pre(){
+npn_pre(){
      if [[ -n "$PROXY" ]]; then
           [[ -n "$1" ]] && pr_warning "$1"
           pr_warning "not tested as proxies do not support proxying it"
@@ -7879,14 +7880,14 @@ spdy_pre(){
           return 1
      fi
      if ! "$HAS_SPDY"; then
-          pr_local_problem "$OPENSSL doesn't support SPDY/NPN";
-          fileout "SPDY-NPN" "WARN" "not tested $OPENSSL doesn't support SPDY/NPN"
+          pr_local_problem "$OPENSSL doesn't support NPN/SPDY";
+          fileout "NPN" "WARN" "not tested $OPENSSL doesn't support NPN/SPDY"
           return 7
      fi
      return 0
 }
 
-http2_pre(){
+alpn_pre(){
      if [[ -n "$PROXY" ]]; then
           [[ -n "$1" ]] && pr_warning " $1 "
           pr_warning "not tested as proxies do not support proxying it"
@@ -7894,21 +7895,25 @@ http2_pre(){
           return 1
      fi
      if ! "$HAS_ALPN" && "$SSL_NATIVE"; then
-          prln_local_problem "$OPENSSL doesn't support HTTP2/ALPN";
-          fileout "HTTP2-ALPN" "WARN" "HTTP/2 was not tested as $OPENSSL does not support it"
+          prln_local_problem "$OPENSSL doesn't support ALPN/HTTP2";
+          fileout "ALPN" "WARN" "HTTP/2 was not tested as $OPENSSL does not support it"
           return 7
      fi
      return 0
 }
 
-run_spdy() {
+# modern browsers do not support it anymore but we shoud still test it at least for fingerprinting the server side
+# Thus we don't label any support for NPN as good.
+# FAST mode skips this test
+run_npn() {
      local tmpstr
      local -i ret=0
-     local jsonID="SPDY-NPN"
+     local jsonID="NPN"
 
      [[ -n "$STARTTLS" ]] && return 0
-     pr_bold " SPDY/NPN   "
-     if ! spdy_pre; then
+     "$FAST" && return 0
+     pr_bold " NPN/SPDY   "
+     if ! npn_pre; then
           outln
           return 0
      fi
@@ -7931,7 +7936,6 @@ run_spdy() {
                ret=10
           fi
      fi
-     #outln
      # btw: nmap can do that too http://nmap.org/nsedoc/scripts/tls-nextprotoneg.html
      # nmap --script=tls-nextprotoneg #NODE -p $PORT is your friend if your openssl doesn't want to test this
      tmpfile_handle $FUNCNAME.txt
@@ -7939,16 +7943,16 @@ run_spdy() {
 }
 
 
-run_http2() {
+run_alpn() {
      local tmpstr alpn_extn len
      local -i ret=0
-     local had_alpn_proto=false
+     local has_alpn_proto=false
      local alpn_finding=""
-     local jsonID="HTTP2-ALPN"
+     local jsonID="ALPN"
 
      [[ -n "$STARTTLS" ]] && return 0
-     pr_bold " HTTP2/ALPN "
-     if ! http2_pre; then
+     pr_bold " ALPN/HTTP2 "
+     if ! alpn_pre; then
           outln
           return 0
      fi
@@ -7969,23 +7973,26 @@ run_http2() {
                     echo "" > $TMPFILE
                fi
           fi
-          #tmpstr=$(grep -a '^ALPN protocol' $TMPFILE | sed 's/ALPN protocol.*: //')
-          #tmpstr=$(awk '/^ALPN protocol*:/ { print $2 }' $TMPFILE)
           tmpstr=$(awk -F':' '/^ALPN protocol*:/ { print $2 }' $TMPFILE)
           if [[ "$tmpstr" == *"$proto" ]]; then
-              if ! $had_alpn_proto; then
-                  out "$proto"
-                  alpn_finding+="$proto"
-                  had_alpn_proto=true
-              else
-                  out ", $proto"
-                  alpn_finding+=", $proto"
-              fi
+               if ! $has_alpn_proto; then
+                    has_alpn_proto=true
+               else
+                    out ", "
+               fi
+               # only h2 is what browser need to use HTTP/2.0 and brings a security benefit
+               if [[ "$proto" == "h2" ]]; then
+                    pr_svrty_good "$proto"
+                    fileout "$jsonID" "OK" "$alpn_finding"
+               else
+                    out "$proto"
+                    alpn_finding+="$proto"
+               fi
           fi
      done
-     if $had_alpn_proto; then
+     if $has_alpn_proto; then
           outln " (offered)"
-          fileout "$jsonID" "INFO" "offered with protocols $alpn_finding"
+          fileout "$jsonID" "INFO" "$alpn_finding"
           ret=0
      else
           outln "not offered"
@@ -11531,7 +11538,7 @@ run_heartbleed(){
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if [[ ! "${TLS_EXTENSIONS}" =~ heartbeat ]]; then
-          pr_done_best "not vulnerable (OK)"
+          pr_svrty_best "not vulnerable (OK)"
           outln ", no heartbeat extension"
           fileout "$jsonID" "OK" "not vulnerable, no heartbeat extension" "$cve" "$cwe"
           return 0
@@ -11564,7 +11571,7 @@ run_heartbleed(){
      sockread_serverhello 16384 $HEARTBLEED_MAX_WAITSOCK
      if [[ $? -eq 3 ]]; then
           append=", timed out"
-          pr_done_best "not vulnerable (OK)"; out "$append"
+          pr_svrty_best "not vulnerable (OK)"; out "$append"
           fileout "$jsonID" "OK" "not vulnerable $append" "$cve" "$cwe"
           ret=0
      else
@@ -11589,7 +11596,7 @@ run_heartbleed(){
                     # check possibility of weird vsftpd reply, see #426, despite "1803" seems very unlikely...
                     if grep -q '500 OOPS' "$SOCK_REPLY_FILE" ; then
                          append=", successful weeded out vsftpd false positive"
-                         pr_done_best "not vulnerable (OK)"; out "$append"
+                         pr_svrty_best "not vulnerable (OK)"; out "$append"
                          fileout "$jsonID" "OK" "not vulnerable $append" "$cve" "$cwe"
                          ret=0
                     else
@@ -11605,7 +11612,7 @@ run_heartbleed(){
                     ret=1
                fi
           else
-               pr_done_best "not vulnerable (OK)"
+               pr_svrty_best "not vulnerable (OK)"
                fileout "$jsonID" "OK" "not vulnerable $cve" "$cwe"
                ret=0
           fi
@@ -11618,7 +11625,7 @@ run_heartbleed(){
 
 # helper function
 ok_ids(){
-     prln_done_best "\n ok -- something resetted our ccs packets"
+     prln_svrty_best "\n ok -- something resetted our ccs packets"
      return 0
 }
 
@@ -11740,7 +11747,7 @@ run_ccs_injection(){
 # 28:      Handshake failure
      if [[ -z "${tls_hello_ascii:0:12}" ]]; then
           # empty reply
-          pr_done_best "not vulnerable (OK)"
+          pr_svrty_best "not vulnerable (OK)"
           if [[ $retval -eq 3 ]]; then
                fileout "$jsonID" "OK" "not vulnerable (timed out)" "$cve" "$cwe"
           else
@@ -11763,7 +11770,7 @@ run_ccs_injection(){
      elif [[ $STARTTLS_PROTOCOL == "mysql" ]] && [[ "${tls_hello_ascii:14:12}" == "233038533031" ]]; then
           # MySQL community edition (yaSSL) returns a MySQL error instead of a TLS Alert
           # Error: #08S01 Bad handshake
-          pr_done_best "not vulnerable (OK)"
+          pr_svrty_best "not vulnerable (OK)"
           out ", looks like MySQL community edition (yaSSL)"
           fileout "$jsonID" "OK" "not vulnerable (MySQL community edition (yaSSL) detected)" "$cve" "$cwe"
      elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != "03" ]]; then
@@ -11829,7 +11836,7 @@ run_ticketbleed() {
      # highly unlikely that it is NOT supported. We may loose time here but it's more solid
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if [[ ! "${TLS_EXTENSIONS}" =~ "session ticket" ]]; then
-          pr_done_best "not vulnerable (OK)"
+          pr_svrty_best "not vulnerable (OK)"
           outln ", no session ticket extension"
           fileout "$jsonID" "OK" "no session ticket extension" "$cve" "$cwe"
           return 0
@@ -11856,7 +11863,7 @@ run_ticketbleed() {
 
      session_tckt_tls="$(get_session_ticket_tls)"
      if [[ "$session_tckt_tls" == "," ]]; then
-          pr_done_best "not vulnerable (OK)"
+          pr_svrty_best "not vulnerable (OK)"
           outln ", no session tickets"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           debugme echo " session ticket TLS \"$session_tckt_tls\""
@@ -11980,11 +11987,11 @@ run_ticketbleed() {
 
           if [[ "${tls_hello_ascii:0:2}" == "15" ]]; then
                debugme echo -n "TLS Alert ${tls_hello_ascii:10:4} (TLS version: ${tls_hello_ascii:2:4}) -- "
-               pr_done_best "not vulnerable (OK)"
+               pr_svrty_best "not vulnerable (OK)"
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
                break
           elif [[ -z "${tls_hello_ascii:0:2}" ]]; then
-               pr_done_best "not vulnerable (OK)"
+               pr_svrty_best "not vulnerable (OK)"
                out ", reply empty"
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
                break
@@ -12037,7 +12044,7 @@ run_ticketbleed() {
                     pr_svrty_critical "VULNERABLE (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                else
-                    pr_done_best "not vulnerable (OK)"
+                    pr_svrty_best "not vulnerable (OK)"
                     out ", memory fragments do not differ"
                     fileout "$jsonID" "OK" "not vulnerable, session IDs were returned but memory fragments do not differ" "$cve" "$cwe"
                fi
@@ -12083,7 +12090,7 @@ run_renego() {
                0)   prln_svrty_critical "VULNERABLE (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                     ;;
-               1)   prln_done_best "not vulnerable (OK)"
+               1)   prln_svrty_best "not vulnerable (OK)"
                     fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
                     ;;
                *)   prln_warning "FIXME (bug): $sec_renego"
@@ -12128,7 +12135,7 @@ run_renego() {
           echo R | $OPENSSL s_client $(s_client_options "$proto $BUGS $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $SNI $PROXY") >$TMPFILE 2>>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
           if [[ $? -eq 3 ]]; then
-               pr_done_good "likely not vulnerable (OK)"; outln ", timed out"        # it hung
+               pr_svrty_good "likely not vulnerable (OK)"; outln ", timed out"        # it hung
                fileout "$jsonID" "OK" "likely not vulnerable (timed out)" "$cve" "$cwe"
                sec_client_renego=1
           else
@@ -12145,7 +12152,7 @@ run_renego() {
                          fi
                          ;;
                     1)
-                         prln_done_good "not vulnerable (OK)"
+                         prln_svrty_good "not vulnerable (OK)"
                          fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
                          ;;
                     *)
@@ -12207,7 +12214,7 @@ run_crime() {
           fileout "CRIME_TLS" "WARN" "Check failed, couldn't connect" "$cve" "$cwe"
           ret=7
      elif grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
-          pr_done_good "not vulnerable (OK)"
+          pr_svrty_good "not vulnerable (OK)"
           if [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH";  then
                out " (not using HTTP anyway)"
                fileout "CRIME_TLS" "OK" "not vulnerable (not using HTTP anyway)" "$cve" "$cwe"
@@ -12252,7 +12259,7 @@ run_crime() {
 
 #              STR=$(grep Compression $TMPFILE )
 #              if echo $STR | grep -q NONE >/dev/null; then
-#                   pr_done_best "not vulnerable (OK)"
+#                   pr_svrty_best "not vulnerable (OK)"
 #                   ret=$((ret + 0))
 #              else
 #                   pr_svrty_critical "VULNERABLE (NOT ok)"
@@ -12319,7 +12326,7 @@ run_breach() {
           prln_warning ") "
           ret=3
      elif [[ -z $result ]]; then
-          pr_done_best "no HTTP compression (OK) "
+          pr_svrty_best "no HTTP compression (OK) "
           outln "$disclaimer"
           fileout "$jsonID" "OK" "no HTTP compression $disclaimer" "$cve" "$cwe"
           ret=0
@@ -12387,7 +12394,7 @@ run_sweet32() {
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers" "$cve" "$cwe" "$hint"
      else
-          pr_done_best "not vulnerable (OK)";
+          pr_svrty_best "not vulnerable (OK)";
           if "$using_sockets"; then
                fileout "SWEET32" "OK" "not vulnerable" "$cve" "$cwe"
           else
@@ -12446,7 +12453,7 @@ run_ssl_poodle() {
           fileout "$jsonID" "HIGH" "VULNERABLE, uses SSLv3+CBC" "$cve" "$cwe" "$hint"
      else
           POODLE=1
-          pr_done_best "not vulnerable (OK)";
+          pr_svrty_best "not vulnerable (OK)";
           if "$using_sockets"; then
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           else
@@ -12529,7 +12536,7 @@ run_tls_fallback_scsv() {
                fileout "$jsonID" "HIGH" "only SSLv3 supported"
                return 7
                ;;
-          *)   pr_done_good "No fallback possible, TLS 1.3 is the only protocol (OK)"
+          *)   prln_svrty_good "No fallback possible, TLS 1.3 is the only protocol (OK)"
                fileout "$jsonID" "OK" "only TLS 1.3 supported"
                return 7
      esac
@@ -12551,11 +12558,12 @@ run_tls_fallback_scsv() {
      if [[ -z "$low_proto" ]]; then
           case "$high_proto" in
                "tls1_2")
-                    pr_done_good "No fallback possible, no protocol below $high_proto_str offered (OK)"
+                    prln_svrty_good "No fallback possible, no protocol below $high_proto_str offered (OK)"
                     ;;
-               *)   out "No fallback possible, no protocol below $high_proto_str offered (OK)"
+               *)   outln "No fallback possible, no protocol below $high_proto_str offered (OK)"
                     ;;
           esac
+          fileout "$jsonID" "OK" "no protocol below $high_proto_str offered"
           return 7
      fi
      case "$low_proto" in
@@ -12588,11 +12596,11 @@ run_tls_fallback_scsv() {
                     ret=1
                fi
           elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
-               pr_done_good "Downgrade attack prevention supported (OK)"
+               pr_svrty_good "Downgrade attack prevention supported (OK)"
                fileout "$jsonID" "OK" "supported"
                ret=0
           elif grep -qa "alert handshake failure" "$TMPFILE"; then
-               pr_done_good "Probably OK. "
+               pr_svrty_good "Probably OK. "
                fileout "$jsonID" "OK" "Probably oK"
                # see RFC 7507, https://github.com/drwetter/testssl.sh/issues/121
                # other case reported by Nicolas was F5 and at costumer of mine: the same
@@ -12689,7 +12697,7 @@ run_freak() {
           pr_svrty_critical "VULNERABLE (NOT ok)"; out ", uses EXPORT RSA ciphers"
           fileout "$jsonID" "CRITICAL" "VULNERABLE, uses EXPORT RSA ciphers" "$cve" "$cwe" "$hint"
      else
-          pr_done_best "not vulnerable (OK)"; out "$addtl_warning"
+          pr_svrty_best "not vulnerable (OK)"; out "$addtl_warning"
           fileout "$jsonID" "OK" "not vulnerable $addtl_warning" "$cve" "$cwe"
      fi
      outln
@@ -12908,17 +12916,17 @@ run_logjam() {
                out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
           elif [[ $ret -eq 3 ]]; then
-               pr_done_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
+               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no DH key detected"
                fileout "$jsonID2" "OK" "no DH key detected"
           elif [[ $ret -eq 0 ]]; then
-               pr_done_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
+               pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no common primes detected"
                fileout "$jsonID2" "OK" "no common primes detected"
           elif [[ $ret -eq 7 ]]; then
-               pr_done_good "partly not vulnerable:"; out " no DH EXPORT ciphers${addtl_warning}"
+               pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
           fi
      fi
@@ -12984,7 +12992,7 @@ run_drown() {
                fi
                ret=1
                ;;
-          *)   prln_done_best "not vulnerable on this host and port (OK)"
+          *)   prln_svrty_best "not vulnerable on this host and port (OK)"
                fileout "DROWN" "OK" "not vulnerable to DROWN on this host and port" "$cve" "$cwe"
                if [[ -n "$cert_fingerprint_sha2" ]]; then
                     outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
@@ -13115,10 +13123,10 @@ run_beast(){
           if [[ $sclient_success -ne 0 ]]; then                  # protocol supported?
                if "$continued"; then                             # second round: we hit TLS1
                     if "$HAS_SSL3" || "$using_sockets"; then
-                         prln_done_good "no SSL3 or TLS1 (OK)"
+                         prln_svrty_good "no SSL3 or TLS1 (OK)"
                          fileout "$jsonID" "OK" "not vulnerable, no SSL3 or TLS1" "$cve" "$cwe"
                     else
-                         prln_done_good "no TLS1 (OK)"
+                         prln_svrty_good "no TLS1 (OK)"
                          fileout "$jsonID" "OK" "not vulnerable, no TLS1" "$cve" "$cwe"
                     fi
                     return 0
@@ -13246,12 +13254,12 @@ run_beast(){
                     first=false
                else
                     [[ $proto == "tls1" ]] && ! $first && echo -n "$spaces "
-                    prln_done_good "no CBC ciphers for $(toupper $proto) (OK)"
+                    prln_svrty_good "no CBC ciphers for $(toupper $proto) (OK)"
                     first=false
                fi
           else
                if ! "$vuln_beast" ; then
-                    prln_done_good "no CBC ciphers for $(toupper $proto) (OK)"
+                    prln_svrty_good "no CBC ciphers for $(toupper $proto) (OK)"
                     fileout "${jsonID}_CBC_$(toupper $proto)" "OK" "No CBC ciphers for $(toupper $proto)" "$cve" "$cwe"
                fi
           fi
@@ -13281,7 +13289,7 @@ run_beast(){
                fileout "$jsonID" "MEDIUM" "VULNERABLE -- and no higher protocols as mitigation supported" "$cve" "$cwe" "$hint"
           fi
      fi
-     "$first" && ! "$vuln_beast" && prln_done_good "no CBC ciphers found for any protocol (OK)"
+     "$first" && ! "$vuln_beast" && prln_svrty_good "no CBC ciphers found for any protocol (OK)"
 
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
      tmpfile_handle $FUNCNAME.txt
@@ -13333,7 +13341,7 @@ run_lucky13() {
           # the CBC padding which led to timing differences during MAC processing has been solved in openssl (https://www.openssl.org/news/secadv/20130205.txt)
           # and other software. However we can't tell with reasonable effort from the outside. Thus we still issue a warning and label it experimental
      else
-          pr_done_best "not vulnerable (OK)";
+          pr_svrty_best "not vulnerable (OK)";
           if "$using_sockets"; then
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           else
@@ -13591,7 +13599,7 @@ run_rc4() {
           prln_local_problem "No RC4 Ciphers configured in $OPENSSL"
           fileout "$jsonID" "WARN" "RC4 ciphers not supported by local OpenSSL ($OPENSSL)"
      else
-          prln_done_good "no RC4 ciphers detected (OK)"
+          prln_svrty_good "no RC4 ciphers detected (OK)"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
      fi
      outln
@@ -14027,7 +14035,7 @@ run_robot() {
                cipherlist="$(strip_inconsistent_ciphers "$tls_hexcode" ", $cipherlist")"
                cipherlist="${cipherlist:2}"
           elif [[ $ret -ne 0 ]]; then
-               prln_done_best "Server does not support any cipher suites that use RSA key transport"
+               prln_svrty_best "Server does not support any cipher suites that use RSA key transport"
                fileout "$jsonID" "OK" "not vulnerable, no RSA key transport cipher"
                return 0
           fi
@@ -14213,7 +14221,7 @@ run_robot() {
                fileout "$jsonID" "CRITICAL" "VULNERABLE"
           fi
      else
-          prln_done_best "not vulnerable (OK)"
+          prln_svrty_best "not vulnerable (OK)"
           fileout "$jsonID" "OK" "not vulnerable"
      fi
      return 0
@@ -16739,8 +16747,8 @@ lets_roll() {
      fileout_section_header $section_number false && ((section_number++))
      $do_protocols && {
           run_protocols; ret=$(($? + ret)); time_right_align run_protocols;
-          run_spdy; ret=$(($? + ret)); time_right_align run_spdy;
-          run_http2; ret=$(($? + ret)); time_right_align run_http2;
+          run_npn; ret=$(($? + ret)); time_right_align run_npn;
+          run_alpn; ret=$(($? + ret)); time_right_align run_alpn;
      }
      fileout_section_header $section_number true && ((section_number++))
      "$do_grease" && { run_grease; ret=$(($? + ret)); time_right_align run_grease; }
