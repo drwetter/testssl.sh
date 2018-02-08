@@ -2375,7 +2375,7 @@ run_more_flags() {
                     first=false
                fi
                pr_litecyan "$f2t"
-               outln "$HEADERVALUE"     # shouldn't be that long
+               outln " $HEADERVALUE"     # shouldn't be that long
                fileout "$f2t" "INFO" "$f2t: $HEADERVALUE"
           fi
      done
@@ -7903,7 +7903,8 @@ alpn_pre(){
 }
 
 # modern browsers do not support it anymore but we shoud still test it at least for fingerprinting the server side
-# Thus we don't label any support for NPN as good.   FAST mode skips this test
+# Thus we don't label any support for NPN as good.
+# FAST mode skips this test
 run_npn() {
      local tmpstr
      local -i ret=0
