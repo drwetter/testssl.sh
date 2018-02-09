@@ -236,6 +236,7 @@ FIRST_FINDING=true                      # is this the first finding we are outpu
 JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
 CSVHEADER=true                          # same for CSV
 HTMLHEADER=true                         # same for HTML
+SECTION_FOOTER_NEEDED=false             # kludge for tracking whether we need to close the JSON section object
 GIVE_HINTS=false                        # give an addtional info to findings
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
 CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
@@ -351,7 +352,6 @@ LOW=1
 MEDIUM=2
 HIGH=3
 CRITICAL=4
-
 SEVERITY_LEVEL=0
 
 set_severity_level() {
@@ -679,11 +679,14 @@ fileout_section_header() {
     local str=""
     "$2" && str="$(fileout_section_footer false)"
     "$do_pretty_json" && FIRST_FINDING=true && (printf "%s%s\n" "$str" "$(fileout_json_section "$1")") >> "$JSONFILE"
+    SECTION_FOOTER_NEEDED=true
 }
 
+# arg1: whether to end object too
 fileout_section_footer() {
     "$do_pretty_json" && printf "\n                    ]" >> "$JSONFILE"
     "$do_pretty_json" && "$1" && echo -e "\n          }" >> "$JSONFILE"
+    SECTION_FOOTER_NEEDED=false
 }
 
 fileout_json_print_parameter() {
@@ -4255,7 +4258,7 @@ run_protocols() {
      local tls13_ciphers_to_test=""
      local drafts_offered=""
      local debug_recomm=", rerun with DEBUG>=2"
-     local -i ret
+     local -i ret=0 subret=0
      local jsonID="SSLv2"
 
      outln; pr_headline " Testing protocols "
@@ -4299,6 +4302,7 @@ run_protocols() {
                     ;;
                4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
                     fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+                    ret=1
                     ;;
                3)   lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
                     [[ "$DEBUG" -ge 2 ]] && tm_out "  ($lines lines)  "
@@ -4316,6 +4320,7 @@ run_protocols() {
                     fi
                     ;;
                *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
+                    ret=1
                     ;;
           esac
           debugme tmln_out
@@ -4335,7 +4340,8 @@ run_protocols() {
                     add_tls_offered ssl2 yes
                     ;;
                7)   fileout "$jsonID" "INFO" "not tested due to lack of local support"
-                    ;;                                      # no local support
+                    ret=1
+                    ;;
           esac
      fi
 
@@ -4368,6 +4374,7 @@ run_protocols() {
                     else
                          prln_svrty_medium "strange, server ${DETECTED_TLS_VERSION}"
                          fileout "$jsonID" "MEDIUM" "strange, server ${DETECTED_TLS_VERSION}"
+                         ret=1
                     fi
                fi
                ;;
@@ -4377,6 +4384,7 @@ run_protocols() {
           5)   pr_svrty_high "$supported_no_ciph2"
                fileout "$jsonID" "HIGH" "$supported_no_ciph1"
                outln "(may need debugging)"
+               ret=1
                add_tls_offered ssl3 yes
                ;;
           7)   if "$using_sockets" ; then
@@ -4388,6 +4396,7 @@ run_protocols() {
                fi
                ;;
           *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
+               ret=1
                ;;
      esac
 
@@ -4449,8 +4458,10 @@ run_protocols() {
                     # warning on screen came already from locally_supported()
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
+               ret=1
                ;;
           *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
+               ret=1
                ;;
      esac
 
@@ -4515,8 +4526,10 @@ run_protocols() {
                     # warning on screen came already from locally_supported()
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
+               ret=1
                ;;
           *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
+               ret=1
                ;;
      esac
 
@@ -4524,17 +4537,17 @@ run_protocols() {
      jsonID="TLS1_2"
      if "$using_sockets"; then
           tls_sockets "03" "$TLS12_CIPHER"
-          ret=$?
-          if [[ $ret -ne 0 ]]; then
+          subret=$?
+          if [[ $subret -ne 0 ]]; then
                tls_sockets "03" "$TLS12_CIPHER_2ND_TRY"
-               [[ $? -eq 0 ]] && ret=0
+               [[ $? -eq 0 ]] && subret=0
                # see #807 and #806
           fi
      else
           run_prototest_openssl "-tls1_2"
-          ret=$?
+          subret=$?
      fi
-     case $ret in
+     case $subret in
           0)   prln_svrty_best "offered (OK)"
                fileout "$jsonID" "OK" "offered"
                latest_supported="0303"
@@ -4592,6 +4605,7 @@ run_protocols() {
                     # warning on screen came already from locally_supported()
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
+               ret=1
                ;;
           *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
                ;;
@@ -4605,7 +4619,7 @@ run_protocols() {
           # plus the cipher selected in the TLSv1.2 test. If the TLSv1.2 test was
           # not successful, then just use the 5 TLSv1.3 ciphers plus the list of
           # ciphers used in all of the previous tests ($TLS_CIPHER).
-          if [[ $ret -eq 0 ]] || [[ $req -eq 2 ]]; then
+          if [[ $subret -eq 0 ]] || [[ $subret -eq 2 ]]; then
                tls13_ciphers_to_test="$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
                if [[ "$tls13_ciphers_to_test" == TLS_* ]] || [[ "$tls13_ciphers_to_test" == SSL_* ]]; then
                     tls13_ciphers_to_test="$(rfc2hexcode "$tls13_ciphers_to_test")"
@@ -4720,8 +4734,10 @@ run_protocols() {
                     # warning on screen came already from locally_supported()
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
+               ret=1
                ;;
           *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
+               ret=1
                ;;
      esac
 
@@ -4731,7 +4747,7 @@ run_protocols() {
           ignore_no_or_lame "You should not proceed as no protocol was detected. If you still really really want to, say \"YES\"" "YES"
           [[ $? -ne 0 ]] && exit -2
      fi
-     return 0
+     return $ret
 }
 
 #TODO: work with fixed lists here --> atm ok, as sockets are preferred. If there would be a single function for testing: yes.
@@ -7918,22 +7934,21 @@ run_npn() {
           return 0
      fi
      $OPENSSL s_client $(s_client_options "-connect $NODEIP:$PORT $BUGS $SNI -nextprotoneg "$NPN_PROTOs"") </dev/null 2>$ERRFILE >$TMPFILE
+     [[ $? -ne 0 ]] && ret=1
      tmpstr=$(grep -a '^Protocols' $TMPFILE | sed 's/Protocols.*: //')
      if [[ -z "$tmpstr" ]] || [[ "$tmpstr" == " " ]]; then
           outln "not offered"
           fileout "$jsonID" "INFO" "not offered"
-          ret=1
      else
           # now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
           if egrep -aq "h2|spdy|http" <<< $tmpstr ; then
                out "$tmpstr"
                outln " (advertised)"
                fileout "$jsonID" "INFO" "offered with $tmpstr (advertised)"
-               ret=0
           else
                prln_cyan "please check manually, server response was ambiguous ..."
                fileout "$jsonID" "INFO" "please check manually, server response was ambiguous ..."
-               ret=10
+               ret=1
           fi
      fi
      # btw: nmap can do that too http://nmap.org/nsedoc/scripts/tls-nextprotoneg.html
@@ -7960,6 +7975,7 @@ run_alpn() {
           # for some reason OpenSSL doesn't list the advertised protocols, so instead try common protocols
           if "$HAS_ALPN"; then
                $OPENSSL s_client $(s_client_options "-connect $NODEIP:$PORT $BUGS $SNI -alpn $proto") </dev/null 2>$ERRFILE >$TMPFILE
+               [[ $? -ne 0 ]] && ret=1
           else
                alpn_extn="$(printf "%02x" ${#proto}),$(string_to_asciihex "$proto")"
                len="$(printf "%04x" $((${#proto}+1)))"
@@ -7993,11 +8009,9 @@ run_alpn() {
      if $has_alpn_proto; then
           outln " (offered)"
           fileout "$jsonID" "INFO" "$alpn_finding"
-          ret=0
      else
           outln "not offered"
           fileout "$jsonID" "INFO" "not offered"
-          ret=1
      fi
      tmpfile_handle $FUNCNAME.txt
      return $ret
@@ -14811,7 +14825,7 @@ EOF
 }
 
 
-cleanup () {
+cleanup() {
      # If parallel mass testing is being performed, then the child tests need
      # to be killed before $TEMPDIR is deleted. Otherwise, error messages
      # will be created if testssl.sh is stopped before all testing is complete.
@@ -14837,6 +14851,7 @@ cleanup () {
           [[ -d "$TEMPDIR" ]] && rm -rf "$TEMPDIR";
      fi
      outln
+     "$SECTION_FOOTER_NEEDED" && fileout_section_footer true
      html_footer
      fileout_footer
      # debugging off, see above
@@ -16833,9 +16848,6 @@ lets_roll() {
 ################# main #################
 
 
-#main() {
-#     local ret=0
-#     local ip=""
      ret=0
      ip=""
 
@@ -16909,8 +16921,6 @@ lets_roll() {
           lets_roll "${STARTTLS_PROTOCOL}"
           ret=$?
      fi
-#}
 
-#main
 exit $ret
 
