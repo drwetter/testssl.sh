@@ -2478,6 +2478,7 @@ sub_cipherlists() {
      local cipherlist sslv2_cipherlist detected_ssl2_ciphers
      local singlespaces
      local proto=""
+     local -i ret=0
      local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
      local jsonID="cipherlist"
 
@@ -2547,6 +2548,7 @@ sub_cipherlists() {
                     pr_warning "SERVER_ERROR: test inconclusive."
                     fileout "${jsonID}_$4" "WARN" "SERVER_ERROR, test inconclusive."
                fi
+               ret=1
           else
                # Otherwise the error means the server doesn't support that cipher list.
                case $3 in
@@ -2601,6 +2603,7 @@ sub_cipherlists() {
                     *) # we shouldn't reach this
                          pr_warning "?: $3 (please report this)"
                          fileout "${jsonID}_$4" "WARN" "return condition $3 unclear"
+                         ret=1
                          ;;
                esac
           fi
@@ -4608,6 +4611,7 @@ run_protocols() {
                ret=1
                ;;
           *)   pr_fixme "unexpected value around line $((LINENO))"; outln "$debug_recomm"
+               ret=1
                ;;
      esac
 
@@ -4755,6 +4759,7 @@ run_cipherlists() {
      local hexc hexcode strength
      local using_sockets=true
      local -i i
+     local -i ret=0
      local null_ciphers="c0,10, c0,06, c0,15, c0,0b, c0,01, c0,3b, c0,3a, c0,39, 00,b9, 00,b8, 00,b5, 00,b4, 00,2e, 00,2d, 00,b1, 00,b0, 00,2c, 00,3b, 00,02, 00,01, 00,82, 00,83, ff,87, 00,ff"
      local sslv2_null_ciphers=""
      local anon_ciphers="c0,19, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, c0,47, c0,5b, c0,85, c0,18, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,46, c0,5a, c0,84, c0,16, 00,18, c0,17, 00,1b, 00,1a, 00,19, 00,17, c0,15, 00,ff"
@@ -4799,19 +4804,26 @@ run_cipherlists() {
      # argv[5]: non-SSLv2 cipher list to test (hexcodes), if using sockets
      # argv[6]: SSLv2 cipher list to test (hexcodes), if using sockets
      sub_cipherlists 'NULL:eNULL'                            " NULL ciphers (no encryption)              "    -2 "NULL"      "$null_ciphers"   "$sslv2_null_ciphers"
+     ret=$?
      sub_cipherlists 'aNULL:ADH'                             " Anonymous NULL Ciphers (no authentication)"    -2 "aNULL"     "$anon_ciphers"   "$sslv2_anon_ciphers"
+     ret=$((ret +$?))
      sub_cipherlists 'EXPORT:!ADH:!NULL'                     " Export ciphers (w/o ADH+NULL)             "    -2 "EXPORT"    "$exp_ciphers"    "$sslv2_exp_ciphers"
+     ret=$((ret +$?))
      sub_cipherlists 'LOW:DES:!ADH:!EXP:!NULL'               " LOW: 64 Bit + DES encryption (w/o export) "    -2 "DES+64Bit" "$low_ciphers"    "$sslv2_low_ciphers"
-
+     ret=$((ret +$?))
      sub_cipherlists 'MEDIUM:!aNULL:!AES:!CAMELLIA:!ARIA:!CHACHA20:!3DES' \
                                                              " Weak 128 Bit ciphers (SEED, IDEA, RC[2,4])"    -1 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers"
+     ret=$((ret +$?))
      sub_cipherlists '3DES:!aNULL:!ADH'                      " Triple DES Ciphers (Medium)               "     0 "3DES"      "$tdes_ciphers"   "$sslv2_tdes_ciphers"
+     ret=$((ret +$?))
      sub_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!AESGCM:!CamelliaGCM:!AESCCM8:!AESCCM'\
                                                              " High encryption (AES+Camellia, no AEAD)   "     1 "HIGH"      "$high_ciphers"    ""
+     ret=$((ret +$?))
      sub_cipherlists 'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM8:AESCCM' \
                                                              " Strong encryption (AEAD ciphers)          "     2 "STRONG"    "$strong_ciphers"  ""
+     ret=$((ret +$?))
      outln
-     return 0
+     return $ret
 }
 
 pr_dh_quality() {
@@ -7876,11 +7888,13 @@ run_pfs() {
      tmpfile_handle $FUNCNAME.txt
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
 #     sub1_curves
-     if "$pfs_offered"; then
-          return 0
-     else
-          return 1
-     fi
+     #if "$pfs_offered"; then
+          # return 0
+     #else
+     #     :
+     #fi
+     return 0
+#FIXME: we don't have any error condition here --> that probably doesn't reflect all cases
 }
 
 
@@ -13651,6 +13665,7 @@ run_grease() {
      local selected_alpn_protocol grease_selected_alpn_protocol
      local ciph list temp curve_found
      local -i i j rnd alpn_list_len extn_len debug_level="$DEBUG"
+     local -i ret=0
      # Note: The folowing values were taken from https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
      # These arrays may need to be updated if the values change in the final version of this document.
      local -a -r grease_cipher_suites=( "0a,0a" "1a,1a" "2a,2a" "3a,3a" "4a,4a" "5a,5a" "6a,6a" "7a,7a" "8a,8a" "9a,9a" "aa,aa" "ba,ba" "ca,ca" "da,da" "ea,ea" "fa,fa" )
@@ -13978,10 +13993,13 @@ run_grease() {
      if ! "$bug_found"; then
           outln " No bugs found."
           fileout "$jsonID" "OK" "No bugs found."
-          return 0
+          #return 0
      else
-          return 1
+          #return 1
+          :
      fi
+     return $ret
+#FIXME: No client side error cases where we want to return 1?
 }
 
 # If the server supports any non-PSK cipher suites that use RSA key transport,
