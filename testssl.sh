@@ -7482,13 +7482,13 @@ run_server_defaults() {
           fi
      fi
      [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
-
      for (( i=1; i <= certs_found; i++ )); do
           echo "${previous_hostcert[i]}" > $HOSTCERT
           echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
           certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" \
                "${cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" \
                "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
+               [[ $? -ne 0 ]] && ((ret++))
      done
      return $ret
 }
