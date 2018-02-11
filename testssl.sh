@@ -6607,7 +6607,8 @@ certificate_info() {
                *ecdsa*|*ecPublicKey)    out "EC ";;
                *GOST*|*gost*)           out "GOST ";;
                *dh*|*DH*)               out "DH " ;;
-               *)                       pr_fixme "don't know $cert_key_algo "; ((ret++);;
+               *)                       pr_fixme "don't know $cert_key_algo "
+                                        let ret++ ;;
           esac
           # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
           # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
