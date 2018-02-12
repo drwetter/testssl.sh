@@ -820,6 +820,7 @@ fileout() {
 
      if ( "$do_pretty_json" && [[ "$1" == "service" ]] ) || show_finding "$severity"; then
          local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
+         [[ -z "$finding" ]] && finding="(empty)"
          [[ -e "$JSONFILE" ]] && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
          "$do_csv" && \
               echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
@@ -8970,7 +8971,7 @@ derive-handshake-traffic-keys() {
      if [[ "$cipher" == *SHA256 ]]; then
           hash_fn="-sha256"
      elif [[ "$cipher" == *SHA384 ]]; then
-          hash_fn="-sha384" 
+          hash_fn="-sha384"
      else
           return 1
      fi
@@ -9288,7 +9289,7 @@ sym-decrypt() {
      local -i ciphertext_len tag_len
 
      case "$cipher" in
-          *CCM_8*) 
+          *CCM_8*)
                tag_len=16 ;;
           *CCM*|*GCM*|*CHACHA20_POLY1305*)
                tag_len=32 ;;
@@ -10186,7 +10187,7 @@ parse_tls_serverhello() {
                     if [[ -n "$tls_certificate_ascii" ]]; then
                          # In TLS 1.3, the Certificate message begins with a zero length certificate_request_context.
                          # In addition, certificate_list is now a list of (certificate, extension) pairs rather than
-                         # just certificates. So, extract the extensions and add them to $tls_serverhello_ascii and 
+                         # just certificates. So, extract the extensions and add them to $tls_serverhello_ascii and
                          # create a new $tls_certificate_ascii that only contains a list of certificates.
                          if [[ -n "$tls_certificate_ascii" ]]; then
                               if [[ "${tls_certificate_ascii:0:2}" != "00" ]]; then
@@ -14824,7 +14825,7 @@ mybanner() {
      bb1=$(cat <<EOF
 
 ###########################################################
-    $PROG_NAME       $VERSION from 
+    $PROG_NAME       $VERSION from
 EOF
 )
      bb2=$(cat <<EOF
@@ -14833,7 +14834,7 @@ EOF
              modification under GPLv2 permitted.
       USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @ 
+       Please file bugs @
 EOF
 )
      bb3=$(cat <<EOF
