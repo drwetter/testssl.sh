@@ -1501,7 +1501,6 @@ service_detection() {
 #problems not handled: chunked
 run_http_header() {
      local header
-     local -i ret
      local referer useragent
      local url redirect
 
@@ -1513,22 +1512,23 @@ run_http_header() {
      printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      if [[ $? -eq 0 ]]; then
-          # we do the get command again as it terminated within $HEADER_MAXSLEEP. Thus it didn't hang, we do it
-          # again in the foreground to get an accurate header time!
+          # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
+          # Doing it again in the foreground to get an accurate header time
           printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           HAD_SLEPT=0
      else
-          # GET request needed to be killed before, try, whether it succeeded:
+          # 1st GET request hung and needed to be killed. Check whether it succeeded anyway:
           if egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
-               NOW_TIME=$(($(date "+%s") - HAD_SLEPT))         # correct by seconds we slept
+               # correct by seconds we slept, HAD_SLEPT comes from wait_kill()
+               NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           else
-               pr_warning " likely HTTP header requests failed (#lines: $(wc -l < $HEADERFILE | sed 's/ //g'))."
+               pr_warning " likely HTTP header requests failed (#lines: ${$(wc -l < "$HEADERFILE")// /}"
                outln "Rerun with DEBUG=1 and inspect \"run_http_header.txt\"\n"
                debugme cat $HEADERFILE
-               return 7
+               return 1
           fi
      fi
      # populate vars for HTTP time
@@ -1536,20 +1536,17 @@ run_http_header() {
      debugme echo "$NOW_TIME: $HTTP_TIME"
 
      # delete from pattern til the end. We ignore any leading spaces (e.g. www.amazon.de)
-     sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' \
-         -e '/<\?XML/,$d' -e '/<?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' $HEADERFILE >$HEADERFILE.2
-#### ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
-     mv $HEADERFILE.2  $HEADERFILE  # sed'ing in place doesn't work with BSD and Linux simultaneously
-     ret=0
+     sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' \
+         -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<?xml/,$d' $HEADERFILE >$HEADERFILE.tmp
+         # ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
+     mv $HEADERFILE.tmp $HEADERFILE
 
      HTTP_STATUS_CODE=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
      msg_thereafter=$(awk -F"$HTTP_STATUS_CODE" '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)   # dirty trick to use the status code as a
-     msg_thereafter=$(strip_lf "$msg_thereafter")                                    # field separator, otherwise we need a loop with awk
+     msg_thereafter=$(strip_lf "$msg_thereafter")                                                   # field separator, otherwise we need a loop with awk
      debugme echo "Status/MSG: $HTTP_STATUS_CODE $msg_thereafter"
 
      pr_bold " HTTP Status Code           "
-     [[ -z "$HTTP_STATUS_CODE" ]] && pr_cyan "No status code" && return 3
-
      out "  $HTTP_STATUS_CODE$msg_thereafter"
      case $HTTP_STATUS_CODE in
           301|302|307|308)
@@ -1559,41 +1556,47 @@ run_http_header() {
                     pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
                     fileout "insecure_redirect" "HIGH" "Redirect to insecure URL: \"$redirect\""
                fi
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested)"
+               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
                ;;
           200|204|403|405)
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested)"
+               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
                ;;
           206)
                out " -- WHAT?"
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- WHAT?"
+               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\") -- WHAT?"
                # partial content shouldn't happen
                ;;
           400)
                pr_cyan " (Hint: better try another URL)"
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- better try another URL"
+               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\") -- better try another URL"
                ;;
           401)
                grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; out "$(strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)")"
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- $(grep -a "^WWW-Authenticate" $HEADERFILE)"
+               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\") -- $(grep -a "^WWW-Authenticate" $HEADERFILE)"
                ;;
           404)
                out " (Hint: supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\")"
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- better supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\""
+               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
+               ;;
+          "")
+               pr_warning ". No HTTP status code??"
+               fileout "HTTP_status_code" "WARN" "No HTTP status code"
+               return 1
                ;;
           *)
                pr_warning ". Oh, didn't expect \"$HTTP_STATUS_CODE$msg_thereafter\""
-               fileout "HTTP_status_code" "WARN" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\" tested) -- Oops, didn't expect a \"$HTTP_STATUS_CODE$msg_thereafter\""
+               fileout "HTTP_status_code" "WARN" "Unexpected $HTTP_STATUS_CODE$msg_thereafter @ \"$URL_PATH\""
                ;;
      esac
      outln
 
      # we don't call "tmpfile_handle $FUNCNAME.txt" as we need the header file in other functions!
-     return $ret
+     return 0
 }
 
 # Borrowed from Glenn Jackman, see https://unix.stackexchange.com/users/4667/glenn-jackman
-detect_ipv4() {
+#
+match_ipv4_httpheader() {
      local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
      local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
      local whitelisted_header="pagespeed|page-speed|^Content-Security-Policy|^MicrosoftSharePointTeamServices|^X-OWA-Version|^Location|^Server: PRTG"
@@ -1602,12 +1605,13 @@ detect_ipv4() {
      local first=true
      local spaces="                              "
      local count
+     local jsonID="ipv4_in_header"
 
      if [[ ! -s $HEADERFILE ]]; then
-          run_http_header "$1" || return 3
+          run_http_header "$1" || return 1
      fi
 
-     # white list some headers as they are mistakenly identified as ipv4 address. Issues 158, 323,o facebook has a CSP rule for 127.0.0.1
+     # Whitelist some headers as they are mistakenly identified as ipv4 address. Issues #158, #323. Also facebook has a CSP rule for 127.0.0.1
      if egrep -vai "$whitelisted_header" $HEADERFILE | grep -iqE "$ipv4address"; then
           pr_bold " IPv4 address in header       "
           count=0
@@ -1623,7 +1627,7 @@ detect_ipv4() {
                     fi
                     pr_svrty_medium "$result"
                     outln "\n$spaces$your_ip_msg"
-                    fileout "ip_in_header_$count" "MEDIUM" "IPv4 address in header  $result $your_ip_msg"
+                    fileout "$jsonID" "MEDIUM" "IPv4 address $result $your_ip_msg in header"
                fi
                count=$count+1
           done < $HEADERFILE
@@ -1636,11 +1640,11 @@ run_http_date() {
      jsonID="HTTP_clock_skew"
 
      if [[ $SERVICE != "HTTP" ]] || "$CLIENT_AUTH"; then
-          return 7
+          return 0
      fi
 
      if [[ ! -s $HEADERFILE ]]; then
-          run_http_header "$1" || return 3        # this is just for the line "Testing HTTP header response"
+          run_http_header "$1" || return 1
      fi
      pr_bold " HTTP clock skew              "
      if [[ -n "$HTTP_TIME" ]]; then
@@ -1658,7 +1662,8 @@ run_http_date() {
      fi
      debugme tm_out ", epoch: $HTTP_TIME"
      outln
-     detect_ipv4
+     match_ipv4_httpheader
+     return 0
 }
 
 
@@ -1669,7 +1674,8 @@ run_http_date() {
 # returns:
 #    0 if header not found
 #    1-n nr of headers found, then in HEADERVALUE the first value from key
-detect_header() {
+#
+match_httpheader_key() {
      local key="$1"
      local spaces="$3"
      local -i nr=0
@@ -1726,10 +1732,10 @@ run_hsts() {
      local spaces="                              "
 
      if [[ ! -s $HEADERFILE ]]; then
-          run_http_header "$1" || return 3
+          run_http_header "$1" || return 1
      fi
      pr_bold " Strict Transport Security    "
-     detect_header "Strict-Transport-Security" "HSTS" "$spaces"
+     match_httpheader_key "Strict-Transport-Security" "HSTS" "$spaces"
      if [[ $? -ne 0 ]]; then
           echo "$HEADERVALUE" >$TMPFILE
           hsts_age_sec=$(sed -e 's/[^0-9]*//g' <<< $HEADERVALUE)
@@ -1772,7 +1778,7 @@ run_hsts() {
      outln
 
      tmpfile_handle $FUNCNAME.txt
-     return $?
+     return 0
 }
 
 
@@ -1792,7 +1798,7 @@ run_hpkp() {
      local ca_hashes="$TESTSSL_INSTALL_DIR/etc/ca_hashes.txt"
 
      if [[ ! -s $HEADERFILE ]]; then
-          run_http_header "$1" || return 3
+          run_http_header "$1" || return 1
      fi
      pr_bold " Public Key Pinning           "
      egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
@@ -1864,9 +1870,9 @@ run_hpkp() {
           debugme tmln_out "\n$spki"
 
           # Look at the host certificate first
-          # get the key fingerprint from the host certificate
           if [[ ! -s "$HOSTCERT" ]]; then
                get_host_cert || return 1
+               # no host certificate
           fi
 
           hpkp_spki_hostcert="$($OPENSSL x509 -in $HOSTCERT -pubkey -noout 2>/dev/null | grep -v PUBLIC | \
@@ -1897,7 +1903,7 @@ run_hpkp() {
                done
           fi
 
-          # This is where the matching magic starts, first host certificate, intermediate, then root out of the stores
+          # This is where the matching magic starts. First host, intermediate, then root certificate from the supplied stores
           spki_match=false
           has_backup_spki=false
           i=0
@@ -2015,7 +2021,7 @@ run_hpkp() {
      fi
 
      tmpfile_handle $FUNCNAME.txt
-     return $?
+     return 0
 }
 
 emphasize_stuff_in_headers(){
@@ -2119,9 +2125,10 @@ emphasize_stuff_in_headers(){
 
 run_server_banner() {
      local serverbanner
+     local jsonID="server_banner"
 
      if [[ ! -s $HEADERFILE ]]; then
-          run_http_header "$1" || return 3
+          run_http_header "$1" || return 1
      fi
      pr_bold " Server banner                "
      grep -ai '^Server' $HEADERFILE >$TMPFILE
@@ -2129,23 +2136,56 @@ run_server_banner() {
           serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
           if [[ x"$serverbanner" == "x\n" ]] || [[ x"$serverbanner" == "x\n\r" ]] || [[ -z "$serverbanner" ]]; then
                outln "banner exists but empty string"
-               fileout "server_banner" "INFO" "Server banner is empty"
+               fileout "$jsonID" "INFO" "Server banner is empty"
           else
                emphasize_stuff_in_headers "$serverbanner"
-               fileout "server_banner" "INFO" "$serverbanner"
+               fileout "$jsonID" "INFO" "$serverbanner"
                if [[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
                     prln_warning "                              It's recommended to run another test w/ OpenSSL 1.0.1 !"
                     # see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
-                    fileout "IIS6_openssl_mismatch" "WARN" "It is recommended to rerun this test w/ OpenSSL 1.0.1. See https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
+                    fileout "${jsonID}" "WARN" "IIS6_openssl_mismatch: Recommended to rerun this test w/ OpenSSL 1.0.1. See https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
                fi
           fi
           # mozilla.github.io/server-side-tls/ssl-config-generator/
           # https://support.microsoft.com/en-us/kb/245030
      else
           outln "(no \"Server\" line in header, interesting!)"
-          fileout "server_banner" "INFO" "No Server banner line in header, interesting!"
+          fileout "$jsonID" "INFO" "No Server banner line in header, interesting!"
      fi
 
+     tmpfile_handle $FUNCNAME.txt
+     return 0
+}
+
+run_appl_banner() {
+     local line
+     local first=true
+     local spaces="                              "
+     local appl_banners=""
+     local jsonID="appl_banner"
+
+     if [[ ! -s $HEADERFILE ]]; then
+          run_http_header "$1" || return 1
+     fi
+     pr_bold " Application banner           "
+     egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
+     if [[ $? -ne 0 ]]; then
+          outln "--"
+          fileout "$jsonID" "INFO" "No application banner found"
+     else
+          while IFS='' read -r line; do
+               line=$(strip_lf "$line")
+               if ! $first; then
+                    out "$spaces"
+                    appl_banners="${appl_banners}, ${line}"
+               else
+                    appl_banners="${line}"
+                    first=false
+               fi
+               emphasize_stuff_in_headers "$line"
+          done < "$TMPFILE"
+          fileout "$jsonID" "INFO" "$appl_banners"
+     fi
      tmpfile_handle $FUNCNAME.txt
      return 0
 }
@@ -2157,7 +2197,7 @@ run_rp_banner() {
      local rp_banners=""
 
      if [[ ! -s $HEADERFILE ]]; then
-          run_http_header "$1" || return 3
+          run_http_header "$1" || return 1
      fi
      pr_bold " Reverse Proxy banner         "
      egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded|^Forwarded' $HEADERFILE >$TMPFILE
@@ -2181,45 +2221,12 @@ run_rp_banner() {
 
      tmpfile_handle $FUNCNAME.txt
      return 0
-#         emphasize_stuff_in_headers "$(sed 's/^/ /g' $TMPFILE | tr '\n\r' '  ')" || \
 }
-
-run_application_banner() {
-     local line
-     local first=true
-     local spaces="                              "
-     local app_banners=""
-
-     if [[ ! -s $HEADERFILE ]]; then
-          run_http_header "$1" || return 3
-     fi
-     pr_bold " Application banner           "
-     egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
-     if [[ $? -ne 0 ]]; then
-          outln "--"
-          fileout "app_banner" "INFO" "No application banner found"
-     else
-          while IFS='' read -r line; do
-               line=$(strip_lf "$line")
-               if ! $first; then
-                    out "$spaces"
-                    app_banners="${app_banners}, ${line}"
-               else
-                    app_banners="${line}"
-                    first=false
-               fi
-               emphasize_stuff_in_headers "$line"
-          done < "$TMPFILE"
-          fileout "app_banner" "INFO" "$app_banners"
-     fi
-     tmpfile_handle $FUNCNAME.txt
-     return 0
-}
-
 
 
 # arg1: multiline string w cookies
-f5_bigip_check() {
+#
+sub_f5_bigip_check() {
      local allcookies="$1"
      local ip port cookievalue cookiename
      local routed_domain offset
@@ -2277,7 +2284,7 @@ run_cookie_flags() {     # ARG1: Path
      local spaces="                              "
 
      if [[ ! -s $HEADERFILE ]]; then
-          run_http_header "$1" || return 3
+          run_http_header "$1" || return 1
      fi
 
      if ! grep -q 20 <<< "$HTTP_STATUS_CODE"; then
@@ -2328,7 +2335,7 @@ run_cookie_flags() {     # ARG1: Path
           fi
           outln "$msg302"
           allcookies="$(awk '/[Ss][Ee][Tt]-[Cc][Oo][Oo][Kk][Ii][Ee]:/ { print $2 }' "$TMPFILE")"
-          f5_bigip_check "$allcookies" "$spaces"
+          sub_f5_bigip_check "$allcookies" "$spaces"
      fi
 
      tmpfile_handle $FUNCNAME.txt
@@ -2344,13 +2351,13 @@ run_more_flags() {
      local spaces="                              "
 
      if [[ ! -s $HEADERFILE ]]; then
-          run_http_header "$1" || return 3
+          run_http_header "$1" || return 1
      fi
 
      pr_bold " Security headers             "
      for f2t in $good_flags2test; do
           [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$f2t\""
-          detect_header "$f2t" "$f2t" "$spaces"
+          match_httpheader_key "$f2t" "$f2t" "$spaces"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
                     out "$spaces"       # output leading spaces if the first header
@@ -2365,7 +2372,7 @@ run_more_flags() {
 
      for f2t in $other_flags2test; do
           [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$f2t\""
-          detect_header "$f2t" "$f2t" "$spaces"
+          match_httpheader_key "$f2t" "$f2t" "$spaces"
           if [[ $? -ge 1 ]]; then
                if ! "$first"; then
                     out "$spaces"       # output leading spaces if the first header
@@ -2382,13 +2389,10 @@ run_more_flags() {
      if "$first"; then
           prln_svrty_medium "--"
           fileout "sec_headers" "MEDIUM" "No security (or other interesting) headers detected"
-          ret=1
-     else
-          ret=0
      fi
 
      tmpfile_handle $FUNCNAME.txt
-     return $ret
+     return 0
 }
 
 
@@ -3122,7 +3126,7 @@ run_cipher_match(){
           done
           "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
           tmpfile_handle $FUNCNAME.txt
-          time_right_align run_cipher_match
+          stopwatch run_cipher_match
           fileout_section_footer true
           outln
           END_TIME=$(date +%s)
@@ -5719,6 +5723,7 @@ cipher_pref_check() {
 
 
 # arg1 is OpenSSL s_client parameter or empty
+#
 get_host_cert() {
      local tmpvar=$TEMPDIR/$FUNCNAME.txt     # change later to $TMPFILE
 
@@ -5958,6 +5963,7 @@ extract_new_tls_extensions() {
 # since including a status request extension in a ClientHello does not work for GOST
 # only servers. In the case of NPN, since a server will not include both the NPN and
 # ALPN extensions in the same ServerHello.
+#
 determine_tls_extensions() {
      local addcmd
      local -i success=1
@@ -16230,6 +16236,7 @@ set_scanning_defaults() {
      VULN_COUNT=16
 }
 
+# returns number of $do variables set = number of run_funcs() to perform
 query_globals() {
      local gbl
      local true_nr=0
@@ -16293,7 +16300,7 @@ create_cmd_line_string() {
 parse_cmd_line() {
      local outfile_arg=""
      local cipher_mapping
-     local -i retvat=0
+     local -i subret=0
 
      CMDLINE="$(create_cmd_line_string "${CMDLINE_ARRAY[@]}")"
 
@@ -16341,11 +16348,11 @@ parse_cmd_line() {
                -V|-V=*|--local|--local=*)    # attention, this could have a value or not!
                     do_display_only=true
                     PATTERN2SHOW="$(parse_opt_equal_sign "$1" "$2")"
-                    retval=$?
+                    subret=$?
                     if [[ "$PATTERN2SHOW" == -* ]]; then
                          unset PATTERN2SHOW  # we hit the next command ==> not our value
                     else                     # it was ours, point to next arg
-                         [[ $retval -eq 0 ]] && shift
+                         [[ $subret -eq 0 ]] && shift
                     fi
                     ;;
                -x|-x=*|--single[-_]cipher|--single[-_]cipher=*)
@@ -16752,9 +16759,10 @@ reset_hostdepended_vars() {
      SERVER_SIZE_LIMIT_BUG=false
 }
 
-# rough estimate, in the future we maybe want to make use of nano secs (%N)
-# note this is for performance debugging purposes (MEASURE_TIME=yes), so eye candy is not important
-time_right_align() {
+# Rough estimate, in the future we maybe want to make use of nano secs (%N). Note this
+# is for performance debugging purposes (MEASURE_TIME=yes), eye candy is not important.
+#
+stopwatch() {
      local new_delta
 
      "$MEASURE_TIME" || return
@@ -16765,7 +16773,7 @@ time_right_align() {
 }
 
 lets_roll() {
-     local ret
+     local -i ret=0
      local section_number=1
 
      if [[ "$1" == init ]]; then
@@ -16775,7 +16783,7 @@ lets_roll() {
           [[ -n "$MEASURE_TIME_FILE" ]] && >"$MEASURE_TIME_FILE"
           return 0
      fi
-     time_right_align initialized
+     stopwatch initialized
 
      [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" 2
      nodeip_to_proper_ip6
@@ -16794,39 +16802,39 @@ lets_roll() {
      # all top level functions  now following have the prefix "run_"
      fileout_section_header $section_number false && ((section_number++))
      $do_protocols && {
-          run_protocols; ret=$(($? + ret)); time_right_align run_protocols;
-          run_npn; ret=$(($? + ret)); time_right_align run_npn;
-          run_alpn; ret=$(($? + ret)); time_right_align run_alpn;
+          run_protocols; ret=$(($? + ret)); stopwatch run_protocols;
+          run_npn; ret=$(($? + ret)); stopwatch run_npn;
+          run_alpn; ret=$(($? + ret)); stopwatch run_alpn;
      }
      fileout_section_header $section_number true && ((section_number++))
-     "$do_grease" && { run_grease; ret=$(($? + ret)); time_right_align run_grease; }
+     "$do_grease" && { run_grease; ret=$(($? + ret)); stopwatch run_grease; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_cipherlists && { run_cipherlists; ret=$(($? + ret)); time_right_align run_cipherlists; }
+     $do_cipherlists && { run_cipherlists; ret=$(($? + ret)); stopwatch run_cipherlists; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_pfs && { run_pfs; ret=$(($? + ret)); time_right_align run_pfs; }
+     $do_pfs && { run_pfs; ret=$(($? + ret)); stopwatch run_pfs; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_preference && { run_server_preference; ret=$(($? + ret)); time_right_align run_server_preference; }
+     $do_server_preference && { run_server_preference; ret=$(($? + ret)); stopwatch run_server_preference; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_defaults && { run_server_defaults; ret=$(($? + ret)); time_right_align run_server_defaults; }
+     $do_server_defaults && { run_server_defaults; ret=$(($? + ret)); stopwatch run_server_defaults; }
 
      if $do_header; then
           #TODO: refactor this into functions
           fileout_section_header $section_number true && ((section_number++))
           if [[ $SERVICE == "HTTP" ]]; then
-               run_http_header "$URL_PATH"
-               run_http_date "$URL_PATH"
-               run_hsts "$URL_PATH"
-               run_hpkp "$URL_PATH"
-               run_server_banner "$URL_PATH"
-               run_application_banner "$URL_PATH"
-               run_cookie_flags "$URL_PATH"
-               run_more_flags "$URL_PATH"
-               run_rp_banner "$URL_PATH"
-               time_right_align do_header
+               run_http_header "$URL_PATH"; ret=$(($? + ret))
+               run_http_date "$URL_PATH";   ret=$(($? + ret))
+               run_hsts "$URL_PATH";        ret=$(($? + ret))
+               run_hpkp "$URL_PATH";        ret=$(($? + ret))
+               run_server_banner "$URL_PATH";  ret=$(($? + ret))
+               run_appl_banner "$URL_PATH";    ret=$(($? + ret))
+               run_cookie_flags "$URL_PATH";   ret=$(($? + ret))
+               run_more_flags "$URL_PATH";     ret=$(($? + ret))
+               run_rp_banner "$URL_PATH";      ret=$(($? + ret))
+               stopwatch do_header
          fi
      else
          ((section_number++))
@@ -16839,29 +16847,29 @@ lets_roll() {
      fi
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); time_right_align run_heartbleed; }
-     $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); time_right_align run_ccs_injection; }
-     $do_ticketbleed && { run_ticketbleed; ret=$(($? + ret)); time_right_align run_ticketbleed; }
-     $do_robot && { run_robot; ret=$(($? + ret)); time_right_align run_robot; }
-     $do_renego && { run_renego; ret=$(($? + ret)); time_right_align run_renego; }
-     $do_crime && { run_crime; ret=$(($? + ret)); time_right_align run_crime; }
-     $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret));  time_right_align run_breach; }
-     $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); time_right_align run_ssl_poodle; }
-     $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); time_right_align run_tls_fallback_scsv; }
-     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); time_right_align run_sweet32; }
-     $do_freak && { run_freak; ret=$(($? + ret)); time_right_align run_freak; }
-     $do_drown && { run_drown ret=$(($? + ret)); time_right_align run_drown; }
-     $do_logjam && { run_logjam; ret=$(($? + ret)); time_right_align run_logjam; }
-     $do_beast && { run_beast; ret=$(($? + ret)); time_right_align run_beast; }
-     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); time_right_align run_lucky13; }
-     $do_rc4 && { run_rc4; ret=$(($? + ret)); time_right_align run_rc4; }
+     $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); stopwatch run_heartbleed; }
+     $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); stopwatch run_ccs_injection; }
+     $do_ticketbleed && { run_ticketbleed; ret=$(($? + ret)); stopwatch run_ticketbleed; }
+     $do_robot && { run_robot; ret=$(($? + ret)); stopwatch run_robot; }
+     $do_renego && { run_renego; ret=$(($? + ret)); stopwatch run_renego; }
+     $do_crime && { run_crime; ret=$(($? + ret)); stopwatch run_crime; }
+     $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret));  stopwatch run_breach; }
+     $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); stopwatch run_ssl_poodle; }
+     $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); stopwatch run_tls_fallback_scsv; }
+     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); stopwatch run_sweet32; }
+     $do_freak && { run_freak; ret=$(($? + ret)); stopwatch run_freak; }
+     $do_drown && { run_drown ret=$(($? + ret)); stopwatch run_drown; }
+     $do_logjam && { run_logjam; ret=$(($? + ret)); stopwatch run_logjam; }
+     $do_beast && { run_beast; ret=$(($? + ret)); stopwatch run_beast; }
+     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); stopwatch run_lucky13; }
+     $do_rc4 && { run_rc4; ret=$(($? + ret)); stopwatch run_rc4; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_allciphers && { run_allciphers; ret=$(($? + ret)); time_right_align run_allciphers; }
-     $do_cipher_per_proto && { run_cipher_per_proto; ret=$(($? + ret)); time_right_align run_cipher_per_proto; }
+     $do_allciphers && { run_allciphers; ret=$(($? + ret)); stopwatch run_allciphers; }
+     $do_cipher_per_proto && { run_cipher_per_proto; ret=$(($? + ret)); stopwatch run_cipher_per_proto; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); time_right_align run_client_simulation; }
+     $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); stopwatch run_client_simulation; }
 
      fileout_section_footer true
 
@@ -16881,7 +16889,7 @@ lets_roll() {
 ################# main #################
 
 
-     ret=0
+     RET=0     # this is a global as we can have a function main(), see #705. Should we toss then all local $ret?
      ip=""
 
      lets_roll init
@@ -16927,7 +16935,7 @@ lets_roll() {
      if "$do_mx_all_ips"; then
           query_globals                                # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
           [[ $? -eq 1 ]] && set_scanning_defaults
-          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
+          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have similar code
           exit $?
      fi
 
@@ -16944,7 +16952,7 @@ lets_roll() {
                outln
                NODEIP="$ip"
                lets_roll "${STARTTLS_PROTOCOL}"
-               ret=$(($? + ret))
+               RET=$((RET + $?))                       # RET value per IP address
           done
           draw_line "-" $((TERM_WIDTH * 2 / 3))
           outln
@@ -16952,8 +16960,8 @@ lets_roll() {
      else                                              # Just 1x ip4v to check, applies also if CMDLINE_IP was supplied
           NODEIP="$IPADDRs"
           lets_roll "${STARTTLS_PROTOCOL}"
-          ret=$?
+          RET=$?
      fi
 
-exit $ret
+exit $RET
 
