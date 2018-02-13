@@ -15159,7 +15159,7 @@ get_a_record() {
      fi
      if [[ -z "$ip4" ]]; then
           if type -p nslookup &>/dev/null; then
-               ip4=$(filter_ip4_address $(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/ { getline; print $NF }'))
+               ip4=$(filter_ip4_address $(strip_lf "$(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/ { getline; print $NF }')"))
           fi
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
@@ -15191,7 +15191,7 @@ get_aaaa_record() {
           elif type -p drill &> /dev/null; then
                ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
           elif type -p nslookup &>/dev/null; then
-               ip6=$(filter_ip6_address $(nslookup -type=aaaa "$1" 2>/dev/null | awk '/'"^${a}"'.*AAAA/ { print $NF }'))
+               ip6=$(filter_ip6_address $(strip_lf "$(nslookup -type=aaaa "$1" 2>/dev/null | awk '/'"^${a}"'.*AAAA/ { print $NF }')"))
           fi
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
@@ -15229,7 +15229,7 @@ get_caa_rr_record() {
                raw_caa="$(sed -e 's/^.*has CAA record //' -e 's/^.*has TYPE257 record //' <<< "$raw_caa")"
           fi
      elif type -p nslookup &> /dev/null; then
-          raw_caa="$(nslookup -type=type257 $1 | grep -w rdata_257)"
+          raw_caa="$(strip_lf "$(nslookup -type=type257 $1 | grep -w rdata_257)")"
           if [[ -n "$raw_caa" ]]; then
                raw_caa="$(sed 's/^.*rdata_257 = //' <<< "$raw_caa")"
           fi
@@ -15294,7 +15294,7 @@ get_mx_record() {
      elif type -p drill &> /dev/null; then
           mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
      elif type -p nslookup &> /dev/null; then
-          mxs="$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')"
+          mxs="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')")"
      else
           fatal "No dig, host, drill or nslookup" -3
      fi
@@ -15389,7 +15389,7 @@ determine_rdns() {
      elif type -p drill &> /dev/null; then
           rDNS=$(drill -x ptr $nodeip 2>/dev/null | awk '/ANSWER SECTION/ { getline; print $NF }')
      elif type -p nslookup &> /dev/null; then
-          rDNS=$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')
+          rDNS=$(strip_lf "$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')")
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
      rDNS="$(echo $rDNS)"
