@@ -8970,7 +8970,7 @@ derive-handshake-traffic-keys() {
      if [[ "$cipher" == *SHA256 ]]; then
           hash_fn="-sha256"
      elif [[ "$cipher" == *SHA384 ]]; then
-          hash_fn="-sha384" 
+          hash_fn="-sha384"
      else
           return 1
      fi
@@ -9288,7 +9288,7 @@ sym-decrypt() {
      local -i ciphertext_len tag_len
 
      case "$cipher" in
-          *CCM_8*) 
+          *CCM_8*)
                tag_len=16 ;;
           *CCM*|*GCM*|*CHACHA20_POLY1305*)
                tag_len=32 ;;
@@ -10186,7 +10186,7 @@ parse_tls_serverhello() {
                     if [[ -n "$tls_certificate_ascii" ]]; then
                          # In TLS 1.3, the Certificate message begins with a zero length certificate_request_context.
                          # In addition, certificate_list is now a list of (certificate, extension) pairs rather than
-                         # just certificates. So, extract the extensions and add them to $tls_serverhello_ascii and 
+                         # just certificates. So, extract the extensions and add them to $tls_serverhello_ascii and
                          # create a new $tls_certificate_ascii that only contains a list of certificates.
                          if [[ -n "$tls_certificate_ascii" ]]; then
                               if [[ "${tls_certificate_ascii:0:2}" != "00" ]]; then
