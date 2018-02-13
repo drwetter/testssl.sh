@@ -8030,7 +8030,7 @@ run_alpn() {
                # only h2 is what browser need to use HTTP/2.0 and brings a security benefit
                if [[ "$proto" == "h2" ]]; then
                     pr_svrty_good "$proto"
-                    fileout "$jsonID" "OK" "$alpn_finding"
+                    fileout "$jsonID" "OK" "$proto"
                else
                     out "$proto"
                     alpn_finding+="$proto"
