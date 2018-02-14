@@ -11580,16 +11580,17 @@ tls_sockets() {
 
 
 # mainly adapted from https://gist.github.com/takeshixx/10107280
+#
 run_heartbleed(){
      local tls_hexcode
      local heartbleed_payload
-     local -i n ret lines_returned
+     local -i n lines_returned
      local append=""
      local tls_hello_ascii=""
+     local jsonID="heartbleed"
      local cve="CVE-2014-0160"
      local cwe="CWE-119"
      local hint=""
-     local jsonID="heartbleed"
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
      pr_bold " Heartbleed"; out " ($cve)                "
@@ -11631,7 +11632,6 @@ run_heartbleed(){
           append=", timed out"
           pr_svrty_best "not vulnerable (OK)"; out "$append"
           fileout "$jsonID" "OK" "not vulnerable $append" "$cve" "$cwe"
-          ret=0
      else
 
           # server reply should be (>=SSLv3): 18030x in case of a heartBEAT reply -- which we take as a positive result
@@ -11656,29 +11656,25 @@ run_heartbleed(){
                          append=", successful weeded out vsftpd false positive"
                          pr_svrty_best "not vulnerable (OK)"; out "$append"
                          fileout "$jsonID" "OK" "not vulnerable $append" "$cve" "$cwe"
-                         ret=0
                     else
                          out "likely "
                          pr_svrty_critical "VULNERABLE (NOT ok)"
                          [[ $DEBUG -lt 3 ]] && tm_out ", use debug >=3 to confirm"
                          fileout "$jsonID" "CRITICAL" "VULNERABLE $cve" "$cwe" "$hint"
-                         ret=1
                     fi
                else
                     pr_svrty_critical "VULNERABLE (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "VULNERABLE $cve" "$cwe" "$hint"
-                    ret=1
                fi
           else
                pr_svrty_best "not vulnerable (OK)"
                fileout "$jsonID" "OK" "not vulnerable $cve" "$cwe"
-               ret=0
           fi
      fi
      outln
      tmpfile_handle $FUNCNAME.dd $SOCK_REPLY_FILE
      close_socket
-     return $ret
+     return 0
 }
 
 # helper function
@@ -11687,18 +11683,19 @@ ok_ids(){
      return 0
 }
 
+# see https://www.openssl.org/news/secadv_20140605.txt
+# mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
 #FIXME: At a certain point ccs needs to be changed and make use of code2network using a file, then tls_sockets
+#
 run_ccs_injection(){
      local tls_hexcode ccs_message client_hello byte6 sockreply
-     local -i retval ret
+     local -i retval ret=0
      local tls_hello_ascii=""
+     local jsonID="CCS"
      local cve="CVE-2014-0224"
      local cwe="CWE-310"
      local hint=""
-     local jsonID="CCS"
 
-     # see https://www.openssl.org/news/secadv_20140605.txt
-     # mainly adapted from Ramon de C Valle's C code from https://gist.github.com/rcvalle/71f4b027d61a78c42607
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CCS injection vulnerability " && outln
      pr_bold " CCS"; out " ($cve)                       "
 
@@ -11754,7 +11751,7 @@ run_ccs_injection(){
      x00, x07, x00, x06, x00, x05, x00, x04,
      x00, x03, x00, x02, x00, x01, x01, x00"
 
-     fd_socket 5 || return 6
+     fd_socket 5 || return 1
 
 # we now make a standard handshake ...
      debugme echo -n "sending client hello... "
@@ -11811,12 +11808,10 @@ run_ccs_injection(){
           else
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           fi
-          ret=0
      elif [[ "$byte6" == "15" ]] && [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
           # decryption failed received
           pr_svrty_critical "VULNERABLE (NOT ok)"
           fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
-          ret=1
      elif [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
           if [[ "$byte6" == "0A" ]] || [[ "$byte6" == "28" ]]; then
                # Unexpected message / Handshake failure  received
@@ -11835,12 +11830,12 @@ run_ccs_injection(){
           pr_warning "test failed"
           out ", probably read buffer too small (${tls_hello_ascii:0:14})"
           fileout "$jsonID" "DEBUG" "test failed, probably read buffer too small (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
-          ret=7
+          ret=1
      else
           pr_warning "test failed "
           out "around line $LINENO (debug info: ${tls_hello_ascii:0:12},$byte6)"
           fileout "$jsonID" "DEBUG" "test failed, around line $LINENO, debug info (${tls_hello_ascii:0:12},$byte6)" "$cve" "$cwe" "$hint"
-          ret=7
+          ret=1
      fi
      outln
 
@@ -11849,13 +11844,14 @@ run_ccs_injection(){
      return $ret
 }
 
-get_session_ticket_tls() {
+sub_session_ticket_tls() {
      local sessticket_tls=""
 
      #FIXME: we likely have done this already before (either @ run_server_defaults() or at least the output
      #       from a previous handshake) --> would save 1x connect
-     #ATTENTION: we DO NOT do SNI here as we assume this is a vulnerabilty of the TLS stack. If we'd do SNI here, we'd also need
+     #ATTENTION: we DO NOT use SNI here as we assume ticketbleed is a vulnerabilty of the TLS stack. If we'd do SNI here, we'd also need
      #           it in the ClientHello of run_ticketbleed() otherwise the ticket will be different and the whole thing won't work!
+     #
      sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $OPTIMAL_PROTO $PROXY -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
      sessticket_tls="$(sed -e 's/^.* - /x/g' -e 's/  .*$//g' <<< "$sessticket_tls" | tr '\n' ',')"
      sed -e 's/ /,x/g' -e 's/-/,x/g' <<< "$sessticket_tls"
@@ -11872,15 +11868,15 @@ run_ticketbleed() {
      local -i len_tckt_tls=0 nr_sid_detected=0
      local xlen_tckt_tls="" xlen_handshake_record_layer="" xlen_handshake_ssl_layer=""
      local -i len_handshake_record_layer=0
-     local cve="CVE-2016-9244"
-     local cwe="CWE-200"
-     local hint=""
      local tls_version=""
      local i
      local -a memory sid_detected
      local early_exit=true
-     local ret=0
+     local -i ret=0
      local jsonID="ticketbleed"
+     local cve="CVE-2016-9244"
+     local cwe="CWE-200"
+     local hint=""
 
      [[ -n "$STARTTLS" ]] && return 0
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
@@ -11920,7 +11916,7 @@ run_ticketbleed() {
      fi
      debugme echo "using protocol $tls_hexcode"
 
-     session_tckt_tls="$(get_session_ticket_tls)"
+     session_tckt_tls="$(sub_session_ticket_tls)"
      if [[ "$session_tckt_tls" == "," ]]; then
           pr_svrty_best "not vulnerable (OK)"
           outln ", no session tickets"
@@ -12024,7 +12020,7 @@ run_ticketbleed() {
 # Extension: Heartbeat
      x00, x0f, x00, x01, x01"
 
-     # we do 3 client hellos, and see whether different memmory is returned
+     # we do 3 client hellos, then see whether different memory is returned
      for i in 1 2 3; do
           fd_socket 5 || return 6
           debugme echo -n "sending client hello... "
@@ -12075,7 +12071,7 @@ run_ticketbleed() {
                fi
                [[ "$DEBUG" -ge 1 ]] && echo $tls_hello_ascii >$TEMPDIR/$FUNCNAME.tls_hello_ascii${i}.txt
           else
-               ret=7
+               ret=1
                pr_warning "test failed"
                out " around line $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})"
                fileout "$jsonID" "DEBUG" "test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
@@ -12104,8 +12100,8 @@ run_ticketbleed() {
                     fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                else
                     pr_svrty_best "not vulnerable (OK)"
-                    out ", memory fragments do not differ"
-                    fileout "$jsonID" "OK" "not vulnerable, session IDs were returned but memory fragments do not differ" "$cve" "$cwe"
+                    out ", session IDs were returned but potential memory fragments do not differ"
+                    fileout "$jsonID" "OK" "not vulnerable, returned potential memory fragments do not differ" "$cve" "$cwe"
                fi
           else
                if [[ "$DEBUG" -ge 2 ]]; then
@@ -12115,8 +12111,8 @@ run_ticketbleed() {
                     pr_warning "test failed, non reproducible results!"
                     out " Please run again w \"--debug=2\"  (# of faked TLS SIDs detected: $nr_sid_detected)"
                fi
-               fileout "$jsonID" "DEBUG" "# of TLS Session IDs detected: $nr_sid_detected, ${sid_detected[1]},${sid_detected[2]},${sid_detected[3]}" "$cve" "$cwe"
-               ret=7
+               fileout "$jsonID" "DEBUG" "test failed, non reproducible results. $nr_sid_detected TLS Session IDs $nr_sid_detected, ${sid_detected[1]},${sid_detected[2]},${sid_detected[3]}" "$cve" "$cwe"
+               ret=1
           fi
      fi
      outln
@@ -12129,6 +12125,7 @@ run_renego() {
      local legacycmd="" proto="$OPTIMAL_PROTO"
      local insecure_renogo_str="Secure Renegotiation IS NOT"
      local sec_renego sec_client_renego
+     local -i ret=0
      local cve="CVE-2009-3555"
      local cwe="CWE-310"
      local hint=""
@@ -12171,7 +12168,7 @@ run_renego() {
                     [a-l])
                          prln_local_problem " Your $OPENSSL cannot test this secure renegotiation vulnerability"
                          fileout "$jsonID" "WARN" "your $OPENSSL cannot test this secure renegotiation vulnerability" "$cve" "$cwe"
-                         return 3
+                         return 1
                          ;;
                     [m-z])
                          ;; # all ok
@@ -12217,16 +12214,16 @@ run_renego() {
                     *)
                          prln_warning "FIXME (bug): $sec_client_renego"
                          fileout "$jsonID" "DEBUG" "FIXME (bug) $sec_client_renego - Please report" "$cve" "$cwe"
+                         ret=1
                          ;;
                esac
           fi
      fi
 
-     #FIXME Insecure Client-Initiated Renegotiation is missing
+     #FIXME Insecure Client-Initiated Renegotiation is missing ==> sockets
 
      tmpfile_handle $FUNCNAME.txt
-     return $(( sec_renego +  sec_client_renego))
-#FIXME: the return value is wrong, should be 0 if all ok. But as the caller doesn't care we don't care either ... yet ;-)
+     return $ret
 }
 
 run_crime() {
@@ -12251,7 +12248,7 @@ run_crime() {
           if "$SSL_NATIVE"; then
                prln_local_problem "$OPENSSL lacks zlib support"
                fileout "CRIME_TLS" "WARN" "CRIME, TLS: Not tested. $OPENSSL lacks zlib support" "$cve" "$cwe"
-               return 7
+               return 1
           else
                tls_sockets "03" "$TLS12_CIPHER" "" "" "true"
                sclient_success=$?
@@ -12271,7 +12268,7 @@ run_crime() {
      if [[ $sclient_success -ne 0 ]]; then
           pr_warning "test failed (couldn't connect)"
           fileout "CRIME_TLS" "WARN" "Check failed, couldn't connect" "$cve" "$cwe"
-          ret=7
+          ret=1
      elif grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
           pr_svrty_good "not vulnerable (OK)"
           if [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH";  then
@@ -12280,7 +12277,6 @@ run_crime() {
           else
                fileout "CRIME_TLS" "OK" "not vulnerable" "$cve" "$cwe"
           fi
-          ret=0
      else
           if [[ $SERVICE == "HTTP" ]] || "$CLIENT_AUTH"; then
                pr_svrty_high "VULNERABLE (NOT ok)"
@@ -12288,11 +12284,10 @@ run_crime() {
           else
                pr_svrty_medium "VULNERABLE but not using HTTP: probably no exploit known"
                fileout "CRIME_TLS" "MEDIUM" "VULNERABLE, but not using HTTP. Probably no exploit known" "$cve" "$cwe" "$hint"
+               # not clear whether a protocol != HTTP offers the ability to repeatedly modify the input
+               # which is done e.g. via javascript in the context of HTTP
           fi
-          ret=1
      fi
-     # not clear whether this is a protocol != HTTP as one needs to have the ability to repeatedly modify the input
-     # which is done e.g. via javascript in the context of HTTP
      outln
 
 # this needs to be re-done i order to remove the redundant check for spdy
@@ -12331,15 +12326,17 @@ run_crime() {
      return $ret
 }
 
+
 # BREACH is a HTTP-level compression & an attack which works against any cipher suite and is agnostic
 # to the version of TLS/SSL, more: http://www.breachattack.com/ . Foreign referrers are the important thing here!
 # Mitigation: see https://community.qualys.com/message/20360
+#
 run_breach() {
      local header
      local -i ret=0
      local -i was_killed=0
      local referer useragent
-     local url
+     local url="$1"
      local spaces="                                          "
      local disclaimer=""
      local when_makesense=" Can be ignored for static pages or if no secrets in the page"
@@ -12354,16 +12351,14 @@ run_breach() {
      pr_bold " BREACH"; out " ($cve)                    "
      if "$CLIENT_AUTH"; then
           outln "cannot be tested (server side requires x509 authentication)"
-          fileout "$jsonID" "INFO" "cannot be tested, server side requires x509 authentication" "$cve" "$cwe"
-          return 7
+          fileout "$jsonID" "INFO" "was not tested, server side requires x509 authentication" "$cve" "$cwe"
      fi
 
-     url="$1"
      [[ -z "$url" ]] && url="/"
      disclaimer=" - only supplied \"$url\" tested"
 
      referer="https://google.com/"
-     [[ "$NODE" =~ google ]] && referer="https://yandex.ru/" # otherwise we have a false positive for google.com
+     [[ "$NODE" =~ google ]] && referer="https://yandex.ru/"     # otherwise we have a false positive for google.com
 
      useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
@@ -12383,18 +12378,16 @@ run_breach() {
                fileout "$jsonID" "WARN" "Test failed as HTTP request stalled" "$cve" "$cwe"
           fi
           prln_warning ") "
-          ret=3
+          ret=1
      elif [[ -z $result ]]; then
           pr_svrty_best "no HTTP compression (OK) "
           outln "$disclaimer"
-          fileout "$jsonID" "OK" "no HTTP compression $disclaimer" "$cve" "$cwe"
-          ret=0
+          fileout "$jsonID" "OK" "not vulnerable, no HTTP compression $disclaimer" "$cve" "$cwe"
      else
           pr_svrty_high "potentially NOT ok, uses $result HTTP compression."
           outln "$disclaimer"
           outln "$spaces$when_makesense"
           fileout "$jsonID" "HIGH" "potentially VULNERABLE, uses $result HTTP compression $disclaimer" "$cve" "$cwe" "$hint"
-          ret=1
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
 
@@ -12402,8 +12395,10 @@ run_breach() {
      return $ret
 }
 
+
 # SWEET32 (https://sweet32.info/). Birthday attacks on 64-bit block ciphers.
 # In a nutshell: don't use 3DES ciphers anymore (DES, RC2 and IDEA too)
+#
 run_sweet32() {
      local -i sclient_success=1
      # DES, RC2 and IDEA are missing
@@ -12468,7 +12463,8 @@ run_sweet32() {
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
-     return $sclient_success
+     [[ $sclient_success -ge 6 ]] && return 1
+     return 0
 }
 
 
@@ -12477,11 +12473,11 @@ run_ssl_poodle() {
      local -i sclient_success=0
      local cbc_ciphers="ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:DHE-PSK-AES256-CBC-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:AECDH-AES256-SHA:ADH-AES256-SHA:ADH-CAMELLIA256-SHA:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-SHA:ECDHE-PSK-AES256-CBC-SHA:CAMELLIA256-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:AECDH-AES128-SHA:ADH-AES128-SHA:ADH-SEED-SHA:ADH-CAMELLIA128-SHA:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-SHA:ECDHE-PSK-AES128-CBC-SHA:DHE-PSK-AES128-CBC-SHA:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5:EXP-DH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA"
      local cbc_ciphers_hex="c0,14, c0,0a, c0,22, c0,21, c0,20, 00,91, 00,39, 00,38, 00,37, 00,36, 00,88, 00,87, 00,86, 00,85, c0,19, 00,3a, 00,89, c0,0f, c0,05, 00,35, c0,36, 00,84, 00,95, 00,8d, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,33, 00,32, 00,31, 00,30, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44, 00,43, 00,42, c0,18, 00,34, 00,9b, 00,46, c0,0e, c0,04, 00,2f, c0,35, 00,90, 00,96, 00,41, 00,07, 00,94, 00,8c, 00,21, 00,25, c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,17, 00,1b, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, 00,63, 00,15, 00,12, 00,0f, 00,0c, 00,1a, 00,62, 00,09, 00,1e, 00,22, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e"
-     local cve="CVE-2014-3566"
-     local cwe="CWE-310"
      local hint=""
      local -i nr_cbc_ciphers=0
      local using_sockets=true
+     local cve="CVE-2014-3566"
+     local cwe="CWE-310"
      local jsonID="POODLE_SSL"
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption) " && outln
@@ -12527,7 +12523,7 @@ run_ssl_poodle() {
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
-     return $sclient_success
+     return 0
 }
 
 # for appliance which use padding, no fallback needed
@@ -12540,10 +12536,14 @@ run_tls_poodle() {
      #FIXME
      prln_warning "#FIXME"
      fileout "$jsonID" "WARN" "Not yet implemented #FIXME" "$cve" "$cwe"
-     return 7
+     return 0
 }
 
-#FIXME: fileout needs to be patched according to new scheme. Postponed as otherwise merge fails
+#FIXME: fileout needs to be patched according to new scheme. Postponed as otherwise merge fails ??
+#
+# This isn't a vulnerability check per se, but checks for the existence of
+# the countermeasure to protect against protocol downgrade attacks.
+#
 run_tls_fallback_scsv() {
      local -i ret=0
      local high_proto="" low_proto=""
@@ -12552,21 +12552,19 @@ run_tls_fallback_scsv() {
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for TLS_FALLBACK_SCSV Protection " && outln
      pr_bold " TLS_FALLBACK_SCSV"; out " (RFC 7507)              "
-     # This isn't a vulnerability check per se, but checks for the existence of
-     # the countermeasure to protect against protocol downgrade attacks.
 
      # First check we have support for TLS_FALLBACK_SCSV in our local OpenSSL
      if ! "$HAS_FALLBACK_SCSV"; then
           prln_local_problem "$OPENSSL lacks TLS_FALLBACK_SCSV support"
           fileout "$jsonID" "WARN" "$OPENSSL lacks TLS_FALLBACK_SCSV support"
-          return 4
+          return 1
      fi
 
      # First determine the highest protocol that the server supports (not including TLSv1.3).
      if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
           prln_svrty_critical "No fallback possible, SSLv2 is the only protocol"
           fileout "$jsonID" "CRITICAL" "SSLv2 is the only protocol"
-          return 7
+          return 0
      fi
      for p in tls1_2 tls1_1 tls1 ssl3; do
           [[ $(has_server_protocol "$p") -eq 1 ]] && continue
@@ -12593,11 +12591,11 @@ run_tls_fallback_scsv() {
           "ssl3")
                prln_svrty_high "No fallback possible, SSLv3 is the only protocol"
                fileout "$jsonID" "HIGH" "only SSLv3 supported"
-               return 7
+               return 0
                ;;
           *)   prln_svrty_good "No fallback possible, TLS 1.3 is the only protocol (OK)"
                fileout "$jsonID" "OK" "only TLS 1.3 supported"
-               return 7
+               return 0
      esac
 
      # Next find a second protocol that the server supports.
@@ -12623,7 +12621,7 @@ run_tls_fallback_scsv() {
                     ;;
           esac
           fileout "$jsonID" "OK" "no protocol below $high_proto_str offered"
-          return 7
+          return 0
      fi
      case "$low_proto" in
           "tls1_1")
@@ -12648,16 +12646,13 @@ run_tls_fallback_scsv() {
                elif [[ "$POODLE" -eq 0 ]]; then
                     pr_svrty_high "Downgrade attack prevention NOT supported and vulnerable to POODLE SSL"
                     fileout "$jsonID" "HIGH" "NOT supported and vulnerable to POODLE SSL"
-                    ret=0
                else
                     pr_svrty_medium "Downgrade attack prevention NOT supported"
                     fileout "$jsonID" "MEDIUM" "NOT supported"
-                    ret=1
                fi
           elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
                pr_svrty_good "Downgrade attack prevention supported (OK)"
                fileout "$jsonID" "OK" "supported"
-               ret=0
           elif grep -qa "alert handshake failure" "$TMPFILE"; then
                pr_svrty_good "Probably OK. "
                fileout "$jsonID" "OK" "Probably oK"
@@ -12665,20 +12660,19 @@ run_tls_fallback_scsv() {
                # other case reported by Nicolas was F5 and at costumer of mine: the same
                pr_svrty_medium "But received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
                fileout "$jsonID" "MEDIUM" "received non-RFC-compliant \"handshake failure\" instead of \"inappropriate fallback\""
-               ret=2
           elif grep -qa "ssl handshake failure" "$TMPFILE"; then
                pr_svrty_medium "some unexpected \"handshake failure\" instead of \"inappropriate fallback\""
                fileout "$jsonID" "MEDIUM" "some unexpected \"handshake failure\" instead of \"inappropriate fallback\" (likely: warning)"
-               ret=3
           else
                pr_warning "Check failed, unexpected result "
                out ", run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
                fileout "$jsonID" "WARN" "Check failed, unexpected result, run $PROG_NAME -Z --debug=1 and look at $TEMPDIR/*tls_fallback_scsv.txt"
+               ret=1
           fi
      else
           pr_warning "test failed (couldn't connect)"
           fileout "$jsonID" "WARN" "Check failed. (couldn't connect)"
-          ret=7
+          ret=1
      fi
 
      outln
@@ -12697,10 +12691,10 @@ run_freak() {
      local exportrsa_ssl2_cipher_list_hex="04,00,80, 02,00,80"
      local detected_ssl2_ciphers
      local addtl_warning="" hexc
+     local using_sockets=true
      local cve="CVE-2015-0204"
      local cwe="CWE-310"
      local hint=""
-     local using_sockets=true
      local jsonID="FREAK"
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for FREAK attack " && outln
@@ -12717,7 +12711,7 @@ run_freak() {
      case $nr_supported_ciphers in
           0)   prln_local_problem "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
                fileout "$jsonID" "WARN" "Not tested. $OPENSSL doesn't have any EXPORT RSA ciphers configured" "$cve" "$cwe"
-               return 7
+               return 0
                ;;
           1|2|3)
                addtl_warning=" ($magenta""tested only with $nr_supported_ciphers out of 9 ciphers only!$off)" ;;
@@ -12782,7 +12776,7 @@ run_freak() {
      debugme echo $nr_supported_ciphers
 
      tmpfile_handle $FUNCNAME.txt
-     return $ret
+     return 0
 }
 
 
@@ -12794,9 +12788,7 @@ run_logjam() {
      local all_dh_ciphers="cc,15, 00,b3, 00,91, c0,97, 00,a3, 00,9f, cc,aa, c0,a3, c0,9f, 00,6b, 00,6a, 00,39, 00,38, 00,c4, 00,c3, 00,88, 00,87, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, 00,ab, cc,ad, c0,a7, c0,43, c0,45, c0,47, c0,53, c0,57, c0,5b, c0,67, c0,6d, c0,7d, c0,81, c0,85, c0,91, 00,a2, 00,9e, c0,a2, c0,9e, 00,aa, c0,a6, 00,67, 00,40, 00,33, 00,32, 00,be, 00,bd, 00,9a, 00,99, 00,45, 00,44, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, 00,b2, 00,90, c0,96, c0,42, c0,44, c0,46, c0,52, c0,56, c0,5a, c0,66, c0,6c, c0,7c, c0,80, c0,84, c0,90, 00,66, 00,18, 00,8e, 00,16, 00,13, 00,1b, 00,8f, 00,63, 00,15, 00,12, 00,1a, 00,65, 00,14, 00,11, 00,19, 00,17, 00,b5, 00,b4, 00,2d" # 93 ciphers
      local -i i nr_supported_ciphers=0 server_key_exchange_len=0 ephemeral_pub_len=0 len_dh_p=0
      local addtl_warning="" hexc
-     local cve="CVE-2015-4000"
-     local cwe="CWE-310"
-     local hint=""
+     local -i ret=0 subret=0
      local server_key_exchange ephemeral_pub key_bitstring=""
      local dh_p=""
      local spaces="                                           "
@@ -12804,8 +12796,10 @@ run_logjam() {
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local comment="" str=""
      local -i lineno_matched=0
-     local -i ret
      local using_sockets=true
+     local cve="CVE-2015-4000"
+     local cwe="CWE-310"
+     local hint=""
      local jsonID="LOGJAM"
      local jsonID2="${jsonID}-common_primes"
 
@@ -12821,7 +12815,9 @@ run_logjam() {
           case $nr_supported_ciphers in
                0)   prln_local_problem "$OPENSSL doesn't have any DH EXPORT ciphers configured"
                     fileout "$jsonID" "WARN" "Not tested. $OPENSSL doesn't support any DH EXPORT ciphers" "$cve" "$cwe"
-                    return 1            # we could continue here testing common primes but the logjam test would be not complete and it's misleading/hard to code+display
+                    # we could continue here testing common primes but the logjam test would be not complete and it'd be misleading
+                    #FIXME: with low priority this can be fixed
+                    return 1
                     ;;
                1|2|3) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
                4)   ;;
@@ -12902,7 +12898,7 @@ run_logjam() {
                prln_local_problem "couldn't read common primes file $common_primes_file"
                out "${spaces}"
                fileout "$jsonID2" "WARN" "couldn't read common primes file $common_primes_file"
-               ret=7
+               ret=1
           else
                dh_p="$(toupper "$dh_p")"
                # In the previous line of the match is bascially the hint we want to echo
@@ -12910,22 +12906,22 @@ run_logjam() {
                lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
                if [[ "$lineno_matched" -ne 0 ]]; then
                     comment="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
-                    ret=1     # vulnerable: common prime
+                    subret=1     # vulnerable: common prime
                else
-                    ret=0     # not vulnerable: no known common prime
+                    subret=0     # not vulnerable: no known common prime
                fi
           fi
      else
-          ret=3               # no DH key detected
+          subret=3               # no DH key detected
      fi
 
      if "$vuln_exportdh_ciphers"; then
           pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DH EXPORT ciphers"
           fileout "$jsonID" "HIGH" "VULNERABLE, uses DH EXPORT ciphers" "$cve" "$cwe" "$hint"
-          if [[ $ret -eq 3 ]]; then
+          if [[ $subret -eq 3 ]]; then
                out ", no DH key detected"
                fileout "$jsonID2" "OK" "no DH key detected"
-          elif [[ $ret -eq 1 ]]; then
+          elif [[ $subret -eq 1 ]]; then
                out "\n${spaces}"
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p -le 512 ]]; then
@@ -12944,14 +12940,14 @@ run_logjam() {
                     out "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "$jsonID2" "INFO" "$comment"
                fi
-          elif [[ $ret -eq 0 ]]; then
+          elif [[ $subret -eq 0 ]]; then
                out " no common primes detected"
                fileout "$jsonID2" "INFO" "--"
-          elif [[ $ret -eq 7 ]]; then
+          elif [[ $ret -eq 1 ]]; then
                out "FIXME 1"
           fi
      else
-          if [[ $ret -eq 1 ]]; then
+          if [[ $subret -eq 1 ]]; then
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p  -le 512 ]]; then
                     pr_svrty_critical "VULNERABLE (NOT ok):" ; out " uses common prime "; pr_italic "$comment"; out " ($len_dh_p bits)"
@@ -12972,29 +12968,29 @@ run_logjam() {
                outln ","
                out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
-          elif [[ $ret -eq 3 ]]; then
+          elif [[ $subret -eq 3 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no DH key detected"
                fileout "$jsonID2" "OK" "no DH key"
-          elif [[ $ret -eq 0 ]]; then
+          elif [[ $subret -eq 0 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no common primes detected"
                fileout "$jsonID2" "OK" "--"
-          elif [[ $ret -eq 7 ]]; then
+          elif [[ $ret -eq 1 ]]; then
                pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
           fi
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
-     return 0
+     return $ret
 }
 
 # Decrypting RSA with Obsolete and Weakened eNcryption, more @ https://drownattack.com/
 run_drown() {
-     local nr_ciphers_detected ret
+     local -i nr_ciphers_detected ret=0
      local spaces="                                          "
      local cert_fingerprint_sha2=""
      local cve="CVE-2016-0800 CVE-2016-0703"
@@ -13027,8 +13023,8 @@ run_drown() {
                pr_fixme "strange v2 reply "
                outln " (rerun with DEBUG >=2)"
                [[ $DEBUG -ge 3 ]] && hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" | head -1
-               ret=7
                fileout "$jsonID" "WARN" "received a strange SSLv2 reply (rerun with DEBUG>=2)" "$cve" "$cwe"
+               ret=1
                ;;
           3)   # vulnerable, [[ -n "$cert_fingerprint_sha2" ]] test is not needed as we should have RSA certificate here
                lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
@@ -13047,7 +13043,6 @@ run_drown() {
                     pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
                     outln
                fi
-               ret=1
                ;;
           *)   prln_svrty_best "not vulnerable on this host and port (OK)"
                fileout "DROWN" "OK" "not vulnerable to DROWN on this host and port" "$cve" "$cwe"
@@ -13061,7 +13056,6 @@ run_drown() {
                     outln "$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
                     fileout "$jsonID" "INFO" "no RSA certificate, can't be used with SSLv2 elsewhere"
                fi
-               ret=0
                ;;
      esac
 
@@ -13075,7 +13069,7 @@ run_beast(){
      local hexc dash cbc_cipher sslvers auth mac export
      local -a ciph hexcode normalized_hexcode kx enc export2
      local proto proto_hex
-     local -i i ret nr_ciphers=0 sclient_success=0
+     local -i i subret nr_ciphers=0 sclient_success=0
      local detected_cbc_ciphers="" ciphers_to_test
      local higher_proto_supported=""
      local vuln_beast=false
@@ -13143,13 +13137,13 @@ run_beast(){
 
      # first determine whether it's mitigated by higher protocols
      for proto in tls1_1 tls1_2; do
-          ret=$(has_server_protocol "$proto")
-          if [[ $ret -eq 0 ]]; then
+          subret=$(has_server_protocol "$proto")
+          if [[ $subret -eq 0 ]]; then
                case $proto in
                     tls1_1) higher_proto_supported+=" TLSv1.1" ;;
                     tls1_2) higher_proto_supported+=" TLSv1.2" ;;
                esac
-          elif [[ $ret -eq 2 ]]; then
+          elif [[ $subret -eq 2 ]]; then
                $OPENSSL s_client $(s_client_options "-state -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") 2>>$ERRFILE >$TMPFILE </dev/null
                if sclient_connect_successful $? $TMPFILE; then
                     higher_proto_supported+=" $(get_protocol $TMPFILE)"
@@ -13164,10 +13158,10 @@ run_beast(){
                out "                                           "
                continue
           fi
-          ret=$(has_server_protocol "$proto")
-          if [[ $ret -eq 0 ]]; then
+          subret=$(has_server_protocol "$proto")
+          if [[ $subret -eq 0 ]]; then
                sclient_success=0
-          elif [[ $ret -eq 1 ]]; then
+          elif [[ $subret -eq 1 ]]; then
                sclient_success=1
           elif [[ "$proto" != "ssl3" ]] || "$HAS_SSL3"; then
                $OPENSSL s_client $(s_client_options "-"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE </dev/null
@@ -13413,16 +13407,18 @@ run_lucky13() {
      fi
      outln
      tmpfile_handle $FUNCNAME.txt
-     return $sclient_success
+     [[ $sclient_success -ge 6 ]] && return 1
+     return 0
 }
 
 
 # https://tools.ietf.org/html/rfc7465    REQUIRES that TLS clients and servers NEVER negotiate the use of RC4 cipher suites!
 # https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
 # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
+#
 run_rc4() {
      local -i rc4_offered=0
-     local -i nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 ret
+     local -i nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 sclient_success=0
      local n auth mac export hexc sslv2_ciphers_hex="" sslv2_ciphers_ossl="" s
      local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
      local -i i
@@ -13598,8 +13594,8 @@ run_rc4() {
                else
                     tls_sockets "$proto" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
                fi
-               ret=$?
-               [[ $ret -ne 0 ]] && [[ $ret -ne 2 ]] && break
+               sclient_success=$?
+               [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
                cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                for (( i=0; i < nr_nonossl_ciphers; i++ )); do
                     [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
@@ -13663,7 +13659,8 @@ run_rc4() {
 
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
      tmpfile_handle $FUNCNAME.txt
-     return $rc4_offered
+     [[ $sclient_success -ge 6 ]] && return 1
+     return 0
 }
 
 
@@ -14028,13 +14025,14 @@ run_grease() {
           :
      fi
      return $ret
-#FIXME: No client side error cases where we want to return 1?
+     #FIXME: No client side error cases where we want to return 1?
 }
 
 # If the server supports any non-PSK cipher suites that use RSA key transport,
 # check if the server is vulnerable to Bleichenbacher's Oracle Threat (ROBOT) attacks.
 # See "Return Of Bleichenbacher's Oracle Threat (ROBOT)" by Hanno Böck,
 # Juraj Somorovsky, and Craig Young (https://robotattack.org).
+#
 run_robot() {
      local tls_hexcode="03"
      # A list of all non-PSK cipher suites that use RSA key transport
@@ -14045,7 +14043,7 @@ run_robot() {
      local rnd_pms="aa112233445566778899112233445566778899112233445566778899112233445566778899112233445566778899"
      local change_cipher_spec finished resp
      local -a response
-     local -i i ret len iteration testnum pubkeybits pubkeybytes
+     local -i i subret len iteration testnum pubkeybits pubkeybytes
      local vulnerable=false send_ccs_finished=true
      local -i start_time end_time timeout=$MAX_WAITSOCK
      local cve="CVE-2017-17382 CVE-2017-17427 CVE-2017-17428 CVE-2017-13098 CVE-2017-1000385 CVE-2017-13099 CVE-2016-6883 CVE-2012-5081"
@@ -14058,11 +14056,11 @@ run_robot() {
      if [[ ! "$HAS_PKUTIL" ]]; then
           prln_local_problem "Your $OPENSSL does not support the pkeyutl utility."
           fileout "$jsonID" "WARN" "$OPENSSL does not support the pkeyutl utility."
-          return 7
+          return 1
      elif ! "$HAS_PKEY"; then
           prln_local_problem "Your $OPENSSL does not support the pkey utility."
           fileout "$jsonID" "WARN" "$OPENSSL does not support the pkey utility."
-          return 7
+          return 1
      fi
 
      if [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
@@ -14080,8 +14078,8 @@ run_robot() {
      # listed first, and then try all ciphers that use RSA key transport
      # if there is no connection on the first try.
      tls_sockets "$tls_hexcode" "$aes_gcm_cbc_cipherlist, 00,ff"
-     ret=$?
-     if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
+     subret=$?
+     if [[ $subret -eq 0 ]] || [[ $subret -eq 2 ]]; then
           cipherlist="$aes_gcm_cbc_cipherlist"
           tls_hexcode="${DETECTED_TLS_VERSION:2:2}"
      else
@@ -14090,12 +14088,12 @@ run_robot() {
                cipherlist="${cipherlist:2}"
           fi
           tls_sockets "$tls_hexcode" "$cipherlist, 00,ff"
-          ret=$?
-          if [[ $ret -eq 2 ]]; then
+          subret=$?
+          if [[ $subret -eq 2 ]]; then
                tls_hexcode="${DETECTED_TLS_VERSION:2:2}"
                cipherlist="$(strip_inconsistent_ciphers "$tls_hexcode" ", $cipherlist")"
                cipherlist="${cipherlist:2}"
-          elif [[ $ret -ne 0 ]]; then
+          elif [[ $subret -ne 0 ]]; then
                prln_svrty_best "Server does not support any cipher suites that use RSA key transport"
                fileout "$jsonID" "OK" "not vulnerable, no RSA key transport cipher"
                return 0
@@ -14208,8 +14206,8 @@ run_robot() {
                debugme echo "reading server error response..."
                start_time=$(LC_ALL=C date "+%s")
                sockread_serverhello 32768 $timeout
-               ret=$?
-               if [[ $ret -eq 0 ]]; then
+               subret=$?
+               if [[ $subret -eq 0 ]]; then
                     end_time=$(LC_ALL=C date "+%s")
                     resp=$(hexdump -v -e '16/1 "%02x"' "$SOCK_REPLY_FILE")
                     response[testnum]="${resp%%[!0-9A-F]*}"
@@ -14224,7 +14222,7 @@ run_robot() {
                     response[testnum]="Timeout waiting for alert"
                fi
                debugme echo -e "\nresponse[$testnum] = ${response[testnum]}"
-               [[ $DEBUG -ge 3 ]] && [[ $ret -eq 0 ]] && parse_tls_serverhello "${response[testnum]}"
+               [[ $DEBUG -ge 3 ]] && [[ $subret -eq 0 ]] && parse_tls_serverhello "${response[testnum]}"
                close_socket
 
                # Don't continue testing if it has already been determined that
