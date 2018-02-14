@@ -507,7 +507,10 @@ to create the hashes for HPKP.</li>
 <h2 id="EXIT-STATUS">EXIT STATUS</h2>
 
 <ul>
-<li>0    testssl.sh finished successfully</li>
+<li>0    testssl.sh finished successfully without errors and without unambiguous results</li>
+<li>1    testssl.sh has encountered exactly one ambiguous situation or an error during run</li>
+<li>1+n  same as previous. The errors or ambiguous results are added, also per IP.</li>
+<li>50-200 reserved for returning a vulnerability scoring for system monitoring or a CI tools</li>
 <li>245  no bash used</li>
 <li>249  temp file creation problem</li>
 <li>251  feature not yet supported</li>
@@ -549,7 +552,7 @@ to create the hashes for HPKP.</li>
 
   <ol class='man-decor man-foot man foot'>
     <li class='tl'></li>
-    <li class='tc'>January 2018</li>
+    <li class='tc'>February 2018</li>
     <li class='tr'>testssl(1)</li>
   </ol>
 
