@@ -1606,6 +1606,8 @@ match_ipv4_httpheader() {
      local spaces="                              "
      local count
      local jsonID="ipv4_in_header"
+     local cwe="CWE-212"
+     local cve=""
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 1
@@ -1627,7 +1629,7 @@ match_ipv4_httpheader() {
                     fi
                     pr_svrty_medium "$result"
                     outln "\n$spaces$your_ip_msg"
-                    fileout "$jsonID" "MEDIUM" "IPv4 address $result $your_ip_msg in header"
+                    fileout "$jsonID" "MEDIUM" "$result $your_ip_msg" "$cve" "$cwe"
                fi
                count=$count+1
           done < $HEADERFILE
@@ -2125,7 +2127,7 @@ emphasize_stuff_in_headers(){
 
 run_server_banner() {
      local serverbanner
-     local jsonID="server_banner"
+     local jsonID="banner_server"
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 1
@@ -2162,7 +2164,7 @@ run_appl_banner() {
      local first=true
      local spaces="                              "
      local appl_banners=""
-     local jsonID="appl_banner"
+     local jsonID="banner_application"
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 1
@@ -2195,6 +2197,9 @@ run_rp_banner() {
      local first=true
      local spaces="                              "
      local rp_banners=""
+     local jsonID="banner_reverseproxy"
+     local cwe="CWE-200"
+     local cve=""
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 1
@@ -2203,7 +2208,7 @@ run_rp_banner() {
      egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded|^Forwarded' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
-          fileout "rp_banner" "INFO" "No reverse proxy banner found"
+          fileout "$jsonID" "INFO" "--" "$cve" "$cwe"
      else
           while read line; do
                line=$(strip_lf "$line")
@@ -2215,7 +2220,7 @@ run_rp_banner() {
                emphasize_stuff_in_headers "$line"
                rp_banners="${rp_banners}${line}"
           done < $TMPFILE
-          fileout "rp_banner" "INFO" "Reverse proxy banner(s) found: $rp_banners"
+          fileout "$jsonID" "INFO" "$rp_banners" "$cve" "$cwe"
      fi
      outln
 
@@ -2232,6 +2237,8 @@ sub_f5_bigip_check() {
      local routed_domain offset
      local savedcookies=""
      local spaces="$2"
+     local cwe="CWE-212"
+     local cve=""
 
      # taken from https://github.com/drwetter/F5-BIGIP-Decoder, more details see there
 
@@ -2244,32 +2251,32 @@ sub_f5_bigip_check() {
                ip="$(f5_ip_oldstyle "$cookievalue")"
                port="$(f5_port_decode $cookievalue)"
                out "${spaces}F5 cookie (default IPv4 pool member): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
-               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv4 pool member ${ip}:${port}"
+               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv4 pool member ${ip}:${port}" "$cve" "$cwe"
           elif grep -q -E '^rd[0-9]{1,2}o0{20}f{4}[a-f0-9]{8}o[0-9]{1,5}' <<< "$cookievalue"; then
                routed_domain="$(f5_determine_routeddomain "$cookievalue")"
                offset=$(( 2 + ${#routed_domain} + 1 + 24))
                port="${cookievalue##*o}"
                ip="$(f5_hex2ip "${cookievalue:$offset:8}")"
                out "${spaces}F5 cookie (IPv4 pool in routed domain "; pr_svrty_medium "$routed_domain"; out "): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
-               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is IPv4 pool member in routed domain $routed_domain ${ip}:${port}"
+               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is IPv4 pool member in routed domain $routed_domain ${ip}:${port}" "$cve" "$cwe"
           elif grep -q -E '^vi[a-f0-9]{32}\.[0-9]{1,5}' <<< "$cookievalue"; then
                ip="$(f5_hex2ip6 ${cookievalue:2:32})"
                port="${cookievalue##*.}"
                port=$(f5_port_decode "$port")
                out "${spaces}F5 cookie (default IPv6 pool member): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
-               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv6 pool member ${ip}:${port}"
+               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv6 pool member ${ip}:${port}" "$cve" "$cwe"
           elif grep -q -E '^rd[0-9]{1,2}o[a-f0-9]{32}o[0-9]{1,5}' <<< "$cookievalue"; then
                routed_domain="$(f5_determine_routeddomain "$cookievalue")"
                offset=$(( 2 + ${#routed_domain} + 1 ))
                port="${cookievalue##*o}"
                ip="$(f5_hex2ip6 ${cookievalue:$offset:32})"
                out "${spaces}F5 cookie (IPv6 pool in routed domain "; pr_svrty_medium "$routed_domain"; out "): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
-               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is IPv6 pool member in routed domain $routed_domain ${ip}:${port}"
+               fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is IPv6 pool member in routed domain $routed_domain ${ip}:${port}" "$cve" "$cwe"
           elif grep -q -E '^\!.*=$' <<< "$cookievalue"; then
                if [[ "${#cookievalue}" -eq 81 ]] ; then
                     savedcookies="${savedcookies}     ${cookiename}=${cookievalue:1:79}"
                     out "${spaces}Encrypted F5 cookie named "; pr_italic "${cookiename}"; outln " detected"
-                    fileout "cookie_bigip_f5" "INFO" "encrypted F5 cookie named ${cookiename} detected"
+                    fileout "cookie_bigip_f5" "INFO" "encrypted F5 cookie named ${cookiename}"
                fi
           fi
      done <<< "$allcookies"
@@ -2301,11 +2308,11 @@ run_cookie_flags() {     # ARG1: Path
      grep -ai '^Set-Cookie' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "(none issued at \"$1\")$msg302"
-          fileout "cookie_count" "INFO" "No cookies issued at \"$1\"$msg302_"
+          fileout "cookie_count" "INFO" "0 at \"$1\"$msg302_"
      else
           nr_cookies=$(count_lines "$(cat $TMPFILE)")
           out "$nr_cookies issued: "
-          fileout "cookie_count" "INFO" "$nr_cookies cookie(s) issued at \"$1\"$msg302_"
+          fileout "cookie_count" "INFO" "$nr_cookies at \"$1\"$msg302_"
           if [[ $nr_cookies -gt 1 ]]; then
                negative_word="NONE"
           else
@@ -2318,9 +2325,9 @@ run_cookie_flags() {     # ARG1: Path
           esac
           out " secure, "
           if [[ $nr_cookies -eq $nr_secure ]]; then
-               fileout "cookie_secure" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as secure"
+               fileout "cookie_secure" "OK" "All ($nr_cookies) at \"$1\" marked as secure"
           else
-               fileout "cookie_secure" "INFO" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as secure"
+               fileout "cookie_secure" "INFO" "$nr_secure/$nr_cookies at \"$1\" marked as secure"
           fi
           nr_httponly=$(grep -cai httponly $TMPFILE)
           case $nr_httponly in
@@ -2329,9 +2336,9 @@ run_cookie_flags() {     # ARG1: Path
           esac
           out " HttpOnly"
           if [[ $nr_cookies -eq $nr_httponly ]]; then
-               fileout "cookie_httponly" "OK" "All $nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
+               fileout "cookie_httponly" "OK" "All ($nr_cookies) at \"$1\" marked as HttpOnly$msg302_"
           else
-               fileout "cookie_httponly" "INFO" "$nr_secure/$nr_cookies cookie(s) issued at \"$1\" marked as HttpOnly$msg302_"
+               fileout "cookie_httponly" "INFO" "$nr_secure/$nr_cookies at \"$1\" marked as HttpOnly$msg302_"
           fi
           outln "$msg302"
           allcookies="$(awk '/[Ss][Ee][Tt]-[Cc][Oo][Oo][Kk][Ii][Ee]:/ { print $2 }' "$TMPFILE")"
@@ -2388,7 +2395,7 @@ run_more_flags() {
 
      if "$first"; then
           prln_svrty_medium "--"
-          fileout "sec_headers" "MEDIUM" "No security (or other interesting) headers detected"
+          fileout "security_headers" "MEDIUM" "--"
      fi
 
      tmpfile_handle $FUNCNAME.txt
@@ -4286,6 +4293,7 @@ run_protocols() {
                6) # couldn't open socket
                     prln_fixme "couldn't open socket"
                     fileout "$jsonID" "WARN" "couldn't be tested, socket problem"
+                    ((ret++))
                     ;;
                7) # strange reply, couldn't convert the cipher spec length to a hex number
                     pr_cyan "strange v2 reply "
@@ -4314,11 +4322,11 @@ run_protocols() {
                          add_tls_offered ssl2 yes
                          if [[ 0 -eq "$nr_ciphers_detected" ]]; then
                               prln_svrty_high "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
-                              fileout "$jsonID" "HIGH" "offered, vulnerable to CVE-2015-3197"
+                              fileout "$jsonID" "HIGH" "offered, no cipher" "CVE-2015-3197" "CWE-310"
                          else
                               pr_svrty_critical "offered (NOT ok), also VULNERABLE to DROWN attack";
                               outln " -- $nr_ciphers_detected ciphers"
-                              fileout "$jsonID" "CRITICAL" "offered, vulnerable to DROWN attack. Detected ciphers: $nr_ciphers_detected"
+                              fileout "$jsonID" "CRITICAL" "vulnerable with $nr_ciphers_detected ciphers"
                          fi
                     fi
                     ;;
@@ -4339,7 +4347,7 @@ run_protocols() {
                     add_tls_offered ssl2 no
                     ;;
                5)   pr_svrty_high "CVE-2015-3197: $supported_no_ciph2";
-                    fileout "$jsonID" "HIGH" "CVE-2015-3197: SSLv2 is $supported_no_ciph2"
+                    fileout "$jsonID" "HIGH" "offered, no cipher" "CVE-2015-3197" "CWE-310"
                     add_tls_offered ssl2 yes
                     ;;
                7)   fileout "$jsonID" "INFO" "not tested due to lack of local support"
@@ -4384,10 +4392,8 @@ run_protocols() {
           4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
                ;;
-          5)   pr_svrty_high "$supported_no_ciph2"
+          5)   pr_svrty_high "$supported_no_ciph1"               # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "HIGH" "$supported_no_ciph1"
-               outln "(may need debugging)"
-               ((ret++))
                add_tls_offered ssl3 yes
                ;;
           7)   if "$using_sockets" ; then
@@ -4416,12 +4422,12 @@ run_protocols() {
                latest_supported="0301"
                latest_supported_string="TLSv1.0"
                add_tls_offered tls1 yes
-               ;;                                           # nothing wrong with it -- per se
+               ;;                                                # nothing wrong with it -- per se
           1)   out "not offered"
                add_tls_offered tls1 no
                if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
-                    fileout "$jsonID" "INFO" "not offered"     # neither good or bad
+                    fileout "$jsonID" "INFO" "not offered"       # neither good or bad
                else
                     prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "connection failed rather than downgrading to $latest_supported_string"
@@ -4450,7 +4456,7 @@ run_protocols() {
           4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
                ;;
-          5)   outln "$supported_no_ciph1"                                 # protocol ok, but no cipher
+          5)   outln "$supported_no_ciph1"                                 # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1 yes
                ;;
@@ -4481,12 +4487,12 @@ run_protocols() {
                latest_supported="0302"
                latest_supported_string="TLSv1.1"
                add_tls_offered tls1_1 yes
-               ;;                                            # nothing wrong with it
+               ;;                                                # nothing wrong with it
           1)   out "not offered"
                add_tls_offered tls1_1 no
                if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
-                    fileout "$jsonID" "INFO" "is not offered"  # neither good or bad
+                    fileout "$jsonID" "INFO" "is not offered"    # neither good or bad
                else
                     prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string"
                     fileout "$jsonID" "CRITICAL" "connection failed rather than downgrading to $latest_supported_string"
@@ -4518,10 +4524,10 @@ run_protocols() {
           4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
                ;;
-          5)   outln "$supported_no_ciph1"
-               fileout "$jsonID" "INFO" "TLSv1.1 is $supported_no_ciph1"
+          5)   outln "$supported_no_ciph1"                       # protocol detected but no cipher --> comes from run_prototest_openssl
+               fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1_1 yes
-               ;;                                                # protocol ok, but no cipher
+               ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.1"; outln "$debug_recomm"
@@ -4597,10 +4603,10 @@ run_protocols() {
           4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
                ;;
-          5)   outln "$supported_no_ciph1"
-               fileout "$jsonID" "INFO" "is $supported_no_ciph1"
+          5)   outln "$supported_no_ciph1"                  # protocol detected, but no cipher --> comes from run_prototest_openssl
+               fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1_2 yes
-               ;;                                # protocol ok, but no cipher
+               ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.2"; outln "$debug_recomm"
@@ -4727,10 +4733,10 @@ run_protocols() {
           4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
                ;;
-          5)   outln "$supported_no_ciph1"
-               fileout "$jsonID" "INFO" "is $supported_no_ciph1"
+          5)   outln "$supported_no_ciph1"             # protocol detected but no cipher --> comes from run_prototest_openssl
+               fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1_3 yes
-               ;;                                # protocol ok, but no cipher
+               ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
                     prln_warning "strange reply, maybe a client side problem with TLS 1.3"; outln "$debug_recomm"
@@ -4783,6 +4789,10 @@ run_cipherlists() {
      # no SSLv2 here and in strong
   # ~ equivalent to 'grep AEAD etc/cipher-mapping.txt | grep -v Au=None'
      local strong_ciphers="13,01, 13,02, 13,03, 13,04, 13,05, cc,14, cc,13, cc,15, c0,30, c0,2c, 00,a5, 00,a3, 00,a1, 00,9f, cc,a9, cc,a8, cc,aa, c0,af, c0,ad, c0,a3, c0,9f, 00,ad, 00,ab, cc,ae, cc,ad, cc,ac, c0,ab, c0,a7, c0,32, c0,2e, 00,9d, c0,a1, c0,9d, 00,a9, cc,ab, c0,a9, c0,a5, c0,51, c0,53, c0,55, c0,57, c0,59, c0,5d, c0,5f, c0,61, c0,63, c0,6b, c0,6d, c0,6f, c0,7b, c0,7d, c0,7f, c0,81, c0,83, c0,87, c0,89, c0,8b, c0,8d, c0,8f, c0,91, c0,93, 16,b7, 16,b8, 16,b9, 16,ba, c0,2f, c0,2b, 00,a4, 00,a2, 00,a0, 00,9e, c0,ae, c0,ac, c0,a2, c0,9e, 00,ac, 00,aa, c0,aa, c0,a6, c0,a0, c0,9c, 00,a8, c0,a8, c0,a4, c0,31, c0,2d, 00,9c, c0,50, c0,52, c0,54, c0,56, c0,58, c0,5c, c0,5e, c0,60, c0,62, c0,6a, c0,6c, c0,6e, c0,7a, c0,7c, c0,7e, c0,80, c0,82, c0,86, c0,88, c0,8a, c0,8c, c0,8e, c0,90, c0,92, 00,ff"
+     local cwe="CWE-327"
+     local cwe2="CWE-310"
+     local cve=""
+
 
      "$SSL_NATIVE" && using_sockets=false
      if ! "$using_sockets"; then
@@ -4803,18 +4813,18 @@ run_cipherlists() {
      # argv[4]: string to be appended for fileout
      # argv[5]: non-SSLv2 cipher list to test (hexcodes), if using sockets
      # argv[6]: SSLv2 cipher list to test (hexcodes), if using sockets
-     sub_cipherlists 'NULL:eNULL'                            " NULL ciphers (no encryption)              "    -2 "NULL"      "$null_ciphers"   "$sslv2_null_ciphers"
+     sub_cipherlists 'NULL:eNULL'                            " NULL ciphers (no encryption)              "    -2 "NULL"      "$null_ciphers"   "$sslv2_null_ciphers" "$cve" "$cwe"
      ret=$?
-     sub_cipherlists 'aNULL:ADH'                             " Anonymous NULL Ciphers (no authentication)"    -2 "aNULL"     "$anon_ciphers"   "$sslv2_anon_ciphers"
+     sub_cipherlists 'aNULL:ADH'                             " Anonymous NULL Ciphers (no authentication)"    -2 "aNULL"     "$anon_ciphers"   "$sslv2_anon_ciphers" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists 'EXPORT:!ADH:!NULL'                     " Export ciphers (w/o ADH+NULL)             "    -2 "EXPORT"    "$exp_ciphers"    "$sslv2_exp_ciphers"
+     sub_cipherlists 'EXPORT:!ADH:!NULL'                     " Export ciphers (w/o ADH+NULL)             "    -2 "EXPORT"    "$exp_ciphers"    "$sslv2_exp_ciphers"  "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists 'LOW:DES:!ADH:!EXP:!NULL'               " LOW: 64 Bit + DES encryption (w/o export) "    -2 "DES+64Bit" "$low_ciphers"    "$sslv2_low_ciphers"
+     sub_cipherlists 'LOW:DES:!ADH:!EXP:!NULL'               " LOW: 64 Bit + DES encryption (w/o export) "    -2 "DES+64Bit" "$low_ciphers"    "$sslv2_low_ciphers" "$cve" "$cwe"
      ret=$((ret + $?))
      sub_cipherlists 'MEDIUM:!aNULL:!AES:!CAMELLIA:!ARIA:!CHACHA20:!3DES' \
-                                                             " Weak 128 Bit ciphers (SEED, IDEA, RC[2,4])"    -1 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers"
+                                                             " Weak 128 Bit ciphers (SEED, IDEA, RC[2,4])"    -1 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists '3DES:!aNULL:!ADH'                      " Triple DES Ciphers (Medium)               "     0 "3DES"      "$tdes_ciphers"   "$sslv2_tdes_ciphers"
+     sub_cipherlists '3DES:!aNULL:!ADH'                      " Triple DES Ciphers (Medium)               "     0 "3DES"      "$tdes_ciphers"   "$sslv2_tdes_ciphers" "$cve" "$cwe2"
      ret=$((ret + $?))
      sub_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!AESGCM:!CamelliaGCM:!AESCCM8:!AESCCM'\
                                                              " High encryption (AES+Camellia, no AEAD)   "     1 "HIGH"      "$high_ciphers"    ""
@@ -5154,6 +5164,8 @@ run_server_preference() {
      local addcmd="" addcmd2=""
      local using_sockets=true
      local jsonID="cipher_order"
+     local cwe="CWE-310"
+     local cve=""
 
      "$SSL_NATIVE" && using_sockets=false
 
@@ -5217,7 +5229,7 @@ run_server_preference() {
           pr_svrty_best "yes (OK)"
           has_cipher_order=true
           limitedsense=""
-          fileout "$jsonID" "OK" "sets cipher order"
+          fileout "$jsonID" "OK" "server"
      fi
      debugme tm_out "  $cipher1 | $cipher2"
      outln
@@ -5891,7 +5903,7 @@ determine_trust() {
 tls_time() {
      local now difftime
      local spaces="               "
-     local jsonID="TLS_time"
+     local jsonID="TLS_timestamp"
 
      pr_bold " TLS clock skew" ; out "$spaces"
      TLS_DIFFTIME_SET=true                                       # this is a switch whether we want to measure the remote TLS_TIME
@@ -5905,17 +5917,17 @@ tls_time() {
           if [[ "${#difftime}" -gt 5 ]]; then
                # openssl >= 1.0.1f fills this field with random values! --> good for possible fingerprint
                out "Random values, no fingerprinting possible "
-               fileout "$jsonID" "INFO" "TLS timestamp is random"
+               fileout "$jsonID" "INFO" "random"
           else
                [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
                out "$difftime"; out " sec from localtime";
-               fileout "$jsonID" "INFO" "TLS timestamp is off from your localtime by $difftime seconds"
+               fileout "$jsonID" "INFO" "off by $difftime seconds from your localtime"
           fi
           debugme tm_out "$TLS_TIME"
           outln
      else
           outln "SSLv3 through TLS 1.2 didn't return a timestamp"
-          fileout "$jsonID" "INFO" "No TLS timestamp returned by SSLv3 through TLSv1.2"
+          fileout "$jsonID" "INFO" "None returned by SSLv3 through TLSv1.2"
      fi
      TLS_DIFFTIME_SET=false                                      # reset the switch to save calls to date and friend in tls_sockets()
      return 0
@@ -6855,7 +6867,7 @@ certificate_info() {
                if [[ -n "$issuer_C" ]]; then
                     issuerfinding+=" from "
                     out " from "
-                    # issuerfinding+="$issuer_C"
+                    issuerfinding+="$issuer_C"
                     pr_italic "$issuer_C"
                fi
                issuerfinding+=")"
@@ -7141,7 +7153,7 @@ certificate_info() {
      must_staple "$json_postfix" "$provides_stapling" "$cert_txt"
 
      out "$indent"; pr_bold " DNS CAA RR"; out " (experimental)    "
-     jsonID="dns_CAArecord"
+     jsonID="DNS_CAArecord"
      caa_node="$NODE"
      caa=""
      while ( [[ -z "$caa" ]] &&  [[ ! -z "$caa_node" ]] ); do
@@ -7169,7 +7181,7 @@ certificate_info() {
           fileout "${jsonID}${json_postfix}" "WARN" "check skipped as instructed"
      else
           pr_svrty_low "not offered"
-          fileout "${jsonID}${json_postfix}" "LOW" "not offered"
+          fileout "${jsonID}${json_postfix}" "LOW" "--"
      fi
      outln
 
@@ -7924,7 +7936,7 @@ npn_pre(){
      if [[ -n "$PROXY" ]]; then
           [[ -n "$1" ]] && pr_warning "$1"
           pr_warning "not tested as proxies do not support proxying it"
-          fileout "SPDY-NPN" "WARN" "not tested as proxies do not support proxying it"
+          fileout "NPN" "WARN" "not tested as proxies do not support proxying it"
           return 1
      fi
      if ! "$HAS_SPDY"; then
@@ -7939,12 +7951,12 @@ alpn_pre(){
      if [[ -n "$PROXY" ]]; then
           [[ -n "$1" ]] && pr_warning " $1 "
           pr_warning "not tested as proxies do not support proxying it"
-          fileout "HTTP2/ALPN" "WARN" "HTTP/2 was not tested as proxies do not support proxying it"
+          fileout "ALPN" "WARN" "not tested as proxies do not support proxying it"
           return 1
      fi
      if ! "$HAS_ALPN" && "$SSL_NATIVE"; then
           prln_local_problem "$OPENSSL doesn't support ALPN/HTTP2";
-          fileout "ALPN" "WARN" "HTTP/2 was not tested as $OPENSSL does not support it"
+          fileout "ALPN" "WARN" "not tested as $OPENSSL does not support it"
           return 7
      fi
      return 0
@@ -8031,7 +8043,7 @@ run_alpn() {
                # only h2 is what browser need to use HTTP/2.0 and brings a security benefit
                if [[ "$proto" == "h2" ]]; then
                     pr_svrty_good "$proto"
-                    fileout "$jsonID" "OK" "$proto"
+                    fileout "${jsonID}_HTTP2" "OK" "$proto"
                else
                     out "$proto"
                     alpn_finding+="$proto"
@@ -12907,8 +12919,6 @@ run_logjam() {
           ret=3               # no DH key detected
      fi
 
-     # now the final verdict
-     # we only use once the color here on the screen, so screen and fileout SEEM to be inconsistent
      if "$vuln_exportdh_ciphers"; then
           pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DH EXPORT ciphers"
           fileout "$jsonID" "HIGH" "VULNERABLE, uses DH EXPORT ciphers" "$cve" "$cwe" "$hint"
@@ -12920,23 +12930,23 @@ run_logjam() {
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p -le 512 ]]; then
                     pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "CRITICAL" "common prime \"$comment\" detected"
+                    fileout "$jsonID2" "CRITICAL" "$comment"
                elif [[ $len_dh_p -le 1024 ]]; then
                     pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "HIGH" "common prime \"$comment\" detected"
+                    fileout "$jsonID2" "HIGH" "$comment"
                elif [[ $len_dh_p -le 1536 ]]; then
                     pr_svrty_medium "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "MEDIUM" "common prime \"$comment\" detected"
+                    fileout "$jsonID2" "MEDIUM" "$comment"
                elif [[ $len_dh_p -le 2048 ]]; then
                     pr_svrty_low "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID_common primes" "LOW" "common prime \"$comment\" detected"
+                    fileout "$jsonID_common primes" "LOW" "$comment"
                else
                     out "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "INFO" "common prime \"$comment\" detected"
+                    fileout "$jsonID2" "INFO" "$comment"
                fi
           elif [[ $ret -eq 0 ]]; then
                out " no common primes detected"
-               fileout "$jsonID2" "INFO" "no common primes detected"
+               fileout "$jsonID2" "INFO" "--"
           elif [[ $ret -eq 7 ]]; then
                out "FIXME 1"
           fi
@@ -12945,16 +12955,16 @@ run_logjam() {
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p  -le 512 ]]; then
                     pr_svrty_critical "VULNERABLE (NOT ok):" ; out " uses common prime "; pr_italic "$comment"; out " ($len_dh_p bits)"
-                    fileout "$jsonID2" "CRITICAL" "common prime \"$comment\" detected"
+                    fileout "$jsonID2" "CRITICAL" "\"$comment\""
                elif [[ $len_dh_p -le 1024 ]]; then
                     pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "HIGH" "common prime \"$comment\" detected"
+                    fileout "$jsonID2" "HIGH" "\"comment\""
                elif [[ $len_dh_p -le 1536 ]]; then
                     pr_svrty_medium "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "MEDIUM" "common prime \"$comment\" detected"
+                    fileout "$jsonID2" "MEDIUM" "\"$comment\""
                elif [[ $len_dh_p -le 2048 ]]; then
                     pr_svrty_low "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "LOW" "common prime \"$comment\" detected"
+                    fileout "$jsonID2" "LOW" "\"$comment\""
                else
                     out "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "$jsonID2" "INFO" "common prime \"$comment\" detected"
@@ -12966,12 +12976,12 @@ run_logjam() {
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no DH key detected"
-               fileout "$jsonID2" "OK" "no DH key detected"
+               fileout "$jsonID2" "OK" "no DH key"
           elif [[ $ret -eq 0 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no common primes detected"
-               fileout "$jsonID2" "OK" "no common primes detected"
+               fileout "$jsonID2" "OK" "--"
           elif [[ $ret -eq 7 ]]; then
                pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
@@ -16765,10 +16775,11 @@ reset_hostdepended_vars() {
 #
 stopwatch() {
      local new_delta
+     local column=$((COLUMNS - 0))           # for future adjustments
 
      "$MEASURE_TIME" || return
      new_delta=$(( $(date +%s) - LAST_TIME ))
-     printf "%${COLUMNS}s" "$new_delta"
+     printf "%${column}s" "$new_delta"
      [[ -e "$MEASURE_TIME_FILE" ]] && echo "$1 : $new_delta " >> "$MEASURE_TIME_FILE"
      LAST_TIME=$(( new_delta + LAST_TIME ))
 }
@@ -16790,6 +16801,7 @@ lets_roll() {
      nodeip_to_proper_ip6
      reset_hostdepended_vars
      determine_rdns                # Returns always zero or has already exited if fatal error occured
+     stopwatch determine_rdns
 
      ((SERVER_COUNTER++))
      determine_service "$1"        # STARTTLS service? Other will be determined here too. Returns always 0 or has already exited if fatal error occured
@@ -16892,6 +16904,7 @@ lets_roll() {
 
      RET=0     # this is a global as we can have a function main(), see #705. Should we toss then all local $ret?
      ip=""
+     stopwatch start
 
      lets_roll init
      initialize_globals
@@ -16908,8 +16921,8 @@ lets_roll() {
      set_color_functions
      maketempf
      find_openssl_binary
-     prepare_debug
-     prepare_arrays
+     prepare_debug  ; stopwatch parse
+     prepare_arrays ; stopwatch prepare_arrays
      mybanner
      check_proxy
      check4openssl_oldfarts
