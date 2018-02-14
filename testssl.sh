@@ -3153,7 +3153,7 @@ run_cipher_match(){
 
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad)
 run_allciphers() {
-     local -i nr_ciphers_tested=0 nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 ret
+     local -i nr_ciphers_tested=0 nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 sclient_success=0
      local n auth mac export hexc sslv2_ciphers="" s
      local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
      local -i i end_of_bundle bundle bundle_size num_bundles mod_check
@@ -3376,8 +3376,8 @@ run_allciphers() {
                     else
                          tls_sockets "$proto" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
                     fi
-                    ret=$?
-                    [[ $ret -ne 0 ]] && [[ $ret -ne 2 ]] && break
+                    sclient_success=$?
+                    [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
                     cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
                          [[ "$cipher" == "${rfc_ciph2[i]}" ]] && ciphers_found2[i]=true && break
@@ -3416,6 +3416,7 @@ run_allciphers() {
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
 
      outln
+     [[ $sclient_success -ge 6 ]] && return 1
      return 0
 }
 
@@ -3454,7 +3455,8 @@ run_cipher_per_proto() {
      neat_header
      echo -e " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2\n -tls1_3 04 TLS 1.3" | while read proto proto_hex proto_text; do
           pr_underline "$(printf "%s" "$proto_text")"
-          out "  ";                                    # for local problem if it happens
+          # for local problem if it happens
+          out "  "
           if ! "$using_sockets" && ! locally_supported "$proto"; then
                continue
           fi
@@ -3705,6 +3707,7 @@ run_cipher_per_proto() {
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
      tmpfile_handle $FUNCNAME.txt
      return 0
+#FIXME: no error condition
 }
 
 # arg1 is an ASCII-HEX encoded SSLv3 or TLS ClientHello.
@@ -3985,6 +3988,7 @@ run_client_simulation() {
      local has_dh_bits using_sockets=true
      local client_service
      local options
+     local -i ret=0
      local jsonID="clientsimulation"
 
      # source the external file
@@ -4015,6 +4019,7 @@ run_client_simulation() {
           pr_headline " Running client simulations via openssl "
           prln_warning " -- you shouldn't run this with \"--ssl-native\" as you will get false results"
           fileout "$jsonID" "WARN" "You shouldn't run this with \"--ssl-native\" as you will get false results"
+          ret=1
      fi
      outln
      debugme echo
@@ -4156,10 +4161,11 @@ run_client_simulation() {
                     fi
                fi   # correct service?
           fi   #current?
-          i=$((i+1))
+          ((i++))
      done
+
      tmpfile_handle $FUNCNAME.txt
-     return 0
+     return $ret
 }
 
 # generic function whether $1 is supported by s_client ($2: string to display)
