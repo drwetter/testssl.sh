@@ -4632,7 +4632,7 @@ run_protocols() {
                fi
           fi
           if [[ ${#tls13_ciphers_to_test} -eq 9 ]]; then
-               tls13_ciphers_to_test="$TLS13_CIPHER, ${tls13_ciphers_to_test:2:2},${tls13_ciphers_to_test:7:2}"
+               tls13_ciphers_to_test="$TLS13_CIPHER, ${tls13_ciphers_to_test:2:2},${tls13_ciphers_to_test:7:2}, 00,ff"
           else
                tls13_ciphers_to_test="$TLS13_CIPHER,$TLS_CIPHER"
           fi
@@ -6414,6 +6414,7 @@ certificate_transparency() {
                          ciphers+=", ${hexc:2:2},${hexc:7:2}"
                     fi
                done < <($OPENSSL ciphers -V $cipher 2>>$ERRFILE)
+               ciphers+=", 00,ff"
           fi
           [[ -z "$sni_used" ]] && sni="$SNI" && SNI=""
           tls_sockets "${tls_version:2:2}" "${ciphers:2}" "all" "00,12,00,00$extra_extns"
@@ -7593,7 +7594,7 @@ run_pfs() {
           # All TLSv1.3 cipher suites offer robust PFS.
           sclient_success=0
      elif "$using_sockets"; then
-          tls_sockets "04" "${pfs_hex_cipher_list:2}"
+          tls_sockets "04" "${pfs_hex_cipher_list:2}, 00,ff"
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
      else
@@ -7819,7 +7820,7 @@ run_pfs() {
                     [[ -z "$curves_to_test" ]] && break
                     len1=$(printf "%02x" "$((2*${#curves_to_test}/7))")
                     len2=$(printf "%02x" "$((2*${#curves_to_test}/7+2))")
-                    tls_sockets "$proto" "${ecdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
+                    tls_sockets "$proto" "${ecdhe_cipher_list_hex:2}, 00,ff" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
                     sclient_success=$?
                     [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
                     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
@@ -7859,7 +7860,7 @@ run_pfs() {
           "$pfs_tls13_offered" && protos_to_try="04"
           if "$ffdhe_offered" && "$EXPERIMENTAL"; then
                # Check to see whether RFC 7919 is supported (see Section 4 of RFC 7919)
-               tls_sockets "03" "${ffdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, 04, 00, 02, 01, fb"
+               tls_sockets "03" "${ffdhe_cipher_list_hex:2}, 00,ff" "ephemeralkey" "00, 0a, 00, 04, 00, 02, 01, fb"
                sclient_success=$?
                if [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]]; then
                     if "$pfs_tls13_offered"; then
@@ -7878,7 +7879,7 @@ run_pfs() {
                     [[ -z "$curves_to_test" ]] && break
                     len1=$(printf "%02x" "$((2*${#curves_to_test}/7))")
                     len2=$(printf "%02x" "$((2*${#curves_to_test}/7+2))")
-                    tls_sockets "$proto" "${ffdhe_cipher_list_hex:2}" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
+                    tls_sockets "$proto" "${ffdhe_cipher_list_hex:2}, 00,ff" "ephemeralkey" "00, 0a, 00, $len2, 00, $len1, ${curves_to_test:2}"
                     sclient_success=$?
                     [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
                     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
@@ -12415,7 +12416,7 @@ run_sweet32() {
           for proto in 03 02 01 00; do
                "$FAST" && [[ "$proto" != "03" ]] && break
                ! "$FAST" && [[ $(has_server_protocol "$proto") -eq 1 ]] && continue
-               tls_sockets "$proto" "${sweet32_ciphers_hex}"
+               tls_sockets "$proto" "${sweet32_ciphers_hex}, 00,ff"
                sclient_success=$?
                [[ $sclient_success -eq 2 ]] && sclient_success=0
                [[ $sclient_success -eq 0 ]] && break
@@ -12478,7 +12479,7 @@ run_ssl_poodle() {
      # The openssl binary distributed has almost everything we need (PSK and KRB5 ciphers are typically missing).
      # Measurements show that there's little impact whether we use sockets or TLS here, so the default is sockets here
      if "$using_sockets"; then
-          tls_sockets "00" "$cbc_ciphers_hex"
+          tls_sockets "00" "$cbc_ciphers_hex, 00,ff"
           sclient_success=$?
      else
           if ! "$HAS_SSL3"; then
@@ -12714,7 +12715,7 @@ run_freak() {
                addtl_warning="" ;;
      esac
      if "$using_sockets"; then
-          tls_sockets "03" "$exportrsa_tls_cipher_list_hex"
+          tls_sockets "03" "$exportrsa_tls_cipher_list_hex, 00,ff"
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
           if [[ $sclient_success -ne 0 ]]; then
@@ -12817,7 +12818,7 @@ run_logjam() {
 
      # test for DH export ciphers first
      if "$using_sockets"; then
-          tls_sockets "03" "$exportdh_cipher_list_hex"
+          tls_sockets "03" "$exportdh_cipher_list_hex, 00,ff"
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
      else
@@ -12847,7 +12848,7 @@ run_logjam() {
 
      # Try all ciphers that use an ephemeral DH key. If successful, check whether the key uses a weak prime.
      if "$using_sockets"; then
-          tls_sockets "03" "$all_dh_ciphers" "ephemeralkey"
+          tls_sockets "03" "$all_dh_ciphers, 00,ff" "ephemeralkey"
           sclient_success=$?
           if [[ $sclient_success -eq 0 ]] || [[ $sclient_success -eq 2 ]]; then
                cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
@@ -13189,7 +13190,7 @@ run_beast(){
                     "ssl3") proto_hex="00" ;;
                     "tls1") proto_hex="01" ;;
                esac
-               tls_sockets "$proto_hex" "$cbc_ciphers_hex"
+               tls_sockets "$proto_hex" "$cbc_ciphers_hex, 00,ff"
                [[ $? -eq 0 ]] || continue
           else
                $OPENSSL s_client $(s_client_options "-"$proto" -cipher "$cbc_cipher_list" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE </dev/null
@@ -13369,7 +13370,7 @@ run_lucky13() {
      # Measurements show that there's little impact whether we use sockets or TLS here, so the default is sockets here
 
      if "$using_sockets"; then
-          tls_sockets "03" "${cbc_ciphers_hex}"
+          tls_sockets "03" "${cbc_ciphers_hex}, 00,ff"
           sclient_success=$?
           [[ "$sclient_success" -eq 2 ]] && sclient_success=0
      else
@@ -13907,7 +13908,7 @@ run_grease() {
      # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
      if [[ "$proto" != "00" ]]; then
           # Send a ClientHello that lists all of the ECDHE cipher suites
-          tls_sockets "$proto" "$ecdhe_ciphers" "ephemeralkey"
+          tls_sockets "$proto" "$ecdhe_ciphers, 00,ff" "ephemeralkey"
           success=$?
           if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
                # Send the same ClientHello as before but with an unrecognized
@@ -13939,7 +13940,7 @@ run_grease() {
                     00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
                fi
                debugme echo -e "\nSending ClientHello with unrecognized named group value in supported_groups extension."
-               tls_sockets "$proto" "$ecdhe_ciphers" "" "$extn"
+               tls_sockets "$proto" "$ecdhe_ciphers, 00,ff" "" "$extn"
                success=$?
                if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                     prln_svrty_medium " Server fails if ClientHello contains a supported_groups extension with an unrecognized named group value (${grease_supported_groups[rnd]})."
@@ -14068,7 +14069,7 @@ run_robot() {
      # ciphers that use AES in GCM or CBC mode, with the GCM ciphers
      # listed first, and then try all ciphers that use RSA key transport
      # if there is no connection on the first try.
-     tls_sockets "$tls_hexcode" "$aes_gcm_cbc_cipherlist"
+     tls_sockets "$tls_hexcode" "$aes_gcm_cbc_cipherlist, 00,ff"
      ret=$?
      if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
           cipherlist="$aes_gcm_cbc_cipherlist"
@@ -14078,7 +14079,7 @@ run_robot() {
                cipherlist="$(strip_inconsistent_ciphers "$tls_hexcode" ", $cipherlist")"
                cipherlist="${cipherlist:2}"
           fi
-          tls_sockets "$tls_hexcode" "$cipherlist"
+          tls_sockets "$tls_hexcode" "$cipherlist, 00,ff"
           ret=$?
           if [[ $ret -eq 2 ]]; then
                tls_hexcode="${DETECTED_TLS_VERSION:2:2}"
@@ -14116,7 +14117,7 @@ run_robot() {
                response[testnum]="untested"
           done
           for (( testnum=0; testnum < 5; testnum++ )); do
-               tls_sockets "$tls_hexcode" "$cipherlist" "all" "" "" "false"
+               tls_sockets "$tls_hexcode" "$cipherlist, 00,ff" "all" "" "" "false"
 
                # Create the padded premaster secret to encrypt. The padding should be
                # of the form "00 02 <random> 00 <TLS version> <premaster secret>."
