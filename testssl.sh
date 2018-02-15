@@ -114,8 +114,9 @@ egrep -q "dev|rc" <<< "$VERSION" && \
 
 readonly PROG_NAME="$(basename "$0")"
 readonly RUN_DIR="$(dirname "$0")"
-TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # if you run testssl.sh from a different path you can set either TESTSSL_INSTALL_DIR
-CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # or CA_BUNDLES_PATH to find the CA BUNDLES. TESTSSL_INSTALL_DIR helps you to find the RFC mapping also
+TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # If you run testssl.sh and it doesn't find it neccessary file automagically set TESTSSL_INSTALL_DIR
+CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # You can have your stores some place else
+ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES:-""}"  # single file with a CA in PEM format or comma separated lists of them
 CIPHERS_BY_STRENGTH_FILE=""
 TLS_DATA_FILE=""                                  # mandatory file for socket-based handdhakes
 OPENSSL_LOCATION=""
@@ -5827,12 +5828,13 @@ determine_trust() {
                return 1
           fi
           debugme printf -- " %-12s" "${certificate_file[i]}"
-          # set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
+          # Set SSL_CERT_DIR to /dev/null so that $OPENSSL verify will only use certificates in $bundle_fname
+          # in a subshell because that should be valid here only
           (export SSL_CERT_DIR="/dev/null"; export SSL_CERT_FILE="/dev/null"
           if [[ $certificates_provided -ge 2 ]]; then
-               $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+               $OPENSSL verify -purpose sslserver -CAfile <(cat $ADDITIONAL_CA_FILES "$bundle_fname") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
           else
-               $OPENSSL verify -purpose sslserver -CAfile "$bundle_fname" $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+               $OPENSSL verify -purpose sslserver -CAfile <(cat $ADDITIONAL_CA_FILES "$bundle_fname") $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
           fi)
           verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1 $TEMPDIR/${certificate_file[i]}.2)
           [[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
@@ -14571,7 +14573,7 @@ check_bsd_mount() {
           elif mount | grep '/dev/fd' | grep -q fdescfs; then
                :
           else
-               fatal "You need to mount fdescfs on FreeBSD: \"mount -t fdescfs fdesc /dev/fd\"" -3
+               fatal "You need to mount fdescfs on FreeBSD: \"mount -t fdescfs fdesc /dev/fd\"" -10
           fi
      fi
 }
@@ -14606,6 +14608,7 @@ help() {
                                    Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch".
                                    Alternatively: nmap output in greppable format (-oG) (1x port per line allowed)
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
+     --add-ca <cafile>             <cafile> or a comma separated list of CA files will be added during runtime to all CA stores
 
 single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
@@ -16336,7 +16339,7 @@ parse_cmd_line() {
                     prepare_debug
                     mybanner
                     exit 0
-                    ;;
+                   ;;
                --mx)
                     do_mx_all_ips=true
                     PORT=25
@@ -16509,6 +16512,10 @@ parse_cmd_line() {
                     do_allciphers=false
                     do_cipher_per_proto=true
                     do_grease=true
+                    ;;
+               --add-ca|--add-CA|--add-ca=*|--add-CA=*)
+                    ADDITIONAL_CA_FILES="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
                     ;;
                --devel) ### this development feature will soon disappear
                     HEX_CIPHER="$TLS12_CIPHER"
@@ -16747,6 +16754,11 @@ parse_cmd_line() {
           [[ -n "$2" ]] && fatal "URI comes last" "1"
      fi
      [[ $CMDLINE_IP == "one" ]] && "$NODNS" && fatal "\"--ip=one\" and \"--nodns\" doesn't work together"
+     ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES//,/ }"
+     for fname in $ADDITIONAL_CA_FILES; do
+          [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" -2
+          grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" -2
+     done
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
      # if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
