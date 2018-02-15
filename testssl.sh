@@ -4687,6 +4687,11 @@ run_protocols() {
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
                          drafts_offered+="draft 23"
                     fi
+                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 18"
+                    if [[ $? -eq 0 ]]; then
+                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
+                         drafts_offered+="draft 24"
+                    fi
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 03, 04"
                     if [[ $? -eq 0 ]]; then
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
@@ -10806,11 +10811,13 @@ generate_key_share_extension() {
 # ARG4: (optional) additional request extensions
 # ARG5: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
 # ARG6: (optional): "false" if socksend_tls_clienthello() should not open a new socket
+# ARG7: (optional): "true" if this is a second ClientHello that follows receipt of a HelloRetryRequest
 socksend_tls_clienthello() {
      local tls_low_byte="$1" tls_legacy_version="$1"
      local process_full="$3"
-     local new_socket=true
-     local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301 -- except: SSLv3
+     local new_socket=true is_second_clienthello=false
+     local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301
+                                           # -- except: SSLv3 and second ClientHello after HelloRetryRequest
      local servername_hexstr len_servername len_servername_hex
      local hexdump_format_str part1 part2
      local all_extensions=""
@@ -10829,6 +10836,7 @@ socksend_tls_clienthello() {
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
      [[ "$5" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
      [[ "$6" == "false" ]] && new_socket=false
+     [[ "$7" == "true" ]] && is_second_clienthello=true
 
      cipher_suites="$2"                      # we don't have the leading \x here so string length is two byte less, see next
      len_ciph_suites_byte=${#cipher_suites}
@@ -11001,7 +11009,7 @@ socksend_tls_clienthello() {
                          # draft versions of TLSv1.3. Eventually it should only adversize
                          # support for the final version (0304).
                          if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
-                              extension_supported_versions+=", 7f, 17"
+                              extension_supported_versions+=", 03, 04, 7f, 18, 7f, 17"
                          else
                               extension_supported_versions+=", 7f, 16, 7f, 15, 7f, 14, 7f, 13, 7f, 12"
                          fi
@@ -11010,9 +11018,9 @@ socksend_tls_clienthello() {
                     fi
                done
                [[ -n "$all_extensions" ]] && all_extensions+=","
-               # FIXME: Adjust the lengths ("+11" and "+9") when the draft versions of TLSv1.3 are removed.
+               # FIXME: Adjust the lengths ("+7" and "+6") when the draft versions of TLSv1.3 are removed.
                if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
-                    all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+3))), $(printf "%02x" $((2*0x$tls_low_byte+2)))$extension_supported_versions"
+                    all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+7))), $(printf "%02x" $((2*0x$tls_low_byte+6)))$extension_supported_versions"
                else
                     all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+11))), $(printf "%02x" $((2*0x$tls_low_byte+10)))$extension_supported_versions"
                fi
@@ -11126,8 +11134,10 @@ socksend_tls_clienthello() {
      len_all_word="$LEN_STR"
      #[[ $DEBUG -ge 3 ]] && echo $len_all_word
 
-     # if we have SSLv3, the first occurence of TLS protocol -- record layer -- is SSLv3, otherwise TLS 1.0
+     # if we have SSLv3, the first occurence of TLS protocol -- record layer -- is SSLv3, otherwise TLS 1.0,
+     # except in the case of a second ClientHello in TLS 1.3, in which case it is TLS 1.2.
      [[ $tls_low_byte == "00" ]] && tls_word_reclayer="03, 00"
+     "$is_second_clienthello" && tls_word_reclayer="03, 03"
 
      [[ 0x$tls_legacy_version -ge 0x04 ]] && tls_legacy_version="03"
 
@@ -11387,7 +11397,12 @@ resend_if_hello_retry_request() {
          socksend ", x14, x03, x03 ,x00, x01, x01" 0
      fi
      debugme echo -en "\nsending second client hello... "
-     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false"
+     # Starting with TLSv1.3 draft 24, the second ClientHello should specify a record layer version of 0x0303
+     if [[ "$server_version" == "0304" ]] || [[ 0x$server_version -ge 0x7f18 ]]; then
+          socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false" "true"
+     else
+          socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false"
+     fi
      if [[ $? -ne 0 ]]; then
           debugme echo "stuck on sending: $ret"
           return 6
@@ -15555,7 +15570,7 @@ determine_optimal_proto() {
      # sent.
      if [[ -z "$1" ]]; then
           KEY_SHARE_EXTN_NR="33"
-          tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f,17"
+          tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 07, 06, 03,04, 7f,18, 7f,17"
           if [[ $? -eq 0 ]]; then
                add_tls_offered tls1_3 yes
           else
