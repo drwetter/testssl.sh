@@ -10965,7 +10965,7 @@ socksend_tls_clienthello() {
           # the provided values for those extensions.
           extra_extensions="$(tolower "$4")"
           code2network "$extra_extensions"
-          len_all=${#extra_extensions}
+          len_all=${#NW_STR}
           for (( i=0; i < len_all; i=i+16+4*0x$len_extension_hex )); do
                part2=$i+4
                extn_type="${NW_STR:i:2}${NW_STR:part2:2}"
