@@ -1300,7 +1300,7 @@ s_client_options() {
      local options="$1"
 
      # Don't include the -servername option for an SSLv2 or SSLv3 ClientHello.
-     [[ -n "$SNI" ]] && [[ " $options " =~ \ -ssl[2|3]\  ]] && options="$(sed "s/$SNI//" <<< "$options")"
+     [[ -n "$SNI" ]] && ( [[ " $options " =~ \ -ssl2\  ]] || [[ " $options " =~ \ -ssl3\  ]] )  && options="$(sed "s/$SNI//" <<< "$options")"
 
      # The server_name extension should not be included in the ClientHello unless
      # the -servername option is provided. However, OpenSSL 1.1.1 will include the
