@@ -140,13 +140,23 @@ else
 fi
 readonly SYSTEM=$(uname -s)
 SYSTEM2=""                                             # currently only being used for WSL = bash on windows
-date -d @735275209 >/dev/null 2>&1 && \
-     readonly HAS_GNUDATE=true || \
-     readonly HAS_GNUDATE=false
+
+HAS_GNUDATE=false
+HAS_FREEBSDDATE=false
+HAS_OPENBSDDATE=false
+
+if date -d @735275209 >/dev/null 2>&1; then
+     if date -r @735275209  >/dev/null 2>&1; then
+          # it can't do any conversion from a plain date output
+	     HAS_OPENBSDDATE=true
+     else
+          HAS_GNUDATE=true
+     fi
+fi
 # FreeBSD and OS X date(1) accept "-f inputformat"
 date -j -f '%s' 1234567 >/dev/null 2>&1 && \
-     readonly HAS_FREEBSDDATE=true || \
-     readonly HAS_FREEBSDDATE=false
+     HAS_FREEBSDDATE=true
+
 echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      readonly HAS_SED_E=true || \
      readonly HAS_SED_E=false
@@ -1347,6 +1357,11 @@ if "$HAS_GNUDATE"; then  # Linux and NetBSD
 elif "$HAS_FREEBSDDATE"; then # FreeBSD and OS X
      parse_date() {
           LC_ALL=C date -j -f "$3" "$2" "$1"
+     }
+elif "$HAS_OPENBSDDATE"; then
+     parse_date() {
+          # we just echo it as a conversion as we want it is not possible
+          echo "$1"
      }
 else
      parse_date() {
@@ -5810,7 +5825,7 @@ determine_trust() {
      [[ -n $json_postfix ]] && spaces="                                "
 
      case $OSSL_VER_MAJOR.$OSSL_VER_MINOR in
-          1.0.2|1.1.0|1.1.1|2.3.*|2.2.*|2.1.*)                # 2.x is LibreSSL. 2.1.1 was tested to work, below is not sure
+          1.0.2|1.1.0|1.1.1|2.[1-9].*)                # 2.x is LibreSSL. 2.1.1 was tested to work, below is not sure
               :
           ;;
           *)   addtl_warning="Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust"
@@ -7051,15 +7066,18 @@ certificate_info() {
      enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
      startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
 
-     days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
-     days2expire=$((days2expire  / 3600 / 24 ))
-
-     # we adjust the thresholds by %50 for LE certificates, relaxing those warnings
-     if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then
-          days2warn2=$((days2warn2 / 2))
-          days2warn1=$((days2warn1 / 2))
+     if "$HAS_OPENBSDDATE"; then
+          # best we are able to do under OpenBSD
+          days2expire=""
+     else
+          days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
+          days2expire=$((days2expire  / 3600 / 24 ))
+          # we adjust the thresholds by %50 for LE certificates, relaxing those warnings
+          if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then
+                 days2warn2=$((days2warn2 / 2))
+                 days2warn1=$((days2warn1 / 2))
+          fi
      fi
-
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! grep -qw not <<< "$expire" ; then
           pr_svrty_critical "expired"
@@ -14780,6 +14798,7 @@ TERM_WIDTH: $TERM_WIDTH
 INTERACTIVE: $INTERACTIVE
 HAS_GNUDATE: $HAS_GNUDATE
 HAS_FREEBSDDATE: $HAS_FREEBSDDATE
+HAS_OPENBSDDATE: $HAS_OPENBSDDATE
 HAS_SED_E: $HAS_SED_E
 
 SHOW_EACH_C: $SHOW_EACH_C
@@ -16810,7 +16829,7 @@ stopwatch() {
 
      "$MEASURE_TIME" || return
      new_delta=$(( $(date +%s) - LAST_TIME ))
-     printf "%${column}s" "$new_delta"
+     printf "%${column}s" "$1: $new_delta"
      [[ -e "$MEASURE_TIME_FILE" ]] && echo "$1 : $new_delta " >> "$MEASURE_TIME_FILE"
      LAST_TIME=$(( new_delta + LAST_TIME ))
 }
@@ -16922,7 +16941,7 @@ lets_roll() {
      SCAN_TIME=$(( END_TIME - START_TIME ))
      datebanner " Done"
 
-     "$MEASURE_TIME" && printf "%${COLUMNS}s\n" "$SCAN_TIME"
+     "$MEASURE_TIME" && printf "$1: %${COLUMNS}s\n" "$SCAN_TIME"
      [[ -e "$MEASURE_TIME_FILE" ]] && echo "Total : $SCAN_TIME " >> "$MEASURE_TIME_FILE"
 
      return $ret
