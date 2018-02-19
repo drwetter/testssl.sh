@@ -11,9 +11,9 @@ cryptographic flaws.
 #### Key features
 
 * Clear output: you can tell easily whether anything is good or bad
-* Ease of installation: It works for Linux, Darwin, FreeBSD, NetBSD and
-  MSYS2/Cygwin out of the box: no need to install or configure something,
-  no gems, CPAN, pip or the like.
+* Ease of installation: It works for Linux, OSX/Darwin, FreeBSD, NetBSD,
+  OpenBSD (needs bash) and MSYS2/Cygwin out of the box: no need to install
+  or to configure something.  No gems, CPAN, pip or the like/
 * Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not
   only webservers at port 443
 * Toolbox: Several command line options help you to run YOUR test and
@@ -32,29 +32,34 @@ You can download testssl.sh by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
-Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl.sh/archive/2.9dev.zip. Then ``testssl.sh --help`` will give you some help upfront. More help: see doc directory. Older sample runs are at https://testssl.sh/.
+Or help yourself downloading the ZIP archive
+https://github.com/drwetter/testssl.sh/archive/2.9dev.zip.  ``testssl.sh --help``
+will give you some help upfront.  More help: see doc directory with
+man pages. Older sample runs are at https://testssl.sh/.
 
 
 #### Status
 
 Here in the _2.9dev branch you find the development version_ of the software
 -- with new features and maybe some bugs -- albeit we try our best before
-committing to test changes. For the previous stable version please see
-[testssl.sh](https://testssl.sh/ "Go to the site with the stable version")
-or download 2.8 from here. This project also release an interim release
-[2.9.5](https://github.com/drwetter/testssl.sh/tree/2.9.5) which is
-is the successor of 2.8 and stable enough for day-to-day work.
+committing to test changes. Be aware that we also change the output or command
+line.
+
+For the previous stable version please see [testssl.sh](https://testssl.sh/
+"Go to the site with the stable version") or
+download  the interim release 2.9.5 from here [2.9.5](https://github.com/drwetter/testssl.sh/tree/2.9.5) which is is the
+successor of 2.8 and stable for day-to-day work.
 
 #### Compatibility
 
-testssl.sh is working on every Linux/BSD distribution out of the box. In 2.9dev most
-of the limitations of disabled features from the openssl client are gone due to bash-socket-based
-checks. As a result you can also use e.g. LibreSSL.
-testssl.sh also works on otherunixoid system out of the box, supposed they have
-`/bin/bash` and standard tools like sed and awk installed. System V needs to have GNU
-grep installed. MacOS X and Windows (using MSYS2 or cygwin) work too. OpenSSL
-version  version >= 1.0.2 is recommended for better LOGJAM checks and to
-display bit strengths for key exchanges.
+testssl.sh is working on every Linux/BSD distribution out of the box. Since 2.9dev
+most of the limitations of disabled features from the openssl client are gone
+due to bash-socket-based checks. As a result you can also use e.g. LibreSSL.
+testssl.sh also works on other unixoid system out of the box, supposed they have
+`/bin/bash` >= version 3.2 and standard tools like sed and awk installed.
+System V needs to have GNU grep installed. MacOS X and Windows (using MSYS2 or
+cygwin) work too. OpenSSL version  version >= 1.0.2 is recommended for better
+LOGJAM checks and to display bit strengths for key exchanges.
 
 Update notification here or @ [twitter](https://twitter.com/drwetter).
 
@@ -86,12 +91,19 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * TLS Robustness check (GREASE)
 * Postgres und MySQL STARTTLS support, MongoDB support
 * Decodes BIG IP F5 Cookie
-* Better OpenBSD, better LibreSSL support
+* Fully OpenBSD and LibreSSL support
 * Missing SAN warning
 * Man page
 * Better error msg suppression (not fully installed OpenSSL)
 * DNS over Proxy and other proxy improvements
-* TLS 1.3 support
+* Better JSON output: renamed IDs and findings shorter/better parsable
+* JSON output now valid also for non-responsing servers
+* Added support for private CAs
+* Exit code now 0 for running without error
+* ROBOT check
+* Better extension support
+* Better OpenSSL 1.1.1 support
+* Supports latest and greatest version of TLS 1.3, shows drafts supported
 
 #### Further features planned in 2.9dev
 
