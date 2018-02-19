@@ -5,6 +5,7 @@
 
 [ -z "$BASH_VERSINFO" ] && printf "\n\033[1;35m Please make sure you're using \"bash\"! Bye...\033[m\n\n" >&2 && exit 245
 [ $(kill -l | grep -c SIG) -eq 0 ] && printf "\n\033[1;35m Please make sure you're calling me without leading \"sh\"! Bye...\033[m\n\n"  >&2 && exit 245
+[ ${BASH_VERSINFO[0]} -le 3 -a ${BASH_VERSINFO[1]} -le 1 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit 245
 
 # testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some
 # vulnerabilities or features
@@ -137,13 +138,23 @@ else
 fi
 readonly SYSTEM=$(uname -s)
 SYSTEM2=""                                             # currently only being used for WSL = bash on windows
-date -d @735275209 >/dev/null 2>&1 && \
-     readonly HAS_GNUDATE=true || \
-     readonly HAS_GNUDATE=false
+
+HAS_GNUDATE=false
+HAS_FREEBSDDATE=false
+HAS_OPENBSDDATE=false
+
+if date -d @735275209 >/dev/null 2>&1; then
+     if date -r @735275209  >/dev/null 2>&1; then
+          # it can't do any conversion from a plain date output
+	     HAS_OPENBSDDATE=true
+     else
+          HAS_GNUDATE=true
+     fi
+fi
 # FreeBSD and OS X date(1) accept "-f inputformat"
 date -j -f '%s' 1234567 >/dev/null 2>&1 && \
-     readonly HAS_FREEBSDDATE=true || \
-     readonly HAS_FREEBSDDATE=false
+     HAS_FREEBSDDATE=true
+
 echo A | sed -E 's/A//' >/dev/null 2>&1 && \
      readonly HAS_SED_E=true || \
      readonly HAS_SED_E=false
@@ -1240,6 +1251,11 @@ elif "$HAS_FREEBSDDATE"; then # FreeBSD and OS X
 	parse_date() {
 		LC_ALL=C date -j -f "$3"  "$2" "$1"
 	}
+elif "$HAS_OPENBSDDATE"; then
+     parse_date() {
+          # we just echo it as a conversion is not possible
+          echo "$1"
+}
 else
 	parse_date() {
 		LC_ALL=C date -j "$2" "$1"
@@ -1300,7 +1316,7 @@ s_client_options() {
      local options="$1"
 
      # Don't include the -servername option for an SSLv2 or SSLv3 ClientHello.
-     [[ -n "$SNI" ]] && ( [[ " $options " =~ \ -ssl2\  ]] || [[ " $options " =~ \ -ssl3\  ]] )  && options="$(sed "s/$SNI//" <<< "$options")"
+     [[ -n "$SNI" ]] && [[ " $options " =~ \ -ssl[2|3]\  ]] && options="$(sed "s/$SNI//" <<< "$options")"
 
      # The server_name extension should not be included in the ClientHello unless
      # the -servername option is provided. However, OpenSSL 1.1.1 will include the
@@ -5093,12 +5109,14 @@ determine_trust() {
      # and the output should should be indented by two more spaces.
      [[ -n $json_prefix ]] && spaces="                                "
 
-     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.0.2" ]] && \
-          [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0" ]] && \
-          [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1" ]]; then
-          addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
-          fileout "${json_prefix}chain_of_trust_Problem" "WARN" "$addtl_warning"
-     fi
+     case $OSSL_VER_MAJOR.$OSSL_VER_MINOR in
+          1.0.2|1.1.0|1.1.1|2.[1-9].*)
+               :              # 2.x is LibreSSL. 2.1.1 was tested to work, below is not sure
+          ;;
+          *)   addtl_warning="(Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust)"
+               fileout "${json_prefix}chain_of_trust_Problem" "WARN" "$addtl_warning"
+               ;;
+     esac
      debugme tmln_out
 
      # if you run testssl.sh from a different path /you can set either TESTSSL_INSTALL_DIR or CA_BUNDLES_PATH to find the CA BUNDLES
@@ -6198,14 +6216,19 @@ certificate_info() {
 
      enddate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -enddate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M" "%b %d %T %Y %Z")
      startdate=$(parse_date "$($OPENSSL x509 -in $HOSTCERT -noout -startdate 2>>$ERRFILE | cut -d= -f 2)" +"%F %H:%M" "%b %d %T %Y %Z")
-     days2expire=$(( $(parse_date "$enddate" "+%s" "%F %H:%M %z") - $(LC_ALL=C date "+%s") ))    # in seconds
-     days2expire=$((days2expire  / 3600 / 24 ))
 
-     if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then          # we take the half of the thresholds for LE certificates
-          days2warn2=$((days2warn2 / 2))
-          days2warn1=$((days2warn1 / 2))
+     if "$HAS_OPENBSDDATE"; then
+          # best we are able to do under OpenBSD
+          days2expire=""
+     else
+          days2expire=$(( $(parse_date "$enddate" "+%s" "%F %H:%M %z") - $(LC_ALL=C date "+%s") ))    # in seconds
+          days2expire=$((days2expire  / 3600 / 24 ))
+
+          if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then          # we take the half of the thresholds for LE certificates
+               days2warn2=$((days2warn2 / 2))
+               days2warn1=$((days2warn1 / 2))
+          fi
      fi
-
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! grep -qw not <<< "$expire" ; then
           pr_svrty_critical "expired!"
@@ -11658,6 +11681,7 @@ TERM_WIDTH: $TERM_WIDTH
 INTERACTIVE: $INTERACTIVE
 HAS_GNUDATE: $HAS_GNUDATE
 HAS_FREEBSDDATE: $HAS_FREEBSDDATE
+HAS_OPENBSDDATE: $HAS_OPENBSDDATE
 HAS_SED_E: $HAS_SED_E
 
 SHOW_EACH_C: $SHOW_EACH_C
@@ -13678,7 +13702,7 @@ lets_roll() {
      SCAN_TIME=$(( END_TIME - START_TIME ))
      datebanner " Done"
 
-     "$MEASURE_TIME" && printf "%${COLUMNS}s\n" "$SCAN_TIME"
+     "$MEASURE_TIME" && printf "$1: %${COLUMNS}s\n" "$SCAN_TIME"
      [[ -e "$MEASURE_TIME_FILE" ]] && echo "Total : $SCAN_TIME " >> "$MEASURE_TIME_FILE"
 
      return $ret
