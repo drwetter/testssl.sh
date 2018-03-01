@@ -379,6 +379,7 @@ set_severity_level() {
    elif [[ "$severity" == "CRITICAL" ]]; then
            SEVERITY_LEVEL=$CRITICAL
    else
+        # WARN will always be logged
         echo "Supported severity levels are LOW, MEDIUM, HIGH, CRITICAL!"
         help 1
    fi
@@ -388,12 +389,12 @@ show_finding() {
    local severity=$1
 
    ( [[ "$severity" == "DEBUG" ]] ) ||
-   ( [[ "$severity" == "WARN" ]] ) ||
    ( [[ "$severity" == "INFO" ]] && [[ $SEVERITY_LEVEL -le $INFO ]] ) ||
    ( [[ "$severity" == "OK" ]] && [[ $SEVERITY_LEVEL -le $OK ]] ) ||
    ( [[ "$severity" == "LOW" ]] && [[ $SEVERITY_LEVEL -le $LOW ]] ) ||
    ( [[ "$severity" == "MEDIUM" ]] && [[ $SEVERITY_LEVEL -le $MEDIUM ]] ) ||
    ( [[ "$severity" == "HIGH" ]] && [[ $SEVERITY_LEVEL -le $HIGH ]] ) ||
+   ( [[ "$severity" == "WARN" ]] ) ||
    ( [[ "$severity" == "CRITICAL" ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] )
 }
 
@@ -663,12 +664,21 @@ strip_quote() {
 
 fileout_json_footer() {
      if "$do_json"; then
-          # no scan time in --severity=low and above, also needed for Travis. Bit hackish...
-          [[ $SEVERITY_LEVEL -lt $LOW ]] && fileout_json_finding "scanTime" "INFO" "$SCAN_TIME" "" "" ""
+          if [[ "$SCAN_TIME" -eq 0 ]]; then
+               fileout_json_finding "scanTime" "WARN" "Scan interrupted" "" "" ""
+          elif [[ $SEVERITY_LEVEL -lt $LOW ]] ; then
+               # no scan time in --severity=low and above, also needed for Travis, hackish...
+               fileout_json_finding "scanTime" "INFO" $SCAN_TIME "" "" ""
+          fi
           printf "]\n" >> "$JSONFILE"
      fi
-     "$do_pretty_json" && echo -e "          ],
-          \"scanTime\"  : \"$SCAN_TIME\"\n}" >> "$JSONFILE"
+     if "$do_pretty_json"; then
+          if [[ "$SCAN_TIME" -eq 0 ]]; then
+               echo -e "          ],\n                    \"scanTime\"  : \"Scan interrupted\"\n}" >> "$JSONFILE"
+          else
+               echo -e "          ],\n                    \"scanTime\"  : ${SCAN_TIME}\n}" >> "$JSONFILE"
+          fi
+     fi
 }
 
 fileout_json_section() {
@@ -3154,8 +3164,7 @@ run_cipher_match(){
           stopwatch run_cipher_match
           fileout_section_footer true
           outln
-          END_TIME=$(date +%s)
-          SCAN_TIME=$(( END_TIME - START_TIME ))
+          calc_scantime
           datebanner " Done"
 
           "$MEASURE_TIME" && printf "%${COLUMNS}s\n" "$SCAN_TIME"
@@ -3167,6 +3176,7 @@ run_cipher_match(){
      tmpfile_handle $FUNCNAME.txt
      return 0       # this is a single test for a cipher
 }
+
 
 
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad)
@@ -14915,6 +14925,10 @@ EOF
      outln " (built: \"$OSSL_BUILD_DATE\", platform: \"$OSSL_VER_PLATFORM\")\n"
 }
 
+calc_scantime() {
+          END_TIME=$(date +%s)
+          SCAN_TIME=$(( END_TIME - START_TIME ))
+}
 
 cleanup() {
      # If parallel mass testing is being performed, then the child tests need
@@ -16940,8 +16954,7 @@ lets_roll() {
      fileout_section_footer true
 
      outln
-     END_TIME=$(date +%s)
-     SCAN_TIME=$(( END_TIME - START_TIME ))
+     calc_scantime
      datebanner " Done"
 
      "$MEASURE_TIME" && printf "$1: %${COLUMNS}s\n" "$SCAN_TIME"
