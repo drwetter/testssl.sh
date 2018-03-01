@@ -1851,12 +1851,9 @@ run_hpkp() {
                fileout "HPKP_multiple" "WARN" "Multiple HPKP headers $hpkp_headers. Using first header \'$first_hpkp_header\'"
           fi
 
-          # remove leading Public-Key-Pins*, any colons, double quotes and trailing spaces and taking the first -- whatever that is
-          sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' $TMPFILE | \
-               sed -e 's/;//g' -e 's/\"//g' -e 's/^ //' | head -1 > $TMPFILE.2
-          # BSD lacks -i, otherwise we would have done it inline
-          # now separate key value and other stuff per line:
-          tr ' ' '\n' < $TMPFILE.2 >$TMPFILE
+          # remove leading Public-Key-Pins* and convert it to mulitline arg
+          sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://'  $TMPFILE | tr ';' '\n' | sed -e 's/\"//g' -e 's/^ //' >$TMPFILE.2
+          mv $TMPFILE.2 $TMPFILE
 
           hpkp_nr_keys=$(grep -ac pin-sha $TMPFILE)
           if [[ $hpkp_nr_keys -eq 1 ]]; then
