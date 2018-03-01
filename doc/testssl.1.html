@@ -384,7 +384,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--hints</code>           This option is not in use yet. This option is meant to give hints how to fix a finding or at least a help to improve something. GIVE_HINTS is the environment variable for this.</p>
 
-<p><code>--severity &lt;severity></code>         For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the <code>severity</code> value specified. Allowed are <code>&lt;LOW|MEDIUM|HIGH|CRITICAL></code></p>
+<p><code>--severity &lt;severity></code>         For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the <code>severity</code> value specified. Allowed are <code>&lt;LOW|MEDIUM|HIGH|CRITICAL></code>. WARN is another severity level which translates to a client-side scanning error or problem. Implicitly you will see all WARN severities in a file.</p>
 
 <p><code>--append</code>                      Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file exit with an error. <code>--append</code> however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.</p>
 
@@ -539,11 +539,11 @@ to create the hashes for HPKP.</li>
 
 <h2 id="LIMITATION">LIMITATION</h2>
 
-<p>The Windows implementation is known to be slow.</p>
+<p>All native Windows platforms emulating Linux are known to be slow.</p>
 
 <h2 id="BUGS">BUGS</h2>
 
-<p>Known ones and interface for filing new ones: https://testssl.sh/bugs/ .</p>
+<p>Probably. Current known ones and interface for filing new ones: https://testssl.sh/bugs/ .</p>
 
 <h2 id="SEE-ALSO">SEE ALSO</h2>
 
@@ -552,7 +552,7 @@ to create the hashes for HPKP.</li>
 
   <ol class='man-decor man-foot man foot'>
     <li class='tl'></li>
-    <li class='tc'>February 2018</li>
+    <li class='tc'>March 2018</li>
     <li class='tr'>testssl(1)</li>
   </ol>
 

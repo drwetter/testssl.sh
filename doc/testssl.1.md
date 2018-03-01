@@ -305,7 +305,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--hints`			This option is not in use yet. This option is meant to give hints how to fix a finding or at least a help to improve something. GIVE_HINTS is the environment variable for this.
 
-`--severity <severity>`         For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the `severity` value specified. Allowed are `<LOW|MEDIUM|HIGH|CRITICAL>`
+`--severity <severity>`         For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the `severity` value specified. Allowed are `<LOW|MEDIUM|HIGH|CRITICAL>`. WARN is another severity level which translates to a client-side scanning error or problem. Implicitly you will see all WARN severities in a file.
 
 `--append`                      Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file exit with an error. `--append` however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
 
@@ -465,12 +465,12 @@ Copyright © 2012 Dirk Wetter. License GPLv2: Free Software Foundation, Inc.
 
 ## LIMITATION
 
-The Windows implementation is known to be slow.
+All native Windows platforms emulating Linux are known to be slow.
 
 
 ## BUGS
 
-Known ones and interface for filing new ones: https://testssl.sh/bugs/ .
+Probably. Current known ones and interface for filing new ones: https://testssl.sh/bugs/ .
 
 
 ## SEE ALSO

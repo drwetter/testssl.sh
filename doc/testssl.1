@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "TESTSSL" "1" "February 2018" "" ""
+.TH "TESTSSL" "1" "March 2018" "" ""
 .
 .SH "NAME"
 \fBtestssl\fR
@@ -402,7 +402,7 @@ whole 9 yards
 \fB\-\-hints\fR This option is not in use yet\. This option is meant to give hints how to fix a finding or at least a help to improve something\. GIVE_HINTS is the environment variable for this\.
 .
 .P
-\fB\-\-severity <severity>\fR For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the \fBseverity\fR value specified\. Allowed are \fB<LOW|MEDIUM|HIGH|CRITICAL>\fR
+\fB\-\-severity <severity>\fR For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the \fBseverity\fR value specified\. Allowed are \fB<LOW|MEDIUM|HIGH|CRITICAL>\fR\. WARN is another severity level which translates to a client\-side scanning error or problem\. Implicitly you will see all WARN severities in a file\.
 .
 .P
 \fB\-\-append\fR Normally, if an output file already exists and it has a file size greater zero, testssl\.sh will prompt you to manually remove the file exit with an error\. \fB\-\-append\fR however will append to this file, without a header\. The environment variable APPEND does the same\. Be careful using this switch/variable\. A complementary option which overwrites an existing file doesn\'t exist per design\.
@@ -710,10 +710,10 @@ Developed by Dirk Wetter, David Cooper and many others, see https://github\.com/
 Copyright © 2012 Dirk Wetter\. License GPLv2: Free Software Foundation, Inc\. This is free software: you are free to change and redistribute it under the terms of the license\. Usage WITHOUT ANY WARRANTY\. USE at your OWN RISK!
 .
 .SH "LIMITATION"
-The Windows implementation is known to be slow\.
+All native Windows platforms emulating Linux are known to be slow\.
 .
 .SH "BUGS"
-Known ones and interface for filing new ones: https://testssl\.sh/bugs/ \.
+Probably\. Current known ones and interface for filing new ones: https://testssl\.sh/bugs/ \.
 .
 .SH "SEE ALSO"
 \fBciphers\fR(1), \fBopenssl\fR(1), \fBs_client\fR(1), \fBx509\fR(1), \fBverify\fR(1), \fBocsp\fR(1), \fBcrl\fR(1), \fBbash\fR(1) and the websites \fBhttps://testssl\.sh/\fR and \fBhttps://github\.com/drwetter/testssl\.sh/\fR \.
