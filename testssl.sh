@@ -682,6 +682,10 @@ fileout_json_print_parameter() {
 
 fileout_json_finding() {
      local target
+     local finding="$3"
+     local cve="$4"
+     local cwe="$5"
+     local hint="$6"
 
      if "$do_json"; then
           "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
@@ -804,6 +808,7 @@ fileout_insert_warning() {
 # ID, SEVERITY, FINDING, CVE, CWE, HINT
 fileout() {
      local severity="$2"
+     local cve="$4"
      local cwe="$5"
      local hint="$6"
 
