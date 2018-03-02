@@ -214,6 +214,7 @@ ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulati
 # tuning vars which cannot be set by a cmd line switch
 EXPERIMENTAL=${EXPERIMENTAL:-false}
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
+MAX_SOCKET_FAIL=${MAX_SOCKET_FAIL:-2}   # we allow this many failures for tcp sockets before we terminate
 MAX_WAITSOCK=${MAX_WAITSOCK:-10}        # waiting at max 10 seconds for socket reply. There shouldn't be any reason to change this.
 CCS_MAX_WAITSOCK=${CCS_MAX_WAITSOCK:-5} # for the two CCS payload (each). There shouldn't be any reason to change this.
 HEARTBLEED_MAX_WAITSOCK=${HEARTBLEED_MAX_WAITSOCK:-8}      # for the heartbleed payload. There shouldn't be any reason to change this.
@@ -254,6 +255,7 @@ GIVE_HINTS=false                        # give an addtional info to findings
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
 CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
 HAD_SLEPT=0
+NR_SOCKET_FAIL=0
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observerd @ facebook and others, old ones like h2-17 omitted as they could not be found
 readonly ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
@@ -731,6 +733,9 @@ fileout_json_print_parameter() {
 fileout_json_finding() {
      local target
      local finding="$3"            # FIXME: dealing with locals and globals in fileout()
+     local cve="$4"
+     local cwe="$5"
+     local hint="$6"
 
      if "$do_json"; then
           "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
@@ -838,6 +843,7 @@ fileout_insert_warning() {
 # ID, SEVERITY, FINDING, CVE, CWE, HINT
 fileout() {
      local severity="$2"
+     local cve="$4"
      local cwe="$5"
      local hint="$6"
 
@@ -8339,6 +8345,11 @@ fd_socket() {
                fi
           done
      elif ! exec 5<>/dev/tcp/$nodeip/$PORT; then  #  2>/dev/null would remove an error message, but disables debugging
+          ((NR_SOCKET_FAIL++))
+          if [[ $NR_SOCKET_FAIL -ge $MAX_SOCKET_FAIL ]]; then
+               [[ $MAX_SOCKET_FAIL -eq 1 ]] && fatal "TCP connect problem" -2
+               fatal "repeated TCP connect problems, doesn't make sense to continue" -2
+          fi
           outln
           pr_warning "Unable to open a socket to $NODEIP:$PORT. "
           # It can last ~2 minutes but for for those rare occasions we don't do a timeout handler here, KISS
