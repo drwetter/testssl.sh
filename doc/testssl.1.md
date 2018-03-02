@@ -370,6 +370,8 @@ Except the environment variables mentioned above which replace command line opti
 * CA_BUNDLES_PATH: If you have an own set of CA bundles or you want to point testssl.sh to a specific location of a CA bundle, you can use this variable to set the directory which testssl.sh will
 use. Please note that it overrides completely the builtin path of testssl.sh which means that you will only test against the bundles you point to. Also you might want to use ~/utils/create_ca_hashes.sh
 to create the hashes for HPKP.
+* MAX_SOCKET_FAIL: A number which tells testssl.sh how often a TCP socket connection may fail before the program gives up and terminates. The default is 2.
+
 
 [comment]: # CAPATH
 
