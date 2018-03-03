@@ -1828,7 +1828,6 @@ run_hpkp() {
      local spaces_indented="                  "
      local certificate_found=false
      local i
-     local hpkp_headers
      local first_hpkp_header
      local spki
      local ca_hashes="$TESTSSL_INSTALL_DIR/etc/ca_hashes.txt"
@@ -1837,29 +1836,36 @@ run_hpkp() {
           run_http_header "$1" || return 1
      fi
      pr_bold " Public Key Pinning           "
-     egrep -aiw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE >$TMPFILE
+     grep -aiw '^Public-Key-Pins' $HEADERFILE >$TMPFILE                    # TMPFILE includes report-only
      if [[ $? -eq 0 ]]; then
-          if egrep -aciw '^Public-Key-Pins|Public-Key-Pins-Report-Only' $HEADERFILE | egrep -waq "1" ; then
-               :
+          if [[ $(grep -aciw '^Public-Key-Pins:' $TMPFILE) -gt 1 ]]; then
+               pr_svrty_medium "Misconfiguration, multiple Public-Key-Pins headers"
+               outln ", taking first line"
+               fileout "HPKP_error" "MEDIUM" "multiple Public-Key-Pins in header"
+               first_hpkp_header="$(grep -aiw '^Public-Key-Pins:' $TMPFILE | head -1)"
+               # we only evaluate the keys here, unless they a not present
+               out "$spaces "
+          elif [[ $(grep -aciw '^Public-Key-Pins-Report-Only:' $TMPFILE) -gt 1 ]]; then
+               outln "Multiple HPKP headers (Report-Only), taking first line"
+               fileout "HPKP_notice" "INFO" "multiple Public-Key-Pins-Report-Only in header"
+               first_hpkp_header="$(grep -aiw '^Public-Key-Pins-Report-Only:' $TMPFILE | head -1)"
+               out "$spaces "
+          elif [[ $(egrep -aciw '^Public-Key-Pins:|^Public-Key-Pins-Report-Only:' $TMPFILE) -eq 2 ]]; then
+               outln "Public-Key-Pins + Public-Key-Pins-Report-Only detected. Continue with first one"
+               first_hpkp_header="$(grep -aiw '^Public-Key-Pins:' $TMPFILE)"
+               out "$spaces "
+          elif [[ $(grep -aciw '^Public-Key-Pins:' $TMPFILE) -eq 1 ]]; then
+               first_hpkp_header="$(grep -aiw '^Public-Key-Pins:' $TMPFILE)"
           else
-               hpkp_headers=""
-               pr_svrty_medium "misconfiguration, multiple HPKP headers: "
-               # https://scotthelme.co.uk is a candidate
-               #FIXME: should display both Public-Key-Pins+Public-Key-Pins-Report-Only --> egrep -ai -w
-               for i in $(newline_to_spaces "$(egrep -ai '^Public-Key-Pins' $HEADERFILE | awk -F':' '/Public-Key-Pins/ { print $1 }')"); do
-                    pr_italic $i
-                    hpkp_headers="$hpkp_headers$i "
-                    out " "
-               done
-               out "\n$spaces Examining first: "
-               first_hpkp_header=$(awk -F':' '/Public-Key-Pins/ { print $1 }' $HEADERFILE | head -1)
-               pr_italic "$first_hpkp_header, "
-               fileout "HPKP_multiple" "WARN" "Multiple HPKP headers $hpkp_headers. Using first header \'$first_hpkp_header\'"
+               outln "Public-Key-Pins-Only detected"
+               first_hpkp_header="$(grep -aiw '^Public-Key-Pins-Report-Only:' $TMPFILE)"
+               out "$spaces "
+               fileout "HPKP_SPKIs" "INFO" "Only Public-Key-Pins-Report-Only"
           fi
 
           # remove leading Public-Key-Pins* and convert it to mulitline arg
-          sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://'  $TMPFILE | tr ';' '\n' | sed -e 's/\"//g' -e 's/^ //' >$TMPFILE.2
-          mv $TMPFILE.2 $TMPFILE
+          sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' <<< "$first_hpkp_header" | \
+               tr ';' '\n' | sed -e 's/\"//g' -e 's/^ //' >$TMPFILE
 
           hpkp_nr_keys=$(grep -ac pin-sha $TMPFILE)
           if [[ $hpkp_nr_keys -eq 1 ]]; then
