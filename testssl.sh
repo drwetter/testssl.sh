@@ -10832,9 +10832,18 @@ generate_key_share_extension() {
                [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1"* ]] && \
                continue
 
+          # Versions of OpenSSL prior to 1.1.1 cannot perform operations
+          # with X448 keys, so don't include the X448 key share
+          # if the server's response needs to be decrypted and an
+          # older version of OpenSSL is being used.
+          [[ $i -gt 12 ]] && [[ $group -eq 30 ]] && [[ "$2" == "all" ]] && \
+               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1"* ]] && \
+               continue
+
           # NOTE: The public keys could be extracted from the private keys
-          # (TLS13_KEY_SHARES) using $OPENSSL, but only OpenSSL 1.1.0 can
-          # extract the public key from an X25519 private key.
+          # (TLS13_KEY_SHARES) using $OPENSSL, but only OpenSSL 1.1.0 and newer can
+          # extract the public key from an X25519 private key, and only
+          # OpenSSL 1.1.1 can extract the public key from an X448 private key.
           key_share="${TLS13_PUBLIC_KEY_SHARES[group]}"
           if [[ ${#key_share} -gt 4 ]]; then
                key_shares+=",$key_share"
@@ -10985,21 +10994,29 @@ socksend_tls_clienthello() {
           elif [[ 0x$tls_low_byte -gt 0x03 ]]; then
                # Supported Groups Extension
                if [[ "$process_full" != "all" ]] || \
-                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || \
                   [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see draft-ietf-tls-tls13
-                    00,0e, 00,0c,               # lengths
-                    00,1d, 00,17, 00,18, 00,19,
+                    00,10, 00,0e,               # lengths
+                    00,1d, 00,17, 00,1e, 00,18, 00,19,
                     01,00, 01,01"
-               else
-                    # OpenSSL prior to 1.1.0 does not support X25519, so list it as the least
+                    # OpenSSL prior to 1.1.1 does not support X448, so list it as the least
                     # preferred option if the response needs to be decrypted.
+               elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see draft-ietf-tls-tls13
-                    00,0e, 00,0c,               # lengths
+                    00,10, 00,0e,               # lengths
+                    00,1d, 00,17, 00,18, 00,19,
+                    01,00, 01,01, 00,1e"
+               else
+                    # OpenSSL prior to 1.1.0 does not support either X25519 or X448,
+                    # so list them as the least referred options if the response
+                    # needs to be decrypted.
+                    extension_supported_groups="
+                    00,0a,                      # Type: Supported Groups, see draft-ietf-tls-tls13
+                    00,10, 00,0e,               # lengths
                     00,17, 00,18, 00,19,
-                    01,00, 01,01, 00,1d"
+                    01,00, 01,01, 00,1d, 00,1e"
                fi
 
                code2network "$extension_supported_groups"
