@@ -5066,10 +5066,7 @@ read_dhtype_from_file() {
 
 # arg1: certificate file
 read_sigalg_from_file() {
-     local hostcert_txt="${1//pem/txt}"
-
-     [[ -r "$hostcert_txt" ]] || $OPENSSL x509 -noout -text -in "$1" 2>/dev/null >$hostcert_txt
-     awk -F':' '/Signature Algorithm/ { print $2; exit; }' $hostcert_txt
+     $OPENSSL x509 -noout -text -in "$1" 2>/dev/null | awk -F':' '/Signature Algorithm/ { print $2; exit; }'
 }
 
 
