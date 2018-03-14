@@ -4728,6 +4728,16 @@ run_protocols() {
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
                          drafts_offered+="draft 24"
                     fi
+                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 19"
+                    if [[ $? -eq 0 ]]; then
+                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
+                         drafts_offered+="draft 25"
+                    fi
+                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 1a"
+                    if [[ $? -eq 0 ]]; then
+                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
+                         drafts_offered+="draft 26"
+                    fi
                     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 03, 04"
                     if [[ $? -eq 0 ]]; then
                          [[ -n "$drafts_offered" ]] && drafts_offered+=", "
@@ -11069,7 +11079,7 @@ socksend_tls_clienthello() {
                          # draft versions of TLSv1.3. Eventually it should only adversize
                          # support for the final version (0304).
                          if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
-                              extension_supported_versions+=", 03, 04, 7f, 18, 7f, 17"
+                              extension_supported_versions+=", 03, 04, 7f, 1a, 7f, 19, 7f, 18, 7f, 17"
                          else
                               extension_supported_versions+=", 7f, 16, 7f, 15, 7f, 14, 7f, 13, 7f, 12"
                          fi
@@ -11080,7 +11090,7 @@ socksend_tls_clienthello() {
                [[ -n "$all_extensions" ]] && all_extensions+=","
                # FIXME: Adjust the lengths ("+7" and "+6") when the draft versions of TLSv1.3 are removed.
                if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
-                    all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+7))), $(printf "%02x" $((2*0x$tls_low_byte+6)))$extension_supported_versions"
+                    all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+11))), $(printf "%02x" $((2*0x$tls_low_byte+10)))$extension_supported_versions"
                else
                     all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+11))), $(printf "%02x" $((2*0x$tls_low_byte+10)))$extension_supported_versions"
                fi
@@ -15635,7 +15645,7 @@ determine_optimal_proto() {
      # sent.
      if [[ -z "$1" ]]; then
           KEY_SHARE_EXTN_NR="33"
-          tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 07, 06, 03,04, 7f,18, 7f,17"
+          tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0b, 0a, 03,04, 7f,1a, 7f,19, 7f,18, 7f,17"
           if [[ $? -eq 0 ]]; then
                add_tls_offered tls1_3 yes
           else
