@@ -5607,6 +5607,10 @@ cipher_pref_check() {
                out "\n    SSLv3:     "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
                continue
           fi
+          if [[ $p == tls1_3 ]] && ! "$HAS_TLS13" && ! "$using_sockets"; then
+               out "\n    TLSv1.3    "; pr_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\"";
+               continue
+          fi
 
           [[ $(has_server_protocol "$p") -eq 1 ]] && continue
 
