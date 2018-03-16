@@ -1,5 +1,5 @@
-      0x13,0x02 - TLS13-AES-256-GCM-SHA384       TLS_AES_256_GCM_SHA384                             TLSv1.3    Kx=any         Au=any     Enc=AESGCM(256)                Mac=AEAD               
-      0x13,0x03 - TLS13-CHACHA20-POLY1305-SHA256 TLS_CHACHA20_POLY1305_SHA256                       TLSv1.3    Kx=any         Au=any     Enc=ChaCha20(256)              Mac=AEAD               
+      0x13,0x02 - TLS_AES_256_GCM_SHA384         TLS_AES_256_GCM_SHA384                             TLSv1.3    Kx=any         Au=any     Enc=AESGCM(256)                Mac=AEAD               
+      0x13,0x03 - TLS_CHACHA20_POLY1305_SHA256   TLS_CHACHA20_POLY1305_SHA256                       TLSv1.3    Kx=any         Au=any     Enc=ChaCha20(256)              Mac=AEAD               
       0xCC,0x14 - ECDHE-ECDSA-CHACHA20-POLY1305-OLD  TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256_OLD  TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
       0xCC,0x13 - ECDHE-RSA-CHACHA20-POLY1305-OLD    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD    TLSv1.2    Kx=ECDH        Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
       0xCC,0x15 - DHE-RSA-CHACHA20-POLY1305-OLD      TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256_OLD      TLSv1.2    Kx=DH          Au=RSA     Enc=ChaCha20(256)              Mac=AEAD               
@@ -136,9 +136,9 @@
       0x16,0xB8 - -                              TLS_CECPQ1_ECDSA_WITH_CHACHA20_POLY1305_SHA256     TLSv1.2    Kx=CECPQ1      Au=ECDSA   Enc=ChaCha20(256)              Mac=AEAD               
       0x16,0xB9 - -                              TLS_CECPQ1_RSA_WITH_AES_256_GCM_SHA384             TLSv1.2    Kx=CECPQ1      Au=RSA     Enc=AESGCM(256)                Mac=AEAD               
       0x16,0xBA - -                              TLS_CECPQ1_ECDSA_WITH_AES_256_GCM_SHA384           TLSv1.2    Kx=CECPQ1      Au=ECDSA   Enc=AESGCM(256)                Mac=AEAD               
-      0x13,0x01 - TLS13-AES-128-GCM-SHA256       TLS_AES_128_GCM_SHA256                             TLSv1.3    Kx=any         Au=any     Enc=AESGCM(128)                Mac=AEAD               
-      0x13,0x04 - TLS13-AES-128-CCM-SHA256       TLS_AES_128_CCM_SHA256                             TLSv1.3    Kx=any         Au=any     Enc=AESCCM(128)                Mac=AEAD               
-      0x13,0x05 - TLS13-AES-128-CCM-8-SHA256     TLS_AES_128_CCM_8_SHA256                           TLSv1.3    Kx=any         Au=any     Enc=AESCCM8(128)               Mac=AEAD               
+      0x13,0x01 - TLS_AES_128_GCM_SHA256         TLS_AES_128_GCM_SHA256                             TLSv1.3    Kx=any         Au=any     Enc=AESGCM(128)                Mac=AEAD               
+      0x13,0x04 - TLS_AES_128_CCM_SHA256         TLS_AES_128_CCM_SHA256                             TLSv1.3    Kx=any         Au=any     Enc=AESCCM(128)                Mac=AEAD               
+      0x13,0x05 - TLS_AES_128_CCM_8_SHA256       TLS_AES_128_CCM_8_SHA256                           TLSv1.3    Kx=any         Au=any     Enc=AESCCM8(128)               Mac=AEAD               
       0xC0,0x2F - ECDHE-RSA-AES128-GCM-SHA256    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AESGCM(128)                Mac=AEAD               
       0xC0,0x2B - ECDHE-ECDSA-AES128-GCM-SHA256  TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256            TLSv1.2    Kx=ECDH        Au=ECDSA   Enc=AESGCM(128)                Mac=AEAD               
       0xC0,0x27 - ECDHE-RSA-AES128-SHA256        TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256              TLSv1.2    Kx=ECDH        Au=RSA     Enc=AES(128)                   Mac=SHA256             
