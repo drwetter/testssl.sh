@@ -8104,7 +8104,7 @@ run_alpn() {
                else
                     out ", "
                fi
-               # only h2 is what browser need to use HTTP/2.0 and brings a security benefit
+               # only h2 is what browser need to use HTTP/2.0 and brings a security,privacy and performance benefit
                if [[ "$proto" == "h2" ]]; then
                     pr_svrty_good "$proto"
                     fileout "${jsonID}_HTTP2" "OK" "$proto"
@@ -8116,7 +8116,8 @@ run_alpn() {
      done
      if $has_alpn_proto; then
           outln " (offered)"
-          fileout "$jsonID" "INFO" "$alpn_finding"
+          # if h2 is not the only protocol:
+          [[ -n "$alpn_finding" ]] && fileout "$jsonID" "INFO" "$alpn_finding"
      else
           outln "not offered"
           fileout "$jsonID" "INFO" "not offered"
