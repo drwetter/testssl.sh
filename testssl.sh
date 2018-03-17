@@ -12890,7 +12890,7 @@ run_logjam() {
      local dh_p=""
      local spaces="                                           "
      local vuln_exportdh_ciphers=false
-     local openssl_no_dhciphers=false
+     local openssl_no_expdhciphers=false
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local comment="" str=""
      local -i lineno_matched=0
@@ -12914,7 +12914,7 @@ run_logjam() {
                0)   prln_local_problem "$OPENSSL doesn't have any DH EXPORT ciphers configured"
                     fileout "$jsonID" "WARN" "Not tested. $OPENSSL doesn't support any DH EXPORT ciphers" "$cve" "$cwe"
                     out "$spaces"
-                    openssl_no_dhciphers=true
+                    openssl_no_expdhciphers=true
                     ;;
                1|2|3) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
                4)   ;;
@@ -13062,7 +13062,7 @@ run_logjam() {
                     out "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "$jsonID2" "INFO" "common prime \"$comment\" detected"
                fi
-               if ! "$openssl_no_dhciphers"; then
+               if ! "$openssl_no_expdhciphers"; then
                     outln ","
                     out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
                     fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
