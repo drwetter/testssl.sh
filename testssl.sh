@@ -12890,6 +12890,7 @@ run_logjam() {
      local dh_p=""
      local spaces="                                           "
      local vuln_exportdh_ciphers=false
+     local openssl_no_dhciphers=false
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local comment="" str=""
      local -i lineno_matched=0
@@ -12912,9 +12913,8 @@ run_logjam() {
           case $nr_supported_ciphers in
                0)   prln_local_problem "$OPENSSL doesn't have any DH EXPORT ciphers configured"
                     fileout "$jsonID" "WARN" "Not tested. $OPENSSL doesn't support any DH EXPORT ciphers" "$cve" "$cwe"
-                    # we could continue here testing common primes but the logjam test would be not complete and it'd be misleading
-                    #FIXME: with low priority this can be fixed
-                    return 1
+                    out "$spaces"
+                    openssl_no_dhciphers=true
                     ;;
                1|2|3) addtl_warning=" ($magenta""tested w/ $nr_supported_ciphers/4 ciphers only!$off)" ;;
                4)   ;;
@@ -13062,9 +13062,11 @@ run_logjam() {
                     out "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "$jsonID2" "INFO" "common prime \"$comment\" detected"
                fi
-               outln ","
-               out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
-               fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
+               if ! "$openssl_no_dhciphers"; then
+                    outln ","
+                    out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
+                    fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
+               fi
           elif [[ $subret -eq 3 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
