@@ -6369,7 +6369,7 @@ compare_server_name_to_cert() {
 
      # If the CN contains any characters that are not valid for a DNS name,
      # then assume it does not contain a DNS name.
-     [[ -n $(sed 's/^[\.a-zA-Z0-9*\-]*//' <<< "$cn") ]] && return $subret
+     [[ -n $(sed 's/^[_\.a-zA-Z0-9*\-]*//' <<< "$cn") ]] && return $subret
 
      # Check whether the CN in the certificate matches the servername
      [[ $(toupper "$cn") == "$servername" ]] && subret+=4 && return $subret
