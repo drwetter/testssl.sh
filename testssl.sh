@@ -14521,7 +14521,7 @@ find_openssl_binary() {
      ossl_wo_dev_info="${OSSL_VER%%-*}"
      OSSL_VER_MINOR="${ossl_wo_dev_info#$OSSL_VER_MAJOR\.}"
      OSSL_VER_MINOR="${OSSL_VER_MINOR%%[a-zA-Z]*}"
-     OSSL_VER_APPENDIX="${ossl_wo_dev_info#$OSSL_VER_MAJOR\.$OSSL_VER_MINOR}"
+     OSSL_VER_APPENDIX="${OSSL_VER#$OSSL_VER_MAJOR\.$OSSL_VER_MINOR}"
      OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
      OSSL_BUILD_DATE=$($OPENSSL version -a 2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
 
