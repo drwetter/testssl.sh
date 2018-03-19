@@ -6270,12 +6270,12 @@ is_wildcard()
 
      # Remove part of name preceding '*' or '.'. If no "*" appears in the
      # left-most label, then it is not a wildcard name (RFC 6125, Section 6.4.3).
-     basename="$(echo -n "$certname" | sed 's/^[a-zA-Z0-9\-]*//')"
+     basename="$(echo -n "$certname" | sed 's/^[_a-zA-Z0-9\-]*//')"
      [[ "${basename:0:1}" != "*" ]] && return 1 # not a wildcard name
 
      # Check that there are no additional wildcard ('*') characters or any
      # other characters that do not belong in a DNS name.
-     [[ -n $(echo -n "${basename:1}" | sed 's/^[\.a-zA-Z0-9\-]*//') ]] && return 1
+     [[ -n $(echo -n "${basename:1}" | sed 's/^[_\.a-zA-Z0-9\-]*//') ]] && return 1
      return 0
 }
 
@@ -6305,7 +6305,7 @@ wildcard_match()
      servername="$(toupper "$servername")"
 
      # Extract part of name that comes after the "*"
-     basename="$(echo -n "$certname" | sed 's/^[A-Z0-9\-]*\*//')"
+     basename="$(echo -n "$certname" | sed 's/^[_A-Z0-9\-]*\*//')"
      len_basename=${#basename}
      len_part1=$len_certname-$len_basename-1
      len_wildcard=$len_servername-$len_certname+1
@@ -6318,7 +6318,7 @@ wildcard_match()
 
      # Check that part of $servername that matches "*" is all part of a single
      # domain label.
-     [[ -n $(echo -n "${servername:len_part1:len_wildcard}" | sed 's/^[A-Z0-9\-]*//') ]] && return 1
+     [[ -n $(echo -n "${servername:len_part1:len_wildcard}" | sed 's/^[_A-Z0-9\-]*//') ]] && return 1
 
      return 0
 }
