@@ -1813,6 +1813,7 @@ run_hsts() {
      local hsts_age_sec
      local hsts_age_days
      local spaces="                              "
+     local jsonID="HSTS"
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 1
@@ -1829,34 +1830,34 @@ run_hsts() {
                hsts_age_days=-1
           fi
           if [[ $hsts_age_days -eq -1 ]]; then
-               pr_svrty_medium "HSTS max-age is required but missing. Setting 15552000 s (180 days) or more is recommended"
-               fileout "HSTS_time" "MEDIUM" "parameter max-age missing. Recommended > 15552000 seconds = 180 days"
+               pr_svrty_medium "misconfiguration: HSTS max-age (recommended > 15552000 seconds = 180 days ) is required but missing"
+               fileout "${jsonID}_time" "MEDIUM" "misconfiguration, parameter max-age (recommended > 15552000 seconds = 180 days) missing"
           elif [[ $hsts_age_sec -eq 0 ]]; then
-               pr_svrty_medium "HSTS max-age is set to 0. HSTS is disabled"
-               fileout "HSTS_time" "MEDIUM" "0. HSTS is disabled"
+               pr_svrty_low "HSTS max-age is set to 0. HSTS is disabled"
+               fileout "${jsonID}_time" "LOW" "0. HSTS is disabled"
           elif [[ $hsts_age_sec -gt $HSTS_MIN ]]; then
                pr_svrty_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
-               fileout "HSTS_time" "OK" "$hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN seconds"
+               fileout "${jsonID}_time" "OK" "$hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN seconds"
           else
                pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >=$HSTS_MIN seconds recommended)"
-               fileout "HSTS_time" "MEDIUM" "max-age too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN seconds"
+               fileout "${jsonID}_time" "MEDIUM" "max-age too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN seconds"
           fi
           if includeSubDomains "$TMPFILE"; then
-               fileout "HSTS_subdomains" "OK" "includes subdomains"
+               fileout "${jsonID}_subdomains" "OK" "includes subdomains"
           else
-               fileout "HSTS_subdomains" "INFO" "only for this domain"
+               fileout "${jsonID}_subdomains" "INFO" "only for this domain"
           fi
           if preload "$TMPFILE"; then
-               fileout "HSTS_preload" "OK" "domain IS marked for preloading"
+               fileout "${jsonID}_preload" "OK" "domain IS marked for preloading"
           else
-               fileout "HSTS_preload" "INFO" "domain is NOT marked for preloading"
+               fileout "${jsonID}_preload" "INFO" "domain is NOT marked for preloading"
                #FIXME: To be checked against preloading lists,
                # e.g. https://dxr.mozilla.org/mozilla-central/source/security/manager/boot/src/nsSTSPreloadList.inc
                #      https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
           fi
      else
-          out "--"
-          fileout "HSTS" "HIGH" "not offered"
+          pr_svrty_low "not offered"
+          fileout "$jsonID" "LOW" "not offered"
      fi
      outln
 
