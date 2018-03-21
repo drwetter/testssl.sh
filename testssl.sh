@@ -1036,7 +1036,9 @@ hex2dec() {
 # convert 414243 into ABC
 hex2ascii() {
           for (( i=0; i<${#1}; i+=2 )); do
-               printf "\x${1:$i:2}"
+               # 2>/dev/null added because 'warning: command substitution: ignored null byte in input'
+               # --> didn't help though
+               printf "\x${1:$i:2}" 2>/dev/null
           done
 }
 
@@ -4394,8 +4396,7 @@ run_protocols() {
      local key_share_extn_nr="$KEY_SHARE_EXTN_NR"
      local lines nr_ciphers_detected
      local tls13_ciphers_to_test=""
-     local drafts_offered=""
-     local debug_recomm=", rerun with DEBUG>=2"
+     local drafts_offered="" debug_recomm=""
      local -i ret=0 subret=0
      local jsonID="SSLv2"
 
@@ -4413,6 +4414,7 @@ run_protocols() {
           fi
      fi
      outln
+     [[ "$DEBUG" -le 1 ]] && debug_recomm=", rerun w DEBUG>=2 or --ssl-native"
 
      pr_bold " SSLv2      ";
      if ! "$SSL_NATIVE"; then
@@ -4439,9 +4441,11 @@ run_protocols() {
                     fileout "$jsonID" "OK" "not offered"
                     add_tls_offered ssl2 no
                     ;;
-               4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
-                    fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
-                    ((ret++))
+               4)   out "likely "; pr_svrty_best "not offered (OK), "
+                    fileout "$jsonID" "OK" "likely not offered"
+                    add_tls_offered ssl2 no
+                    pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
+                    fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                     ;;
                3)   lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
                     [[ "$DEBUG" -ge 2 ]] && tm_out "  ($lines lines)  "
@@ -4517,8 +4521,11 @@ run_protocols() {
                     fi
                fi
                ;;
-          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
-               fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+          4)   out "likely "; pr_svrty_best "not offered (OK), "
+               fileout "$jsonID" "OK" "not offered"
+               add_tls_offered ssl3 no
+               pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                ;;
           5)   pr_svrty_high "$supported_no_ciph1"               # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "HIGH" "$supported_no_ciph1"
@@ -4581,8 +4588,11 @@ run_protocols() {
                     fi
                fi
                ;;
-          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
-               fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+          4)   out "likely not offered, "
+               fileout "$jsonID" "INFO" "likely not offered"
+               add_tls_offered tls1 no
+               pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                ;;
           5)   outln "$supported_no_ciph1"                                 # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
@@ -4649,8 +4659,11 @@ run_protocols() {
                     fi
                fi
                ;;
-          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
-               fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+          4)   out "likely not offered, "
+               fileout "$jsonID" "INFO" "is not offered"
+               add_tls_offered tls1_1 no
+               pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                ;;
           5)   outln "$supported_no_ciph1"                       # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
@@ -4728,8 +4741,11 @@ run_protocols() {
                     fi
                fi
                ;;
-          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
-               fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+          4)   out "likely "; pr_svrty_medium "not offered, "
+               fileout "$jsonID" "MEDIUM" "not offered"
+               add_tls_offered tls1_2 no
+               pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                ;;
           5)   outln "$supported_no_ciph1"                  # protocol detected, but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
@@ -4873,8 +4889,11 @@ run_protocols() {
                fi
                add_tls_offered tls1_3 no
                ;;
-          4)   pr_fixme "signalled a 5xx after STARTTLS handshake"; outln "$debug_recomm"
-               fileout "$jsonID" "WARN" "received 5xx after STARTTLS handshake reply (rerun with DEBUG>=2)"
+          4)   out "likely not offered, "
+               fileout "$jsonID" "INFO" "not offered"
+               add_tls_offered tls1_3 no
+               pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
+               fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                ;;
           5)   outln "$supported_no_ciph1"             # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
@@ -9840,9 +9859,9 @@ parse_tls_serverhello() {
                tmln_out
           fi
 
-          if [[ $tls_content_type == "35" ]] && "$do_starttls"; then
-               # this could be a 500/5xx for some weird reason where the STARTTLS handshake failed
-               debugme echo "$(hex2ascii "$tls_hello_ascii")"
+          if "$do_starttls" && ( [[ $tls_content_type == 35 ]] || [[ $tls_content_type == 34 ]] ); then
+               # STARTTLS handshake failed and server replied plaintext with a 5xx or 4xx
+               [[ $DEBUG -ge 2 ]] && printf "%s\n" "$(hex2ascii "$tls_hello_ascii" 2>/dev/null)"
                [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
                return 4
           elif [[ $tls_content_type != "14" ]] && [[ $tls_content_type != "15" ]] && \
