@@ -13086,6 +13086,7 @@ initialize_globals() {
      do_tls_sockets=false
      do_client_simulation=false
      do_display_only=false
+     do_starttls=true
 }
 
 
