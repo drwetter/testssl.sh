@@ -1666,7 +1666,7 @@ run_hsts() {
           fi
      else
           out "--"
-          fileout "hsts" "HIGH" "No support for HTTP Strict Transport Security"
+          fileout "hsts" "INFO" "No support for HTTP Strict Transport Security"
      fi
      outln
 
