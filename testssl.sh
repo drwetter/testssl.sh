@@ -1855,7 +1855,7 @@ run_hsts() {
                #      https://chromium.googlesource.com/chromium/src/+/master/net/http/transport_security_state_static.json
           fi
      else
-          out "--"
+          pr_svrty_high "not offered"
           fileout "HSTS" "HIGH" "not offered"
      fi
      outln
@@ -2102,7 +2102,7 @@ run_hpkp() {
                fileout "HPKP_backup" "HIGH" "No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site."
           fi
      else
-          outln "--"
+          prln_svrty_good "not supported"
           fileout "HPKP" "INFO" "No support for HTTP Public Key Pinning"
      fi
 
@@ -2256,7 +2256,7 @@ run_appl_banner() {
      pr_bold " Application banner           "
      egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
-          outln "--"
+          prln_svrty_good "not found"
           fileout "$jsonID" "INFO" "No application banner found"
      else
           while IFS='' read -r line; do
@@ -2291,7 +2291,7 @@ run_rp_banner() {
      pr_bold " Reverse Proxy banner         "
      egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded|^Forwarded' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
-          outln "--"
+          prln_svrty_good "not found"
           fileout "$jsonID" "INFO" "--" "$cve" "$cwe"
      else
           while read line; do
@@ -2478,7 +2478,7 @@ run_more_flags() {
      #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall" or Access-Control-Allow-Origin: *
 
      if "$first"; then
-          prln_svrty_medium "--"
+          prln_svrty_medium "none found"
           fileout "security_headers" "MEDIUM" "--"
      fi
 
@@ -6521,7 +6521,7 @@ must_staple() {
                fileout "${jsonID}${json_postfix}" "HIGH" "extension detected but no OCSP stapling provided"
           fi
      else
-          outln "--"
+          prln_svrty_good "not supported"
           fileout "${jsonID}${json_postfix}" "INFO" "--"
      fi
      return 0
@@ -6869,7 +6869,7 @@ certificate_info() {
                outok=false
           fi
      else
-          outln "--"
+          prln_svrty_good "none"
           fileout "${jsonID}${json_postfix}" "INFO" "No server key usage information"
           outok=false
      fi
@@ -6889,7 +6889,7 @@ certificate_info() {
                outok=false
           fi
      else
-          outln "--"
+          prln_svrty_good "none"
           fileout "${jsonID}${json_postfix}" "INFO" "No server extended key usage information"
           outok=false
      fi
@@ -7245,8 +7245,8 @@ certificate_info() {
      # ~ get next 50 lines after pattern , strip until Signature Algorithm and retrieve URIs
      crl="$(awk '/X509v3 CRL Distribution/{i=50} i&&i--' <<< "$cert_txt" | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
      if [[ -z "$crl" ]] ; then
+          prln_svrty_good "none"
           fileout "${jsonID}${json_postfix}" "INFO" "--"
-          outln "--"
      else
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                outln "$crl"
@@ -7260,7 +7260,7 @@ certificate_info() {
      jsonID="cert_ocspURL"
      ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
      if [[ -z "$ocsp_uri" ]]; then
-          outln "--"
+          prln_svrty_good "none"
           fileout "${jsonID}${json_postfix}" "INFO" "--"
      else
           if [[ $(count_lines "$ocsp_uri") -eq 1 ]]; then
