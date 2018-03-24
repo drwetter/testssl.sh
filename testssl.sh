@@ -1724,25 +1724,32 @@ match_ipv4_httpheader() {
 
 run_http_date() {
      local now difftime
+     local spaces="                              "
      jsonID="HTTP_clock_skew"
 
      if [[ $SERVICE != "HTTP" ]] || "$CLIENT_AUTH"; then
           return 0
      fi
-
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 1
      fi
      pr_bold " HTTP clock skew              "
      if [[ -n "$HTTP_TIME" ]]; then
-          HTTP_TIME=$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE) # the trailing \r confuses BSD flavors otherwise
-
-          difftime=$((HTTP_TIME - NOW_TIME))
-          [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
-          # process was killed, so we need to add an error:
-          [[ $HAD_SLEPT -ne 0 ]] && difftime="$difftime (± 1.5)"
-          out "$difftime sec from localtime";
-          fileout "$jsonID" "INFO" "$difftime seconds from localtime"
+          HTTP_TIME="$(strip_lf "$HTTP_TIME")"
+          if "$HAS_OPENBSDDATE"; then
+               # we can't normalize the date under OpenBSD thus no substraction is possible
+               outln "remote: $HTTP_TIME"
+               out "${spaces}local:  $(date)"
+               fileout "$jsonID" "INFO" "$HTTP_TIME - $(date)"
+          else
+               HTTP_TIME="$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE)"
+               difftime=$((HTTP_TIME - NOW_TIME))
+               [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
+               # process was killed, so we need to add an error
+               [[ $HAD_SLEPT -ne 0 ]] && difftime="$difftime (± 1.5)"
+               out "$difftime sec from localtime";
+               fileout "$jsonID" "INFO" "$difftime seconds from localtime"
+          fi
      else
           out "Got no HTTP time, maybe try different URL?";
           fileout "$jsonID" "INFO" "Got no HTTP time, maybe try different URL?"
