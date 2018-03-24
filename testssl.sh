@@ -1535,6 +1535,7 @@ detect_ipv4() {
 
 run_http_date() {
      local now difftime
+     local  spaces="                              "
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 3        # this is just for the line "Testing HTTP header response"
@@ -1544,14 +1545,21 @@ run_http_date() {
           out "not tested as we're not targeting HTTP"
      else
           if [[ -n "$HTTP_TIME" ]]; then
-               HTTP_TIME=$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE) # the trailing \r confuses BSD flavors otherwise
-
-               difftime=$((HTTP_TIME - NOW_TIME))
-               [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
-               # process was killed, so we need to add an error:
-               [[ $HAD_SLEPT -ne 0 ]] && difftime="$difftime (± 1.5)"
-               out "$difftime sec from localtime";
-               fileout "http_clock_skew" "INFO" "HTTP clock skew $difftime sec from localtime"
+               HTTP_TIME="$(strip_lf "$HTTP_TIME")"
+               if "$HAS_OPENBSDDATE"; then
+                    # we can't normalize the date under OpenBSD thus no substraction is possible
+                    outln "remote: $HTTP_TIME"
+                    out "${spaces}local:  $(date)"
+                    fileout "$jsonID" "INFO" "$HTTP_TIME - $(date)"
+               else
+               HTTP_TIME=$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE)
+                    difftime=$((HTTP_TIME - NOW_TIME))
+                    [[ $difftime != "-"* ]] && [[ $difftime != "0" ]] && difftime="+$difftime"
+                    # process was killed, so we need to add an error:
+                    [[ $HAD_SLEPT -ne 0 ]] && difftime="$difftime (± 1.5)"
+                    out "$difftime sec from localtime";
+                    fileout "http_clock_skew" "INFO" "HTTP clock skew $difftime sec from localtime"
+               fi
           else
                out "Got no HTTP time, maybe try different URL?";
                fileout "http_clock_skew" "INFO" "HTTP clock skew not measured. Got no HTTP time, maybe try different URL?"
