@@ -3953,8 +3953,10 @@ client_simulation_sockets() {
 
      if [[ "${1:0:4}" == "1603" ]]; then
           clienthello="$(create_client_simulation_tls_clienthello "$1")"
+          TLS_CLIENT_HELLO="${clienthello:10}"
      else
           clienthello="$1"
+          TLS_CLIENT_HELLO=""
      fi
      len=${#clienthello}
      for (( i=0; i < len; i=i+2 )); do
