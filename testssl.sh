@@ -4885,7 +4885,7 @@ run_protocols() {
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
                fi
                if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
-                    [[ $DEBUG -eq 1 ]] && out " -- downgraded"
+                    [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
                     outln
                     fileout "$jsonID" "INFO" "not offered and downgraded to a weaker protocol"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
@@ -12575,7 +12575,7 @@ run_crime() {
 #              fi
 #         fi
 #    fi
-#    [[ $DEBUG -eq 2 ]] tmln_out "$STR"
+#    [[ $DEBUG -ge 2 ]] tmln_out "$STR"
      tmpfile_handle $FUNCNAME.txt
      return $ret
 }
@@ -12694,7 +12694,7 @@ run_sweet32() {
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $proto -cipher $sweet32_ciphers -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
-               [[ $DEBUG -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+               [[ $DEBUG -ge 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
                [[ $sclient_success -eq 0 ]] && break
           done
      fi
@@ -13946,7 +13946,7 @@ run_grease() {
      local alpn_proto alpn alpn_list_len_hex extn_len_hex
      local selected_alpn_protocol grease_selected_alpn_protocol
      local ciph list temp curve_found
-     local -i i j rnd alpn_list_len extn_len debug_level="$DEBUG"
+     local -i i j rnd alpn_list_len extn_len debug_level=""
      local -i ret=0
      # Note: The folowing values were taken from https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
      # These arrays may need to be updated if the values change in the final version of this document.
@@ -14008,6 +14008,7 @@ run_grease() {
      # most recent calls to tls_sockets even if tls_sockets is not successful. Setting $DEBUG to
      # a non-zero value ensures this. Setting it to 1 prevents any extra information from being
      # displayed.
+     debug_level="$DEBUG"
      [[ $DEBUG -eq 0 ]] && DEBUG=1
      debugme echo -e "\nSending ClientHello with non-existent ciphers."
      tls_sockets "$proto" "de,d0, de,d1, d3,d2, de,d3, 00,ff"
