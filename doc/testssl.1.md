@@ -371,6 +371,8 @@ Except the environment variables mentioned above which replace command line opti
 use. Please note that it overrides completely the builtin path of testssl.sh which means that you will only test against the bundles you point to. Also you might want to use ~/utils/create_ca_hashes.sh
 to create the hashes for HPKP.
 * MAX_SOCKET_FAIL: A number which tells testssl.sh how often a TCP socket connection may fail before the program gives up and terminates. The default is 2.
+* MAX_OSSL_FAIL: A number which tells testssl.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates. The default is 2.
+* MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3.
 
 
 [comment]: # CAPATH

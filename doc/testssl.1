@@ -507,6 +507,12 @@ CA_BUNDLES_PATH: If you have an own set of CA bundles or you want to point tests
 .IP "\(bu" 4
 MAX_SOCKET_FAIL: A number which tells testssl\.sh how often a TCP socket connection may fail before the program gives up and terminates\. The default is 2\.
 .
+.IP "\(bu" 4
+MAX_OSSL_FAIL: A number which tells testssl\.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates\. The default is 2\.
+.
+.IP "\(bu" 4
+MAX_HEADER_FAIL: A number which tells testssl\.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates\. The default is 3\.
+.
 .IP "" 0
 .
 .SH "EXAMPLES"
