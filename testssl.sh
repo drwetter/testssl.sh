@@ -216,6 +216,7 @@ EXPERIMENTAL=${EXPERIMENTAL:-false}
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 MAX_SOCKET_FAIL=${MAX_SOCKET_FAIL:-2}   # If this many failures for TCP socket connects are reached we terminate
 MAX_OSSL_FAIL=${MAX_OSSL_FAIL:-2}       # If this many failures for s_client connects are reached we terminate
+MAX_HEADER_FAIL=${MAX_HEADER_FAIL:-3}   # If this many failures for HTTP GET are encountered we terminate
 MAX_WAITSOCK=${MAX_WAITSOCK:-10}        # waiting at max 10 seconds for socket reply. There shouldn't be any reason to change this.
 CCS_MAX_WAITSOCK=${CCS_MAX_WAITSOCK:-5} # for the two CCS payload (each). There shouldn't be any reason to change this.
 HEARTBLEED_MAX_WAITSOCK=${HEARTBLEED_MAX_WAITSOCK:-8}      # for the heartbleed payload. There shouldn't be any reason to change this.
@@ -258,6 +259,7 @@ CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
 HAD_SLEPT=0
 NR_SOCKET_FAIL=0                        # Counter for socket failures
 NR_OSSL_FAIL=0                          # .. for OpenSSL connects
+NR_HEADER_FAIL=0                        # .. for HTTP_GET
 readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observerd @ facebook and others, old ones like h2-17 omitted as they could not be found
 readonly ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
@@ -1582,6 +1584,18 @@ service_detection() {
      return 0
 }
 
+# 1: counter variable
+# 2: threshold for this variable
+# 3: string for first occurence of problem
+# 4: string for repeated occurence of problem
+#
+connectivity_problem() {
+     if [[ $1 -ge $2 ]]; then
+          [[ $2 -eq 1 ]] && fatal "$3" -2
+          fatal "$4" -2
+     fi
+}
+
 
 #problems not handled: chunked
 run_http_header() {
@@ -1590,8 +1604,11 @@ run_http_header() {
      local url redirect
 
      HEADERFILE=$TEMPDIR/$NODEIP.http_header.txt
-     outln; pr_headlineln " Testing HTTP header response @ \"$URL_PATH\" "
-     outln
+     if [[ $NR_HEADER_FAIL -eq 0 ]]; then
+          # skip repeating this line if it's 2nd, 3rd,.. try
+          outln; pr_headlineln " Testing HTTP header response @ \"$URL_PATH\" "
+          outln
+     fi
 
      [[ -z "$1" ]] && url="/" || url="$1"
      printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
@@ -1610,14 +1627,24 @@ run_http_header() {
                NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           else
-               pr_warning " likely HTTP header requests failed (#lines: ${$(wc -l < "$HEADERFILE")// /}"
-               outln "Rerun with DEBUG=1 and inspect \"run_http_header.txt\"\n"
+               prln_warning " likely HTTP header requests failed (#lines: ${$(wc -l < "$HEADERFILE")// /}"
+               [[ "$DEBUG" -lt 1 ]] & outln "Rerun with DEBUG>=1 and inspect \"run_http_header.txt\"\n"
+               fileout "HTTP_status_code" "WARN" "HTTP header request failed"
                debugme cat $HEADERFILE
+               ((NR_HEADER_FAIL++))
+               connectivity_problem $NR_HEADER_FAIL $MAX_HEADER_FAIL "HTTP header connect problem" "repeated HTTP header connect problems, doesn't make sense to continue"
                return 1
           fi
      fi
-     # populate vars for HTTP time
+     if [[ ! -s $HEADERFILE ]]; then
+          prln_warning " HTTP header reply empty"
+          fileout "HTTP_status_code" "WARN" "HTTP header reply empty"
+          ((NR_HEADER_FAIL++))
+          connectivity_problem $NR_HEADER_FAIL $MAX_HEADER_FAIL "HTTP header zero" "repeatedly HTTP header was zero, doesn't make sense to continue"
+          return 1
+     fi
 
+     # populate vars for HTTP time
      debugme echo "$NOW_TIME: $HTTP_TIME"
 
      # delete from pattern til the end. We ignore any leading spaces (e.g. www.amazon.de)
@@ -4174,6 +4201,12 @@ run_client_simulation() {
           ( "$using_sockets" || "$HAS_DH_BITS") && out "----------------------"
           outln
      fi
+     if ! "$using_sockets"; then
+          # We can't use the connectivity checker here as of now the openssl reply is always empty (reason??)
+          save_max_ossl_fail=$MAX_OSSL_FAIL
+          nr_ossl_fail=$NR_OSSL_FAIL
+          MAX_OSSL_FAIL=100
+     fi
      for name in "${short[@]}"; do
           if ${current[i]} || "$ALL_CLIENTS" ; then
                # for ANY we test this service or if the service we determined from STARTTLS matches
@@ -4298,6 +4331,11 @@ run_client_simulation() {
           fi   #current?
           ((i++))
      done
+     if ! "$using_sockets"; then
+          # restore from above
+          MAX_OSSL_FAIL=$save_max_ossl_fail
+          NR_OSSL_FAIL=$nr_ossl_fail
+     fi
 
      tmpfile_handle $FUNCNAME.txt
      return $ret
@@ -6122,7 +6160,6 @@ tls_time() {
 # core function determining whether handshake succeded or not
 # arg1: return value of "openssl s_client connect"
 # arg2: temporary file with the server hello
-# arg3: error file
 # returns 0 if connect was successful, 1 if not
 #
 sclient_connect_successful() {
@@ -6132,18 +6169,12 @@ sclient_connect_successful() {
      # what's left now is: master key empty and Session-ID not empty
      # ==> probably client-based auth with x509 certificate. We handle that at other places
      #
-     # But for rebustness we need to detected failures due to network / server problems
-     # Detection is as follows (stderr):
-     # ECONNREFUSED --> "socket: Bad file descriptor" or "connect: Connection refused" or (openssl 1.1.1):
-     #                  lines with "system library:connect:Connection refused" and "BIO_connect:connect error"
-     # EHOSTUNREACH --> "Bad file descriptor" or "connect: No route to host" or or (openssl 1.1.1):
-     #                  "connect:No route to host" and "BIO_connect:connect error"
-#     LANG=C egrep -q "Bad file descriptor|Connection refused|No route to host" "$3"
-#     [[ $? -ne 0 ]] || ((NR_OSSL_FAIL++))
-#     if [[ $NR_OSSL_FAIL -ge $MAX_OSSL_FAIL ]]; then
-#          [[ $MAX_SOCKET_FAIL -eq 1 ]] && fatal "TCP connect problem" -2
-#          fatal "repeated TCP connect problems, doesn't make sense to continue" -2
-#     fi
+     # For robustness we also detected here network / server connectivity problems:
+     # Just need to check whether $TMPFILE=$2 is empty
+     if [[ ! -s "$2" ]]; then
+          ((NR_OSSL_FAIL++))
+          connectivity_problem $NR_OSSL_FAIL $MAX_OSSL_FAIL "openssl s_client connect problem" "repeated openssl s_client connect problem, doesn't make sense to continue"
+     fi
      return 1
 }
 
@@ -8510,7 +8541,7 @@ fd_socket() {
                     proyxline=${proyxline#* }
                     if [[ "${proyxline%% *}" != "200" ]]; then
                          pr_warning "Unable to CONNECT via proxy. "
-                         [[ "$PORT" != 443 ]] && prln_magenta "Check whether your proxy supports port $PORT and the underlying protocol."
+                         [[ "$PORT" != 443 ]] && prln_warning "Check whether your proxy supports port $PORT and the underlying protocol."
                          return 6
                     fi
                fi
@@ -8520,11 +8551,7 @@ fd_socket() {
           done
      elif ! exec 5<>/dev/tcp/$nodeip/$PORT; then  #  2>/dev/null would remove an error message, but disables debugging
           ((NR_SOCKET_FAIL++))
-          if [[ $NR_SOCKET_FAIL -ge $MAX_SOCKET_FAIL ]]; then
-               outln
-               [[ $MAX_SOCKET_FAIL -eq 1 ]] && fatal "TCP connect problem" -2
-               fatal "repeated TCP connect problems, giving up.." -2
-          fi
+          connectivity_problem $NR_SOCKET_FAIL $MAX_SOCKET_FAIL "TCP connect problem" "repeated TCP connect problems, giving up"
           outln
           pr_warning "Unable to open a socket to $NODEIP:$PORT. "
           # It can last ~2 minutes but for for those rare occasions we don't do a timeout handler here, KISS
@@ -8533,10 +8560,10 @@ fd_socket() {
 
      if [[ -n "$STARTTLS" ]]; then
           case "$STARTTLS_PROTOCOL" in # port
-               ftp|ftps)  # https://tools.ietf.org/html/rfc4217, https://tools.ietf.org/html/rfc959
+               ftp|ftps)   # https://tools.ietf.org/html/rfc4217, https://tools.ietf.org/html/rfc959
                     starttls_ftp_dialog
                     ;;
-               smtp|smtps)  # SMTP, see https://tools.ietf.org/html/rfc5321, https://tools.ietf.org/html/rfc3207
+               smtp|smtps) # SMTP, see https://tools.ietf.org/html/rfc5321, https://tools.ietf.org/html/rfc3207
                     starttls_smtp_dialog
                     ;;
                pop3|pop3s) # POP, see https://tools.ietf.org/html/rfc2595
@@ -13180,23 +13207,23 @@ run_logjam() {
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p -le 512 ]]; then
                     pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "CRITICAL" "$comment"
+                    fileout "$jsonID2" "CRITICAL" "$comment" "$cve" "$cwe"
                elif [[ $len_dh_p -le 1024 ]]; then
                     pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "HIGH" "$comment"
+                    fileout "$jsonID2" "HIGH" "$comment" "$cve" "$cwe"
                elif [[ $len_dh_p -le 1536 ]]; then
                     pr_svrty_medium "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "MEDIUM" "$comment"
+                    fileout "$jsonID2" "MEDIUM" "$comment" "$cve" "$cwe"
                elif [[ $len_dh_p -le 2048 ]]; then
                     pr_svrty_low "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID_common primes" "LOW" "$comment"
+                    fileout "$jsonID_common primes" "LOW" "$comment" "$cve" "$cwe"
                else
                     out "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "INFO" "$comment"
+                    fileout "$jsonID2" "INFO" "$comment" "$cve" "$cwe"
                fi
           elif [[ $subret -eq 0 ]]; then
                out " no common primes detected"
-               fileout "$jsonID2" "INFO" "--"
+               fileout "$jsonID2" "INFO" "--" "$cve" "$cwe"
           elif [[ $ret -eq 1 ]]; then
                out "FIXME 1"
           fi
@@ -13205,19 +13232,19 @@ run_logjam() {
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p  -le 512 ]]; then
                     pr_svrty_critical "VULNERABLE (NOT ok):" ; out " uses common prime "; pr_italic "$comment"; out " ($len_dh_p bits)"
-                    fileout "$jsonID2" "CRITICAL" "\"$comment\""
+                    fileout "$jsonID2" "CRITICAL" "\"$comment\"" "$cve" "$cwe"
                elif [[ $len_dh_p -le 1024 ]]; then
                     pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "HIGH" "\"comment\""
+                    fileout "$jsonID2" "HIGH" "\"comment\"" "$cve" "$cwe"
                elif [[ $len_dh_p -le 1536 ]]; then
                     pr_svrty_medium "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "MEDIUM" "\"$comment\""
+                    fileout "$jsonID2" "MEDIUM" "\"$comment\"" "$cve" "$cwe"
                elif [[ $len_dh_p -le 2048 ]]; then
                     pr_svrty_low "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "LOW" "\"$comment\""
+                    fileout "$jsonID2" "LOW" "\"$comment\"" "$cve" "$cwe"
                else
                     out "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "INFO" "common prime \"$comment\" detected"
+                    fileout "$jsonID2" "INFO" "common prime \"$comment\" detected" "$cve" "$cwe"
                fi
                if ! "$openssl_no_expdhciphers"; then
                     outln ","
@@ -13228,12 +13255,12 @@ run_logjam() {
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no DH key detected"
-               fileout "$jsonID2" "OK" "no DH key"
+               fileout "$jsonID2" "OK" "no DH key" "$cve" "$cwe"
           elif [[ $subret -eq 0 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no common primes detected"
-               fileout "$jsonID2" "OK" "--"
+               fileout "$jsonID2" "OK" "--" "$cve" "$cwe"
           elif [[ $ret -eq 1 ]]; then
                pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
@@ -13307,10 +13334,10 @@ run_drown() {
                     out "$spaces "
                     pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
                     outln " could help you to find out"
-                    fileout "$jsonID" "INFO" "Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2"
+                    fileout "$jsonID" "INFO" "Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe"
                else
                     outln "$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
-                    fileout "$jsonID" "INFO" "no RSA certificate, can't be used with SSLv2 elsewhere"
+                    fileout "$jsonID" "INFO" "no RSA certificate, can't be used with SSLv2 elsewhere" "$cve" "$cwe"
                fi
                ;;
      esac
@@ -14303,8 +14330,8 @@ run_robot() {
      local -i i subret len iteration testnum pubkeybits pubkeybytes
      local vulnerable=false send_ccs_finished=true
      local -i start_time end_time timeout=$MAX_WAITSOCK
-     local cve="CVE-2017-17382 CVE-2017-17427 CVE-2017-17428 CVE-2017-13098 CVE-2017-1000385 CVE-2017-13099 CVE-2016-6883 CVE-2012-5081"
-     local cwe=""
+     local cve="CVE-2017-17382 CVE-2017-17427 CVE-2017-17428 CVE-2017-13098 CVE-2017-1000385 CVE-2017-13099 CVE-2016-6883 CVE-2012-5081 CVE-2017-6168"
+     local cwe="CWE-203"
      local jsonID="ROBOT"
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability " && outln
@@ -14312,11 +14339,11 @@ run_robot() {
 
      if [[ ! "$HAS_PKUTIL" ]]; then
           prln_local_problem "Your $OPENSSL does not support the pkeyutl utility."
-          fileout "$jsonID" "WARN" "$OPENSSL does not support the pkeyutl utility."
+          fileout "$jsonID" "WARN" "$OPENSSL does not support the pkeyutl utility." "$cve" "$cwe"
           return 1
      elif ! "$HAS_PKEY"; then
           prln_local_problem "Your $OPENSSL does not support the pkey utility."
-          fileout "$jsonID" "WARN" "$OPENSSL does not support the pkey utility."
+          fileout "$jsonID" "WARN" "$OPENSSL does not support the pkey utility." "$cve" "$cwe"
           return 1
      fi
 
@@ -14352,7 +14379,7 @@ run_robot() {
                cipherlist="${cipherlist:2}"
           elif [[ $subret -ne 0 ]]; then
                prln_svrty_best "Server does not support any cipher suites that use RSA key transport"
-               fileout "$jsonID" "OK" "not vulnerable, no RSA key transport cipher"
+               fileout "$jsonID" "OK" "not vulnerable, no RSA key transport cipher" "$cve" "$cwe"
                return 0
           fi
      fi
@@ -14531,14 +14558,14 @@ run_robot() {
      if "$vulnerable"; then
           if [[ "${response[1]}" == "${response[2]}" ]] && [[ "${response[2]}" == "${response[3]}" ]]; then
                pr_svrty_medium "VULNERABLE (NOT ok)"; outln " - weakly vulnerable as the attack would take too long"
-               fileout "$jsonID" "MEDIUM" "VULNERABLE, but the attack would take too long"
+               fileout "$jsonID" "MEDIUM" "VULNERABLE, but the attack would take too long" "$cve" "$cwe"
           else
                prln_svrty_critical "VULNERABLE (NOT ok)"
-               fileout "$jsonID" "CRITICAL" "VULNERABLE"
+               fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe"
           fi
      else
           prln_svrty_best "not vulnerable (OK)"
-          fileout "$jsonID" "OK" "not vulnerable"
+          fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
      fi
      return 0
 }
