@@ -6163,8 +6163,14 @@ tls_time() {
 # returns 0 if connect was successful, 1 if not
 #
 sclient_connect_successful() {
+     local server_hello="$(cat "$2")"
+     local re='Master-Key: ([^\
+]*)'
+
      [[ $1 -eq 0 ]] && return 0
-     [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]] && return 0
+     if [[ "$server_hello" =~ $re ]]; then
+          [[ -n "${BASH_REMATCH[1]}" ]] && return 0
+     fi
      # further check like ~  fgrep 'Cipher is (NONE)' "$2" &> /dev/null && return 1' not done.
      # what's left now is: master key empty and Session-ID not empty
      # ==> probably client-based auth with x509 certificate. We handle that at other places
@@ -13216,7 +13222,7 @@ run_logjam() {
                     fileout "$jsonID2" "MEDIUM" "$comment" "$cve" "$cwe"
                elif [[ $len_dh_p -le 2048 ]]; then
                     pr_svrty_low "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID_common primes" "LOW" "$comment" "$cve" "$cwe"
+                    fileout "$jsonID2" "LOW" "$comment" "$cve" "$cwe"
                else
                     out "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "$jsonID2" "INFO" "$comment" "$cve" "$cwe"
@@ -13232,19 +13238,19 @@ run_logjam() {
                # now size matters -- i.e. the bit size ;-)
                if [[ $len_dh_p  -le 512 ]]; then
                     pr_svrty_critical "VULNERABLE (NOT ok):" ; out " uses common prime "; pr_italic "$comment"; out " ($len_dh_p bits)"
-                    fileout "$jsonID2" "CRITICAL" "\"$comment\"" "$cve" "$cwe"
+                    fileout "$jsonID2" "CRITICAL" "$comment" "$cve" "$cwe"
                elif [[ $len_dh_p -le 1024 ]]; then
                     pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "HIGH" "\"comment\"" "$cve" "$cwe"
+                    fileout "$jsonID2" "HIGH" "$comment" "$cve" "$cwe"
                elif [[ $len_dh_p -le 1536 ]]; then
                     pr_svrty_medium "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "MEDIUM" "\"$comment\"" "$cve" "$cwe"
+                    fileout "$jsonID2" "MEDIUM" "$comment" "$cve" "$cwe"
                elif [[ $len_dh_p -le 2048 ]]; then
                     pr_svrty_low "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "LOW" "\"$comment\"" "$cve" "$cwe"
+                    fileout "$jsonID2" "LOW" "$comment" "$cve" "$cwe"
                else
                     out "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "INFO" "common prime \"$comment\" detected" "$cve" "$cwe"
+                    fileout "$jsonID2" "INFO" "$comment" "$cve" "$cwe"
                fi
                if ! "$openssl_no_expdhciphers"; then
                     outln ","
