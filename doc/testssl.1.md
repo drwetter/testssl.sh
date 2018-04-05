@@ -204,7 +204,7 @@ If the server provides no matching record in Subject Alternative Name (SAN) but 
 
 ### OUTPUT OPTIONS
 
-`--warnings <batch|off>`     The warnings parameter determines how testssl.sh will deal with situations where user input will normally be necessary. There are a couple of options here.  `batch` doesn't wait for a confirming keypress. This is automatically being chosen for mass testing (`--file`). `-false` just skips the warning AND the confirmation. Please note that there are conflicts where testssl.sh will still ask for confirmation. Those are ones which would have a drastic impact on the results.
+`--warnings <batch|off>`     The warnings parameter determines how testssl.sh will deal with situations where user input normally will be necessary. There are a couple of options here.  `batch` doesn't wait for a confirming keypress. This is automatically being chosen for mass testing (`--file`). `-false` just skips the warning AND the confirmation. Please note that there are conflicts where testssl.sh will still ask for a confirmation which are the ones which would have a drastic impact on the results. Almost any other decision will be made as a best guess by testssl.sh.
 The same can be achived by setting the environment variable `WARNINGS`.
 
 `--openssl-timeout <seconds>` This is especially useful for all connects using openssl and practically useful for mass testing. It avoids the openssl connect to hang for ~2 minutes. The expected parameter `<seconds>` instructs testssl.sh to wait before the openssl connect will be terminated. The option is only available if your OS has a timeout binary installed. As there are different implementations of `timeout`: It automatically calls the binary with the right parameters.
