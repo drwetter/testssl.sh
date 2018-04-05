@@ -14945,7 +14945,7 @@ tuning / connect options (most also can be preset via environment variables):
      --sneaky                      leave less traces in target logs: user agent, referer
 
 output options (can also be preset via environment variables):
-     --warnings <batch|off|false>  "batch" doesn't wait for keypress, "off" or "false" skips connection warning
+     --warnings <batch|off|false>  "batch" doesn't ask for a confirmation, "off" or "false" skips connection warnings
      --openssl-timeout <seconds>   useful to avoid hangers. <seconds> to wait before openssl connect will be terminated
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
