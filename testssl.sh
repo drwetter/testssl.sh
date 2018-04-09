@@ -6232,7 +6232,7 @@ certificate_info() {
           # best we are able to do under OpenBSD
           days2expire=""
      else
-          days2expire=$(( $(parse_date "$enddate" "+%s" "%F %H:%M %z") - $(LC_ALL=C date "+%s") ))    # in seconds
+          days2expire=$(( $(parse_date "$enddate" "+%s" "%F %H:%M") - $(LC_ALL=C date "+%s") ))    # in seconds
           days2expire=$((days2expire  / 3600 / 24 ))
 
           if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then          # we take the half of the thresholds for LE certificates
