@@ -7983,8 +7983,10 @@ run_pfs() {
                               fi
                          fi
                     fi
-                    if [[ "${ciph[i]}" == "DHE-"* ]] || [[ "${ciph[i]}" == TLS13* ]] || [[ "${ciph[i]}" == TLS_* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_DHE_"* ]] ); then
+                    if [[ "${ciph[i]}" == "DHE-"* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_DHE_"* ]] ); then
                          ffdhe_offered=true
+                         ffdhe_cipher_list_hex+=", ${hexcode[i]}"
+                    elif [[ "${ciph[i]}" == TLS13* ]] || [[ "${ciph[i]}" == TLS_* ]]; then
                          ffdhe_cipher_list_hex+=", ${hexcode[i]}"
                     fi
                fi
@@ -8161,16 +8163,16 @@ run_pfs() {
                     [[ $i -eq $nr_curves ]] && break
                     supported_curve[i]=true
                done
-               curves_offered=""
-               for (( i=0; i < nr_curves; i++ )); do
-                    "${supported_curve[i]}" && curves_offered+="${ffdhe_groups_output[i]} "
-               done
-               if [[ -n "$curves_offered" ]]; then
-                    pr_bold " RFC 7919 DH groups offered:  "
-                    outln "$curves_offered"
-                    fileout "RFC7919_DH_groups" "INFO" "$curves_offered offered"
-               fi
           done
+          curves_offered=""
+          for (( i=0; i < nr_curves; i++ )); do
+               "${supported_curve[i]}" && curves_offered+="${ffdhe_groups_output[i]} "
+          done
+          if [[ -n "$curves_offered" ]]; then
+               pr_bold " RFC 7919 DH groups offered:  "
+               outln "$curves_offered"
+               fileout "RFC7919_DH_groups" "INFO" "$curves_offered"
+          fi
      fi
      outln
 
