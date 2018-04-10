@@ -145,7 +145,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 * `Strong grade Ciphers` (AEAD): 'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM8:AESCCM'
 
 
-`-p, --protocols`               checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 - TLS 1.3 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2. For TLS 1.3 several drafts (18-23) and TLS 1.3 final are suuported.
+`-p, --protocols`               checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 - TLS 1.3 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2. For TLS 1.3 several drafts (18-23) and TLS 1.3 final are supported.
 
 `-P, --preference`              displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher. If there's a cipher order enforced by the server it displays it for each protocol (openssl+sockets). If there's not, it displays instead which ciphers from the server were picked with each protocol (by using openssl only)
 

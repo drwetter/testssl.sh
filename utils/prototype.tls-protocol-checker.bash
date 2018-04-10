@@ -67,7 +67,7 @@ c0, 0d, c0, 03, 00, 0a, 00, 63, 00, 15, 00, 12, 00, 0f, 00, 0c,
 00, 08, 00, 06, 00, 03, 00, ff" 
 
 #formatted example for SNI
-#00 00 	# extention server_name
+#00 00 	# extension server_name
 #00 1a    # length       			= the following +2 = server_name length + 5
 #00 18    # server_name list_length	= server_name length +3
 #00 		# server_name type (hostname)
@@ -133,7 +133,7 @@ socksend_clienthello() {
 		hex_len_sn_hex=`printf "%02x\n" $LEN_SN_HEX`
 		hex_len_sn_hex3=`printf "%02x\n" $((LEN_SN_HEX+3))`
 		hex_len_sn_hex5=`printf "%02x\n" $((LEN_SN_HEX+5))`
-		hex_len_extention=`printf "%02x\n" $((LEN_SN_HEX+9))`
+		hex_len_extension=`printf "%02x\n" $((LEN_SN_HEX+9))`
 		
 		len_ciph_suites_byte=`echo ${#cipher_suites}`
 		let "len_ciph_suites_byte += 2"
@@ -144,12 +144,12 @@ socksend_clienthello() {
 		len_ciph_suites_word="$LEN_STR"
 		[[ $DEBUG -ge 4 ]] && echo $len_ciph_suites_word
 
-		len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$hex_len_extention + 0x2))`
+		len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x27 + 0x$hex_len_extension + 0x2))`
 		#len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x27))`
 		len_c_hello_word="$LEN_STR"
 		[[ $DEBUG -ge 4 ]] && echo $len_c_hello_word
 
-		len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$hex_len_extention + 0x2))`
+		len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x2b + 0x$hex_len_extension + 0x2))`
 		#len2twobytes `printf "%02x\n" $((0x$len_ciph_suites + 0x2b))`
 		len_all_word="$LEN_STR"
 		[[ $DEBUG -ge 4 ]] && echo $len_all_word
@@ -175,8 +175,8 @@ socksend_clienthello() {
 		,00"                    # Compression method (x00 for NULL)
 
 		EXTENSION_CONTAINING_SNI="
-		,00, $hex_len_extention  # first the len of all (here: 1) extentions. We assume len(hostname) < FF - 9
-		,00, 00                  # extention server_name
+		,00, $hex_len_extension  # first the len of all (here: 1) extensions. We assume len(hostname) < FF - 9
+		,00, 00                  # extension server_name
 		,00, $hex_len_sn_hex5    # length SNI EXT
 		,00, $hex_len_sn_hex3    # server_name list_length
 		,00                      # server_name type (hostname)
