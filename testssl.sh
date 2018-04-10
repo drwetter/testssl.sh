@@ -4132,6 +4132,7 @@ run_client_simulation() {
      local short=()
      local protos=()
      local ciphers=()
+     local ciphersuites=()
      local tlsvers=()
      local sni=()
      local warning=()
@@ -4223,7 +4224,7 @@ run_client_simulation() {
                               [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
                          fi
                     else
-                         options="$(s_client_options "-cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
+                         options="$(s_client_options "-cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
                          debugme echo "$OPENSSL s_client $options  </dev/null"
                          $OPENSSL s_client $options </dev/null >$TMPFILE 2>$ERRFILE
                          sclient_connect_successful $? $TMPFILE
@@ -4263,7 +4264,7 @@ run_client_simulation() {
                          if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
                               # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                               for tls in ${tlsvers[i]}; do
-                                   options="$(s_client_options "$tls -cipher ${ciphers[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
+                                   options="$(s_client_options "$tls -cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
                                    debugme echo "$OPENSSL s_client $options  </dev/null"
                                    $OPENSSL s_client $options  </dev/null >$TMPFILE 2>$ERRFILE
                                    sclient_connect_successful $? $TMPFILE
