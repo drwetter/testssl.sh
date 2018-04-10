@@ -4363,19 +4363,17 @@ locally_supported() {
 run_prototest_openssl() {
      local -i ret=0
 
+     ! locally_supported "$1" "$2" && return 7
      $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
      debugme egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
-     if ! locally_supported "$1" "$2" ; then
-          ret=7
-     else                                    # try again without $PROXY
-          $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-          sclient_connect_successful $? $TMPFILE
-          ret=$?
-          debugme egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
-          grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
-     fi
+     # try again without $PROXY
+     $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+     sclient_connect_successful $? $TMPFILE
+     ret=$?
+     debugme egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
      tmpfile_handle $FUNCNAME$1.txt
      return $ret
 
@@ -6388,6 +6386,7 @@ get_server_certificate() {
      sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE >$TEMPDIR/tlsext.txt
      for proto in $protocols_to_try; do
           [[ 1 -eq $(has_server_protocol $proto) ]] && continue
+          [[ "$proto" == "ssl3" ]] && ! "$HAS_SSL3" && continue
           addcmd=""
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status") </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
@@ -6398,6 +6397,7 @@ get_server_certificate() {
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
+          [[ "$proto" == "ssl3" ]] && ! "$HAS_SSL3" && return 7
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug") </dev/null 2>>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
                if [ -z "$1" ]; then
@@ -12719,6 +12719,7 @@ run_sweet32() {
           nr_sweet32_ciphers=$(count_ciphers $sweet32_ciphers)
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $sweet32_ciphers))
           for proto in -no_ssl2 -tls1_1 -tls1 -ssl3; do
+               [[ $nr_supported_ciphers -eq 0 ]] && break
                ! "$HAS_SSL3" && [[ "$proto" == "-ssl3" ]] && continue
                if [[ "$proto" != "-no_ssl2" ]]; then
                     "$FAST" && break
@@ -13116,7 +13117,7 @@ run_logjam() {
           tls_sockets "03" "$exportdh_cipher_list_hex, 00,ff"
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
-     else
+     elif [[ $nr_supported_ciphers -ne 0 ]]; then
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $exportdh_cipher_list -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
@@ -13496,6 +13497,7 @@ run_beast(){
                sigalg[nr_ciphers]=""
           done
           while true; do
+               [[ "$proto" == "ssl3" ]] && ! "$HAS_SSL3" && break
                ciphers_to_test=""
                for (( i=0; i < nr_ciphers; i++ )); do
                     ! "${ciphers_found[i]}" && "${ossl_supported[i]}" && ciphers_to_test+=":${ciph[i]}"
