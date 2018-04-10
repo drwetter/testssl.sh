@@ -85,7 +85,7 @@ display_dns() {
 	$ECHO
 	[ -n "$rDNS" ] && $ECHO "rDNS: $rDNS"
 	if [ `echo "$ip4" | wc -l` -gt 1 ]; then
-		$ECHO "$1 other IPv4 adresses:\c" 
+		$ECHO "$1 other IPv4 addresses:\c"
 		for i in $ip4; do
 			[ "$i" == "$NODEIP" ] && continue
 			$ECHO " $i\c"

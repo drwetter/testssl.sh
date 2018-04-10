@@ -29,13 +29,13 @@ find_openssl_binary() {
           pr_warningln "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
           outln " Looking some place else ..."
      elif [[ -x "$OPENSSL" ]]; then
-          :    # 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
+          :    # 1. all ok supplied $OPENSSL was found and has executable bit set -- testrun comes below
      elif test_openssl_suffix $RUN_DIR; then
           :    # 2. otherwise try openssl in path of testssl.sh
      elif test_openssl_suffix ../$RUN_DIR; then
           :    # 2. otherwise try openssl in path of testssl.sh
      elif test_openssl_suffix ../$RUN_DIR/bin; then
-          :    # 3. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
+          :    # 3. otherwise here, this is supposed to be the standard --platform independent path in the future!!!
      elif test_openssl_suffix "$(dirname "$(which openssl)")"; then
           :    # 5. we tried hard and failed, so now we use the system binaries
      fi

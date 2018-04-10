@@ -116,7 +116,7 @@ egrep -q "dev|rc" <<< "$VERSION" && \
 
 readonly PROG_NAME="$(basename "$0")"
 readonly RUN_DIR="$(dirname "$0")"
-TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # If you run testssl.sh and it doesn't find it neccessary file automagically set TESTSSL_INSTALL_DIR
+TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # If you run testssl.sh and it doesn't find it necessary file automagically set TESTSSL_INSTALL_DIR
 CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # You can have your stores some place else
 ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES:-""}"  # single file with a CA in PEM format or comma separated lists of them
 CIPHERS_BY_STRENGTH_FILE=""
@@ -253,7 +253,7 @@ JSONHEADER=true                         # include JSON headers and footers in HT
 CSVHEADER=true                          # same for CSV
 HTMLHEADER=true                         # same for HTML
 SECTION_FOOTER_NEEDED=false             # kludge for tracking whether we need to close the JSON section object
-GIVE_HINTS=false                        # give an addtional info to findings
+GIVE_HINTS=false                        # give an additional info to findings
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
 CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
 HAD_SLEPT=0
@@ -588,7 +588,7 @@ pr_boldurl() { tm_bold "$1"; html_out "<a href="$1" style=\"font-weight:bold;col
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                          http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
-### no ouput support for HTML!
+### no output support for HTML!
 set_color_functions() {
      local ncurses_tput=true
 
@@ -668,7 +668,7 @@ strip_quote() {
           -e 's/ *$//g' <<< "$1"
 }
 
-#################### JSON FILE FORMATING ####################
+#################### JSON FILE FORMATTING ####################
 
 fileout_json_footer() {
      if "$do_json"; then
@@ -783,7 +783,7 @@ fileout_json_finding() {
     fi
 }
 
-##################### FILE FORMATING #########################
+##################### FILE FORMATTING #########################
 
 fileout_pretty_json_banner() {
      local target
@@ -943,7 +943,7 @@ csv_header() {
 }
 
 
-################# JSON FILE FORMATING END. HTML START ####################
+################# JSON FILE FORMATTING END. HTML START ####################
 
 html_header() {
      local fname_prefix
@@ -1012,9 +1012,9 @@ html_footer() {
      return 0
 }
 
-################# HTML FILE FORMATING END ####################
+################# HTML FILE FORMATTING END ####################
 
-################### FILE FORMATING END #########################
+################### FILE FORMATTING END #########################
 
 ###### START helper function definitions ######
 
@@ -1586,8 +1586,8 @@ service_detection() {
 
 # 1: counter variable
 # 2: threshold for this variable
-# 3: string for first occurence of problem
-# 4: string for repeated occurence of problem
+# 3: string for first occurrence of problem
+# 4: string for repeated occurrence of problem
 #
 connectivity_problem() {
      if [[ $1 -ge $2 ]]; then
@@ -1764,7 +1764,7 @@ run_http_date() {
      if [[ -n "$HTTP_TIME" ]]; then
           HTTP_TIME="$(strip_lf "$HTTP_TIME")"
           if "$HAS_OPENBSDDATE"; then
-               # we can't normalize the date under OpenBSD thus no substraction is possible
+               # we can't normalize the date under OpenBSD thus no subtraction is possible
                outln "remote: $HTTP_TIME"
                out "${spaces}local:  $(date)"
                fileout "$jsonID" "INFO" "$HTTP_TIME - $(date)"
@@ -5318,7 +5318,7 @@ sub_session_resumption() {
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>/dev/null
      ret1=$?
      if "$byID" && [[ $OSSL_VER_MINOR == "1.1" ]] && [[ $OSSL_VER_MAJOR == "1" ]] && [[ ! -s "$sess_data" ]]; then
-          # it seems OpenSSL indicates no Session ID resumption by just not generating ouput
+          # it seems OpenSSL indicates no Session ID resumption by just not generating output
           debugme echo -n "No session resumption byID (empty file)"
           ret=2
      else
@@ -6155,7 +6155,7 @@ tls_time() {
      return 0
 }
 
-# core function determining whether handshake succeded or not
+# core function determining whether handshake succeeded or not
 # arg1: return value of "openssl s_client connect"
 # arg2: temporary file with the server hello
 # returns 0 if connect was successful, 1 if not
@@ -6429,7 +6429,7 @@ get_server_certificate() {
 get_cn_from_cert() {
      local subject
 
-     # attention! openssl 1.0.2 doesn't properly handle online output from certifcates from trustwave.com/github.com
+     # attention! openssl 1.0.2 doesn't properly handle online output from certificates from trustwave.com/github.com
      #FIXME: use -nameopt oid for robustness
 
      # for e.g. russian sites -esc_msb,utf8 works in an UTF8 terminal -- any way to check platform indepedent?
@@ -8219,7 +8219,7 @@ alpn_pre(){
      return 0
 }
 
-# modern browsers do not support it anymore but we shoud still test it at least for fingerprinting the server side
+# modern browsers do not support it anymore but we should still test it at least for fingerprinting the server side
 # Thus we don't label any support for NPN as good.
 # FAST mode skips this test
 run_npn() {
@@ -8879,7 +8879,7 @@ get_dh_ephemeralkey() {
      fi
      dh_param="30${len1}${dh_p}${dh_g}"
 
-     # Make a SEQUENCE of the paramters SEQUENCE and the OID
+     # Make a SEQUENCE of the parameters SEQUENCE and the OID
      dh_param_len=22+${#dh_param}
      if [[ $dh_param_len -lt 256 ]]; then
           len1="$(printf "%02x" $((dh_param_len/2)))"
@@ -9879,7 +9879,7 @@ parse_tls_serverhello() {
      # Client messages, including handshake messages, are carried by the record layer.
      # First, extract the handshake and alert messages.
      # see http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#TLS_record
-     # byte 0:      content type:                 0x14=CCS,    0x15=TLS alert  x16=Handshake,  0x17 Aplication, 0x18=HB
+     # byte 0:      content type:                 0x14=CCS,    0x15=TLS alert  x16=Handshake,  0x17 Application, 0x18=HB
      # byte 1+2:    TLS version word, major is 03, minor 00=SSL3, 01=TLS1 02=TLS1.1 03=TLS 1.2
      # byte 3+4:    fragment length
      # bytes 5...:  message fragment
@@ -11363,7 +11363,7 @@ socksend_tls_clienthello() {
           fi
           len2twobytes "$len_extension_hex"
           all_extensions="
-          ,$LEN_STR  # first the len of all extentions.
+          ,$LEN_STR  # first the len of all extensions.
           ,$all_extensions"
 
      fi
@@ -11398,7 +11398,7 @@ socksend_tls_clienthello() {
      len_all_word="$LEN_STR"
      #[[ $DEBUG -ge 3 ]] && echo $len_all_word
 
-     # if we have SSLv3, the first occurence of TLS protocol -- record layer -- is SSLv3, otherwise TLS 1.0,
+     # if we have SSLv3, the first occurrence of TLS protocol -- record layer -- is SSLv3, otherwise TLS 1.0,
      # except in the case of a second ClientHello in TLS 1.3, in which case it is TLS 1.2.
      [[ $tls_low_byte == "00" ]] && tls_word_reclayer="03, 00"
      "$is_second_clienthello" && tls_word_reclayer="03, 03"
@@ -11500,7 +11500,7 @@ resend_if_hello_retry_request() {
           return 0
      fi
 
-     # This appears to be a HelloRetryRequest messsage.
+     # This appears to be a HelloRetryRequest message.
      debugme echo "reading hello retry request... "
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C $SOCK_REPLY_FILE | head -6
@@ -11514,7 +11514,7 @@ resend_if_hello_retry_request() {
           debugme echo "malformed HelloRetryRequest"
           return 1
      fi
-     # The HelloRetryRequest messsage may be followed by something
+     # The HelloRetryRequest message may be followed by something
      # else (e.g., a change cipher spec message). Ignore anything
      # that follows.
      tls_hello_ascii_len=$msg_len+10
@@ -11898,7 +11898,7 @@ run_heartbleed(){
           tls_hexcode="x03, x03"
      elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
           tls_hexcode="x03, x00"
-     else # no protcol for some reason defined, determine TLS versions offered with a new handshake
+     else # no protocol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
                *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
@@ -11966,7 +11966,7 @@ run_heartbleed(){
 
 # helper function
 ok_ids(){
-     prln_svrty_best "\n ok -- something resetted our ccs packets"
+     prln_svrty_best "\n ok -- something reset our ccs packets"
      return 0
 }
 
@@ -11994,7 +11994,7 @@ run_ccs_injection(){
           tls_hexcode="x03, x03"
      elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
           tls_hexcode="x03, x00"
-     else # no protcol for some reason defined, determine TLS versions offered with a new handshake
+     else # no protocol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
                *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
@@ -12192,7 +12192,7 @@ run_ticketbleed() {
           tls_hexcode="x03, x03"
      elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
           tls_hexcode="x03, x00"
-     else # no protcol for some reason defined, determine TLS versions offered with a new handshake
+     else # no protocol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
                *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
@@ -12374,7 +12374,7 @@ run_ticketbleed() {
      done
 
      if ! "$early_exit"; then
-          # here we test the replys if a TLS server hello was received >1x
+          # here we test the replies if a TLS server hello was received >1x
           for i in 1 2 3 ; do
                if [[ "${sid_detected[i]}" =~ $sid_input ]]; then
                     # was our faked TLS SID returned?
@@ -13983,7 +13983,7 @@ run_grease() {
      local ciph list temp curve_found
      local -i i j rnd alpn_list_len extn_len debug_level=""
      local -i ret=0
-     # Note: The folowing values were taken from https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
+     # Note: The following values were taken from https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
      # These arrays may need to be updated if the values change in the final version of this document.
      local -a -r grease_cipher_suites=( "0a,0a" "1a,1a" "2a,2a" "3a,3a" "4a,4a" "5a,5a" "6a,6a" "7a,7a" "8a,8a" "9a,9a" "aa,aa" "ba,ba" "ca,ca" "da,da" "ea,ea" "fa,fa" )
      local -a -r grease_supported_groups=( "0a,0a" "1a,1a" "2a,2a" "3a,3a" "4a,4a" "5a,5a" "6a,6a" "7a,7a" "8a,8a" "9a,9a" "aa,aa" "ba,ba" "ca,ca" "da,da" "ea,ea" "fa,fa" )
@@ -14123,7 +14123,7 @@ run_grease() {
                # Check for inability to handle empty last extension (see PR #792 and
                # https://www.ietf.org/mail-archive/web/tls/current/msg19720.html).
                # (Since this test also uses an unrecognized extension, only run this
-               # test if the previous test passed, and use the final exension value
+               # test if the previous test passed, and use the final extension value
                # from that test to ensure that the only difference is the location
                # of the extension.)
 
@@ -14688,14 +14688,14 @@ find_openssl_binary() {
           prln_warning "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
           tmln_out " Looking some place else ..."
      elif [[ -x "$OPENSSL" ]]; then
-          :    # 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
+          :    # 1. all ok supplied $OPENSSL was found and has executable bit set -- testrun comes below
      elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(type -p openssl)")"; then
           # 2. otherwise, only if on Bash on Windows, use system binaries only.
           SYSTEM2="WSL"
      elif test_openssl_suffix "$TESTSSL_INSTALL_DIR"; then
           :    # 3. otherwise try openssl in path of testssl.sh
      elif test_openssl_suffix "$TESTSSL_INSTALL_DIR/bin"; then
-          :    # 4. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
+          :    # 4. otherwise here, this is supposed to be the standard --platform independent path in the future!!!
      elif test_openssl_suffix "$(dirname "$(type -p openssl)")"; then
           :    # 5. we tried hard and failed, so now we use the system binaries
      fi
@@ -14970,7 +14970,7 @@ file output options (can also be preset via environment variables)
      --csv                         additional output of findings to CSV file '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.csv' in cwd or directory
      --csvfile|-oC <csvfile>       additional output as CSV to the specified file or directory, similar to --logfile
      --html                        additional output as HTML to file '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.html'
-     --htmlfile|-oH <htmlfile>     additional output as HTML to the specifed file or directory, similar to --logfile
+     --htmlfile|-oH <htmlfile>     additional output as HTML to the specified file or directory, similar to --logfile
      --out(f,F)ile|-oa/-oA <fname> log to a LOG,JSON,CSV,HTML file (see nmap). -oA/-oa: pretty/flat JSON. "auto" uses '\${NODE}-p\${port}\${YYYYMMDD-HHMM}'
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
@@ -15457,7 +15457,7 @@ get_a_record() {
           elif type -p dig &>/dev/null; then
                ip4=$(filter_ip4_address $(dig @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
           else
-               fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable." -3
+               fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." -3
           fi
      fi
      if [[ -z "$ip4" ]]; then
@@ -15498,7 +15498,7 @@ get_aaaa_record() {
                elif type -p dig &>/dev/null; then
                     ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
                else
-                    fatal "Local hostname given but no 'avahi-resolve' or 'dig' avaliable." -3
+                    fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." -3
                fi
           elif type -p host &> /dev/null ; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
@@ -15527,7 +15527,7 @@ get_caa_rr_record() {
 
      "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
-     # rougly that's the difference between text and binary format
+     # roughly that's the difference between text and binary format
      # 1) 'google.com has CAA record 0 issue "symantec.com"'
      # 2) 'google.com has TYPE257 record \# 19 0005697373756573796D616E7465632E636F6D'
      # for dig +short the output always starts with '0 issue [..]' or '\# 19 [..]' so we normalize thereto to keep caa_flag, caa_property
@@ -15765,7 +15765,7 @@ sclient_auth() {
                fi
           fi
      fi
-     # what's left now is: master key empty, handshake returned not successful, session ID empty --> not sucessful
+     # what's left now is: master key empty, handshake returned not successful, session ID empty --> not successful
      return 1
 }
 
@@ -17073,7 +17073,7 @@ nodeip_to_proper_ip6() {
           ${UNBRACKTD_IPV6} || NODEIP="[$NODEIP]"
           len_nodeip=${#NODEIP}
           CORRECT_SPACES="$(printf -- " "'%.s' $(eval "echo {1.."$((len_nodeip - 17))"}"))"
-          # IPv6 addresses are longer, this varaible takes care that "further IP" and "Service" is properly aligned
+          # IPv6 addresses are longer, this variable takes care that "further IP" and "Service" is properly aligned
      fi
 }
 
@@ -17104,7 +17104,7 @@ lets_roll() {
      local section_number=1
 
      if [[ "$1" == init ]]; then
-          # called once upfront to be able to measure preperation time b4 everything starts
+          # called once upfront to be able to measure preparation time b4 everything starts
           START_TIME=$(date +%s)
           LAST_TIME=$START_TIME
           [[ -n "$MEASURE_TIME_FILE" ]] && >"$MEASURE_TIME_FILE"
@@ -17115,11 +17115,11 @@ lets_roll() {
      [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" 2
      nodeip_to_proper_ip6
      reset_hostdepended_vars
-     determine_rdns                # Returns always zero or has already exited if fatal error occured
+     determine_rdns                # Returns always zero or has already exited if fatal error occurred
      stopwatch determine_rdns
 
      ((SERVER_COUNTER++))
-     determine_service "$1"        # STARTTLS service? Other will be determined here too. Returns always 0 or has already exited if fatal error occured
+     determine_service "$1"        # STARTTLS service? Other will be determined here too. Returns always 0 or has already exited if fatal error occurred
 
      # "secret" devel options --devel:
      $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit 0; }
@@ -17259,11 +17259,11 @@ lets_roll() {
      fi
      html_banner
 
-     #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
+     #TODO: there shouldn't be the need for a special case for --mx, only the ip addresses we would need upfront and the do-parser
      if "$do_mx_all_ips"; then
           query_globals                                # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
           [[ $? -eq 1 ]] && set_scanning_defaults
-          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have similar code
+          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff necessary as ~15 lines later we have similar code
           exit $?
      fi
 

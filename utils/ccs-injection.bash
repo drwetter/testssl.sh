@@ -210,7 +210,7 @@ fixme(){
 
 ok_ids() {
      echo
-     tput bold; tput setaf 2; echo "ok -- something resetted our ccs packets"; tput sgr0
+     tput bold; tput setaf 2; echo "ok -- something reset our ccs packets"; tput sgr0
      echo
      exit 0
 }

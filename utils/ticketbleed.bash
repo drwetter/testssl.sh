@@ -123,7 +123,7 @@ send_clienthello() {
 # length of SessionTicket TLS
      x00, $xlen_tckt_tls,
 # Session Ticket
-     $session_tckt_tls                       # here we have the comma aleady
+     $session_tckt_tls                       # here we have the comma already
 # Extension: Heartbeat
      x00, x0f, x00, x01, x01"
 
@@ -328,7 +328,7 @@ done
 echo
 
 if ! "$early_exit"; then
-     # here we test the replys if a TLS server hello was received >1x
+     # here we test the replies if a TLS server hello was received >1x
      for i in 1 2 3 ; do
           if grep -q $sid_input <<< "${sid_detected[i]}"; then
                # was our faked TLS SID returned?
