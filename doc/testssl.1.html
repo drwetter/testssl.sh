@@ -198,8 +198,8 @@ host.example.com:631
 
 <ul>
 <li><p><code>-n, --nodns &lt;min|none></code> tells testssl.sh which DNS lookups should be performed. <code>min</code> uses only forward DNS resolution (A and AAAA record or MX record) and skips CAA lookups and PTR records from the IP address back to a DNS name.  <code>none</code> performs no
-DNS lookups at all. For the latter you either have to supply the IP address as a target, to use <code>--ip`` or have the IP address
-in /etc/hosts.  The use of the switch is only useful if you either can't or are not willing to perform DNS lookups. The latter can apply e.g. to some pentestsi. In general this option could e.g. help you to avoid timeouts by DNS lookups.</code>NODNS` is the enviroment variable for this.</p></li>
+DNS lookups at all. For the latter you either have to supply the IP address as a target, to use <code>--ip</code> or have the IP address
+in /etc/hosts.  The use of the switch is only useful if you either can't or are not willing to perform DNS lookups. The latter can apply e.g. to some pentestsi. In general this option could e.g. help you to avoid timeouts by DNS lookups. <code>NODNS</code> is the enviroment variable for this.</p></li>
 <li><p><code>--sneaky</code> as a friendly feature for the server side testssl.sh uses a HTTP user agent <code>TLS tester from ${URL}</code>. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via <code>SNEAKY=true</code>).</p></li>
 </ul>
 
