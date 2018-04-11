@@ -120,7 +120,9 @@ Please note that the content of `fname` has to be in Unix format. DOS carriage r
 `--assuming-http`           testssl.sh does upfront an application protocol detection. In cases where for some reasons the usage of HTTP cannot be automatically detected you may want to use this option. It tells testssl.sh not to skip HTTP specific tests and to run the client simulation with browsers. Sometimes also the severity depends on the application protocol, e.g. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server.
 
 
-* `-n, --no-dns` instructs testssl.sh to not do any DNS lookups. This is useful if you either can't or are not willing to perform DNS lookups. The latter applies e.g. to some pentests, the former could e.g. help you to avoid timeouts by DNS lookups. `NODNS=true` has the same effect.
+* `-n, --nodns <min|none>` tells testssl.sh which DNS lookups should be performed. `min` uses only forward DNS resolution (A and AAAA record or MX record) and skips CAA lookups and PTR records from the IP address back to a DNS name.  `none` performs no
+DNS lookups at all. For the latter you either have to supply the IP address as a target, to use `--ip`` or have the IP address
+in /etc/hosts.  The use of the switch is only useful if you either can't or are not willing to perform DNS lookups. The latter can apply e.g. to some pentestsi. In general this option could e.g. help you to avoid timeouts by DNS lookups. `NODNS` is the enviroment variable for this.
 
 * `--sneaky` as a friendly feature for the server side testssl.sh uses a HTTP user agent `TLS tester from ${URL}`. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
 

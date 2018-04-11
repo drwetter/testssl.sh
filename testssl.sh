@@ -207,7 +207,7 @@ HTMLFILE="${HTMLFILE:-""}"              # HTML if used
 FNAME=${FNAME:-""}                      # file name to read commands from
 FNAME_PREFIX=${FNAME_PREFIX:-""}        # output filename prefix, see --outprefix
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
-NODNS=${NODNS:-false}                   # always do DNS lookups per default. For some pentests it might save time to set this to true
+# NODNS=${NODNS:-"no"}                  # if unset it does all DNS lookups per default. "min" only for hosts or "none" at all
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
 
@@ -7420,8 +7420,8 @@ certificate_info() {
           all_caa=${all_caa%, }                 # strip trailing comma
           pr_italic "$(out_row_aligned_max_width "$all_caa" "$indent                              " $TERM_WIDTH)"
           fileout "${jsonID}${json_postfix}" "OK" "$all_caa"
-     elif "$NODNS"; then
-          pr_warning "(was instructed to not use DNS)"
+     elif [[ -n "$NODNS" ]]; then
+          pr_warning "(instructed to minimize DNS queries)"
           fileout "${jsonID}${json_postfix}" "WARN" "check skipped as instructed"
      else
           pr_svrty_low "not offered"
@@ -14945,7 +14945,7 @@ tuning / connect options (most also can be preset via environment variables):
      -6                            also use IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
-     -n, --nodns                   do not try any DNS lookup
+     -n, --nodns [min|none]        if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records
      --sneaky                      leave less traces in target logs: user agent, referer
 
 output options (can also be preset via environment variables):
@@ -15450,7 +15450,7 @@ get_a_record() {
      local ip4=""
      local saved_openssl_conf="$OPENSSL_CONF"
 
-     "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
+     [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
@@ -15490,7 +15490,7 @@ get_aaaa_record() {
      local ip6=""
      local saved_openssl_conf="$OPENSSL_CONF"
 
-     "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
+     [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
      if [[ -z "$ip6" ]]; then
@@ -15527,7 +15527,7 @@ get_caa_rr_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local all_caa=""
 
-     "$NODNS" && return 0                    # if no DNS lookup was instructed, leave here
+     [[ -n "$NODNS" ]] && return 0           # if minimum DNS lookup was instructed, leave here
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
      # roughly that's the difference between text and binary format
      # 1) 'google.com has CAA record 0 issue "symantec.com"'
@@ -15689,9 +15689,10 @@ determine_ip_addresses() {
 
 determine_rdns() {
      local saved_openssl_conf="$OPENSSL_CONF"
-     local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
+     local nodeip=""
 
-     "$NODNS" && rDNS="--" && return 0
+     [[ -n "$NODNS" ]] && rDNS="(instructed to minimize DNS queries)" && return 0   # PTR records were not asked for
+     local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
      OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
@@ -15974,7 +15975,7 @@ display_rdns_etc() {
           outln "$PROXYIP:$PROXYPORT "
      fi
      if [[ $(count_words "$IP46ADDRs") -gt 1 ]]; then
-          out " further IP addresses:   $CORRECT_SPACES"
+          out " Further IP addresses:   $CORRECT_SPACES"
           for ip in $IP46ADDRs; do
                if [[ "$ip" == "$NODEIP" ]] || [[ "[$ip]" == "$NODEIP" ]]; then
                     continue
@@ -15989,7 +15990,10 @@ display_rdns_etc() {
      elif  [[ -n "$CMDLINE_IP" ]]; then
           outln " A record via           $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
      fi
-     if [[ -n "$rDNS" ]]; then
+     if [[ "$rDNS" =~ instructed ]]; then
+          out "$(printf " %-23s %s" "rDNS ($nodeip):")"
+          pr_warning "$rDNS"
+     elif [[ -n "$rDNS" ]]; then
           out "$(printf " %-23s %s" "rDNS ($nodeip):")"
           out "$(out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
@@ -16662,7 +16666,11 @@ parse_cmd_line() {
                     fi
                     ;;
                -n|--nodns)
-                    NODNS=true
+                    NODNS="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    if [[ "$NODNS" != none ]] && [[ "$NODNS" != min ]]; then
+                         fatal "Value for nodns switch can be either \"min\" or \"none\""
+                    fi
                     ;;
                -V|-V=*|--local|--local=*)    # attention, this could have a value or not!
                     do_display_only=true
@@ -17046,7 +17054,7 @@ parse_cmd_line() {
      done
 
      # Show usage if no further options were specified
-     if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! $do_display_only; then
+     if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! "$do_display_only"; then
           fatal "URI missing" "1"
      else
      # left off here is the URI
@@ -17054,7 +17062,8 @@ parse_cmd_line() {
           # parameter after URI supplied:
           [[ -n "$2" ]] && fatal "URI comes last" "1"
      fi
-     [[ $CMDLINE_IP == "one" ]] && "$NODNS" && fatal "\"--ip=one\" and \"--nodns\" doesn't work together"
+     [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal "\"--ip=one\" and \"--nodns=none\" don't work together" 2
+    "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" 2
      ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES//,/ }"
      for fname in $ADDITIONAL_CA_FILES; do
           [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" -2
