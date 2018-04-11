@@ -14134,19 +14134,7 @@ determine_ip_addresses() {
      local ip6=""
 
      ip4=$(get_a_record $NODE)
-     # Get_a_record / get_aaaa_record returns immediately if NODNS is "none",
-     # however there are edge case we want to consider to avoid an unnecessary lookup.
-     # If we have an IPv4 record already and minimum DNS lookups were requested the IPv6 lookup can be skipped.
-     # It needs to be done though if an IPv6 check was requested and the IPv4 lookup failed.
-     if [[ -n "$ip4" ]] && [[ -n "$NODNS" ]]; then
-          :
-     elif [[ -z "$NODNS" ]]; then
-          ip6=$(get_aaaa_record $NODE)
-     elif [[ -z "$ip4" ]] && [[ "$NODNS" == min ]] && "$HAS_IPv6"; then
-          ip6=$(get_aaaa_record $NODE)
-     else
-          outln "fixme"
-     fi
+     ip6=$(get_aaaa_record $NODE)
      IP46ADDRs=$(newline_to_spaces "$ip4 $ip6")
 
      if [[ -n "$CMDLINE_IP" ]]; then
@@ -14473,18 +14461,14 @@ display_rdns_etc() {
      fi
      if [[ $(count_words "$IP46ADDRs") -gt 1 ]]; then
           out " Further IP addresses:   $CORRECT_SPACES"
-          if [[ -n "$NODNS" ]]; then
-               prln_warning "(instructed to minimize DNS queries)"
-          else
-               for ip in $IP46ADDRs; do
-                    if [[ "$ip" == "$NODEIP" ]] || [[ "[$ip]" == "$NODEIP" ]]; then
-                         continue
-                    else
-                         further_ip_addrs+="$ip "
-                    fi
-               done
-               outln "$(out_row_aligned_max_width "$further_ip_addrs" "                         $CORRECT_SPACES" $TERM_WIDTH)"
-          fi
+          for ip in $IP46ADDRs; do
+               if [[ "$ip" == "$NODEIP" ]] || [[ "[$ip]" == "$NODEIP" ]]; then
+                    continue
+               else
+                    further_ip_addrs+="$ip "
+               fi
+          done
+          outln "$(out_row_aligned_max_width "$further_ip_addrs" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
      if "$LOCAL_A"; then
           outln " A record via           $CORRECT_SPACES /etc/hosts "
