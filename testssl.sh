@@ -14945,7 +14945,7 @@ tuning / connect options (most also can be preset via environment variables):
      -6                            also use IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
-     -n, --nodns [min|none]        if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records
+     -n, --nodns <min|none>        if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records
      --sneaky                      leave less traces in target logs: user agent, referer
 
 output options (can also be preset via environment variables):
@@ -16665,7 +16665,7 @@ parse_cmd_line() {
                          unset CMDLINE_IP
                     fi
                     ;;
-               -n|--nodns)
+               -n|--nodns|-n=*|--nodns=*)
                     NODNS="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     if [[ "$NODNS" != none ]] && [[ "$NODNS" != min ]]; then
