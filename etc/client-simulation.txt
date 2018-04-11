@@ -23,6 +23,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(true)
 
@@ -43,6 +44,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect163k1:sect163r1:sect163r2:sect193r1:sect193r2:sect233k1:sect233r1:sect239k1:sect283k1:sect283r1:sect409k1:sect409r1:sect571k1:sect571r1:secp160k1:secp160r1:secp160r2:secp192k1:prime192v1:secp224k1:secp224r1:secp256k1:prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -63,6 +65,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(true)
 
@@ -83,6 +86,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(false)
 
@@ -103,6 +107,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(true)
 
@@ -123,6 +128,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("secp521r1:secp384r1:prime256v1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -143,6 +149,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("secp521r1:secp384r1:prime256v1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -163,6 +170,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -183,6 +191,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("X25519:prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -203,6 +212,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -223,6 +233,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -243,6 +254,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -263,6 +275,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -283,6 +296,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -303,6 +317,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -323,6 +338,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -343,6 +359,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -363,6 +380,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -383,6 +401,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -403,6 +422,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -423,6 +443,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -443,6 +464,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -463,6 +485,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -483,6 +506,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -503,6 +527,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(8192)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -523,6 +548,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(8192)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -543,6 +569,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(8192)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -563,6 +590,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -583,6 +611,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -603,6 +632,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("X25519:prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -623,6 +653,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("X25519:prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -643,6 +674,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("X25519:prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -663,6 +695,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -683,6 +716,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -703,6 +737,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect163k1:sect163r1:sect163r2:sect193r1:sect193r2:sect233k1:sect233r1:sect239k1:sect283k1:sect283r1:sect409k1:sect409r1:sect571k1:sect571r1:secp160k1:secp160r1:secp160r2:secp192k1:prime192v1:secp224k1:secp224r1:secp256k1:prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -723,6 +758,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -743,6 +779,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -763,6 +800,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -783,6 +821,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -803,6 +842,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -823,6 +863,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -843,6 +884,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -863,6 +905,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -883,6 +926,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -903,6 +947,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -923,6 +968,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -943,6 +989,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -963,6 +1010,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -983,6 +1031,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1003,6 +1052,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1023,6 +1073,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1043,6 +1094,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1063,6 +1115,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1083,6 +1136,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1103,6 +1157,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1123,6 +1178,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1143,6 +1199,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1163,6 +1220,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1183,6 +1241,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("X25519:prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1203,6 +1262,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1223,6 +1283,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1243,6 +1304,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1263,6 +1325,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(16384)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1283,6 +1346,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1303,6 +1367,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1323,6 +1388,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1343,6 +1409,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(16384)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1363,6 +1430,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(16384)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1383,6 +1451,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1403,6 +1472,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1423,6 +1493,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(16384)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1443,6 +1514,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1463,6 +1535,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(16384)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1483,6 +1556,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(16384)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1503,6 +1577,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(16384)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1523,6 +1598,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1543,6 +1619,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1563,6 +1640,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1583,6 +1661,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1603,6 +1682,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1623,6 +1703,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1643,6 +1724,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1663,6 +1745,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1683,6 +1766,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1703,6 +1787,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1723,6 +1808,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1743,6 +1829,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(4096)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1763,6 +1850,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(8192)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1783,6 +1871,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(8192)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1803,6 +1892,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(8192)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1823,6 +1913,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(8192)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1843,6 +1934,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(8192)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1863,6 +1955,7 @@
      minRsaBits+=(2048)
      maxRsaBits+=(8192)
      minEcdsaBits+=(256)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(true)
      current+=(true)
 
@@ -1883,6 +1976,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1903,6 +1997,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1923,6 +2018,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:sect163k1:sect163r2:prime192v1:secp224r1:sect233k1:sect233r1:sect283k1:sect283r1:secp384r1:sect409k1:sect409r1:secp521r1:sect571k1:sect571r1:secp160k1:secp160r1:secp160r2:sect163r1:secp192k1:sect193r1:sect193r2:secp224k1:sect239k1:secp256k1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1943,6 +2039,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:sect163k1:sect163r2:prime192v1:secp224r1:sect233k1:sect233r1:sect283k1:sect283r1:secp384r1:sect409k1:sect409r1:secp521r1:sect571k1:sect571r1:secp160k1:secp160r1:secp160r2:sect163r1:secp192k1:sect193r1:sect193r2:secp224k1:sect239k1:secp256k1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -1963,6 +2060,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:sect163k1:sect163r2:prime192v1:secp224r1:sect233k1:sect233r1:sect283k1:sect283r1:secp384r1:sect409k1:sect409r1:secp521r1:sect571k1:sect571r1:secp160k1:secp160r1:secp160r2:sect163r1:secp192k1:sect193r1:sect193r2:secp224k1:sect239k1:secp256k1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -1983,6 +2081,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2003,6 +2102,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2023,6 +2123,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(true)
 
@@ -2043,6 +2144,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp521r1:brainpoolP512r1:brainpoolP384r1:secp384r1:brainpoolP256r1:secp256k1:sect571r1:sect571k1:sect409k1:sect409r1:sect283k1:sect283r1")
      requiresSha2+=(false)
      current+=(true)
 
@@ -2063,6 +2165,7 @@
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2083,6 +2186,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2103,6 +2207,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2123,6 +2228,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2143,6 +2249,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2163,6 +2270,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2183,6 +2291,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2203,6 +2312,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2223,6 +2333,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2243,6 +2354,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("secp384r1:prime256v1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2263,6 +2375,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("secp384r1:prime256v1")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2283,6 +2396,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2303,6 +2417,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2323,6 +2438,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(false)
 
@@ -2343,6 +2459,7 @@ names+=("BingBot Dec 2013")
      minRsaBits+=(-1)
      maxRsaBits+=(-1)
      minEcdsaBits+=(-1)
+     curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
      current+=(false)
 

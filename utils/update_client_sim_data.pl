@@ -208,6 +208,71 @@ foreach my $client ( @$ssllabs ) {
 		} else {
 			$sim->{requiresSha2} = "requiresSha2+=(false)";
 		}
+
+		my @curves = ();
+		foreach my $curve ( @{$client->{ellipticCurves}} ) {
+			if ( $curve == 1 ) {
+				push @curves, "sect163k1"; }
+			elsif ( $curve == 2 ) {
+				push @curves, "sect163r1"; }
+			elsif ( $curve == 3 ) {
+				push @curves, "sect163r2"; }
+			elsif ( $curve == 4 ) {
+				push @curves, "sect193r1"; }
+			elsif ( $curve == 5 ) {
+				push @curves, "sect193r2"; }
+			elsif ( $curve == 6 ) {
+				push @curves, "sect233k1"; }
+			elsif ( $curve == 7 ) {
+				push @curves, "sect233r1"; }
+			elsif ( $curve == 8 ) {
+				push @curves, "sect239k1"; }
+			elsif ( $curve == 9 ) {
+				push @curves, "sect283k1"; }
+			elsif ( $curve == 10 ) {
+				push @curves, "sect283r1"; }
+			elsif ( $curve == 11 ) {
+				push @curves, "sect409k1"; }
+			elsif ( $curve == 12 ) {
+				push @curves, "sect409r1"; }
+			elsif ( $curve == 13 ) {
+				push @curves, "sect571k1"; }
+			elsif ( $curve == 14 ) {
+				push @curves, "sect571r1"; }
+			elsif ( $curve == 15 ) {
+				push @curves, "secp160k1"; }
+			elsif ( $curve == 16 ) {
+				push @curves, "secp160r1"; }
+			elsif ( $curve == 17 ) {
+				push @curves, "secp160r2"; }
+			elsif ( $curve == 18 ) {
+				push @curves, "secp192k1"; }
+			elsif ( $curve == 19 ) {
+				push @curves, "prime192v1"; }
+			elsif ( $curve == 20 ) {
+				push @curves, "secp224k1"; }
+			elsif ( $curve == 21 ) {
+				push @curves, "secp224r1"; }
+			elsif ( $curve == 22 ) {
+				push @curves, "secp256k1"; }
+			elsif ( $curve == 23 ) {
+				push @curves, "prime256v1"; }
+			elsif ( $curve == 24 ) {
+				push @curves, "secp384r1"; }
+			elsif ( $curve == 25 ) {
+				push @curves, "secp521r1"; }
+			elsif ( $curve == 26 ) {
+				push @curves, "brainpoolP256r1"; }
+			elsif ( $curve == 27 ) {
+				push @curves, "brainpoolP384r1"; }
+			elsif ( $curve == 28 ) {
+				push @curves, "brainpoolP512r1"; }
+			elsif ( $curve == 29 ) {
+				push @curves, "X25519"; }
+			elsif ( $curve == 30 ) {
+				push @curves, "X448"; }
+		}
+		$sim->{ellipticCurves} = "curves+=(\"" . (join ":", @curves) . "\")";
 	}
 }
 
@@ -231,6 +296,7 @@ my $sim = {};
 #$sim->{minRsaBits} = "minRsaBits+=(-1)";
 #$sim->{maxRsaBits} = "maxRsaBits+=(-1)";
 #$sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
+#$sim->{ellipticCurves} = "curves+=(\"sect233k1:secp256r1:secp384r1:secp521r1\")";
 #$sim->{requiresSha2} = "requiresSha2+=(false)";
 #
 #$sim->{name} = "names+=(\"Mail OSX 10.11.15             \")";
@@ -250,6 +316,7 @@ my $sim = {};
 #$sim->{minRsaBits} = "minRsaBits+=(-1)";
 #$sim->{maxRsaBits} = "maxRsaBits+=(-1)";
 #$sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
+#$sim->{ellipticCurves} = "curves+=(\"sect233k1:secp256r1:secp384r1:secp521r1\")";
 #$sim->{requiresSha2} = "requiresSha2+=(false)";
 
 # example of self generated / provided handshake:
@@ -270,6 +337,7 @@ $sim->{maxDhBits} = "maxDhBits+=(-1)";
 $sim->{minRsaBits} = "minRsaBits+=(-1)";
 $sim->{maxRsaBits} = "maxRsaBits+=(-1)";
 $sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
+$sim->{ellipticCurves} = "curves+=(\"sect233k1:secp256r1:secp384r1:secp521r1\")";
 $sim->{requiresSha2} = "requiresSha2+=(false)";
 
 my %count;
@@ -394,7 +462,7 @@ print OUT "$header";
 
 foreach my $shortname ( sort keys %sims ) {
 	foreach my $k ( qw(name shortname ciphers ciphersuites sni warning handshakebytes protos tlsvers lowestProtocol highestProtocol service 
-		minDhBits maxDhBits minRsaBits maxRsaBits minEcdsaBits requiresSha2 current) ) {
+		minDhBits maxDhBits minRsaBits maxRsaBits minEcdsaBits ellipticCurves requiresSha2 current) ) {
 		print OUT "     $sims{$shortname}->{$k}\n";
 	}
 	print OUT "\n";

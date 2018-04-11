@@ -296,6 +296,7 @@ OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 CLIENT_PROB_NO=1
 HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
+OSSL_SUPPORTED_CURVES=""
 HAS_SSL2=false
 HAS_SSL3=false
 HAS_TLS13=false
@@ -4145,9 +4146,10 @@ run_client_simulation() {
      local minRsaBits=()
      local maxRsaBits=()
      local minEcdsaBits=()
+     local curves=()
      local requiresSha2=()
      local i=0
-     local name tls proto cipher temp what_dh bits curve
+     local name tls proto cipher temp what_dh bits curve supported_curves
      local has_dh_bits using_sockets=true
      local client_service
      local options
@@ -4224,7 +4226,16 @@ run_client_simulation() {
                               [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE >$ERRFILE
                          fi
                     else
-                         options="$(s_client_options "-cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
+                         if [[ -n "${curves[i]}" ]]; then
+                              # "$OPENSSL s_client" will fail if the -curves option includes any unsupported curves.
+                              supported_curves=""
+                              for curve in $(colon_to_spaces "${curves[i]}"); do
+                                   [[ "$OSSL_SUPPORTED_CURVES" =~ " $curve " ]] && supported_curves+=":$curve"
+                              done
+                              curves[i]=""
+                              [[ -n "$supported_curves" ]] && curves[i]="-curves ${supported_curves:1}"
+                         fi
+                         options="$(s_client_options "-cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
                          debugme echo "$OPENSSL s_client $options  </dev/null"
                          $OPENSSL s_client $options </dev/null >$TMPFILE 2>$ERRFILE
                          sclient_connect_successful $? $TMPFILE
@@ -4264,7 +4275,7 @@ run_client_simulation() {
                          if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
                               # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                               for tls in ${tlsvers[i]}; do
-                                   options="$(s_client_options "$tls -cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
+                                   options="$(s_client_options "$tls -cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
                                    debugme echo "$OPENSSL s_client $options  </dev/null"
                                    $OPENSSL s_client $options  </dev/null >$TMPFILE 2>$ERRFILE
                                    sclient_connect_successful $? $TMPFILE
@@ -8020,8 +8031,7 @@ run_pfs() {
           for curve in "${curves_ossl[@]}"; do
                ossl_supported[nr_curves]=false
                supported_curve[nr_curves]=false
-               $OPENSSL s_client -curves $curve -connect x 2>&1 | egrep -iaq "Error with command|unknown option"
-               [[ $? -ne 0 ]] && ossl_supported[nr_curves]=true && nr_ossl_curves+=1
+               [[ "$OSSL_SUPPORTED_CURVES" =~ " $curve " ]] && ossl_supported[nr_curves]=true && nr_ossl_curves+=1
                nr_curves+=1
           done
 
@@ -14685,6 +14695,8 @@ find_openssl_binary() {
      local s_client_starttls_has=$TEMPDIR/s_client_starttls_has.txt
      local openssl_location cwd=""
      local ossl_wo_dev_info
+     local curve
+     local -a curves_ossl=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
 
      # 0. check environment variable whether it's executable
      if [[ -n "$OPENSSL" ]] && [[ ! -x "$OPENSSL" ]]; then
@@ -14765,6 +14777,11 @@ find_openssl_binary() {
           HAS_CIPHERSUITES=true
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
+
+     for curve in "${curves_ossl[@]}"; do
+          $OPENSSL s_client -curves $curve -connect x 2>&1 | egrep -iaq "Error with command|unknown option"
+          [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
+     done
 
      $OPENSSL pkey -help 2>&1 | grep -q Error || \
           HAS_PKEY=true
@@ -15031,6 +15048,8 @@ OSSL_VER_PLATFORM: $OSSL_VER_PLATFORM
 
 OPENSSL_NR_CIPHERS: $OPENSSL_NR_CIPHERS
 OPENSSL_CONF: $OPENSSL_CONF
+
+OSSL_SUPPORTED_CURVES: $OSSL_SUPPORTED_CURVES
 
 HAS_IPv6: $HAS_IPv6
 HAS_SSL2: $HAS_SSL2
