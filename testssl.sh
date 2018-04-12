@@ -79,7 +79,7 @@ declare -r ERR_OTHERCLIENT=248     # Other client problem
 declare -r ERR_DNSLOOKUP=247       # Problem with resolving IP addresses or names
 declare -r ERR_CONNECT=246         # Connectivity problem
 declare -r ERR_CLUELESS=245        # Weird state, either though user options or testssl.sh
-declare -r ERR_RESSOURCE=244       # Resources testssl.sh needs couldn't be read
+declare -r ERR_RESOURCE=244        # Resources testssl.sh needs couldn't be read
 declare -r ERR_CHILD=242           # Child received a signal from master
 declare -r ALLOK=0                 # All is fine
 
@@ -14695,7 +14695,7 @@ get_install_dir() {
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
-          [[ $? -ne 0 ]] && exit $ERR_RESSOURCE
+          [[ $? -ne 0 ]] && exit $ERR_RESOURCE
      fi
 
      TLS_DATA_FILE="$TESTSSL_INSTALL_DIR/etc/tls_data.txt"
@@ -14704,7 +14704,7 @@ get_install_dir() {
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
-          [[ $? -ne 0 ]] && exit $ERR_RESSOURCE
+          [[ $? -ne 0 ]] && exit $ERR_RESOURCE
      else
           :     # see #705, in a nutshell: not portable to initialize a global array inside a function. Thus it'll be done in main part below
      fi
@@ -17093,8 +17093,8 @@ parse_cmd_line() {
 
      ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES//,/ }"
      for fname in $ADDITIONAL_CA_FILES; do
-          [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" $ERR_RESSOURCE
-          grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESSOURCE
+          [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" $ERR_RESOURCE
+          grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
