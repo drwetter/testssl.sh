@@ -145,7 +145,7 @@ HNAME="${HNAME%%.*}"
 
 declare CMDLINE
 declare -r -a CMDLINE_ARRAY=("$@")                # When performing mass testing, the child processes need to be sent the
-declare -r -a MASS_TESTING_CMDLINE                # command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
+declare -a MASS_TESTING_CMDLINE                   # command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
 
 
 ########### Some predefinitions: date, sed (we always use test and not try to determine
