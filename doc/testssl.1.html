@@ -196,13 +196,11 @@ host.example.com:631
 
 <p><code>--assuming-http</code>           testssl.sh does upfront an application protocol detection. In cases where for some reasons the usage of HTTP cannot be automatically detected you may want to use this option. It tells testssl.sh not to skip HTTP specific tests and to run the client simulation with browsers. Sometimes also the severity depends on the application protocol, e.g. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server.</p>
 
-<ul>
-<li><p><code>-n, --nodns &lt;min|none></code> tells testssl.sh which DNS lookups should be performed. <code>min</code> uses only forward DNS resolution (A and AAAA record or MX record) and skips CAA lookups and PTR records from the IP address back to a DNS name.  <code>none</code> performs no
+<p><code>-n, --nodns &lt;min|none></code> tells testssl.sh which DNS lookups should be performed. <code>min</code> uses only forward DNS resolution (A and AAAA record or MX record) and skips CAA lookups and PTR records from the IP address back to a DNS name.  <code>none</code> performs no
 DNS lookups at all. For the latter you either have to supply the IP address as a target, to use <code>--ip</code> or have the IP address
-in /etc/hosts.  The use of the switch is only useful if you either can't or are not willing to perform DNS lookups. The latter can apply e.g. to some pentestsi. In general this option could e.g. help you to avoid timeouts by DNS lookups. <code>NODNS</code> is the enviroment variable for this.</p></li>
-<li><p><code>--sneaky</code> as a friendly feature for the server side testssl.sh uses a HTTP user agent <code>TLS tester from ${URL}</code>. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via <code>SNEAKY=true</code>).</p></li>
-</ul>
+in /etc/hosts.  The use of the switch is only useful if you either can't or are not willing to perform DNS lookups. The latter can apply e.g. to some pentestsi. In general this option could e.g. help you to avoid timeouts by DNS lookups. <code>NODNS</code> is the enviroment variable for this.</p>
 
+<p><code>--sneaky</code> as a friendly feature for the server side testssl.sh uses a HTTP user agent <code>TLS tester from ${URL}</code>. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via <code>SNEAKY=true</code>).</p>
 
 <h3 id="SINGLE-CHECK-OPTIONS">SINGLE CHECK OPTIONS</h3>
 
@@ -287,9 +285,9 @@ Also the Certification Authority Authorization (CAA) record is displayed.</p>
 
 <p><code>-I, --ccs, --ccs-injection</code>    Checks for CCS injection which is an openssl vulnerability. Sometimes also here the check needs to wait for a reply. The predefined timeout of 5 seconds can be changed with the environment variable <code>CCS_MAX_WAITSOCK</code>.</p>
 
-<p><code>-T, --ticketbleed</code>     Checks for Ticketbleed memory leakage in BigIP loadbalancers.</p>
+<p><code>-T, --ticketbleed</code>             Checks for Ticketbleed memory leakage in BigIP loadbalancers.</p>
 
-<p><code>-BB, --robot</code>      Checks for vulnerability to Bleichenbacher attacks.</p>
+<p><code>-BB, --robot</code>          Checks for vulnerability to Bleichenbacher attacks.</p>
 
 <p><code>-R, --renegotiation</code>           Tests renegotiation vulnerabilities. Currently there's a check for "Secure Renegotiation" and for "Secure Client-Initiated Renegotiation". Please be aware that vulnerable servers to the latter can likely be DoSed very easily (HTTP). A check for "Insecure Client-Initiated Renegotiation" is not yet implemented.</p>
 
@@ -346,7 +344,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--colorblind</code>                  Swaps green and blue colors in the output, so that this percentage of folks (up to 8% of males, see https://en.wikipedia.org/wiki/Color_blindness) can distinguish those findings better. <code>COLORBLIND</code> is the according variable if you want to set this in the environment.</p>
 
-<p><code>--debug &lt;0-6></code>            This gives you additional output on the screen (2-6), only useful for debugging. <code>DEBUG</code> is the according environment variable which you can use. There are six levels (0 is the default, thus it has no effect):</p>
+<p><code>--debug &lt;0-6></code>                 This gives you additional output on the screen (2-6), only useful for debugging. <code>DEBUG</code> is the according environment variable which you can use. There are six levels (0 is the default, thus it has no effect):</p>
 
 <ol>
 <li>screen output normal but leaves useful debug output in <strong>/tmp/testssl.XXXXXX/</strong> . The info about the exact directory is included in the screen output.</li>
@@ -384,7 +382,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>-oa &lt;filename></code> / <code>--outfile &lt;filename></code>     Does the same as the previous option but uses flat JSON instead.</p>
 
-<p><code>--hints</code>           This option is not in use yet. This option is meant to give hints how to fix a finding or at least a help to improve something. GIVE_HINTS is the environment variable for this.</p>
+<p><code>--hints</code>                       This option is not in use yet. This option is meant to give hints how to fix a finding or at least a help to improve something. GIVE_HINTS is the environment variable for this.</p>
 
 <p><code>--severity &lt;severity></code>         For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the <code>severity</code> value specified. Allowed are <code>&lt;LOW|MEDIUM|HIGH|CRITICAL></code>. WARN is another severity level which translates to a client-side scanning error or problem. Implicitly you will see all WARN severities in a file.</p>
 
@@ -516,12 +514,19 @@ to create the hashes for HPKP.</li>
 <li>1    testssl.sh has encountered exactly one ambiguous situation or an error during run</li>
 <li>1+n  same as previous. The errors or ambiguous results are added, also per IP.</li>
 <li>50-200 reserved for returning a vulnerability scoring for system monitoring or a CI tools</li>
-<li>245  no bash used</li>
-<li>249  temp file creation problem</li>
-<li>251  feature not yet supported</li>
-<li>252  no DNS resolver found or not executable / proxy couldn't be determined from given values / -xmpphost supplied but OPENSSL too old</li>
-<li>253  no SSL/TLS enabled server / OPENSSL too old / couldn't connect to proxy / couldn't connect via STARTTLS</li>
-<li>254  no OPENSSL found or not executable / no IPv4 address could be determined / illegal STARTTLS protocol supplied / supplied file name not readable</li>
+<li>242 (ERR_CHILD)       Child received a signal from master</li>
+<li>244 (ERR_RESOURCE)    Resources testssl.sh needs couldn't be read</li>
+<li>245 (ERR_CLUELESS)    Weird state, either though user options or testssl.sh</li>
+<li>246 (ERR_CONNECT)     Connectivity problem</li>
+<li>247 (ERR_DNSLOOKUP)   Problem with resolving IP addresses or names</li>
+<li>248 (ERR_OTHERCLIENT) Other client problem</li>
+<li>249 (ERR_DNSBIN)      Problem with DNS lookup binaries</li>
+<li>250 (ERR_OSSLBIN)     Problem with OpenSSL binary</li>
+<li>251 (ERR_NOSUPPORT)   Feature requested is not supported</li>
+<li>252 (ERR_FNAMEPARSE)  Input file couldn't be parsed</li>
+<li>253 (ERR_FCREATE)     Output file couldn't be created</li>
+<li>254 (ERR_CMDLINE)     Cmd line couldn't be parsed</li>
+<li>255 (ERR_BASH )       Bash version incorrect</li>
 </ul>
 
 

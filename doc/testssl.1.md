@@ -119,11 +119,11 @@ Please note that the content of `fname` has to be in Unix format. DOS carriage r
 
 `--assuming-http`           testssl.sh does upfront an application protocol detection. In cases where for some reasons the usage of HTTP cannot be automatically detected you may want to use this option. It tells testssl.sh not to skip HTTP specific tests and to run the client simulation with browsers. Sometimes also the severity depends on the application protocol, e.g. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server.
 
-* `-n, --nodns <min|none>` tells testssl.sh which DNS lookups should be performed. `min` uses only forward DNS resolution (A and AAAA record or MX record) and skips CAA lookups and PTR records from the IP address back to a DNS name.  `none` performs no
+`-n, --nodns <min|none>` tells testssl.sh which DNS lookups should be performed. `min` uses only forward DNS resolution (A and AAAA record or MX record) and skips CAA lookups and PTR records from the IP address back to a DNS name.  `none` performs no
 DNS lookups at all. For the latter you either have to supply the IP address as a target, to use `--ip` or have the IP address
 in /etc/hosts.  The use of the switch is only useful if you either can't or are not willing to perform DNS lookups. The latter can apply e.g. to some pentestsi. In general this option could e.g. help you to avoid timeouts by DNS lookups. `NODNS` is the enviroment variable for this.
 
-* `--sneaky` as a friendly feature for the server side testssl.sh uses a HTTP user agent `TLS tester from ${URL}`. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
+`--sneaky` as a friendly feature for the server side testssl.sh uses a HTTP user agent `TLS tester from ${URL}`. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
 
 
 ### SINGLE CHECK OPTIONS
@@ -206,9 +206,9 @@ Also the Certification Authority Authorization (CAA) record is displayed.
 
 `-I, --ccs, --ccs-injection`    Checks for CCS injection which is an openssl vulnerability. Sometimes also here the check needs to wait for a reply. The predefined timeout of 5 seconds can be changed with the environment variable `CCS_MAX_WAITSOCK`.
 
-`-T, --ticketbleed`		Checks for Ticketbleed memory leakage in BigIP loadbalancers.
+`-T, --ticketbleed`             Checks for Ticketbleed memory leakage in BigIP loadbalancers.
 
-`-BB, --robot`		Checks for vulnerability to Bleichenbacher attacks.
+`-BB, --robot`          Checks for vulnerability to Bleichenbacher attacks.
 
 `-R, --renegotiation`           Tests renegotiation vulnerabilities. Currently there's a check for "Secure Renegotiation" and for "Secure Client-Initiated Renegotiation". Please be aware that vulnerable servers to the latter can likely be DoSed very easily (HTTP). A check for "Insecure Client-Initiated Renegotiation" is not yet implemented.
 
@@ -267,7 +267,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--colorblind`                  Swaps green and blue colors in the output, so that this percentage of folks (up to 8% of males, see https://en.wikipedia.org/wiki/Color_blindness) can distinguish those findings better. `COLORBLIND` is the according variable if you want to set this in the environment.
 
-`--debug <0-6>`			This gives you additional output on the screen (2-6), only useful for debugging. `DEBUG` is the according environment variable which you can use. There are six levels (0 is the default, thus it has no effect):
+`--debug <0-6>`                 This gives you additional output on the screen (2-6), only useful for debugging. `DEBUG` is the according environment variable which you can use. There are six levels (0 is the default, thus it has no effect):
 
 1. screen output normal but leaves useful debug output in __/tmp/testssl.XXXXXX/__ . The info about the exact directory is included in the screen output.
 2. list more what's going on, status (high level) and connection errors, a few general debug output
@@ -304,7 +304,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `-oa <filename>` / `--outfile <filename>`     Does the same as the previous option but uses flat JSON instead.
 
-`--hints`			This option is not in use yet. This option is meant to give hints how to fix a finding or at least a help to improve something. GIVE_HINTS is the environment variable for this.
+`--hints`                       This option is not in use yet. This option is meant to give hints how to fix a finding or at least a help to improve something. GIVE_HINTS is the environment variable for this.
 
 `--severity <severity>`         For JSON and CSV output this will only add findings to the output file if a severity is equal or higher than the `severity` value specified. Allowed are `<LOW|MEDIUM|HIGH|CRITICAL>`. WARN is another severity level which translates to a client-side scanning error or problem. Implicitly you will see all WARN severities in a file.
 
@@ -441,13 +441,19 @@ does the same on the plain text IMAP port. Please note that for plain TLS-encryp
 * 1    testssl.sh has encountered exactly one ambiguous situation or an error during run
 * 1+n  same as previous. The errors or ambiguous results are added, also per IP.
 * 50-200 reserved for returning a vulnerability scoring for system monitoring or a CI tools
-* 245  no bash used
-* 249  temp file creation problem
-* 251  feature not yet supported
-* 252  no DNS resolver found or not executable / proxy couldn't be determined from given values / -xmpphost supplied but OPENSSL too old
-* 253  no SSL/TLS enabled server / OPENSSL too old / couldn't connect to proxy / couldn't connect via STARTTLS
-* 254  no OPENSSL found or not executable / no IPv4 address could be determined / illegal STARTTLS protocol supplied / supplied file name not readable
-
+* 242 (ERR_CHILD)       Child received a signal from master
+* 244 (ERR_RESOURCE)    Resources testssl.sh needs couldn't be read
+* 245 (ERR_CLUELESS)    Weird state, either though user options or testssl.sh
+* 246 (ERR_CONNECT)     Connectivity problem
+* 247 (ERR_DNSLOOKUP)   Problem with resolving IP addresses or names
+* 248 (ERR_OTHERCLIENT) Other client problem
+* 249 (ERR_DNSBIN)      Problem with DNS lookup binaries
+* 250 (ERR_OSSLBIN)     Problem with OpenSSL binary
+* 251 (ERR_NOSUPPORT)   Feature requested is not supported
+* 252 (ERR_FNAMEPARSE)  Input file couldn't be parsed
+* 253 (ERR_FCREATE)     Output file couldn't be created
+* 254 (ERR_CMDLINE)     Cmd line couldn't be parsed
+* 255 (ERR_BASH )       Bash version incorrect
 
 ## FILES
 
