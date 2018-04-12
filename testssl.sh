@@ -3,19 +3,15 @@
 # vim:ts=5:sw=5:expandtab
 # we have a spaces softtab, that ensures readability with other editors too
 
-[ -z "$BASH_VERSINFO" ] && printf "\n\033[1;35m Please make sure you're using \"bash\"! Bye...\033[m\n\n" >&2 && exit 245
-[ $(kill -l | grep -c SIG) -eq 0 ] && printf "\n\033[1;35m Please make sure you're calling me without leading \"sh\"! Bye...\033[m\n\n"  >&2 && exit 245
-[ ${BASH_VERSINFO[0]} -lt 3 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit 245
-[ ${BASH_VERSINFO[0]} -le 3 -a ${BASH_VERSINFO[1]} -le 1 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit 245
-
 # testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some
 # vulnerabilities or features
 #
 # Devel version is available from    https://github.com/drwetter/testssl.sh
 # Stable version from                https://testssl.sh
 # Please file bugs at github!        https://github.com/drwetter/testssl.sh/issues
-
-# Main author: Dirk Wetter, copyleft: 2007-today, contributions so far see CREDITS.md
+#
+# Project lead and initiator: Dirk Wetter, copyleft: 2007-today, contributions so far see CREDITS.md
+# Main contriubtions from David Cooper
 #
 # License: GPLv2, see http://www.fsf.org/licensing/licenses/info/GPLv2.html
 # and accompanying license "LICENSE.txt". Redistribution + modification under this
@@ -33,63 +29,73 @@
 # stating a CC BY 3.0 US license: https://creativecommons.org/licenses/by/3.0/us/
 #
 # Please note:  USAGE WITHOUT ANY WARRANTY, THE SOFTWARE IS PROVIDED "AS IS".
-#
 # USE IT AT your OWN RISK!
 # Seriously! The threat is you run this code on your computer and input could be /
 # is being supplied via untrusted sources.
-
+#
 # HISTORY:
 # Back in 2006 it all started with a few openssl commands...
 # That's because openssl is a such a good swiss army knife (see e.g.
 # wiki.openssl.org/index.php/Command_Line_Utilities) that it was difficult to resist
 # wrapping some shell commands around it, which I used for my pen tests. This is how
 # everything started.
-# Now it has grown up, it has bash socket support for some features, which is basically replacing
-# more and more functions of OpenSSL and will serve as some kind of library in the future.
-# The socket checks in bash may sound cool and unique -- they are -- but probably you
-# can achieve e.g. the same result with my favorite interactive shell: zsh (zmodload zsh/net/socket
-# -- checkout zsh/net/tcp) too!
-# /bin/bash though is way more often used within Linux and it's perfect
-# for cross platform support, see MacOS X and also under Windows the MSYS2 extension or Cygwin
-# as well as Bash on Windows (WSL)
+# Now it has grown up, it has bash socket support for most features, which has been basically
+# replacing more and more functions of OpenSSL and some sockets functions serve as some kind
+# of central functions.
+#
+# WHY BASH?
 # Cross-platform is one of the three main goals of this script. Second: Ease of installation.
 # No compiling, install gems, go to CPAN, use pip etc. Third: Easy to use and to interpret
 # the results.
-
-# Did I mention it's open source?
-
+# /bin/bash including the builtin sockets fulfill all that.  The socket checks in bash may sound
+# cool and unique -- they are -- but probably you can achieve e.g. the same result with my favorite
+# interactive shell: zsh (zmodload zsh/net/socket -- checkout zsh/net/tcp) too! Oh, and btw.
+# ksh93 has socket support too.
+# /bin/bash though is way more often used within Linux and it's perfect for cross platform support.
+# MacOS X has it and also under Windows the MSYS2 extension or Cygwin as well as Bash on Windows (WSL)
+# has /bin/bash.
+#
 # Q: So what's the difference to www.ssllabs.com/ssltest/ or sslcheck.globalsign.com/ ?
 # A: As of now ssllabs only check 1) webservers 2) on standard ports, 3) reachable from the
 #    internet. And those examples above 4) are 3rd parties. If these restrictions are all fine
 #    with you and you need a management compatible rating -- go ahead and use those.
-
-# But also if your fine with those restrictions: testssl.sh is meant as a tool in your hand
-# and it's way more flexible.
 #
-# Oh, and did I mention testssl.sh is open source?
+# But also if your fine with those restrictions: testssl.sh is meant as a tool in your hand
+# and it's way more flexible.  Oh, and did I mention testssl.sh is open source?
+#
+#################### Stop talking, action now ####################
 
-# Note that up to today there were a lot changes for "standard" openssl
-# binaries: a lot of features (ciphers, protocols, vulnerabilities)
-# are disabled as they'll impact security otherwise. For security
-# testing though we need  all broken features. testssl.sh will
-# over time replace those checks with bash sockets -- however it's
-# still recommended to use the supplied binaries or cook your own, see
-# https://github.com/drwetter/testssl.sh/blob/master/bin/Readme.md .
-# Don't worry if feature X is not available you'll get a warning about
-# this missing feature! The idea is if this script can't tell something
-# for sure it speaks up so that you have clear picture.
 
-# debugging help:
-readonly PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+########### Definition of error codes
+#
+declare -r ERR_BASH=255            # Bash version incorrect
+declare -r ERR_CMDLINE=254         # Cmd line couldn't be parsed
+declare -r ERR_FCREATE=253         # Output file couldn't be created
+declare -r ERR_FNAMEPARSE=252      # Input file couldn't be parsed
+declare -r ERR_NOSUPPORT=251       # Feature requested is not supported
+declare -r ERR_OSSLBIN=250         # Problem with OpenSSL binary
+declare -r ERR_DNSBIN=249          # Problem with DNS lookup binaries
+declare -r ERR_OTHERCLIENT=248     # Other client problem
+declare -r ERR_DNSLOOKUP=247       # Problem with resolving IP addresses or names
+declare -r ERR_CONNECT=246         # Connectivity problem
+declare -r ERR_CLUELESS=245        # Weird state, either though user options or testssl.sh
+declare -r ERR_RESSOURCE=244       # Resources testssl.sh needs couldn't be read
+declare -r ERR_CHILD=242           # Child received a signal from master
+declare -r ALLOK=0                 # All is fine
 
-# see stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
-# how to paste both in order to do performance analysis
-DEBUGTIME=${DEBUGTIME:-false}
+
+[ -z "$BASH_VERSINFO" ] && printf "\n\033[1;35m Please make sure you're using \"bash\"! Bye...\033[m\n\n" >&2 && exit $ERR_BASH
+[ $(kill -l | grep -c SIG) -eq 0 ] && printf "\n\033[1;35m Please make sure you're calling me without leading \"sh\"! Bye...\033[m\n\n"  >&2 && exit $ERR_BASH
+[ ${BASH_VERSINFO[0]} -lt 3 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit $ERR_BASH
+[ ${BASH_VERSINFO[0]} -le 3 -a ${BASH_VERSINFO[1]} -le 1 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit $ERR_BASH
+
+########### Debugging helpers + profiling
+#
+declare -r PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+DEBUGTIME=${DEBUGTIME:-false}                     # stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353, profiling bash
 DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for testssl.sh and bash3's default
                                                   # false: needed for performance analysis or useful for just having an extra file
 DEBUG_ALLINONE=${SETX:-false}                     # SETX as a shortcut for old style debugging, overriding DEBUG_ALLINONE
-
-
 if grep -q xtrace <<< "$SHELLOPTS"; then
      if "$DEBUGTIME"; then
           # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
@@ -103,19 +109,31 @@ if grep -q xtrace <<< "$SHELLOPTS"; then
      fi
 fi
 
-
-# make sure that temporary files are cleaned up after use in ANY case
+########### Traps! Make sure that temporary files are cleaned up after use in ANY case
+#
 trap "cleanup" QUIT EXIT
 trap "child_error" USR1
 
-readonly VERSION="2.9dev"
-readonly SWCONTACT="dirk aet testssl dot sh"
-egrep -q "dev|rc" <<< "$VERSION" && \
+########### Internal definitions
+#
+declare -r VERSION="2.9dev"
+declare -r SWCONTACT="dirk aet testssl dot sh"
+egrep -q "dev|rc|beta" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
      SWURL="https://testssl.sh/"
-
-readonly PROG_NAME="$(basename "$0")"
-readonly RUN_DIR="$(dirname "$0")"
+declare -r CVS_REL=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')
+declare -r CVS_REL_SHORT=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')
+if git log &>/dev/null; then
+     declare -r GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
+     declare -r GIT_REL_SHORT=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1 }')
+     declare -r REL_DATE=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $2 }')
+else
+     declare -r REL_DATE=$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')
+fi
+declare -r PROG_NAME="$(basename "$0")"
+declare -r RUN_DIR="$(dirname "$0")"
+declare -r SYSTEM=$(uname -s)
+SYSTEM2=""                                        # currently only being used for WSL = bash on windows
 TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # If you run testssl.sh and it doesn't find it necessary file automagically set TESTSSL_INSTALL_DIR
 CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # You can have your stores some place else
 ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES:-""}"  # single file with a CA in PEM format or comma separated lists of them
@@ -126,27 +144,16 @@ HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
 
 declare CMDLINE
-# When performing mass testing, the child processes need to be sent the
-# command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
-readonly -a CMDLINE_ARRAY=("$@")
-declare -a MASS_TESTING_CMDLINE
+declare -r -a CMDLINE_ARRAY=("$@")                # When performing mass testing, the child processes need to be sent the
+declare -r -a MASS_TESTING_CMDLINE                # command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
 
-readonly CVS_REL=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')
-readonly CVS_REL_SHORT=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')
-if git log &>/dev/null; then
-     readonly GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
-     readonly GIT_REL_SHORT=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1 }')
-     readonly REL_DATE=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $2 }')
-else
-     readonly REL_DATE=$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')
-fi
-readonly SYSTEM=$(uname -s)
-SYSTEM2=""                                             # currently only being used for WSL = bash on windows
 
+########### Some predefinitions: date, sed (we always use test and not try to determine
+#   capabilities by querying the OS)
+#
 HAS_GNUDATE=false
 HAS_FREEBSDDATE=false
 HAS_OPENBSDDATE=false
-
 if date -d @735275209 >/dev/null 2>&1; then
      if date -r @735275209  >/dev/null 2>&1; then
           # it can't do any conversion from a plain date output
@@ -160,12 +167,13 @@ date -j -f '%s' 1234567 >/dev/null 2>&1 && \
      HAS_FREEBSDDATE=true
 
 echo A | sed -E 's/A//' >/dev/null 2>&1 && \
-     readonly HAS_SED_E=true || \
-     readonly HAS_SED_E=false
+     declare -r HAS_SED_E=true || \
+     declare -r HAS_SED_E=false
 
+########### Terminal defintions
 tty -s && \
-     readonly INTERACTIVE=true || \
-     readonly INTERACTIVE=false
+     declare -r INTERACTIVE=true || \
+     declare -r INTERACTIVE=false
 
 if [[ -z $TERM_WIDTH ]]; then                               # no batch file and no otherwise predefined TERM_WIDTH
      if ! tput cols &>/dev/null || ! "$INTERACTIVE";then    # Prevent tput errors if running non interactive
@@ -176,12 +184,13 @@ if [[ -z $TERM_WIDTH ]]; then                               # no batch file and 
 fi
 TERM_CURRPOS=0                                              # custom line wrapping needs alter the current horizontal cursor pos
 
-## CONFIGURATION PART ##
-# following variables make use of $ENV, e.g. OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <URI>
-# 0 means (normally) true here. Some of the variables are also accessible with a command line switch, see --help
+
+########### Defining (and presetting) variables which can be changed
+#
+# Following variables make use of $ENV and can be used like "OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <URI>"
 declare -x OPENSSL OPENSSL_TIMEOUT
 FAST_SOCKET=${FAST_SOCKET:-false}       # EXPERIMENTAL feature to accelerate sockets -- DO NOT USE it for production
-COLOR=${COLOR:-2}                       # 3: extra color, 2: Full color, 1: b/w+positioning, 0: no ESC at all
+COLOR=${COLOR:-2}                       # 3: Extra color (ciphers, curves), 2: Full color, 1: B/W only 0: No ESC at all
 COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the output
 SHOW_EACH_C=${SHOW_EACH_C:-false}       # where individual ciphers are tested show just the positively ones tested
 SHOW_SIGALGO=${SHOW_SIGALGO:-false}     # "secret" switch whether testssl.sh shows the signature algorithm for -E / -e
@@ -207,11 +216,12 @@ HTMLFILE="${HTMLFILE:-""}"              # HTML if used
 FNAME=${FNAME:-""}                      # file name to read commands from
 FNAME_PREFIX=${FNAME_PREFIX:-""}        # output filename prefix, see --outprefix
 APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
-# NODNS=${NODNS:-"no"}                  # if unset it does all DNS lookups per default. "min" only for hosts or "none" at all
+[[ -z "$NODNS" ]] && declare NODNS      # If unset it does all DNS lookups per default. "min" only for hosts or "none" at all
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
 
-# tuning vars which cannot be set by a cmd line switch
+########### Tuning vars which cannot be set by a cmd line switch
+#
 EXPERIMENTAL=${EXPERIMENTAL:-false}
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 MAX_SOCKET_FAIL=${MAX_SOCKET_FAIL:-2}   # If this many failures for TCP socket connects are reached we terminate
@@ -234,7 +244,7 @@ VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THR
 DNS_VIA_PROXY=${DNS_VIA_PROXY:-false}   # don't do DNS lookups via proxy. --ip=proxy reverses this
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (external) openssl engine set this to true
-readonly CLIENT_MIN_PFS=5               # number of ciphers needed to run a test for PFS
+declare -r CLIENT_MIN_PFS=5             # number of ciphers needed to run a test for PFS
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
 if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
@@ -243,10 +253,11 @@ else
      MEASURE_TIME=${MEASURE_TIME:-false}
 fi
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
-readonly UA_STD="TLS tester from $SWURL"
-readonly UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
+declare -r UA_STD="TLS tester from $SWURL"
+declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
 
-# initialization part, further global vars just declared here
+########### Initialization part, further global vars just being declared here
+#
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
 JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
@@ -260,10 +271,12 @@ HAD_SLEPT=0
 NR_SOCKET_FAIL=0                        # Counter for socket failures
 NR_OSSL_FAIL=0                          # .. for OpenSSL connects
 NR_HEADER_FAIL=0                        # .. for HTTP_GET
-readonly NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
+PROTOS_OFFERED=""                       # This keeps which protocol is being offered. See has_server_protocol().
+DETECTED_TLS_VERSION=""
+TLS_EXTENSIONS=""
+declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observerd @ facebook and others, old ones like h2-17 omitted as they could not be found
-readonly ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
-
+declare -r ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
 declare -a SESS_RESUMPTION
 TEMPDIR=""
 TMPFILE=""
@@ -274,15 +287,12 @@ HOSTCERT=""                             # File with host certificate, without in
 HEADERFILE=""
 HEADERVALUE=""
 HTTP_STATUS_CODE=""
-PROTOS_OFFERED=""                       # This is a global to keep the info which protocol is being offered. See has_server_protocol().
 KEY_SHARE_EXTN_NR="33"                  # The extension number for key_share was changed from 40 to 51 in TLSv1.3 draft 23. In order to
                                         # support draft 23 in additional to earlier drafts, need to know which extension number to use.
                                         # Note that it appears that a single ClientHello cannot advertise both draft 23 and earlier drafts.
                                         # Preset may help to deal with STARTTLS + TLS 1.3 draft 23 but not earlier.
-TLS_EXTENSIONS=""
 BAD_SERVER_HELLO_CIPHER=false           # reserved for cases where a ServerHello doesn't contain a cipher offered in the ClientHello
 GOST_STATUS_PROBLEM=false
-DETECTED_TLS_VERSION=""
 PATTERN2SHOW=""
 SOCK_REPLY_FILE=""
 NW_STR=""
@@ -319,27 +329,27 @@ PORT=443                                # unless otherwise auto-determined, see 
 NODE=""
 NODEIP=""
 rDNS=""
-CORRECT_SPACES=""                       # used for IPv6 and proper output formatting
+CORRECT_SPACES=""                       # Used for IPv6 and proper output formatting
 IPADDRs=""
 IP46ADDRs=""
-LOCAL_A=false                           # does the $NODEIP come from /etc/hosts?
-LOCAL_AAAA=false                        # does the IPv6 IP come from /etc/hosts?
+LOCAL_A=false                           # Does the $NODEIP come from /etc/hosts?
+LOCAL_AAAA=false                        # Does the IPv6 IP come from /etc/hosts?
 XMPP_HOST=""
 PROXY=""
 PROXYIP=""
 PROXYPORT=""
 VULN_COUNT=0
-SERVICE=""                              # is the server running an HTTP server, SMTP, POP or IMAP?
+SERVICE=""                              # Is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
 CERT_FINGERPRINT_SHA2=""
 RSA_CERT_FINGERPRINT_SHA2=""
 STARTTLS_PROTOCOL=""
-OPTIMAL_PROTO=""                        # we need this for IIS6 (sigh) and OpenSSL 1.0.2, otherwise some handshakes
-                                        # will fail, see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
-STARTTLS_OPTIMAL_PROTO=""               # same for STARTTLS, see https://github.com/drwetter/testssl.sh/issues/188
-TLS_TIME=""                             # to keep the value of TLS server timestamp
-TLS_NOW=""                              # similar
-TLS_DIFFTIME_SET=false                  # tells TLS functions to measure the TLS difftime or not
+OPTIMAL_PROTO=""                        # Need this for IIS6 (sigh) + OpenSSL 1.0.2, otherwise some handshakes will fail see
+                                        # https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
+STARTTLS_OPTIMAL_PROTO=""               # Same for STARTTLS, see https://github.com/drwetter/testssl.sh/issues/188
+TLS_TIME=""                             # To keep the value of TLS server timestamp
+TLS_NOW=""                              # Similar
+TLS_DIFFTIME_SET=false                  # Tells TLS functions to measure the TLS difftime or not
 NOW_TIME=""
 HTTP_TIME=""
 GET_REQ11=""
@@ -347,15 +357,15 @@ START_TIME=0                            # time in epoch when the action started
 END_TIME=0                              # .. ended
 SCAN_TIME=0                             # diff of both: total scan time
 LAST_TIME=0                             # only used for performance measurements (MEASURE_TIME=true)
-
-# Devel stuff, see -q below
-TLS_LOW_BYTE=""
-HEX_CIPHER=""
-
 SERVER_COUNTER=0                        # Counter for multiple servers
 
+TLS_LOW_BYTE=""                         # For "secret" development stuff, see -q below
+HEX_CIPHER=""                           # "
+
+
 ########### Global variables for parallel mass testing
-readonly PARALLEL_SLEEP=1                 # Time to sleep after starting each test
+#
+declare -r PARALLEL_SLEEP=1               # Time to sleep after starting each test
 MAX_WAIT_TEST=${MAX_WAIT_TEST:-1200}      # Maximum time (in seconds) to wait for a test to complete
 MAX_PARALLEL=${MAX_PARALLEL:-20}          # Maximum number of tests to run in parallel
                                           # This value may be made larger on systems with faster processors
@@ -365,8 +375,23 @@ declare -i NR_PARALLEL_TESTS=0            # number of parallel tests run
 declare -i NEXT_PARALLEL_TEST_TO_FINISH=0 # number of parallel tests that have completed and have been processed
 declare FIRST_JSON_OUTPUT=true            # true if no output has been added to $JSONFILE yet.
 
-#################### SEVERITY ####################
 
+########### Cipher suite information
+#
+declare -i TLS_NR_CIPHERS=0
+declare TLS_CIPHER_HEXCODE=()
+declare TLS_CIPHER_OSSL_NAME=()
+declare TLS_CIPHER_RFC_NAME=()
+declare TLS_CIPHER_SSLVERS=()
+declare TLS_CIPHER_KX=()
+declare TLS_CIPHER_AUTH=()
+declare TLS_CIPHER_ENC=()
+declare TLS_CIPHER_EXPORT=()
+declare TLS_CIPHER_OSSL_SUPPORTED=()
+declare TLS13_OSSL_CIPHERS="TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256"
+
+########### Severity functions and globals
+#
 INFO=0
 OK=0
 LOW=1
@@ -406,21 +431,7 @@ show_finding() {
    ( [[ "$severity" == "CRITICAL" ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] )
 }
 
-
-###### Cipher suite information #####
-declare -i TLS_NR_CIPHERS=0
-declare TLS_CIPHER_HEXCODE=()
-declare TLS_CIPHER_OSSL_NAME=()
-declare TLS_CIPHER_RFC_NAME=()
-declare TLS_CIPHER_SSLVERS=()
-declare TLS_CIPHER_KX=()
-declare TLS_CIPHER_AUTH=()
-declare TLS_CIPHER_ENC=()
-declare TLS_CIPHER_EXPORT=()
-declare TLS_CIPHER_OSSL_SUPPORTED=()
-declare TLS13_OSSL_CIPHERS="TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256"
-
-###### output functions ######
+########### Output functions
 
 # For HTML output, replace any HTML reserved characters with the entity name
 html_reserved(){
@@ -442,7 +453,7 @@ html_out() {
      # here and other printf's: a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%'. '--' and %b do the rest.
 }
 
-# this is intentionally the same.
+# This is intentionally the same.
 safe_echo()  { printf -- "%b" "${1//%/%%}"; }
 tm_out()     { printf -- "%b" "${1//%/%%}"; }
 tmln_out()   { printf -- "%b" "${1//%/%%}\n"; }
@@ -452,7 +463,7 @@ outln() { printf -- "%b" "${1//%/%%}\n"; html_out "$1\n"; }
 
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
-# color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
+# Color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
 tm_liteblue()   { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;32m$1" || tm_out "\033[0;34m$1" ) || tm_out "$1"; tm_off; }    # not yet used
 pr_liteblue()   { tm_liteblue "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
 tmln_liteblue() { tm_liteblue "$1"; tmln_out; }
@@ -485,8 +496,8 @@ tmln_cyan()     { tm_cyan "$1"; tmln_out; }
 pr_cyan()       { tm_cyan "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:cyan;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 prln_cyan()     { pr_cyan "$1"; outln; }
 
-tm_litegrey()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[0;37m$1" || tm_out "$1"; tm_off; }                        # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
-tmln_litegrey() { tm_litegrey "$1"; tmln_out; }                                                                  # not really usable on a black background, see ..
+tm_litegrey()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[0;37m$1" || tm_out "$1"; tm_off; }                         # ... https://github.com/drwetter/testssl.sh/pull/600#issuecomment-276129876
+tmln_litegrey() { tm_litegrey "$1"; tmln_out; }                                                                   # not really usable on a black background, see ..
 prln_litegrey() { pr_litegrey "$1"; outln; }
 pr_litegrey()   { tm_litegrey "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"color:darkgray;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 
@@ -510,7 +521,7 @@ tmln_svrty_low()   { tm_svrty_low "$1"; tmln_out; }
 pr_svrty_low()     { tm_svrty_low "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:#cdcd00;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 prln_svrty_low()   { pr_svrty_low "$1"; outln; }
 
-tm_svrty_medium()  { [[ "$COLOR" -ge 2 ]] && tm_out "\033[0;33m$1" || tm_out "$1"; tm_off; }       # brown | it is not a bad problem but you shouldn't do this
+tm_svrty_medium()  { [[ "$COLOR" -ge 2 ]] && tm_out "\033[0;33m$1" || tm_out "$1"; tm_off; }         # brown | it is not a bad problem but you shouldn't do this
 pr_svrty_medium()  { tm_svrty_medium "$1"; [[ "$COLOR" -ge 2 ]] && html_out "<span style=\"color:#cd8000;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 tmln_svrty_medium(){ tm_svrty_medium "$1"; tmln_out; }
 prln_svrty_medium(){ pr_svrty_medium "$1"; outln; }
@@ -897,7 +908,7 @@ json_header() {
      if "$APPEND"; then
           JSONHEADER=false
      else
-          [[ -s "$JSONFILE" ]] && fatal "non-empty \"$JSONFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -s "$JSONFILE" ]] && fatal "non-empty \"$JSONFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
           "$do_json" && echo "[" > "$JSONFILE"
           "$do_pretty_json" && echo "{" > "$JSONFILE"
      fi
@@ -937,7 +948,7 @@ csv_header() {
      if "$APPEND"; then
           CSVHEADER=false
      else
-          [[ -s "$CSVFILE" ]] && fatal "non-empty \"$CSVFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -s "$CSVFILE" ]] && fatal "non-empty \"$CSVFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
           echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
      fi
      return 0
@@ -980,7 +991,7 @@ html_header() {
      if "$APPEND"; then
           HTMLHEADER=false
      else
-          [[ -s "$HTMLFILE" ]] && fatal "non-empty \"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" 1
+          [[ -s "$HTMLFILE" ]] && fatal "non-empty \"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
           html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
           html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
           html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
@@ -1014,6 +1025,39 @@ html_footer() {
 }
 
 ################# HTML FILE FORMATTING END ####################
+
+prepare_logging() {
+     # arg1: for testing mx records name we put a name of logfile in here, otherwise we get strange file names
+     local fname_prefix="$1"
+     local filename_provided=false
+
+     [[ -n "$LOGFILE" ]] && [[ ! -d "$LOGFILE" ]] && filename_provided=true
+
+     # Similar to html_header():
+     ! "$do_logging" && return 0
+     "$do_mass_testing" && ! "$filename_provided" && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
+
+     [[ -z "$fname_prefix" ]] && fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
+
+     if [[ -z "$LOGFILE" ]]; then
+          LOGFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".log)"
+     elif [[ -d "$LOGFILE" ]]; then
+          # actually we were instructed to place all files in a DIR instead of the current working dir
+          LOGFILE="$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)"
+     else
+          : # just for clarity: a log file was specified, no need to do anything else
+     fi
+
+     if ! "$APPEND"; then
+          [[ -s "$LOGFILE" ]] && fatal "non-empty \"$LOGFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+     fi
+     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>"$LOGFILE"
+     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>"$LOGFILE"
+     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>"$LOGFILE"
+     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>"$LOGFILE"
+     exec > >(tee -a -i "$LOGFILE")
+}
 
 ################### FILE FORMATTING END #########################
 
@@ -1592,8 +1636,8 @@ service_detection() {
 #
 connectivity_problem() {
      if [[ $1 -ge $2 ]]; then
-          [[ $2 -eq 1 ]] && fatal "$3" -2
-          fatal "$4" -2
+          [[ $2 -eq 1 ]] && fatal "$3" $ERR_CONNECT
+          fatal "$4" $ERR_CONNECT
      fi
 }
 
@@ -2543,7 +2587,7 @@ prettyprint_local() {
      local re='^[0-9A-Fa-f]+$'
 
      if [[ "$1" == 0x* ]] || [[ "$1" == 0X* ]]; then
-          fatal "pls supply x<number> instead" 2
+          fatal "pls supply x<number> instead" $ERR_CMDLINE
      fi
 
      if [[ -z "$1" ]]; then
@@ -4976,7 +5020,7 @@ run_protocols() {
      if [[ ! "$PROTOS_OFFERED" =~ yes ]]; then
           outln
           ignore_no_or_lame "You should not proceed as no protocol was detected. If you still really really want to, say \"YES\"" "YES"
-          [[ $? -ne 0 ]] && exit -2
+          [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
      return $ret
 }
@@ -8595,10 +8639,10 @@ fd_socket() {
                     starttls_imap_dialog
                     ;;
                ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
-                    fatal "FIXME: LDAP+STARTTLS over sockets not yet supported (try \"--ssl-native\")" -4
+                    fatal "FIXME: LDAP+STARTTLS over sockets not yet supported (try \"--ssl-native\")" $ERR_NOSUPPORT
                     ;;
                acap|acaps) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
-                    fatal "ACAP Easteregg: not implemented -- probably never will" -4
+                    fatal "ACAP Easteregg: not implemented -- probably never will" $ERR_NOSUPPORT
                     ;;
                xmpp|xmpps) # XMPP, see https://tools.ietf.org/html/rfc6120
                     starttls_just_read
@@ -8624,7 +8668,7 @@ EOF
                     starttls_mysql_dialog
                     ;;
                *) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
-                    fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" -4
+                    fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" $ERR_NOSUPPORT
           esac
      fi
      [[ $? -eq 0 ]] && return 0
@@ -14596,7 +14640,7 @@ old_fart() {
      pr_url "https://github.com/PeterMosmans/openssl"
      outln "."
      fileout_insert_warning "old_fart" "WARN" "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn\'t make much sense to proceed. Get precompiled bins or compile https://github.com/PeterMosmans/openssl ."
-     fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn't make much sense to proceed." -5
+     fatal "Your $OPENSSL $OSSL_VER version is an old fart... . It doesn't make much sense to proceed." $ERR_OSSLBIN
 }
 
 # try very hard to determine the install path to get ahold of the mapping file and the CA bundles
@@ -14651,7 +14695,7 @@ get_install_dir() {
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
-          [[ $? -ne 0 ]] && exit -2
+          [[ $? -ne 0 ]] && exit $ERR_RESSOURCE
      fi
 
      TLS_DATA_FILE="$TESTSSL_INSTALL_DIR/etc/tls_data.txt"
@@ -14660,7 +14704,7 @@ get_install_dir() {
           outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
-          [[ $? -ne 0 ]] && exit -2
+          [[ $? -ne 0 ]] && exit $ERR_RESSOURCE
      else
           :     # see #705, in a nutshell: not portable to initialize a global array inside a function. Thus it'll be done in main part below
      fi
@@ -14718,7 +14762,7 @@ find_openssl_binary() {
      # no ERRFILE initialized yet, thus we use /dev/null for stderr directly
      $OPENSSL version -a 2>/dev/null >/dev/null
      if [[ $? -ne 0 ]] || [[ ! -x "$OPENSSL" ]]; then
-          fatal "cannot exec or find any openssl binary" -5
+          fatal "cannot exec or find any openssl binary" $ERR_OSSLBIN
      fi
 
      # http://www.openssl.org/news/openssl-notes.html
@@ -14837,7 +14881,7 @@ find_openssl_binary() {
                outln
                prln_warning " Necessary binary \"timeout\" not found."
                ignore_no_or_lame " Continue without timeout? " "yes"
-               [[ $? -ne 0 ]] && exit -2
+               [[ $? -ne 0 ]] && exit $ERR_OSSLBIN
                unset OPENSSL_TIMEOUT
           fi
      fi
@@ -14870,7 +14914,7 @@ check4openssl_oldfarts() {
                     fileout_insert_warning "too_old_openssl" "WARN" "Update openssl binaries or compile from https://github.com/PeterMosmans/openssl .";;
           esac
           ignore_no_or_lame " Type \"yes\" to accept false negatives or positives" "yes"
-          [[ $? -ne 0 ]] && exit -2
+          [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
      outln
 }
@@ -14883,7 +14927,7 @@ check_bsd_mount() {
           elif mount | grep '/dev/fd' | grep -q fdescfs; then
                :
           else
-               fatal "You need to mount fdescfs on FreeBSD: \"mount -t fdescfs fdesc /dev/fd\"" -10
+               fatal "You need to mount fdescfs on FreeBSD: \"mount -t fdescfs fdesc /dev/fd\"" $ERR_OTHERCLIENT
           fi
      fi
 }
@@ -15012,12 +15056,12 @@ EOF
 }
 
 maketempf() {
-     TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX) || exit -6
-     TMPFILE=$TEMPDIR/tempfile.txt || exit -6
+     TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX) || exit $ERR_FCREATE
+     TMPFILE=$TEMPDIR/tempfile.txt || exit $ERR_FCREATE
      if [[ "$DEBUG" -eq 0 ]]; then
           ERRFILE="/dev/null"
      else
-          ERRFILE=$TEMPDIR/errorfile.txt || exit -6
+          ERRFILE=$TEMPDIR/errorfile.txt || exit $ERR_FCREATE
      fi
      HOSTCERT=$TEMPDIR/host_certificate.pem
 }
@@ -15234,28 +15278,24 @@ cleanup() {
 
 child_error() {
      cleanup
-     exit 1
+     exit $ERR_CHILD
 }
 
+# arg1: string to print / to write to file
+# arg2: error code, is a global, see ERR_* above
+#
 fatal() {
      outln
      prln_magenta "Fatal error: $1" >&2
      fileout "fatal_error"  "ERROR" "$1"
      exit $2
-     # 1:  cmd line error
-     # 2:  secondary/other cmd line error
-     # -1: other user error
-     # -2: network problem
-     # -3: s.th. fatal is not supported in the client
-     # -4: s.th. is not supported yet
-     # -5: openssl problem
 }
 
 
-# for now only GOST engine
 initialize_engine(){
-     grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null && return 0        # have been here already
-
+     # for now only GOST engine
+     grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null && \
+          return 0        # We have been here already
      if "$NO_ENGINE"; then
           return 1
      elif $OPENSSL engine gost -v 2>&1 | egrep -q 'invalid command|no such engine'; then
@@ -15272,7 +15312,7 @@ initialize_engine(){
           if [[ -n "$OPENSSL_CONF" ]]; then
                prln_warning "For now I am providing the config file to have GOST support"
           else
-               OPENSSL_CONF=$TEMPDIR/gost.conf || exit -6
+               OPENSSL_CONF=$TEMPDIR/gost.conf
                # see https://www.mail-archive.com/openssl-users@openssl.org/msg65395.html
                cat >$OPENSSL_CONF << EOF
 # testssl config file for openssl
@@ -15291,6 +15331,7 @@ default_algorithms = ALL
 CRYPT_PARAMS = id-Gost28147-89-CryptoPro-A-ParamSet
 
 EOF
+               [[ $? -ne 0 ]] && exit $ERR_OSSLBIN
                export OPENSSL_CONF
           fi
      fi
@@ -15333,9 +15374,9 @@ parse_hn_port() {
      # if there's a trailing ':' probably a starttls/application protocol was specified
      if grep -q ':$' <<< "$NODE"; then
           if grep -wq http <<< "$NODE"; then
-               fatal "\"http\" is not what you meant probably" 1
+               fatal "\"http\" is not what you meant probably" $ERR_CMDLINE
           else
-               fatal "\"$1\" is not a valid URI" 1
+               fatal "\"$1\" is not a valid URI" $ERR_CMDLINE
           fi
      fi
 
@@ -15361,41 +15402,6 @@ parse_hn_port() {
      [[ -z "$URL_PATH" ]] && URL_PATH="/"
      debugme echo $URL_PATH
      return 0                                               # NODE, URL_PATH, PORT is set now
-}
-
-
-# now do logging if instructed
-# arg1: for testing mx records name we put a name of logfile in here, otherwise we get strange file names
-prepare_logging() {
-     local fname_prefix="$1"
-     local filename_provided=false
-
-     [[ -n "$LOGFILE" ]] && [[ ! -d "$LOGFILE" ]] && filename_provided=true
-
-     # Similar to html_header():
-     ! "$do_logging" && return 0
-     "$do_mass_testing" && ! "$filename_provided" && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
-
-     [[ -z "$fname_prefix" ]] && fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
-
-     if [[ -z "$LOGFILE" ]]; then
-          LOGFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".log)"
-     elif [[ -d "$LOGFILE" ]]; then
-          # actually we were instructed to place all files in a DIR instead of the current working dir
-          LOGFILE="$LOGFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".log)"
-     else
-          : # just for clarity: a log file was specified, no need to do anything else
-     fi
-
-     if ! "$APPEND"; then
-          [[ -s "$LOGFILE" ]] && fatal "non-empty \"$LOGFILE\" exists. Either use \"--append\" or (re)move it" 1
-     fi
-     tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>"$LOGFILE"
-     tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>"$LOGFILE"
-     tmln_out "## version testssl: $VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE" >>"$LOGFILE"
-     tmln_out "## version openssl: \"$OSSL_VER\" from \"$OSSL_BUILD_DATE\")\n" >>"$LOGFILE"
-     exec > >(tee -a -i "$LOGFILE")
 }
 
 
@@ -15459,7 +15465,7 @@ get_local_a() {
 # does a hard exit if no lookup binary is provided
 check_resolver_bins() {
      if ! type -p dig &> /dev/null && ! type -p host &> /dev/null && ! type -p drill &> /dev/null && ! type -p nslookup &>/dev/null; then
-          fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" "-3"
+          fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" $ERR_DNSBIN
      fi
      return 0
 }
@@ -15479,7 +15485,7 @@ get_a_record() {
           elif type -p dig &>/dev/null; then
                ip4=$(filter_ip4_address $(dig @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
           else
-               fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." -3
+               fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
           fi
      fi
      if [[ -z "$ip4" ]]; then
@@ -15520,7 +15526,7 @@ get_aaaa_record() {
                elif type -p dig &>/dev/null; then
                     ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
                else
-                    fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." -3
+                    fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
                fi
           elif type -p host &> /dev/null ; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
@@ -15634,7 +15640,7 @@ get_mx_record() {
      elif type -p nslookup &> /dev/null; then
           mxs="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')")"
      else
-          fatal "No dig, host, drill or nslookup" -3
+          fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
      fi
      OPENSSL_CONF="$saved_openssl_conf"
      echo "$mxs"
@@ -15664,7 +15670,7 @@ determine_ip_addresses() {
           elif is_ipv6addr "$NODEIP"; then
                ip6="$NODEIP"
           else
-               fatal "couldn't identify supplied \"CMDLINE_IP\"" 2
+               fatal "couldn't identify supplied \"CMDLINE_IP\"" $ERR_DNSLOOKUP
           fi
      elif is_ipv4addr "$NODE"; then
           ip4="$NODE"                        # only an IPv4 address was supplied as an argument, no hostname
@@ -15699,9 +15705,9 @@ determine_ip_addresses() {
      fi
      if [[ -z "$IPADDRs" ]]; then
           if [[ -n "$ip6" ]]; then
-               fatal "Only IPv6 address(es) for \"$NODE\" available, maybe add \"-6\" to $0" -1
+               fatal "Only IPv6 address(es) for \"$NODE\" available, maybe add \"-6\" to $0" $ERR_DNSLOOKUP
           else
-               fatal "No IPv4/IPv6 address(es) for \"$NODE\" available" -1
+               fatal "No IPv4/IPv6 address(es) for \"$NODE\" available" $ERR_DNSLOOKUP
           fi
      fi
      return 0                                # IPADDR and IP46ADDR is set now
@@ -15741,20 +15747,20 @@ determine_rdns() {
 check_proxy() {
      if [[ -n "$PROXY" ]]; then
           if ! "$HAS_PROXY"; then
-               fatal "Your $OPENSSL is too old to support the \"-proxy\" option" -5
+               fatal "Your $OPENSSL is too old to support the \"-proxy\" option" $ERR_OSSLBIN
           fi
           if [[ "$PROXY" == "auto" ]]; then
                # get $ENV (https_proxy is the one we care about)
                PROXY="${https_proxy#*\/\/}"
                [[ -z "$PROXY" ]] && PROXY="${http_proxy#*\/\/}"
-               [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" 2
+               [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" $ERR_CMDLINE
           fi
           # strip off http/https part if supplied:
           PROXY="${PROXY/http\:\/\//}"
           PROXY="${PROXY/https\:\/\//}"
           PROXYNODE="${PROXY%:*}"
           PROXYPORT="${PROXY#*:}"
-          is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" 2
+          is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" $ERR_CMDLINE
 
           #if is_ipv4addr "$PROXYNODE" || is_ipv6addr "$PROXYNODE" ; then
           # IPv6 via openssl -proxy: that doesn't work. Sockets does
@@ -15763,7 +15769,7 @@ check_proxy() {
                PROXYIP="$PROXYNODE"
           else
                PROXYIP="$(get_a_record "$PROXYNODE" 2>/dev/null | grep -v alias | sed 's/^.*address //')"
-               [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" "2"
+               [[ -z "$PROXYIP" ]] && fatal "Proxy IP cannot be determined from \"$PROXYNODE\"" $ERR_CMDLINE
           fi
           PROXY="-proxy $PROXYIP:$PROXYPORT"
      fi
@@ -15853,7 +15859,7 @@ determine_optimal_proto() {
           if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
                prln_magenta "$NODEIP:$PORT appears to only support SSLv2."
                ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
-               [[ $? -ne 0 ]] && exit -2
+               [[ $? -ne 0 ]] && exit $ERR_CLUELESS
           fi
      fi
      grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
@@ -15868,7 +15874,7 @@ determine_optimal_proto() {
           tmpfile_handle $FUNCNAME.txt
           prln_bold "doesn't seem to be a TLS/SSL enabled server";
           ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
-          [[ $? -ne 0 ]] && exit -2
+          [[ $? -ne 0 ]] && $ERR_CLUELESS
      fi
 
      # NOTE: The following code is only needed as long as draft versions of TLSv1.3 prior to draft 23
@@ -15903,8 +15909,8 @@ determine_service() {
 
      if ! fd_socket; then          # check if we can connect to $NODEIP:$PORT
           [[ -n "$PROXY" ]] && \
-               fatal "You're sure $PROXYNODE:$PROXYPORT allows tunneling here? Can't connect to \"$NODEIP:$PORT\"" -2 || \
-               fatal "Can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" -2
+               fatal "You're sure $PROXYNODE:$PROXYPORT allows tunneling here? Can't connect to \"$NODEIP:$PORT\"" $ERR_CONNECT || \
+               fatal "Can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" $ERR_CONNECT
      fi
      close_socket
 
@@ -15934,7 +15940,7 @@ determine_service() {
                          NODEIP="$NODE"
                          if [[ -n "$XMPP_HOST" ]]; then
                               if ! "$HAS_XMPP"; then
-                                   fatal "Your $OPENSSL does not support the \"-xmpphost\" option" -5
+                                   fatal "Your $OPENSSL does not support the \"-xmpphost\" option" $ERR_OSSLBIN
                               fi
                               STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # small hack -- instead of changing calls all over the place
                               # see http://xmpp.org/rfcs/rfc3920.html
@@ -15947,26 +15953,26 @@ determine_service() {
                                         NODE=${rDNS%%.}
                                         NODEIP=${rDNS%%.}
                                    else
-                                        fatal "No DNS supplied and no PTR record available which I can try for XMPP" -1
+                                        fatal "No DNS supplied and no PTR record available which I can try for XMPP" $ERR_DNSLOOKUP
                                    fi
                               fi
                          fi
                     elif [[ "$protocol" == postgres ]]; then
                          # Check if openssl version supports postgres.
                          if ! "$HAS_POSTGRES"; then
-                              fatal "Your $OPENSSL does not support the \"-starttls postgres\" option" -5
+                              fatal "Your $OPENSSL does not support the \"-starttls postgres\" option" $ERR_OSSLBIN
                          fi
                     elif [[ "$protocol" == mysql ]]; then
                          # Check if openssl version supports mysql.
                          if ! "$HAS_MYSQL"; then
-                              fatal "Your $OPENSSL does not support the \"-starttls mysql\" option" -5
+                              fatal "Your $OPENSSL does not support the \"-starttls mysql\" option" $ERR_OSSLBIN
                          fi
                     fi
                     $OPENSSL s_client $(s_client_options "-connect $NODEIP:$PORT $PROXY $BUGS $STARTTLS") 2>$ERRFILE >$TMPFILE </dev/null
                     if [[ $? -ne 0 ]]; then
                          debugme cat $TMPFILE | head -25
                          outln
-                         fatal " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT" -2
+                         fatal " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT" $ERR_CONNECT
                     fi
                     grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
                     out " Service set:$CORRECT_SPACES            STARTTLS via "
@@ -15977,7 +15983,7 @@ determine_service() {
                     outln
                     ;;
                *)   outln
-                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet, ldap, postgres, and mysql allowed" -4
+                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet, ldap, postgres, and mysql allowed" $ERR_CMDLINE
                     ;;
           esac
      fi
@@ -16237,12 +16243,12 @@ nmap_to_plain_file() {
           # yes, greppable
           if [[ $(grep -c Status "$FNAME") -ge 1 ]]; then
                [[ $(grep -c  '\/open\/' "$FNAME")  -eq 0 ]] && \
-                    fatal "Nmap file $FNAME should contain at least one open port" -1
+                    fatal "Nmap file $FNAME should contain at least one open port" $ERR_FNAMEPARSE
           else
                fatal "strange, nmap grepable misses \"Status\"" -1
           fi
      else
-          fatal "Nmap file $FNAME is not in grep(p)able format (-oG filename.g(n)map)" -1
+          fatal "Nmap file $FNAME is not in grep(p)able format (-oG filename.g(n)map)" $ERR_FNAMEPARSE
      fi
      # strip extension and create output file *.txt in same folder
      target_fname="${FNAME%.*}.txt"
@@ -16253,7 +16259,7 @@ nmap_to_plain_file() {
           target_fname="${target_fname##*\/}"     # strip path (Unix)
           target_fname="${target_fname##*\\}"     # strip path (Dos)
           target_fname="$TEMPDIR/$target_fname"
-          > "${target_fname}" || fatal "Cannot create \"${target_fname}\""  -1
+          > "${target_fname}" || fatal "Cannot create \"${target_fname}\"" $ERR_FCREATE
      fi
 
      # Line x:   "Host: AAA.BBB.CCC.DDD (<FQDN>) Status: Up"
@@ -16285,7 +16291,7 @@ nmap_to_plain_file() {
      [[ "$DEBUG" -ge 1 ]] && echo
 
      [[ -s "$target_fname" ]] || \
-          fatal "Couldn't find any open port in $FNAME" -3
+          fatal "Couldn't find any open port in $FNAME" $ERR_FNAMEPARSE
      export FNAME=$target_fname
 }
 
@@ -16296,7 +16302,7 @@ run_mass_testing() {
      local saved_fname="$FNAME"
 
      if [[ ! -r "$FNAME" ]] && "$IKNOW_FNAME"; then
-          fatal "Can't read file \"$FNAME\"" "2"
+          fatal "Can't read file \"$FNAME\"" $ERR_FNAMEPARSE
      fi
 
      if [[ "$(head -1 "$FNAME")" =~ (Nmap [4-8])(.*)( scan initiated )(.*) ]]; then
@@ -16369,7 +16375,7 @@ run_mass_testing_parallel() {
      local saved_fname="$FNAME"
 
      if [[ ! -r "$FNAME" ]] && $IKNOW_FNAME; then
-          fatal "Can't read file \"$FNAME\"" "2"
+          fatal "Can't read file \"$FNAME\"" $ERR_FNAMEPARSE
      fi
 
      if [[ "$(head -1 "$FNAME")" =~ (Nmap [4-8])(.*)( scan initiated )(.*) ]]; then
@@ -16663,7 +16669,7 @@ parse_cmd_line() {
                     find_openssl_binary
                     prepare_debug
                     mybanner
-                    exit 0
+                    exit $ALLOK
                    ;;
                --mx)
                     do_mx_all_ips=true
@@ -16689,7 +16695,7 @@ parse_cmd_line() {
                     NODNS="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     if [[ "$NODNS" != none ]] && [[ "$NODNS" != min ]]; then
-                         fatal "Value for nodns switch can be either \"min\" or \"none\""
+                         fatal "Value for nodns switch can be either \"min\" or \"none\"" $ERR_CMDLINE
                     fi
                     ;;
                -V|-V=*|--local|--local=*)    # attention, this could have a value or not!
@@ -16947,22 +16953,22 @@ parse_cmd_line() {
                     do_logging=true
                     ;;
                --json)
-                    $do_pretty_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
+                    $do_pretty_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     do_json=true
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but we can specify a log location additionally
                --jsonfile|--jsonfile=*|-oj|-oj=*)
-                    $do_pretty_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
+                    $do_pretty_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_json=true
                     ;;
                --json-pretty)
-                    $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
+                    $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     do_pretty_json=true
                     ;;
                --jsonfile-pretty|--jsonfile-pretty=*|-oJ|-oJ=*)
-                    $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" 251
+                    $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_pretty_json=true
@@ -17075,19 +17081,20 @@ parse_cmd_line() {
 
      # Show usage if no further options were specified
      if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! "$do_display_only"; then
-          fatal "URI missing" "1"
+          fatal "URI missing" $ERR_CMDLINE
      else
      # left off here is the URI
           URI="$1"
           # parameter after URI supplied:
-          [[ -n "$2" ]] && fatal "URI comes last" "1"
+          [[ -n "$2" ]] && fatal "URI comes last" $ERR_CMDLINE
      fi
-     [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal "\"--ip=one\" and \"--nodns=none\" don't work together" 2
-    "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" 2
+     [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal "\"--ip=one\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
+    "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
+
      ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES//,/ }"
      for fname in $ADDITIONAL_CA_FILES; do
-          [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" -2
-          grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" -2
+          [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" $ERR_RESSOURCE
+          grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESSOURCE
      done
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
@@ -17143,7 +17150,7 @@ lets_roll() {
      fi
      stopwatch initialized
 
-     [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" 2
+     [[ -z "$NODEIP" ]] && fatal "$NODE doesn't resolve to an IP address" $ERR_DNSLOOKUP
      nodeip_to_proper_ip6
      reset_hostdepended_vars
      determine_rdns                # Returns always zero or has already exited if fatal error occurred
@@ -17153,8 +17160,8 @@ lets_roll() {
      determine_service "$1"        # STARTTLS service? Other will be determined here too. Returns always 0 or has already exited if fatal error occurred
 
      # "secret" devel options --devel:
-     $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit 0; }
-     $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo "$?" ; exit 0; }
+     $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit $ALLOK; }
+     $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo "$?" ; exit $ALLOK; }
      $do_cipher_match && { fileout_section_header $section_number false; run_cipher_match ${single_cipher}; }
      ((section_number++))
 
@@ -17302,7 +17309,7 @@ lets_roll() {
      prepare_logging
 
      if ! determine_ip_addresses; then
-          fatal "No IP address could be determined" 2
+          fatal "No IP address could be determined" $ERR_DNSLOOKUP
      fi
      if [[ $(count_words "$IPADDRs") -gt 1 ]]; then    # we have more than one ipv4 address to check
           pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
