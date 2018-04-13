@@ -95,7 +95,12 @@ foreach my $client ( @$ssllabs ) {
 				push @ciphers, "TLS13-AES-128-CCM-SHA256"; }
 			elsif ( $suite == "4869" ) {
 				push @ciphers, "TLS13-AES-128-CCM-8-SHA256"; }
-			elsif ( $suite == "14906" ) {
+			elsif ( $suite == "2570" || $suite == "6682" || $suite == "10794" ||
+				   $suite == "14906" || $suite == "19018" || $suite == "23130" ||
+				   $suite == "27242" || $suite == "31354" || $suite == "35466" ||
+				   $suite == "39578" || $suite == "43690" || $suite == "47802" ||
+				   $suite == "51914" || $suite == "56026" || $suite == "60138" ||
+				   $suite == "64250" ) {
 				if ( $has_matched ) {
 					print " \"$shortname\": ";
 					$has_matched = 0;
