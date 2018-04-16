@@ -189,7 +189,17 @@ foreach my $client ( @$ssllabs ) {
 		$sim->{protos} = "protos+=(\"" . (join " ", reverse @proto_flags) . "\")";
 		$sim->{tlsvers} = "tlsvers+=(\"" . (join " ", reverse @tls_flags) . "\")";
 		$sim->{lowestProtocol} = sprintf("lowest_protocol+=(\"0x%04x\")", $client->{lowestProtocol});
-		$sim->{highestProtocol} = sprintf("highest_protocol+=(\"0x%04x\")", $client->{highestProtocol});
+		# https://api.dev.ssllabs.com/api/v3/getClients incorrectly indicates
+		# a highestProtocol of TLS 1.2 for clients that support TLS 1.3, which
+		# can lead to client simulation reporting "no connection" if the connection
+		# is made using TLS 1.3. In order to avoid this problem, assume that any
+		# client with a highestProtocol of TLS 1.2 that supports any TLS 1.3
+		# ciphers really supports TLS 1.3.
+		if ( $client->{highestProtocol} != 771 || scalar(@ciphersuites) == 0 ) {
+			$sim->{highestProtocol} = sprintf("highest_protocol+=(\"0x%04x\")", $client->{highestProtocol});
+		} else {
+			$sim->{highestProtocol} = sprintf("highest_protocol+=(\"0x0304\")", $client->{highestProtocol});
+		}
 
 		if ( lc($client->{name}) eq "java" || lc($client->{name}) eq "openssl" ) {
 			# Java and OpenSSL are generic clients
