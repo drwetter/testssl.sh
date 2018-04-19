@@ -96,7 +96,7 @@ DEBUGTIME=${DEBUGTIME:-false}                     # stackoverflow.com/questions/
 DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for testssl.sh and bash3's default
                                                   # false: needed for performance analysis or useful for just having an extra file
 DEBUG_ALLINONE=${SETX:-false}                     # SETX as a shortcut for old style debugging, overriding DEBUG_ALLINONE
-if grep -q xtrace <<< "$SHELLOPTS"; then
+if [[ "$SHELLOPTS" =~ xtrace ]]; then
      if "$DEBUGTIME"; then
           # separate debugging, doesn't mess up the screen, $DEBUGTIME determines whether we also do performance analysis
           exec 42>&2 2> >(tee /tmp/testssl-$$.log | sed -u 's/^.*$/now/' | date -f - +%s.%N >/tmp/testssl-$$.time)
@@ -316,7 +316,7 @@ HAS_NO_SSL2=false
 HAS_NOSERVERNAME=false
 HAS_CIPHERSUITES=false
 HAS_ALPN=false
-HAS_SPDY=false
+HAS_NPN=false
 HAS_FALLBACK_SCSV=false
 HAS_PROXY=false
 HAS_XMPP=false
@@ -604,7 +604,7 @@ pr_boldurl() { tm_bold "$1"; html_out "<a href="$1" style=\"font-weight:bold;col
 set_color_functions() {
      local ncurses_tput=true
 
-     if [[ $(uname) == OpenBSD ]] && grep -q xterm-256 <<< "$TERM"; then
+     if [[ $(uname) == OpenBSD ]] && [[ "$TERM" =~ xterm-256 ]]; then
           export TERM=xterm
           # openBSD can't handle 256 colors (yet) in xterm which might lead to ugly errors
           # like "tput: not enough arguments (3) for capability `AF'". Not our fault but
@@ -1667,7 +1667,7 @@ run_http_header() {
           HAD_SLEPT=0
      else
           # 1st GET request hung and needed to be killed. Check whether it succeeded anyway:
-          if egrep -iaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
+          if grep -Eiaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
                # correct by seconds we slept, HAD_SLEPT comes from wait_kill()
                NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
@@ -1771,7 +1771,7 @@ match_ipv4_httpheader() {
      fi
 
      # Whitelist some headers as they are mistakenly identified as ipv4 address. Issues #158, #323. Also facebook has a CSP rule for 127.0.0.1
-     if egrep -vai "$whitelisted_header" $HEADERFILE | grep -iqE "$ipv4address"; then
+     if grep -Evai "$whitelisted_header" $HEADERFILE | grep -Eiq "$ipv4address"; then
           pr_bold " IPv4 address in header       "
           count=0
           while read line; do
@@ -1836,7 +1836,8 @@ run_http_date() {
 # HEADERFILE needs to contain the HTTP header (made sure by invoker)
 # arg1: key=word to match
 # arg2: hint for fileout() if double header
-# args3:indentation, i.e string w spaces
+# arg3: indentation, i.e string w spaces
+# arg4: whether we need a CR before "misconfiguration"
 # returns:
 #    0 if header not found
 #    1-n nr of headers found, then in HEADERVALUE the first value from key
@@ -1844,6 +1845,7 @@ run_http_date() {
 match_httpheader_key() {
      local key="$1"
      local spaces="$3"
+     local first=$4
      local -i nr=0
 
      nr=$(grep -Eaicw "^ *$key:" $HEADERFILE)
@@ -1855,14 +1857,16 @@ match_httpheader_key() {
           HEADERVALUE="${HEADERVALUE#*:}"                        # remove leading part=key to colon
           HEADERVALUE="$(strip_lf "$HEADERVALUE")"
           HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
+          "$first" || out "$spaces"
           return 1
      else
+          "$first" || out "$spaces"
           pr_svrty_medium "misconfiguration: "
           pr_italic "$key"
           pr_svrty_medium " ${nr}x"
-          out " -- checking first one only"
-          out "\n$spaces"
-          HEADERVALUE="$(grep -Faiw "$key:" $HEADERFILE | head -1)"
+          outln " -- checking first one only"
+          out "$spaces"
+          HEADERVALUE="$(fgrep -Faiw "$key:" $HEADERFILE | head -1)"
           HEADERVALUE="${HEADERVALUE#*:}"
           HEADERVALUE="$(strip_lf "$HEADERVALUE")"
           HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
@@ -1902,7 +1906,7 @@ run_hsts() {
           run_http_header "$1" || return 1
      fi
      pr_bold " Strict Transport Security    "
-     match_httpheader_key "Strict-Transport-Security" "HSTS" "$spaces"
+     match_httpheader_key "Strict-Transport-Security" "HSTS" "$spaces" "true"
      if [[ $? -ne 0 ]]; then
           echo "$HEADERVALUE" >$TMPFILE
           hsts_age_sec=$(sed -e 's/[^0-9]*//g' <<< $HEADERVALUE)
@@ -2380,10 +2384,10 @@ run_rp_banner() {
      else
           while read line; do
                line=$(strip_lf "$line")
-               if ! $first; then
-                    out "$spaces"
-               else
+               if $first; then
                     first=false
+               else
+                    out "$spaces"
                fi
                emphasize_stuff_in_headers "$line"
                rp_banners="${rp_banners}${line}"
@@ -2415,32 +2419,32 @@ sub_f5_bigip_check() {
           [[ -z "$cookievalue" ]] && break
           cookievalue=${cookievalue/;/}
           debugme echo $cookiename : $cookievalue
-          if grep -q -E '[0-9]{9,10}\.[0-9]{3,5}\.0000' <<< "$cookievalue"; then
+          if grep -Eq '[0-9]{9,10}\.[0-9]{3,5}\.0000' <<< "$cookievalue"; then
                ip="$(f5_ip_oldstyle "$cookievalue")"
                port="$(f5_port_decode $cookievalue)"
                out "${spaces}F5 cookie (default IPv4 pool member): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
                fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv4 pool member ${ip}:${port}" "$cve" "$cwe"
-          elif grep -q -E '^rd[0-9]{1,2}o0{20}f{4}[a-f0-9]{8}o[0-9]{1,5}' <<< "$cookievalue"; then
+          elif grep -Eq '^rd[0-9]{1,2}o0{20}f{4}[a-f0-9]{8}o[0-9]{1,5}' <<< "$cookievalue"; then
                routed_domain="$(f5_determine_routeddomain "$cookievalue")"
                offset=$(( 2 + ${#routed_domain} + 1 + 24))
                port="${cookievalue##*o}"
                ip="$(f5_hex2ip "${cookievalue:$offset:8}")"
                out "${spaces}F5 cookie (IPv4 pool in routed domain "; pr_svrty_medium "$routed_domain"; out "): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
                fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is IPv4 pool member in routed domain $routed_domain ${ip}:${port}" "$cve" "$cwe"
-          elif grep -q -E '^vi[a-f0-9]{32}\.[0-9]{1,5}' <<< "$cookievalue"; then
+          elif grep -Eq '^vi[a-f0-9]{32}\.[0-9]{1,5}' <<< "$cookievalue"; then
                ip="$(f5_hex2ip6 ${cookievalue:2:32})"
                port="${cookievalue##*.}"
                port=$(f5_port_decode "$port")
                out "${spaces}F5 cookie (default IPv6 pool member): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
                fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv6 pool member ${ip}:${port}" "$cve" "$cwe"
-          elif grep -q -E '^rd[0-9]{1,2}o[a-f0-9]{32}o[0-9]{1,5}' <<< "$cookievalue"; then
+          elif grep -Eq '^rd[0-9]{1,2}o[a-f0-9]{32}o[0-9]{1,5}' <<< "$cookievalue"; then
                routed_domain="$(f5_determine_routeddomain "$cookievalue")"
                offset=$(( 2 + ${#routed_domain} + 1 ))
                port="${cookievalue##*o}"
                ip="$(f5_hex2ip6 ${cookievalue:$offset:32})"
                out "${spaces}F5 cookie (IPv6 pool in routed domain "; pr_svrty_medium "$routed_domain"; out "): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
                fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is IPv6 pool member in routed domain $routed_domain ${ip}:${port}" "$cve" "$cwe"
-          elif grep -q -E '^\!.*=$' <<< "$cookievalue"; then
+          elif grep -Eq '^\!.*=$' <<< "$cookievalue"; then
                if [[ "${#cookievalue}" -eq 81 ]] ; then
                     savedcookies="${savedcookies}     ${cookiename}=${cookievalue:1:79}"
                     out "${spaces}Encrypted F5 cookie named "; pr_italic "${cookiename}"; outln " detected"
@@ -2462,8 +2466,8 @@ run_cookie_flags() {     # ARG1: Path
           run_http_header "$1" || return 1
      fi
 
-     if ! grep -q 20 <<< "$HTTP_STATUS_CODE"; then
-          if egrep -q "301|302" <<< "$HTTP_STATUS_CODE"; then
+     if [[ ! "$HTTP_STATUS_CODE" =~ 20 ]]; then
+          if [[ "$HTTP_STATUS_CODE" =~ [301|302] ]]; then
                msg302=" -- maybe better try target URL of 30x"
                msg302_=" (30x detected, better try target URL of 30x)"
           else
@@ -2518,50 +2522,49 @@ run_cookie_flags() {     # ARG1: Path
 }
 
 
-run_more_flags() {
-     local good_flags2test="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
-     local other_flags2test="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible"
-     local f2t
+run_security_headers() {
+     local good_header="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
+     local other_header="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible"
+     local header
      local first=true
      local spaces="                              "
+     local have_header=false
 
      if [[ ! -s $HEADERFILE ]]; then
           run_http_header "$1" || return 1
      fi
 
      pr_bold " Security headers             "
-     for f2t in $good_flags2test; do
-          [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$f2t\""
-          match_httpheader_key "$f2t" "$f2t" "$spaces"
+     for header in $good_header; do
+          [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$header\""
+          match_httpheader_key "$header" "$header" "$spaces" "$first"
           if [[ $? -ge 1 ]]; then
-               if ! "$first"; then
-                    out "$spaces"       # output leading spaces if the first header
-               else
+               have_header=true
+               if "$first"; then
                     first=false
                fi
-               pr_svrty_good "$f2t"
+               pr_svrty_good "$header"
                outln " $(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
-               fileout "$f2t" "OK" "$HEADERVALUE"
+               fileout "$header" "OK" "$HEADERVALUE"
           fi
      done
 
-     for f2t in $other_flags2test; do
-          [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$f2t\""
-          match_httpheader_key "$f2t" "$f2t" "$spaces"
+     for header in $other_header; do
+          [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$header\""
+          match_httpheader_key "$header" "$header" "$spaces" "$first"
           if [[ $? -ge 1 ]]; then
-               if ! "$first"; then
-                    out "$spaces"       # output leading spaces if the first header
-               else
+               have_header=true
+               if "$first"; then
                     first=false
                fi
-               pr_litecyan "$f2t"
+               pr_litecyan "$header"
                outln " $HEADERVALUE"     # shouldn't be that long
-               fileout "$f2t" "INFO" "$f2t: $HEADERVALUE"
+               fileout "$header" "INFO" "$header: $HEADERVALUE"
           fi
      done
      #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall" or Access-Control-Allow-Origin: *
 
-     if "$first"; then
+     if ! "$have_header"; then
           prln_svrty_medium "--"
           fileout "security_headers" "MEDIUM" "--"
      fi
@@ -2956,7 +2959,7 @@ neat_list(){
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
 
-     grep -iq export <<< "$export" && strength="$strength,exp"
+     [[ "$export" =~ export ]] && strength="$strength,exp"
 
      [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
@@ -6313,7 +6316,7 @@ determine_tls_extensions() {
      else
           if "$HAS_ALPN" && [[ -z $STARTTLS ]]; then
                params="-alpn \"${ALPN_PROTOs// /,}\""  # we need to replace " " by ","
-          elif "$HAS_SPDY" && [[ -z $STARTTLS ]]; then
+          elif "$HAS_NPN" && [[ -z $STARTTLS ]]; then
                params="-nextprotoneg \"$NPN_PROTOs\""
           fi
           if [[ -z "$OPTIMAL_PROTO" ]] && [[ -z "$SNI" ]] && "$HAS_NO_SSL2"; then
@@ -6413,7 +6416,7 @@ get_server_certificate() {
           return $success
      fi
 
-     "$HAS_SPDY" && [[ -z "$STARTTLS" ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
+     "$HAS_NPN" && [[ -z "$STARTTLS" ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
 
      if [[ -n "$2" ]]; then
          protocols_to_try="$2"
@@ -7342,7 +7345,8 @@ certificate_info() {
           days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
           days2expire=$((days2expire  / 3600 / 24 ))
           # we adjust the thresholds by %50 for LE certificates, relaxing those warnings
-          if grep -q "^Let's Encrypt Authority" <<< "$issuer_CN"; then
+          # . instead of \' because it does not break syntax highlighting in vim
+          if [[ "$issuer_CN" =~ ^Let.s\ Encrypt\ Authority ]] ; then
                  days2warn2=$((days2warn2 / 2))
                  days2warn1=$((days2warn1 / 2))
           fi
@@ -8253,7 +8257,7 @@ npn_pre(){
           fileout "NPN" "WARN" "not tested as proxies do not support proxying it"
           return 1
      fi
-     if ! "$HAS_SPDY"; then
+     if ! "$HAS_NPN"; then
           pr_local_problem "$OPENSSL doesn't support NPN/SPDY";
           fileout "NPN" "WARN" "not tested $OPENSSL doesn't support NPN/SPDY"
           return 7
@@ -8299,7 +8303,7 @@ run_npn() {
           fileout "$jsonID" "INFO" "not offered"
      else
           # now comes a strange thing: "Protocols advertised by server:" is empty but connection succeeded
-          if egrep -aq "h2|spdy|http" <<< $tmpstr ; then
+          if [[ "$tmpstr" =~ [h2|spdy|http] ]]; then
                out "$tmpstr"
                outln " (advertised)"
                fileout "$jsonID" "INFO" "offered with $tmpstr (advertised)"
@@ -11025,7 +11029,7 @@ sslv2_sockets() {
           server_hello_len=2+$(hex2dec "${server_hello:1:3}")
           response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
           for (( 1; response_len < server_hello_len; 1 )); do
-               sock_reply_file2=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
+               sock_reply_file2=${SOCK_REPLY_FILE}.2
                mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
 
                debugme echo -n "requesting more server hello data... "
@@ -14841,7 +14845,7 @@ find_openssl_binary() {
           HAS_ALPN=true
 
      grep -qw '\-nextprotoneg' $s_client_has && \
-          HAS_SPDY=true
+          HAS_NPN=true
 
      grep -qw '\-fallback_scsv' $s_client_has && \
           HAS_FALLBACK_SCSV=true
@@ -17197,9 +17201,9 @@ lets_roll() {
                run_hpkp "$URL_PATH";        ret=$(($? + ret))
                run_server_banner "$URL_PATH";  ret=$(($? + ret))
                run_appl_banner "$URL_PATH";    ret=$(($? + ret))
-               run_cookie_flags "$URL_PATH";   ret=$(($? + ret))
-               run_more_flags "$URL_PATH";     ret=$(($? + ret))
-               run_rp_banner "$URL_PATH";      ret=$(($? + ret))
+               run_cookie_flags "$URL_PATH";      ret=$(($? + ret))
+               run_security_headers "$URL_PATH";  ret=$(($? + ret))
+               run_rp_banner "$URL_PATH";         ret=$(($? + ret))
                stopwatch do_header
          fi
      else
