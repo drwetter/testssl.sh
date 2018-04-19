@@ -84,7 +84,7 @@ declare -r ERR_CHILD=242           # Child received a signal from master
 declare -r ALLOK=0                 # All is fine
 
 
-[ -z "$BASH_VERSINFO" ] && printf "\n\033[1;35m Please make sure you're using \"bash\"! Bye...\033[m\n\n" >&2 && exit $ERR_BASH
+[ -z "${BASH_VERSINFO[0]}" ] && printf "\n\033[1;35m Please make sure you're using \"bash\"! Bye...\033[m\n\n" >&2 && exit $ERR_BASH
 [ $(kill -l | grep -c SIG) -eq 0 ] && printf "\n\033[1;35m Please make sure you're calling me without leading \"sh\"! Bye...\033[m\n\n"  >&2 && exit $ERR_BASH
 [ ${BASH_VERSINFO[0]} -lt 3 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit $ERR_BASH
 [ ${BASH_VERSINFO[0]} -le 3 -a ${BASH_VERSINFO[1]} -le 1 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit $ERR_BASH
@@ -116,23 +116,23 @@ trap "child_error" USR1
 
 ########### Internal definitions
 #
-declare -r VERSION="2.9dev"
+declare -r VERSION="3.0beta"
 declare -r SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc|beta" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
      SWURL="https://testssl.sh/"
-declare -r CVS_REL=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')
-declare -r CVS_REL_SHORT=$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')
+declare -r CVS_REL="$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')"
+declare -r CVS_REL_SHORT="$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')"
 if git log &>/dev/null; then
-     declare -r GIT_REL=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')
-     declare -r GIT_REL_SHORT=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1 }')
-     declare -r REL_DATE=$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $2 }')
+     declare -r GIT_REL="$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
+     declare -r GIT_REL_SHORT="$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1 }')"
+     declare -r REL_DATE="$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $2 }')"
 else
-     declare -r REL_DATE=$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')
+     declare -r REL_DATE="$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')"
 fi
 declare -r PROG_NAME="$(basename "$0")"
 declare -r RUN_DIR="$(dirname "$0")"
-declare -r SYSTEM=$(uname -s)
+declare -r SYSTEM="$(uname -s)"
 SYSTEM2=""                                        # currently only being used for WSL = bash on windows
 TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # If you run testssl.sh and it doesn't find it necessary file automagically set TESTSSL_INSTALL_DIR
 CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # You can have your stores some place else
@@ -898,7 +898,7 @@ json_header() {
      else
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
+          fname_prefix="${FNAME_PREFIX}${NODE}_p${PORT}"
      fi
      if [[ -z "$JSONFILE" ]]; then
           JSONFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".json)"
@@ -937,7 +937,7 @@ csv_header() {
      else
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
+          fname_prefix="${FNAME_PREFIX}${NODE}_p${PORT}"
      fi
 
      if [[ -z "$CSVFILE" ]]; then
@@ -980,7 +980,7 @@ html_header() {
      else
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-          fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
+          fname_prefix="${FNAME_PREFIX}${NODE}_p${PORT}"
      fi
 
      if [[ -z "$HTMLFILE" ]]; then
@@ -1398,7 +1398,7 @@ http_get() {
 
      "$SNEAKY" && useragent="$UA_SNEAKY"
 
-     IFS=/ read proto z node query <<< "$1"
+     IFS=/ read -r proto z node query <<< "$1"
 
      exec 33<>/dev/tcp/$node/80
      printf "GET /$query HTTP/1.1\r\nHost: $node\r\nUser-Agent: $useragent\r\nConnection: Close\r\nAccept: */*\r\n\r\n" >&33
@@ -1625,7 +1625,7 @@ service_detection() {
      esac
 
      outln "\n"
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -1747,7 +1747,7 @@ run_http_header() {
      esac
      outln
 
-     # we don't call "tmpfile_handle $FUNCNAME.txt" as we need the header file in other functions!
+     # we don't call "tmpfile_handle ${FUNCNAME[0]}.txt" as we need the header file in other functions!
      return 0
 }
 
@@ -1948,7 +1948,7 @@ run_hsts() {
      fi
      outln
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -2194,7 +2194,7 @@ run_hpkp() {
           fileout "HPKP" "INFO" "No support for HTTP Public Key Pinning"
      fi
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -2327,7 +2327,7 @@ run_server_banner() {
           fileout "$jsonID" "INFO" "No Server banner line in header, interesting!"
      fi
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -2360,7 +2360,7 @@ run_appl_banner() {
           done < "$TMPFILE"
           fileout "$jsonID" "INFO" "$appl_banners"
      fi
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -2396,7 +2396,7 @@ run_rp_banner() {
      fi
      outln
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -2517,7 +2517,7 @@ run_cookie_flags() {     # ARG1: Path
           sub_f5_bigip_check "$allcookies" "$spaces"
      fi
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -2569,7 +2569,7 @@ run_security_headers() {
           fileout "security_headers" "MEDIUM" "--"
      fi
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -2606,14 +2606,14 @@ prettyprint_local() {
      neat_header
 
      if [[ -z "$1" ]]; then
-          actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V" | while read hexcode dash ciph sslvers kx auth enc mac export ; do       # -V doesn't work with openssl < 1.0
+          actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V" | while read -r hexcode dash ciph sslvers kx auth enc mac export ; do       # -V doesn't work with openssl < 1.0
                hexc="$(normalize_ciphercode $hexcode)"
                outln "$(neat_list "$hexc" "$ciph" "$kx" "$enc")"
           done
      else
           #for arg in $(echo $@ | sed 's/,/ /g'); do
           for arg in ${*//,/ /}; do
-               actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V" | while read hexcode dash ciph sslvers kx auth enc mac export ; do # -V doesn't work with openssl < 1.0
+               actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V" | while read -r hexcode dash ciph sslvers kx auth enc mac export ; do # -V doesn't work with openssl < 1.0
                     hexc="$(normalize_ciphercode $hexcode)"
                     # for numbers we don't do word matching:
                     [[ $arg =~ $re ]] && \
@@ -2794,7 +2794,7 @@ sub_cipherlists() {
                          ;;
                esac
           fi
-          tmpfile_handle $FUNCNAME.$debugname.txt
+          tmpfile_handle ${FUNCNAME[0]}.$debugname.txt
           [[ $DEBUG -ge 1 ]] && tm_out " -- $1"
           outln
      else
@@ -2832,7 +2832,7 @@ socksend() {
 
      # read line per line and strip comments (bash internal func can't handle multiline statements
      data="$(while read line; do
-          printf  "${line%%\#*}"
+          printf "${line%%\#*}"
      done <<< "$1" )"
      data="${data// /}"        # strip ' '
      data="${data//,/\\}"     # s&r , by \
@@ -3153,8 +3153,8 @@ run_cipher_match(){
                done
                if [[ -n "$ciphers_to_test" ]]; then
                     $OPENSSL s_client -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-                    sclient_connect_successful "$?" "$TMPFILE"
-                    if [[ "$?" -eq 0 ]]; then
+                    sclient_connect_successful $? "$TMPFILE"
+                    if [[ $? -eq 0 ]]; then
                          supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
                          "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$TMPFILE")"
                          for (( i=0 ; i<nr_ciphers; i++ )); do
@@ -3218,7 +3218,7 @@ run_cipher_match(){
                          done
                          [[ -z "$ciphers_to_test" ]] && [[ -z "$tls13_ciphers_to_test" ]] && break
                          $OPENSSL s_client $(s_client_options "$proto -cipher "\'${ciphers_to_test:1}\'" -ciphersuites "\'${tls13_ciphers_to_test:1}\'" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-                         sclient_connect_successful "$?" "$TMPFILE" || break
+                         sclient_connect_successful $? "$TMPFILE" || break
                          cipher=$(get_cipher $TMPFILE)
                          [[ -z "$cipher" ]] && break
                          for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
@@ -3322,7 +3322,7 @@ run_cipher_match(){
                fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
           done
           "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
-          tmpfile_handle $FUNCNAME.txt
+          tmpfile_handle ${FUNCNAME[0]}.txt
           stopwatch run_cipher_match
           fileout_section_footer true
           outln
@@ -3335,7 +3335,7 @@ run_cipher_match(){
      done
      outln
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0       # this is a single test for a cipher
 }
 
@@ -3391,7 +3391,7 @@ run_allciphers() {
           done
           nr_ciphers=$TLS_NR_CIPHERS
      else
-          while read hexc n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
+          while read -r hexc n ciph[nr_ciphers] sslvers[nr_ciphers] kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
                ciphers_found[nr_ciphers]=false
                if [[ ${#hexc} -eq 9 ]]; then
                     if [[ "${hexc:2:2}" == "00" ]]; then
@@ -3423,8 +3423,8 @@ run_allciphers() {
           fi
      elif "$HAS_SSL2"; then
           $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-          sclient_connect_successful "$?" "$TMPFILE"
-          if [[ "$?" -eq 0 ]]; then
+          sclient_connect_successful $? "$TMPFILE"
+          if [[ $? -eq 0 ]]; then
                supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
                "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$TMPFILE")"
                for (( i=0 ; i<nr_ciphers; i++ )); do
@@ -3507,7 +3507,7 @@ run_allciphers() {
                     done
                     [[ -z "$ciphers_to_test" ]] && [[ -z "$tls13_ciphers_to_test" ]] && break
                     $OPENSSL s_client $(s_client_options "$proto -cipher "\'${ciphers_to_test:1}\'" -ciphersuites "\'${tls13_ciphers_to_test:1}\'" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-                    sclient_connect_successful "$?" "$TMPFILE" || break
+                    sclient_connect_successful $? "$TMPFILE" || break
                     cipher=$(get_cipher $TMPFILE)
                     [[ -z "$cipher" ]] && break
                     for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
@@ -3750,8 +3750,8 @@ run_cipher_per_proto() {
                     fi
                else
                     $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-                    sclient_connect_successful "$?" "$TMPFILE"
-                    if [[ "$?" -eq 0 ]]; then
+                    sclient_connect_successful $? "$TMPFILE"
+                    if [[ $? -eq 0 ]]; then
                          supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
                          "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$TMPFILE")"
                          for (( i=0 ; i<nr_ciphers; i++ )); do
@@ -3803,9 +3803,9 @@ run_cipher_per_proto() {
                          done
                          success=1
                          if [[ -n "$ciphers_to_test" ]] || [[ -n "$tls13_ciphers_to_test" ]]; then
-                              $OPENSSL s_client $(s_client_options "-cipher "\'${ciphers_to_test:1}\'" -ciphersuites "\'${tls13_ciphers_to_test:1}\'" $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-                              sclient_connect_successful "$?" "$TMPFILE"
-                              if [[ "$?" -eq 0 ]]; then
+                              OPENSSL s_client $(s_client_options "-cipher "\'${ciphers_to_test:1}\'" -ciphersuites "\'${tls13_ciphers_to_test:1}\'" $proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+                              sclient_connect_successful $? "$TMPFILE"
+                              if [[ $? -eq 0 ]]; then
                                    cipher=$(get_cipher $TMPFILE)
                                    if [[ -n "$cipher" ]]; then
                                         success=0
@@ -3913,7 +3913,7 @@ run_cipher_per_proto() {
           done
      done
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 #FIXME: no error condition
 }
@@ -4396,7 +4396,7 @@ run_client_simulation() {
           NR_OSSL_FAIL=$nr_ossl_fail
      fi
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
 
@@ -5451,7 +5451,7 @@ run_server_preference() {
           pr_warning "no matching cipher in this list found (pls report this): "
           outln "$list_fwd  . "
           fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd"
-          tmpfile_handle $FUNCNAME.txt
+          tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
           # we assume the problem is with testing here but it could be also the server side
      elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
@@ -5465,7 +5465,7 @@ run_server_preference() {
                pr_warning "no matching cipher in this list found (pls report this): "
                outln "$list_fwd  . "
                fileout "$jsonID" "WARN" "Could not determine cipher order, no matching cipher in list found (pls report this): $list_fwd"
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
      fi
@@ -5790,7 +5790,7 @@ check_tls12_pref() {
      fi
      tm_out "$order"
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -6009,7 +6009,7 @@ cipher_pref_check() {
      outln
 
      outln
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -6017,7 +6017,7 @@ cipher_pref_check() {
 # arg1 is OpenSSL s_client parameter or empty
 #
 get_host_cert() {
-     local tmpvar=$TEMPDIR/$FUNCNAME.txt     # change later to $TMPFILE
+     local tmpvar=$TEMPDIR/${FUNCNAME[0]}.txt     # change later to $TMPFILE
 
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $1") 2>/dev/null </dev/null >$tmpvar
      if sclient_connect_successful $? $tmpvar; then
@@ -6030,7 +6030,7 @@ get_host_cert() {
           fi
           return 1
      fi
-     #tmpfile_handle $FUNCNAME.txt
+     #tmpfile_handle ${FUNCNAME[0]}.txt
      #return $((${PIPESTATUS[0]} + ${PIPESTATUS[1]}))
 }
 
@@ -6182,7 +6182,7 @@ determine_trust() {
 # not handled: Root CA supplied ("contains anchor" in SSLlabs terminology)
 
 tls_time() {
-     local now difftime
+     local difftime
      local spaces="               "
      local jsonID="TLS_timestamp"
 
@@ -6311,7 +6311,7 @@ determine_tls_extensions() {
           [[ $success -eq 0 ]] && extract_new_tls_extensions "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
           if [[ -r "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ]]; then
                cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
           fi
      else
           if "$HAS_ALPN" && [[ -z $STARTTLS ]]; then
@@ -6335,7 +6335,7 @@ determine_tls_extensions() {
                success=$?
           fi
           [[ $success -eq 0 ]] && extract_new_tls_extensions $TMPFILE
-          tmpfile_handle $FUNCNAME.txt
+          tmpfile_handle ${FUNCNAME[0]}.txt
      fi
      return $success
 }
@@ -6412,7 +6412,7 @@ get_server_certificate() {
           fi
           [[ $success -eq 0 ]] && add_tls_offered tls1_3 yes
           extract_new_tls_extensions $TMPFILE
-          tmpfile_handle $FUNCNAME.txt
+          tmpfile_handle ${FUNCNAME[0]}.txt
           return $success
      fi
 
@@ -6434,7 +6434,7 @@ get_server_certificate() {
                extract_certificates "ssl2"
                success=$?
           fi
-          tmpfile_handle $FUNCNAME.txt
+          tmpfile_handle ${FUNCNAME[0]}.txt
           return $success
      fi
 
@@ -6462,7 +6462,7 @@ get_server_certificate() {
                if [ -z "$1" ]; then
                    prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
                fi
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 7  # this is ugly, I know
           else
                grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
@@ -6479,7 +6479,7 @@ get_server_certificate() {
      extract_certificates "$proto"
      success=$?
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return $success
 }
 
@@ -6642,7 +6642,7 @@ must_staple() {
           # probably okay, since it seems likely that any TLS Feature extension
           # that includes status_request_v2 will also include status_request.
           supported=true
-     elif [[ "$hostcert_txt" =~ "1.3.6.1.5.5.7.1.24:" ]]; then
+     elif [[ "$hostcert_txt" =~ '1.3.6.1.5.5.7.1.24:' ]]; then
           cert="$($OPENSSL x509 -in "$HOSTCERT" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
           extn="${cert##*06082B06010505070118}"
           # Check for critical bit, and skip over it if present.
@@ -6692,11 +6692,11 @@ certificate_transparency() {
      # server's certificate. If they aren't, check whether the server provided
      # a stapled OCSP response with SCTs. If no SCTs were found in the certificate
      # or OCSP response, check for an SCT TLS extension.
-     if [[ "$cert_txt" =~ "CT Precertificate SCTs" ]] || [[ "$cert_txt" =~ "1.3.6.1.4.1.11129.2.4.2" ]]; then
+     if [[ "$cert_txt" =~ "CT Precertificate SCTs" ]] || [[ "$cert_txt" =~ '1.3.6.1.4.1.11129.2.4.2' ]]; then
           tm_out "certificate extension"
           return 0
      fi
-     if [[ "$ocsp_response" =~ "CT Certificate SCTs" ]] || [[ "$ocsp_response" =~ "1.3.6.1.4.1.11129.2.4.5" ]]; then
+     if [[ "$ocsp_response" =~ "CT Certificate SCTs" ]] || [[ "$ocsp_response" =~ '1.3.6.1.4.1.11129.2.4.5' ]]; then
           tm_out "OCSP extension"
           return 0
      fi
@@ -6705,7 +6705,7 @@ certificate_transparency() {
      # determine_tls_extensions() discovered an SCT TLS extension. If the server has more than
      # one certificate, then it is possible that an SCT TLS extension is returned for some
      # certificates, but not for all of them.
-     if [[ $number_of_certificates -eq 1 ]] && [[ "$TLS_EXTENSIONS" =~ "signed certificate timestamps" ]]; then
+     if [[ $number_of_certificates -eq 1 ]] && [[ "$TLS_EXTENSIONS" =~ signed\ certificate\ timestamps ]]; then
           tm_out "TLS extension"
           return 0
      fi
@@ -6721,7 +6721,7 @@ certificate_transparency() {
                     return 1
                fi
           else
-               while read hexc n ciph sslver kx auth enc mac export; do
+               while read -r hexc n ciph sslver kx auth enc mac export; do
                     if [[ ${#hexc} -eq 9 ]]; then
                          ciphers+=", ${hexc:2:2},${hexc:7:2}"
                     fi
@@ -6956,7 +6956,7 @@ certificate_info() {
                fi
                outln " bits"
           elif [[ $cert_key_algo = *RSA* ]] || [[ $cert_key_algo = *rsa* ]] || [[ $cert_key_algo = *dsa* ]] || \
-               [[ $cert_key_algo =~ dhKeyAgreement ]] || [[ $cert_key_algo =~ "X9.42 DH" ]]; then
+               [[ $cert_key_algo =~ dhKeyAgreement ]] || [[ $cert_key_algo =~ 'X9.42 DH' ]]; then
                if [[ "$cert_keysize" -le 512 ]]; then
                     pr_svrty_critical "$cert_keysize"
                     outln " bits"
@@ -7613,7 +7613,7 @@ run_server_defaults() {
                                    if [[ "$sans_nosni" == "$sans_sni" ]]; then
                                         success[n]=0
                                    else
-                                        while read san; do
+                                        while read -r san; do
                                              [[ -n "$san" ]] && [[ " $sans_sni " =~ " $san " ]] && success[n]=0 && break
                                         done <<< "$sans_nosni"
                                    fi
@@ -7892,7 +7892,7 @@ run_pfs() {
                fi
           done
      else
-          while read hexc dash ciph[nr_supported_ciphers] sslvers kx[nr_supported_ciphers] auth enc[nr_supported_ciphers] mac export; do
+          while read -r hexc dash ciph[nr_supported_ciphers] sslvers kx[nr_supported_ciphers] auth enc[nr_supported_ciphers] mac export; do
                ciphers_found[nr_supported_ciphers]=false
                if [[ "${hexc:2:2}" == "00" ]]; then
                     normalized_hexcode[nr_supported_ciphers]="x${hexc:7:2}"
@@ -8235,7 +8235,7 @@ run_pfs() {
      fi
      outln
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
      #if "$pfs_offered"; then
           # return 0
@@ -8315,7 +8315,7 @@ run_npn() {
      fi
      # btw: nmap can do that too http://nmap.org/nsedoc/scripts/tls-nextprotoneg.html
      # nmap --script=tls-nextprotoneg #NODE -p $PORT is your friend if your openssl doesn't want to test this
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
 
@@ -8376,7 +8376,7 @@ run_alpn() {
           outln "not offered"
           fileout "$jsonID" "INFO" "not offered"
      fi
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
 
@@ -8603,7 +8603,7 @@ fd_socket() {
                echo -e "CONNECT $nodeip:$PORT HTTP/1.0\n" >&5
           fi
           while true ; do
-               read proyxline <&5
+               read -r proyxline <&5
                if [[ "${proyxline%/*}" == "HTTP" ]]; then
                     proyxline=${proyxline#* }
                     if [[ "${proyxline%% *}" != "200" ]]; then
@@ -9095,7 +9095,7 @@ parse_sslv2_serverhello() {
           done
           echo "======================================" >> $TMPFILE
 
-          tmpfile_handle $FUNCNAME.txt
+          tmpfile_handle ${FUNCNAME[0]}.txt
      fi
      return $ret
 }
@@ -9464,21 +9464,21 @@ chacha20_inner_block() {
      local res
 
      res="$(chacha20_Qround "$s0" "$s4" "$s8" "$s12")"
-     read s0 s4 s8 s12 <<< "$res"
+     read -r s0 s4 s8 s12 <<< "$res"
      res="$(chacha20_Qround "$s1" "$s5" "$s9" "$s13")"
-     read s1 s5 s9 s13 <<< "$res"
+     read -r s1 s5 s9 s13 <<< "$res"
      res="$(chacha20_Qround "$s2" "$s6" "$s10" "$s14")"
-     read s2 s6 s10 s14 <<< "$res"
+     read -r s2 s6 s10 s14 <<< "$res"
      res="$(chacha20_Qround "$s3" "$s7" "$s11" "$s15")"
-     read s3 s7 s11 s15 <<< "$res"
+     read -r s3 s7 s11 s15 <<< "$res"
      res="$(chacha20_Qround "$s0" "$s5" "$s10" "$s15")"
-     read s0 s5 s10 s15 <<< "$res"
+     read -r s0 s5 s10 s15 <<< "$res"
      res="$(chacha20_Qround "$s1" "$s6" "$s11" "$s12")"
-     read s1 s6 s11 s12 <<< "$res"
+     read -r s1 s6 s11 s12 <<< "$res"
      res="$(chacha20_Qround "$s2" "$s7" "$s8" "$s13")"
-     read s2 s7 s8 s13 <<< "$res"
+     read -r s2 s7 s8 s13 <<< "$res"
      res="$(chacha20_Qround "$s3" "$s4" "$s9" "$s14")"
-     read s3 s4 s9 s14 <<< "$res"
+     read -r s3 s4 s9 s14 <<< "$res"
 
      tm_out "$s0 $s1 $s2 $s3 $s4 $s5 $s6 $s7 $s8 $s9 $s10 $s11 $s12 $s13 $s14 $s15"
      return 0
@@ -9517,7 +9517,7 @@ chacha20_block() {
      for (( i=0 ; i < 10; i++ )); do
           working_state="$(chacha20_inner_block $working_state)"
      done
-     read ws0 ws1 ws2 ws3 ws4 ws5 ws6 ws7 ws8 ws9 ws10 ws11 ws12 ws13 ws14 ws15 <<< "$working_state"
+     read -r ws0 ws1 ws2 ws3 ws4 ws5 ws6 ws7 ws8 ws9 ws10 ws11 ws12 ws13 ws14 ws15 <<< "$working_state"
 
      # Add working state to state
      s0="$(printf "%08X" $(((0x$s0+0x$ws0) & 0xffffffff)))"
@@ -9684,7 +9684,7 @@ get-nonce() {
      i=$len-8
      msb="${iv:0:i}"
      lsb="0x${iv:i:8}"
-     nonce="${msb}$(printf "%08X" "$(($lsb ^ $seq_num))")"
+     nonce="${msb}$(printf "%08X" "$((lsb ^ seq_num))")"
      tm_out "$nonce"
      return 0
 }
@@ -9718,7 +9718,7 @@ check_tls_serverhellodone() {
 
      DETECTED_TLS_VERSION=""
 
-     [[ -n "$key_and_iv" ]] && read key iv <<< "$key_and_iv"
+     [[ -n "$key_and_iv" ]] && read -r key iv <<< "$key_and_iv"
 
      if [[ -z "$tls_hello_ascii" ]]; then
           return 0              # no server hello received
@@ -9745,7 +9745,7 @@ check_tls_serverhellodone() {
           if [[ "$tls_content_type" == "16" ]]; then
                tls_handshake_ascii+="${tls_hello_ascii:i:msg_len}"
                tls_handshake_ascii_len=${#tls_handshake_ascii}
-               decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $(($msg_len/2)))${tls_hello_ascii:i:msg_len}"
+               decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $((msg_len/2)))${tls_hello_ascii:i:msg_len}"
                # the ServerHello MUST be the first handshake message
                [[ $tls_handshake_ascii_len -ge 2 ]] && [[ "${tls_handshake_ascii:0:2}" != "02" ]] && return 2
                if [[ $tls_handshake_ascii_len -ge 12 ]]; then
@@ -9790,7 +9790,7 @@ check_tls_serverhellodone() {
                fi
           elif [[ "$tls_content_type" == "15" ]]; then   # TLS ALERT
                tls_alert_ascii+="${tls_hello_ascii:i:msg_len}"
-               decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $(($msg_len/2)))${tls_hello_ascii:i:msg_len}"
+               decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $((msg_len/2)))${tls_hello_ascii:i:msg_len}"
           elif [[ "$tls_content_type" == "17" ]] && [[ -n "$key_and_iv" ]]; then # encrypted data
                nonce="$(get-nonce "$iv" "$seq_num")"
                [[ $? -ne 0 ]] && return 2
@@ -9804,7 +9804,7 @@ check_tls_serverhellodone() {
                     plaintext_len=$plaintext_len-2
                done
                tls_content_type="${plaintext:plaintext_len:2}"
-               decrypted_response+="${tls_content_type}0301$(printf "%04X" $(($plaintext_len/2)))${plaintext:0:plaintext_len}"
+               decrypted_response+="${tls_content_type}0301$(printf "%04X" $((plaintext_len/2)))${plaintext:0:plaintext_len}"
                if [[ "$tls_content_type" == "16" ]]; then
                     tls_handshake_ascii+="${plaintext:0:plaintext_len}"
                elif [[ "$tls_content_type" == "15" ]]; then
@@ -9953,7 +9953,7 @@ parse_tls_serverhello() {
                if [[ "$process_full" == "all" ]]; then
                     # The entire server response should have been retrieved.
                     debugme tmln_warning "Malformed message."
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -9985,16 +9985,16 @@ parse_tls_serverhello() {
           if "$do_starttls" && ( [[ $tls_content_type == 35 ]] || [[ $tls_content_type == 34 ]] ); then
                # STARTTLS handshake failed and server replied plaintext with a 5xx or 4xx
                [[ $DEBUG -ge 2 ]] && printf "%s\n" "$(hex2ascii "$tls_hello_ascii" 2>/dev/null)"
-               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 4
           elif [[ $tls_content_type != "14" ]] && [[ $tls_content_type != "15" ]] && \
                [[ $tls_content_type != "16" ]] && [[ $tls_content_type != "17" ]]; then
                debugme tmln_warning "Content type other than alert, handshake, change cipher spec, or application data detected."
-               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 8
           elif [[ "${tls_protocol:0:2}" != "03" ]]; then
                debugme tmln_warning "Protocol record_version.major is not 03."
-               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
           DETECTED_TLS_VERSION=$tls_protocol
@@ -10002,7 +10002,7 @@ parse_tls_serverhello() {
           if [[ $msg_len -gt $tls_hello_ascii_len-$i ]]; then
                if [[ "$process_full" == "all" ]]; then
                     debugme tmln_warning "Malformed message."
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 7
                else
                     # This could just be a result of the server's response being split
@@ -10022,7 +10022,7 @@ parse_tls_serverhello() {
      tls_alert_ascii_len=${#tls_alert_ascii}
      if [[ "$process_full" == "all" ]] && [[ $tls_alert_ascii_len%4 -ne 0 ]]; then
           debugme tmln_warning "Malformed message."
-          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
      fi
 
@@ -10051,11 +10051,11 @@ parse_tls_serverhello() {
 
                if [[ "$tls_err_level" != "01" ]] && [[ "$tls_err_level" != "02" ]]; then
                     debugme tmln_warning "Unexpected AlertLevel (0x$tls_err_level)."
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                elif [[ "$tls_err_level" == "02" ]]; then
                     # Fatal alert
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
           done
@@ -10072,7 +10072,7 @@ parse_tls_serverhello() {
                if [[ "$process_full" == "all" ]]; then
                     # The entire server response should have been retrieved.
                     debugme tmln_warning "Malformed message."
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -10116,7 +10116,7 @@ parse_tls_serverhello() {
           if [[ $msg_len -gt $tls_handshake_ascii_len-$i ]]; then
                if [[ "$process_full" == "all" ]]; then
                     debugme tmln_warning "Malformed message."
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                else
                     # This could just be a result of the server's response being
@@ -10129,7 +10129,7 @@ parse_tls_serverhello() {
           if [[ "$tls_msg_type" == "02" ]]; then
                if [[ -n "$tls_serverhello_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one ServerHello handshake message."
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -10145,7 +10145,7 @@ parse_tls_serverhello() {
           elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "0B" ]]; then
                if [[ -n "$tls_certificate_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one Certificate handshake message."
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                tls_certificate_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -10153,7 +10153,7 @@ parse_tls_serverhello() {
           elif ( [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]] ) && [[ "$tls_msg_type" == "0C" ]]; then
                if [[ -n "$tls_serverkeyexchange_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one ServerKeyExchange handshake message."
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                tls_serverkeyexchange_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -10161,7 +10161,7 @@ parse_tls_serverhello() {
           elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "16" ]]; then
                if [[ -n "$tls_certificate_status_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one certificate_status handshake message."
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                tls_certificate_status_ascii="${tls_handshake_ascii:i:msg_len}"
@@ -10172,18 +10172,18 @@ parse_tls_serverhello() {
      if [[ $tls_serverhello_ascii_len -eq 0 ]]; then
           debugme echo "server hello empty, TCP connection closed"
           DETECTED_TLS_VERSION="closed TCP connection "
-          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1              # no server hello received
      elif [[ $tls_serverhello_ascii_len -lt 76 ]]; then
           DETECTED_TLS_VERSION="reply malformed"
           debugme echo "Malformed response"
-          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
      elif [[ "${tls_handshake_ascii:0:2}" != "02" ]]; then
           # the ServerHello MUST be the first handshake message
           DETECTED_TLS_VERSION="reply contained no ServerHello"
           debugme tmln_warning "The first handshake protocol message is not a ServerHello."
-          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
      fi
      if [[ $DEBUG -eq 0 ]]; then
@@ -10205,7 +10205,7 @@ parse_tls_serverhello() {
      [[ "${DETECTED_TLS_VERSION:0:2}" == "7F" ]] && DETECTED_TLS_VERSION="0304"
      if [[ "${DETECTED_TLS_VERSION:0:2}" != "03" ]]; then
           debugme tmln_warning "server_version.major in ServerHello is not 03."
-          [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+          [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
      fi
 
@@ -10217,7 +10217,7 @@ parse_tls_serverhello() {
           let offset=70+$tls_sid_len
           if [[ $tls_serverhello_ascii_len -lt 76+$tls_sid_len ]]; then
                debugme echo "Malformed response"
-               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
      else
@@ -10239,19 +10239,19 @@ parse_tls_serverhello() {
           ( [[ "$process_full" == "ephemeralkey" ]] && [[ "0x${DETECTED_TLS_VERSION:2:2}" -gt "0x03" ]] ) ); then
           if [[ $tls_serverhello_ascii_len -lt $extns_offset+4 ]]; then
                debugme echo "Malformed response"
-               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
           tls_extensions_len=$(hex2dec "${tls_serverhello_ascii:extns_offset:4}")*2
           if [[ $tls_extensions_len -ne $tls_serverhello_ascii_len-$extns_offset-4 ]]; then
                debugme tmln_warning "Malformed message."
-               [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+               [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
           for (( i=0; i<tls_extensions_len; i=i+8+extension_len )); do
                if [[  $tls_extensions_len-$i -lt 8 ]]; then
                     debugme echo "Malformed response"
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                let offset=$extns_offset+4+$i
@@ -10260,7 +10260,7 @@ parse_tls_serverhello() {
                extension_len=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
                if [[  $extension_len -gt $tls_extensions_len-$i-8 ]]; then
                     debugme echo "Malformed response"
-                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                case $extension_type in
@@ -10327,7 +10327,7 @@ parse_tls_serverhello() {
                           if [[ "$process_full" == "all" ]]; then
                                if [[ $extension_len -lt 4 ]]; then
                                     debugme echo "Malformed application layer protocol negotiation extension."
-                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
                                fi
                                echo -n "ALPN protocol:  " >> $TMPFILE
@@ -10335,14 +10335,14 @@ parse_tls_serverhello() {
                                j=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
                                if [[ $extension_len -ne $j+4 ]] || [[ $j -lt 2 ]]; then
                                     debugme echo "Malformed application layer protocol negotiation extension."
-                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
                                fi
                                let offset=$offset+4
                                j=2*$(hex2dec "${tls_serverhello_ascii:offset:2}")
                                if [[ $extension_len -ne $j+6 ]]; then
                                     debugme echo "Malformed application layer protocol negotiation extension."
-                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
                                fi
                                let offset=$offset+2
@@ -10379,7 +10379,7 @@ parse_tls_serverhello() {
                           if [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]]; then
                                if [[ $extension_len -lt 4  ]]; then
                                     debugme tmln_warning "Malformed key share extension."
-                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
                                fi
                                let offset=$extns_offset+12+$i
@@ -10388,7 +10388,7 @@ parse_tls_serverhello() {
                                msg_len=2*"$(hex2dec "${tls_serverhello_ascii:offset:4}")"
                                if [[ $msg_len -ne $extension_len-8 ]]; then
                                     debugme tmln_warning "Malformed key share extension."
-                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
                                fi
                                case $named_curve in
@@ -10414,7 +10414,7 @@ parse_tls_serverhello() {
                                elif [[ $named_curve -eq 30 ]]; then
                                     key_bitstring="3042300506032b656f033900${tls_serverhello_ascii:offset:msg_len}"
                                elif [[ $named_curve -lt 256 ]] && [[ -n "$named_curve_oid" ]]; then
-                                    len1="$(printf "%02x" $(($msg_len/2+1)))"
+                                    len1="$(printf "%02x" $((msg_len/2+1)))"
                                     [[ "0x${len1}" -ge "0x80" ]] && len1="81${len1}"
                                     key_bitstring="03${len1}00${tls_serverhello_ascii:offset:msg_len}"
                                     len2="$(printf "%02x" $((${#named_curve_oid}/2+9)))"
@@ -10434,7 +10434,7 @@ parse_tls_serverhello() {
                                     else
                                          key_bitstring="${tls_serverhello_ascii:offset:msg_len}"
                                     fi
-                                    len1="$(printf "%04x" $(($msg_len/2)))"
+                                    len1="$(printf "%04x" $((msg_len/2)))"
                                     key_bitstring="0282${len1}$key_bitstring"
                                     len1="$(printf "%04x" $((${#key_bitstring}/2+1)))"
                                     key_bitstring="${dh_param}0382${len1}00$key_bitstring"
@@ -10479,13 +10479,13 @@ parse_tls_serverhello() {
                                for (( j=0; j<extension_len; j=j+protocol_len+2 )); do
                                     if [[ $extension_len -lt $j+2 ]]; then
                                          debugme echo "Malformed next protocol extension."
-                                         [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                                         [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                          return 1
                                     fi
                                     protocol_len=2*$(hex2dec "${tls_serverhello_ascii:offset:2}")
                                     if [[ $extension_len -lt $j+$protocol_len+2 ]]; then
                                          debugme echo "Malformed next protocol extension."
-                                         [[ $DEBUG -ge 1 ]] && tmpfile_handle $FUNCNAME.txt
+                                         [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                          return 1
                                     fi
                                     let offset=$offset+2
@@ -10525,30 +10525,30 @@ parse_tls_serverhello() {
                          if [[ -n "$tls_certificate_ascii" ]]; then
                               if [[ "${tls_certificate_ascii:0:2}" != "00" ]]; then
                                   debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
-                                   tmpfile_handle $FUNCNAME.txt
+                                   tmpfile_handle ${FUNCNAME[0]}.txt
                                    return 1
                               fi
                               if [[ $tls_certificate_ascii_len -lt 8 ]]; then
                                    debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
-                                   tmpfile_handle $FUNCNAME.txt
+                                   tmpfile_handle ${FUNCNAME[0]}.txt
                                    return 1
                               fi
                               certificate_list_len=2*$(hex2dec "${tls_certificate_ascii:2:6}")
                               if [[ $certificate_list_len -ne $tls_certificate_ascii_len-8 ]]; then
                                    debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
-                                   tmpfile_handle $FUNCNAME.txt
+                                   tmpfile_handle ${FUNCNAME[0]}.txt
                                    return 1
                               fi
                               for (( j=8; j < tls_certificate_ascii_len; j=j+extn_len )); do
                                    if [[ $tls_certificate_ascii_len-$j -lt 6 ]]; then
                                         debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
-                                        tmpfile_handle $FUNCNAME.txt
+                                        tmpfile_handle ${FUNCNAME[0]}.txt
                                         return 1
                                    fi
                                    certificate_len=2*$(hex2dec "${tls_certificate_ascii:j:6}")
                                    if [[ $certificate_len -gt $tls_certificate_ascii_len-$j-6 ]]; then
                                         debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
-                                        tmpfile_handle $FUNCNAME.txt
+                                        tmpfile_handle ${FUNCNAME[0]}.txt
                                         return 1
                                    fi
                                    len1=$certificate_len+6
@@ -10560,10 +10560,10 @@ parse_tls_serverhello() {
                                    tls_serverhello_ascii_len+=$extn_len
                                    tls_extensions_len+=$extn_len
                                    let offset=$extns_offset+4
-                                   tls_serverhello_ascii="${tls_serverhello_ascii:0:extns_offset}$(printf "%04X" $((0x${tls_serverhello_ascii:extns_offset:4}+$extn_len/2)))${tls_serverhello_ascii:offset}${tls_certificate_ascii:j:extn_len}"
+                                   tls_serverhello_ascii="${tls_serverhello_ascii:0:extns_offset}$(printf "%04X" $(( 0x${tls_serverhello_ascii:extns_offset:4}+extn_len/2)) )${tls_serverhello_ascii:offset}${tls_certificate_ascii:j:extn_len}"
                               done
                               tls_certificate_ascii_len=${#tls_revised_certificate_msg}+6
-                              tls_certificate_ascii="$(printf "%06X" $(($tls_certificate_ascii_len/2-3)))$tls_revised_certificate_msg"
+                              tls_certificate_ascii="$(printf "%06X" $(( tls_certificate_ascii_len/2-3)) )$tls_revised_certificate_msg"
                          fi
                     fi
                fi
@@ -10679,7 +10679,7 @@ parse_tls_serverhello() {
           if [[ $i -ge $cipherlist_len ]]; then
                BAD_SERVER_HELLO_CIPHER=true
                debugme echo "The ServerHello specifies a cipher suite that wasn't included in the ClientHello."
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
      fi
@@ -10707,7 +10707,7 @@ parse_tls_serverhello() {
                     done
                     if [[ $j -eq $extension_len-2 ]]; then
                          debugme echo "The ServerHello specifies a version that wasn't offered in the ClientHello."
-                         tmpfile_handle $FUNCNAME.txt
+                         tmpfile_handle ${FUNCNAME[0]}.txt
                          return 1
                     fi
                     break
@@ -10726,13 +10726,13 @@ parse_tls_serverhello() {
           # subsequent certificates, they are intermediate certificates.
           if [[ $tls_certificate_ascii_len -lt 12 ]]; then
                debugme echo "Malformed Certificate Handshake message in ServerHello."
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
           certificate_list_len=2*$(hex2dec "${tls_certificate_ascii:0:6}")
           if [[ $certificate_list_len -ne $tls_certificate_ascii_len-6 ]]; then
                debugme echo "Malformed Certificate Handshake message in ServerHello."
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
 
@@ -10740,14 +10740,14 @@ parse_tls_serverhello() {
           certificate_len=2*$(hex2dec "${tls_certificate_ascii:6:6}")
           if [[ $certificate_len -gt $tls_certificate_ascii_len-12 ]]; then
                debugme echo "Malformed Certificate Handshake message in ServerHello."
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
           asciihex_to_binary_file "${tls_certificate_ascii:12:certificate_len}" "/dev/stdout" | \
                $OPENSSL x509 -inform DER -outform PEM -out "$HOSTCERT" 2>$ERRFILE
           if [[ $? -ne 0 ]]; then
                debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
           get_pub_key_size
@@ -10765,21 +10765,21 @@ parse_tls_serverhello() {
           for (( i=12+certificate_len; i<tls_certificate_ascii_len; i=i+certificate_len )); do
                if [[ $tls_certificate_ascii_len-$i -lt 6 ]]; then
                     debugme echo "Malformed Certificate Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
+                    tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                certificate_len=2*$(hex2dec "${tls_certificate_ascii:i:6}")
                i+=6
                if [[ $certificate_len -gt $tls_certificate_ascii_len-$i ]]; then
                     debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
+                    tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                pem_certificate="$(asciihex_to_binary_file "${tls_certificate_ascii:i:certificate_len}" "/dev/stdout" | \
                                   $OPENSSL x509 -inform DER -outform PEM 2>$ERRFILE)"
                if [[ $? -ne 0 ]]; then
                     debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
+                    tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                nr_certs+=1
@@ -10804,14 +10804,14 @@ parse_tls_serverhello() {
      # Now parse the certificate status message
      if [[ $tls_certificate_status_ascii_len -ne 0 ]] && [[ $tls_certificate_status_ascii_len -lt 8 ]]; then
           debugme echo "Malformed certificate status Handshake message in ServerHello."
-          tmpfile_handle $FUNCNAME.txt
+          tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
      elif [[ $tls_certificate_status_ascii_len -ne 0 ]] && [[ "${tls_certificate_status_ascii:0:2}" == "01" ]]; then
           # This is a certificate status message of type "ocsp"
           ocsp_response_len=2*$(hex2dec "${tls_certificate_status_ascii:2:6}")
           if [[ $ocsp_response_len -ne $tls_certificate_status_ascii_len-8 ]]; then
                debugme echo "Malformed certificate status Handshake message in ServerHello."
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
           ocsp_resp_offset=8
@@ -10821,13 +10821,13 @@ parse_tls_serverhello() {
           ocsp_response_list_len=2*$(hex2dec "${tls_certificate_status_ascii:2:6}")
           if [[ $ocsp_response_list_len -ne $tls_certificate_status_ascii_len-8 ]] || [[ $ocsp_response_list_len -lt 6 ]]; then
                debugme echo "Malformed certificate status Handshake message in ServerHello."
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
           ocsp_response_len=2*$(hex2dec "${tls_certificate_status_ascii:8:6}")
           if [[ $ocsp_response_len -gt $ocsp_response_list_len-6 ]]; then
                debugme echo "Malformed certificate status Handshake message in ServerHello."
-               tmpfile_handle $FUNCNAME.txt
+               tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
           ocsp_resp_offset=14
@@ -10855,7 +10855,7 @@ parse_tls_serverhello() {
              [[ $rfc_cipher_suite == ECDHE* ]] || [[ $rfc_cipher_suite == AECDH* ]]; then
                if [[ $tls_serverkeyexchange_ascii_len -lt 6 ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
+                    tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                curve_type=$(hex2dec "${tls_serverkeyexchange_ascii:0:2}")
@@ -10910,14 +10910,14 @@ parse_tls_serverhello() {
                # p is the same as the length of the public key.
                if [[ $tls_serverkeyexchange_ascii_len -lt 4 ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
+                    tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                dh_p_len=2*$(hex2dec "${tls_serverkeyexchange_ascii:0:4}")
                offset=4+$dh_p_len
                if [[ $tls_serverkeyexchange_ascii_len -lt $offset ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
+                    tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
 
@@ -10928,7 +10928,7 @@ parse_tls_serverhello() {
                done
                if [[ $i -ge $offset ]]; then
                     debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
-                    tmpfile_handle $FUNCNAME.txt
+                    tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
                dh_p="${tls_serverkeyexchange_ascii:i:dh_p_len}"
@@ -10963,9 +10963,9 @@ parse_tls_serverhello() {
                [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: DH,$named_curve_str $dh_bits bits" >> $TMPFILE
           fi
      fi
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
 
-     TLS_SERVER_HELLO="02$(printf "%06x" $(($tls_serverhello_ascii_len/2)))${tls_serverhello_ascii}"
+     TLS_SERVER_HELLO="02$(printf "%06x" $(( tls_serverhello_ascii_len/2)) )${tls_serverhello_ascii}"
      return 0
 }
 
@@ -11613,7 +11613,7 @@ resend_if_hello_retry_request() {
      fi
 
      # Parse HelloRetryRequest extensions
-     for (( i=extns_offset+4; i < tls_hello_ascii_len; i=i+8+$len_extn )); do
+     for (( i=extns_offset+4; i < tls_hello_ascii_len; i=i+8+len_extn )); do
           extn_type="${tls_hello_ascii:i:4}"
           j=$i+4
           len_extn=2*$(hex2dec "${tls_hello_ascii:j:4}")
@@ -11662,7 +11662,7 @@ resend_if_hello_retry_request() {
      # except key_share and cookie.
      extra_extensions="$(strip_spaces "$(tolower "$3")")"
      extra_extensions_len=${#extra_extensions}
-     for (( i=0; i < extra_extensions_len; i=i+12+$len_extn )); do
+     for (( i=0; i < extra_extensions_len; i=i+12+len_extn )); do
           part2=$i+3
           extn_type="${extra_extensions:i:2}${extra_extensions:part2:2}"
           j=$i+6
@@ -12570,7 +12570,7 @@ run_renego() {
 
      #FIXME Insecure Client-Initiated Renegotiation is missing ==> sockets
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
 
@@ -12670,7 +12670,7 @@ run_crime() {
 #         fi
 #    fi
 #    [[ $DEBUG -ge 2 ]] tmln_out "$STR"
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
 
@@ -12739,7 +12739,7 @@ run_breach() {
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
 
@@ -12811,7 +12811,7 @@ run_sweet32() {
           fi
      fi
      outln
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      [[ $sclient_success -ge 6 ]] && return 1
      return 0
 }
@@ -12871,7 +12871,7 @@ run_ssl_poodle() {
           fi
      fi
      outln
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -13025,7 +13025,7 @@ run_tls_fallback_scsv() {
      fi
 
      outln
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
 
@@ -13080,7 +13080,7 @@ run_freak() {
                     len=${#exportrsa_ssl2_cipher_list_hex}
                     detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
                     for (( i=0; i<len; i=i+6 )); do
-                         [[ "$detected_ssl2_ciphers" =~ "x${exportrsa_ssl2_cipher_list_hex:i:6}" ]] && sclient_success=0 && break
+                         [[ "$detected_ssl2_ciphers" =~ x${exportrsa_ssl2_cipher_list_hex:i:6} ]] && sclient_success=0 && break
                     done
                fi
           fi
@@ -13124,7 +13124,7 @@ run_freak() {
      fi
      debugme echo $nr_supported_ciphers
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -13335,7 +13335,7 @@ run_logjam() {
           fi
      fi
      outln
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
 }
 
@@ -13695,7 +13695,7 @@ run_beast(){
      "$first" && ! "$vuln_beast" && prln_svrty_good "no CBC ciphers found for any protocol (OK)"
 
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -13758,7 +13758,7 @@ run_lucky13() {
           fi
      fi
      outln
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      [[ $sclient_success -ge 6 ]] && return 1
      return 0
 }
@@ -13858,7 +13858,7 @@ run_rc4() {
                supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
                "$WIDE" && "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$HOSTCERT")"
                for (( i=0 ; i<nr_ciphers; i++ )); do
-                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${normalized_hexcode[i]}" ]]; then
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
                          ciphers_found[i]=true
                          "$WIDE" && "$SHOW_SIGALGO" && sigalg[i]="$s"
                          rc4_offered=1
@@ -13867,12 +13867,12 @@ run_rc4() {
           fi
      elif "$HAS_SSL2" && [[ -n "$sslv2_ciphers_ossl" ]]; then
           $OPENSSL s_client -cipher "${sslv2_ciphers_ossl:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
-          sclient_connect_successful "$?" "$TMPFILE"
-          if [[ "$?" -eq 0 ]]; then
+          sclient_connect_successful $? "$TMPFILE"
+          if [[ $? -eq 0 ]]; then
                supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
                "$WIDE" && "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$TMPFILE")"
                for (( i=0 ; i<nr_ciphers; i++ )); do
-                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ "${ciph[i]}" ]]; then
+                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${ciph[i]} ]]; then
                          ciphers_found[i]=true
                          "$WIDE" && "$SHOW_SIGALGO" && sigalg[i]="$s"
                          rc4_offered=1
@@ -13901,7 +13901,7 @@ run_rc4() {
                done
                [[ -z "$ciphers_to_test" ]] && break
                $OPENSSL s_client $(s_client_options "$proto -cipher "${ciphers_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-               sclient_connect_successful "$?" "$TMPFILE" || break
+               sclient_connect_successful $? "$TMPFILE" || break
                cipher=$(get_cipher $TMPFILE)
                [[ -z "$cipher" ]] && break
                for (( i=0; i < nr_ossl_ciphers; i++ )); do
@@ -14010,7 +14010,7 @@ run_rc4() {
      outln
 
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      [[ $sclient_success -ge 6 ]] && return 1
      return 0
 }
@@ -14696,7 +14696,7 @@ get_install_dir() {
           DISPLAY_CIPHERNAMES="no-rfc"
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
           prln_warning "\nATTENTION: No cipher mapping file found!"
-          outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
+          outln "Please note from 2.9 on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
           [[ $? -ne 0 ]] && exit $ERR_RESOURCE
@@ -14705,7 +14705,7 @@ get_install_dir() {
      TLS_DATA_FILE="$TESTSSL_INSTALL_DIR/etc/tls_data.txt"
      if [[ ! -r "$TLS_DATA_FILE" ]]; then
           prln_warning "\nATTENTION: No TLS data file found -- needed for socket-based handshakes"
-          outln "Please note from 2.9dev on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
+          outln "Please note from 2.9 on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
           outln
           ignore_no_or_lame "Type \"yes\" to ignore this warning and proceed at your own risk" "yes"
           [[ $? -ne 0 ]] && exit $ERR_RESOURCE
@@ -14872,7 +14872,7 @@ find_openssl_binary() {
      [[ $? -eq 0 ]] && HAS_AES256_GCM=true
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
-          if type -p timeout 2>&1 >/dev/null ; then
+          if type -p timeout >/dev/null 2>&1; then
                if ! "$do_mass_testing"; then
                     # there are different "timeout". Check whether --preserve-status is supported
                     if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
@@ -15550,7 +15550,6 @@ get_aaaa_record() {
 # arg1: domain to check for
 get_caa_rr_record() {
      local raw_caa=""
-     local caa_flag
      local -i len_caa_property
      local caa_property_name
      local caa_property_value
@@ -15612,7 +15611,6 @@ get_caa_rr_record() {
           return 0
      elif grep -q '"' <<< "$raw_caa"; then
           raw_caa=${raw_caa//\"/}                           # strip all ". Now we should have flag, name, value
-          #caa_flag="$(awk '{ print $1 }' <<< "$raw_caa")"
           #caa_property_name="$(awk '{ print $2 }' <<< "$raw_caa")"
           #caa_property_value="$(awk '{ print $3 }' <<< "$raw_caa")"
           safe_echo "$(sort <<< "$(awk '{ print $2"="$3 }' <<< "$raw_caa")")"
@@ -15875,7 +15873,7 @@ determine_optimal_proto() {
           else
                pr_bold " $NODEIP:$PORT "
           fi
-          tmpfile_handle $FUNCNAME.txt
+          tmpfile_handle ${FUNCNAME[0]}.txt
           prln_bold "doesn't seem to be a TLS/SSL enabled server";
           ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
           [[ $? -ne 0 ]] && $ERR_CLUELESS
@@ -15901,7 +15899,7 @@ determine_optimal_proto() {
           fi
      fi
 
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -15912,9 +15910,11 @@ determine_service() {
      local protocol
 
      if ! fd_socket; then          # check if we can connect to $NODEIP:$PORT
-          [[ -n "$PROXY" ]] && \
-               fatal "You're sure $PROXYNODE:$PROXYPORT allows tunneling here? Can't connect to \"$NODEIP:$PORT\"" $ERR_CONNECT || \
+          if [[ -n "$PROXY" ]]; then
+               fatal "You're sure $PROXYNODE:$PROXYPORT allows tunneling here? Can't connect to \"$NODEIP:$PORT\"" $ERR_CONNECT
+          else
                fatal "Can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" $ERR_CONNECT
+          fi
      fi
      close_socket
 
@@ -15991,7 +15991,7 @@ determine_service() {
                     ;;
           esac
      fi
-     tmpfile_handle $FUNCNAME.txt
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0       # OPTIMAL_PROTO, GET_REQ*/HEAD_REQ* is set now
 }
 
@@ -16116,7 +16116,7 @@ create_mass_testing_cmdline() {
      local skip_next=false
 
      MASS_TESTING_CMDLINE=()
-     [[ "$testing_type" =~ parallel ]] && read testing_type test_number <<< "$testing_type"
+     [[ "$testing_type" =~ parallel ]] && read -r testing_type test_number <<< "$testing_type"
 
      # Start by adding the elements from the global command line to the command line for the
      # test. If run_mass_testing_parallel(), then modify the command line so that, when
@@ -16238,7 +16238,7 @@ ports2starttls() {
 nmap_to_plain_file() {
      local target_fname=""
      local oneline=""
-     local ip hosttxt round_brackets ports_specs starttls
+     local ip hostdontcare round_brackets ports_specs starttls
      local tmp port host_spec protocol dontcare dontcare1
      #FIXME: IPv6 is missing here
 
@@ -16269,7 +16269,7 @@ nmap_to_plain_file() {
      # Line x:   "Host: AAA.BBB.CCC.DDD (<FQDN>) Status: Up"
      # Line x+1: "Host: AAA.BBB.CCC.DDD (<FQDN>) Ports: 443/open/tcp//https///"
      # (or):      Host: AAA.BBB.CCC.DDD (<FQDN>) Ports: 22/open/tcp//ssh//<banner>/, 25/open/tcp//smtp//<banner>/, 443/open/tcp//ssl|http//<banner>
-     while read -r hosttxt ip round_brackets tmp ports_specs; do
+     while read -r hostdontcare ip round_brackets tmp ports_specs; do
           [[ "$ports_specs" =~ "Status: "  ]] && continue             # we don't need this
           [[ "$ports_specs" =~ '/open/tcp/' ]] || continue            # no open tcp at all for this IP --> move
           host_spec="$ip"
@@ -16315,7 +16315,7 @@ run_mass_testing() {
      fi
 
      pr_reverse "====== Running in file batch mode with ${gnmapadd}file=\"$saved_fname\" ======"; outln "\n"
-     while read cmdline; do
+     while read -r cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
@@ -16388,7 +16388,7 @@ run_mass_testing_parallel() {
      fi
 
      pr_reverse "====== Running in file batch mode with ${gnmapadd}file=\"$saved_fname\" ======"; outln "\n"
-     while read cmdline; do
+     while read -r cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
           [[ "$cmdline" == "EOF" ]] && break
@@ -17164,8 +17164,8 @@ lets_roll() {
      determine_service "$1"        # STARTTLS service? Other will be determined here too. Returns always 0 or has already exited if fatal error occurred
 
      # "secret" devel options --devel:
-     $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo "$?" ; exit $ALLOK; }
-     $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo "$?" ; exit $ALLOK; }
+     $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo $? ; exit $ALLOK; }
+     $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo $? ; exit $ALLOK; }
      $do_cipher_match && { fileout_section_header $section_number false; run_cipher_match ${single_cipher}; }
      ((section_number++))
 
