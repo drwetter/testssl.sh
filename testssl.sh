@@ -105,7 +105,7 @@ fi
 trap "cleanup" QUIT EXIT
 trap "child_error" USR1
 
-readonly VERSION="2.9.5-4"
+readonly VERSION="2.9.5-6"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
@@ -9483,18 +9483,34 @@ run_ccs_injection(){
                fileout "ccs" "OK" "CCS: not vulnerable" "$cve" "$cwe"
           fi
           ret=0
-     elif [[ "$byte6" == "15" ]] && [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
-          # decryption failed received
-          pr_svrty_critical "VULNERABLE (NOT ok)"
-          fileout "ccs" "CRITICAL" "CCS: VULNERABLE" "$cve" "$cwe" "$hint"
-          ret=1
      elif [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
-          if [[ "$byte6" == "0A" ]] || [[ "$byte6" == "28" ]]; then
-               # Unexpected message / Handshake failure  received
-               pr_warning "likely "
-               out "not vulnerable (OK)"
-               out " - alert description type: $byte6"
-               fileout "ccs" "WARN" "CCS: probably not vulnerable but received 0x${byte6} instead of 0x15" "$cve" "$cwe" "$hint"
+          if [[ ! "${tls_hello_ascii:5:2}" =~ [03|02|01|00] ]]; then
+               pr_warning "test failed "
+               out "no proper TLS repy (debug info: protocol sent: 1503${tlshexcode#x03, x}, reply: ${tls_hello_ascii:0:14}"
+               fileout "$jsonID" "DEBUG" "test failed, around line $LINENO, debug info (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
+               ret=1
+          elif [[ "$byte6" == "15" ]]; then
+               # decryption failed received
+               pr_svrty_critical "VULNERABLE (NOT ok)"
+               fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
+          elif [[ "$byte6" == "0A" ]] || [[ "$byte6" == "28" ]]; then
+                # Unexpected message / Handshake failure  received
+                pr_warning "likely "
+                out "not vulnerable (OK)"
+                out " - alert description type: $byte6"
+                fileout "$jsonID" "WARN" "probably not vulnerable but received 0x${byte6} instead of 0x15" "$cve" "$cwe" "$hint"
+          elif [[ "$byte6" == "14" ]]; then
+               # bad_record_mac -- this is not "not vulnerable"
+               out "likely "
+               pr_svrty_critical "VULNERABLE (NOT ok)"
+               out ", suspicious \"bad_record_mac\" ($byte6)"
+               fileout "$jsonID" "CRITICAL" "likely VULNERABLE" "$cve" "$cwe" "$hint"
+          else
+               # other errors, see https://tools.ietf.org/html/rfc5246#section-7.2
+               out "likely "
+               pr_svrty_critical "VULNERABLE (NOT ok)"
+               out ", suspicious error code \"$byte6\" returned. Please report"
+               fileout "$jsonID" "CRITICAL" "likely VULNERABLE with $byte6" "$cve" "$cwe" "$hint"
           fi
      elif [[ $STARTTLS_PROTOCOL == "mysql" ]] && [[ "${tls_hello_ascii:14:12}" == "233038533031" ]]; then
           # MySQL community edition (yaSSL) returns a MySQL error instead of a TLS Alert
