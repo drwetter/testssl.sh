@@ -15893,7 +15893,7 @@ determine_optimal_proto() {
           tmpfile_handle ${FUNCNAME[0]}.txt
           prln_bold "doesn't seem to be a TLS/SSL enabled server";
           ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
-          [[ $? -ne 0 ]] && $ERR_CLUELESS
+          [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
 
      # NOTE: The following code is only needed as long as draft versions of TLSv1.3 prior to draft 23
