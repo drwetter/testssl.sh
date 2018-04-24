@@ -814,8 +814,8 @@ fileout() {
 
      if ( "$do_pretty_json" && [[ "$1" == "service" ]] ) || show_finding "$severity"; then
          local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
-         [[ -e "$JSONFILE" ]] && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
-         "$do_csv" && \
+         [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
+         "$do_csv" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && \
               echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
      "$FIRST_FINDING" && FIRST_FINDING=false
      fi
