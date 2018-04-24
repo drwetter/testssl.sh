@@ -189,6 +189,7 @@ TERM_CURRPOS=0                                              # custom line wrappi
 #
 # Following variables make use of $ENV and can be used like "OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <URI>"
 declare -x OPENSSL OPENSSL_TIMEOUT
+PHONE_OUTSIDE=${PHONE_OUTSIDE:-false}   # Whether testssl can retrieve CRLs and OCSP
 FAST_SOCKET=${FAST_SOCKET:-false}       # EXPERIMENTAL feature to accelerate sockets -- DO NOT USE it for production
 COLOR=${COLOR:-2}                       # 3: Extra color (ciphers, curves), 2: Full color, 1: B/W only 0: No ESC at all
 COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the output
@@ -1388,8 +1389,13 @@ filter_input() {
      sed -e 's/#.*$//' -e '/^$/d' <<< "$1" | tr -d '\n' | tr -d '\t'
 }
 
-# dl's any URL (argv1) via HTTP 1.1 GET from port 80, arg2: file to store http body
-# proxy is not honored (see cmd line switches)
+# dl's any URL (arg1) via HTTP 1.1 GET from port 80, arg2: file to store http body
+# proxy is not honored yet (see cmd line switches)
+#
+# example usage:
+#      myfile=$(mktemp $TEMPDIR/http_get.XXXXXX.txt)
+#      http_get "http://crl.startssl.com/sca-server1.crl" "$myfile"
+#
 http_get() {
      local proto z
      local node="" query=""
@@ -1399,18 +1405,45 @@ http_get() {
      "$SNEAKY" && useragent="$UA_SNEAKY"
 
      IFS=/ read -r proto z node query <<< "$1"
-
      exec 33<>/dev/tcp/$node/80
-     printf "GET /$query HTTP/1.1\r\nHost: $node\r\nUser-Agent: $useragent\r\nConnection: Close\r\nAccept: */*\r\n\r\n" >&33
-     cat <&33 | \
-          tr -d '\r' | sed '1,/^$/d' >$dl
-     # HTTP header stripped now, closing fd:
+     printf -- "%b" "GET /$query HTTP/1.1\r\nHost: $node\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nConnection: Close\r\nAccept: text/*\r\n\r\n" >&33
+     # strip HTTP header: >$dl
+     cat <&33 | sed '1,/^[[:space:]]*$/d' >$dl
      exec 33<&-
-     [[ -s "$2" ]] && return 0 || return 1
+     [[ -s "$dl" ]] && return 0 || return 1
 }
-# example usage:
-# myfile=$(mktemp $TEMPDIR/http_get.XXXXXX.txt)
-# http_get "http://crl.startssl.com/sca-server1.crl" "$myfile"
+
+check_revocation_crl() {
+     local crl="$1"
+     local cert_serial="$2"
+     local tmpfile=""
+
+     "$PHONE_OUTSIDE" || return 0
+     tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${crl##*\/} || exit $ERR_FCREATE
+
+     http_get "$crl" "$tmpfile"
+     if [[ $? -ne 0 ]]; then
+          pr_warning "retrieval of \"$1\" failed"
+          return 7
+     fi
+     # -crl_download would be more elegant but is supported from 1.0.2 onwards
+     #FIXME Would be great to use that for >= 1.0.2
+     openssl crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem"
+     if [[ $? -ne 0 ]]; then
+          pr_warning "conversion of "$tmpfile" failed"
+          return 7
+     fi
+     cat $TEMPDIR/intermediatecerts.pem "${tmpfile%%.crl}.pem" >$TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem
+     openssl verify -crl_check -CAfile $TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem $TEMPDIR/host_certificate.pem &>$ERRFILE
+     if [[ $? -eq 0 ]]; then
+          out ", "
+          pr_svrty_good "not revoked"
+     else
+          out ", "
+          pr_svrty_critical "revoked"
+     fi
+     return 0
+}
 
 wait_kill(){
      local pid=$1             # pid we wait for or kill
@@ -7395,9 +7428,21 @@ certificate_info() {
           outln "--"
      else
           if [[ $(count_lines "$crl") -eq 1 ]]; then
-               outln "$crl"
+               out "$crl"
+               check_revocation_crl "$crl" "$cert_serial"
+               outln
           else # more than one CRL
-               out_row_aligned "$crl" "$spaces"
+               first_crl=true
+               while read -r line; do
+                    if "$first_crl"; then
+                         first_crl=false
+                    else
+                         out "$spaces"
+                    fi
+                    out "$line"
+                    check_revocation_crl "$line" "$cert_serial"
+                    outln
+               done <<< "$crl"
           fi
           fileout "${jsonID}${json_postfix}" "INFO" "$crl"
      fi
