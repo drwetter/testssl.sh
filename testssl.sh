@@ -189,7 +189,7 @@ TERM_CURRPOS=0                                              # custom line wrappi
 #
 # Following variables make use of $ENV and can be used like "OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <URI>"
 declare -x OPENSSL OPENSSL_TIMEOUT
-PHONE_OUTSIDE=${PHONE_OUTSIDE:-false}   # Whether testssl can retrieve CRLs and OCSP
+PHONE_OUT=${PHONE_OUT:-false}           # Whether testssl can retrieve CRLs and OCSP
 FAST_SOCKET=${FAST_SOCKET:-false}       # EXPERIMENTAL feature to accelerate sockets -- DO NOT USE it for production
 COLOR=${COLOR:-2}                       # 3: Extra color (ciphers, curves), 2: Full color, 1: B/W only 0: No ESC at all
 COLORBLIND=${COLORBLIND:-false}         # if true, swap blue and green in the output
@@ -1389,12 +1389,9 @@ filter_input() {
      sed -e 's/#.*$//' -e '/^$/d' <<< "$1" | tr -d '\n' | tr -d '\t'
 }
 
-# dl's any URL (arg1) via HTTP 1.1 GET from port 80, arg2: file to store http body
-# proxy is not honored yet (see cmd line switches)
-#
-# example usage:
-#      myfile=$(mktemp $TEMPDIR/http_get.XXXXXX.txt)
-#      http_get "http://crl.startssl.com/sca-server1.crl" "$myfile"
+# Dl's any URL (arg1) via HTTP 1.1 GET from port 80, arg2: file to store http body.
+# Proxy is not honored yet (see cmd line switches) -- except when using curl or wget.
+# There the environment variable is used automatically
 #
 http_get() {
      local proto z
@@ -1404,43 +1401,61 @@ http_get() {
 
      "$SNEAKY" && useragent="$UA_SNEAKY"
 
-     IFS=/ read -r proto z node query <<< "$1"
-     exec 33<>/dev/tcp/$node/80
-     printf -- "%b" "GET /$query HTTP/1.1\r\nHost: $node\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nConnection: Close\r\nAccept: text/*\r\n\r\n" >&33
-     # strip HTTP header: >$dl
-     cat <&33 | sed '1,/^[[:space:]]*$/d' >$dl
-     exec 33<&-
-     [[ -s "$dl" ]] && return 0 || return 1
+     # auomatically handles proxy vars via ENV
+     if which curl &>/dev/null; then
+          curl -s -A $''"$useragent"'' -o $dl "$1"
+          return $?
+     elif which wget &>/dev/null; then
+          wget -q -U $''"$useragent"'' -O $dl "$1"
+          return $?
+     else
+          # Worst option: slower and hiccups with chunked transfers.  Workround for the latter is HTTP/1.0
+          IFS=/ read -r proto z node query <<< "$1"
+          exec 33<>/dev/tcp/$node/80
+          printf -- "%b" "GET /$query HTTP/1.0\r\nUser-Agent: $useragent\r\nHost: $node\r\nAccept: */*\r\n\r\n" >&33
+          # strip HTTP header
+          if [[ $DEBUG -ge 1 ]]; then
+               cat <&33 >${dl}.raw
+               cat ${dl}.raw | sed '1,/^[[:space:]]*$/d' >${dl}
+          else
+               cat <&33 | sed '1,/^[[:space:]]*$/d' >${dl}
+          fi
+          exec 33<&-
+          [[ -s "$dl" ]] && return 0 || return 1
+     fi
 }
 
 check_revocation_crl() {
      local crl="$1"
-     local cert_serial="$2"
+     local jsonID="$2"
      local tmpfile=""
 
-     "$PHONE_OUTSIDE" || return 0
+     "$PHONE_OUT" || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${crl##*\/} || exit $ERR_FCREATE
 
      http_get "$crl" "$tmpfile"
      if [[ $? -ne 0 ]]; then
           pr_warning "retrieval of \"$1\" failed"
-          return 7
+          fileout "$jsonID" "WARN" "CRL retrieval from $1 failed"
+          return 1
      fi
-     # -crl_download would be more elegant but is supported from 1.0.2 onwards
-     #FIXME Would be great to use that for >= 1.0.2
-     openssl crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem"
+     # -crl_download could be more elegant but is supported from 1.0.2 onwards only
+     $OPENSSL crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem"
      if [[ $? -ne 0 ]]; then
           pr_warning "conversion of "$tmpfile" failed"
-          return 7
+          fileout "$jsonID" "WARN" "conversion of CRL to PEM format failed"
+          return 1
      fi
      cat $TEMPDIR/intermediatecerts.pem "${tmpfile%%.crl}.pem" >$TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem
      openssl verify -crl_check -CAfile $TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem $TEMPDIR/host_certificate.pem &>$ERRFILE
      if [[ $? -eq 0 ]]; then
           out ", "
           pr_svrty_good "not revoked"
+          fileout "$jsonID" "OK" "not revoked"
      else
           out ", "
           pr_svrty_critical "revoked"
+          fileout "$jsonID" "CRITICAL" "revoked"
      fi
      return 0
 }
@@ -7429,7 +7444,8 @@ certificate_info() {
      else
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                out "$crl"
-               check_revocation_crl "$crl" "$cert_serial"
+               check_revocation_crl "$crl" "cert_CRLrevoked_${json_postfix}"
+               ret=$((ret +$?))
                outln
           else # more than one CRL
                first_crl=true
@@ -7440,7 +7456,8 @@ certificate_info() {
                          out "$spaces"
                     fi
                     out "$line"
-                    check_revocation_crl "$line" "$cert_serial"
+                    check_revocation_crl "$line" "cert_CRLrevoked_${json_postfix}"
+                    ret=$((ret +$?))
                     outln
                done <<< "$crl"
           fi
@@ -15029,6 +15046,7 @@ help() {
                                    Alternatively: nmap output in greppable format (-oG) (1x port per line allowed)
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
      --add-ca <cafile>             <cafile> or a comma separated list of CA files will be added during runtime to all CA stores
+     --phone-out                   Allow to contact external servers for CRL download and querying OCSP responder
 
 single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
@@ -17122,6 +17140,9 @@ parse_cmd_line() {
                --proxy|--proxy=*)
                     PROXY="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
+                    ;;
+               --phone-out)
+                    PHONE_OUT=true
                     ;;
                -6)  # doesn't work automagically. My versions have -DOPENSSL_USE_IPV6, CentOS/RHEL/FC do not
                     HAS_IPv6=true
