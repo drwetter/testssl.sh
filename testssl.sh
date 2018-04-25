@@ -5470,9 +5470,10 @@ run_server_preference() {
      local -a cipher proto
      local proto_ossl proto_txt proto_hex cipherlist i
      local -i ret=0 j sclient_success str_len
-     local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256"
-     # now reversed offline via tac, see https://github.com/thomassa/testssl.sh/commit/7a4106e839b8c3033259d66697893765fc468393 :
-     local list_reverse="AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
+     local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-SHA256:ADH-AES256-GCM-SHA384:AECDH-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-AES128-SHA"
+     local list_reverse="ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:AECDH-AES128-SHA:ADH-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-GCM-SHA256:AES128-GCM-SHA256:AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-DES-CBC3-SHA:AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
+     tls13_list_fwd="TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256"
+     tls13_list_reverse="TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384"
      local has_cipher_order=false
      local addcmd="" addcmd2=""
      local using_sockets=true
@@ -5494,11 +5495,11 @@ run_server_preference() {
           # and the -no_ssl2 isn't provided.
           addcmd="-no_ssl2 $SNI"
      fi
-     $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>$ERRFILE >$TMPFILE
+     $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>$ERRFILE >$TMPFILE
      if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
           pr_warning "no matching cipher in this list found (pls report this): "
-          outln "$list_fwd  . "
-          fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd"
+          outln "$list_fwd:$tls13_list_fwd  . "
+          fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd:$tls13_list_fwd"
           tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
           # we assume the problem is with testing here but it could be also the server side
@@ -5508,11 +5509,11 @@ run_server_preference() {
           debugme tm_out "(workaround #188) "
           determine_optimal_proto $STARTTLS_PROTOCOL
           [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$SNI"
-          $OPENSSL s_client $(s_client_options "$STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $(s_client_options "$STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
                pr_warning "no matching cipher in this list found (pls report this): "
-               outln "$list_fwd  . "
-               fileout "$jsonID" "WARN" "Could not determine cipher order, no matching cipher in list found (pls report this): $list_fwd"
+               outln "$list_fwd:$tls13_list_fwd  . "
+               fileout "$jsonID" "WARN" "Could not determine cipher order, no matching cipher in list found (pls report this): $list_fwd:$tls13_list_fwd"
                tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
@@ -5530,7 +5531,7 @@ run_server_preference() {
      fi
 
      # second client hello with reverse list
-     $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>>$ERRFILE >$TMPFILE
+     $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_reverse -ciphersuites $tls13_list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>>$ERRFILE >$TMPFILE
      # first handshake worked above so no error handling here
      cipher2=$(get_cipher $TMPFILE)               # cipher2 from 2nd serverhello
 
