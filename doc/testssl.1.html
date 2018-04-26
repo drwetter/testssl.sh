@@ -340,7 +340,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--show-each</code>                   This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  <code>SHOW_EACH_C</code> is your friend if you prefer to set this via the shell environment.</p>
 
-<p><code>--color &lt;0|1|2></code>               It determines the use of colors on the screen: <code>2</code> is the default and makes use of ANSI and termcap escape codes on your terminal. <code>1</code> just uses non-colored mark-up like bold, italics, underline, reverse.  <code>0</code> means no mark-up at all = no escape codes. Setting the environment variable <code>COLOR</code> achieves the same result.</p>
+<p><code>--color &lt;0|1|2|3></code>               It determines the use of colors on the screen: <code>2</code> is the default and makes use of ANSI and termcap escape codes on your terminal. <code>1</code> just uses non-colored mark-up like bold, italics, underline, reverse.  <code>0</code> means no mark-up at all = no escape codes. <code>3</code> will color ciphers and EC according to an internal (not yet perfect) rating. Setting the environment variable <code>COLOR</code> achieves the same result.</p>
 
 <p><code>--colorblind</code>                  Swaps green and blue colors in the output, so that this percentage of folks (up to 8% of males, see https://en.wikipedia.org/wiki/Color_blindness) can distinguish those findings better. <code>COLORBLIND</code> is the according variable if you want to set this in the environment.</p>
 
@@ -388,7 +388,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--append</code>                      Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file exit with an error. <code>--append</code> however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.</p>
 
-<p><code>--outprefix &lt;fname_prefix></code>   Prepend output filename prefix <var>fname_prefix</var> before '\${NODE}.'. You can use as well the environment variable FNAME_PREFIX.</p>
+<p><code>--outprefix &lt;fname_prefix></code>   Prepend output filename prefix <var>fname_prefix</var> before '\${NODE}.'. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named <code>&lt;fname_prefix>.${NODE}-p${port}${YYYYMMDD-HHMM}.&lt;format></code> when no file name of the respective output option was specified.</p>
 
 <p>A few file output options can also be preset via environment variables.</p>
 
@@ -409,6 +409,8 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 <li>light magenta: a fatal error which either requires strict consent from the user to continue or a condition which leaves no other choice for testssl.sh to quit</li>
 </ul>
 
+
+<p>Besides that <code>--color=3</code> will color ciphers and EC acording to an internal and rough rating.</p>
 
 <p>What is labeled as "light" above appears as such on the screen but is technically speaking "bold".  Markup (without any color) is used in the following manner:</p>
 

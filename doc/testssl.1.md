@@ -262,7 +262,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 `--show-each`                   This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  `SHOW_EACH_C` is your friend if you prefer to set this via the shell environment.
 
 
-`--color <0|1|2>`               It determines the use of colors on the screen: `2` is the default and makes use of ANSI and termcap escape codes on your terminal. `1` just uses non-colored mark-up like bold, italics, underline, reverse.  `0` means no mark-up at all = no escape codes. Setting the environment variable `COLOR` achieves the same result.
+`--color <0|1|2|3>`               It determines the use of colors on the screen: `2` is the default and makes use of ANSI and termcap escape codes on your terminal. `1` just uses non-colored mark-up like bold, italics, underline, reverse.  `0` means no mark-up at all = no escape codes. `3` will color ciphers and EC according to an internal (not yet perfect) rating. Setting the environment variable `COLOR` achieves the same result.
 
 
 `--colorblind`                  Swaps green and blue colors in the output, so that this percentage of folks (up to 8% of males, see https://en.wikipedia.org/wiki/Color_blindness) can distinguish those findings better. `COLORBLIND` is the according variable if you want to set this in the environment.
@@ -310,7 +310,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--append`                      Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file exit with an error. `--append` however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
 
-`--outprefix <fname_prefix>`   Prepend output filename prefix <fname_prefix> before '\${NODE}.'. You can use as well the environment variable FNAME_PREFIX.
+`--outprefix <fname_prefix>`   Prepend output filename prefix <fname_prefix> before '\${NODE}.'. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named `<fname_prefix>.${NODE}-p${port}${YYYYMMDD-HHMM}.<format>` when no file name of the respective output option was specified.
 
 A few file output options can also be preset via environment variables.
 
@@ -328,6 +328,8 @@ Testssl.sh makes use of (the eight) standard terminal colors. The color scheme i
 * cyan: currently used for `--show-each` or an additional hint
 * magenta: signals a warning condition, e.g. either a local lack of capabilities on the client side or another problem
 * light magenta: a fatal error which either requires strict consent from the user to continue or a condition which leaves no other choice for testssl.sh to quit
+
+Besides that `--color=3` will color ciphers and EC acording to an internal and rough rating.
 
 What is labeled as "light" above appears as such on the screen but is technically speaking "bold".  Markup (without any color) is used in the following manner:
 

@@ -332,7 +332,7 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
 \fB\-\-show\-each\fR This is an option for all wide modes only: it displays all ciphers tested \-\- not only succeeded ones\. \fBSHOW_EACH_C\fR is your friend if you prefer to set this via the shell environment\.
 .
 .P
-\fB\-\-color <0|1|2>\fR It determines the use of colors on the screen: \fB2\fR is the default and makes use of ANSI and termcap escape codes on your terminal\. \fB1\fR just uses non\-colored mark\-up like bold, italics, underline, reverse\. \fB0\fR means no mark\-up at all = no escape codes\. Setting the environment variable \fBCOLOR\fR achieves the same result\.
+\fB\-\-color <0|1|2|3>\fR It determines the use of colors on the screen: \fB2\fR is the default and makes use of ANSI and termcap escape codes on your terminal\. \fB1\fR just uses non\-colored mark\-up like bold, italics, underline, reverse\. \fB0\fR means no mark\-up at all = no escape codes\. \fB3\fR will color ciphers and EC according to an internal (not yet perfect) rating\. Setting the environment variable \fBCOLOR\fR achieves the same result\.
 .
 .P
 \fB\-\-colorblind\fR Swaps green and blue colors in the output, so that this percentage of folks (up to 8% of males, see https://en\.wikipedia\.org/wiki/Color_blindness) can distinguish those findings better\. \fBCOLORBLIND\fR is the according variable if you want to set this in the environment\.
@@ -406,7 +406,7 @@ whole 9 yards
 \fB\-\-append\fR Normally, if an output file already exists and it has a file size greater zero, testssl\.sh will prompt you to manually remove the file exit with an error\. \fB\-\-append\fR however will append to this file, without a header\. The environment variable APPEND does the same\. Be careful using this switch/variable\. A complementary option which overwrites an existing file doesn\'t exist per design\.
 .
 .P
-\fB\-\-outprefix <fname_prefix>\fR Prepend output filename prefix \fIfname_prefix\fR before \'\e${NODE}\.\'\. You can use as well the environment variable FNAME_PREFIX\.
+\fB\-\-outprefix <fname_prefix>\fR Prepend output filename prefix \fIfname_prefix\fR before \'\e${NODE}\.\'\. You can use as well the environment variable FNAME_PREFIX\. Using this any output files will be named \fB<fname_prefix>\.${NODE}\-p${port}${YYYYMMDD\-HHMM}\.<format>\fR when no file name of the respective output option was specified\.
 .
 .P
 A few file output options can also be preset via environment variables\.
@@ -445,6 +445,9 @@ magenta: signals a warning condition, e\.g\. either a local lack of capabilities
 light magenta: a fatal error which either requires strict consent from the user to continue or a condition which leaves no other choice for testssl\.sh to quit
 .
 .IP "" 0
+.
+.P
+Besides that \fB\-\-color=3\fR will color ciphers and EC acording to an internal and rough rating\.
 .
 .P
 What is labeled as "light" above appears as such on the screen but is technically speaking "bold"\. Markup (without any color) is used in the following manner:
