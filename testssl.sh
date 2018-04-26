@@ -5731,9 +5731,10 @@ run_server_preference() {
      fi
      $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>$ERRFILE >$TMPFILE
      if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
+          list_fwd="$(actually_supported_ciphers $list_fwd $tls13_list_fwd '-tls1')"
           pr_warning "no matching cipher in this list found (pls report this): "
-          outln "$list_fwd:$tls13_list_fwd  . "
-          fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd:$tls13_list_fwd"
+          outln "$list_fwd  . "
+          fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd"
           tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
           # we assume the problem is with testing here but it could be also the server side
@@ -5745,9 +5746,10 @@ run_server_preference() {
           [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$SNI"
           $OPENSSL s_client $(s_client_options "$STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
+               list_fwd="$(actually_supported_ciphers $list_fwd $tls13_list_fwd '-tls1')"
                pr_warning "no matching cipher in this list found (pls report this): "
-               outln "$list_fwd:$tls13_list_fwd  . "
-               fileout "$jsonID" "WARN" "Could not determine cipher order, no matching cipher in list found (pls report this): $list_fwd:$tls13_list_fwd"
+               outln "$list_fwd  . "
+               fileout "$jsonID" "WARN" "Could not determine cipher order, no matching cipher in list found (pls report this): $list_fwd"
                tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
