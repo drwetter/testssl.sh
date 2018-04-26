@@ -7445,8 +7445,10 @@ certificate_info() {
      else
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                out "$crl"
-               check_revocation_crl "$crl" "cert_CRLrevoked_${json_postfix}"
-               ret=$((ret +$?))
+               if [[ "$expfinding" != "expired" ]]; then
+                    check_revocation_crl "$crl" "cert_CRLrevoked_${json_postfix}"
+                    ret=$((ret +$?))
+               fi
                outln
           else # more than one CRL
                first_crl=true
@@ -7457,8 +7459,10 @@ certificate_info() {
                          out "$spaces"
                     fi
                     out "$line"
-                    check_revocation_crl "$line" "cert_CRLrevoked_${json_postfix}"
-                    ret=$((ret +$?))
+                    if [[ "$expfinding" != "expired" ]]; then
+                         check_revocation_crl "$line" "cert_CRLrevoked_${json_postfix}"
+                         ret=$((ret +$?))
+                    fi
                     outln
                done <<< "$crl"
           fi
