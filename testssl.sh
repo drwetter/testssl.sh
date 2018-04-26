@@ -1431,6 +1431,8 @@ check_revocation_crl() {
      local tmpfile=""
 
      "$PHONE_OUT" || return 0
+     # The code for obtaining CRLs only supports HTTP and HTTPS URLs.
+     [[ "$(tolower "${crl:0:4}")" == "http" ]] || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${crl##*\/} || exit $ERR_FCREATE
 
      http_get "$crl" "$tmpfile"
