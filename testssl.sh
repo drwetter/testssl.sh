@@ -1429,14 +1429,29 @@ check_revocation_crl() {
      local crl="$1"
      local jsonID="$2"
      local tmpfile=""
+     local scheme
+     local ldif
+     local -i success
 
      "$PHONE_OUT" || return 0
-     # The code for obtaining CRLs only supports HTTP and HTTPS URLs.
-     [[ "$(tolower "${crl:0:4}")" == "http" ]] || return 0
+     scheme="$(tolower "${crl%%://*}")"
+     # The code for obtaining CRLs only supports LDAP, HTTP, and HTTPS URLs.
+     [[ "$scheme" == "http" ]] || [[ "$scheme" == "https" ]] || [[ "$scheme" == "ldap" ]] || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${crl##*\/} || exit $ERR_FCREATE
 
-     http_get "$crl" "$tmpfile"
-     if [[ $? -ne 0 ]]; then
+     if [[ "$scheme" == "ldap" ]]; then
+          which curl &>/dev/null || return 0
+          ldif="$(curl -s "$crl")"
+          success=$?
+          if [[ $success -eq 0 ]]; then
+               awk '/certificateRevocationList/ { print $2 }' <<< "$ldif" | $OPENSSL base64 -d -A -out "$tmpfile" 2>/dev/null
+               [[ -s "$tmpfile" ]] || success=1
+          fi
+     else
+          http_get "$crl" "$tmpfile"
+          success=$?
+     fi
+     if [[ $success -ne 0 ]]; then
           pr_warning "retrieval of \"$1\" failed"
           fileout "$jsonID" "WARN" "CRL retrieval from $1 failed"
           return 1
