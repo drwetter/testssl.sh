@@ -125,6 +125,8 @@ in /etc/hosts.  The use of the switch is only useful if you either can't or are 
 
 `--sneaky` as a friendly feature for the server side testssl.sh uses a HTTP user agent `TLS tester from ${URL}`. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
 
+`--phone-out`    instructs testssl.sh to query external -- in a sense of the current run -- URLs or URIs. This is needed for checking revoked certificates via CRL and OCSP. By using this switch you acknowledge that the check might could have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting CA which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.
+
 
 ### SINGLE CHECK OPTIONS
 
@@ -157,7 +159,9 @@ return random values) and several certificate info: certificate signature algori
 certificate key size, X509v3 key usage and extended key usage, certificate
 fingerprints and serial, revocation info (CRL, OCSP, OCSP
 stapling/must staple), certificate transparency info (if provided by
-server).  It also displays certificate start and expiration time in GMT.
+server).  When `--phone-out` supplied it checks against the certificate issuer
+whether the host certificate has been revoked (only URI scheme supported
+currently is HTTP).  `-S, --server_defaults` also displays certificate start and expiration time in GMT.
 In addition testssl.sh checks the trust (CN, SAN, Chain of trust). For the trust chain
 check there are 4 certificate stores provided (see section `FILES` below). If
 the trust is confirmed or not confirmed and the same in all four certificate
@@ -329,7 +333,7 @@ Testssl.sh makes use of (the eight) standard terminal colors. The color scheme i
 * magenta: signals a warning condition, e.g. either a local lack of capabilities on the client side or another problem
 * light magenta: a fatal error which either requires strict consent from the user to continue or a condition which leaves no other choice for testssl.sh to quit
 
-Besides that `--color=3` will color ciphers and EC acording to an internal and rough rating.
+Besides `--color=3` will color ciphers and EC according to an internal and rough rating.
 
 What is labeled as "light" above appears as such on the screen but is technically speaking "bold".  Markup (without any color) is used in the following manner:
 

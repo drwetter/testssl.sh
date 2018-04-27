@@ -202,6 +202,8 @@ in /etc/hosts.  The use of the switch is only useful if you either can't or are 
 
 <p><code>--sneaky</code> as a friendly feature for the server side testssl.sh uses a HTTP user agent <code>TLS tester from ${URL}</code>. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via <code>SNEAKY=true</code>).</p>
 
+<p><code>--phone-out</code>    instructs testssl.sh to query external -- in a sense of the current run -- URLs or URIs. This is needed for checking revoked certificates via CRL and OCSP. By using this switch you acknowledge that the check might could have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting CA which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.</p>
+
 <h3 id="SINGLE-CHECK-OPTIONS">SINGLE CHECK OPTIONS</h3>
 
 <p>Any single check switch supplied as an argument prevents testssl.sh from doing a default run. It just takes this and if supplied other options and runs them - in the order they would also appear in the default run.</p>
@@ -234,7 +236,9 @@ return random values) and several certificate info: certificate signature algori
 certificate key size, X509v3 key usage and extended key usage, certificate
 fingerprints and serial, revocation info (CRL, OCSP, OCSP
 stapling/must staple), certificate transparency info (if provided by
-server).  It also displays certificate start and expiration time in GMT.
+server).  When <code>--phone-out</code> supplied it checks against the certificate issuer
+whether the host certificate has been revoked (only URI scheme supported
+currently is HTTP).  <code>-S, --server_defaults</code> also displays certificate start and expiration time in GMT.
 In addition testssl.sh checks the trust (CN, SAN, Chain of trust). For the trust chain
 check there are 4 certificate stores provided (see section <code>FILES</code> below). If
 the trust is confirmed or not confirmed and the same in all four certificate
@@ -410,7 +414,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 </ul>
 
 
-<p>Besides that <code>--color=3</code> will color ciphers and EC acording to an internal and rough rating.</p>
+<p>Besides <code>--color=3</code> will color ciphers and EC according to an internal and rough rating.</p>
 
 <p>What is labeled as "light" above appears as such on the screen but is technically speaking "bold".  Markup (without any color) is used in the following manner:</p>
 
