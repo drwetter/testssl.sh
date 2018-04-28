@@ -1785,6 +1785,7 @@ run_http_header() {
      debugme echo "Status/MSG: $HTTP_STATUS_CODE $msg_thereafter"
 
      pr_bold " HTTP Status Code           "
+     jsonID="HTTP_status_code"
      out "  $HTTP_STATUS_CODE$msg_thereafter"
      case $HTTP_STATUS_CODE in
           301|302|307|308)
@@ -1794,36 +1795,36 @@ run_http_header() {
                     pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
                     fileout "insecure_redirect" "HIGH" "Redirect to insecure URL: \"$redirect\""
                fi
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
+               fileout "$jsonID" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
                ;;
           200|204|403|405)
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
+               fileout "$jsonID" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
                ;;
           206)
                out " -- WHAT?"
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\") -- WHAT?"
+               fileout "$jsonID" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\") -- WHAT?"
                # partial content shouldn't happen
                ;;
           400)
                pr_cyan " (Hint: better try another URL)"
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\") -- better try another URL"
+               fileout "$jsonID" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\") -- better try another URL"
                ;;
           401)
                grep -aq "^WWW-Authenticate" $HEADERFILE && out "  "; out "$(strip_lf "$(grep -a "^WWW-Authenticate" $HEADERFILE)")"
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\") -- $(grep -a "^WWW-Authenticate" $HEADERFILE)"
+               fileout "$jsonID" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\") -- $(grep -a "^WWW-Authenticate" $HEADERFILE)"
                ;;
           404)
                out " (Hint: supply a path which doesn't give a \"$HTTP_STATUS_CODE$msg_thereafter\")"
-               fileout "HTTP_status_code" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
+               fileout "$jsonID" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
                ;;
           "")
                pr_warning ". No HTTP status code??"
-               fileout "HTTP_status_code" "WARN" "No HTTP status code"
+               fileout "$jsonID" "WARN" "No HTTP status code"
                return 1
                ;;
           *)
                pr_warning ". Oh, didn't expect \"$HTTP_STATUS_CODE$msg_thereafter\""
-               fileout "HTTP_status_code" "WARN" "Unexpected $HTTP_STATUS_CODE$msg_thereafter @ \"$URL_PATH\""
+               fileout "$jsonID" "WARN" "Unexpected $HTTP_STATUS_CODE$msg_thereafter @ \"$URL_PATH\""
                ;;
      esac
      outln
