@@ -1401,7 +1401,7 @@ http_get() {
 
      "$SNEAKY" && useragent="$UA_SNEAKY"
 
-     # auomatically handles proxy vars via ENV
+     # automatically handles proxy vars via ENV
      if which curl &>/dev/null; then
           curl -s -A $''"$useragent"'' -o $dl "$1"
           return $?
@@ -1413,7 +1413,7 @@ http_get() {
           IFS=/ read -r proto z node query <<< "$1"
           exec 33<>/dev/tcp/$node/80
           printf -- "%b" "GET /$query HTTP/1.0\r\nUser-Agent: $useragent\r\nHost: $node\r\nAccept: */*\r\n\r\n" >&33
-          # strip HTTP header
+          # strip HTTP header (
           if [[ $DEBUG -ge 1 ]]; then
                cat <&33 >${dl}.raw
                cat ${dl}.raw | sed '1,/^[[:space:]]*$/d' >${dl}
@@ -1425,20 +1425,51 @@ http_get() {
      fi
 }
 
+ldap_get() {
+     local ldif
+     local -i success
+     local crl="$1"
+     local tmpfile="$2"
+     local jsonID="$3"
+
+     if which curl &>/dev/null; then
+          ldif="$(curl -s "$crl")"
+          if [[ $? -eq 0 ]]; then
+               awk '/certificateRevocationList/ { print $2 }' <<< "$ldif" | $OPENSSL base64 -d -A -out "$tmpfile" 2>/dev/null
+               [[ -s "$tmpfile" ]] || return 1
+          fi
+          return 0
+     else
+          pr_litecyan " (for LDAP CRL check install \"curl\")"
+          fileout "$jsonID" "INFO" "LDAP CRL revocation check needs \"curl\""
+          return 2
+     fi
+}
+
 check_revocation_crl() {
      local crl="$1"
      local jsonID="$2"
      local tmpfile=""
+     local scheme
+     local -i success
 
      "$PHONE_OUT" || return 0
-     # The code for obtaining CRLs only supports HTTP and HTTPS URLs.
-     [[ "$(tolower "${crl:0:4}")" == "http" ]] || return 0
+     scheme="$(tolower "${crl%%://*}")"
+     # The code for obtaining CRLs only supports LDAP, HTTP, and HTTPS URLs.
+     [[ "$scheme" == "http" ]] || [[ "$scheme" == "https" ]] || [[ "$scheme" == "ldap" ]] || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${crl##*\/} || exit $ERR_FCREATE
-
-     http_get "$crl" "$tmpfile"
-     if [[ $? -ne 0 ]]; then
-          pr_warning "retrieval of \"$1\" failed"
-          fileout "$jsonID" "WARN" "CRL retrieval from $1 failed"
+     if [[ "$scheme" == "ldap" ]]; then
+          ldap_get "$crl" "$tmpfile" "$jsonID"
+          success=$?
+     else
+          http_get "$crl" "$tmpfile"
+          success=$?
+     fi
+     if [[ $success -eq 2 ]]; then
+          return 0
+     elif [[ $success -ne 0 ]]; then
+          pr_warning "retrieval of \"$crl\" failed"
+          fileout "$jsonID" "WARN" "CRL retrieval from $crl failed"
           return 1
      fi
      # -crl_download could be more elegant but is supported from 1.0.2 onwards only
@@ -7438,7 +7469,7 @@ certificate_info() {
 
 
      out "$indent"; pr_bold " Certificate Revocation List  "
-     jsonID="cert_cRLDistributionPoints"
+     jsonID="cert_crlDistributionPoints"
      # ~ get next 50 lines after pattern , strip until Signature Algorithm and retrieve URIs
      crl="$(awk '/X509v3 CRL Distribution/{i=50} i&&i--' <<< "$cert_txt" | awk '/^$/,/^            [a-zA-Z0-9]+|^    Signature Algorithm:/' | awk -F'URI:' '/URI/ { print $2 }')"
      if [[ -z "$crl" ]] ; then
@@ -7448,7 +7479,7 @@ certificate_info() {
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                out "$crl"
                if [[ "$expfinding" != "expired" ]]; then
-                    check_revocation_crl "$crl" "cert_CRLrevoked_${json_postfix}"
+                    check_revocation_crl "$crl" "cert_crlRevoked${json_postfix}"
                     ret=$((ret +$?))
                fi
                outln
@@ -7462,7 +7493,7 @@ certificate_info() {
                     fi
                     out "$line"
                     if [[ "$expfinding" != "expired" ]]; then
-                         check_revocation_crl "$line" "cert_CRLrevoked_${json_postfix}"
+                         check_revocation_crl "$line" "cert_crlRevoked${json_postfix}"
                          ret=$((ret +$?))
                     fi
                     outln
