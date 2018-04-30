@@ -1482,7 +1482,7 @@ check_revocation_crl() {
           return 1
      fi
      cat $TEMPDIR/intermediatecerts.pem "${tmpfile%%.crl}.pem" >$TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem
-     openssl verify -crl_check -CAfile $TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem $TEMPDIR/host_certificate.pem &>$ERRFILE
+     $OPENSSL verify -crl_check -CAfile $TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem $TEMPDIR/host_certificate.pem &>$ERRFILE
      if [[ $? -eq 0 ]]; then
           out ", "
           pr_svrty_good "not revoked"
