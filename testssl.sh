@@ -316,6 +316,8 @@ HAS_PKEY=false
 HAS_NO_SSL2=false
 HAS_NOSERVERNAME=false
 HAS_CIPHERSUITES=false
+HAS_COMP=false
+HAS_NO_COMP=false
 HAS_ALPN=false
 HAS_NPN=false
 HAS_FALLBACK_SCSV=false
@@ -1619,6 +1621,20 @@ s_client_options() {
      # OpenSSL that don't support -no_ssl2 also don't support SSLv2, the option
      # isn't needed for these versions of OpenSSL.)
      ! "$HAS_NO_SSL2" && options="${options//-no_ssl2/}"
+
+     # At least one server will fail under some circumstances if compression methods are offered.
+     # So, only offer compression methds if necessary for the test. In OpenSSL 1.1.0 and
+     # 1.1.1 compression is only offered if the "-comp" option is provided.
+     # OpenSSL 1.0.0, 1.0.1, and 1.0.2 offer compression unless the "-no_comp" option is provided.
+     # OpenSSL 0.9.8 does not support either the "-comp" or the "-no_comp" option.
+     if [[ " $options " =~ " -comp " ]]; then
+          # Compression is needed for the test. So, remove "-comp" if it isn't supported, but
+          # otherwise make no changes.
+          ! "$HAS_COMP" && options="${options//-comp/}"
+     else
+          # Compression is not needed. So, specify "-no_comp" if that option is supported.
+          "$HAS_NO_COMP" && options+=" -no_comp"
+     fi
 
      # If $OPENSSL is compiled with TLSv1.3 support and s_client is called without
      # specifying a protocol, but specifying a list of ciphers that doesn't include
@@ -12723,11 +12739,8 @@ run_crime() {
           fi
      else
           [[ "$OSSL_VER" == "0.9.8"* ]] && addcmd="-no_ssl2"
-          if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
-               addcmd="-comp"
-          fi
           "$HAS_TLS13" && [[ -z "$OPTIMAL_PROTO" ]] && addcmd+=" -no_tls1_3"
-          $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null &>$TMPFILE
+          $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -comp $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null &>$TMPFILE
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
      fi
@@ -14941,6 +14954,12 @@ find_openssl_binary() {
 
      $OPENSSL s_client -ciphersuites -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_CIPHERSUITES=true
+
+     $OPENSSL s_client -comp -connect x 2>&1 | grep -aq "unknown option" || \
+          HAS_COMP=true
+
+     $OPENSSL s_client -no_comp -connect x 2>&1 | grep -aq "unknown option" || \
+          HAS_NO_COMP=true
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
