@@ -318,6 +318,7 @@ HAS_NOSERVERNAME=false
 HAS_CIPHERSUITES=false
 HAS_COMP=false
 HAS_NO_COMP=false
+HAS_PARTIAL_CHAIN=false
 HAS_ALPN=false
 HAS_NPN=false
 HAS_FALLBACK_SCSV=false
@@ -1451,7 +1452,7 @@ check_revocation_crl() {
      local crl="$1"
      local jsonID="$2"
      local tmpfile=""
-     local scheme
+     local scheme retcode partial_chain=""
      local -i success
 
      "$PHONE_OUT" || return 0
@@ -1474,22 +1475,30 @@ check_revocation_crl() {
           return 1
      fi
      # -crl_download could be more elegant but is supported from 1.0.2 onwards only
-     $OPENSSL crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem"
+     $OPENSSL crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem" &> $ERRFILE
      if [[ $? -ne 0 ]]; then
           pr_warning "conversion of "$tmpfile" failed"
           fileout "$jsonID" "WARN" "conversion of CRL to PEM format failed"
           return 1
      fi
      cat $TEMPDIR/intermediatecerts.pem "${tmpfile%%.crl}.pem" >$TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem
-     $OPENSSL verify -crl_check -CAfile $TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem $TEMPDIR/host_certificate.pem &>$ERRFILE
+     # See https://github.com/drwetter/testssl.sh/pull/1051
+     "$HAS_PARTIAL_CHAIN" && partial_chain="-partial_chain"
+     $OPENSSL verify -crl_check $partial_chain -CAfile $TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem $TEMPDIR/host_certificate.pem &> "${tmpfile%%.crl}.err"
      if [[ $? -eq 0 ]]; then
           out ", "
           pr_svrty_good "not revoked"
           fileout "$jsonID" "OK" "not revoked"
      else
-          out ", "
-          pr_svrty_critical "revoked"
-          fileout "$jsonID" "CRITICAL" "revoked"
+          retcode=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' "${tmpfile%%.crl}.err")
+          if [[ "$retcode" == "23" ]]; then # see verify_retcode_helper() and https://github.com/drwetter/testssl.sh/pull/1051
+               out ", "
+               pr_svrty_critical "revoked"
+               fileout "$jsonID" "CRITICAL" "revoked"
+          elif [[ $DEBUG -ge 2 ]]; then
+               out " "
+               verify_retcode_helper "$retcode"
+          fi
      fi
      return 0
 }
@@ -6218,6 +6227,7 @@ verify_retcode_helper() {
 
      case $retcode in
           # codes from ./doc/apps/verify.pod | verify(1ssl)
+          44) tm_out "(different CRL scope)" ;;                  # X509_V_ERR_DIFFERENT_CRL_SCOPE
           26) tm_out "(unsupported certificate purpose)" ;;      # X509_V_ERR_INVALID_PURPOSE
           24) tm_out "(certificate unreadable)" ;;               # X509_V_ERR_INVALID_CA
           23) tm_out "(certificate revoked)" ;;                  # X509_V_ERR_CERT_REVOKED
@@ -15110,6 +15120,13 @@ find_openssl_binary() {
 
      $OPENSSL enc -aes-256-gcm -K 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef -iv 0123456789abcdef01234567  > /dev/null 2> /dev/null <<< "test"
      [[ $? -eq 0 ]] && HAS_AES256_GCM=true
+
+     $OPENSSL verify -partial_chain <<< "-----BEGIN CERTIFICATE-----
+MIGYMGYCAQEwCQYHKoZIzj0EATAAMB4XDTE4MDUwMjE5NDk1NVoXDTE4MDYwMTE5
+NDk1NVowADAyMBAGByqGSM49AgEGBSuBBAAGAx4ABIqtRNoHWKXwhKqS065E2p+0
+bGW4kYxYp8ON+FMwCQYHKoZIzj0EAQMjADAgAg4qMOUGcBYIn9OouAC6EwIODVw+
+r5TrwCZfR3CoB+k=
+-----END CERTIFICATE-----" 2>&1 | grep -aq "recognized usages" || HAS_PARTIAL_CHAIN=true
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
           if type -p timeout >/dev/null 2>&1; then
