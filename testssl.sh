@@ -4600,7 +4600,7 @@ run_protocols() {
      local key_share_extn_nr="$KEY_SHARE_EXTN_NR"
      local lines nr_ciphers_detected
      local tls13_ciphers_to_test=""
-     local drafts_offered="" debug_recomm=""
+     local i drafts_offered=""  drafts_offered_str="" supported_versions debug_recomm=""
      local -i ret=0 subret=0
      local jsonID="SSLv2"
 
@@ -4999,59 +4999,79 @@ run_protocols() {
                     outln "offered (OK)"
                     fileout "$jsonID" "OK" "offered"
                else
+                    # Determine which version of TLS 1.3 was offered. For drafts 18-21 the
+                    # version appears in the ProtocolVersion field of the ServerHello. For
+                    # drafts 22-28 and the final TLS 1.3 the ProtocolVersion field contains
+                    # 0303 and the actual version appears in the supported_versions extension.
+                    if [[ "${TLS_SERVER_HELLO:8:3}" == "7F1" ]]; then
+                         drafts_offered+=" ${TLS_SERVER_HELLO:8:4} "
+                    elif [[ "$TLS_SERVER_HELLO" =~ "002B00020304" ]]; then
+                         drafts_offered+=" 0304 "
+                    else
+                         for i in 1C 1B 1A 19 18 17 16 15 14 13 12; do
+                              if [[ "$TLS_SERVER_HELLO" =~ "002B00027F$i" ]]; then
+                                   drafts_offered+=" 7F$i "
+                                   break
+                              fi
+                         done
+                    fi
                     KEY_SHARE_EXTN_NR="28"
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 12"
-                    [[ $? -eq 0 ]] && drafts_offered="draft 18"
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 13"
-                    if [[ $? -eq 0 ]]; then
-                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 19"
-                    fi
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 14"
-                    if [[ $? -eq 0 ]]; then
-                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 20"
-                    fi
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 15"
-                    if [[ $? -eq 0 ]]; then
-                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 21"
-                    fi
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 16"
-                    if [[ $? -eq 0 ]]; then
-                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 22"
-                    fi
+                    while true; do
+                         supported_versions=""
+                         for i in 16 15 14 13 12; do
+                              [[ "$drafts_offered" =~ " 7F$i " ]] || supported_versions+=",7f,$i"
+                         done
+                         [[ -z "$supported_versions" ]] && break
+                         supported_versions="00, 2b, 00, $(printf "%02x" $((${#supported_versions}/3+1))), $(printf "%02x" $((${#supported_versions}/3))) $supported_versions"
+                         tls_sockets "04" "$TLS13_CIPHER" "" "$supported_versions"
+                         [[ $? -eq 0 ]] || break
+                         if [[ "${TLS_SERVER_HELLO:8:3}" == "7F1" ]]; then
+                              drafts_offered+=" ${TLS_SERVER_HELLO:8:4} "
+                         else
+                              for i in 16 15 14 13 12; do
+                                   if [[ "$TLS_SERVER_HELLO" =~ "002B00027F$i" ]]; then
+                                        drafts_offered+=" 7F$i "
+                                        break
+                                   fi
+                              done
+                         fi
+                    done
                     KEY_SHARE_EXTN_NR="33"
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 17"
-                    if [[ $? -eq 0 ]]; then
-                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 23"
-                    fi
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 18"
-                    if [[ $? -eq 0 ]]; then
-                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 24"
-                    fi
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 19"
-                    if [[ $? -eq 0 ]]; then
-                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 25"
-                    fi
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 7f, 1a"
-                    if [[ $? -eq 0 ]]; then
-                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="draft 26"
-                    fi
-                    tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 03, 02, 03, 04"
-                    if [[ $? -eq 0 ]]; then
-                         [[ -n "$drafts_offered" ]] && drafts_offered+=", "
-                         drafts_offered+="final"
-                    fi
+                    while true; do
+                         supported_versions=""
+                         for i in 1C 1B 1A 19 18 17; do
+                              [[ "$drafts_offered" =~ " 7F$i " ]] || supported_versions+=",7f,$i"
+                         done
+                         [[ "$drafts_offered" =~ " 0304 " ]] || supported_versions+=",03,04"
+                         [[ -z "$supported_versions" ]] && break
+                         supported_versions="00, 2b, 00, $(printf "%02x" $((${#supported_versions}/3+1))), $(printf "%02x" $((${#supported_versions}/3))) $supported_versions"
+                         tls_sockets "04" "$TLS13_CIPHER" "" "$supported_versions"
+                         [[ $? -eq 0 ]] || break
+                         if [[ "$TLS_SERVER_HELLO" =~ "002B00020304" ]]; then
+                              drafts_offered+=" 0304 "
+                         else
+                              for i in 1C 1B 1A 19 18 17; do
+                                   if [[ "$TLS_SERVER_HELLO" =~ "002B00027F$i" ]]; then
+                                        drafts_offered+=" 7F$i "
+                                        break
+                                   fi
+                              done
+                         fi
+                    done
                     KEY_SHARE_EXTN_NR="$key_share_extn_nr"
                     if [[ -n "$drafts_offered" ]]; then
-                         pr_svrty_best "offered (OK)"; outln ": $drafts_offered"
-                         fileout "$jsonID" "OK" "offered with $drafts_offered"
+                         for i in 1C 1B 1A 19 18 17 16 15 14 13 12; do
+                              if [[ "$drafts_offered" =~ " 7F$i " ]]; then
+                                   [[ -n "$drafts_offered_str" ]] && drafts_offered_str+=", "
+                                   drafts_offered_str+="draft $(printf "%d" 0x$i)"
+                              fi
+                         done
+                         if [[ "$drafts_offered" =~ " 0304 " ]]; then
+                              [[ -n "$drafts_offered_str" ]] && drafts_offered_str+=", "
+                              drafts_offered_str+="final"
+                         fi
+                         pr_svrty_best "offered (OK)"; outln ": $drafts_offered_str"
+                         fileout "$jsonID" "OK" "offered with $drafts_offered_str"
                     else
                          pr_warning "Unexpected results"; outln "$debug_recomm"
                          fileout "$jsonID" "WARN" "unexpected results"
@@ -11451,7 +11471,7 @@ socksend_tls_clienthello() {
                          # draft versions of TLSv1.3. Eventually it should only adversize
                          # support for the final version (0304).
                          if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
-                              extension_supported_versions+=", 03, 04, 7f, 1a, 7f, 19, 7f, 18, 7f, 17"
+                              extension_supported_versions+=", 03, 04, 7f, 1c, 7f, 1b, 7f, 1a, 7f, 19, 7f, 18, 7f, 17"
                          else
                               extension_supported_versions+=", 7f, 16, 7f, 15, 7f, 14, 7f, 13, 7f, 12"
                          fi
@@ -11462,7 +11482,7 @@ socksend_tls_clienthello() {
                [[ -n "$all_extensions" ]] && all_extensions+=","
                # FIXME: Adjust the lengths ("+7" and "+6") when the draft versions of TLSv1.3 are removed.
                if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
-                    all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+11))), $(printf "%02x" $((2*0x$tls_low_byte+10)))$extension_supported_versions"
+                    all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+15))), $(printf "%02x" $((2*0x$tls_low_byte+14)))$extension_supported_versions"
                else
                     all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+11))), $(printf "%02x" $((2*0x$tls_low_byte+10)))$extension_supported_versions"
                fi
@@ -16022,7 +16042,7 @@ determine_optimal_proto() {
      # sent.
      if [[ -z "$1" ]]; then
           KEY_SHARE_EXTN_NR="33"
-          tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0b, 0a, 03,04, 7f,1a, 7f,19, 7f,18, 7f,17"
+          tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0f, 0e, 03,04, 7f,1c, 7f,1b, 7f,1a, 7f,19, 7f,18, 7f,17"
           if [[ $? -eq 0 ]]; then
                add_tls_offered tls1_3 yes
           else
