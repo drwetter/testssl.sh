@@ -1436,10 +1436,9 @@ ldap_get() {
 
      if which curl &>/dev/null; then
           ldif="$(curl -s "$crl")"
-          if [[ $? -eq 0 ]]; then
-               awk '/certificateRevocationList/ { print $2 }' <<< "$ldif" | $OPENSSL base64 -d -A -out "$tmpfile" 2>/dev/null
-               [[ -s "$tmpfile" ]] || return 1
-          fi
+          [[ $? -eq 0 ]] || return 1
+          awk '/certificateRevocationList/ { print $2 }' <<< "$ldif" | $OPENSSL base64 -d -A -out "$tmpfile" 2>/dev/null
+          [[ -s "$tmpfile" ]] || return 1
           return 0
      else
           pr_litecyan " (for LDAP CRL check install \"curl\")"
