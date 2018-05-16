@@ -1493,6 +1493,36 @@ check_revocation_crl() {
      return 0
 }
 
+check_revocation_ocsp() {
+     local uri="$1"
+     local jsonID="$2"
+     local tmpfile=""
+     local -i success
+
+     "$PHONE_OUT" || return 0
+     tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
+     $OPENSSL ocsp -no_nonce -url "$uri" -issuer $TEMPDIR/hostcert_issuer.pem \
+          -verify_other $TEMPDIR/intermediatecerts.pem \
+          -CAfile $TEMPDIR/intermediatecerts.pem -cert $HOSTCERT &> "$tmpfile"
+     if [[ $? -eq 0 ]] && grep -q "Response verify OK" "$tmpfile"; then
+          if grep -q "$HOSTCERT: good" "$tmpfile"; then
+               out ", "
+               pr_svrty_good "not revoked"
+               fileout "$jsonID" "OK" "not revoked"
+          elif grep -q "$HOSTCERT: revoked" "$tmpfile"; then
+               out ", "
+               pr_svrty_critical "revoked"
+               fileout "$jsonID" "CRITICAL" "revoked"
+          elif [[ $DEBUG -ge 2 ]]; then
+               outln
+               cat "$tmpfile"
+          fi
+     elif [[ $DEBUG -ge 2 ]]; then
+          outln
+          cat "$tmpfile"
+     fi
+}
+
 wait_kill(){
      local pid=$1             # pid we wait for or kill
      local maxsleep=$2        # how long we wait before killing
@@ -6452,6 +6482,7 @@ extract_certificates() {
              echo "" > $TEMPDIR/intermediatecerts.pem
          else
              cat level?.crt > $TEMPDIR/intermediatecerts.pem
+             cp level1.crt $TEMPDIR/hostcert_issuer.pem
              rm level?.crt
          fi
      fi
@@ -7510,9 +7541,27 @@ certificate_info() {
           fileout "${jsonID}${json_postfix}" "INFO" "--"
      else
           if [[ $(count_lines "$ocsp_uri") -eq 1 ]]; then
-               outln "$ocsp_uri"
+               out "$ocsp_uri"
+               if [[ "$expfinding" != "expired" ]]; then
+                    check_revocation_ocsp "$ocsp_uri" "cert_ocspRevoked${json_postfix}"
+               fi
+               ret=$((ret +$?))
+               outln
           else
-               out_row_aligned "$ocsp_uri" "$spaces"
+               first_ocsp=true
+               while read -r line; do
+                    if "$first_ocsp"; then
+                         first_ocsp=false
+                    else
+                         out "$spaces"
+                    fi
+                    out "$line"
+                    if [[ "$expfinding" != "expired" ]]; then
+                         check_revocation_ocsp "$line" "cert_ocspRevoked${json_postfix}"
+                         ret=$((ret +$?))
+                    fi
+                    outln
+               done <<< "$ocsp_uri"
           fi
           fileout "${jsonID}${json_postfix}" "INFO" "$ocsp_uri"
      fi
@@ -7609,7 +7658,7 @@ run_server_defaults() {
      local -i i n
      local -i certs_found=0
      local -i ret=0
-     local -a previous_hostcert previous_hostcert_txt previous_hostcert_type previous_intermediates keysize cipher
+     local -a previous_hostcert previous_hostcert_txt previous_hostcert_type previous_hostcert_issuer previous_intermediates keysize cipher
      local -a ocsp_response ocsp_response_status sni_used tls_version ct
      local -a ciphers_to_test certificate_type
      local -a -i success
@@ -7740,6 +7789,8 @@ run_server_defaults() {
                          previous_hostcert[certs_found]=$newhostcert
                          previous_hostcert_txt[certs_found]="$($OPENSSL x509 -noout -text 2>>$ERRFILE <<< "$newhostcert")"
                          previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
+                         previous_hostcert_issuer[certs_found]=""
+                         [[ -n "${previous_intermediates[certs_found]}" ]] && previous_hostcert_issuer[certs_found]=$(cat $TEMPDIR/hostcert_issuer.pem)
                          [[ $n -ge 10 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                          tls_version[certs_found]="$DETECTED_TLS_VERSION"
                          previous_hostcert_type[certs_found]=" ${certificate_type[n]}"
@@ -7909,6 +7960,7 @@ run_server_defaults() {
      for (( i=1; i <= certs_found; i++ )); do
           echo "${previous_hostcert[i]}" > $HOSTCERT
           echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
+          echo "${previous_hostcert_issuer[i]}" > $TEMPDIR/hostcert_issuer.pem
           certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" \
                "${cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" \
                "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
