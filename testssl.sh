@@ -1501,8 +1501,8 @@ check_revocation_ocsp() {
 
      "$PHONE_OUT" || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
-     $OPENSSL ocsp -no_nonce -url "$uri" -issuer $TEMPDIR/hostcert_issuer.pem \
-          -verify_other $TEMPDIR/intermediatecerts.pem \
+     $OPENSSL ocsp -no_nonce -header Host ${uri##http://} -url "$uri" \
+          -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem  \
           -CAfile $TEMPDIR/intermediatecerts.pem -cert $HOSTCERT &> "$tmpfile"
      if [[ $? -eq 0 ]] && grep -q "Response verify OK" "$tmpfile"; then
           if grep -q "$HOSTCERT: good" "$tmpfile"; then
@@ -1517,9 +1517,15 @@ check_revocation_ocsp() {
                outln
                cat "$tmpfile"
           fi
-     elif [[ $DEBUG -ge 2 ]]; then
-          outln
-          cat "$tmpfile"
+     else
+          out ", "
+          pr_warning "error querying OCSP responder"
+          if [[ $DEBUG -ge 2 ]]; then
+               outln
+               cat "$tmpfile"
+          else
+               out " (--debug >= 2 shows reason)"
+          fi
      fi
 }
 
