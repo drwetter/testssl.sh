@@ -1402,10 +1402,10 @@ http_get() {
      "$SNEAKY" && useragent="$UA_SNEAKY"
 
      # automatically handles proxy vars via ENV
-     if which curl &>/dev/null; then
+     if type -p curl &>/dev/null; then
           curl -s -A $''"$useragent"'' -o $dl "$1"
           return $?
-     elif which wget &>/dev/null; then
+     elif type -p wget &>/dev/null; then
           wget -q -U $''"$useragent"'' -O $dl "$1"
           return $?
      else
@@ -1432,7 +1432,7 @@ ldap_get() {
      local tmpfile="$2"
      local jsonID="$3"
 
-     if which curl &>/dev/null; then
+     if type -p curl &>/dev/null; then
           ldif="$(curl -s "$crl")"
           if [[ $? -eq 0 ]]; then
                awk '/certificateRevocationList/ { print $2 }' <<< "$ldif" | $OPENSSL base64 -d -A -out "$tmpfile" 2>/dev/null
@@ -1498,18 +1498,19 @@ check_revocation_ocsp() {
      local jsonID="$2"
      local tmpfile=""
      local -i success
+     local code=""
 
      "$PHONE_OUT" || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      $OPENSSL ocsp -no_nonce -header Host ${uri##http://} -url "$uri" \
-          -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem  \
-          -CAfile $TEMPDIR/intermediatecerts.pem -cert $HOSTCERT &> "$tmpfile"
-     if [[ $? -eq 0 ]] && grep -q "Response verify OK" "$tmpfile"; then
+          -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
+          -CAfile $TEMPDIR/intermediatecerts.pem -cert $HOSTCERT -text &> "$tmpfile"
+     if [[ $? -eq 0 ]] && fgrep -q "Response verify OK" "$tmpfile"; then
           if grep -q "$HOSTCERT: good" "$tmpfile"; then
                out ", "
                pr_svrty_good "not revoked"
                fileout "$jsonID" "OK" "not revoked"
-          elif grep -q "$HOSTCERT: revoked" "$tmpfile"; then
+          elif fgrep -q "$HOSTCERT: revoked" "$tmpfile"; then
                out ", "
                pr_svrty_critical "revoked"
                fileout "$jsonID" "CRITICAL" "revoked"
@@ -1518,13 +1519,15 @@ check_revocation_ocsp() {
                cat "$tmpfile"
           fi
      else
+          code="$(awk -F':' '/Code/ { print $NF }' $tmpfile)"
           out ", "
           pr_warning "error querying OCSP responder"
+          fileout "$jsonID" "WARN" "$code"
           if [[ $DEBUG -ge 2 ]]; then
                outln
                cat "$tmpfile"
           else
-               out " (--debug >= 2 shows reason)"
+               out " ($code)"
           fi
      fi
 }
