@@ -1504,7 +1504,7 @@ check_revocation_ocsp() {
      "$PHONE_OUT" || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      host_header=${uri##http://}
-     host_header=${host_header%/*}
+     host_header=${host_header%%/*}
      $OPENSSL ocsp -no_nonce -header Host ${host_header} -url "$uri" \
           -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
           -CAfile $TEMPDIR/intermediatecerts.pem -cert $HOSTCERT -text &> "$tmpfile"
