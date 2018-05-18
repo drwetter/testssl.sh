@@ -1499,10 +1499,13 @@ check_revocation_ocsp() {
      local tmpfile=""
      local -i success
      local code=""
+     local host_header=""
 
      "$PHONE_OUT" || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
-     $OPENSSL ocsp -no_nonce -header Host ${uri##http://} -url "$uri" \
+     host_header=${uri##http://}
+     host_header=${host_header%/*}
+     $OPENSSL ocsp -no_nonce -header Host ${host_header} -url "$uri" \
           -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
           -CAfile $TEMPDIR/intermediatecerts.pem -cert $HOSTCERT -text &> "$tmpfile"
      if [[ $? -eq 0 ]] && fgrep -q "Response verify OK" "$tmpfile"; then
@@ -1522,10 +1525,11 @@ check_revocation_ocsp() {
           code="$(awk -F':' '/Code/ { print $NF }' $tmpfile)"
           out ", "
           pr_warning "error querying OCSP responder"
+          [[ -s "$tmpfile" ]] && code="empty ocsp response"
           fileout "$jsonID" "WARN" "$code"
           if [[ $DEBUG -ge 2 ]]; then
                outln
-               cat "$tmpfile"
+               [[ -s "$tmpfile" ]] && cat "$tmpfile" || echo "empty ocsp response"
           else
                out " ($code)"
           fi
