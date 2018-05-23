@@ -7451,8 +7451,10 @@ certificate_info() {
      out "$indent"; pr_bold " Certificate Validity (UTC)   "
 
      # FreeBSD + OSX can't swallow the leading blank:
-     enddate="$(strip_leading_space "$(awk -F':' '/Not After/ { print $2":"$3":"$4 }' <<< "$cert_txt")")"       # in GMT
-     startdate="$(strip_leading_space "$(awk -F':' '/Not Before/ { print $2":"$3":"$4 }' <<< "$cert_txt")")"
+     enddate="${cert_txt#*Validity*Not Before: *Not After : }"
+     enddate="${enddate%%GMT*}GMT"
+     startdate="${cert_txt#*Validity*Not Before: }"
+     startdate="${startdate%%GMT*}GMT"
      enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
      startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
 
