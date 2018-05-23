@@ -1506,7 +1506,12 @@ check_revocation_ocsp() {
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      host_header=${uri##http://}
      host_header=${host_header%%/*}
-     $OPENSSL ocsp -no_nonce -header Host ${host_header} -url "$uri" \
+     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
+          host_header="-header Host=${host_header}"
+     else
+          host_header="-header Host ${host_header}"
+     fi
+     $OPENSSL ocsp -no_nonce ${host_header} -url "$uri" \
           -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
           -CAfile $TEMPDIR/intermediatecerts.pem -cert $HOSTCERT -text &> "$tmpfile"
      if [[ $? -eq 0 ]] && fgrep -q "Response verify OK" "$tmpfile"; then
@@ -1526,7 +1531,7 @@ check_revocation_ocsp() {
           code="$(awk -F':' '/Code/ { print $NF }' $tmpfile)"
           out ", "
           pr_warning "error querying OCSP responder"
-          [[ -s "$tmpfile" ]] && code="empty ocsp response"
+          [[ -s "$tmpfile" ]] || code="empty ocsp response"
           fileout "$jsonID" "WARN" "$code"
           if [[ $DEBUG -ge 2 ]]; then
                outln
