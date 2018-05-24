@@ -17245,7 +17245,7 @@ parse_cmd_line() {
                     do_csv=true
                     do_logging=true
                     ;;
-               --outFile|--outFile|foA|-oA=*)
+               --outFile|--outFile|-oA|-oA=*)
                     outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
                     if [[ "$outfile_arg" != "auto" ]]; then
                          HTMLFILE="$outfile_arg.html"
