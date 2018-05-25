@@ -1541,6 +1541,7 @@ check_revocation_ocsp() {
           [[ -s "$tmpfile" ]] || response="empty ocsp response"
           [[ -z "$response" ]] && response="$(awk '/Responder Error:/ { print $3 }' "$tmpfile")"
           [[ -z "$response" ]] && grep -Fq "Response Verify Failure" "$tmpfile" && response="unable to verify response"
+          [[ -z "$response" ]] && response="$(awk -F':' '/Code/ { print $NF }' $tmpfile)"
           out ", "
           pr_warning "error querying OCSP responder"
           fileout "$jsonID" "WARN" "$response"
