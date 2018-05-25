@@ -1499,7 +1499,7 @@ check_revocation_ocsp() {
      local jsonID="$2"
      local tmpfile=""
      local -i success
-     local code=""
+     local response=""
      local host_header=""
 
      "$PHONE_OUT" || return 0
@@ -1514,30 +1514,42 @@ check_revocation_ocsp() {
      $OPENSSL ocsp -no_nonce ${host_header} -url "$uri" \
           -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
           -CAfile $TEMPDIR/intermediatecerts.pem -cert $HOSTCERT -text &> "$tmpfile"
-     if [[ $? -eq 0 ]] && fgrep -q "Response verify OK" "$tmpfile"; then
-          if grep -q "$HOSTCERT: good" "$tmpfile"; then
+     if [[ $? -eq 0 ]] && grep -Fq "Response verify OK" "$tmpfile"; then
+          response="$(grep -F "$HOSTCERT: " "$tmpfile")"
+          response="${response#$HOSTCERT: }"
+          response="${response%\.}"
+          if [[ "$response" =~ "good" ]]; then
                out ", "
                pr_svrty_good "not revoked"
                fileout "$jsonID" "OK" "not revoked"
-          elif fgrep -q "$HOSTCERT: revoked" "$tmpfile"; then
+          elif [[ "$response" =~ "revoked" ]]; then
                out ", "
                pr_svrty_critical "revoked"
                fileout "$jsonID" "CRITICAL" "revoked"
-          elif [[ $DEBUG -ge 2 ]]; then
-               outln
-               cat "$tmpfile"
+          else
+               out ", "
+               pr_warning "error querying OCSP responder"
+               fileout "$jsonID" "WARN" "$response"
+               if [[ $DEBUG -ge 2 ]]; then
+                    outln
+                    cat "$tmpfile"
+               else
+                    out " ($response)"
+               fi
           fi
      else
-          code="$(awk -F':' '/Code/ { print $NF }' $tmpfile)"
+          [[ -s "$tmpfile" ]] || response="empty ocsp response"
+          [[ -z "$response" ]] && response="$(awk '/Responder Error:/ { print $3 }' "$tmpfile")"
+          [[ -z "$response" ]] && grep -Fq "Response Verify Failure" "$tmpfile" && response="unable to verify response"
+          [[ -z "$response" ]] && response="$(awk -F':' '/Code/ { print $NF }' $tmpfile)"
           out ", "
           pr_warning "error querying OCSP responder"
-          [[ -s "$tmpfile" ]] || code="empty ocsp response"
-          fileout "$jsonID" "WARN" "$code"
+          fileout "$jsonID" "WARN" "$response"
           if [[ $DEBUG -ge 2 ]]; then
                outln
                [[ -s "$tmpfile" ]] && cat "$tmpfile" || echo "empty ocsp response"
-          else
-               out " ($code)"
+          elif [[ -n "$response" ]]; then
+               out " ($response)"
           fi
      fi
 }
