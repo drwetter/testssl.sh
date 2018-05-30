@@ -1456,6 +1456,7 @@ check_revocation_crl() {
      local -i success
 
      "$PHONE_OUT" || return 0
+     [[ -n "$GOOD_CA_BUNDLE" ]] || return 0
      scheme="$(tolower "${crl%%://*}")"
      # The code for obtaining CRLs only supports LDAP, HTTP, and HTTPS URLs.
      [[ "$scheme" == "http" ]] || [[ "$scheme" == "https" ]] || [[ "$scheme" == "ldap" ]] || return 0
@@ -1520,6 +1521,8 @@ check_revocation_ocsp() {
      local host_header=""
 
      "$PHONE_OUT" || return 0
+     [[ -n "$GOOD_CA_BUNDLE" ]] || return 0
+     grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      host_header=${uri##http://}
      host_header=${host_header%%/*}
@@ -7597,7 +7600,7 @@ certificate_info() {
      else
           if [[ $(count_lines "$crl") -eq 1 ]]; then
                out "$crl"
-               if [[ "$expfinding" != "expired" ]] && [[ -n "$GOOD_CA_BUNDLE" ]]; then
+               if [[ "$expfinding" != "expired" ]]; then
                     check_revocation_crl "$crl" "cert_crlRevoked${json_postfix}"
                     ret=$((ret +$?))
                fi
@@ -7611,7 +7614,7 @@ certificate_info() {
                          out "$spaces"
                     fi
                     out "$line"
-                    if [[ "$expfinding" != "expired" ]] && [[ -n "$GOOD_CA_BUNDLE" ]]; then
+                    if [[ "$expfinding" != "expired" ]]; then
                          check_revocation_crl "$line" "cert_crlRevoked${json_postfix}"
                          ret=$((ret +$?))
                     fi
@@ -7630,8 +7633,7 @@ certificate_info() {
      else
           if [[ $(count_lines "$ocsp_uri") -eq 1 ]]; then
                out "$ocsp_uri"
-               if [[ "$expfinding" != "expired" ]] && [[ -n "$GOOD_CA_BUNDLE" ]] && \
-                    grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem; then
+               if [[ "$expfinding" != "expired" ]]; then
                     check_revocation_ocsp "$ocsp_uri" "cert_ocspRevoked${json_postfix}"
                fi
                ret=$((ret +$?))
@@ -7645,8 +7647,7 @@ certificate_info() {
                          out "$spaces"
                     fi
                     out "$line"
-                    if [[ "$expfinding" != "expired" ]] && [[ -n "$GOOD_CA_BUNDLE" ]] && \
-                         grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem; then
+                    if [[ "$expfinding" != "expired" ]]; then
                          check_revocation_ocsp "$line" "cert_ocspRevoked${json_postfix}"
                          ret=$((ret +$?))
                     fi
