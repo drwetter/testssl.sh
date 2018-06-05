@@ -247,6 +247,7 @@ UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo)
 NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (external) openssl engine set this to true
 declare -r CLIENT_MIN_PFS=5             # number of ciphers needed to run a test for PFS
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
+GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
 MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
 if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
      MEASURE_TIME=true
@@ -1451,10 +1452,11 @@ check_revocation_crl() {
      local crl="$1"
      local jsonID="$2"
      local tmpfile=""
-     local scheme
+     local scheme retcode
      local -i success
 
      "$PHONE_OUT" || return 0
+     [[ -n "$GOOD_CA_BUNDLE" ]] || return 0
      scheme="$(tolower "${crl%%://*}")"
      # The code for obtaining CRLs only supports LDAP, HTTP, and HTTPS URLs.
      [[ "$scheme" == "http" ]] || [[ "$scheme" == "https" ]] || [[ "$scheme" == "ldap" ]] || return 0
@@ -1474,22 +1476,38 @@ check_revocation_crl() {
           return 1
      fi
      # -crl_download could be more elegant but is supported from 1.0.2 onwards only
-     $OPENSSL crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem"
+     $OPENSSL crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem" &>$ERRFILE
      if [[ $? -ne 0 ]]; then
           pr_warning "conversion of "$tmpfile" failed"
           fileout "$jsonID" "WARN" "conversion of CRL to PEM format failed"
           return 1
      fi
-     cat $TEMPDIR/intermediatecerts.pem "${tmpfile%%.crl}.pem" >$TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem
-     $OPENSSL verify -crl_check -CAfile $TEMPDIR/${NODE}-${NODEIP}-CRL-chain.pem $TEMPDIR/host_certificate.pem &>$ERRFILE
+     if grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem; then
+          $OPENSSL verify -crl_check -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT &> "${tmpfile%%.crl}.err"
+     else
+          $OPENSSL verify -crl_check -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") $HOSTCERT &> "${tmpfile%%.crl}.err"
+     fi
      if [[ $? -eq 0 ]]; then
           out ", "
           pr_svrty_good "not revoked"
           fileout "$jsonID" "OK" "not revoked"
      else
-          out ", "
-          pr_svrty_critical "revoked"
-          fileout "$jsonID" "CRITICAL" "revoked"
+          retcode=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' "${tmpfile%%.crl}.err")
+          if [[ "$retcode" == "23" ]]; then # see verify_retcode_helper()
+               out ", "
+               pr_svrty_critical "revoked"
+               fileout "$jsonID" "CRITICAL" "revoked"
+          else
+               retcode="$(verify_retcode_helper "$retcode")"
+               out " $retcode"
+               retcode="${retcode#(}"
+               retcode="${retcode%)}"
+               fileout "$jsonID" "WARN" "$retcode"
+               if [[ $DEBUG -ge 2 ]]; then
+                    outln
+                    cat "${tmpfile%%.crl}.err"
+               fi
+          fi
      fi
      return 0
 }
@@ -1503,6 +1521,8 @@ check_revocation_ocsp() {
      local host_header=""
 
      "$PHONE_OUT" || return 0
+     [[ -n "$GOOD_CA_BUNDLE" ]] || return 0
+     grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      host_header=${uri##http://}
      host_header=${host_header%%/*}
@@ -1513,7 +1533,7 @@ check_revocation_ocsp() {
      fi
      $OPENSSL ocsp -no_nonce ${host_header} -url "$uri" \
           -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
-          -CAfile $TEMPDIR/intermediatecerts.pem -cert $HOSTCERT -text &> "$tmpfile"
+          -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
      if [[ $? -eq 0 ]] && grep -Fq "Response verify OK" "$tmpfile"; then
           response="$(grep -F "$HOSTCERT: " "$tmpfile")"
           response="${response#$HOSTCERT: }"
@@ -6218,6 +6238,7 @@ verify_retcode_helper() {
 
      case $retcode in
           # codes from ./doc/apps/verify.pod | verify(1ssl)
+          44) tm_out "(different CRL scope)" ;;                  # X509_V_ERR_DIFFERENT_CRL_SCOPE
           26) tm_out "(unsupported certificate purpose)" ;;      # X509_V_ERR_INVALID_PURPOSE
           24) tm_out "(certificate unreadable)" ;;               # X509_V_ERR_INVALID_CA
           23) tm_out "(certificate revoked)" ;;                  # X509_V_ERR_CERT_REVOKED
@@ -6292,6 +6313,7 @@ determine_trust() {
           if [[ ${verify_retcode[i]} -eq 0 ]]; then
                trust[i]=true
                some_ok=true
+               [[ -z "$GOOD_CA_BUNDLE" ]] && GOOD_CA_BUNDLE="$bundle_fname"
                debugme tm_svrty_good "Ok   "
                debugme tmln_out "${verify_retcode[i]}"
           else
@@ -6977,6 +6999,7 @@ certificate_info() {
           spaces="                              "
      fi
 
+     GOOD_CA_BUNDLE=""
      cert_sig_algo="$(awk -F':' '/Signature Algorithm/ { print $2; if (++Match >= 1) exit; }' <<< "$cert_txt")"
      cert_sig_algo="${cert_sig_algo// /}"
      cert_key_algo="$(awk -F':' '/Public Key Algorithm:/ { print $2; if (++Match >= 1) exit; }' <<< "$cert_txt")"
