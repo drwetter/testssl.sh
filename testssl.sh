@@ -13697,8 +13697,6 @@ run_beast(){
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
           pr_headlineln " Testing for BEAST vulnerability "
-     fi
-     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
      fi
      pr_bold " BEAST"; out " ($cve)                     "
@@ -13928,10 +13926,11 @@ run_beast(){
      if "$vuln_beast"; then
           if [[ -n "$higher_proto_supported" ]]; then
                if "$WIDE"; then
-                    outln
+                    outln; out " "
                     # NOT ok seems too harsh for me if we have TLS >1.0
                     pr_svrty_low "VULNERABLE"
                     outln " -- but also supports higher protocols (possible mitigation) $higher_proto_supported"
+                    outln
                else
                     out "$spaces"
                     pr_svrty_low "VULNERABLE"
@@ -13972,8 +13971,9 @@ run_lucky13() {
      local hint=""
      local jsonID="LUCKY13"
 
-     [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for LUCKY13 vulnerability " && outln
-     if [[ $VULN_COUNT -le $VULN_THRESHLD ]] || "$WIDE"; then
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
+          outln
+          pr_headlineln " Testing for LUCKY13 vulnerability "
           outln
      fi
      pr_bold " LUCKY13"; out " ($cve), experimental     "
@@ -14048,8 +14048,6 @@ run_rc4() {
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
           pr_headlineln " Checking for vulnerable RC4 Ciphers "
-     fi
-     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
      fi
      pr_bold " RC4"; out " (${cve// /, })        "
@@ -14255,7 +14253,7 @@ run_rc4() {
           done
           ! "$WIDE" && pr_svrty_high "$(out_row_aligned_max_width "$rc4_detected" "                                                                " $TERM_WIDTH)"
           outln
-          "$WIDE" && pr_svrty_high "VULNERABLE (NOT ok)"
+          "$WIDE" && out " " && prln_svrty_high "VULNERABLE (NOT ok)"
           fileout "$jsonID" "HIGH" "VULNERABLE, Detected ciphers: $rc4_detected" "$cve" "$cwe" "$hint"
      elif [[ $nr_ciphers -eq 0 ]]; then
           prln_local_problem "No RC4 Ciphers configured in $OPENSSL"
