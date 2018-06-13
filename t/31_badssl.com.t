@@ -39,7 +39,7 @@ is($found,1,"We had a finding for this in the JSON output"); $tests++;
 # Self signed and not-expired
 pass("Running testssl against self-signed.badssl.com"); $tests++;
 $out = `./testssl.sh -S --jsonfile tmp.json --color 0 self-signed.badssl.com`;
-like($out, qr/Certificate Validity \(UTC\)\s+\d+/,"The certificate should not be expired"); $tests++;
+unlike($out, qr/Certificate Validity \(UTC\)s+expired/,"The certificate should not be expired"); $tests++;
 $json = json('tmp.json');
 unlink 'tmp.json';
 $found = 0;
@@ -47,8 +47,7 @@ foreach my $f ( @$json ) {
 	if ( $f->{id} eq "cert_expiration_status" ) {
 		$found = 1;
 		like($f->{finding},qr/days/,"Finding doesn't read expired."); $tests++;
-# hope they don't come below 60days:
-		is($f->{severity}, "OK", "Severity should be ok"); $tests++;
+		isnt($f->{severity}, "HIGH", "Severity should be OK or MEDIUM"); $tests++;
 		last;
     }
 }
