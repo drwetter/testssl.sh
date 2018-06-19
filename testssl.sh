@@ -1848,8 +1848,8 @@ run_http_header() {
                NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           else
-               prln_warning " likely HTTP header requests failed (#lines: ${$(wc -l < "$HEADERFILE")// /}"
-               [[ "$DEBUG" -lt 1 ]] & outln "Rerun with DEBUG>=1 and inspect \"run_http_header.txt\"\n"
+               prln_warning " likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE | awk '{ print $1 }'))"
+               [[ "$DEBUG" -lt 1 ]] & outln "Rerun with DEBUG>=1 and inspect $HEADERFILE\n"
                fileout "HTTP_status_code" "WARN" "HTTP header request failed"
                debugme cat $HEADERFILE
                ((NR_HEADER_FAIL++))
