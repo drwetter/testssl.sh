@@ -289,10 +289,11 @@ HOSTCERT=""                             # File with host certificate, without in
 HEADERFILE=""
 HEADERVALUE=""
 HTTP_STATUS_CODE=""
-KEY_SHARE_EXTN_NR="33"                  # The extension number for key_share was changed from 40 to 51 in TLSv1.3 draft 23. In order to
-                                        # support draft 23 in additional to earlier drafts, need to know which extension number to use.
-                                        # Note that it appears that a single ClientHello cannot advertise both draft 23 and earlier drafts.
-                                        # Preset may help to deal with STARTTLS + TLS 1.3 draft 23 but not earlier.
+KEY_SHARE_EXTN_NR="33"                  # The extension number for key_share was changed from 40 to 51 in TLSv1.3 draft 23.
+                                        # In order to support draft 23 and later in addition to earlier drafts, need to
+                                        # know which extension number to use. Note that it appears that a single
+                                        # ClientHello cannot advertise both draft 23 and later and earlier drafts.
+                                        # Preset may help to deal with STARTTLS + TLS 1.3 draft 23 and later but not earlier.
 BAD_SERVER_HELLO_CIPHER=false           # reserved for cases where a ServerHello doesn't contain a cipher offered in the ClientHello
 GOST_STATUS_PROBLEM=false
 PATTERN2SHOW=""
@@ -9398,7 +9399,7 @@ hkdf-expand() {
 # arg3: label
 # arg4: context
 # arg5: length
-# See draft-ietf-tls-tls13, Section 7.1
+# See RFC 8446, Section 7.1
 hkdf-expand-label() {
      local hash_fn="$1"
      local secret="$2" label="$3"
@@ -9430,7 +9431,7 @@ hkdf-expand-label() {
 # arg2: secret
 # arg3: label
 # arg4: ASCII-HEX of messages
-# See draft-ietf-tls-tls13, Section 7.1
+# See RFC 8446, Section 7.1
 derive-secret() {
      local hash_fn="$1"
      local secret="$2" label="$3" messages="$4"
@@ -9452,7 +9453,7 @@ derive-secret() {
 # arg2: private key file
 # arg3: file containing server's ephemeral public key
 # arg4: ASCII-HEX of messages (ClientHello...ServerHello)
-# See key derivation schedule diagram in Section 7.1 of draft-ietf-tls-tls13
+# See key derivation schedule diagram in Section 7.1 of RFC 8446
 derive-handshake-traffic-secret() {
      local hash_fn="$1"
      local priv_file="$2" pub_file="$3"
@@ -9515,7 +9516,7 @@ derive-handshake-traffic-secret() {
 # arg2: secret (created by derive-handshake-traffic-secret)
 # arg3: purpose ("key" or "iv")
 # arg4: length of the key
-# See draft-ietf-tls-tls13, Section 7.3
+# See RFC 8446, Section 7.3
 derive-traffic-key() {
      local hash_fn="$1"
      local secret="$2" purpose="$3"
@@ -11471,7 +11472,7 @@ socksend_tls_clienthello() {
                03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
           else
                extension_signature_algorithms="
-               00, 0d,                    # Type: signature_algorithms , see draft-ietf-tls-tls13
+               00, 0d,                    # Type: signature_algorithms , see RFC 8446
                00, 22, 00, 20,            # lengths
                04,03, 05,03, 06,03, 08,04, 08,05, 08,06,
                04,01, 05,01, 06,01, 08,09, 08,0a, 08,0b,
@@ -11501,7 +11502,7 @@ socksend_tls_clienthello() {
                if [[ "$process_full" != "all" ]] || \
                   [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
                     extension_supported_groups="
-                    00,0a,                      # Type: Supported Groups, see draft-ietf-tls-tls13
+                    00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,10, 00,0e,               # lengths
                     00,1d, 00,17, 00,1e, 00,18, 00,19,
                     01,00, 01,01"
@@ -11509,7 +11510,7 @@ socksend_tls_clienthello() {
                     # preferred option if the response needs to be decrypted.
                elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
                     extension_supported_groups="
-                    00,0a,                      # Type: Supported Groups, see draft-ietf-tls-tls13
+                    00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,10, 00,0e,               # lengths
                     00,1d, 00,17, 00,18, 00,19,
                     01,00, 01,01, 00,1e"
@@ -11518,7 +11519,7 @@ socksend_tls_clienthello() {
                     # so list them as the least referred options if the response
                     # needs to be decrypted.
                     extension_supported_groups="
-                    00,0a,                      # Type: Supported Groups, see draft-ietf-tls-tls13
+                    00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,10, 00,0e,               # lengths
                     00,17, 00,18, 00,19,
                     01,00, 01,01, 00,1d, 00,1e"
@@ -11586,7 +11587,7 @@ socksend_tls_clienthello() {
                     fi
                done
                [[ -n "$all_extensions" ]] && all_extensions+=","
-               # FIXME: Adjust the lengths ("+7" and "+6") when the draft versions of TLSv1.3 are removed.
+               # FIXME: Adjust the lengths ("+15" and "+14") when the draft versions of TLSv1.3 are removed.
                if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
                     all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+15))), $(printf "%02x" $((2*0x$tls_low_byte+14)))$extension_supported_versions"
                else
