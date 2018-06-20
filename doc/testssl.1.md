@@ -437,6 +437,7 @@ does the same on the plain text IMAP port. Please note that for plain TLS-encryp
 * RFC 7685: A Transport Layer Security (TLS) ClientHello Padding Extension
 * RFC 7905: ChaCha20-Poly1305 Cipher Suites for Transport Layer Security (TLS)
 * RFC 7919: Negotiated Finite Field Diffie-Hellman Ephemeral Parameters for Transport Layer Security
+* RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3
 * W3C CSP: Content Security Policy Level 1-3
 * TLSWG Draft: The Transport Layer Security (TLS) Protocol Version 1.3
 
