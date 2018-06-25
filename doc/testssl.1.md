@@ -444,7 +444,7 @@ does the same on the plain text IMAP port. Please note that for plain TLS-encryp
 
 ## EXIT STATUS
 
-* 0    testssl.sh finished successfully without errors and without unambiguous results
+* 0    testssl.sh finished successfully without errors and without ambiguous results
 * 1    testssl.sh has encountered exactly one ambiguous situation or an error during run
 * 1+n  same as previous. The errors or ambiguous results are added, also per IP.
 * 50-200 reserved for returning a vulnerability scoring for system monitoring or a CI tools
@@ -473,7 +473,7 @@ does the same on the plain text IMAP port. Please note that for plain TLS-encryp
 
 ## AUTHORS
 
-Developed by Dirk Wetter, David Cooper and many others, see https://github.com/drwetter/testssl.sh/blob/master/CREDITS.md
+Developed by Dirk Wetter, David Cooper and many others, see CREDITS.md .
 
 
 ## COPYRIGHT
