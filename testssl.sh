@@ -220,6 +220,7 @@ APPEND=${APPEND:-false}                 # append to csv/json file instead of ove
 [[ -z "$NODNS" ]] && declare NODNS      # If unset it does all DNS lookups per default. "min" only for hosts or "none" at all
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
+OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulnerability tests which may cause blocking by an IDS?
 
 ########### Tuning vars which cannot be set by a cmd line switch. Use instead e.g "HEADER_MAXSLEEP=10 ./testssl.sh <your_args_here>"
 #
@@ -15234,7 +15235,6 @@ help() {
                                    Alternatively: nmap output in greppable format (-oG) (1x port per line allowed)
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
      --add-ca <cafile>             <cafile> or a comma separated list of CA files will be added during runtime to all CA stores
-     --phone-out                   Allow to contact external servers for CRL download and querying OCSP responder
 
 single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
@@ -15281,6 +15281,8 @@ tuning / connect options (most also can be preset via environment variables):
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
      -n, --nodns <min|none>        if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records
      --sneaky                      leave less traces in target logs: user agent, referer
+     --ids-friendly                skips a few vulnerablity checks which may cause IDSs to block the scanning IP
+     --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
 
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't ask for a confirmation, "off" or "false" skips connection warnings
@@ -15400,6 +15402,8 @@ SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
 ASSUME_HTTP $ASSUME_HTTP
 SNEAKY: $SNEAKY
+OFFENSIVE: $OFFENSIVE
+PHONE_OUT: $PHONE_OUT
 
 DEBUG: $DEBUG
 
@@ -16834,10 +16838,10 @@ set_scanning_defaults() {
      do_beast=true
      do_lucky13=true
      do_breach=true
-     do_heartbleed=true
-     do_ccs_injection=true
-     do_ticketbleed=true
-     do_robot=true
+     do_heartbleed="$OFFENSIVE"
+     do_ccs_injection="$OFFENSIVE"
+     do_ticketbleed="$OFFENSIVE"
+     do_robot="$OFFENSIVE"
      do_crime=true
      do_freak=true
      do_logjam=true
@@ -16854,7 +16858,11 @@ set_scanning_defaults() {
      do_server_preference=true
      do_tls_fallback_scsv=true
      do_client_simulation=true
-     VULN_COUNT=16
+     if "$OFFENSIVE"; then
+          VULN_COUNT=16
+     else
+          VULN_COUNT=12
+     fi
 }
 
 # returns number of $do variables set = number of run_funcs() to perform
@@ -17026,10 +17034,10 @@ parse_cmd_line() {
                     ;;
                -U|--vulnerable)
                     do_vulnerabilities=true
-                    do_heartbleed=true
-                    do_ccs_injection=true
-                    do_ticketbleed=true
-                    do_robot=true
+                    do_heartbleed="$OFFENSIVE"
+                    do_ccs_injection="$OFFENSIVE"
+                    do_ticketbleed="$OFFENSIVE"
+                    do_robot="$OFFENSIVE"
                     do_renego=true
                     do_crime=true
                     do_breach=true
@@ -17042,7 +17050,14 @@ parse_cmd_line() {
                     do_beast=true
                     do_lucky13=true
                     do_rc4=true
-                    VULN_COUNT=16
+                    if "$OFFENSIVE"; then
+                         VULN_COUNT=16
+                    else
+                         VULN_COUNT=12
+                    fi
+                    ;;
+               --ids-friendly)
+                    OFFENSIVE=false
                     ;;
                -H|--heartbleed)
                     do_heartbleed=true
