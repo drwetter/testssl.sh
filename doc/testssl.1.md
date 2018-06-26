@@ -123,9 +123,11 @@ Please note that the content of `fname` has to be in Unix format. DOS carriage r
 DNS lookups at all. For the latter you either have to supply the IP address as a target, to use `--ip` or have the IP address
 in /etc/hosts.  The use of the switch is only useful if you either can't or are not willing to perform DNS lookups. The latter can apply e.g. to some pentestsi. In general this option could e.g. help you to avoid timeouts by DNS lookups. `NODNS` is the enviroment variable for this.
 
-`--sneaky` as a friendly feature for the server side testssl.sh uses a HTTP user agent `TLS tester from ${URL}`. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
+`--sneaky` is a friendly feature for the server side testssl.sh uses a HTTP user agent `TLS tester from ${URL}`. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
 
-`--phone-out`    instructs testssl.sh to query external -- in a sense of the current run -- URLs or URIs. This is needed for checking revoked certificates via CRL and OCSP. By using this switch you acknowledge that the check might could have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting CA which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.
+`--ids-friendly` is a switch which may help to get a scan finished which otherwise will be blocked by a server side IDS. This switch skips tests for the following vulnerabilities:heartbleed, CCS injection, ticketbleed and ROBOT. The environment variable OFFENSIVE set to false will achieve the same result. Please be advised that as an alternative or as a general approach you can try to apply evasion techniques by changing the variables USLEEP_SND and / or USLEEP_REC and maybe *MAX_WAITSOCK.
+
+`--phone-out` instructs testssl.sh to query external -- in a sense of the current run -- URLs or URIs. This is needed for checking revoked certificates via CRL and OCSP. By using this switch you acknowledge that the check might could have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting CA which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.
 
 
 ### SINGLE CHECK OPTIONS
