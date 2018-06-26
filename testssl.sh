@@ -220,6 +220,7 @@ APPEND=${APPEND:-false}                 # append to csv/json file instead of ove
 [[ -z "$NODNS" ]] && declare NODNS      # If unset it does all DNS lookups per default. "min" only for hosts or "none" at all
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
+OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulnerability tests?
 
 ########### Tuning vars which cannot be set by a cmd line switch. Use instead e.g "HEADER_MAXSLEEP=10 ./testssl.sh <your_args_here>"
 #
@@ -16831,19 +16832,19 @@ initialize_globals() {
 set_scanning_defaults() {
      do_allciphers=true
      do_vulnerabilities=true
-     do_beast=true
-     do_lucky13=true
-     do_breach=true
-     do_heartbleed=true
-     do_ccs_injection=true
-     do_ticketbleed=true
-     do_robot=true
-     do_crime=true
-     do_freak=true
-     do_logjam=true
-     do_drown=true
-     do_ssl_poodle=true
-     do_sweet32=true
+     do_beast="$OFFENSIVE" 
+     do_lucky13="$OFFENSIVE"
+     do_breach="$OFFENSIVE"
+     do_heartbleed="$OFFENSIVE"
+     do_ccs_injection="$OFFENSIVE"
+     do_ticketbleed="$OFFENSIVE"
+     do_robot="$OFFENSIVE"
+     do_crime="$OFFENSIVE"
+     do_freak="$OFFENSIVE"
+     do_logjam="$OFFENSIVE"
+     do_drown="$OFFENSIVE"
+     do_ssl_poodle="$OFFENSIVE"
+     do_sweet32="$OFFENSIVE"
      do_header=true
      do_pfs=true
      do_rc4=true
@@ -17026,21 +17027,21 @@ parse_cmd_line() {
                     ;;
                -U|--vulnerable)
                     do_vulnerabilities=true
-                    do_heartbleed=true
-                    do_ccs_injection=true
-                    do_ticketbleed=true
-                    do_robot=true
+                    do_heartbleed="$OFFENSIVE"
+                    do_ccs_injection="$OFFENSIVE"
+                    do_ticketbleed="$OFFENSIVE"
+                    do_robot="$OFFENSIVE"
                     do_renego=true
-                    do_crime=true
-                    do_breach=true
-                    do_ssl_poodle=true
+                    do_crime="$OFFENSIVE"
+                    do_breach="$OFFENSIVE"
+                    do_ssl_poodle="$OFFENSIVE"
                     do_tls_fallback_scsv=true
-                    do_sweet32=true
-                    do_freak=true
-                    do_drown=true
-                    do_logjam=true
-                    do_beast=true
-                    do_lucky13=true
+                    do_sweet32="$OFFENSIVE"
+                    do_freak="$OFFENSIVE"
+                    do_drown="$OFFENSIVE"
+                    do_logjam="$OFFENSIVE"
+                    do_beast="$OFFENSIVE"
+                    do_lucky13="$OFFENSIVE"
                     do_rc4=true
                     VULN_COUNT=16
                     ;;
