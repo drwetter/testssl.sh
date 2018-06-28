@@ -249,6 +249,7 @@ NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (ext
 declare -r CLIENT_MIN_PFS=5             # number of ciphers needed to run a test for PFS
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
+STAPLED_OCSP_RESPONSE=""
 MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
 if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
      MEASURE_TIME=true
@@ -1516,26 +1517,35 @@ check_revocation_crl() {
 
 check_revocation_ocsp() {
      local uri="$1"
-     local jsonID="$2"
+     local stapled_response="$2"
+     local jsonID="$3"
      local tmpfile=""
      local -i success
      local response=""
      local host_header=""
 
-     "$PHONE_OUT" || return 0
+     "$PHONE_OUT" || [[ -n "$stapled_response" ]] || return 0
      [[ -n "$GOOD_CA_BUNDLE" ]] || return 0
      grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
-     host_header=${uri##http://}
-     host_header=${host_header%%/*}
-     if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
-          host_header="-header Host=${host_header}"
+     if [[ -n "$stapled_response" ]]; then
+          > "$TEMPDIR/stabled_ocsp_response.dd"
+          asciihex_to_binary_file "$stapled_response" "$TEMPDIR/stabled_ocsp_response.dd"
+          $OPENSSL ocsp -no_nonce -respin "$TEMPDIR/stabled_ocsp_response.dd" \
+               -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
+               -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
      else
-          host_header="-header Host ${host_header}"
+          host_header=${uri##http://}
+          host_header=${host_header%%/*}
+          if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
+               host_header="-header Host=${host_header}"
+          else
+               host_header="-header Host ${host_header}"
+          fi
+          $OPENSSL ocsp -no_nonce ${host_header} -url "$uri" \
+               -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
+               -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
      fi
-     $OPENSSL ocsp -no_nonce ${host_header} -url "$uri" \
-          -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
-          -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
      if [[ $? -eq 0 ]] && grep -Fq "Response verify OK" "$tmpfile"; then
           response="$(grep -F "$HOSTCERT: " "$tmpfile")"
           response="${response#$HOSTCERT: }"
@@ -6580,6 +6590,53 @@ extract_certificates() {
      return $success
 }
 
+extract_stapled_ocsp() {
+     local response="$(cat $TMPFILE)"
+     local ocsp tmp
+     local -i ocsp_len
+     
+     STAPLED_OCSP_RESPONSE=""
+     if [[ "$response" =~ "CertificateStatus" ]]; then
+          # This is OpenSSL 1.1.0 or 1.1.1 and the response
+          # is TLS 1.2 or earlier.
+          ocsp="${response##*CertificateStatus}"
+          ocsp="16${ocsp#*16}"
+          ocsp="${ocsp%%<<<*}"
+          ocsp="$(strip_spaces "$(newline_to_spaces "$ocsp")")"
+          ocsp="${ocsp:8}"
+     elif [[ "$response" =~ "TLS server extension \"status request\" (id=5), len=0" ]]; then
+          # This is not OpenSSL 1.1.0 or 1.1.1, and the response
+          # is TLS 1.2 or earlier.
+          ocsp="${response%%OCSP response:*}"
+          ocsp="${ocsp##*<<<}"
+          ocsp="16${ocsp#*16}"
+          ocsp="$(strip_spaces "$(newline_to_spaces "$ocsp")")"
+          ocsp="${ocsp:8}"
+     elif [[ "$response" =~ "TLS server extension \"status request\" (id=5), len=" ]]; then
+            # This is OpenSSL 1.1.1 and the response is TLS 1.3.
+            ocsp="${response##*TLS server extension \"status request\" (id=5), len=}"
+            ocsp="${ocsp%%<<<*}"
+            tmp="${ocsp%%[!0-9]*}"
+            ocsp="${ocsp#$tmp}"
+            ocsp_len=2*$tmp
+            ocsp="$(awk ' { print $3 $4 $5 $6 $7 $8 $9 $10 $11 $12 $13 $14 $15 $16 $17 } ' <<< "$ocsp" | sed 's/-//')"
+            ocsp="$(strip_spaces "$(newline_to_spaces "$ocsp")")"
+            ocsp="${ocsp:0:ocsp_len}"
+     else
+          return 0
+     fi
+     # Determine whether this is a single OCSP response or a sequence of
+     # responses and then extract just the response for the server's
+     # certificate.
+     if [[ "${ocsp:0:2}" == "01" ]]; then
+          STAPLED_OCSP_RESPONSE="${ocsp:8}"
+     elif [[ "${ocsp:0:2}" == "02" ]]; then
+          ocsp_len=2*$(hex2dec "${tls_certificate_status_ascii:8:6}")
+          STAPLED_OCSP_RESPONSE="${ocsp:14:ocsp_len}"
+     fi
+     return 0     
+}
+
 # arg1 is "-cipher <OpenSSL cipher>" or empty
 # arg2 is a list of protocols to try (tls1_2, tls1_1, tls1, ssl3) or empty (if all should be tried)
 get_server_certificate() {
@@ -6591,15 +6648,16 @@ get_server_certificate() {
           [[ $(has_server_protocol "tls1_3") -eq 1 ]] && return 1
           if "$HAS_TLS13"; then
                if [[ "$1" =~ "-cipher tls1_3_RSA" ]]; then
-                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -sigalgs PSS+SHA256:PSS+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
+                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs PSS+SHA256:PSS+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
                elif [[ "$1" =~ "-cipher tls1_3_ECDSA" ]]; then
-                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -sigalgs ECDSA+SHA256:ECDSA+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
+                    $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs ECDSA+SHA256:ECDSA+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
                else
                     return 1
                fi
                sclient_connect_successful $? $TMPFILE || return 1
                DETECTED_TLS_VERSION="0304"
                extract_certificates "tls1_3"
+               extract_stapled_ocsp
                success=$?
           else
                if [[ "$1" =~ "-cipher tls1_3_RSA" ]]; then
@@ -6650,7 +6708,7 @@ get_server_certificate() {
           [[ 1 -eq $(has_server_protocol $proto) ]] && continue
           [[ "$proto" == "ssl3" ]] && ! "$HAS_SSL3" && continue
           addcmd=""
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status") </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status -msg") </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
                success=0
                grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
@@ -6680,6 +6738,7 @@ get_server_certificate() {
      esac
      extract_new_tls_extensions $TMPFILE
      extract_certificates "$proto"
+     extract_stapled_ocsp
      success=$?
 
      tmpfile_handle ${FUNCNAME[0]}.txt
@@ -6960,10 +7019,11 @@ certificate_info() {
      local cipher=$4
      local cert_keysize=$5
      local cert_type="$6"
-     local ocsp_response=$7
-     local ocsp_response_status=$8
-     local sni_used=$9
-     local ct="${10}"
+     local ocsp_response_binary="$7"
+     local ocsp_response=$8
+     local ocsp_response_status=$9
+     local sni_used="${10}"
+     local ct="${11}"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_keyusage cert_ext_keyusage
      local outok=true
      local expire days2expire secs2warn ocsp_uri crl
@@ -7636,7 +7696,7 @@ certificate_info() {
           if [[ $(count_lines "$ocsp_uri") -eq 1 ]]; then
                out "$ocsp_uri"
                if [[ "$expfinding" != "expired" ]]; then
-                    check_revocation_ocsp "$ocsp_uri" "cert_ocspRevoked${json_postfix}"
+                    check_revocation_ocsp "$ocsp_uri" "" "cert_ocspRevoked${json_postfix}"
                fi
                ret=$((ret +$?))
                outln
@@ -7650,7 +7710,7 @@ certificate_info() {
                     fi
                     out "$line"
                     if [[ "$expfinding" != "expired" ]]; then
-                         check_revocation_ocsp "$line" "cert_ocspRevoked${json_postfix}"
+                         check_revocation_ocsp "$line" "" "cert_ocspRevoked${json_postfix}"
                          ret=$((ret +$?))
                     fi
                     outln
@@ -7680,6 +7740,7 @@ certificate_info() {
                pr_svrty_good "offered"
                fileout "${jsonID}${json_postfix}" "OK" "offered"
                provides_stapling=true
+               check_revocation_ocsp "" "$ocsp_response_binary" "cert_ocspRevoked${json_postfix}"
           else
                if $GOST_STATUS_PROBLEM; then
                     pr_warning "(GOST servers make problems here, sorry)"
@@ -7752,7 +7813,7 @@ run_server_defaults() {
      local -i certs_found=0
      local -i ret=0
      local -a previous_hostcert previous_hostcert_txt previous_hostcert_type previous_hostcert_issuer previous_intermediates keysize cipher
-     local -a ocsp_response ocsp_response_status sni_used tls_version ct
+     local -a ocsp_response_binary ocsp_response ocsp_response_status sni_used tls_version ct
      local -a ciphers_to_test certificate_type
      local -a -i success
      local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
@@ -7873,6 +7934,7 @@ run_server_defaults() {
                          # If an OCSP response was sent, then get the full
                          # response so that certificate_info() can determine
                          # whether it includes a certificate transparency extension.
+                         ocsp_response_binary[certs_found]="$STAPLED_OCSP_RESPONSE"
                          if grep -a "OCSP response:" $TMPFILE | grep -q "no response sent"; then
                               ocsp_response[certs_found]="$(grep -a "OCSP response" $TMPFILE)"
                          else
@@ -8056,7 +8118,8 @@ run_server_defaults() {
           echo "${previous_hostcert_issuer[i]}" > $TEMPDIR/hostcert_issuer.pem
           certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" \
                "${cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" \
-               "${ocsp_response[i]}" "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
+               "${ocsp_response_binary[i]}" "${ocsp_response[i]}" \
+               "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
                [[ $? -ne 0 ]] && ((ret++))
      done
      return $ret
@@ -11034,8 +11097,11 @@ parse_tls_serverhello() {
                echo "   i:${CAissuerDN:8}" >> $TMPFILE
                echo "$pem_certificate"  >> $TMPFILE
                echo "$pem_certificate" >> "$TEMPDIR/intermediatecerts.pem"
-               if [[ -z "$hostcert_issuer" ]] && [[ $tls_certificate_status_ascii_len -ne 0 ]]; then
-                    hostcert_issuer=$(mktemp $TEMPDIR/pem_cert.XXXXXX) || return 1
+               if [[ -z "$hostcert_issuer" ]]; then
+                    # The issuer's certificate is needed if there is a stapled OCSP response,
+                    # and it may be needed if check_revocation_ocsp() will later be called
+                    # with the OCSP URI in the server's certificate.
+                    hostcert_issuer="$TEMPDIR/hostcert_issuer.pem"
                     echo "$pem_certificate" > "$hostcert_issuer"
                fi
           done
@@ -11077,15 +11143,16 @@ parse_tls_serverhello() {
           fi
           ocsp_resp_offset=14
      fi
+     STAPLED_OCSP_RESPONSE=""
      if [[ $ocsp_response_len -ne 0 ]]; then
+          STAPLED_OCSP_RESPONSE="${tls_certificate_status_ascii:ocsp_resp_offset:ocsp_response_len}"
           echo "OCSP response:" >> $TMPFILE
           echo "===============================================================================" >> $TMPFILE
           if [[ -n "$hostcert_issuer" ]]; then
-               asciihex_to_binary_file "${tls_certificate_status_ascii:ocsp_resp_offset:ocsp_response_len}" "/dev/stdout" | \
+               asciihex_to_binary_file "$STAPLED_OCSP_RESPONSE" "/dev/stdout" | \
                     $OPENSSL ocsp -no_nonce -CAfile $TEMPDIR/intermediatecerts.pem -issuer $hostcert_issuer -cert $HOSTCERT -respin /dev/stdin -resp_text >> $TMPFILE 2>$ERRFILE
-               rm "$hostcert_issuer"
           else
-               asciihex_to_binary_file "${tls_certificate_status_ascii:ocsp_resp_offset:ocsp_response_len}" "/dev/stdout" | \
+               asciihex_to_binary_file "$STAPLED_OCSP_RESPONSE" "/dev/stdout" | \
                     $OPENSSL ocsp -respin /dev/stdin -resp_text >> $TMPFILE 2>$ERRFILE
           fi
           echo "===============================================================================" >> $TMPFILE
