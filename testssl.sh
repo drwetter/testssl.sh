@@ -6555,7 +6555,8 @@ determine_tls_extensions() {
 extract_certificates() {
      local version="$1"
      local savedir
-     local -i success nrsaved=0
+     local -i i success nrsaved=0
+     local issuerDN CAsubjectDN
 
      # Place the server's certificate in $HOSTCERT and any intermediate
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
@@ -6582,7 +6583,26 @@ extract_certificates() {
              echo "" > $TEMPDIR/intermediatecerts.pem
          else
              cat level?.crt > $TEMPDIR/intermediatecerts.pem
-             cp level1.crt $TEMPDIR/hostcert_issuer.pem
+             issuerDN="$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>/dev/null)"
+             issuerDN="${issuerDN:8}"
+             # The second certficate (level1.crt) SHOULD be issued to the CA
+             # that issued the server's certificate. But, according to RFC 8446
+             # clients SHOULD be prepared to handle cases in which the server
+             # does not order the certificates correctly.
+             for (( i=1; i < nrsaved; i++ )); do
+                  CAsubjectDN="$($OPENSSL x509 -in "level$i.crt" -noout -subject  2>/dev/null)"
+                  if [[ "${CAsubjectDN:9}" == "$issuerDN" ]]; then
+                       cp "level$i.crt" $TEMPDIR/hostcert_issuer.pem
+                       break
+                  fi
+             done
+             # This should never happen, but if more than one certificate was
+             # provided and none of them belong to the CA that issued the
+             # server's certificate, then the extra certificates should just
+             # be deleted. There is code elsewhere that assumes that if
+             # $TEMPDIR/intermediatecerts.pem is non-empty, then
+             # $TEMPDIR/hostcert_issuer.pem is also present.
+             [[ $i -eq $nrsaved ]] && echo "" > $TEMPDIR/intermediatecerts.pem
              rm level?.crt
          fi
      fi
@@ -11097,7 +11117,7 @@ parse_tls_serverhello() {
                echo "   i:${CAissuerDN:8}" >> $TMPFILE
                echo "$pem_certificate"  >> $TMPFILE
                echo "$pem_certificate" >> "$TEMPDIR/intermediatecerts.pem"
-               if [[ -z "$hostcert_issuer" ]]; then
+               if [[ -z "$hostcert_issuer" ]] && [[ "${CAsubjectDN:9}" == "${issuerDN:8}" ]]; then
                     # The issuer's certificate is needed if there is a stapled OCSP response,
                     # and it may be needed if check_revocation_ocsp() will later be called
                     # with the OCSP URI in the server's certificate.
