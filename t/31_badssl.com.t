@@ -47,7 +47,7 @@ foreach my $f ( @$json ) {
 	if ( $f->{id} eq "cert_expiration_status" ) {
 		$found = 1;
 		like($f->{finding},qr/days/,"Finding doesn't read expired."); $tests++;
-		isnt($f->{severity}, "HIGH", "Severity should be OK or MEDIUM"); $tests++;
+		isnt($f->{severity}, "CRITICAL", "Severity should be OK, MEDIUM or HIGH"); $tests++;
 		last;
     }
 }
