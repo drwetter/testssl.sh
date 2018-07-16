@@ -7339,7 +7339,7 @@ certificate_info() {
      outln "$spaces$cert_fingerprint_sha2"
 
      # " " needs to be converted back to lf in JSON/CSV output
-     fileout "cert" "INFO" "$(< $HOSTCERT)"
+     fileout "cert${json_postfix}" "INFO" "$(< $HOSTCERT)"
 
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" ||
@@ -8132,6 +8132,8 @@ run_server_defaults() {
           fi
      fi
      [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
+
+     fileout "cert_numbers" "INFO" "$certs_found"
      for (( i=1; i <= certs_found; i++ )); do
           echo "${previous_hostcert[i]}" > $HOSTCERT
           echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
