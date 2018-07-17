@@ -1,15 +1,20 @@
 #!/bin/bash
 #
 #  vim:tw=90:ts=5:sw=5
+#
+# Script compiling OpenSSL 1.1.1 from github. Not yet particular sophisticated.
+# Just meant to provide a help to get the compile job done
 
 echo
 echo "#####################################################"
 echo "#######    Build script for openssl 1.1.1     #######"
-echo "#######  (contains some weak ryptography)     #######"
+echo "#######  (contains some weak cryptography)    #######"
 echo "#####################################################"
 echo
 
-OPT11="enable-tls1_3 enable-tls13downgrade enable-ec_nistp_64_gcc_128 sctp enable-aria enable-asan enable-rc5 enable-ssl3 enable-ssl3-method enable-dynamic-engine enable-ssl-trace"
+OPT11="enable-tls1_3 enable-tls13downgrade enable-ec_nistp_64_gcc_128 sctp enable-aria \
+enable-asan enable-rc5 enable-ssl3 enable-ssl3-method enable-dynamic-engine enable-ssl-trace \
+-DOPENSSL_TLS_SECURITY_LEVEL=0 "
 
 STDOPTIONS="--prefix=/usr/ --openssldir=/etc/ssl -DOPENSSL_USE_BUILD_DATE enable-zlib \
 enable-heartbeats enable-rc5 enable-md2 enable-ssl3 enable-weak-ssl-ciphers zlib no-shared \
@@ -37,7 +42,7 @@ error() {
 makeall() {
 	make depend && make -j2 # && make report
 	if [ $? -ne 0 ]; then
-#FIXME: we need another error handler, as a failure doesb't mean a return status of 1
+#FIXME: we need another error handler, as a failure doesn't mean here anymore a return status of 1
 		error "making"
 		return 1
 	fi
@@ -56,11 +61,11 @@ case $(uname -m) in
 	"i686") clean
 		if [[ "$1" = krb ]]; then
 			name2add=krb
-			./config $STDOPTIONS no-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT
+			./config $STDOPTIONS --with-krb5-flavor=MIT
 		else
 			name2add=static
 			#export CFLAGS='-fPIC'
-			./config $STDOPTIONS no-ec_nistp_64_gcc_128 -static
+			./config $STDOPTIONS -static
 		fi
 		[ $? -ne 0 ] && error "configuring"
 		makeall && copyfiles "$name2add"
@@ -73,7 +78,7 @@ case $(uname -m) in
 	"x86_64") clean
 		if [[ "$1" = krb ]]; then
 			name2add=krb
-			./config $STDOPTIONS enable-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT
+			./config $STDOPTIONS --with-krb5-flavor=MIT
 		else
 			#name2add=static
 			#./config $STDOPTIONS enable-ec_nistp_64_gcc_128 -static
@@ -84,7 +89,8 @@ case $(uname -m) in
 		[ $? -ne 0 ] && error "configuring"
 		makeall && copyfiles "$name2add"
 		[ $? -ne 0 ] && error "copying files"
-		apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL' | wc -l
+		# see ciphers(1), SSL_CTX_set_security_level(3)
+		apps/openssl ciphers -V 'ALL:COMPLEMENTOFALL:@SECLEVEL=0' | wc -l
 		echo
 		echo "------------ all ok ------------"
 		echo
