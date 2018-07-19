@@ -2498,7 +2498,7 @@ run_server_banner() {
      if [[ $? -eq 0 ]]; then
           serverbanner=$(sed -e 's/^Server: //' -e 's/^server: //' $TMPFILE)
           if [[ "$serverbanner" == $'\n' ]] || [[ "$serverbanner" == $'\r' ]] || [[ "$serverbanner" == $'\n\r' ]] || [[ -z "$serverbanner" ]]; then
-               outln "banner exists but empty string"
+               outln "exists but empty string"
                fileout "$jsonID" "INFO" "Server banner is empty"
           else
                emphasize_stuff_in_headers "$serverbanner"
