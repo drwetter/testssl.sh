@@ -13477,7 +13477,7 @@ run_freak() {
 }
 
 
-# see https://weakdh.org/upported_ciphers/ogjam.html
+# see https://weakdh.org/logjam.html
 run_logjam() {
      local -i sclient_success=0
      local exportdh_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
@@ -13630,7 +13630,7 @@ run_logjam() {
                elif [[ $len_dh_p -le 1536 ]]; then
                     pr_svrty_medium "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "$jsonID2" "MEDIUM" "$comment" "$cve" "$cwe"
-               elif [[ $len_dh_p -le 2048 ]]; then
+               elif [[ $len_dh_p -lt 2048 ]]; then
                     pr_svrty_low "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "$jsonID2" "LOW" "$comment" "$cve" "$cwe"
                else
@@ -13655,7 +13655,7 @@ run_logjam() {
                elif [[ $len_dh_p -le 1536 ]]; then
                     pr_svrty_medium "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "$jsonID2" "MEDIUM" "$comment" "$cve" "$cwe"
-               elif [[ $len_dh_p -le 2048 ]]; then
+               elif [[ $len_dh_p -lt 2048 ]]; then
                     pr_svrty_low "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
                     fileout "$jsonID2" "LOW" "$comment" "$cve" "$cwe"
                else
