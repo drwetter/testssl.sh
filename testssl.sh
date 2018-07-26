@@ -225,6 +225,7 @@ OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulne
 ########### Tuning vars which cannot be set by a cmd line switch. Use instead e.g "HEADER_MAXSLEEP=10 ./testssl.sh <your_args_here>"
 #
 EXPERIMENTAL=${EXPERIMENTAL:-false}
+PROXY_WAIT=${PROXY_WAIT:-20}            # waiting at max 20 seconds for socket reply through proxy
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 MAX_SOCKET_FAIL=${MAX_SOCKET_FAIL:-2}   # If this many failures for TCP socket connects are reached we terminate
 MAX_OSSL_FAIL=${MAX_OSSL_FAIL:-2}       # If this many failures for s_client connects are reached we terminate
@@ -242,8 +243,8 @@ HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, p
      HPKP_MIN=$((HPKP_MIN * 86400))     # correct to seconds
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
-VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
-DNS_VIA_PROXY=${DNS_VIA_PROXY:-false}   # don't do DNS lookups via proxy. --ip=proxy reverses this
+pVULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
+DNS_VIA_PROXY=${DNS_VIA_PROXY:-true}    # do DNS lookups via proxy. --ip=proxy reverses this
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (external) openssl engine set this to true
 declare -r CLIENT_MIN_PFS=5             # number of ciphers needed to run a test for PFS
@@ -1404,29 +1405,61 @@ http_get() {
      local node="" query=""
      local dl="$2"
      local useragent="$UA_STD"
+     local proxy_arg=""
 
      "$SNEAKY" && useragent="$UA_SNEAKY"
 
-     # automatically handles proxy vars via ENV
+set -x
      if type -p curl &>/dev/null; then
-          curl -s -A $''"$useragent"'' -o $dl "$1"
+          if [[ -z "$PROXY" ]]; then
+               curl -s --noproxy '*' -A $''"$useragent"'' -o $dl "$1"
+          else
+               # If there's a proxy defined, we just use the env variable http_proxy
+#http_proxy hier definieren!
+               curl -s -A $''"$useragent"'' -o $dl "$1"
+          fi
           return $?
      elif type -p wget &>/dev/null; then
-          wget -q -U $''"$useragent"'' -O $dl "$1"
+          if [[ -z "$PROXY" ]] ; then
+               proxy_arg='--no-proxy'
+#http_proxy hier definieren!
+          fi
+          # If there's a proxy defined, we just use the env variable http_proxy
+          wget "$proxy_arg" -q -U $''"$useragent"'' -O $dl "$1"
           return $?
      else
-          # Worst option: slower and hiccups with chunked transfers.  Workround for the latter is HTTP/1.0
+          # Worst option: slower and hiccups with chunked transfers. Workround for the
+          # latter is using HTTP/1.0. We do not support https here, yet.
+          # First the URL will be split
           IFS=/ read -r proto z node query <<< "$1"
-          exec 33<>/dev/tcp/$node/80
-          printf -- "%b" "GET /$query HTTP/1.0\r\nUser-Agent: $useragent\r\nHost: $node\r\nAccept: */*\r\n\r\n" >&33
-          # strip HTTP header (
+          proto=${proto%:}
+          if [[ "$proto" != http ]]; then
+               pr_warning "protocol $proto not supported yet"
+               return 6
+          fi
+          if [[ -n $PROXY ]]; then
+               #FIXME: finish proxy support here. fd_socket connects to NODE or NODEIP
+               # fd_socket || return 6
+               # printf -- "%b" "GET $proto://$node/$query HTTP/1.0\r\nUser-Agent: $useragent\r\nHost: $node\r\nAccept: */*\r\n\r\n" >&5
+               pr_warning "proxying not supported yet"
+               return 6
+          else
+               IFS=/ read -r proto z node query <<< "$1"
+               exec 33<>/dev/tcp/$node/80
+               printf -- "%b" "GET /$query HTTP/1.0\r\nUser-Agent: $useragent\r\nHost: $node\r\nAccept: */*\r\n\r\n" >&33
+          fi
+          # strip HTTP header
           if [[ $DEBUG -ge 1 ]]; then
-               cat <&33 >${dl}.raw
+               cat <&5 >${dl}.raw
                cat ${dl}.raw | sed '1,/^[[:space:]]*$/d' >${dl}
           else
-               cat <&33 | sed '1,/^[[:space:]]*$/d' >${dl}
+               cat <&5 | sed '1,/^[[:space:]]*$/d' >${dl}
           fi
-          exec 33<&-
+          if [[ -n $PROXY ]]; then
+               close_socket
+          else
+               exec 33<&-
+          fi
           [[ -s "$dl" ]] && return 0 || return 1
      fi
 }
@@ -1439,6 +1472,7 @@ ldap_get() {
      local jsonID="$3"
 
      if type -p curl &>/dev/null; then
+          # proxy handling?
           ldif="$(curl -s "$crl")"
           [[ $? -eq 0 ]] || return 1
           awk '/certificateRevocationList/ { print $2 }' <<< "$ldif" | $OPENSSL base64 -d -A -out "$tmpfile" 2>/dev/null
@@ -1474,6 +1508,7 @@ check_revocation_crl() {
      if [[ $success -eq 2 ]]; then
           return 0
      elif [[ $success -ne 0 ]]; then
+          out ", "
           pr_warning "retrieval of \"$crl\" failed"
           fileout "$jsonID" "WARN" "CRL retrieval from $crl failed"
           return 1
@@ -1732,26 +1767,26 @@ s_client_options() {
      # any TLSv1.3 ciphers, then the command will always fail. So, if $OPENSSL supports
      # TLSv1.3 and a cipher list is provided, but no protocol is specified, then add
      # -no_tls1_3 if no TLSv1.3 ciphers are provided.
-     if "$HAS_TLS13" && [[ "$ciphers" != "notpresent" ]] && \
-          ( [[ "$tls13_ciphers" == "notpresent" ]] || [[ -z "$tls13_ciphers" ]] ) && \
+     if "$HAS_TLS13" && [[ "$ciphers" != notpresent ]] && \
+          ( [[ "$tls13_ciphers" == notpresent ]] || [[ -z "$tls13_ciphers" ]] ) && \
           [[ ! " $options " =~ \ -ssl[2|3]\  ]] && \
           [[ ! " $options " =~ \ -tls1\  ]] && \
           [[ ! " $options " =~ \ -tls1_[1|2|3]\  ]]; then
           options+=" -no_tls1_3"
      fi
 
-     if [[ "$ciphers" != "notpresent" ]] || [[ "$tls13_ciphers" != "notpresent" ]]; then
+     if [[ "$ciphers" != notpresent ]] || [[ "$tls13_ciphers" != notpresent ]]; then
           if ! "$HAS_CIPHERSUITES"; then
-               [[ "$ciphers" == "notpresent" ]] && ciphers=""
-               [[ "$tls13_ciphers" == "notpresent" ]] && tls13_ciphers=""
+               [[ "$ciphers" == notpresent ]] && ciphers=""
+               [[ "$tls13_ciphers" == notpresent ]] && tls13_ciphers=""
                [[ -n "$ciphers" ]] && [[ -n "$tls13_ciphers" ]] && ciphers=":$ciphers"
                ciphers="$tls13_ciphers$ciphers"
                options+=" -cipher $ciphers"
           else
-               if [[ "$ciphers" != "notpresent" ]] && [[ -n "$ciphers" ]]; then
+               if [[ "$ciphers" != notpresent ]] && [[ -n "$ciphers" ]]; then
                     options+=" -cipher $ciphers"
                fi
-               if [[ "$tls13_ciphers" != "notpresent" ]] && [[ -n "$tls13_ciphers" ]]; then
+               if [[ "$tls13_ciphers" != notpresent ]] && [[ -n "$tls13_ciphers" ]]; then
                     options+=" -ciphersuites $tls13_ciphers"
                fi
           fi
@@ -8920,27 +8955,33 @@ fd_socket() {
      local nodeip="$(tr -d '[]' <<< $NODEIP)"          # sockets do not need the square brackets we have of IPv6 addresses
                                                        # we just need do it here, that's all!
      if [[ -n "$PROXY" ]]; then
-          if ! exec 5<> /dev/tcp/${PROXYIP}/${PROXYPORT}; then
+          # PROXYNODE works better than PROXYIP on modern versions of squid
+          if ! exec 5<> /dev/tcp/${PROXYNODE}/${PROXYPORT}; then
                outln
-               pr_warning "$PROG_NAME: unable to open a socket to proxy $PROXYIP:$PROXYPORT"
+               pr_warning "$PROG_NAME: unable to open a socket to proxy $PROXYNODE:$PROXYPORT"
                return 6
           fi
           if "$DNS_VIA_PROXY"; then
-               echo -e "CONNECT $NODE:$PORT HTTP/1.0\n" >&5
+               printf -- "%b" "CONNECT $NODE:$PORT\r\n" >&5
           else
-               echo -e "CONNECT $nodeip:$PORT HTTP/1.0\n" >&5
+               printf -- "%b" "CONNECT $nodeip:$PORT\r\n\r\n" >&5
           fi
-          while true ; do
-               read -r proyxline <&5
-               if [[ "${proyxline%/*}" == "HTTP" ]]; then
+          while true; do
+               read -t $PROXY_WAIT -r proyxline <&5
+               if [[ $? -ge 128 ]]; then
+                    pr_warning "Proxy timed out. Unable to CONNECT via proxy. "
+                    close_socket
+                    return 6
+               elif [[ "${proyxline%/*}" == HTTP ]]; then
                     proyxline=${proyxline#* }
-                    if [[ "${proyxline%% *}" != "200" ]]; then
+                    if [[ "${proyxline%% *}" != 200 ]]; then
                          pr_warning "Unable to CONNECT via proxy. "
                          [[ "$PORT" != 443 ]] && prln_warning "Check whether your proxy supports port $PORT and the underlying protocol."
+                         close_socket
                          return 6
                     fi
                fi
-               if [[ "$proyxline" == $'\r' ]]; then
+               if [[ "$proyxline" == $'\r' ]] || [[ -z "$proyxline" ]] ; then
                     break
                fi
           done
@@ -15362,7 +15403,7 @@ tuning / connect options (most also can be preset via environment variables):
      --assume-http                 if protocol check fails it assumes HTTP protocol and enforces HTTP checks
      --ssl-native                  fallback to checks with OpenSSL where sockets are normally used
      --openssl <PATH>              use this openssl binary (default: look in \$PATH, \$RUN_DIR of $PROG_NAME)
-     --proxy <host:port|auto>      connect via the specified HTTP proxy, auto: autodetermination from \$env (\$http(s)_proxy)
+     --proxy <host:port|auto>      (experimental) proxy connects via <host:port>, auto: values from \$env (\$http(s)_proxy)
      -6                            also use IPv6. Works only with supporting OpenSSL version and IPv6 connectivity
      --ip <ip>                     a) tests the supplied <ip> v4 or v6 address instead of resolving host(s) in URI
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
@@ -15453,7 +15494,6 @@ OSSL_VER_PLATFORM: $OSSL_VER_PLATFORM
 
 OPENSSL_NR_CIPHERS: $OPENSSL_NR_CIPHERS
 OPENSSL_CONF: $OPENSSL_CONF
-
 OSSL_SUPPORTED_CURVES: $OSSL_SUPPORTED_CURVES
 
 HAS_IPv6: $HAS_IPv6
@@ -15840,6 +15880,11 @@ get_a_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
 
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
+     if [[ "$1" == localhost ]]; then
+          # This is a bit ugly but prevents from doing DNS lookups which could fail
+          echo 127.0.0.1
+          return 0
+     fi
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
@@ -16115,10 +16160,16 @@ check_proxy() {
                PROXY="${https_proxy#*\/\/}"
                [[ -z "$PROXY" ]] && PROXY="${http_proxy#*\/\/}"
                [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" $ERR_CMDLINE
+          else
+               # set ENV as we might need it for http_get(). Normalize it to remove protocol
+               http_proxy="${PROXY/http\:\/\//}"
+               https_proxy="${PROXY/http\:\/\//}"
+               export http_proxy=http://${PROXY}
+               export https_proxy=http://${PROXY}
           fi
           # strip off http/https part if supplied:
           PROXY="${PROXY/http\:\/\//}"
-          PROXY="${PROXY/https\:\/\//}"
+          PROXY="${PROXY/https\:\/\//}"      # this shouldn't be needed
           PROXYNODE="${PROXY%:*}"
           PROXYPORT="${PROXY#*:}"
           is_number "$PROXYPORT" || fatal "Proxy port cannot be determined from \"$PROXY\"" $ERR_CMDLINE
@@ -17053,7 +17104,7 @@ parse_cmd_line() {
                --ip|--ip=*)
                     CMDLINE_IP="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
-                    if [[ $CMDLINE_IP == "proxy" ]]; then
+                    if [[ $CMDLINE_IP == proxy ]]; then
                          DNS_VIA_PROXY=true
                          unset CMDLINE_IP
                     fi
