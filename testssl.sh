@@ -12252,8 +12252,8 @@ determine_ip_addresses() {
 
      if [[ -n "$CMDLINE_IP" ]]; then
           # command line has supplied an IP address or "one"
-          if [[ "$CMDLINE_IP" == "one" ]]; then
-               # use first IPv4 address
+          if [[ "$CMDLINE_IP" == one ]]; then
+               # use first IPv4 or IPv6 address
                CMDLINE_IP="$(head -1 <<< "$ip4")"
                [[ -z "$CMDLINE_IP" ]] && CMDLINE_IP="$(head -1 <<< "$ip6")"
           fi
@@ -12284,16 +12284,25 @@ determine_ip_addresses() {
           fi
      fi
 
-     if [[ -z "$ip4" ]]; then                # IPv6 only address
+     # IPv6 only address
+     if [[ -z "$ip4" ]]; then
           if "$HAS_IPv6"; then
                IPADDRs=$(newline_to_spaces "$ip6")
                IP46ADDRs="$IPADDRs"          # IP46ADDRs are the ones to display, IPADDRs the ones to test
           fi
      else
           if "$HAS_IPv6" && [[ -n "$ip6" ]]; then
-               IPADDRs=$(newline_to_spaces "$ip4 $ip6")
+               if is_ipv6addr "$CMDLINE_IP"; then
+                    IPADDRs=$(newline_to_spaces "$ip6")
+               else
+                    IPADDRs=$(newline_to_spaces "$ip4 $ip6")
+               fi
           else
-               IPADDRs=$(newline_to_spaces "$ip4")
+               if is_ipv4addr "$CMDLINE_IP"; then
+                    IPADDRs=$(newline_to_spaces "$ip4")
+               else
+                    IPADDRs=$(newline_to_spaces "$ip4 $ip6")
+               fi
           fi
      fi
      if [[ -z "$IPADDRs" ]]; then
@@ -12577,8 +12586,14 @@ display_rdns_etc() {
      fi
      if "$LOCAL_A"; then
           outln " A record via           $CORRECT_SPACES /etc/hosts "
+     elif "$LOCAL_AAAA"; then
+          outln " AAAA record via        $CORRECT_SPACES /etc/hosts "
      elif  [[ -n "$CMDLINE_IP" ]]; then
-          outln " A record via           $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
+          if is_ipv6addr $"$CMDLINE_IP"; then
+               outln " AAAA record via        $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
+          else
+               outln " A record via           $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
+          fi
      fi
      if [[ -n "$rDNS" ]]; then
           out "$(printf " %-23s %s" "rDNS ($nodeip):")"
@@ -13149,7 +13164,7 @@ query_globals() {
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_renego \
                do_std_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
-                    [[ "${!gbl}" == "true" ]] && let true_nr++
+                    [[ "${!gbl}" == true ]] && let true_nr++
      done
      return $true_nr
 }
@@ -13236,7 +13251,7 @@ parse_cmd_line() {
                --ip|--ip=*)
                     CMDLINE_IP="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
-                    if [[ $CMDLINE_IP == "proxy" ]]; then
+                    if [[ "$CMDLINE_IP" == proxy ]]; then
                          DNS_VIA_PROXY=true
                          unset CMDLINE_IP
                     fi
@@ -13586,7 +13601,7 @@ parse_cmd_line() {
           # parameter after URI supplied:
           [[ -n "$2" ]] && fatal "URI comes last" "1"
      fi
-     [[ $CMDLINE_IP == "one" ]] && "$NODNS" && fatal "\"--ip=one\" and \"--nodns\" doesn't work together"
+     [[ "$CMDLINE_IP" == one ]] && "$NODNS" && fatal "\"--ip=one\" and \"--nodns\" doesn't work together"
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
      # if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
@@ -13750,7 +13765,7 @@ lets_roll() {
      parse_cmd_line "$@"
      # html_header() needs to be called early! Otherwise if html_out() is called before html_header() and the
      # command line contains --htmlfile <htmlfile> or --html, it'll make problems with html output, see #692.
-     # json_header and csv_header can be called later but for context reasons we'll leave it here
+     # json_header and csv_header could be called later but for context reasons we'll leave it here
      html_header
      json_header
      csv_header
@@ -13788,7 +13803,7 @@ lets_roll() {
      if "$do_mx_all_ips"; then
           query_globals                                # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
           [[ $? -eq 1 ]] && set_scanning_defaults
-          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have sililar code
+          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have similar code
           exit $?
      fi
 
