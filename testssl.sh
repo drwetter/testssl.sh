@@ -16068,11 +16068,7 @@ determine_ip_addresses() {
                     IPADDRs=$(newline_to_spaces "$ip4 $ip6")
                fi
           else
-               if is_ipv4addr "$CMDLINE_IP"; then
-                    IPADDRs=$(newline_to_spaces "$ip4")
-               else
-                    IPADDRs=$(newline_to_spaces "$ip4 $ip6")
-               fi
+               IPADDRs=$(newline_to_spaces "$ip4")
           fi
      fi
      if [[ -z "$IPADDRs" ]]; then
