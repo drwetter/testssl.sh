@@ -16023,9 +16023,12 @@ determine_ip_addresses() {
      if [[ -n "$CMDLINE_IP" ]]; then
           # command line has supplied an IP address or "one"
           if [[ "$CMDLINE_IP" == one ]]; then
-               # use first IPv4 or IPv6 address
-               CMDLINE_IP="$(head -1 <<< "$ip4")"
-               [[ -z "$CMDLINE_IP" ]] && CMDLINE_IP="$(head -1 <<< "$ip6")"
+               # use first IPv6 or IPv4 address
+               if "$HAS_IPv6" && [[ -n "$ip6" ]]; then
+                    CMDLINE_IP="$(head -1 <<< "$ip6")"
+               else
+                    CMDLINE_IP="$(head -1 <<< "$ip4")"
+               fi
           fi
           NODEIP="$CMDLINE_IP"
           if is_ipv4addr "$NODEIP"; then
@@ -16382,14 +16385,14 @@ display_rdns_etc() {
           outln "$(out_row_aligned_max_width "$further_ip_addrs" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
      if "$LOCAL_A"; then
-          outln " A record via           $CORRECT_SPACES /etc/hosts "
+          outln " A record via:          $CORRECT_SPACES /etc/hosts "
      elif "$LOCAL_AAAA"; then
-          outln " AAAA record via        $CORRECT_SPACES /etc/hosts "
+          outln " AAAA record via:       $CORRECT_SPACES /etc/hosts "
      elif  [[ -n "$CMDLINE_IP" ]]; then
           if is_ipv6addr $"$CMDLINE_IP"; then
-               outln " AAAA record via        $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
+               outln " AAAA record via:       $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
           else
-               outln " A record via           $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
+               outln " A record via:          $CORRECT_SPACES supplied IP \"$CMDLINE_IP\""
           fi
      fi
      if [[ "$rDNS" =~ instructed ]]; then

@@ -104,7 +104,7 @@ Please note that the content of `fname` has to be in Unix format. DOS carriage r
 `--mx <domain|host>`     tests all MX records (STARTTLS, port 25) from high to low priority one after the other.
 
 `--ip <ip>`              tests either the supplied IPv4 or IPv6 address instead of resolving host(s) in `<URI>`. IPv6 addresses needs to be in square brackets.
-                   `--ip=one` means: just test the first DNS returns (useful for multiple IPs). It's also useful if you want to resolve the supplied hostname to  a different IP, similar as if you would edit `/etc/hosts` or `/c/Windows/System32/drivers/etc/hosts`. `--ip=proxy` tries a DNS resolution via proxy.
+                   `--ip=one` means: just test the first DNS returns (useful for multiple IPs). If `-6` was supplied too, an IPv6 address is being picked if available and supported by the openssl binary. It might be also useful if you want to resolve the supplied hostname to a different IP, similar as if you would edit `/etc/hosts` or `/c/Windows/System32/drivers/etc/hosts`. `--ip=proxy` tries a DNS resolution via proxy.
 
 `--proxy <host>:<port>`    does the whole check via the specified HTTP proxy. `--proxy=auto` inherits the proxy setting from the environment. Proxying via IPv6 addresses is not possible. The hostname supplied will only be resolved to the first A record. Authentication to the proxy is not supported. In addition if you want lookups via proxy you can specify `DNS_VIA_PROXY=true`.
 

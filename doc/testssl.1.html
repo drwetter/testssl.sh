@@ -181,7 +181,7 @@ host.example.com:631
 <p><code>--mx &lt;domain|host></code>     tests all MX records (STARTTLS, port 25) from high to low priority one after the other.</p>
 
 <p><code>--ip &lt;ip></code>              tests either the supplied IPv4 or IPv6 address instead of resolving host(s) in <code>&lt;URI></code>. IPv6 addresses needs to be in square brackets.
-                   <code>--ip=one</code> means: just test the first DNS returns (useful for multiple IPs). It's also useful if you want to resolve the supplied hostname to  a different IP, similar as if you would edit <code>/etc/hosts</code> or <code>/c/Windows/System32/drivers/etc/hosts</code>. <code>--ip=proxy</code> tries a DNS resolution via proxy.</p>
+                   <code>--ip=one</code> means: just test the first DNS returns (useful for multiple IPs). If <code>-6</code> was supplied too, an IPv6 address is being picked if available and supported by the openssl binary. It might be also useful if you want to resolve the supplied hostname to a different IP, similar as if you would edit <code>/etc/hosts</code> or <code>/c/Windows/System32/drivers/etc/hosts</code>. <code>--ip=proxy</code> tries a DNS resolution via proxy.</p>
 
 <p><code>--proxy &lt;host>:&lt;port></code>    does the whole check via the specified HTTP proxy. <code>--proxy=auto</code> inherits the proxy setting from the environment. Proxying via IPv6 addresses is not possible. The hostname supplied will only be resolved to the first A record. Authentication to the proxy is not supported. In addition if you want lookups via proxy you can specify <code>DNS_VIA_PROXY=true</code>.</p>
 
@@ -571,7 +571,7 @@ to create the hashes for HPKP.</li>
 
   <ol class='man-decor man-foot man foot'>
     <li class='tl'></li>
-    <li class='tc'>June 2018</li>
+    <li class='tc'>August 2018</li>
     <li class='tr'>testssl(1)</li>
   </ol>
 
