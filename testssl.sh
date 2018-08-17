@@ -1399,33 +1399,38 @@ filter_input() {
 # Dl's any URL (arg1) via HTTP 1.1 GET from port 80, arg2: file to store http body.
 # Proxy is not honored yet (see cmd line switches) -- except when using curl or wget.
 # There the environment variable is used automatically
-#
+# Currently it is being used by check_revocation_crl() only.
 http_get() {
      local proto z
      local node="" query=""
      local dl="$2"
      local useragent="$UA_STD"
      local proxy_arg=""
+     local jsonID="http_get"
 
      "$SNEAKY" && useragent="$UA_SNEAKY"
 
-set -x
      if type -p curl &>/dev/null; then
           if [[ -z "$PROXY" ]]; then
                curl -s --noproxy '*' -A $''"$useragent"'' -o $dl "$1"
           else
-               # If there's a proxy defined, we just use the env variable http_proxy
-#http_proxy hier definieren!
-               curl -s -A $''"$useragent"'' -o $dl "$1"
+               # for the sake of simplicity assume the proxy is using http
+               curl -s -x $PROXYIP:$PROXYPORT -A $''"$useragent"'' -o $dl "$1"
           fi
           return $?
      elif type -p wget &>/dev/null; then
-          if [[ -z "$PROXY" ]] ; then
-               proxy_arg='--no-proxy'
-#http_proxy hier definieren!
+          # wget has no proxy command line. We need to use http_proxy instead. And for the sake of simplicity
+          # assume the GET protocol we query is using http -- http_proxy is the $ENV not for the connection TO
+          # the proxy, but for the protocol we query THROUGH the proxy
+          if [[ -z "$PROXY" ]]; then
+               wget --no-proxy -q -U $''"$useragent"'' -O $dl "$1"
+          else
+               if [[ -z "$http_proxy" ]]; then
+                    http_proxy=http://$PROXYIP:$PROXYPORT wget -q -U $''"$useragent"'' -O $dl "$1"
+               else
+                    wget -q -U $''"$useragent"'' -O $dl "$1"
+               fi
           fi
-          # If there's a proxy defined, we just use the env variable http_proxy
-          wget "$proxy_arg" -q -U $''"$useragent"'' -O $dl "$1"
           return $?
      else
           # Worst option: slower and hiccups with chunked transfers. Workround for the
@@ -1435,31 +1440,34 @@ set -x
           proto=${proto%:}
           if [[ "$proto" != http ]]; then
                pr_warning "protocol $proto not supported yet"
+               fileout "$jsonID" "DEBUG" "protocol $proto not supported yet"
                return 6
           fi
           if [[ -n $PROXY ]]; then
-               #FIXME: finish proxy support here. fd_socket connects to NODE or NODEIP
-               # fd_socket || return 6
-               # printf -- "%b" "GET $proto://$node/$query HTTP/1.0\r\nUser-Agent: $useragent\r\nHost: $node\r\nAccept: */*\r\n\r\n" >&5
-               pr_warning "proxying not supported yet"
-               return 6
+               # PROXYNODE works better than PROXYIP on modern versions of squid. \
+               # We don't reuse the code in fd_socket() as there's initial CONNECT which makes problems
+               if ! exec 33<> /dev/tcp/${PROXYNODE}/${PROXYPORT}; then
+                    outln
+                    pr_warning "$PROG_NAME: unable to open a socket to proxy $PROXYNODE:$PROXYPORT"
+                    fileout "$jsonID" "DEBUG" "$PROG_NAME: unable to open a socket to proxy $PROXYNODE:$PROXYPORT"
+                    return 6
+               else
+                    printf -- "%b" "GET $proto://$node/$query HTTP/1.0\r\nUser-Agent: $useragent\r\nHost: $node\r\nAccept: */*\r\n\r\n" >&33
+               fi
           else
                IFS=/ read -r proto z node query <<< "$1"
                exec 33<>/dev/tcp/$node/80
                printf -- "%b" "GET /$query HTTP/1.0\r\nUser-Agent: $useragent\r\nHost: $node\r\nAccept: */*\r\n\r\n" >&33
           fi
-          # strip HTTP header
+          # Strip HTTP header. When in Debug Mode we leave the raw data in place
           if [[ $DEBUG -ge 1 ]]; then
-               cat <&5 >${dl}.raw
+               cat <&33 >${dl}.raw
                cat ${dl}.raw | sed '1,/^[[:space:]]*$/d' >${dl}
           else
-               cat <&5 | sed '1,/^[[:space:]]*$/d' >${dl}
+               cat <&33 | sed '1,/^[[:space:]]*$/d' >${dl}
           fi
-          if [[ -n $PROXY ]]; then
-               close_socket
-          else
-               exec 33<&-
-          fi
+          exec 33<&-
+          exec 33>&-
           [[ -s "$dl" ]] && return 0 || return 1
      fi
 }
@@ -1564,9 +1572,9 @@ check_revocation_ocsp() {
      grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      if [[ -n "$stapled_response" ]]; then
-          > "$TEMPDIR/stabled_ocsp_response.dd"
-          asciihex_to_binary_file "$stapled_response" "$TEMPDIR/stabled_ocsp_response.dd"
-          $OPENSSL ocsp -no_nonce -respin "$TEMPDIR/stabled_ocsp_response.dd" \
+          > "$TEMPDIR/stapled_ocsp_response.dd"
+          asciihex_to_binary_file "$stapled_response" "$TEMPDIR/stapled_ocsp_response.dd"
+          $OPENSSL ocsp -no_nonce -respin "$TEMPDIR/stapled_ocsp_response.dd" \
                -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
                -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
      else
@@ -8948,7 +8956,8 @@ starttls_mysql_dialog() {
      return $ret
 }
 
-# arg for a fd doesn't work here
+# arg1: fd for socket -- which we don't use as it is a hassle and it is not clear whether it works under every bash version
+#
 fd_socket() {
      local jabber=""
      local proyxline=""
@@ -8962,9 +8971,9 @@ fd_socket() {
                return 6
           fi
           if "$DNS_VIA_PROXY"; then
-               printf -- "%b" "CONNECT $NODE:$PORT\r\n" >&5
+               printf -- "%b" "CONNECT $NODE:$PORT HTTP/1.0\n\n" >&5
           else
-               printf -- "%b" "CONNECT $nodeip:$PORT\r\n\r\n" >&5
+               printf -- "%b" "CONNECT $nodeip:$PORT HTTP/1.0\n\n" >&5
           fi
           while true; do
                read -t $PROXY_WAIT -r proyxline <&5
@@ -16160,12 +16169,6 @@ check_proxy() {
                PROXY="${https_proxy#*\/\/}"
                [[ -z "$PROXY" ]] && PROXY="${http_proxy#*\/\/}"
                [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" $ERR_CMDLINE
-          else
-               # set ENV as we might need it for http_get(). Normalize it to remove protocol
-               http_proxy="${PROXY/http\:\/\//}"
-               https_proxy="${PROXY/http\:\/\//}"
-               export http_proxy=http://${PROXY}
-               export https_proxy=http://${PROXY}
           fi
           # strip off http/https part if supplied:
           PROXY="${PROXY/http\:\/\//}"
@@ -16319,7 +16322,7 @@ determine_service() {
      local ua
      local protocol
 
-     if ! fd_socket; then          # check if we can connect to $NODEIP:$PORT
+     if ! fd_socket 5; then          # check if we can connect to $NODEIP:$PORT
           if [[ -n "$PROXY" ]]; then
                fatal "You're sure $PROXYNODE:$PROXYPORT allows tunneling here? Can't connect to \"$NODEIP:$PORT\"" $ERR_CONNECT
           else
