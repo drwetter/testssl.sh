@@ -343,9 +343,9 @@ IP46ADDRs=""
 LOCAL_A=false                           # Does the $NODEIP come from /etc/hosts?
 LOCAL_AAAA=false                        # Does the IPv6 IP come from /etc/hosts?
 XMPP_HOST=""
-PROXY=""
-PROXYIP=""
-PROXYPORT=""
+PROXYIP=""                              # $PROXYIP:$PROXPORT is your proxy if --proxy is defined ...
+PROXYPORT=""                            # ... and openssl has proxy support
+PROXY=""                                # Once check_proxy() executed it contains $PROXYIP:$PROXPORT
 VULN_COUNT=0
 SERVICE=""                              # Is the server running an HTTP server, SMTP, POP or IMAP?
 URI=""
@@ -1080,6 +1080,10 @@ else
      tolower() { echo -n "${1,,}"; }
 fi
 
+get_last_char() {
+     echo "${1:~0}"      # "${string: -1}" would work too (both also in bash 3.2)
+}
+                         # Checking for last char. If already a separator supplied, we don't need an additional one
 debugme() {
      [[ "$DEBUG" -ge 2 ]] && "$@"
      return 0
@@ -16174,9 +16178,10 @@ check_proxy() {
           if ! "$HAS_PROXY"; then
                fatal "Your $OPENSSL is too old to support the \"-proxy\" option" $ERR_OSSLBIN
           fi
-          if [[ "$PROXY" == "auto" ]]; then
-               # get $ENV (https_proxy is the one we care about)
+          if [[ "$PROXY" == auto ]]; then
+               # Get $ENV https_proxy is the one we care about for connects
                PROXY="${https_proxy#*\/\/}"
+               # Fallback:
                [[ -z "$PROXY" ]] && PROXY="${http_proxy#*\/\/}"
                [[ -z "$PROXY" ]] && fatal "you specified \"--proxy=auto\" but \"\$http(s)_proxy\" is empty" $ERR_CMDLINE
           fi
@@ -17475,7 +17480,15 @@ parse_cmd_line() {
                     ;;
                --outprefix)
                     FNAME_PREFIX="$(parse_opt_equal_sign "$1" "$2")"
-                    [[ $? -eq 0 ]] && shift && FNAME_PREFIX="${FNAME_PREFIX}."
+                    if [[ $? -eq 0 ]]; then
+                         shift
+                         case "$(get_last_char "$FNAME_PREFIX")" in
+                              '.') ;;
+                              '-') ;;
+                              '_') ;;
+                              *) FNAME_PREFIX="${FNAME_PREFIX}-" ;;
+                         esac
+                    fi
                     ;;
                --openssl|--openssl=*)
                     OPENSSL="$(parse_opt_equal_sign "$1" "$2")"

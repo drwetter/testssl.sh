@@ -412,7 +412,7 @@ whole 9 yards
 \fB\-\-append\fR Normally, if an output file already exists and it has a file size greater zero, testssl\.sh will prompt you to manually remove the file exit with an error\. \fB\-\-append\fR however will append to this file, without a header\. The environment variable APPEND does the same\. Be careful using this switch/variable\. A complementary option which overwrites an existing file doesn\'t exist per design\.
 .
 .P
-\fB\-\-outprefix <fname_prefix>\fR Prepend output filename prefix \fIfname_prefix\fR before \'\e${NODE}\.\'\. You can use as well the environment variable FNAME_PREFIX\. Using this any output files will be named \fB<fname_prefix>\.${NODE}\-p${port}${YYYYMMDD\-HHMM}\.<format>\fR when no file name of the respective output option was specified\.
+\fB\-\-outprefix <fname_prefix>\fR Prepend output filename prefix \fIfname_prefix\fR before \'\e${NODE}\-\'\. You can use as well the environment variable FNAME_PREFIX\. Using this any output files will be named \fB<fname_prefix>\-${NODE}\-p${port}${YYYYMMDD\-HHMM}\.<format>\fR when no file name of the respective output option was specified\. If you do not like the separator \'\-\' you can as well supply a \fB<fname_prefix>\fR ending in \'\.\', \'_\' or \',\'\. In this case or if you already supplied \'\-\' no additional \'\-\' will be appended to \fB<fname_prefix>\fR\.
 .
 .P
 A few file output options can also be preset via environment variables\.
