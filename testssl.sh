@@ -226,6 +226,8 @@ OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulne
 #
 EXPERIMENTAL=${EXPERIMENTAL:-false}
 PROXY_WAIT=${PROXY_WAIT:-20}            # waiting at max 20 seconds for socket reply through proxy
+DNS_VIA_PROXY=${DNS_VIA_PROXY:-true}    # do DNS lookups via proxy. --ip=proxy reverses this
+IGN_OCSP_PROXY=${IGN_OCSP_PROXY:-false} # Also when --proxy is supplied it is ignored when testing for revocation via OCSP via --phone-out
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 MAX_SOCKET_FAIL=${MAX_SOCKET_FAIL:-2}   # If this many failures for TCP socket connects are reached we terminate
 MAX_OSSL_FAIL=${MAX_OSSL_FAIL:-2}       # If this many failures for s_client connects are reached we terminate
@@ -243,8 +245,7 @@ HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, p
      HPKP_MIN=$((HPKP_MIN * 86400))     # correct to seconds
 DAYS2WARN1=${DAYS2WARN1:-60}            # days to warn before cert expires, threshold 1
 DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, threshold 2
-pVULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
-DNS_VIA_PROXY=${DNS_VIA_PROXY:-true}    # do DNS lookups via proxy. --ip=proxy reverses this
+VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (external) openssl engine set this to true
 declare -r CLIENT_MIN_PFS=5             # number of ciphers needed to run a test for PFS
@@ -1573,6 +1574,13 @@ check_revocation_ocsp() {
 
      "$PHONE_OUT" || [[ -n "$stapled_response" ]] || return 0
      [[ -n "$GOOD_CA_BUNDLE" ]] || return 0
+     if [[ -n "$PROXY" ]] && ! "$IGN_OCSP_PROXY"; then
+          # see #1106 and https://github.com/openssl/openssl/issues/6965
+          out ", "
+          pr_warning "revocation not tested as \"openssl ocsp\" doesn't support a proxy"
+          fileout "$jsonID" "WARN" "Revocation not tested as openssl ocsp doesn't support a proxy"
+          return 0
+     fi
      grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      if [[ -n "$stapled_response" ]]; then
