@@ -606,8 +606,8 @@ tmln_fixme() { tmln_warning "Fixme: $1"; }
 pr_fixme()   { pr_warning "Fixme: $1"; }
 prln_fixme() { prln_warning "Fixme: $1"; }
 
-pr_url()     { tm_out "$1"; html_out "<a href="$1" style=\"color:black;text-decoration:none;\">$1</a>"; }
-pr_boldurl() { tm_bold "$1"; html_out "<a href="$1" style=\"font-weight:bold;color:black;text-decoration:none;\">$1</a>"; }
+pr_url()     { tm_out "$1"; html_out "<a href=\"$1\" style=\"color:black;text-decoration:none;\">$1</a>"; }
+pr_boldurl() { tm_bold "$1"; html_out "<a href=\"$1\" style=\"font-weight:bold;color:black;text-decoration:none;\">$1</a>"; }
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
 ###                          http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
@@ -1283,9 +1283,9 @@ f5_port_decode() {
      if [[ ${#tmp} -eq 4 ]]; then
           :
      elif [[ ${#tmp} -eq 3 ]]; then          # fill it up with leading zeros if needed
-          tmp=0{$tmp}
+          tmp=0${tmp}
      elif [[ ${#tmp} -eq 2 ]]; then
-          tmp=00{$tmp}
+          tmp=00${tmp}
      fi
      echo $((16#${tmp:2:2}${tmp:0:2}))  # reverse order and convert it from hex to dec
 }
@@ -1396,6 +1396,7 @@ tmpfile_handle() {
      mv $savefile "$TEMPDIR/$NODEIP.$1" 2>/dev/null
      [[ $ERRFILE =~ dev.null ]] && return 0 || \
           mv $ERRFILE "$TEMPDIR/$NODEIP.${1//.txt/}.errorlog" 2>/dev/null
+     return 0
 }
 
 # arg1: line with comment sign, tabs and so on
@@ -1412,7 +1413,6 @@ http_get() {
      local node="" query=""
      local dl="$2"
      local useragent="$UA_STD"
-     local proxy_arg=""
      local jsonID="http_get"
 
      "$SNEAKY" && useragent="$UA_SNEAKY"
@@ -1531,7 +1531,7 @@ check_revocation_crl() {
      # -crl_download could be more elegant but is supported from 1.0.2 onwards only
      $OPENSSL crl -inform DER -in "$tmpfile" -outform PEM -out "${tmpfile%%.crl}.pem" &>$ERRFILE
      if [[ $? -ne 0 ]]; then
-          pr_warning "conversion of "$tmpfile" failed"
+          pr_warning "conversion of \"$tmpfile\" failed"
           fileout "$jsonID" "WARN" "conversion of CRL to PEM format failed"
           return 1
      fi
@@ -2041,7 +2041,7 @@ match_ipv4_httpheader() {
 
 
 run_http_date() {
-     local now difftime
+     local difftime
      local spaces="                              "
      jsonID="HTTP_clock_skew"
 
@@ -2074,7 +2074,7 @@ run_http_date() {
      fi
      debugme tm_out ", epoch: $HTTP_TIME"
      outln
-     match_ipv4_httpheader
+     match_ipv4_httpheader "$1"
      return 0
 }
 
@@ -2208,7 +2208,7 @@ run_hpkp() {
      local spaces="                             "
      local spaces_indented="                  "
      local certificate_found=false
-     local i
+     local -i i nrsaved
      local first_hpkp_header
      local spki
      local ca_hashes="$TESTSSL_INSTALL_DIR/etc/ca_hashes.txt"
@@ -2312,7 +2312,7 @@ run_hpkp() {
           rm $TEMPDIR/level0.crt 2>/dev/null
 
           printf ""> "$TEMPDIR/intermediate.hashes"
-          if [[ nrsaved -ge 2 ]]; then
+          if [[ $nrsaved -ge 2 ]]; then
                for cert_fname in $TEMPDIR/level?.crt; do
                     hpkp_spki_ca="$($OPENSSL x509 -in "$cert_fname" -pubkey -noout 2>/dev/null | grep -v PUBLIC | $OPENSSL base64 -d 2>/dev/null |
                          $OPENSSL dgst -sha256 -binary 2>/dev/null | $OPENSSL enc -base64 2>/dev/null)"
@@ -3593,7 +3593,7 @@ run_allciphers() {
      local n auth mac export hexc sslv2_ciphers="" s
      local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
      local -i i end_of_bundle bundle bundle_size num_bundles mod_check
-     local -a ciphers_found ciphers_found2 hexcode2 ciph2 sslvers2 rfc_ciph2
+     local -a ciphers_found ciphers_found2 hexcode2 ciph2 rfc_ciph2
      local -i -a index
      local proto protos_to_try
      local dhlen available ciphers_to_test tls13_ciphers_to_test supported_sslv2_ciphers
@@ -3701,7 +3701,6 @@ run_allciphers() {
           if "${ossl_supported[i]}"; then
                [[ "${sslvers[i]}" == "SSLv2" ]] && continue
                ciphers_found2[nr_ossl_ciphers]=false
-               sslvers2[nr_ossl_ciphers]="${sslvers[i]}"
                ciph2[nr_ossl_ciphers]="${ciph[i]}"
                index[nr_ossl_ciphers]=$i
                nr_ossl_ciphers+=1
@@ -3780,7 +3779,6 @@ run_allciphers() {
                if ! "${ciphers_found[i]}"; then
                     [[ "${sslvers[i]}" == "SSLv2" ]] && continue
                     ciphers_found2[nr_nonossl_ciphers]=false
-                    sslvers2[nr_nonossl_ciphers]="${sslvers[i]}"
                     hexcode2[nr_nonossl_ciphers]="${hexcode[i]}"
                     rfc_ciph2[nr_nonossl_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
                     index[nr_nonossl_ciphers]=$i
@@ -4173,7 +4171,7 @@ create_client_simulation_tls_clienthello() {
      local tls_handshake_ascii="$1"
      local -i len offset tls_handshake_ascii_len len_all len_clienthello
      local -i len_extensions len_extension
-     local content_type tls_version_reclayer handshake_msg_type tls_clientversion
+     local tls_content_type tls_version_reclayer handshake_msg_type tls_clientversion
      local tls_random tls_sid tls_cipher_suites tls_compression_methods
      local tls_extensions="" extension_type len_extensions_hex
      local len_servername hexdump_format_str servername_hexstr
@@ -4441,6 +4439,7 @@ run_client_simulation() {
      local minEcdsaBits=()
      local curves=()
      local requiresSha2=()
+     local current=()
      local i=0
      local name tls proto cipher temp what_dh bits curve supported_curves
      local has_dh_bits using_sockets=true
@@ -4504,7 +4503,7 @@ run_client_simulation() {
           MAX_OSSL_FAIL=100
      fi
      for name in "${short[@]}"; do
-          if ${current[i]} || "$ALL_CLIENTS" ; then
+          if "${current[i]}" || "$ALL_CLIENTS" ; then
                # for ANY we test this service or if the service we determined from STARTTLS matches
                if [[ "${service[i]}" == "ANY" ]] || [[ "${service[i]}" =~ $client_service ]]; then
                     out " $(printf -- "%-29s" "${names[i]}")"
@@ -5304,8 +5303,6 @@ run_cipherlists() {
      local sslv2_null_ciphers=""
      local anon_ciphers="c0,19, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, c0,47, c0,5b, c0,85, c0,18, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,46, c0,5a, c0,84, c0,16, 00,18, c0,17, 00,1b, 00,1a, 00,19, 00,17, c0,15, 00,ff"
      local sslv2_anon_ciphers=""
-     local adh_ciphers="00,a7, 00,6d, 00,3a, 00,c5, 00,89, c0,47, c0,5b, c0,85, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,46, c0,5a, c0,84, 00,18, 00,1b, 00,1a, 00,19, 00,17, 00,ff"
-     local sslv2_adh_ciphers=""
   # ~ grep -i EXP etc/cipher-mapping.txt
      local exp_ciphers="00,63, 00,62, 00,61, 00,65, 00,64, 00,60, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e, 00,17, 00,03, 00,28, 00,2b, 00,ff"
      local sslv2_exp_ciphers="04,00,80, 02,00,80"
@@ -5360,7 +5357,7 @@ run_cipherlists() {
      ret=$((ret + $?))
      sub_cipherlists '3DES:!aNULL:!ADH'                      "" " Triple DES Ciphers (Medium)               "     0 "3DES"      "$tdes_ciphers"   "$sslv2_tdes_ciphers" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!AESGCM:!CamelliaGCM:!AESCCM8:!AESCCM'\
+     sub_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!AESGCM:!CamelliaGCM:!AESCCM8:!AESCCM' \
                                                              "" " High encryption (AES+Camellia, no AEAD)   "     1 "HIGH"      "$high_ciphers"    ""
      ret=$((ret + $?))
      sub_cipherlists 'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM8:AESCCM' 'ALL' \
@@ -5649,7 +5646,10 @@ sub_session_resumption() {
      else
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_in $sess_data") </dev/null >$tmpfile 2>$ERRFILE
           ret2=$?
-          debugme echo "$ret1, $ret2, [[ -s "$sess_data" ]]"
+          if [[ $DEBUG -ge 2 ]]; then
+               echo -n "$ret1, $ret2, "
+               [[ -s "$sess_data" ]] && echo "not empty" || echo "empty"
+          fi
           # now get the line and compare the numbers read" and "written" as a second criteria.
           rw_line="$(awk '/^SSL handshake has read/ { print $5" "$(NF-1) }' "$tmpfile" )"
           rw_line=($rw_line)
@@ -6063,7 +6063,7 @@ check_tls12_pref() {
 
 
 cipher_pref_check() {
-     local p proto proto_hex npn_protos
+     local p proto proto_hex
      local tested_cipher cipher order rfc_ciph rfc_order
      local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
      local -i i nr_ciphers nr_nonossl_ciphers num_bundles mod_check bundle_size bundle end_of_bundle success
@@ -8657,7 +8657,6 @@ run_pfs() {
 
 npn_pre(){
      if [[ -n "$PROXY" ]]; then
-          [[ -n "$1" ]] && pr_warning "$1"
           pr_warning "not tested as proxies do not support proxying it"
           fileout "NPN" "WARN" "not tested as proxies do not support proxying it"
           return 1
@@ -8672,7 +8671,6 @@ npn_pre(){
 
 alpn_pre(){
      if [[ -n "$PROXY" ]]; then
-          [[ -n "$1" ]] && pr_warning " $1 "
           pr_warning "not tested as proxies do not support proxying it"
           fileout "ALPN" "WARN" "not tested as proxies do not support proxying it"
           return 1
@@ -12579,7 +12577,7 @@ run_ccs_injection(){
      elif [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
           if [[ ! "${tls_hello_ascii:5:2}" =~ [03|02|01|00] ]]; then
                pr_warning "test failed "
-               out "no proper TLS repy (debug info: protocol sent: 1503${tlshexcode#x03, x}, reply: ${tls_hello_ascii:0:14}"
+               out "no proper TLS repy (debug info: protocol sent: 1503${tls_hexcode#x03, x}, reply: ${tls_hello_ascii:0:14}"
                fileout "$jsonID" "DEBUG" "test failed, around line $LINENO, debug info (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
                ret=1
           elif [[ "$byte6" == "15" ]]; then
@@ -13572,7 +13570,7 @@ run_logjam() {
      local -i i nr_supported_ciphers=0 server_key_exchange_len=0 ephemeral_pub_len=0 len_dh_p=0
      local addtl_warning="" hexc
      local -i ret=0 subret=0
-     local server_key_exchange ephemeral_pub key_bitstring=""
+     local server_key_exchange key_bitstring=""
      local dh_p=""
      local spaces="                                           "
      local vuln_exportdh_ciphers=false
@@ -14213,7 +14211,7 @@ run_rc4() {
      local n auth mac export hexc sslv2_ciphers_hex="" sslv2_ciphers_ossl="" s
      local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
      local -i i
-     local -a ciphers_found ciphers_found2 hexcode2 ciph2 sslvers2 rfc_ciph2
+     local -a ciphers_found ciphers_found2 hexcode2 ciph2 rfc_ciph2
      local -i -a index
      local dhlen available="" ciphers_to_test supported_sslv2_ciphers proto
      local has_dh_bits="$HAS_DH_BITS" rc4_detected=""
@@ -14321,7 +14319,6 @@ run_rc4() {
      for (( i=0; i < nr_ciphers; i++ )); do
           if "${ossl_supported[i]}" && [[ "${sslvers[i]}" != "SSLv2" ]]; then
                ciphers_found2[nr_ossl_ciphers]=false
-               sslvers2[nr_ossl_ciphers]="${sslvers[i]}"
                ciph2[nr_ossl_ciphers]="${ciph[i]}"
                index[nr_ossl_ciphers]=$i
                nr_ossl_ciphers+=1
@@ -14361,7 +14358,6 @@ run_rc4() {
           for (( i=0; i < nr_ciphers; i++ )); do
                if ! "${ciphers_found[i]}" && [[ "${sslvers[i]}" != "SSLv2" ]]; then
                     ciphers_found2[nr_nonossl_ciphers]=false
-                    sslvers2[nr_nonossl_ciphers]="${sslvers[i]}"
                     hexcode2[nr_nonossl_ciphers]="${hexcode[i]}"
                     rfc_ciph2[nr_nonossl_ciphers]="${rfc_ciph[i]}"
                     index[nr_nonossl_ciphers]=$i
