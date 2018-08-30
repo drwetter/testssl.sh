@@ -251,6 +251,8 @@ NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (ext
 declare -r CLIENT_MIN_PFS=5             # number of ciphers needed to run a test for PFS
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
+CERTIFICATE_LIST_ORDERING_PROBLEM=false # Set to true if server sends a certificate list that contains a certificate
+                                        # that does not certify the one immediately preceding it. (See RFC 8446, Section 4.4.2)
 STAPLED_OCSP_RESPONSE=""
 MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
 if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
@@ -6611,7 +6613,7 @@ extract_certificates() {
      local version="$1"
      local savedir
      local -i i success nrsaved=0
-     local issuerDN CAsubjectDN
+     local issuerDN CAsubjectDN previssuerDN
 
      # Place the server's certificate in $HOSTCERT and any intermediate
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
@@ -6633,6 +6635,7 @@ extract_certificates() {
          success=1
      else
          success=0
+         CERTIFICATE_LIST_ORDERING_PROBLEM=false
          mv level0.crt $HOSTCERT
          if [[ $nrsaved -eq 1 ]]; then
              echo "" > $TEMPDIR/intermediatecerts.pem
@@ -6640,6 +6643,7 @@ extract_certificates() {
              cat level?.crt > $TEMPDIR/intermediatecerts.pem
              issuerDN="$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>/dev/null)"
              issuerDN="${issuerDN:8}"
+             previssuerDN="$issuerDN"
              # The second certficate (level1.crt) SHOULD be issued to the CA
              # that issued the server's certificate. But, according to RFC 8446
              # clients SHOULD be prepared to handle cases in which the server
@@ -6648,8 +6652,12 @@ extract_certificates() {
                   CAsubjectDN="$($OPENSSL x509 -in "level$i.crt" -noout -subject  2>/dev/null)"
                   if [[ "${CAsubjectDN:9}" == "$issuerDN" ]]; then
                        cp "level$i.crt" $TEMPDIR/hostcert_issuer.pem
-                       break
+                       issuerDN="" # set to empty to prevent further matches
                   fi
+                  [[ "${CAsubjectDN:9}" != "$previssuerDN" ]] && CERTIFICATE_LIST_ORDERING_PROBLEM=true
+                  "$CERTIFICATE_LIST_ORDERING_PROBLEM" && [[ -z "$issuerDN" ]] && break
+                  previssuerDN="$($OPENSSL x509 -in "level$i.crt" -noout -issuer  2>/dev/null)"
+                  previssuerDN="${previssuerDN:8}"
              done
              # This should never happen, but if more than one certificate was
              # provided and none of them belong to the CA that issued the
@@ -6657,7 +6665,7 @@ extract_certificates() {
              # be deleted. There is code elsewhere that assumes that if
              # $TEMPDIR/intermediatecerts.pem is non-empty, then
              # $TEMPDIR/hostcert_issuer.pem is also present.
-             [[ $i -eq $nrsaved ]] && echo "" > $TEMPDIR/intermediatecerts.pem
+             [[ -n "$issuerDN" ]] && echo "" > $TEMPDIR/intermediatecerts.pem
              rm level?.crt
          fi
      fi
@@ -6719,6 +6727,7 @@ get_server_certificate() {
      local success
      local npn_params="" line
 
+     CERTIFICATE_LIST_ORDERING_PROBLEM=false
      if [[ "$1" =~ "-cipher tls1_3" ]]; then
           [[ $(has_server_protocol "tls1_3") -eq 1 ]] && return 1
           if "$HAS_TLS13"; then
@@ -7099,6 +7108,7 @@ certificate_info() {
      local ocsp_response_status=$9
      local sni_used="${10}"
      local ct="${11}"
+     local certificate_list_ordering_problem="${12}"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_keyusage cert_ext_keyusage
      local outok=true
      local expire days2expire secs2warn ocsp_uri crl
@@ -7723,8 +7733,15 @@ certificate_info() {
      fileout "cert_notAfter${json_postfix}" "$expok" "$enddate"       # They are in UTC
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
-     out "$indent"; pr_bold " # of certificates provided"; outln "   $certificates_provided"
+     out "$indent"; pr_bold " # of certificates provided"; out "   $certificates_provided"
      fileout "certs_countServer${json_postfix}" "INFO" "${certificates_provided}"
+     if "$certificate_list_ordering_problem"; then
+          prln_svrty_low " (certificate list ordering problem)"
+          fileout "certs_list_ordering_problem${json_postfix}" "LOW" "yes"
+     else
+          fileout "certs_list_ordering_problem${json_postfix}" "INFO" "no"
+          outln
+     fi
 
 
      out "$indent"; pr_bold " Certificate Revocation List  "
@@ -7887,7 +7904,8 @@ run_server_defaults() {
      local -i i n
      local -i certs_found=0
      local -i ret=0
-     local -a previous_hostcert previous_hostcert_txt previous_hostcert_type previous_hostcert_issuer previous_intermediates keysize cipher
+     local -a previous_hostcert previous_hostcert_txt previous_hostcert_type
+     local -a previous_hostcert_issuer previous_intermediates previous_ordering_problem keysize cipher
      local -a ocsp_response_binary ocsp_response ocsp_response_status sni_used tls_version ct
      local -a ciphers_to_test certificate_type
      local -a -i success
@@ -8021,6 +8039,7 @@ run_server_defaults() {
                          previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
                          previous_hostcert_issuer[certs_found]=""
                          [[ -n "${previous_intermediates[certs_found]}" ]] && previous_hostcert_issuer[certs_found]=$(cat $TEMPDIR/hostcert_issuer.pem)
+                         previous_ordering_problem[certs_found]=$CERTIFICATE_LIST_ORDERING_PROBLEM
                          [[ $n -ge 10 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                          tls_version[certs_found]="$DETECTED_TLS_VERSION"
                          previous_hostcert_type[certs_found]=" ${certificate_type[n]}"
@@ -8196,7 +8215,8 @@ run_server_defaults() {
           certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" \
                "${cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" \
                "${ocsp_response_binary[i]}" "${ocsp_response[i]}" \
-               "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}"
+               "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}" \
+               "${previous_ordering_problem[i]}"
                [[ $? -ne 0 ]] && ((ret++))
      done
      return $ret
@@ -11154,6 +11174,8 @@ parse_tls_serverhello() {
 
           echo "" > "$TEMPDIR/intermediatecerts.pem"
           # Place any additional certificates in $TEMPDIR/intermediatecerts.pem
+          CERTIFICATE_LIST_ORDERING_PROBLEM=false
+          CAissuerDN="$issuerDN"
           for (( i=12+certificate_len; i<tls_certificate_ascii_len; i=i+certificate_len )); do
                if [[ $tls_certificate_ascii_len-$i -lt 6 ]]; then
                     debugme echo "Malformed Certificate Handshake message in ServerHello."
@@ -11176,6 +11198,8 @@ parse_tls_serverhello() {
                fi
                nr_certs+=1
                CAsubjectDN="$($OPENSSL x509 -noout -subject 2>>$ERRFILE <<< "$pem_certificate")"
+               # Check that this certificate certifies the one immediately preceding it.
+               [[ "${CAsubjectDN:9}" != "${CAissuerDN:8}" ]] && CERTIFICATE_LIST_ORDERING_PROBLEM=true
                CAissuerDN="$($OPENSSL x509 -noout -issuer 2>>$ERRFILE <<< "$pem_certificate")"
                echo " $nr_certs s:${CAsubjectDN:9}" >> $TMPFILE
                echo "   i:${CAissuerDN:8}" >> $TMPFILE
