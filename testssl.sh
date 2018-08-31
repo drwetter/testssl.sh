@@ -8435,6 +8435,9 @@ run_pfs() {
      local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
      local pfs_ciphers curves_offered="" curves_to_test temp
      local len1 len2 curve_found
+     local key_bitstring dh_p
+     local -i lineno_matched len_dh_p
+     local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
      local jsonID="PFS"
@@ -8786,7 +8789,7 @@ run_pfs() {
           fi
      fi
      if "$using_sockets" && ( "$pfs_tls13_offered" || ( "$ffdhe_offered" && "$EXPERIMENTAL" ) ); then
-          # find out what groups from RFC 7919 are supported.
+          # find out what groups are supported.
           nr_curves=0
           for curve in "${ffdhe_groups_output[@]}"; do
                supported_curve[nr_curves]=false
@@ -8795,17 +8798,13 @@ run_pfs() {
           protos_to_try=""
           "$pfs_tls13_offered" && protos_to_try="04"
           if "$ffdhe_offered" && "$EXPERIMENTAL"; then
-               # Check to see whether RFC 7919 is supported (see Section 4 of RFC 7919)
-               tls_sockets "03" "${ffdhe_cipher_list_hex:2}, 00,ff" "ephemeralkey" "00, 0a, 00, 04, 00, 02, 01, fb"
-               sclient_success=$?
-               if [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]]; then
-                    if "$pfs_tls13_offered"; then
-                         protos_to_try="04 03"
-                    else
-                         protos_to_try="03"
-                    fi
+               if "$pfs_tls13_offered"; then
+                    protos_to_try="04 03"
+               else
+                    protos_to_try="03"
                fi
           fi
+          curve_found=""
           for proto in $protos_to_try; do
                while true; do
                     curves_to_test=""
@@ -8833,10 +8832,49 @@ run_pfs() {
           for (( i=0; i < nr_curves; i++ )); do
                "${supported_curve[i]}" && curves_offered+="${ffdhe_groups_output[i]} "
           done
+          curves_offered="$(strip_trailing_space "$curves_offered")"
+          if "$ffdhe_offered" && "$EXPERIMENTAL" && [[ -z "$curves_offered" ]] && [[ -z "$curve_found" ]]; then
+               # Some servers will fail if the supported_groups extension is present.
+               tls_sockets "03" "${ffdhe_cipher_list_hex:2}, 00,ff" "ephemeralkey"
+               sclient_success=$?
+               if [[ $sclient_success -eq 0 ]] || [[ $sclient_success -eq 2 ]]; then
+                    temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    curve_found="${temp#*, }"
+                    curve_found="${curve_found%%,*}"
+               fi
+          fi
+          if [[ -z "$curves_offered" ]] && [[ -n "$curve_found" ]] && [[ -s "$common_primes_file" ]]; then
+               # The server is not using one of the groups from RFC 7919.
+               key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
+               dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:/,/generator:/' | egrep -v "prime|generator")"
+               dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
+               [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
+               len_dh_p=$((4*${#dh_p}))
+               debugme tmln_out "len(dh_p): $len_dh_p  |  dh_p: $dh_p"
+               dh_p="$(toupper "$dh_p")"
+               # In the previous line of the match is bascially the hint we want to echo
+               # the most elegant thing to get the previous line [ awk '/regex/ { print x }; { x=$0 }' ] doesn't work with gawk
+               lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
+               if [[ "$lineno_matched" -ne 0 ]]; then
+                    curves_offered="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
+               else
+                    curves_offered="unrecognized group"
+               fi
+          fi
           if [[ -n "$curves_offered" ]]; then
-               pr_bold " RFC 7919 DH groups offered:  "
-               outln "$curves_offered"
-               fileout "RFC7919_DH_groups" "INFO" "$curves_offered"
+               if [[ ! "$curves_offered" =~ ffdhe ]] || [[ ! "$curves_offered" =~ \  ]]; then
+                    pr_bold " Finite field group offered:  "
+               else
+                    pr_bold " Finite field groups offered: "
+               fi
+               if [[ "$curves_offered" =~ ffdhe ]]; then
+                    pr_svrty_good "$curves_offered"
+               else
+                    out "$curves_offered ("
+                    pr_dh_quality "$len_dh_p" "$len_dh_p bits"
+                    out ")"
+               fi
+               fileout "DHE_groups" "INFO" "$curves_offered"
           fi
      fi
      outln
