@@ -5827,6 +5827,7 @@ run_server_preference() {
                     outln " (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
                     fileout "$jsonID" "WARN" "Default protocol empty (Hint: if IIS6 give OpenSSL 1.0.1 a try)"
                else
+                    outln
                     fileout "$jsonID" "WARN" "Default protocol empty"
                fi
                ret=1
