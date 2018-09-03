@@ -1206,13 +1206,13 @@ strip_trailing_space() {
 
 # retrieve cipher from ServerHello (via openssl)
 get_cipher() {
-     awk '/Cipher *:/ { print $3 }' "$1"
+     awk '/Cipher *:/ { a=$3 } END { print a }' "$1"
      #awk '/\<Cipher\>/ && !/Cipher is/  && !/^New/ { print $3 }' "$1"
 }
 
 # retrieve protocol from ServerHello (via openssl)
 get_protocol() {
-     awk '/Protocol *:/ { print $3 }' "$1"
+     awk '/Protocol *:/ { a=$3 } END { print a }' "$1"
 }
 
 is_number() {
@@ -2671,7 +2671,7 @@ sub_f5_bigip_check() {
                port="$(f5_port_decode $cookievalue)"
                out "${spaces}F5 cookie (default IPv4 pool member): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
                fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv4 pool member ${ip}:${port}" "$cve" "$cwe"
-          elif grep -Eq '^rd[0-9]{1,2}o0{20}f{4}[a-f0-9]{8}o[0-9]{1,5}' <<< "$cookievalue"; then
+          elif grep -Eq '^rd[0-9]{1,3}o0{20}f{4}[a-f0-9]{8}o[0-9]{1,5}' <<< "$cookievalue"; then
                routed_domain="$(f5_determine_routeddomain "$cookievalue")"
                offset=$(( 2 + ${#routed_domain} + 1 + 24))
                port="${cookievalue##*o}"
@@ -2684,7 +2684,7 @@ sub_f5_bigip_check() {
                port=$(f5_port_decode "$port")
                out "${spaces}F5 cookie (default IPv6 pool member): "; pr_italic "$cookiename "; prln_svrty_medium "${ip}:${port}"
                fileout "cookie_bigip_f5" "MEDIUM" "Information leakage: F5 cookie $cookiename $cookievalue is default IPv6 pool member ${ip}:${port}" "$cve" "$cwe"
-          elif grep -Eq '^rd[0-9]{1,2}o[a-f0-9]{32}o[0-9]{1,5}' <<< "$cookievalue"; then
+          elif grep -Eq '^rd[0-9]{1,3}o[a-f0-9]{32}o[0-9]{1,5}' <<< "$cookievalue"; then
                routed_domain="$(f5_determine_routeddomain "$cookievalue")"
                offset=$(( 2 + ${#routed_domain} + 1 ))
                port="${cookievalue##*o}"
