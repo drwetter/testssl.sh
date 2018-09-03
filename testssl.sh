@@ -790,6 +790,7 @@ fileout_json_finding() {
                     \"target host\"     : \"$target\",
                     \"ip\"              : \"$NODEIP\",
                     \"port\"            : \"$PORT\",
+                    \"rDNS\"            : \"$rDNS\",
                     \"service\"         : \"$finding\"," >> "$JSONFILE"
             $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
          else
@@ -7876,8 +7877,8 @@ certificate_info() {
           pr_italic "$(out_row_aligned_max_width "$all_caa" "$indent                              " $TERM_WIDTH)"
           fileout "${jsonID}${json_postfix}" "OK" "$all_caa"
      elif [[ -n "$NODNS" ]]; then
-          pr_warning "(instructed to minimize DNS queries)"
-          fileout "${jsonID}${json_postfix}" "WARN" "check skipped as instructed"
+          out "(instructed to minimize DNS queries)"
+          fileout "${jsonID}${json_postfix}" "INFO" "check skipped as instructed"
      else
           pr_svrty_low "not offered"
           fileout "${jsonID}${json_postfix}" "LOW" "--"
@@ -16484,7 +16485,7 @@ display_rdns_etc() {
      fi
      if [[ "$rDNS" =~ instructed ]]; then
           out "$(printf " %-23s %s" "rDNS ($nodeip):")"
-          pr_warning "$rDNS"
+          out "$rDNS"
      elif [[ -n "$rDNS" ]]; then
           out "$(printf " %-23s %s" "rDNS ($nodeip):")"
           out "$(out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH)"
