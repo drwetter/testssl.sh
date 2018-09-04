@@ -2,6 +2,7 @@ FROM alpine:latest
 
 RUN apk update && apk upgrade
 RUN apk add bash procps drill git coreutils
+RUN apk add --no-cache curl
 
 RUN addgroup testssl
 RUN adduser -G testssl -g "testssl user"  -s /bin/bash -D testssl
