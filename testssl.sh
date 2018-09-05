@@ -15745,16 +15745,21 @@ initialize_engine(){
      grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null && \
           return 0        # We have been here already
      if "$NO_ENGINE"; then
+          # Avoid potential conflicts also -- manual hook, see #1117
+          export OPENSSL_CONF=''
           return 1
      elif $OPENSSL engine gost -v 2>&1 | egrep -q 'invalid command|no such engine'; then
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
+          export OPENSSL_CONF=''
           return 1
      elif ! $OPENSSL engine gost -vvvv -t -c 2>/dev/null >/dev/null; then
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
+          # Avoid clashes of OpenSSL 1.1.1 config file with our openssl 1.0.2. This is for Debian 10
+          export OPENSSL_CONF=''
           return 1
      else      # we have engine support
           if [[ -n "$OPENSSL_CONF" ]]; then
