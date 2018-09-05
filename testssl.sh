@@ -11880,11 +11880,15 @@ initialize_engine(){
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
+          # Avoid clashes of OpenSSL 1.1.1 config file with our openssl 1.0.2. This is for Debian 10
+          export OPENSSL_CONF=''
           return 1
      elif $OPENSSL engine gost -vvvv -t -c 2>&1 | grep -iq "No such" ; then
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
+          # Avoid clashes of OpenSSL 1.1.1 config file with our openssl 1.0.2. This is for Debian 10
+          export OPENSSL_CONF=''
           return 1
      else      # we have engine support
           if [[ -n "$OPENSSL_CONF" ]]; then
