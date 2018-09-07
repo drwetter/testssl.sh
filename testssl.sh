@@ -105,7 +105,7 @@ fi
 trap "cleanup" QUIT EXIT
 trap "child_error" USR1
 
-readonly VERSION="2.9.5-6"
+readonly VERSION="2.9.5-7"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
