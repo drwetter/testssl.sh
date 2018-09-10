@@ -15755,8 +15755,13 @@ initialize_engine(){
           export OPENSSL_CONF=''
           return 1
      elif ! $OPENSSL engine gost -vvvv -t -c 2>/dev/null >/dev/null; then
-          outln
-          pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
+          # check for openssl 1.1.1 config -- not this may not be reliable. We only use this
+          # to suppress the warning (confuses users), see #1119
+          # https://github.com/openssl/openssl/commit/b524b808a1d1ba204dbdcbb42de4e3bddb3472ac
+          if ! grep -q 'using the .include directive' /etc/ssl/openssl.cnf; then
+                 outln
+                 pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
+          fi
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
           # Avoid clashes of OpenSSL 1.1.1 config file with our openssl 1.0.2. This is for Debian 10
           export OPENSSL_CONF=''
