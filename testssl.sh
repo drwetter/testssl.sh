@@ -738,25 +738,25 @@ fileout_section_header() {
 
 # arg1: whether to end object too
 fileout_section_footer() {
-    "$do_pretty_json" && printf "\n                    ]" >> "$JSONFILE"
-    "$do_pretty_json" && "$1" && echo -e "\n          }" >> "$JSONFILE"
-    SECTION_FOOTER_NEEDED=false
+     "$do_pretty_json" && printf "\n                    ]" >> "$JSONFILE"
+     "$do_pretty_json" && "$1" && echo -e "\n          }" >> "$JSONFILE"
+     SECTION_FOOTER_NEEDED=false
 }
 
 fileout_json_print_parameter() {
-    local parameter="$1"
-    local filler="$2"
-    local value="$3"
-    local not_last="$4"
-    local spaces=""
+     local parameter="$1"
+     local filler="$2"
+     local value="$3"
+     local not_last="$4"
+     local spaces=""
 
-    "$do_json" && \
-        spaces="              " || \
-        spaces="                                "
-    if [[ ! -z "$value" ]]; then
-        printf "%s%s%s%s" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
-        "$not_last" && printf ",\n" >> "$JSONFILE"
-    fi
+     "$do_json" && \
+         spaces="              " || \
+         spaces="                                "
+     if [[ -n "$value" ]] || [[ "$parameter" == finding ]]; then
+          printf "%s%s%s%s" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
+          "$not_last" && printf ",\n" >> "$JSONFILE"
+     fi
 }
 
 fileout_json_finding() {
