@@ -185,7 +185,7 @@ host.example.com:631
 
 <p><code>--proxy &lt;host>:&lt;port></code>    does ANY check via the specified proxy. <code>--proxy=auto</code> inherits the proxy setting from the environment. Proxying via IPv6 addresses is not possible, no HTTPS or SOCKS proxy is supported. The hostname supplied will be resolved to the first A record. Authentication to the proxy is not supported. In addition if you want lookups via proxy you can specify <code>DNS_VIA_PROXY=true</code>. OCSP revocation checking (<code>-S --phone-out</code>) is not supported by OpenSSL via proxy. As supplying a proxy is an indicator for port 80 and 443 being blocked outgoing this check won't be performed. However if <code>IGN_OCSP_PROXY=true</code> has been supplied it will be tried directly.</p>
 
-<p><code>-6</code>       does (also) IPv6 checks. Please note if a supplied URI resolves (also) to an IPv6 address that testssl.sh doesn't do checks on an IPv6 address automatically. This is because testssl.sh does no connectivity checks for IPv6. It also cannot determine reliably whether the OpenSSL binary you are using has IPv6 support. <code>-6</code> assumes both is the case. If both conditions are met and you want in general enable IPv6 tests you might as well add <code>HAS_IPv6</code> to your shell environment.</p>
+<p><code>-6</code>       does (also) IPv6 checks. Please note if a supplied URI resolves (also) to an IPv6 address that testssl.sh doesn't perform checks on an IPv6 address automatically. This is because testssl.sh does no connectivity checks for IPv6. It cannot determine reliably whether the OpenSSL binary you are using has IPv6 support. <code>-6</code> assumes both is the case. If both conditions are met and you want in general enable IPv6 tests you might as well add <code>HAS_IPv6</code> to your shell environment. Besides the OpenSSL binary supplied IPv6 is known to work with vanilla OpenSSL >= 1.1.0, RHEL's, CentOS', FC's and Gentoo's OpenSSL version 1.0.2.</p>
 
 <p><code>--ssl-native</code>               instead of using a mixture of bash sockets and openssl s_client connects testssl.sh uses the latter only. This is at the moment faster but provides less accurate results, especially in the client
  simulation and if the openssl binary lacks cipher support. For TLS protocol checks and standard cipher lists and certain other checks you will see a warning if testssl.sh internally can tell if one check cannot be performed or will give you inaccurate results. For e.g. single cipher checks (<code>--each-cipher</code> and <code>--cipher-per-proto</code>) you might end up getting false negatives without a warning.</p>
@@ -571,7 +571,7 @@ to create the hashes for HPKP.</li>
 
   <ol class='man-decor man-foot man foot'>
     <li class='tl'></li>
-    <li class='tc'>August 2018</li>
+    <li class='tc'>September 2018</li>
     <li class='tr'>testssl(1)</li>
   </ol>
 
