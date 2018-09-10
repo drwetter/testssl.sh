@@ -16539,14 +16539,14 @@ run_mx_all_ips() {
      fi
      if [[ -n "$mxs" ]] && [[ "$mxs" != ' ' ]]; then
           [[ $mxport == "465" ]] && \
-               STARTTLS_PROTOCOL=""          # no starttls for Port 465, on all other ports we speak starttls
-          pr_bold "Testing now all MX records (on port $mxport): "; outln "$mxs"
+               STARTTLS_PROTOCOL=""                              # no starttls for tcp 465, all other ports are starttls
+          pr_bold "Testing all MX records (on port $mxport): "; outln "$mxs"
           for mx in $mxs; do
                draw_line "-" $((TERM_WIDTH * 2 / 3))
                outln
                parse_hn_port "$mx:$mxport"
                determine_ip_addresses || continue
-               if [[ $(count_words "$(echo -n "$IPADDRs")") -gt 1 ]]; then           # we have more than one ipv4 address to check
+               if [[ $(count_words "$IPADDRs") -gt 1 ]]; then    # we have more than one ipv4 address to check
                     pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
                     for ip in $IPADDRs; do
                          NODEIP="$ip"
@@ -16560,7 +16560,7 @@ run_mx_all_ips() {
           done
           draw_line "-" $((TERM_WIDTH * 2 / 3))
           outln
-          pr_bold "Done testing now all MX records (on port $mxport): "; outln "$mxs"
+          pr_bold "Done testing all MX records (on port $mxport): "; outln "$mxs"
      else
           prln_bold " $1 has no MX records(s)"
      fi
@@ -17743,6 +17743,10 @@ lets_roll() {
      calc_scantime
      datebanner " Done"
 
+     # reset the failed connect counter as we are finished
+     NR_SOCKET_FAIL=0
+     NR_OSSL_FAIL=0
+
      "$MEASURE_TIME" && printf "$1: %${COLUMNS}s\n" "$SCAN_TIME"
      [[ -e "$MEASURE_TIME_FILE" ]] && echo "Total : $SCAN_TIME " >> "$MEASURE_TIME_FILE"
 
@@ -17805,7 +17809,7 @@ lets_roll() {
           exit $?
      fi
 
-     [[ -z "$NODE" ]] && parse_hn_port "${URI}"        # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now
+     [[ -z "$NODE" ]] && parse_hn_port "${URI}"        # NODE, URL_PATH, PORT, IPADDRs and IP46ADDR is set now
      prepare_logging
 
      if ! determine_ip_addresses; then
