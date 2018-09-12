@@ -11841,6 +11841,13 @@ socksend_tls_clienthello() {
                done
                len_extension=$len_extension+$len_padding_extension+0x4
                len_extension_hex=$(printf "%02x\n" $len_extension)
+          elif [[ ! "$extra_extensions_list" =~ " 0015 " ]] && ( [[ $((len_all%256)) -eq 10 ]] || [[ $((len_all%256)) -eq 14 ]] ); then
+               # Some servers fail if the length of the ClientHello is 522, 778, 1034, 1290, ... bytes.
+               # A few servers also fail if the length is 526, 782, 1038, 1294, ... bytes.
+               # So, if the ClientHello would be one of these length, add a 5-byte padding extension.
+               all_extensions="$all_extensions\\x00\\x15\\x00\\x01\\x00"
+               len_extension+=5
+               len_extension_hex=$(printf "%02x\n" $len_extension)
           fi
           len2twobytes "$len_extension_hex"
           all_extensions="
