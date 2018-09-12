@@ -11827,7 +11827,6 @@ socksend_tls_clienthello() {
           # then add a padding extension (see RFC 7685)
           len_all=$((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2))
           "$offer_compression" && len_all+=2
-          [[ 0x$tls_low_byte -gt 0x03 ]] && len_all+=32 # TLSv1.3 ClientHello includes a 32-byte session id
           if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]] && [[ ! "$extra_extensions_list" =~ " 0015 " ]]; then
                if [[ $len_all -gt 508 ]]; then
                     len_padding_extension=1 # Final extension cannot be empty: see PR #792
@@ -11842,18 +11841,12 @@ socksend_tls_clienthello() {
                done
                len_extension=$len_extension+$len_padding_extension+0x4
                len_extension_hex=$(printf "%02x\n" $len_extension)
-          elif [[ ! "$extra_extensions_list" =~ " 0015 " ]] && ( [[ $((len_all%256)) -eq 10 ]] || [[ $((len_all%256)) -eq 14 ]] ); then
-               # Some servers fail if the length of the ClientHello is 522, 778, 1034, 1290, ... bytes.
-               # A few servers also fail if the length is 526, 782, 1038, 1294, ... bytes.
-               # So, if the ClientHello would be one of these length, add a 5-byte padding extension.
-               all_extensions="$all_extensions\\x00\\x15\\x00\\x01\\x00"
-               len_extension+=5
-               len_extension_hex=$(printf "%02x\n" $len_extension)
           fi
           len2twobytes "$len_extension_hex"
           all_extensions="
           ,$LEN_STR  # first the len of all extensions.
           ,$all_extensions"
+
      fi
 
      if [[ 0x$tls_low_byte -gt 0x03 ]]; then
@@ -14479,7 +14472,7 @@ run_tls_truncation() {
 run_grease() {
      local -i success
      local bug_found=false
-     local normal_hello_ok=false
+     local normal_hello_ok=false clienthello_size_bug=false
      local cipher_list proto selected_cipher selected_cipher_hex="" extn rnd_bytes
      local alpn_proto alpn alpn_list_len_hex extn_len_hex
      local selected_alpn_protocol grease_selected_alpn_protocol
@@ -14685,6 +14678,7 @@ run_grease() {
                prln_svrty_medium " Server fails if ClientHello is between 256 and 511 bytes in length."
                fileout "$jsonID" "CRITICAL" "Server fails if ClientHello is between 256 and 511 bytes in length."
                bug_found=true
+               clienthello_size_bug=true
           fi
      fi
 
@@ -14692,21 +14686,51 @@ run_grease() {
      # A few servers also fail if the length is 526, 782, 1038, 1294, ... bytes.
      # So, send a number of ClientHello messages of extactly these lengths to see whether
      # the connection fails.
-     if "$normal_hello_ok" && [[ "$proto" != "00" ]]; then
-          if [[ -z "$SNI" ]]; then
-               base_len=426
+     if "$normal_hello_ok" && [[ "$proto" != "00" ]] && [[ ${#SNI} -le 92 ]]; then
+          if [[ "$proto" == "03" ]]; then
+               if [[ -z "$SNI" ]]; then
+                    base_len=426
+               else
+                    base_len=423+${#SNI}
+               fi
           else
-               base_len=423+${#SNI}
+               if [[ -z "$SNI" ]]; then
+                    base_len=294
+               else
+                    base_len=291+${#SNI}
+               fi
           fi
-          for clienthello_len in 522 526 778 782 1034 1290 1546 1802 2058; do
-               extn_len=$((clienthello_len-base_len))
+          for clienthello_len in 266 522 526 778 782 1034 1290 1546 1802 2058; do
+               if [[ $clienthello_len -eq 266 ]]; then
+                    # If the server cannot handle ClientHello message lengths between
+                    # 256 and 511, there is no need to test a ClientHello message of
+                    # length 266.
+                    "$clienthello_size_bug" && continue
+                    # In order to create a message of length 266, need to send a message
+                    # with fewer cipher suites, so the "true" base length of the messsage
+                    # will be shorter.
+                    extn_len=$((clienthello_len+250-base_len))
+               else
+                    extn_len=$((clienthello_len-base_len))
+               fi
                extn=""
                for (( i=0; i < extn_len; i++ )); do
                     extn+=",00"
                done
                extn_len_hex=$(printf "%04x" $extn_len)
                debugme echo -e "\nSending ClientHello with length $clienthello_len bytes"
-               tls_sockets "$proto" "$cipher_list" "" "00,15,${extn_len_hex:0:2},${extn_len_hex:2:2}${extn}"
+               if [[ $clienthello_len -eq 266 ]]; then
+                    # Some extensions are only included if the ClientHello includes a TLS_ECDHE cipher suite.
+                    # So, add one (either c0,01 or c0,02 in order to ensure that the message length will
+                    # be correct.
+                    if [[ "$selected_cipher_hex" == "C0,01" ]]; then
+                         tls_sockets "$proto" "$selected_cipher_hex, c0,02, 00,ff" "" "00,15,${extn_len_hex:0:2},${extn_len_hex:2:2}${extn}"
+                    else
+                         tls_sockets "$proto" "$selected_cipher_hex, c0,01, 00,ff" "" "00,15,${extn_len_hex:0:2},${extn_len_hex:2:2}${extn}"
+                    fi
+               else
+                    tls_sockets "$proto" "$cipher_list" "" "00,15,${extn_len_hex:0:2},${extn_len_hex:2:2}${extn}"
+               fi
                success=$?
                if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                     prln_svrty_medium " Server fails if ClientHello is $clienthello_len bytes in length."
