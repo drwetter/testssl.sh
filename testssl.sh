@@ -14472,12 +14472,12 @@ run_tls_truncation() {
 run_grease() {
      local -i success
      local bug_found=false
-     local normal_hello_ok=false
+     local normal_hello_ok=false clienthello_size_bug=false
      local cipher_list proto selected_cipher selected_cipher_hex="" extn rnd_bytes
      local alpn_proto alpn alpn_list_len_hex extn_len_hex
      local selected_alpn_protocol grease_selected_alpn_protocol
      local ciph list temp curve_found
-     local -i i j rnd alpn_list_len extn_len debug_level=""
+     local -i i j rnd alpn_list_len extn_len base_len clienthello_len debug_level=""
      local -i ret=0
      # Note: The following values were taken from https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
      # These arrays may need to be updated if the values change in the final version of this document.
@@ -14678,7 +14678,66 @@ run_grease() {
                prln_svrty_medium " Server fails if ClientHello is between 256 and 511 bytes in length."
                fileout "$jsonID" "CRITICAL" "Server fails if ClientHello is between 256 and 511 bytes in length."
                bug_found=true
+               clienthello_size_bug=true
           fi
+     fi
+
+     # Some servers fail if the length of the ClientHello is 522, 778, 1034, 1290, ... bytes.
+     # A few servers also fail if the length is 526, 782, 1038, 1294, ... bytes.
+     # So, send a number of ClientHello messages of extactly these lengths to see whether
+     # the connection fails.
+     if "$normal_hello_ok" && [[ "$proto" != "00" ]] && [[ ${#SNI} -le 92 ]]; then
+          if [[ "$proto" == "03" ]]; then
+               if [[ -z "$SNI" ]]; then
+                    base_len=426
+               else
+                    base_len=423+${#SNI}
+               fi
+          else
+               if [[ -z "$SNI" ]]; then
+                    base_len=294
+               else
+                    base_len=291+${#SNI}
+               fi
+          fi
+          for clienthello_len in 266 522 526 778 782 1034 1290 1546 1802 2058; do
+               if [[ $clienthello_len -eq 266 ]]; then
+                    # If the server cannot handle ClientHello message lengths between
+                    # 256 and 511, there is no need to test a ClientHello message of
+                    # length 266.
+                    "$clienthello_size_bug" && continue
+                    # In order to create a message of length 266, need to send a message
+                    # with fewer cipher suites, so the "true" base length of the messsage
+                    # will be shorter.
+                    extn_len=$((clienthello_len+250-base_len))
+               else
+                    extn_len=$((clienthello_len-base_len))
+               fi
+               extn=""
+               for (( i=0; i < extn_len; i++ )); do
+                    extn+=",00"
+               done
+               extn_len_hex=$(printf "%04x" $extn_len)
+               debugme echo -e "\nSending ClientHello with length $clienthello_len bytes"
+               if [[ $clienthello_len -eq 266 ]]; then
+                    # Some extensions are only included if the ClientHello includes a TLS_ECDHE cipher suite.
+                    # So, add one (either c0,01 or c0,02 in order to ensure that the message length will
+                    # be correct.
+                    if [[ "$selected_cipher_hex" == "C0,01" ]]; then
+                         tls_sockets "$proto" "$selected_cipher_hex, c0,02, 00,ff" "" "00,15,${extn_len_hex:0:2},${extn_len_hex:2:2}${extn}"
+                    else
+                         tls_sockets "$proto" "$selected_cipher_hex, c0,01, 00,ff" "" "00,15,${extn_len_hex:0:2},${extn_len_hex:2:2}${extn}"
+                    fi
+               else
+                    tls_sockets "$proto" "$cipher_list" "" "00,15,${extn_len_hex:0:2},${extn_len_hex:2:2}${extn}"
+               fi
+               success=$?
+               if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
+                    prln_svrty_medium " Server fails if ClientHello is $clienthello_len bytes in length."
+                    fileout "$jsonID" "CRITICAL" "Server fails if ClientHello is $clienthello_len bytes in length."
+                    bug_found=true
+               fi
+          done
      fi
 
      # Check that server ignores unrecognized cipher suite values
