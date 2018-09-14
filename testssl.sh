@@ -17172,6 +17172,9 @@ parse_cmd_line() {
                          DNS_VIA_PROXY=true
                          unset CMDLINE_IP
                     fi
+                    # normalize any IPv6 address
+                    CMDLINE_IP="${CMDLINE_IP//[/}"
+                    CMDLINE_IP="${CMDLINE_IP//]/}"
                     ;;
                -n|--nodns|-n=*|--nodns=*)
                     NODNS="$(parse_opt_equal_sign "$1" "$2")"
