@@ -11846,11 +11846,12 @@ socksend_tls_clienthello() {
           # then add a padding extension (see RFC 7685)
           len_all=$((0x$len_ciph_suites + 0x2b + 0x$len_extension_hex + 0x2))
           "$offer_compression" && len_all+=2
+          [[ 0x$tls_low_byte -gt 0x03 ]] && len_all+=32 # TLSv1.3 ClientHello includes a 32-byte session id
           if [[ $len_all -ge 256 ]] && [[ $len_all -le 511 ]] && [[ ! "$extra_extensions_list" =~ " 0015 " ]]; then
-               if [[ $len_all -gt 508 ]]; then
+               if [[ $len_all -ge 508 ]]; then
                     len_padding_extension=1 # Final extension cannot be empty: see PR #792
                else
-                    len_padding_extension=$((508 - 0x$len_ciph_suites - 0x2b - 0x$len_extension_hex - 0x2))
+                    len_padding_extension=$((508 - len_all))
                fi
                len_padding_extension_hex=$(printf "%02x\n" $len_padding_extension)
                len2twobytes "$len_padding_extension_hex"
@@ -11872,7 +11873,6 @@ socksend_tls_clienthello() {
           all_extensions="
           ,$LEN_STR  # first the len of all extensions.
           ,$all_extensions"
-
      fi
 
      if [[ 0x$tls_low_byte -gt 0x03 ]]; then
