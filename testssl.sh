@@ -8267,6 +8267,9 @@ run_pfs() {
      local curves_hex=("00,01" "00,02" "00,03" "00,04" "00,05" "00,06" "00,07" "00,08" "00,09" "00,0a" "00,0b" "00,0c" "00,0d" "00,0e" "00,0f" "00,10" "00,11" "00,12" "00,13" "00,14" "00,15" "00,16" "00,17" "00,18" "00,19" "00,1a" "00,1b" "00,1c" "00,1d" "00,1e")
      local -a curves_ossl=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
      local -a curves_ossl_output=("K-163" "sect163r1" "B-163" "sect193r1" "sect193r2" "K-233" "B-233" "sect239k1" "K-283" "B-283" "K-409" "B-409" "K-571" "B-571" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "P-192" "secp224k1" "P-224" "secp256k1" "P-256" "P-384" "P-521" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
+     # Many curves have been deprecated, and RFC 8446, Appendix B.3.1.4, states
+     # that these curves MUST NOT be offered in a TLS 1.3 ClientHello.
+     local -a curves_deprecated=("true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "false" "false" "false" "true" "true" "true" "false" "false")
      local -a ffdhe_groups_hex=("01,00" "01,01" "01,02" "01,03" "01,04")
      local -a ffdhe_groups_output=("ffdhe2048" "ffdhe3072" "ffdhe4096" "ffdhe6144" "ffdhe8192")
      local -a supported_curve
@@ -8540,7 +8543,9 @@ run_pfs() {
                     while true; do
                          curves_to_test=""
                          for (( i=low; i < high; i++ )); do
-                              "${ossl_supported[i]}" && ! "${supported_curve[i]}" && curves_to_test+=":${curves_ossl[i]}"
+                              if ! "$HAS_TLS13" || ! "${curves_deprecated[i]}" || [[ "$proto" == "-no_tls1_3" ]]; then
+                                   "${ossl_supported[i]}" && ! "${supported_curve[i]}" && curves_to_test+=":${curves_ossl[i]}"
+                              fi
                          done
                          [[ -z "$curves_to_test" ]] && break
                          $OPENSSL s_client $(s_client_options "$proto -cipher "\'${ecdhe_cipher_list:1}\'" -ciphersuites "\'${tls13_cipher_list:1}\'" -curves "${curves_to_test:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") &>$TMPFILE </dev/null
@@ -8571,7 +8576,9 @@ run_pfs() {
                while true; do
                     curves_to_test=""
                     for (( i=0; i < nr_curves; i++ )); do
-                         ! "${supported_curve[i]}" && curves_to_test+=", ${curves_hex[i]}"
+                         if ! "${curves_deprecated[i]}" || [[ "$proto" == "03" ]]; then
+                              ! "${supported_curve[i]}" && curves_to_test+=", ${curves_hex[i]}"
+                         fi
                     done
                     [[ -z "$curves_to_test" ]] && break
                     len1=$(printf "%02x" "$((2*${#curves_to_test}/7))")
