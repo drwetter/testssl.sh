@@ -701,7 +701,7 @@ fileout_json_finding() {
           echo -e "\n          }" >> "$JSONFILE"
     fi
     if "$do_pretty_json"; then
-        if [[ "$1" == "service" ]]; then
+        if [[ "$1" == service ]]; then
             if [[ $SERVER_COUNTER -gt 1 ]]; then
                 echo "          ," >> "$JSONFILE"
             fi
@@ -804,6 +804,21 @@ fileout_insert_warning() {
      fi
 }
 
+fileout_csv_finding() {
+     tm_out "\"$1\"," >> "$CSVFILE"
+     tm_out "\"$2\"," >> "$CSVFILE"
+     tm_out "\"$3\"," >> "$CSVFILE"
+     tm_out "\"$4\"," >> "$CSVFILE"
+     tm_out "\"$5\"," >> "$CSVFILE"
+     tm_out "\"$6\"," >> "$CSVFILE"
+     if "$GIVE_HINTS"; then
+          tm_out "\"$7\"," >> "$CSVFILE"
+          tm_out "\"$8\"\n" >> "$CSVFILE"
+     else
+          tm_out "\"$7\"\n" >> "$CSVFILE"
+     fi
+}
+
 
 # ID, SEVERITY, FINDING, CVE, CWE, HINT
 fileout() {
@@ -812,11 +827,11 @@ fileout() {
      local cwe="$5"
      local hint="$6"
 
-     if ( "$do_pretty_json" && [[ "$1" == "service" ]] ) || show_finding "$severity"; then
-         local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")
-         [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && (fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint")
+     if ( "$do_pretty_json" && [[ "$1" == service ]] ) || show_finding "$severity"; then
+         local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")           # additional quotes will mess up screen output
+         [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
          "$do_csv" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && \
-              echo -e \""$1\"",\"$NODE/$NODEIP\",\"$PORT"\",\""$severity"\",\""$finding"\",\""$cve"\",\""$cwe"\",\""$hint"\"" >> "$CSVFILE"
+               fileout_csv_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
      "$FIRST_FINDING" && FIRST_FINDING=false
      fi
 }
@@ -896,7 +911,11 @@ csv_header() {
           CSVHEADER=false
      else
           [[ -e "$CSVFILE" ]] && fatal "\"$CSVFILE\" exists. Either use \"--append\" or (re)move it" 1
-          echo "\"id\",\"fqdn/ip\",\"port\",\"severity\",\"finding\",\"cve\",\"cwe\",\"hint\"" > "$CSVFILE"
+          if "$GIVE_HINTS"; then
+               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" "hint" > "$CSVFILE"
+          else
+               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" > "$CSVFILE"
+          fi
      fi
      return 0
 }
