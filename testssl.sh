@@ -14572,11 +14572,11 @@ run_grease() {
      success=$?
      if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
           prln_svrty_medium " Server claims to support non-existent cipher suite."
-          fileout "$jsonID" "CRITICAL" "Server claims to support non-existent cipher suite."
+          fileout "$jsonID" "MEDIUM" "Server claims to support non-existent cipher suite."
           bug_found=true
      elif grep -q "The ServerHello specifies a cipher suite that wasn't included in the ClientHello" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ; then
           prln_svrty_medium " Server responded with a ServerHello rather than an alert even though it doesn't support any of the client-offered cipher suites."
-          fileout "$jsonID" "CRITICAL" "Server responded with a ServerHello rather than an alert even though it doesn't support any of the client-offered cipher suites."
+          fileout "$jsonID" "MEDIUM" "Server responded with a ServerHello rather than an alert even though it doesn't support any of the client-offered cipher suites."
           bug_found=true
      else
            # Send a list of non-existent ciphers such that for each cipher that
@@ -14587,11 +14587,11 @@ run_grease() {
            success=$?
            if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
                 prln_svrty_medium " Server claims to support non-existent cipher suite."
-                fileout "$jsonID" "CRITICAL" "Server claims to support non-existent cipher suite."
+                fileout "$jsonID" "MEDIUM" "Server claims to support non-existent cipher suite."
                 bug_found=true
            elif grep -q " The ServerHello specifies a cipher suite that wasn't included in the ClientHello" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ; then
                prln_svrty_medium " Server only compares against second byte in each cipher suite in ClientHello."
-               fileout "$jsonID" "CRITICAL" "Server only compares against second byte in each cipher suite in ClientHello."
+               fileout "$jsonID" "MEDIUM" "Server only compares against second byte in each cipher suite in ClientHello."
                bug_found=true
           fi
      fi
@@ -14639,7 +14639,7 @@ run_grease() {
           if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                prln_svrty_medium " Server fails if ClientHello contains an unrecognized extension."
                outln "    extension used in failed test: $extn"
-               fileout "$jsonID" "CRITICAL" "Server fails if ClientHello contains an unrecognized extension: $extn"
+               fileout "$jsonID" "MEDIUM" "Server fails if ClientHello contains an unrecognized extension: $extn"
                bug_found=true
           else
                # Check for inability to handle empty last extension (see PR #792 and
@@ -14664,7 +14664,7 @@ run_grease() {
                success=$?
                if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                     prln_svrty_medium " Server fails if last extension in ClientHello is empty."
-                    fileout "$jsonID" "CRITICAL" "Server fails if last extension in ClientHello is empty."
+                    fileout "$jsonID" "MEDIUM" "Server fails if last extension in ClientHello is empty."
                     bug_found=true
                fi
           fi
@@ -14679,7 +14679,7 @@ run_grease() {
           success=$?
           if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                prln_svrty_medium " Server fails if ClientHello includes more than 128 cipher suites."
-               fileout "$jsonID" "CRITICAL" "Server fails if ClientHello includes more than 128 cipher suites."
+               fileout "$jsonID" "MEDIUM" "Server fails if ClientHello includes more than 128 cipher suites."
                SERVER_SIZE_LIMIT_BUG=true
                bug_found=true
           fi
@@ -14702,7 +14702,7 @@ run_grease() {
           success=$?
           if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                prln_svrty_medium " Server fails if ClientHello is between 256 and 511 bytes in length."
-               fileout "$jsonID" "CRITICAL" "Server fails if ClientHello is between 256 and 511 bytes in length."
+               fileout "$jsonID" "MEDIUM" "Server fails if ClientHello is between 256 and 511 bytes in length."
                bug_found=true
                clienthello_size_bug=true
           fi
@@ -14760,7 +14760,7 @@ run_grease() {
                success=$?
                if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                     prln_svrty_medium " Server fails if ClientHello is $clienthello_len bytes in length."
-                    fileout "$jsonID" "CRITICAL" "Server fails if ClientHello is $clienthello_len bytes in length."
+                    fileout "$jsonID" "MEDIUM" "Server fails if ClientHello is $clienthello_len bytes in length."
                     bug_found=true
                fi
           done
@@ -14778,7 +14778,7 @@ run_grease() {
           success=$?
           if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                prln_svrty_medium " Server fails if ClientHello contains unrecognized cipher suite values."
-               fileout "$jsonID" "CRITICAL" "Server fails if ClientHello contains unrecognized cipher suite values."
+               fileout "$jsonID" "MEDIUM" "Server fails if ClientHello contains unrecognized cipher suite values."
                bug_found=true
           fi
      fi
@@ -14824,7 +14824,7 @@ run_grease() {
                success=$?
                if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                     prln_svrty_medium " Server fails if ClientHello contains a supported_groups extension with an unrecognized named group value (${grease_supported_groups[rnd]})."
-                    fileout "$jsonID" "CRITICAL" "Server fails if ClientHello contains a supported_groups extension with an unrecognized named group value (${grease_supported_groups[rnd]})."
+                    fileout "$jsonID" "MEDIUM" "Server fails if ClientHello contains a supported_groups extension with an unrecognized named group value (${grease_supported_groups[rnd]})."
                     bug_found=true
                fi
           fi
@@ -14845,7 +14845,7 @@ run_grease() {
           success=$?
           if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                prln_svrty_medium " Server fails if ClientHello contains an application_layer_protocol_negotiation extension."
-               fileout "$jsonID" "CRITICAL" "Server fails if ClientHello contains an application_layer_protocol_negotiation extension."
+               fileout "$jsonID" "MEDIUM" "Server fails if ClientHello contains an application_layer_protocol_negotiation extension."
                bug_found=true
           else
                selected_alpn_protocol="$(grep "ALPN protocol:" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/ALPN protocol:  //')"
@@ -14862,17 +14862,17 @@ run_grease() {
                success=$?
                if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                     prln_svrty_medium " Server fails if ClientHello contains an application_layer_protocol_negotiation extension with an unrecognized ALPN value."
-                    fileout "$jsonID" "CRITICAL" "erver fails if ClientHello contains an application_layer_protocol_negotiation extension with an unrecognized ALPN value."
+                    fileout "$jsonID" "MEDIUM" "erver fails if ClientHello contains an application_layer_protocol_negotiation extension with an unrecognized ALPN value."
                     bug_found=true
                else
                     grease_selected_alpn_protocol="$(grep "ALPN protocol:" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/ALPN protocol:  //')"
                     if [[ -z "$grease_selected_alpn_protocol" ]] && [[ -n "$selected_alpn_protocol" ]]; then
                          prln_svrty_medium " Server did not ignore unrecognized ALPN value in the application_layer_protocol_negotiation extension."
-                         fileout "$jsonID" "CRITICAL" "Server did not ignore unrecognized ALPN value in the application_layer_protocol_negotiation extension."
+                         fileout "$jsonID" "MEDIUM" "Server did not ignore unrecognized ALPN value in the application_layer_protocol_negotiation extension."
                          bug_found=true
                     elif [[ "$grease_selected_alpn_protocol" =~ ignore/ ]]; then
                          prln_svrty_medium " Server selected \"ignore/\" ALPN value in the application_layer_protocol_negotiation extension."
-                         fileout "$jsonID" "CRITICAL" "Server selected \"ignore/\" ALPN value in the application_layer_protocol_negotiation extension."
+                         fileout "$jsonID" "MEDIUM" "Server selected \"ignore/\" ALPN value in the application_layer_protocol_negotiation extension."
                          bug_found=true
                     fi
                fi
