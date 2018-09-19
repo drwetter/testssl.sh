@@ -11505,6 +11505,7 @@ generate_key_share_extension() {
      local -i i len supported_groups_len group
      local extn_len list_len
      local key_share key_shares=""
+     local -i nr_key_shares=0
 
      supported_groups="${1//\\x/}"
      [[ "${supported_groups:0:4}" != "000a" ]] && return 1
@@ -11548,6 +11549,9 @@ generate_key_share_extension() {
           key_share="${TLS13_PUBLIC_KEY_SHARES[group]}"
           if [[ ${#key_share} -gt 4 ]]; then
                key_shares+=",$key_share"
+               nr_key_shares+=1
+               # Don't include more than two keys, so that the extension isn't too large.
+               [[ $nr_key_shares -ge 2 ]] && break
           fi
      done
      [[ -z "$key_shares" ]] && tm_out "" && return 0
