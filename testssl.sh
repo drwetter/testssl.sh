@@ -896,7 +896,7 @@ fileout() {
          local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")           # additional quotes will mess up screen output
          [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
          "$do_csv" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && \
-               fileout_csv_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
+               fileout_csv_finding "$1" "$NODE/$NODEIP", "$PORT", "$severity" "$finding" "$cve" "$cwe" "$hint"
      "$FIRST_FINDING" && FIRST_FINDING=false
      fi
 }
