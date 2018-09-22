@@ -1225,13 +1225,36 @@ strip_trailing_space() {
 
 # retrieve cipher from ServerHello (via openssl)
 get_cipher() {
-     awk '/Cipher *:/ { a=$3 } END { print a }' "$1"
-     #awk '/\<Cipher\>/ && !/Cipher is/  && !/^New/ { print $3 }' "$1"
+     local cipher=""
+     local server_hello="$(cat "$1")"
+
+     if [[ "$server_hello" =~ Cipher\ *:\ ([A-Z0-9]+-[A-Z0-9\-]+|TLS_[A-Z0-9_]+) ]]; then
+          cipher="${BASH_REMATCH##* }"
+     elif [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Z0-9\-]+|TLS_[A-Z0-9_]+) ]]; then
+          cipher="${BASH_REMATCH##* }"
+     fi
+     tm_out "$cipher"
 }
 
 # retrieve protocol from ServerHello (via openssl)
 get_protocol() {
-     awk '/Protocol *:/ { a=$3 } END { print a }' "$1"
+     local protocol=""
+     local server_hello="$(cat "$1")"
+
+     if [[ "$server_hello" =~ Protocol\ *:\ (SSLv[23]|TLSv1(\.[0-3])?) ]]; then
+          protocol="${BASH_REMATCH##* }"
+     elif [[ "$server_hello" =~ (New|Reused)", TLSv1.3, Cipher is "TLS_[A-Z0-9_]+ ]]; then
+          # Note: When OpenSSL prints "New, <protocol>, Cipher is <cipher>", <cipher> is the
+          # negotiated cipher, but <protocol> is not the negotiated protocol. Instead, it is
+          # the SSL/TLS protocol that first defined <cipher>. Since the ciphers that were
+          # first defined for TLSv1.3 may only be used with TLSv1.3, this line may be used
+          # to determine whether TLSv1.3 was negotiated, but if another protocol is specified
+          # on this line, then this line does not indicate the actual protocol negotiated. Also,
+          # only TLSv1.3 cipher suites have names that begin with TLS_, which provides additional
+          # assurance that the above match will only succeed if TLSv1.3 was negotiated.
+          protocol="TLSv1.3"
+     fi
+     tm_out "$protocol"
 }
 
 is_number() {
@@ -6518,7 +6541,7 @@ sclient_connect_successful() {
      if [[ "$server_hello" =~ $re ]]; then
           [[ -n "${BASH_REMATCH[1]}" ]] && return 0
      fi
-     # further check like ~  fgrep 'Cipher is (NONE)' "$2" &> /dev/null && return 1' not done.
+     [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Z0-9\-]+|TLS_[A-Z0-9_]+) ]] && return 0
      # what's left now is: master key empty and Session-ID not empty
      # ==> probably client-based auth with x509 certificate. We handle that at other places
      #
