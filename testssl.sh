@@ -11881,7 +11881,7 @@ socksend_tls_clienthello() {
 
      if [[ 0x$tls_low_byte -gt 0x03 ]]; then
           # TLSv1.3 calls for sending a random 32-byte session id in middlebox compatibility mode.
-          session_id="20,44,b8,92,56,af,74,52,9e,d8,cf,52,14,c8,af,d8,34,0a,e7,7f,eb,86,01,84,50,5d,e4,a1,6a,09,3b,bf,6e"
+          session_id="20,44,b8,92,56,af,74,52,9e,d8,cf,52,14,c8,af,d8,34,0b,e7,7f,eb,86,01,84,50,5d,e4,a1,6a,09,3b,bf,6e"
           len_session_id=32
      else
           session_id="00"
@@ -11934,7 +11934,7 @@ socksend_tls_clienthello() {
      ,54, 51, 1e, 7a          # Unix time since  see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
      ,de, ad, be, ef          # Random 28 bytes
      ,31, 33, 07, 00, 00, 00, 00, 00
-     ,cf, bd, 39, 04, cc, 16, 0a, 85
+     ,cf, bd, 39, 04, cc, 16, 0b, 85
      ,03, 90, 9f, 77, 04, 33, d4, de
      ,$session_id
      ,$len_ciph_suites_word   # Cipher suites length
@@ -12530,7 +12530,7 @@ run_ccs_injection(){
      # Random (32 byte)
      x53, x43, x5b, x90, x9d, x9b, x72, x0b,
      xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
-     xcf, xbd, x39, x04, xcc, x16, x0a, x85,
+     xcf, xbd, x39, x04, xcc, x16, x0b, x85,
      x03, x90, x9f, x77, x04, x33, xd4, xde,
      x00,                # session ID length
      x00, x68,           # cipher suites length
@@ -12771,7 +12771,7 @@ run_ticketbleed() {
      # Random (32 byte) Unix time etc, see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
      xee, xee, x5b, x90, x9d, x9b, x72, x0b,
      xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
-     xcf, xbd, x39, x04, xcc, x16, x0a, x85,
+     xcf, xbd, x39, x04, xcc, x16, x0b, x85,
      x03, x90, x9f, x77, x04, x33, xff, xff,
      $xlen_sid,          # Session ID length
      $sid
