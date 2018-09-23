@@ -114,6 +114,7 @@ fi
 trap "cleanup" QUIT EXIT
 trap "child_error" USR1
 
+
 ########### Internal definitions
 #
 declare -r VERSION="3.0rc1"
@@ -3112,7 +3113,7 @@ socksend2() {
           data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
      fi
      [[ $DEBUG -ge 4 ]] && echo && echo "\"$data\""
-     printf -- "$data" >&5 2>/dev/null &
+     $PRINTF -- "$data" >&5 2>/dev/null &
      sleep $2
 }
 
@@ -3123,10 +3124,10 @@ socksend() {
      data="$(while read line; do
           printf "${line%%\#*}"
      done <<< "$1" )"
-     data="${data// /}"        # strip ' '
+     data="${data// /}"       # strip ' '
      data="${data//,/\\}"     # s&r , by \
      [[ $DEBUG -ge 4 ]] && echo && echo "\"$data\""
-     printf -- "$data" >&5 2>/dev/null &
+     $PRINTF -- "$data" >&5 2>/dev/null &
      sleep $2
 }
 
@@ -4353,7 +4354,7 @@ client_simulation_sockets() {
      data="$NW_STR"
      fd_socket 5 || return 6
      [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
-     printf -- "$data" >&5 2>/dev/null &
+     $PRINTF -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
 
      sockread_serverhello 32768
@@ -9161,7 +9162,7 @@ socksend_sslv2_clienthello() {
      code2network "$1"
      data="$NW_STR"
      [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
-     printf -- "$data" >&5 2>/dev/null &
+     $PRINTF -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
 }
 
@@ -11971,7 +11972,7 @@ socksend_tls_clienthello() {
      code2network "$TLS_CLIENT_HELLO$all_extensions"
      data="$NW_STR"
      [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
-     printf -- "$data" >&5 2>/dev/null &
+     $PRINTF -- "$data" >&5 2>/dev/null &
      sleep $USLEEP_SND
 
      if [[ "$tls_low_byte" -gt 0x03 ]]; then
@@ -15489,6 +15490,22 @@ check_bsd_mount() {
      fi
 }
 
+# This sets the PRINTF command for writing into TCP sockets. It is needed because
+# The shell builtin printf flushes the write buffer at every \n, ("\x0a") which
+# in turn means a new TCP fragment. That causes a slight performance penalty and
+# and some F5s to hiccup, see https://github.com/drwetter/testssl.sh/pull/1113
+#
+choose_printf() {
+     PRINTF="$(type -P printf)"
+     [[ -n "$PRINTF" ]] && return 0
+     if type -t printf >/dev/null; then
+          PRINTF=printf
+          return 0
+     fi
+     fatal "Neither external printf nor shell internal found. " $ERR_CLUELESS
+}
+
+
 help() {
      cat << EOF
 
@@ -15641,6 +15658,7 @@ machine: ${BASH_VERSINFO[5]}
 operating system: $SYSTEM
 os constraint: $SYSTEM2
 shellopts: $SHELLOPTS
+printf: $PRINTF
 
 $($OPENSSL version -a)
 OSSL_VER_MAJOR: $OSSL_VER_MAJOR
@@ -17898,6 +17916,7 @@ lets_roll() {
      check_proxy
      check4openssl_oldfarts
      check_bsd_mount
+     choose_printf
 
      if "$do_display_only"; then
           prettyprint_local "$PATTERN2SHOW"
