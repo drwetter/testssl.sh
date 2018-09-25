@@ -8792,7 +8792,6 @@ run_alpn() {
           # for some reason OpenSSL doesn't list the advertised protocols, so instead try common protocols
           if "$HAS_ALPN"; then
                $OPENSSL s_client $(s_client_options "-connect $NODEIP:$PORT $BUGS $SNI -alpn $proto") </dev/null 2>$ERRFILE >$TMPFILE
-               [[ $? -ne 0 ]] && ret=1
           else
                alpn_extn="$(printf "%02x" ${#proto}),$(string_to_asciihex "$proto")"
                len="$(printf "%04x" $((${#proto}+1)))"
