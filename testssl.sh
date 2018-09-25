@@ -255,6 +255,7 @@ GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can b
 CERTIFICATE_LIST_ORDERING_PROBLEM=false # Set to true if server sends a certificate list that contains a certificate
                                         # that does not certify the one immediately preceding it. (See RFC 8446, Section 4.4.2)
 STAPLED_OCSP_RESPONSE=""
+HAS_DNS_SANS=false                      # Whether the certificate includes a subjectAltName extension with a DNS name or an application-specific identifier type.
 MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
 if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
      MEASURE_TIME=true
@@ -6965,15 +6966,30 @@ wildcard_match()
 #   10, if the server name provided is a wildcard match against the CN AND a name in the SAN
 
 compare_server_name_to_cert() {
-     local servername="$(toupper "$1")"
-     local cert="$2"
-     local cn dns_sans ip_sans san
+     local cert="$1"
+     local servername cn dns_sans ip_sans san dercert tag
+     local srv_id="" xmppaddr=""
+     local -i i len len1
      local -i subret=0             # no error condition, passing results
+
+     HAS_DNS_SANS=false
+     if [[ -n "$XMPP_HOST" ]]; then
+          # RFC 6120, Section 13.7.2.1, states that for XMPP the identity that
+          # should appear in the server's certificate is identity that appears
+          # in the the 'to' address that the client communicates in the initial
+          # stream header.
+          servername="$(toupper "$XMPP_HOST")"
+     else
+          servername="$(toupper "$NODE")"
+     fi
 
      # Check whether any of the DNS names in the certificate match the servername
      dns_sans="$(get_san_dns_from_cert "$cert")"
      while read san; do
-          [[ -n "$san" ]] && [[ $(toupper "$san") == "$servername" ]] && subret=1 && break
+          if [[ -n "$san" ]]; then
+               HAS_DNS_SANS=true
+               [[ $(toupper "$san") == "$servername" ]] && subret=1 && break
+          fi
      done <<< "$dns_sans"
 
      if [[ $subret -eq 0 ]]; then
@@ -6983,6 +6999,109 @@ compare_server_name_to_cert() {
           while read san; do
                [[ -n "$san" ]] && [[ "$san" == "$servername" ]] && subret=1 && break
           done <<< "$ip_sans"
+     fi
+     
+     if [[ $subret -eq 0 ]] && [[ -n "$XMPP_HOST" ]]; then
+          # For XMPP hosts, in addition to checking for a matching DNS name,
+          # should also check for a matching SRV-ID or XmppAddr identifier.
+          dercert="$($OPENSSL x509 -in "$cert" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
+          dercert="${dercert##*0603551D1104}"
+          # Skip over the encoding of the length of the OCTET STRING.
+          if [[ "${dercert:0:1}" == "8" ]]; then
+               i="${dercert:1:1}"
+               i=2*$i+2
+               dercert="${dercert:i}"
+          else
+               dercert="${dercert:2}"
+          fi
+          # Next byte should be a 30 (SEQUENCE).
+          if [[ "${dercert:0:2}" == "30" ]]; then
+               # Get the length of the subjectAltName extension and then skip
+               # over the encoding of the length.
+               if [[ "${dercert:2:1}" == "8" ]]; then
+                    case "${dercert:3:1}" in
+                         1) len=2*0x${dercert:4:2}; dercert="${dercert:6}" ;;
+                         2) len=2*0x${dercert:4:4}; dercert="${dercert:8}" ;;
+                         3) len=2*0x${dercert:4:6}; dercert="${dercert:10}" ;;
+                         *) len=0 ;;
+                    esac
+               else
+                    len=2*0x${dercert:2:2}
+                    dercert="${dercert:4}"
+               fi
+               if [[ $len -ne 0 ]] && [[ $len -lt ${#dercert} ]]; then
+                    # loop through all the names and extract the SRV-ID and XmppAddr identifiers
+                    for (( i=0; i < len; i=i+len_name )); do
+                         tag="${dercert:i:2}"
+                         i+=2
+                         if [[ "${dercert:i:1}" == "8" ]]; then
+                              i+=1
+                              case "${dercert:i:1}" in
+                                   1) i+=1; len_name=2*0x${dercert:i:2}; i+=2 ;;
+                                   2) i+=1; len_name=2*0x${dercert:i:4}; i+=4 ;;
+                                   3) i+=1; len_name=2*0x${dercert:i:6}; i+=4 ;;
+                                   *) len=0 ;;
+                              esac
+                         else
+                              len_name=2*0x${dercert:i:2}
+                              i+=2
+                         fi
+                         if [[ "$tag" == "A0" ]]; then
+                              # This is an otherName.
+                              if [[ $len_name -gt 18 ]] && ( [[ "${dercert:i:20}" == "06082B06010505070805" ]] || \
+                                   [[ "${dercert:i:20}" == "06082B06010505070807" ]] ); then
+                                   # According to the OID, this is either an SRV-ID or XmppAddr.
+                                   j=$i+20       
+                                   if [[ "${dercert:j:2}" == "A0" ]]; then
+                                        j+=2
+                                        if [[ "${dercert:j:1}" == "8" ]]; then
+                                             j+=1
+                                             j+=2*0x${dercert:j:1}+1
+                                        else
+                                             j+=2
+                                        fi
+                                        if ( [[ "${dercert:i:20}" == "06082B06010505070805" ]] && [[ "${dercert:j:2}" == "0C" ]] ) || \
+                                           ( [[ "${dercert:i:20}" == "06082B06010505070807" ]] && [[ "${dercert:j:2}" == "16" ]] ); then
+                                             # XmppAddr should be encoded as UTF8STRING (0C) and
+                                             # SRV-ID should be encoded IA5STRING (16).
+                                             j+=2
+                                             if [[ "${dercert:j:1}" == "8" ]]; then
+                                                  j+=1
+                                                  case "${dercert:j:1}" in
+                                                       1) j+=1; len1=2*0x${dercert:j:2}; j+=2 ;;
+                                                       2) j+=1; len1=2*0x${dercert:j:4}; j+=4 ;;
+                                                       3) j+=1; len1=2*0x${dercert:j:6}; j+=6 ;;
+                                                       4) len1=0 ;;
+                                                  esac
+                                             else
+                                                  len1=2*0x${dercert:j:2}
+                                                  j+=2
+                                             fi
+                                             if [[ $len1 -ne 0 ]]; then
+                                                  san="$(asciihex_to_binary_file "${dercert:j:len1}" "/dev/stdout")"
+                                                  if [[ "${dercert:i:20}" == "06082B06010505070805" ]]; then
+                                                       xmppaddr+="$san "
+                                                  else
+                                                       srv_id+="$san "
+                                                  fi
+                                             fi
+                                        fi
+                                   fi
+                              fi
+                         fi
+                    done
+               fi
+          fi
+          [[ -n "$srv_id" ]] && HAS_DNS_SANS=true
+          [[ -n "$xmppaddr" ]] && HAS_DNS_SANS=true
+          while read -d " " san; do
+               [[ -n "$san" ]] && [[ $(toupper "$san") == "_XMPP-SERVER.$servername" ]] && subret=1 && break
+          done <<< "$srv_id"
+          if [[ $subret -eq 0 ]]; then
+               while read -d " " san; do
+                    [[ -n "$san" ]] && [[ $(toupper "$san") == "$servername" ]] && subret=1 && break
+               done <<< "$xmppaddr"
+          fi
      fi
 
      # Check whether any of the DNS names in the certificate are wildcard names
@@ -7572,7 +7691,7 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " Trust (hostname)             "
-     compare_server_name_to_cert "$NODE" "$HOSTCERT"
+     compare_server_name_to_cert "$HOSTCERT"
      trust_sni=$?
 
      # Find out if the subjectAltName extension is present and contains
@@ -7581,8 +7700,7 @@ certificate_info() {
      #      identifier of CN-ID if the presented identifiers include a DNS-ID,
      #      SRV-ID, URI-ID, or any application-specific identifier types
      #      supported by the client.
-     grep -A2 "Subject Alternative Name" <<< "$cert_txt" | grep -q "DNS:" && \
-          has_dns_sans=true || has_dns_sans=false
+     has_dns_sans=$HAS_DNS_SANS
 
      case $trust_sni in
           0) trustfinding="certificate does not match supplied URI" ;;
@@ -7631,11 +7749,9 @@ certificate_info() {
      fi
 
      if [[ -n "$cn_nosni" ]]; then
-          compare_server_name_to_cert "$NODE" "$HOSTCERT.nosni"
+          compare_server_name_to_cert "$HOSTCERT.nosni"
           trust_nosni=$?
-          $OPENSSL x509 -in "$HOSTCERT.nosni" -noout -text 2>>$ERRFILE | \
-               grep -A2 "Subject Alternative Name" | grep -q "DNS:" && \
-               has_dns_sans_nosni=true || has_dns_sans_nosni=false
+          has_dns_sans_nosni=$HAS_DNS_SANS
      fi
 
      # See issue #733.
@@ -8035,7 +8151,7 @@ run_server_defaults() {
                          # It should be displayed if it is either a match for the
                          # $NODE being tested or if it has the same subject
                          # (CN and SAN) as other certificates for this host.
-                         compare_server_name_to_cert "$NODE" "$HOSTCERT"
+                         compare_server_name_to_cert "$HOSTCERT"
                          [[ $? -ne 0 ]] && success[n]=0 || success[n]=1
 
                          if [[ ${success[n]} -ne 0 ]]; then
