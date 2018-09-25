@@ -15502,6 +15502,10 @@ check_bsd_mount() {
 # and some F5s to hiccup, see https://github.com/drwetter/testssl.sh/pull/1113
 #
 choose_printf() {
+     # temporary measure
+     PRINTF=printf
+     return 0
+
      PRINTF="$(type -P printf)"
      [[ -n "$PRINTF" ]] && return 0
      if type -t printf >/dev/null; then
