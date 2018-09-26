@@ -15499,15 +15499,14 @@ check_bsd_mount() {
 # This sets the PRINTF command for writing into TCP sockets. It is needed because
 # The shell builtin printf flushes the write buffer at every \n, ("\x0a") which
 # in turn means a new TCP fragment. That causes a slight performance penalty and
-# and some F5s to hiccup, see https://github.com/drwetter/testssl.sh/pull/1113
+# and some F5s to hiccup, see #1113. Unfortunately this can be only used under 
+# Linux, see #1134. A better solution needs to follow
 #
 choose_printf() {
-     # temporary measure
-     PRINTF=printf
-     return 0
-
      PRINTF="$(type -P printf)"
-     [[ -n "$PRINTF" ]] && return 0
+     if [[ -n "$PRINTF" ]] && [[ "$SYSTEM" == Linux ]]; then
+           return 0
+     fi
      if type -t printf >/dev/null; then
           PRINTF=printf
           return 0
