@@ -9158,7 +9158,7 @@ code2network() {
 len2twobytes() {
      local len_arg1=${#1}
      [[ $len_arg1 -le 2 ]] && LEN_STR=$(printf "00, %02s \n" "$1")
-     [[ $len_arg1 -eq 3 ]] && LEN_STR=$(printf "%02s, %02s \n" "${1:0:1}" "${1:1:2}")
+     [[ $len_arg1 -eq 3 ]] && LEN_STR=$(printf "0%s, %02s \n" "${1:0:1}" "${1:1:2}")
      [[ $len_arg1 -eq 4 ]] && LEN_STR=$(printf "%02s, %02s \n" "${1:0:2}" "${1:2:2}")
 }
 
