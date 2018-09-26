@@ -7005,7 +7005,16 @@ compare_server_name_to_cert() {
           # For XMPP hosts, in addition to checking for a matching DNS name,
           # should also check for a matching SRV-ID or XmppAddr identifier.
           dercert="$($OPENSSL x509 -in "$cert" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
-          dercert="${dercert##*0603551D1104}"
+          # Look for the beginning of the subjectAltName extension. It
+          # will begin with the OID (2.5.29.17 = 0603551D11). After the OID
+          # there may be an indication that the extension is critical (0101FF).
+          # Finally will be the tag indicating that the value of the extension is
+          # encoded as an OCTET STRING (04).
+          if [[ "$dercert" =~ 0603551D110101FF04 ]]; then
+               dercert="${dercert##*0603551D110101FF04}"
+          else
+               dercert="${dercert##*0603551D1104}"
+          fi
           # Skip over the encoding of the length of the OCTET STRING.
           if [[ "${dercert:0:1}" == "8" ]]; then
                i="${dercert:1:1}"
