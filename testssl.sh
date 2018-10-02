@@ -267,6 +267,7 @@ declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Fi
 
 ########### Initialization part, further global vars just being declared here
 #
+PRINTF=""                               # which external printf to use
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
 JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
@@ -1114,7 +1115,6 @@ debugme() {
 }
 
 hex2dec() {
-     #/usr/bin/printf -- "%d" 0x"$1"
      echo $((16#$1))
 }
 
@@ -15440,13 +15440,21 @@ check_bsd_mount() {
 # This sets the PRINTF command for writing into TCP sockets. It is needed because
 # The shell builtin printf flushes the write buffer at every \n, ("\x0a") which
 # in turn means a new TCP fragment. That causes a slight performance penalty and
-# and some F5s to hiccup, see #1113. Unfortunately this can be only used under 
-# Linux, see #1134. A better solution needs to follow
+# and some F5s to hiccup, see #1113. Unfortunately this can be used only with GNU's
+# and OpenBSD's /usr/bin/printf -- FreeBSD + OS X can't do this.
+# A better solution needs to follow.
 #
 choose_printf() {
-     PRINTF="$(type -P printf)"
-     if [[ -n "$PRINTF" ]] && [[ "$SYSTEM" == Linux ]]; then
-           return 0
+     local p ptf
+
+     ptf="$(type -aP printf)"
+     if [[ -n "$ptf" ]]; then
+          for p in $ptf; do
+               if $p "\xc0\x14\xc0\xff\xee" | hexdump -C  | grep -q 'c0 14 c0 ff ee'; then
+                    PRINTF=$p
+                    return 0
+               fi
+          done
      fi
      if type -t printf >/dev/null; then
           PRINTF=printf
@@ -15610,7 +15618,7 @@ os constraint: $SYSTEM2
 shellopts: $SHELLOPTS
 printf: $PRINTF
 
-$($OPENSSL version -a)
+$($OPENSSL version -a 2>/dev/null)
 OSSL_VER_MAJOR: $OSSL_VER_MAJOR
 OSSL_VER_MINOR: $OSSL_VER_MINOR
 OSSL_VER_APPENDIX: $OSSL_VER_APPENDIX
@@ -17860,13 +17868,13 @@ lets_roll() {
      set_color_functions
      maketempf
      find_openssl_binary
+     choose_printf
      prepare_debug  ; stopwatch parse
      prepare_arrays ; stopwatch prepare_arrays
      mybanner
      check_proxy
      check4openssl_oldfarts
      check_bsd_mount
-     choose_printf
 
      if "$do_display_only"; then
           prettyprint_local "$PATTERN2SHOW"
