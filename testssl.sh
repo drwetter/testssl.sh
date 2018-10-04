@@ -16645,7 +16645,7 @@ determine_service() {
                protocol=${1%s}     # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           fi
           case "$protocol" in
-               ftp|smtp|lmtp|pop3|i16683map|xmpp|telnet|ldap|postgres|mysql)
+               ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql)
                     STARTTLS="-starttls $protocol"
                     SNI=""
                     if [[ "$protocol" == xmpp ]]; then
