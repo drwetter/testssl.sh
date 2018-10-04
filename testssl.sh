@@ -18080,7 +18080,7 @@ lets_roll() {
      else                                              # Just 1x ip4v to check, applies also if CMDLINE_IP was supplied
           NODEIP="$IPADDRs"
           lets_roll "${STARTTLS_PROTOCOL}"
-P          RET=$?
+          RET=$?
      fi
 
 exit $RET
