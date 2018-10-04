@@ -5419,20 +5419,28 @@ run_cipherlists() {
      return $ret
 }
 
+# The return value is an indicator of the quality of the DH key length in $1:
+#   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
+#   5 = neither good nor bad, 6 = pr_svrty_good, 7 = pr_svrty_best
 pr_dh_quality() {
      local bits="$1"
      local string="$2"
 
      if [[ "$bits" -le 600 ]]; then
           pr_svrty_critical "$string"
+          return 1
      elif [[ "$bits" -le 800 ]]; then
           pr_svrty_high "$string"
+          return 2
      elif [[ "$bits" -le 1280 ]]; then
           pr_svrty_medium "$string"
+          return 3
      elif [[ "$bits" -ge 2048 ]]; then
           pr_svrty_good "$string"
+          return 6
      else
           out "$string"
+          return 5
      fi
 }
 
@@ -8435,8 +8443,8 @@ run_pfs() {
      local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
      local pfs_ciphers curves_offered="" curves_to_test temp
      local len1 len2 curve_found
-     local key_bitstring dh_p
-     local -i lineno_matched len_dh_p
+     local key_bitstring dh_p quality_str
+     local -i lineno_matched len_dh_p quality
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
@@ -8869,12 +8877,26 @@ run_pfs() {
                fi
                if [[ "$curves_offered" =~ ffdhe ]]; then
                     pr_svrty_good "$curves_offered"
+                    quality=6
                else
                     out "$curves_offered ("
                     pr_dh_quality "$len_dh_p" "$len_dh_p bits"
+                    quality=$?
                     out ")"
                fi
-               fileout "DHE_groups" "INFO" "$curves_offered"
+               case "$quality" in
+                    1) quality_str="CRITICAL" ;;
+                    2) quality_str="HIGH" ;;
+                    3) quality_str="MEDIUM" ;;
+                    4) quality_str="LOW" ;;
+                    5) quality_str="INFO" ;;
+                    6|7) quality_str="OK" ;;
+               esac
+               if [[ "$curves_offered" == "unrecognized group" ]]; then
+                    fileout "DHE_groups" "$quality_str" "$curves_offered ($len_dh_p bits)"
+               else
+                    fileout "DHE_groups" "$quality_str" "$curves_offered"
+               fi
           fi
      fi
      outln
