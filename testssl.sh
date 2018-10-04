@@ -8419,6 +8419,7 @@ run_pfs() {
      local curves_hex=("00,01" "00,02" "00,03" "00,04" "00,05" "00,06" "00,07" "00,08" "00,09" "00,0a" "00,0b" "00,0c" "00,0d" "00,0e" "00,0f" "00,10" "00,11" "00,12" "00,13" "00,14" "00,15" "00,16" "00,17" "00,18" "00,19" "00,1a" "00,1b" "00,1c" "00,1d" "00,1e")
      local -a curves_ossl=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
      local -a curves_ossl_output=("K-163" "sect163r1" "B-163" "sect193r1" "sect193r2" "K-233" "B-233" "sect239k1" "K-283" "B-283" "K-409" "B-409" "K-571" "B-571" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "P-192" "secp224k1" "P-224" "secp256k1" "P-256" "P-384" "P-521" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
+     local -ai curves_bits=(163 162 163 193 193 232 233 238 281 282 407 409 570 570 161 161 161 192 192 225 224 256 256 384 521 256 384 512 253 448)
      # Many curves have been deprecated, and RFC 8446, Appendix B.3.1.4, states
      # that these curves MUST NOT be offered in a TLS 1.3 ClientHello.
      local -a curves_deprecated=("true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "true" "false" "false" "false" "true" "true" "true" "false" "false")
@@ -8753,15 +8754,29 @@ run_pfs() {
           done
      fi
      if "$ecdhe_offered"; then
+          low=1000
           for (( i=0; i < nr_curves; i++ )); do
-               "${supported_curve[i]}" && curves_offered+="${curves_ossl[i]} "
+               if "${supported_curve[i]}"; then
+                    curves_offered+="${curves_ossl[i]} "
+                    [[ ${curves_bits[i]} -lt $low ]] && low=${curves_bits[i]}
+               fi
           done
           if [[ -n "$curves_offered" ]]; then
                "$WIDE" && outln
                pr_bold " Elliptic curves offered:     "
                out_row_aligned_max_width_by_entry "$curves_offered" "                              " $TERM_WIDTH pr_ecdh_curve_quality
                outln
-               fileout "ECDHE_curves" "INFO" "$curves_offered"
+               # severity ratings based on quality specified by
+               # pr_ecdh_quality() for shortest curve offered.
+               if [[ "$low" -le 163 ]]; then
+                    fileout "ECDHE_curves" "MEDIUM" "$curves_offered"
+               elif [[ "$low" -le 193 ]]; then
+                    fileout "ECDHE_curves" "LOW" "$curves_offered"
+               elif [[ "$low" -le 224 ]]; then
+                    fileout "ECDHE_curves" "INFO" "$curves_offered"
+               else
+                    fileout "ECDHE_curves" "OK" "$curves_offered"
+               fi
           fi
      fi
      if "$using_sockets" && ( "$pfs_tls13_offered" || ( "$ffdhe_offered" && "$EXPERIMENTAL" ) ); then
