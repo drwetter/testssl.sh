@@ -336,6 +336,9 @@ HAS_PROXY=false
 HAS_XMPP=false
 HAS_POSTGRES=false
 HAS_MYSQL=false
+HAS_LMTP=false
+HAS_NNTP=false
+HAS_IRC=false
 HAS_CHACHA20=false
 HAS_AES128_GCM=false
 HAS_AES256_GCM=false
@@ -7000,7 +7003,7 @@ compare_server_name_to_cert() {
                [[ -n "$san" ]] && [[ "$san" == "$servername" ]] && subret=1 && break
           done <<< "$ip_sans"
      fi
-     
+
      if [[ $subret -eq 0 ]] && [[ -n "$XMPP_HOST" ]]; then
           # For XMPP hosts, in addition to checking for a matching DNS name,
           # should also check for a matching SRV-ID or XmppAddr identifier.
@@ -7060,7 +7063,7 @@ compare_server_name_to_cert() {
                               if [[ $len_name -gt 18 ]] && ( [[ "${dercert:i:20}" == "06082B06010505070805" ]] || \
                                    [[ "${dercert:i:20}" == "06082B06010505070807" ]] ); then
                                    # According to the OID, this is either an SRV-ID or XmppAddr.
-                                   j=$i+20       
+                                   j=$i+20
                                    if [[ "${dercert:j:2}" == "A0" ]]; then
                                         j+=2
                                         if [[ "${dercert:j:1}" == "8" ]]; then
@@ -9071,7 +9074,7 @@ starttls_full_read(){
      return $ret
 }
 
-starttls_ftp_dialog(){
+starttls_ftp_dialog() {
      debugme echo "=== starting ftp STARTTLS dialog ==="
      local reAUTHTLS='^ AUTH TLS'
      starttls_full_read '^220-' '^220 '                    && debugme echo "received server greeting" &&
@@ -9084,16 +9087,26 @@ starttls_ftp_dialog(){
      return $ret
 }
 
-starttls_smtp_dialog(){
-     debugme echo "=== starting smtp STARTTLS dialog ==="
+# argv1: empty: SMTP, "lmtp" : LMTP
+#
+starttls_smtp_dialog() {
+     local greet_str="EHLO"
+     local proto="smtp"
+
+     if [[ "$1" == lmtp ]]; then
+          proto="lmtp"
+          greet_str="LHLO"
+     fi
+     debugme echo "=== starting $proto STARTTLS dialog ==="
+
      local re250STARTTLS='^250[ -]STARTTLS'
      starttls_full_read '^220-' '^220 '                    && debugme echo "received server greeting" &&
-     starttls_just_send 'EHLO testssl.sh'                  && debugme echo "sent EHLO" &&
+     starttls_just_send "$greet_str testssl.sh"            && debugme echo "sent $greet_str" &&
      starttls_full_read '^250-' '^250 ' "${re250STARTTLS}" && debugme echo "received server capabilities and checked STARTTLS availability" &&
      starttls_just_send 'STARTTLS'                         && debugme echo "initiated STARTTLS" &&
      starttls_full_read '^220-' '^220 '                    && debugme echo "received ack for STARTTLS"
      local ret=$?
-     debugme echo "=== finished smtp STARTTLS dialog with ${ret} ==="
+     debugme echo "=== finished $proto STARTTLS dialog with ${ret} ==="
      return $ret
 }
 
@@ -9216,8 +9229,11 @@ fd_socket() {
                ftp|ftps)   # https://tools.ietf.org/html/rfc4217, https://tools.ietf.org/html/rfc959
                     starttls_ftp_dialog
                     ;;
-               smtp|smtps) # SMTP, see https://tools.ietf.org/html/rfc5321, https://tools.ietf.org/html/rfc3207
+               smtp|smtps) # SMTP, see https://tools.ietf.org/html/rfc{2033,3207,5321}
                     starttls_smtp_dialog
+                    ;;
+               lmtp|lmtps) # LMTP, see https://tools.ietf.org/html/rfc{2033,3207,5321}
+                    starttls_smtp_dialog lmtp
                     ;;
                pop3|pop3s) # POP, see https://tools.ietf.org/html/rfc2595
                     starttls_pop3_dialog
@@ -15488,6 +15504,15 @@ find_openssl_binary() {
      grep -q 'mysql' $s_client_starttls_has && \
           HAS_MYSQL=true
 
+     grep -q 'lmtp' $s_client_starttls_has && \
+          HAS_LMTP=true
+
+     grep -q 'nntp' $s_client_starttls_has && \
+          HAS_NNTP=true
+
+     grep -q 'irc' $s_client_starttls_has && \
+          HAS_IRC=true
+
      $OPENSSL enc -chacha20 -K "12345678901234567890123456789012" -iv "01000000123456789012345678901234" > /dev/null 2> /dev/null <<< "test"
      [[ $? -eq 0 ]] && HAS_CHACHA20=true
 
@@ -15766,6 +15791,9 @@ HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
 HAS_POSTGRES: $HAS_POSTGRES
 HAS_MYSQL: $HAS_MYSQL
+HAS_LMTP: $HAS_LMTP
+HAS_NNTP: $HAS_NNTP
+HAS_IRC: $HAS_IRC
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -16617,7 +16645,7 @@ determine_service() {
                protocol=${1%s}     # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           fi
           case "$protocol" in
-               ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql)
+               ftp|smtp|lmtp|pop3|i16683map|xmpp|telnet|ldap|postgres|mysql)
                     STARTTLS="-starttls $protocol"
                     SNI=""
                     if [[ "$protocol" == xmpp ]]; then
@@ -16651,6 +16679,11 @@ determine_service() {
                          # Check if openssl version supports mysql.
                          if ! "$HAS_MYSQL"; then
                               fatal "Your $OPENSSL does not support the \"-starttls mysql\" option" $ERR_OSSLBIN
+                         fi
+                    elif [[ "$protocol" == lmtp ]]; then
+                         # Check if openssl version supports lmtp.
+                         if ! "$HAS_LMTP"; then
+                              fatal "Your $OPENSSL does not support the \"-starttls lmtp\" option" $ERR_OSSLBIN
                          fi
                     fi
                     $OPENSSL s_client $(s_client_options "-connect $NODEIP:$PORT $PROXY $BUGS $STARTTLS") 2>$ERRFILE >$TMPFILE </dev/null
@@ -17416,8 +17449,8 @@ parse_cmd_line() {
                     STARTTLS_PROTOCOL="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
-                         ftp|smtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres|mysql) ;;
-                         ftps|smtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
+                         ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres|mysql) ;;
+                         ftps|smtps|lmtp|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
                          *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
@@ -18047,7 +18080,7 @@ lets_roll() {
      else                                              # Just 1x ip4v to check, applies also if CMDLINE_IP was supplied
           NODEIP="$IPADDRs"
           lets_roll "${STARTTLS_PROTOCOL}"
-          RET=$?
+P          RET=$?
      fi
 
 exit $RET
