@@ -8737,13 +8737,13 @@ run_pfs() {
                # severity ratings based on quality specified by
                # pr_ecdh_quality() for shortest curve offered.
                if [[ "$low" -le 163 ]]; then
-                    fileout "ECDHE_curves" "MEDIUM" "$curves_offered"
+                    fileout "${jsonID}_ECDHE_curves" "MEDIUM" "$curves_offered"
                elif [[ "$low" -le 193 ]]; then
-                    fileout "ECDHE_curves" "LOW" "$curves_offered"
+                    fileout "${jsonID}_ECDHE_curves" "LOW" "$curves_offered"
                elif [[ "$low" -le 224 ]]; then
-                    fileout "ECDHE_curves" "INFO" "$curves_offered"
+                    fileout "${jsonID}_ECDHE_curves" "INFO" "$curves_offered"
                else
-                    fileout "ECDHE_curves" "OK" "$curves_offered"
+                    fileout "${jsonID}_ECDHE_curves" "OK" "$curves_offered"
                fi
           fi
      fi
