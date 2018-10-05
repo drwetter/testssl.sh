@@ -3104,38 +3104,6 @@ sub_cipherlists() {
 }
 
 
-# sockets inspired by http://blog.chris007.de/?p=238
-# ARG1: hexbyte with a leading comma (!!), separated by commas
-# ARG2: sleep
-socksend2() {
-     local data
-
-     # the following works under BSD and Linux, which is quite tricky. So don't mess with it unless you're really sure what you do
-     if "$HAS_SED_E"; then
-          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
-     else
-          data=$(sed -e 's/# .*$//g' -e 's/ //g' <<< "$1" | sed -r 's/^[[:space:]]+//; s/[[:space:]]+$//; /^$/d' | sed 's/,/\\/g' | tr -d '\n')
-     fi
-     [[ $DEBUG -ge 4 ]] && echo && echo "\"$data\""
-     $PRINTF -- "$data" >&5 2>/dev/null &
-     sleep $2
-}
-
-socksend() {
-     local data line
-
-     # read line per line and strip comments (bash internal func can't handle multiline statements
-     data="$(while read line; do
-          printf "${line%%\#*}"
-     done <<< "$1" )"
-     data="${data// /}"       # strip ' '
-     data="${data//,/\\}"     # s&r , by \
-     [[ $DEBUG -ge 4 ]] && echo && echo "\"$data\""
-     $PRINTF -- "$data" >&5 2>/dev/null &
-     sleep $2
-}
-
-
 openssl2rfc() {
      local rfcname=""
      local -i i
@@ -9282,7 +9250,6 @@ EOF
      return 1
 }
 
-
 close_socket(){
      exec 5<&-
      exec 5>&-
@@ -9290,20 +9257,17 @@ close_socket(){
 }
 
 
-# first: helper function for protocol checks
-# arg1: formatted string here in the code
+# Format string properly for socket
+# ARG1: any commented sequence of two bytes hex, separated by commas. It can contain comments, new lines, tabs and white spaces
+# NW_STR holds the global with the string prepared for printf, like '\x16\x03\x03\'
 code2network() {
      NW_STR=$(sed -e 's/,/\\\x/g' <<< "$1" | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
 }
 
-len2twobytes() {
-     local len_arg1=${#1}
-     [[ $len_arg1 -le 2 ]] && LEN_STR=$(printf "00, %02s \n" "$1")
-     [[ $len_arg1 -eq 3 ]] && LEN_STR=$(printf "0%s, %02s \n" "${1:0:1}" "${1:1:2}")
-     [[ $len_arg1 -eq 4 ]] && LEN_STR=$(printf "%02s, %02s \n" "${1:0:2}" "${1:2:2}")
-}
-
-socksend_sslv2_clienthello() {
+# sockets inspired by http://blog.chris007.de/?p=238
+# ARG1: hexbytes separated by commas, with a leading comma
+# ARG2: seconds to sleep
+socksend_clienthello() {
      local data=""
 
      code2network "$1"
@@ -9313,7 +9277,26 @@ socksend_sslv2_clienthello() {
      sleep $USLEEP_SND
 }
 
+
+# ARG1: hexbytes -- preceeded by x -- separated by commas, with a leading comma
+# ARG2: seconds to sleep
+socksend() {
+     local data line
+
+     # read line per line and strip comments (bash internal func can't handle multiline statements
+     data="$(while read line; do
+          printf "${line%%\#*}"
+     done <<< "$1" )"
+     data="${data// /}"       # strip ' '
+     data="${data//,/\\}"     # s&r , by \
+     [[ $DEBUG -ge 4 ]] && echo && echo "\"$data\""
+     $PRINTF -- "$data" >&5 2>/dev/null &
+     sleep $2
+}
+
+
 # for SSLv2 to TLS 1.2:
+# ARG1: blocksize for reading
 sockread_serverhello() {
      [[ -z "$2" ]] && maxsleep=$MAX_WAITSOCK || maxsleep=$2
      SOCK_REPLY_FILE=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
@@ -9323,9 +9306,18 @@ sockread_serverhello() {
 }
 
 #trying a faster version
+# ARG1: blocksize for reading
 sockread_fast() {
      dd bs=$1 count=1 <&5 2>/dev/null | hexdump -v -e '16/1 "%02X"'
 }
+
+len2twobytes() {
+     local len_arg1=${#1}
+     [[ $len_arg1 -le 2 ]] && LEN_STR=$(printf "00, %02s \n" "$1")
+     [[ $len_arg1 -eq 3 ]] && LEN_STR=$(printf "0%s, %02s \n" "${1:0:1}" "${1:1:2}")
+     [[ $len_arg1 -eq 4 ]] && LEN_STR=$(printf "%02s, %02s \n" "${1:0:2}" "${1:2:2}")
+}
+
 
 get_pub_key_size() {
      local pubkey pubkeybits
@@ -11631,7 +11623,7 @@ sslv2_sockets() {
 
      fd_socket 5 || return 6
      debugme echo -n "sending client hello... "
-     socksend_sslv2_clienthello "$client_hello"
+     socksend_clienthello "$client_hello"
 
      sockread_serverhello 32768
      if "$parse_complete"; then
@@ -11741,9 +11733,10 @@ generate_key_share_extension() {
 #       "ephemeralkey" - extract the server's ephemeral key (if any)
 # ARG4: (optional) additional request extensions
 # ARG5: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
-# ARG6: (optional): "false" if socksend_tls_clienthello() should not open a new socket
+# ARG6: (optional): "false" if prepare_tls_clienthello() should not open a new socket
 # ARG7: (optional): "true" if this is a second ClientHello that follows receipt of a HelloRetryRequest
-socksend_tls_clienthello() {
+#
+prepare_tls_clienthello() {
      local tls_low_byte="$1" tls_legacy_version="$1"
      local process_full="$3"
      local new_socket=true is_second_clienthello=false
@@ -12116,11 +12109,8 @@ socksend_tls_clienthello() {
           fd_socket 5 || return 6
      fi
 
-     code2network "$TLS_CLIENT_HELLO$all_extensions"
-     data="$NW_STR"
-     [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
-     $PRINTF -- "$data" >&5 2>/dev/null &
-     sleep $USLEEP_SND
+     debugme echo -n "sending client hello... "
+     socksend_clienthello "$TLS_CLIENT_HELLO$all_extensions" $USLEEP_SND
 
      if [[ "$tls_low_byte" -gt 0x03 ]]; then
           TLS_CLIENT_HELLO="$(tolower "$NW_STR")"
@@ -12345,9 +12335,9 @@ resend_if_hello_retry_request() {
      debugme echo -en "\nsending second client hello... "
      # Starting with TLSv1.3 draft 24, the second ClientHello should specify a record layer version of 0x0303
      if [[ "$server_version" == "0304" ]] || [[ 0x$server_version -ge 0x7f18 ]]; then
-          socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false" "true"
+          prepare_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false" "true"
      else
-          socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false"
+          prepare_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false"
      fi
      if [[ $? -ne 0 ]]; then
           debugme echo "stuck on sending: $ret"
@@ -12397,7 +12387,7 @@ tls_sockets() {
      cipher_list_2send="$NW_STR"
 
      debugme echo -en "\nsending client hello... "
-     socksend_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$4" "$offer_compression"
+     prepare_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$4" "$offer_compression"
      ret=$?                             # 6 means opening socket didn't succeed, e.g. timeout
 
      # if sending didn't succeed we don't bother
@@ -14825,7 +14815,7 @@ run_grease() {
                # of the extension.)
 
                # The "extra extensions" parameter needs to include the padding and
-               # heartbeat extensions, since otherwise socksend_tls_clienthello()
+               # heartbeat extensions, since otherwise prepare_tls_clienthello()
                # will add these extensions to the end of the ClientHello.
                debugme echo -e "\nSending ClientHello with empty last extension."
                tls_sockets "$proto" "$cipher_list" "" "
@@ -14869,7 +14859,7 @@ run_grease() {
      # extension, however, may not be an option, since the server may reject the
      # connection attempt for that reason.
      if "$normal_hello_ok" && [[ "$proto" != "00" ]] && [[ ${#SNI} -le 87 ]]; then
-          # Normally socksend_tls_clienthello() will add a padding extension with a length
+          # Normally prepare_tls_clienthello() will add a padding extension with a length
           # that will make the ClientHello be 512 bytes in length. Providing an "extra
           # extensions" parameter with a short padding extension prevents that.
           debugme echo -e "\nSending ClientHello with length between 256 and 511 bytes."
