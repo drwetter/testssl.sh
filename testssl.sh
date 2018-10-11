@@ -268,7 +268,7 @@ declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Fi
 
 ########### Initialization part, further global vars just being declared here
 #
-PRINTF=""                               # which external printf to use
+PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
 JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
@@ -4321,12 +4321,9 @@ client_simulation_sockets() {
      fi
      cipher_list_2send="$NW_STR"
 
-     debugme echo -e "\nsending client hello... "
-     code2network "${data}"
-     data="$NW_STR"
      fd_socket 5 || return 6
-     [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
-     $PRINTF -- "$data" >&5 2>/dev/null &
+     debugme echo -e "\nsending client hello... "
+     socksend_clienthello "${data}"
      sleep $USLEEP_SND
 
      sockread_serverhello 32768
@@ -9167,6 +9164,7 @@ fd_socket() {
      local proyxline=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"          # sockets do not need the square brackets we have of IPv6 addresses
                                                        # we just need do it here, that's all!
+     [[ -t 5 ]] && echo "tty"
      if [[ -n "$PROXY" ]]; then
           # PROXYNODE works better than PROXYIP on modern versions of squid
           if ! exec 5<> /dev/tcp/${PROXYNODE}/${PROXYPORT}; then
@@ -9288,7 +9286,12 @@ socksend_clienthello() {
      code2network "$1"
      data="$NW_STR"
      [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
-     $PRINTF -- "$data" >&5 2>/dev/null &
+     if [[ -z "$PRINTF" ]] ;then
+          # We could also use "dd ibs=1M obs=1M" here but is seems to be at max 3% slower
+          printf -- "$data" | cat >&5 2>/dev/null &
+     else
+          $PRINTF -- "$data" 2>/dev/null >&5 2>/dev/null &
+     fi
      sleep $USLEEP_SND
 }
 
@@ -9305,7 +9308,11 @@ socksend() {
      data="${data// /}"       # strip ' '
      data="${data//,/\\}"     # s&r , by \
      [[ $DEBUG -ge 4 ]] && echo && echo "\"$data\""
-     $PRINTF -- "$data" >&5 2>/dev/null &
+     if [[ -z "$PRINTF" ]] ;then
+          printf -- "$data" | cat >&5 2>/dev/null &
+     else
+          $PRINTF -- "$data" 2>/dev/null >&5 2>/dev/null &
+     fi
      sleep $2
 }
 
@@ -15596,7 +15603,9 @@ check_bsd_mount() {
 # The shell builtin printf flushes the write buffer at every \n, ("\x0a") which
 # in turn means a new TCP fragment. That causes a slight performance penalty and
 # and some F5s to hiccup, see #1113. Unfortunately this can be used only with GNU's
-# and OpenBSD's /usr/bin/printf -- FreeBSD + OS X can't do this.
+# and OpenBSD's /usr/bin/printf -- FreeBSD + OS X can't do this. Thus here we need
+# to pipe through dd or cat, see socksend() and socksend_clienthello(). An empty
+# $PRINTF signals the bash internal printf which then uses cat as a stdout buffer.
 # A better solution needs to follow.
 #
 choose_printf() {
@@ -15605,14 +15614,14 @@ choose_printf() {
      ptf="$(type -aP printf)"
      if [[ -n "$ptf" ]]; then
           for p in $ptf; do
-               if $p "\xc0\x14\xc0\xff\xee" | hexdump -C  | grep -q 'c0 14 c0 ff ee'; then
+               if $p "\xc0\x14\xc0\xff\xee" | hexdump -C | grep -q 'c0 14 c0 ff ee'; then
                     PRINTF=$p
                     return 0
                fi
           done
      fi
      if type -t printf >/dev/null; then
-          PRINTF=printf
+          PRINTF=""
           return 0
      fi
      fatal "Neither external printf nor shell internal found. " $ERR_CLUELESS
