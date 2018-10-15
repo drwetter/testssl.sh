@@ -4460,6 +4460,7 @@ run_client_simulation() {
      local options
      local -i ret=0
      local jsonID="clientsimulation"
+     local client_service=""
 
      # source the external file
      . "$TESTSSL_INSTALL_DIR/etc/client-simulation.txt" 2>/dev/null
@@ -4479,15 +4480,16 @@ run_client_simulation() {
           client_service="HTTP"
      else
           outln "Could not determine the protocol, only simulating generic clients."
-          client_service="undetermined"
      fi
 
      outln
+     pr_headline " Running client simulations "
+     [[ "$client_service" == HTTP ]] && pr_headline "($client_service) "
      if "$using_sockets"; then
-          pr_headlineln " Running client simulations via sockets "
+          pr_headlineln "via sockets "
      else
-          pr_headline " Running client simulations via openssl "
-          prln_warning " -- you shouldn't run this with \"--ssl-native\" as you will get false results"
+          pr_headline "via openssl "
+          prln_warning " -- pls note \"--ssl-native\" will return some false results"
           fileout "$jsonID" "WARN" "You shouldn't run this with \"--ssl-native\" as you will get false results"
           ret=1
      fi
