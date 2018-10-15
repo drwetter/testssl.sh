@@ -26,6 +26,13 @@ cryptographic flaws.
   going on and you can change it.
 * Heck, even the development is open (github)
 
+#### License
+
+This software is free. You can use it under the terms of GPLv2, see LICENSE.
+In addition starting from version 3.0rc1 if you're offering it as a public
+and / or paid service you need to mention to your audience that you're using
+this program and where to get this program from.
+
 #### Installation
 
 You can download testssl.sh by cloning this git repository:
