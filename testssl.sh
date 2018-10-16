@@ -298,6 +298,8 @@ HOSTCERT=""                             # File with host certificate, without in
 HEADERFILE=""
 HEADERVALUE=""
 HTTP_STATUS_CODE=""
+DH_GROUP_OFFERED=""
+DH_GROUP_LEN_P=0
 KEY_SHARE_EXTN_NR="33"                  # The extension number for key_share was changed from 40 to 51 in TLSv1.3 draft 23.
                                         # In order to support draft 23 and later in addition to earlier drafts, need to
                                         # know which extension number to use. Note that it appears that a single
@@ -13779,6 +13781,75 @@ run_freak() {
      return 0
 }
 
+# ARGs see below
+# Sets the global DH_GROUP_OFFERED, start value: "", after this function:
+#    DH_GROUP_OFFERED=""
+#    DH_GROUP_OFFERED="<name of group>"
+#    return:  1: common primes file problem, 0: went w/o error
+get_common_prime() {
+     local jsonID2="$1"
+     local key_bitstring="$2"
+     local spaces="$3"
+     local comment=""
+     local dh_p=""
+     local -i subret=0
+     local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
+     local -i lineno_matched=0
+
+     dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:/,/generator:/' | egrep -v "prime|generator")"
+     dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
+     [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
+     DH_GROUP_LEN_P="$((4*${#dh_p}))"
+     debugme tmln_out "len(dh_p): $DH_GROUP_LEN_P  |  dh_p: $dh_p"
+     [[ "$DEBUG" -gt 1 ]] && echo "$dh_p" > $TEMPDIR/dh_p.txt
+     if [[ ! -s "$common_primes_file" ]]; then
+          prln_local_problem "couldn't read common primes file $common_primes_file"
+          out "${spaces}"
+          fileout "$jsonID2" "WARN" "couldn't read common primes file $common_primes_file"
+          return 1
+     else
+          dh_p="$(toupper "$dh_p")"
+          # In the previous line of the match is bascially the hint we want to echo
+          # the most elegant thing to get the previous line [ awk '/regex/ { print x }; { x=$0 }' ] doesn't work with gawk
+          lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
+          if [[ "$lineno_matched" -ne 0 ]]; then
+               DH_GROUP_OFFERED="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
+               #subret=1     # vulnerable: common prime
+          else
+               DH_GROUP_OFFERED="Unknown DH group"
+               :
+               #subret=0     # not vulnerable: no known common prime
+          fi
+          return 0
+     fi
+}
+
+# helper function for run_logjam, see below
+#
+out_common_prime() {
+     local jsonID2="$1"
+     local cve="$2"
+     local cwe="$3"
+
+     # now size matters -- i.e. the bit size ;-)
+     if [[ $DH_GROUP_LEN_P -le 512 ]]; then
+          pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$DH_GROUP_OFFERED"; out " detected ($DH_GROUP_LEN_P bits)"
+          fileout "$jsonID2" "CRITICAL" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+     elif [[ $DH_GROUP_LEN_P -le 1024 ]]; then
+          pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$DH_GROUP_OFFERED"; out " detected ($DH_GROUP_LEN_P bits)"
+          fileout "$jsonID2" "HIGH" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+     elif [[ $DH_GROUP_LEN_P -le 1536 ]]; then
+          pr_svrty_medium "common prime with $DH_GROUP_LEN_P bits detected: "; pr_italic "$DH_GROUP_OFFERED"
+          fileout "$jsonID2" "MEDIUM" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+     elif [[ $DH_GROUP_LEN_P -lt 2048 ]]; then
+          pr_svrty_low "common prime with $DH_GROUP_LEN_P bits detected: "; pr_italic "$DH_GROUP_OFFERED"
+          fileout "$jsonID2" "LOW" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+     else
+          out "common prime with $DH_GROUP_LEN_P bits detected: "; pr_italic "$DH_GROUP_OFFERED"
+          fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+     fi
+}
+
 
 # see https://weakdh.org/logjam.html
 run_logjam() {
@@ -13786,17 +13857,14 @@ run_logjam() {
      local exportdh_cipher_list="EXP1024-DHE-DSS-DES-CBC-SHA:EXP1024-DHE-DSS-RC4-SHA:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA"
      local exportdh_cipher_list_hex="00,63, 00,65, 00,14, 00,11"
      local all_dh_ciphers="cc,15, 00,b3, 00,91, c0,97, 00,a3, 00,9f, cc,aa, c0,a3, c0,9f, 00,6b, 00,6a, 00,39, 00,38, 00,c4, 00,c3, 00,88, 00,87, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, 00,ab, cc,ad, c0,a7, c0,43, c0,45, c0,47, c0,53, c0,57, c0,5b, c0,67, c0,6d, c0,7d, c0,81, c0,85, c0,91, 00,a2, 00,9e, c0,a2, c0,9e, 00,aa, c0,a6, 00,67, 00,40, 00,33, 00,32, 00,be, 00,bd, 00,9a, 00,99, 00,45, 00,44, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, 00,b2, 00,90, c0,96, c0,42, c0,44, c0,46, c0,52, c0,56, c0,5a, c0,66, c0,6c, c0,7c, c0,80, c0,84, c0,90, 00,66, 00,18, 00,8e, 00,16, 00,13, 00,1b, 00,8f, 00,63, 00,15, 00,12, 00,1a, 00,65, 00,14, 00,11, 00,19, 00,17, 00,b5, 00,b4, 00,2d" # 93 ciphers
-     local -i i nr_supported_ciphers=0 server_key_exchange_len=0 ephemeral_pub_len=0 len_dh_p=0
+     local -i i nr_supported_ciphers=0 server_key_exchange_len=0 ephemeral_pub_len=0
      local addtl_warning="" hexc
      local -i ret=0 subret=0
      local server_key_exchange key_bitstring=""
-     local dh_p=""
      local spaces="                                           "
      local vuln_exportdh_ciphers=false
      local openssl_no_expdhciphers=false
-     local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
-     local comment="" str=""
-     local -i lineno_matched=0
+     local str=""
      local using_sockets=true
      local cve="CVE-2015-4000"
      local cwe="CWE-310"
@@ -13886,35 +13954,23 @@ run_logjam() {
           fi
      fi
 
-     # now the final test for common primes
+     # FIXME: The following logic comes too late if we have already a check for DH groups in run_pfs()
+     # now the final test for common primes, -n "$DH_GROUP_OFFERED" indicates we did this already
      if [[ -n "$key_bitstring" ]]; then
-          dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:/,/generator:/' | egrep -v "prime|generator")"
-          dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
-          [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
-          len_dh_p="$((4*${#dh_p}))"
-          debugme tmln_out "len(dh_p): $len_dh_p  |  dh_p: $dh_p"
-          echo "$dh_p" > $TEMPDIR/dh_p.txt
-          if [[ ! -s "$common_primes_file" ]]; then
-               prln_local_problem "couldn't read common primes file $common_primes_file"
-               out "${spaces}"
-               fileout "$jsonID2" "WARN" "couldn't read common primes file $common_primes_file"
-               ret=1
+           if [[ -z "$DH_GROUP_OFFERED" ]]; then
+               get_common_prime "$jsonID2" "$key_bitstring" "$spaces"
+               ret=$?                   # no common primes file would be ret=1 --> we should treat that some place else before
+          fi
+          if [[ "$DH_GROUP_OFFERED" =~ Unknown ]]; then
+               subret=0                 # no common DH key detected
           else
-               dh_p="$(toupper "$dh_p")"
-               # In the previous line of the match is bascially the hint we want to echo
-               # the most elegant thing to get the previous line [ awk '/regex/ { print x }; { x=$0 }' ] doesn't work with gawk
-               lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
-               if [[ "$lineno_matched" -ne 0 ]]; then
-                    comment="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
-                    subret=1     # vulnerable: common prime
-               else
-                    subret=0     # not vulnerable: no known common prime
-               fi
+               subret=1                 # known prime/DH key
           fi
      else
-          subret=3               # no DH key detected
+          subret=3
      fi
 
+     # Now if we have DH export ciphers we print them out first
      if "$vuln_exportdh_ciphers"; then
           pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DH EXPORT ciphers"
           fileout "$jsonID" "HIGH" "VULNERABLE, uses DH EXPORT ciphers" "$cve" "$cwe" "$hint"
@@ -13923,23 +13979,7 @@ run_logjam() {
                fileout "$jsonID2" "OK" "no DH key detected"
           elif [[ $subret -eq 1 ]]; then
                out "\n${spaces}"
-               # now size matters -- i.e. the bit size ;-)
-               if [[ $len_dh_p -le 512 ]]; then
-                    pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "CRITICAL" "$comment" "$cve" "$cwe"
-               elif [[ $len_dh_p -le 1024 ]]; then
-                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "HIGH" "$comment" "$cve" "$cwe"
-               elif [[ $len_dh_p -le 1536 ]]; then
-                    pr_svrty_medium "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "MEDIUM" "$comment" "$cve" "$cwe"
-               elif [[ $len_dh_p -lt 2048 ]]; then
-                    pr_svrty_low "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "LOW" "$comment" "$cve" "$cwe"
-               else
-                    out "common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "INFO" "$comment" "$cve" "$cwe"
-               fi
+               out_common_prime "$jsonID2" "$cve" "$cwe"
           elif [[ $subret -eq 0 ]]; then
                out " no common primes detected"
                fileout "$jsonID2" "INFO" "--" "$cve" "$cwe"
@@ -13948,23 +13988,7 @@ run_logjam() {
           fi
      else
           if [[ $subret -eq 1 ]]; then
-               # now size matters -- i.e. the bit size ;-)
-               if [[ $len_dh_p  -le 512 ]]; then
-                    pr_svrty_critical "VULNERABLE (NOT ok):" ; out " uses common prime "; pr_italic "$comment"; out " ($len_dh_p bits)"
-                    fileout "$jsonID2" "CRITICAL" "$comment" "$cve" "$cwe"
-               elif [[ $len_dh_p -le 1024 ]]; then
-                    pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$comment"; out " detected ($len_dh_p bits)"
-                    fileout "$jsonID2" "HIGH" "$comment" "$cve" "$cwe"
-               elif [[ $len_dh_p -le 1536 ]]; then
-                    pr_svrty_medium "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "MEDIUM" "$comment" "$cve" "$cwe"
-               elif [[ $len_dh_p -lt 2048 ]]; then
-                    pr_svrty_low "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "LOW" "$comment" "$cve" "$cwe"
-               else
-                    out "Common prime with $len_dh_p bits detected: "; pr_italic "$comment"
-                    fileout "$jsonID2" "INFO" "$comment" "$cve" "$cwe"
-               fi
+               out_common_prime "$jsonID2" "$cve" "$cwe"
                if ! "$openssl_no_expdhciphers"; then
                     outln ","
                     out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
