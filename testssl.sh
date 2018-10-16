@@ -17392,6 +17392,16 @@ create_cmd_line_string() {
      printf '%s\n' "${allargs[*]}"
 }
 
+check_base_requirements() {
+     local binary=''
+
+     for binary in 'hexdump' 'dd' 'grep' 'awk' 'tr' 'sed' 'date' 'cat' 'ps' 'kill' 'head' 'tail' 'dirname';  do
+          if ! type -p "${binary}" &> /dev/null; then
+               fatal "You need to install ${binary} for this program to work" $ERR_RESOURCE
+          fi
+     done
+}
+
 parse_cmd_line() {
      local outfile_arg=""
      local cipher_mapping
@@ -18031,6 +18041,7 @@ lets_roll() {
 
      lets_roll init
      initialize_globals
+     check_base_requirements            # needs to come after $do_html is defined
      parse_cmd_line "$@"
      # html_header() needs to be called early! Otherwise if html_out() is called before html_header() and the
      # command line contains --htmlfile <htmlfile> or --html, it'll make problems with html output, see #692.
