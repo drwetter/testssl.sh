@@ -8443,9 +8443,8 @@ run_pfs() {
      local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
      local pfs_ciphers curves_offered="" curves_to_test temp
      local len1 len2 curve_found
-     local key_bitstring dh_p quality_str
-     local -i lineno_matched len_dh_p quality
-     local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
+     local key_bitstring quality_str
+     local -i len_dh_p quality
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
      local jsonID="PFS"
@@ -8851,23 +8850,11 @@ run_pfs() {
                     curve_found="${curve_found%%,*}"
                fi
           fi
-          if [[ -z "$curves_offered" ]] && [[ -n "$curve_found" ]] && [[ -s "$common_primes_file" ]]; then
+          if [[ -z "$curves_offered" ]] && [[ -n "$curve_found" ]]; then
                # The server is not using one of the groups from RFC 7919.
                key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
-               dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:/,/generator:/' | egrep -v "prime|generator")"
-               dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
-               [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
-               len_dh_p=$((4*${#dh_p}))
-               debugme tmln_out "len(dh_p): $len_dh_p  |  dh_p: $dh_p"
-               dh_p="$(toupper "$dh_p")"
-               # In the previous line of the match is bascially the hint we want to echo
-               # the most elegant thing to get the previous line [ awk '/regex/ { print x }; { x=$0 }' ] doesn't work with gawk
-               lineno_matched=$(grep -n "$dh_p" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
-               if [[ "$lineno_matched" -ne 0 ]]; then
-                    curves_offered="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
-               else
-                    curves_offered="unrecognized group"
-               fi
+               get_common_prime "$jsonID" "$key_bitstring" ""
+               [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
           fi
           if [[ -n "$curves_offered" ]]; then
                if [[ ! "$curves_offered" =~ ffdhe ]] || [[ ! "$curves_offered" =~ \  ]]; then
@@ -8892,7 +8879,7 @@ run_pfs() {
                     5) quality_str="INFO" ;;
                     6|7) quality_str="OK" ;;
                esac
-               if [[ "$curves_offered" == "unrecognized group" ]]; then
+               if [[ "$curves_offered" =~ Unknown ]]; then
                     fileout "DHE_groups" "$quality_str" "$curves_offered ($len_dh_p bits)"
                else
                     fileout "DHE_groups" "$quality_str" "$curves_offered"
