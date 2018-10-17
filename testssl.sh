@@ -8855,6 +8855,9 @@ run_pfs() {
                key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
                get_common_prime "$jsonID" "$key_bitstring" ""
                [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
+          elif [[ -n "$curves_offered" ]]; then
+               DH_GROUP_OFFERED="$curves_offered"
+               [[ ! "$curves_offered" =~ \  ]] && DH_GROUP_LEN_P="${DH_GROUP_OFFERED#ffdhe}"
           fi
           if [[ -n "$curves_offered" ]]; then
                if [[ ! "$curves_offered" =~ ffdhe ]] || [[ ! "$curves_offered" =~ \  ]]; then
@@ -13925,7 +13928,11 @@ out_common_prime() {
      local cwe="$3"
 
      # now size matters -- i.e. the bit size ;-)
-     if [[ $DH_GROUP_LEN_P -le 512 ]]; then
+     [[ "$DH_GROUP_OFFERED" == ffdhe* ]] && [[ ! "$DH_GROUP_OFFERED" =~ \  ]] && DH_GROUP_OFFERED="RFC7919/$DH_GROUP_OFFERED"
+     if [[ "$DH_GROUP_OFFERED" =~ ffdhe ]] && [[ "$DH_GROUP_OFFERED" =~ \  ]]; then
+          out "common primes detected: "; pr_italic "$DH_GROUP_OFFERED"
+          fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+     elif [[ $DH_GROUP_LEN_P -le 512 ]]; then
           pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$DH_GROUP_OFFERED"; out " detected ($DH_GROUP_LEN_P bits)"
           fileout "$jsonID2" "CRITICAL" "$DH_GROUP_OFFERED" "$cve" "$cwe"
      elif [[ $DH_GROUP_LEN_P -le 1024 ]]; then
@@ -14016,7 +14023,13 @@ run_logjam() {
      fi
 
      # Try all ciphers that use an ephemeral DH key. If successful, check whether the key uses a weak prime.
-     if "$using_sockets"; then
+     if [[ -n "$DH_GROUP_OFFERED" ]]; then
+          if [[ "$DH_GROUP_OFFERED" =~ Unknown ]]; then
+               subret=0                 # no common DH key detected
+          else
+               subret=1                 # known prime/DH key
+          fi
+     elif "$using_sockets"; then
           tls_sockets "03" "$all_dh_ciphers, 00,ff" "ephemeralkey"
           sclient_success=$?
           if [[ $sclient_success -eq 0 ]] || [[ $sclient_success -eq 2 ]]; then
@@ -14047,10 +14060,8 @@ run_logjam() {
           fi
      fi
 
-     # FIXME: The following logic comes too late if we have already a check for DH groups in run_pfs()
-     # now the final test for common primes, -n "$DH_GROUP_OFFERED" indicates we did this already
      if [[ -n "$key_bitstring" ]]; then
-           if [[ -z "$DH_GROUP_OFFERED" ]]; then
+          if [[ -z "$DH_GROUP_OFFERED" ]]; then
                get_common_prime "$jsonID2" "$key_bitstring" "$spaces"
                ret=$?                   # no common primes file would be ret=1 --> we should treat that some place else before
           fi
@@ -14059,7 +14070,7 @@ run_logjam() {
           else
                subret=1                 # known prime/DH key
           fi
-     else
+     elif [[ -z "$DH_GROUP_OFFERED" ]]; then
           subret=3
      fi
 
