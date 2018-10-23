@@ -6697,7 +6697,7 @@ extract_stapled_ocsp() {
      local response="$(cat $TMPFILE)"
      local ocsp tmp
      local -i ocsp_len
-     
+
      STAPLED_OCSP_RESPONSE=""
      if [[ "$response" =~ "CertificateStatus" ]]; then
           # This is OpenSSL 1.1.0 or 1.1.1 and the response
@@ -6737,7 +6737,7 @@ extract_stapled_ocsp() {
           ocsp_len=2*$(hex2dec "${tls_certificate_status_ascii:8:6}")
           STAPLED_OCSP_RESPONSE="${ocsp:14:ocsp_len}"
      fi
-     return 0     
+     return 0
 }
 
 # arg1 is "-cipher <OpenSSL cipher>" or empty
@@ -15933,7 +15933,7 @@ mybanner() {
      bb1=$(cat <<EOF
 
 ###########################################################
-    $PROG_NAME       $VERSION from 
+    $PROG_NAME       $VERSION from
 EOF
 )
      bb2=$(cat <<EOF
@@ -15942,7 +15942,7 @@ EOF
              modification under GPLv2 permitted.
       USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @ 
+       Please file bugs @
 EOF
 )
      bb3=$(cat <<EOF
@@ -18137,4 +18137,3 @@ lets_roll() {
      fi
 
 exit $RET
-
