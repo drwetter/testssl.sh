@@ -8800,6 +8800,7 @@ run_pfs() {
           nr_curves=0
           for curve in "${ffdhe_groups_output[@]}"; do
                supported_curve[nr_curves]=false
+               [[ "$DH_GROUP_OFFERED" =~ "$curve" ]] && supported_curve[nr_curves]=true
                nr_curves+=1
           done
           protos_to_try=""
@@ -8827,6 +8828,10 @@ run_pfs() {
                     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     curve_found="${temp#*, }"
                     curve_found="${curve_found%%,*}"
+                    if [[ "$proto" == "03" ]] && [[ -z "$DH_GROUP_OFFERED" ]] && [[ "$curve_found" =~ ffdhe ]]; then
+                         DH_GROUP_OFFERED="RFC7919/$curve_found"
+                         DH_GROUP_LEN_P="${curve_found#ffdhe}"
+                    fi
                     [[ ! "$curve_found" =~ ffdhe ]] && break
                     for (( i=0; i < nr_curves; i++ )); do
                          ! "${supported_curve[i]}" && [[ "${ffdhe_groups_output[i]}" == "$curve_found" ]] && break
@@ -8855,9 +8860,6 @@ run_pfs() {
                key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
                get_common_prime "$jsonID" "$key_bitstring" ""
                [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
-          elif [[ -n "$curves_offered" ]]; then
-               DH_GROUP_OFFERED="$curves_offered"
-               [[ ! "$curves_offered" =~ \  ]] && DH_GROUP_LEN_P="${DH_GROUP_OFFERED#ffdhe}"
           fi
           if [[ -n "$curves_offered" ]]; then
                if [[ ! "$curves_offered" =~ ffdhe ]] || [[ ! "$curves_offered" =~ \  ]]; then
