@@ -1931,7 +1931,12 @@ service_detection() {
 #
 connectivity_problem() {
      if [[ $1 -ge $2 ]]; then
-          [[ $2 -eq 1 ]] && fatal "$3" $ERR_CONNECT
+          if [[ $2 -eq 1 ]]; then
+                fatal "$3" $ERR_CONNECT
+          fi
+          if [[ "$4" =~ openssl\ s_client\ connect ]] ; then
+               fatal "$4" $ERR_CONNECT "consider increasing MAX_OSSL_FAIL (currently: $2)"
+          fi
           fatal "$4" $ERR_CONNECT
      fi
 }
@@ -15613,6 +15618,7 @@ find_openssl_binary() {
                          OPENSSL="timeout $OPENSSL_TIMEOUT $OPENSSL"
                     fi
                fi
+               MAX_OSSL_FAIL+=2
           else
                outln
                prln_warning " Necessary binary \"timeout\" not found."
@@ -16055,10 +16061,12 @@ child_error() {
 
 # arg1: string to print / to write to file
 # arg2: error code, is a global, see ERR_* above
+# arg3: an optional string
 #
 fatal() {
      outln
      prln_magenta "Fatal error: $1" >&2
+     [[ -n "$3" ]] && outln "$3" >&2
      fileout "fatal_error"  "ERROR" "$1"
      exit $2
 }
