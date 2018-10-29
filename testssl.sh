@@ -4889,6 +4889,12 @@ run_protocols() {
                     fi
                fi
                ;;
+          3)   pr_svrty_best "not offered (OK), "
+               fileout "$jsonID" "OK" "not offered"
+               add_tls_offered ssl3 no
+               pr_warning "SSL downgraded to STARTTLS plaintext"; outln
+               fileout "$jsonID" "WARN" "SSL downgraded to STARTTLS plaintext"
+               ;;
           4)   out "likely "; pr_svrty_best "not offered (OK), "
                fileout "$jsonID" "OK" "not offered"
                add_tls_offered ssl3 no
@@ -4955,6 +4961,12 @@ run_protocols() {
                          fileout "$jsonID" "MEDIUM" "strange, server ${DETECTED_TLS_VERSION}"
                     fi
                fi
+               ;;
+          3)   out "not offered, "
+               fileout "$jsonID" "OK" "not offered"
+               add_tls_offered tls1 no
+               pr_warning "TLS downgraded to STARTTLS plaintext"; outln
+               fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
                ;;
           4)   out "likely not offered, "
                fileout "$jsonID" "INFO" "likely not offered"
@@ -5026,6 +5038,12 @@ run_protocols() {
                          fileout "$jsonID" "MEDIUM" "strange, server ${DETECTED_TLS_VERSION}"
                     fi
                fi
+               ;;
+          3)   out "not offered, "
+               fileout "$jsonID" "OK" "not offered"
+               add_tls_offered tls1_1 no
+               pr_warning "TLS downgraded to STARTTLS plaintext"; outln
+               fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
                ;;
           4)   out "likely not offered, "
                fileout "$jsonID" "INFO" "is not offered"
@@ -5109,17 +5127,23 @@ run_protocols() {
                     fi
                fi
                ;;
-          4)   out "likely "; pr_svrty_medium "not offered, "
+           3)  out "not offered, "
+               fileout "$jsonID" "OK" "not offered"
+               add_tls_offered tls1_2 no
+               pr_warning "TLS downgraded to STARTTLS plaintext"; outl 
+               fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
+               ;;
+           4)  out "likely "; pr_svrty_medium "not offered, "
                fileout "$jsonID" "MEDIUM" "not offered"
                add_tls_offered tls1_2 no
                pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                ;;
-          5)   outln "$supported_no_ciph1"                  # protocol detected, but no cipher --> comes from run_prototest_openssl
+           5)  outln "$supported_no_ciph1"                  # protocol detected, but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1_2 yes
                ;;
-          7)   if "$using_sockets" ; then
+           7)  if "$using_sockets" ; then
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.2"; outln "$debug_recomm"
                else
@@ -5276,6 +5300,12 @@ run_protocols() {
                     fileout "$jsonID" "CRITICAL" "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
                fi
                add_tls_offered tls1_3 no
+               ;;
+          3)   out "not offered  "
+               fileout "$jsonID" "INFO" "not offered"
+               add_tls_offered tls1_3 no
+               pr_warning "TLS downgraded to STARTTLS plaintext"; outln
+               fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
                ;;
           4)   out "likely not offered, "
                fileout "$jsonID" "INFO" "not offered"
@@ -9164,13 +9194,16 @@ starttls_mysql_dialog() {
 }
 
 # arg1: fd for socket -- which we don't use as it is a hassle and it is not clear whether it works under every bash version
-#
+# returns 6 if opening the socket caused a problem, 1 if STARTTLS handshake failed, 0: all ok
 fd_socket() {
      local jabber=""
      local proyxline=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"          # sockets do not need the square brackets we have of IPv6 addresses
                                                        # we just need do it here, that's all!
-     [[ -t 5 ]] && echo "tty"
+     if [[ -t 5 ]]; then
+          pr_warning "$PROG_NAME: unable to open a socket because of a tty conflict"
+          return 6
+     fi
      if [[ -n "$PROXY" ]]; then
           # PROXYNODE works better than PROXYIP on modern versions of squid
           if ! exec 5<> /dev/tcp/${PROXYNODE}/${PROXYPORT}; then
@@ -9607,7 +9640,7 @@ get_dh_ephemeralkey() {
 #                3=SSLv2 supported (in $TEMPDIR/$NODEIP.sslv2_sockets.dd is reply for further processing
 #                  --> there could be checked whether ciphers e.g have been returned at all (or anything else)
 #                4=looks like an STARTTLS 5xx message
-#                6=socket coudln't be opened
+#                6=socket couldn't be opened
 #                7=strange reply we can't deal with
 parse_sslv2_serverhello() {
      local ret v2_hello_ascii v2_hello_initbyte v2_hello_length
@@ -10572,7 +10605,7 @@ parse_tls_serverhello() {
      fi
      for (( i=0; i<tls_hello_ascii_len; i=i+msg_len )); do
           if [[ $tls_hello_ascii_len-$i -lt 10 ]]; then
-               if [[ "$process_full" == "all" ]]; then
+               if [[ "$process_full" == all ]]; then
                     # The entire server response should have been retrieved.
                     debugme tmln_warning "Malformed message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -10604,13 +10637,19 @@ parse_tls_serverhello() {
                tmln_out
           fi
 
-          if "$do_starttls" && ( [[ $tls_content_type == 35 ]] || [[ $tls_content_type == 34 ]] ); then
-               # STARTTLS handshake failed and server replied plaintext with a 5xx or 4xx
-               [[ $DEBUG -ge 2 ]] && printf "%s\n" "$(hex2ascii "$tls_hello_ascii" 2>/dev/null)"
-               [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
-               return 4
-          elif [[ $tls_content_type != "14" ]] && [[ $tls_content_type != "15" ]] && \
-               [[ $tls_content_type != "16" ]] && [[ $tls_content_type != "17" ]]; then
+          if "$do_starttls" ; then
+               if [[ $tls_content_type == 35 ]] || [[ $tls_content_type == 34 ]]; then
+                    # STARTTLS handshake failed and server replied plaintext with a 5xx or 4xx
+                    [[ $DEBUG -ge 2 ]] && printf "%s\n" "400/500: $(hex2ascii "$tls_hello_ascii" 2>/dev/null)"
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
+                    return 4
+               elif [[ "$tls_hello_ascii" =~ 6130303220 ]]; then
+                    [[ $DEBUG -ge 2 ]] && printf "%s\n" "probably IMAP plaintext reply \"$(hex2ascii "${tls_hello_ascii:0:32}" 2>/dev/null)\""
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
+                    return 3
+               fi
+          elif [[ $tls_content_type != 14 ]] && [[ $tls_content_type != 15 ]] && \
+               [[ $tls_content_type != 16 ]] && [[ $tls_content_type != 17 ]]; then
                debugme tmln_warning "Content type other than alert, handshake, change cipher spec, or application data detected."
                [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 8
@@ -10622,7 +10661,7 @@ parse_tls_serverhello() {
           DETECTED_TLS_VERSION=$tls_protocol
 
           if [[ $msg_len -gt $tls_hello_ascii_len-$i ]]; then
-               if [[ "$process_full" == "all" ]]; then
+               if [[ "$process_full" == all ]]; then
                     debugme tmln_warning "Malformed message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 7
@@ -10642,7 +10681,7 @@ parse_tls_serverhello() {
 
      # Now check the alert messages.
      tls_alert_ascii_len=${#tls_alert_ascii}
-     if [[ "$process_full" == "all" ]] && [[ $tls_alert_ascii_len%4 -ne 0 ]]; then
+     if [[ "$process_full" == all ]] && [[ $tls_alert_ascii_len%4 -ne 0 ]]; then
           debugme tmln_warning "Malformed message."
           [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
@@ -10706,7 +10745,6 @@ parse_tls_serverhello() {
           i=$i+2
           msg_len=2*$(hex2dec "${tls_handshake_ascii:i:6}")
           i=$i+6
-
           if [[ $DEBUG -ge 3 ]]; then
                tm_out  "     handshake type:         0x${tls_msg_type}"
                case $tls_msg_type in
@@ -11602,6 +11640,7 @@ parse_tls_serverhello() {
 
 #arg1: list of ciphers suites or empty
 #arg2: "true" if full server response should be parsed.
+# return: 6: couldn't open socket, 0: OK, else: return value of parse_sslv2_serverhello()
 sslv2_sockets() {
      local ret
      local client_hello cipher_suites len_client_hello
@@ -12447,7 +12486,7 @@ tls_sockets() {
           # if the ephemeral key is needed (which comes last for TLS 1.2 and
           # below), then we need to check if response appears to be complete,
           # and if it isn't then try to get another packet from the server.
-          if [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]]; then
+          if [[ "$process_full" == all ]] || [[ "$process_full" == ephemeralkey ]]; then
                hello_done=1; skip=true
           fi
           for (( 1 ; hello_done==1; 1 )); do
@@ -12473,7 +12512,6 @@ tls_sockets() {
                          hello_done=0
                     else
                          tls_hello_ascii+="$next_packet"
-
                          if [[ $DEBUG -ge 1 ]]; then
                               sock_reply_file3=$(mktemp $TEMPDIR/ddreply.XXXXXX) || return 7
                               mv "$SOCK_REPLY_FILE" "$sock_reply_file3"
@@ -12535,6 +12573,9 @@ tls_sockets() {
           # determine the return value for higher level, so that they can tell what the result is
           if [[ $save -eq 1 ]] || [[ $lines -eq 1 ]]; then
                ret=1          # NOT available
+          elif [[ $save -eq 3 ]]; then
+               # only for IMAP currently 'a002 NO Starttls'
+               ret=3
           elif [[ $save -eq 8 ]]; then
                # odd return, we just pass this from parse_tls_serverhello() back
                ret=8
