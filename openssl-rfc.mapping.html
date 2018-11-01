@@ -4,12 +4,13 @@
 	<meta charset="UTF-8">
 </head>
 <style type="text/css">
-table { border-collapse:collapse; text-align:left; font-family:Helvetica; table-layout: fixed; width:1000px; overflow: hidden; }
-table th { padding:3px; border:1px solid #000; background-color:#888 ;color:white ;width:50%; }
-tr { padding:3px; border:1px solid #888; background-color:#FFF; empty-cells:hide; font-size:80%; }
-tr:nth-child(odd) { background-color: #CCF; color: #000; } 
-table tr:hover { background-color: #dfac20; color: #fff; }
-td { border:1px solid #999; }
+	table { border-collapse:collapse; text-align:left; font-family:Helvetica; table-layout:fixed; width:1000px; position:sticky; top:0px; z-index:10; }
+	table th { padding:3px; border:1px solid #000; background-color:#666 ;color:white ;width:100%; }
+	table tr:hover { background-color: #dfac20; color: #fff; }
+	tr { padding:3px; border:1px solid #888; background-color:#FFF; font-size:80%; empty-cells:hide; }
+	tr:nth-child(odd) { background-color: #CCF; color: #000; }
+	td { padding-left:3px; border:1px solid #999; }
+        th.sticky { position:sticky; top:0px; z-index:10; }
 </style>
 
 <body>
@@ -24,7 +25,8 @@ td { border:1px solid #999; }
 	https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml
 -->
 
-
+<div style="position:absolute; top:0px;">
+<!--        ^^^ try to minimize the offset when scrolling back for Firefox -->
 <table>
 <col width="8%" />
 <col width="26%" />
@@ -33,7 +35,7 @@ td { border:1px solid #999; }
 <col width="8%" />
 <col width="37%" />
 <thead>
-	<tr><th>Cipher Suite</th><th> Name (OpenSSL)</th><th>   KeyExch. </th><th> Encryption </th><th> Bits         </th><th>Cipher Suite Name (RFC)</th></tr>
+	<tr><th class="sticky" >Cipher Suite</th><th class="sticky"> Name (OpenSSL)</th><th class="sticky">   KeyExch. </th><th class="sticky"> Encryption </th><th class="sticky"> Bits         </th><th class="sticky">Cipher Suite Name (RFC)</th></tr>
 </thead>
 <tbody>
 <!-- RFC 2246, RFC 4346, RFC 5246 -->
@@ -455,4 +457,5 @@ They appeared first in SSLeay (see ssl.h / ssl_lib.c).
 <tr><td> [0xff0810]</td><td> NULL                         </td><td> None     </td><td>   Null    </td><td>  0            </td><td> SSL_CK_NULL                         </td></tr>
 </tbody>
 </table>
+</div>
 </body>
