@@ -296,7 +296,7 @@
       0xC0,0x03 - ECDH-ECDSA-DES-CBC3-SHA        TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA               SSLv3      Kx=ECDH/ECDSA  Au=ECDH    Enc=3DES(168)                  Mac=SHA1               
       0x00,0x0A - DES-CBC3-SHA                   TLS_RSA_WITH_3DES_EDE_CBC_SHA                      SSLv3      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
  0x07,0x00,0xC0 - DES-CBC3-MD5                   SSL_CK_DES_192_EDE3_CBC_WITH_MD5                   SSLv2      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=MD5                
- 0x07,0x01,0xC0 - DES-CBC3-MD5                   SSL_CK_DES_192_EDE3_CBC_WITH_SHA                   SSLv2      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
+ 0x07,0x01,0xC0 - DES-CBC3-SHA                   SSL_CK_DES_192_EDE3_CBC_WITH_SHA                   SSLv2      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
       0x00,0x93 - RSA-PSK-3DES-EDE-CBC-SHA       TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA                  SSLv3      Kx=RSAPSK      Au=RSA     Enc=3DES(168)                  Mac=SHA1               
       0x00,0x8B - PSK-3DES-EDE-CBC-SHA           TLS_PSK_WITH_3DES_EDE_CBC_SHA                      SSLv3      Kx=PSK         Au=PSK     Enc=3DES(168)                  Mac=SHA1               
       0x00,0x1F - KRB5-DES-CBC3-SHA              TLS_KRB5_WITH_3DES_EDE_CBC_SHA                     SSLv3      Kx=KRB5        Au=KRB5    Enc=3DES(168)                  Mac=SHA1               
