@@ -296,6 +296,7 @@
       0xC0,0x03 - ECDH-ECDSA-DES-CBC3-SHA        TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA               SSLv3      Kx=ECDH/ECDSA  Au=ECDH    Enc=3DES(168)                  Mac=SHA1               
       0x00,0x0A - DES-CBC3-SHA                   TLS_RSA_WITH_3DES_EDE_CBC_SHA                      SSLv3      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
  0x07,0x00,0xC0 - DES-CBC3-MD5                   SSL_CK_DES_192_EDE3_CBC_WITH_MD5                   SSLv2      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=MD5                
+ 0x07,0x01,0xC0 - DES-CBC3-MD5                   SSL_CK_DES_192_EDE3_CBC_WITH_SHA                   SSLv2      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
       0x00,0x93 - RSA-PSK-3DES-EDE-CBC-SHA       TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA                  SSLv3      Kx=RSAPSK      Au=RSA     Enc=3DES(168)                  Mac=SHA1               
       0x00,0x8B - PSK-3DES-EDE-CBC-SHA           TLS_PSK_WITH_3DES_EDE_CBC_SHA                      SSLv3      Kx=PSK         Au=PSK     Enc=3DES(168)                  Mac=SHA1               
       0x00,0x1F - KRB5-DES-CBC3-SHA              TLS_KRB5_WITH_3DES_EDE_CBC_SHA                     SSLv3      Kx=KRB5        Au=KRB5    Enc=3DES(168)                  Mac=SHA1               
@@ -305,6 +306,7 @@
       0xFE,0xFF - -                              SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA                 SSLv3      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
       0xFF,0xE0 - -                              SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA                 SSLv3      Kx=RSA         Au=RSA     Enc=3DES(168)                  Mac=SHA1               
  0x08,0x00,0x80 - RC4-64-MD5                     SSL_CK_RC4_64_WITH_MD5                             SSLv2      Kx=RSA         Au=RSA     Enc=RC4(64)                    Mac=MD5                
+ 0xFF,0x80,0x00 - DES-CFB-M1                     SSL_CK_DES_64_CFB64_WITH_MD5_1                     SSLv2      Kx=RSA         Au=RSA     Enc=DES(64)                    Mac=M1
       0x00,0x63 - EXP1024-DHE-DSS-DES-CBC-SHA    TLS_DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA            SSLv3      Kx=DH(1024)    Au=DSS     Enc=DES(56)                    Mac=SHA1     export    
       0x00,0x15 - EDH-RSA-DES-CBC-SHA            TLS_DHE_RSA_WITH_DES_CBC_SHA                       SSLv3      Kx=DH          Au=RSA     Enc=DES(56)                    Mac=SHA1               
       0x00,0x12 - EDH-DSS-DES-CBC-SHA            TLS_DHE_DSS_WITH_DES_CBC_SHA                       SSLv3      Kx=DH          Au=DSS     Enc=DES(56)                    Mac=SHA1               
@@ -315,6 +317,7 @@
       0x00,0x09 - DES-CBC-SHA                    TLS_RSA_WITH_DES_CBC_SHA                           SSLv3      Kx=RSA         Au=RSA     Enc=DES(56)                    Mac=SHA1               
       0x00,0x61 - EXP1024-RC2-CBC-MD5            TLS_RSA_EXPORT1024_WITH_RC2_56_MD5                 SSLv3      Kx=RSA(1024)   Au=RSA     Enc=RC2(56)                    Mac=MD5      export    
  0x06,0x00,0x40 - DES-CBC-MD5                    SSL_CK_DES_64_CBC_WITH_MD5                         SSLv2      Kx=RSA         Au=RSA     Enc=DES(56)                    Mac=MD5                
+ 0x06,0x01,0x40 - DES-CBC-SHA                    SSL_CK_DES_64_CBC_WITH_SHA                         SSLv2      Kx=RSA         Au=RSA     Enc=DES(56)                    Mac=SHA1               
       0x00,0x1E - KRB5-DES-CBC-SHA               TLS_KRB5_WITH_DES_CBC_SHA                          SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(56)                    Mac=SHA1               
       0x00,0x22 - KRB5-DES-CBC-MD5               TLS_KRB5_WITH_DES_CBC_MD5                          SSLv3      Kx=KRB5        Au=KRB5    Enc=DES(56)                    Mac=MD5                
       0xFE,0xFE - -                              SSL_RSA_FIPS_WITH_DES_CBC_SHA                      SSLv3      Kx=RSA         Au=RSA     Enc=DES(56)                    Mac=SHA1               
@@ -359,6 +362,9 @@
       0x00,0x3B - NULL-SHA256                    TLS_RSA_WITH_NULL_SHA256                           TLSv1.2    Kx=RSA         Au=RSA     Enc=None                       Mac=SHA256             
       0x00,0x02 - NULL-SHA                       TLS_RSA_WITH_NULL_SHA                              SSLv3      Kx=RSA         Au=RSA     Enc=None                       Mac=SHA1               
       0x00,0x01 - NULL-MD5                       TLS_RSA_WITH_NULL_MD5                              SSLv3      Kx=RSA         Au=RSA     Enc=None                       Mac=MD5                
+      0x00,0x00 - NULL                           TLS_NULL_WITH_NULL_NULL                            SSLv3      Kx=None        Au=None    Enc=None                       Mac=Null               
+ 0x00,0x00,0x00 - NULL-MD5                       SSL_CK_NULL_WITH_MD5                               SSLv2      Kx=RSA(512)    Au=RSA     Enc=None                       Mac=MD5      export
       0x00,0x82 - GOST94-NULL-GOST94             TLS_GOSTR341094_WITH_NULL_GOSTR3411                TLSv1      Kx=GOST        Au=GOST94  Enc=None                       Mac=GOSTR3411          
       0x00,0x83 - GOST2001-NULL-GOST94           TLS_GOSTR341001_WITH_NULL_GOSTR3411                SSLv3      Kx=GOST        Au=GOST01  Enc=None                       Mac=GOST94             
       0xFF,0x87 - GOST2012256-NULL-STREEBOG256   -                                                  SSLv3      Kx=GOST        Au=GOST01  Enc=None                       Mac=STREEBOG256        
+ 0xFF,0x80,0x10 - NULL                           SSL_CK_NULL                                        SSLv2      Kx=None        Au=None    Enc=None                       Mac=Null
