@@ -5419,20 +5419,28 @@ run_cipherlists() {
      return $ret
 }
 
+# The return value is an indicator of the quality of the DH key length in $1:
+#   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
+#   5 = neither good nor bad, 6 = pr_svrty_good, 7 = pr_svrty_best
 pr_dh_quality() {
      local bits="$1"
      local string="$2"
 
      if [[ "$bits" -le 600 ]]; then
           pr_svrty_critical "$string"
+          return 1
      elif [[ "$bits" -le 800 ]]; then
           pr_svrty_high "$string"
+          return 2
      elif [[ "$bits" -le 1280 ]]; then
           pr_svrty_medium "$string"
+          return 3
      elif [[ "$bits" -ge 2048 ]]; then
           pr_svrty_good "$string"
+          return 6
      else
           out "$string"
+          return 5
      fi
 }
 
@@ -8435,6 +8443,8 @@ run_pfs() {
      local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
      local pfs_ciphers curves_offered="" curves_to_test temp
      local len1 len2 curve_found
+     local key_bitstring quality_str
+     local -i len_dh_p quality
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
      local jsonID="PFS"
@@ -8786,26 +8796,23 @@ run_pfs() {
           fi
      fi
      if "$using_sockets" && ( "$pfs_tls13_offered" || ( "$ffdhe_offered" && "$EXPERIMENTAL" ) ); then
-          # find out what groups from RFC 7919 are supported.
+          # find out what groups are supported.
           nr_curves=0
           for curve in "${ffdhe_groups_output[@]}"; do
                supported_curve[nr_curves]=false
+               [[ "$DH_GROUP_OFFERED" =~ "$curve" ]] && supported_curve[nr_curves]=true
                nr_curves+=1
           done
           protos_to_try=""
           "$pfs_tls13_offered" && protos_to_try="04"
           if "$ffdhe_offered" && "$EXPERIMENTAL"; then
-               # Check to see whether RFC 7919 is supported (see Section 4 of RFC 7919)
-               tls_sockets "03" "${ffdhe_cipher_list_hex:2}, 00,ff" "ephemeralkey" "00, 0a, 00, 04, 00, 02, 01, fb"
-               sclient_success=$?
-               if [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]]; then
-                    if "$pfs_tls13_offered"; then
-                         protos_to_try="04 03"
-                    else
-                         protos_to_try="03"
-                    fi
+               if "$pfs_tls13_offered"; then
+                    protos_to_try="04 03"
+               else
+                    protos_to_try="03"
                fi
           fi
+          curve_found=""
           for proto in $protos_to_try; do
                while true; do
                     curves_to_test=""
@@ -8821,6 +8828,10 @@ run_pfs() {
                     temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     curve_found="${temp#*, }"
                     curve_found="${curve_found%%,*}"
+                    if [[ "$proto" == "03" ]] && [[ -z "$DH_GROUP_OFFERED" ]] && [[ "$curve_found" =~ ffdhe ]]; then
+                         DH_GROUP_OFFERED="RFC7919/$curve_found"
+                         DH_GROUP_LEN_P="${curve_found#ffdhe}"
+                    fi
                     [[ ! "$curve_found" =~ ffdhe ]] && break
                     for (( i=0; i < nr_curves; i++ )); do
                          ! "${supported_curve[i]}" && [[ "${ffdhe_groups_output[i]}" == "$curve_found" ]] && break
@@ -8833,10 +8844,51 @@ run_pfs() {
           for (( i=0; i < nr_curves; i++ )); do
                "${supported_curve[i]}" && curves_offered+="${ffdhe_groups_output[i]} "
           done
+          curves_offered="$(strip_trailing_space "$curves_offered")"
+          if "$ffdhe_offered" && "$EXPERIMENTAL" && [[ -z "$curves_offered" ]] && [[ -z "$curve_found" ]]; then
+               # Some servers will fail if the supported_groups extension is present.
+               tls_sockets "03" "${ffdhe_cipher_list_hex:2}, 00,ff" "ephemeralkey"
+               sclient_success=$?
+               if [[ $sclient_success -eq 0 ]] || [[ $sclient_success -eq 2 ]]; then
+                    temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                    curve_found="${temp#*, }"
+                    curve_found="${curve_found%%,*}"
+               fi
+          fi
+          if [[ -z "$curves_offered" ]] && [[ -n "$curve_found" ]]; then
+               # The server is not using one of the groups from RFC 7919.
+               key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
+               get_common_prime "$jsonID" "$key_bitstring" ""
+               [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
+          fi
           if [[ -n "$curves_offered" ]]; then
-               pr_bold " RFC 7919 DH groups offered:  "
-               outln "$curves_offered"
-               fileout "RFC7919_DH_groups" "INFO" "$curves_offered"
+               if [[ ! "$curves_offered" =~ ffdhe ]] || [[ ! "$curves_offered" =~ \  ]]; then
+                    pr_bold " Finite field group offered:  "
+               else
+                    pr_bold " Finite field groups offered: "
+               fi
+               if [[ "$curves_offered" =~ ffdhe ]]; then
+                    pr_svrty_good "$curves_offered"
+                    quality=6
+               else
+                    out "$curves_offered ("
+                    pr_dh_quality "$len_dh_p" "$len_dh_p bits"
+                    quality=$?
+                    out ")"
+               fi
+               case "$quality" in
+                    1) quality_str="CRITICAL" ;;
+                    2) quality_str="HIGH" ;;
+                    3) quality_str="MEDIUM" ;;
+                    4) quality_str="LOW" ;;
+                    5) quality_str="INFO" ;;
+                    6|7) quality_str="OK" ;;
+               esac
+               if [[ "$curves_offered" =~ Unknown ]]; then
+                    fileout "DHE_groups" "$quality_str" "$curves_offered ($len_dh_p bits)"
+               else
+                    fileout "DHE_groups" "$quality_str" "$curves_offered"
+               fi
           fi
      fi
      outln
@@ -13878,7 +13930,11 @@ out_common_prime() {
      local cwe="$3"
 
      # now size matters -- i.e. the bit size ;-)
-     if [[ $DH_GROUP_LEN_P -le 512 ]]; then
+     [[ "$DH_GROUP_OFFERED" == ffdhe* ]] && [[ ! "$DH_GROUP_OFFERED" =~ \  ]] && DH_GROUP_OFFERED="RFC7919/$DH_GROUP_OFFERED"
+     if [[ "$DH_GROUP_OFFERED" =~ ffdhe ]] && [[ "$DH_GROUP_OFFERED" =~ \  ]]; then
+          out "common primes detected: "; pr_italic "$DH_GROUP_OFFERED"
+          fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+     elif [[ $DH_GROUP_LEN_P -le 512 ]]; then
           pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$DH_GROUP_OFFERED"; out " detected ($DH_GROUP_LEN_P bits)"
           fileout "$jsonID2" "CRITICAL" "$DH_GROUP_OFFERED" "$cve" "$cwe"
      elif [[ $DH_GROUP_LEN_P -le 1024 ]]; then
@@ -13969,7 +14025,13 @@ run_logjam() {
      fi
 
      # Try all ciphers that use an ephemeral DH key. If successful, check whether the key uses a weak prime.
-     if "$using_sockets"; then
+     if [[ -n "$DH_GROUP_OFFERED" ]]; then
+          if [[ "$DH_GROUP_OFFERED" =~ Unknown ]]; then
+               subret=0                 # no common DH key detected
+          else
+               subret=1                 # known prime/DH key
+          fi
+     elif "$using_sockets"; then
           tls_sockets "03" "$all_dh_ciphers, 00,ff" "ephemeralkey"
           sclient_success=$?
           if [[ $sclient_success -eq 0 ]] || [[ $sclient_success -eq 2 ]]; then
@@ -14000,10 +14062,8 @@ run_logjam() {
           fi
      fi
 
-     # FIXME: The following logic comes too late if we have already a check for DH groups in run_pfs()
-     # now the final test for common primes, -n "$DH_GROUP_OFFERED" indicates we did this already
      if [[ -n "$key_bitstring" ]]; then
-           if [[ -z "$DH_GROUP_OFFERED" ]]; then
+          if [[ -z "$DH_GROUP_OFFERED" ]]; then
                get_common_prime "$jsonID2" "$key_bitstring" "$spaces"
                ret=$?                   # no common primes file would be ret=1 --> we should treat that some place else before
           fi
@@ -14012,7 +14072,7 @@ run_logjam() {
           else
                subret=1                 # known prime/DH key
           fi
-     else
+     elif [[ -z "$DH_GROUP_OFFERED" ]]; then
           subret=3
      fi
 
