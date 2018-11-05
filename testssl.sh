@@ -8721,7 +8721,7 @@ run_pfs() {
                          sclient_connect_successful $? $TMPFILE || break
                          temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")
                          curve_found="${temp%%,*}"
-                         if [[ "$curve_found" == "ECDH" ]]; then
+                         if [[ "$curve_found" == ECDH ]]; then
                               curve_found="${temp#*, }"
                               curve_found="${curve_found%%,*}"
                          fi
@@ -8738,14 +8738,14 @@ run_pfs() {
           protos_to_try="03"
           "$pfs_tls13_offered" && protos_to_try="04 03"
           for proto in $protos_to_try; do
-               if [[ "$proto" == "03" ]]; then
+               if [[ "$proto" == 03 ]]; then
                     ecdhe_cipher_list_hex="$(strip_inconsistent_ciphers "03" "$ecdhe_cipher_list_hex")"
                     [[ -z "$ecdhe_cipher_list_hex" ]] && continue
                fi
                while true; do
                     curves_to_test=""
                     for (( i=0; i < nr_curves; i++ )); do
-                         if ! "${curves_deprecated[i]}" || [[ "$proto" == "03" ]]; then
+                         if ! "${curves_deprecated[i]}" || [[ "$proto" == 03 ]]; then
                               ! "${supported_curve[i]}" && curves_to_test+=", ${curves_hex[i]}"
                          fi
                     done
@@ -8863,15 +8863,17 @@ run_pfs() {
           fi
           if [[ -n "$curves_offered" ]]; then
                if [[ ! "$curves_offered" =~ ffdhe ]] || [[ ! "$curves_offered" =~ \  ]]; then
-                    pr_bold " Finite field group offered:  "
+                    pr_bold " DH group offered:            "
                else
-                    pr_bold " Finite field groups offered: "
+                    pr_bold " DH group offered:            "
                fi
                if [[ "$curves_offered" =~ ffdhe ]]; then
+                    # ok not to display them in italics:
                     pr_svrty_good "$curves_offered"
                     quality=6
                else
-                    out "$curves_offered ("
+                    pr_italic "$curves_offered"
+                    out " ("
                     pr_dh_quality "$len_dh_p" "$len_dh_p bits"
                     quality=$?
                     out ")"
@@ -8885,9 +8887,9 @@ run_pfs() {
                     6|7) quality_str="OK" ;;
                esac
                if [[ "$curves_offered" =~ Unknown ]]; then
-                    fileout "DHE_groups" "$quality_str" "$curves_offered ($len_dh_p bits)"
+                    fileout "DH_groups" "$quality_str" "$curves_offered ($len_dh_p bits)"
                else
-                    fileout "DHE_groups" "$quality_str" "$curves_offered"
+                    fileout "DH_groups" "$quality_str" "$curves_offered"
                fi
           fi
      fi
@@ -8895,11 +8897,6 @@ run_pfs() {
 
      tmpfile_handle ${FUNCNAME[0]}.txt
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
-     #if "$pfs_offered"; then
-          # return 0
-     #else
-     #     :
-     #fi
      return 0
 }
 
