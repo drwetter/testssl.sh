@@ -225,7 +225,7 @@ OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulne
 
 ########### Tuning vars which cannot be set by a cmd line switch. Use instead e.g "HEADER_MAXSLEEP=10 ./testssl.sh <your_args_here>"
 #
-EXPERIMENTAL=${EXPERIMENTAL:-false}
+EXPERIMENTAL=${EXPERIMENTAL:-false}     # a development hook which allows us to disable code
 PROXY_WAIT=${PROXY_WAIT:-20}            # waiting at max 20 seconds for socket reply through proxy
 DNS_VIA_PROXY=${DNS_VIA_PROXY:-true}    # do DNS lookups via proxy. --ip=proxy reverses this
 IGN_OCSP_PROXY=${IGN_OCSP_PROXY:-false} # Also when --proxy is supplied it is ignored when testing for revocation via OCSP via --phone-out
@@ -8795,7 +8795,7 @@ run_pfs() {
                fi
           fi
      fi
-     if "$using_sockets" && ( "$pfs_tls13_offered" || ( "$ffdhe_offered" && "$EXPERIMENTAL" ) ); then
+     if "$using_sockets" && ( "$pfs_tls13_offered" || "$ffdhe_offered" ); then
           # find out what groups are supported.
           nr_curves=0
           for curve in "${ffdhe_groups_output[@]}"; do
@@ -8805,7 +8805,7 @@ run_pfs() {
           done
           protos_to_try=""
           "$pfs_tls13_offered" && protos_to_try="04"
-          if "$ffdhe_offered" && "$EXPERIMENTAL"; then
+          if "$ffdhe_offered"; then
                if "$pfs_tls13_offered"; then
                     protos_to_try="04 03"
                else
@@ -8845,7 +8845,7 @@ run_pfs() {
                "${supported_curve[i]}" && curves_offered+="${ffdhe_groups_output[i]} "
           done
           curves_offered="$(strip_trailing_space "$curves_offered")"
-          if "$ffdhe_offered" && "$EXPERIMENTAL" && [[ -z "$curves_offered" ]] && [[ -z "$curve_found" ]]; then
+          if "$ffdhe_offered" && [[ -z "$curves_offered" ]] && [[ -z "$curve_found" ]]; then
                # Some servers will fail if the supported_groups extension is present.
                tls_sockets "03" "${ffdhe_cipher_list_hex:2}, 00,ff" "ephemeralkey"
                sclient_success=$?
