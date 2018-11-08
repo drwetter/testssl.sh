@@ -795,7 +795,7 @@ fileout_json_finding() {
             target="$NODE"
             $do_mx_all_ips && target="$URI"
             echo -e "          {
-                    \"target host\"     : \"$target\",
+                    \"targetHost\"      : \"$target\",
                     \"ip\"              : \"$NODEIP\",
                     \"port\"            : \"$PORT\",
                     \"rDNS\"            : \"$rDNS\",
