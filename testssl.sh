@@ -3184,7 +3184,7 @@ show_rfc_style(){
 
 neat_header(){
      if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
-          out "$(printf -- "Hexcode  Cipher Suite Name (RFC)                           KeyExch.   Encryption  Bits")"
+          out "$(printf -- "Hexcode  Cipher Suite Name (IANA/RFC)                      KeyExch.   Encryption  Bits")"
           [[ "$DISPLAY_CIPHERNAMES" != "rfc-only" ]] && out "$(printf -- "     Cipher Suite Name (OpenSSL)")"
           outln
           out "$(printf -- "%s------------------------------------------------------------------------------------------")"
@@ -3192,7 +3192,7 @@ neat_header(){
           outln
      else
           out "$(printf -- "Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.   Encryption  Bits")"
-          [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && out "$(printf -- "     Cipher Suite Name (RFC)")"
+          [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && out "$(printf -- "     Cipher Suite Name (IANA/RFC)")"
           outln
           out "$(printf -- "%s--------------------------------------------------------------------------")"
           [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && out "$(printf -- "---------------------------------------------------")"
@@ -4510,7 +4510,7 @@ run_client_simulation() {
                outln
                out "--------------------------------------------------------------------------"
           else
-               out " Browser                      Protocol  Cipher Suite Name (RFC)                          "
+               out " Browser                      Protocol  Cipher Suite Name (IANA/RFC)                      "
                ( "$using_sockets" || "$HAS_DH_BITS") && out "Forward Secrecy"
                outln
                out "------------------------------------------------------------------------------------------"
@@ -15854,9 +15854,9 @@ output options (can also be preset via environment variables):
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
      --mapping <openssl|           openssl: use the OpenSSL cipher suite name as the primary name cipher suite name form (default)
-                rfc|                 rfc: use the RFC cipher suite name as the primary name cipher suite name form
-                no-openssl|          no-openssl: don't display the OpenSSL cipher suite name, display RFC names only
-                no-rfc>              no-rfc: don't display the RFC cipher suite name, display OpenSSL names only
+                iana|rfc             -> use the IANA/(RFC) cipher suite name as the primary name cipher suite name form
+                no-openssl|          -> don't display the OpenSSL cipher suite name, display IANA/(RFC) names only
+                no-iana|no-rfc>      -> don't display the IANA/(RFC) cipher suite name, display OpenSSL names only
      --color <0|1|2|3>             0: no escape or other codes,  1: b/w escape codes,  2: color (default), 3: extra color (color all ciphers)
      --colorblind                  swap green and blue in the output
      --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
@@ -17957,10 +17957,10 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case "$cipher_mapping" in
                          no-openssl) DISPLAY_CIPHERNAMES="rfc-only" ;;
-                         no-rfc) DISPLAY_CIPHERNAMES="openssl-only" ;;
+                         no-rfc|no-iana) DISPLAY_CIPHERNAMES="openssl-only" ;;
                          openssl) DISPLAY_CIPHERNAMES="openssl" ;;
-                         rfc) DISPLAY_CIPHERNAMES="rfc" ;;
-                         *)   tmln_warning "\nmapping can only be \"no-openssl\", \"no-rfc\", \"openssl\" or \"rfc\""
+                         rfc|iana) DISPLAY_CIPHERNAMES="rfc" ;;
+                         *)   tmln_warning "\nmapping can only be \"no-openssl\", \"no-iana\"(\"no-rfc\"), \"openssl\" or \"iana\"(\"rfc\")"
                               help 1 ;;
                     esac
                     ;;

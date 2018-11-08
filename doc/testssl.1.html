@@ -334,15 +334,18 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--wide</code>                        Except the "each cipher output" all tests displays the single cipher name (scheme see below). This option enables testssl.sh to display also for the following sections the same output as for testing each ciphers: BEAST, PFS, RC4. The client simulation has also a wide mode. The difference here is restricted to a column aligned output and a proper headline. The environment variable <code>WIDE</code> can be used instead.</p>
 
-<p><code>--mapping &lt;openssl|rfc|no-openssl|no-rfc></code></p>
+<p><code>--mapping &lt;openssl|iana|no-openssl|no-iana></code></p>
 
 <ul>
 <li><code>openssl</code>: use the OpenSSL cipher suite name as the primary name cipher suite name form (default),</li>
-<li><code>rfc</code>: use the RFC cipher suite name as the primary name cipher suite name form.</li>
-<li><code>no-openssl</code>: don't display the OpenSSL cipher suite name, display RFC names only.</li>
-<li><code>no-rfc</code>: don't display the RFC cipher suite name, display OpenSSL names only.</li>
+<li><code>iana</code>: use the IANA cipher suite name as the primary name cipher suite name form.</li>
+<li><code>no-openssl</code>: don't display the OpenSSL cipher suite name, display IANA names only.</li>
+<li><code>no-iana</code>: don't display the IANA cipher suite name, display OpenSSL names only.</li>
 </ul>
 
+
+<p>Please note that in testssl.sh 3,0 you can still use <code>rfc</code> instead of <code>iana</code> and <code>no-rfc</code> instead of <code>no-iana</code> but it'll disappear
+after 3.0.</p>
 
 <p><code>--show-each</code>                   This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  <code>SHOW_EACH_C</code> is your friend if you prefer to set this via the shell environment.</p>
 
@@ -541,11 +544,11 @@ to create the hashes for HPKP.</li>
 
 <h2 id="FILES">FILES</h2>
 
-<p><strong>etc/*pem</strong>             Here are the certificate stores from Apple, Linux, Mozilla Firefox, Windows.</p>
+<p><strong>etc/*pem</strong>               Here are the certificate stores from Apple, Linux, Mozilla Firefox, Windows.</p>
 
-<p><strong>etc/mapping-rfc.txt</strong>   Provides a mandatory file with mapping from OpenSSL cipher suites names to the ones from IANA / used in the RFCs.</p>
+<p><strong>etc/cipher-mapping.txt</strong>  Provides a mandatory file with mapping from OpenSSL cipher suites names to the ones from IANA / used in the RFCs.</p>
 
-<p><strong>etc/tls_data.txt</strong>      Provides a mandatory file for ciphers (bash sockets) and key material.</p>
+<p><strong>etc/tls_data.txt</strong>        Provides a mandatory file for ciphers (bash sockets) and key material.</p>
 
 <h2 id="AUTHORS">AUTHORS</h2>
 
@@ -571,7 +574,7 @@ to create the hashes for HPKP.</li>
 
   <ol class='man-decor man-foot man foot'>
     <li class='tl'></li>
-    <li class='tc'>September 2018</li>
+    <li class='tc'>November 2018</li>
     <li class='tr'>testssl(1)</li>
   </ol>
 

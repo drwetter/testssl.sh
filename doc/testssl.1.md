@@ -257,12 +257,15 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 `--wide`                        Except the "each cipher output" all tests displays the single cipher name (scheme see below). This option enables testssl.sh to display also for the following sections the same output as for testing each ciphers: BEAST, PFS, RC4. The client simulation has also a wide mode. The difference here is restricted to a column aligned output and a proper headline. The environment variable `WIDE` can be used instead.
 
 
-`--mapping <openssl|rfc|no-openssl|no-rfc>`
+`--mapping <openssl|iana|no-openssl|no-iana>`
 
 * `openssl`: use the OpenSSL cipher suite name as the primary name cipher suite name form (default),
-* `rfc`: use the RFC cipher suite name as the primary name cipher suite name form.
-* `no-openssl`: don't display the OpenSSL cipher suite name, display RFC names only.
-* `no-rfc`: don't display the RFC cipher suite name, display OpenSSL names only.
+* `iana`: use the IANA cipher suite name as the primary name cipher suite name form.
+* `no-openssl`: don't display the OpenSSL cipher suite name, display IANA names only.
+* `no-iana`: don't display the IANA cipher suite name, display OpenSSL names only.
+
+Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and `no-rfc` instead of `no-iana` but it'll disappear
+after 3.0.
 
 
 `--show-each`                   This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  `SHOW_EACH_C` is your friend if you prefer to set this via the shell environment.
@@ -466,11 +469,11 @@ does the same on the plain text IMAP port. Please note that for plain TLS-encryp
 
 ## FILES
 
-**etc/\*pem**             Here are the certificate stores from Apple, Linux, Mozilla Firefox, Windows.
+**etc/\*pem**               Here are the certificate stores from Apple, Linux, Mozilla Firefox, Windows.
 
-**etc/mapping-rfc.txt**   Provides a mandatory file with mapping from OpenSSL cipher suites names to the ones from IANA / used in the RFCs.
+**etc/cipher-mapping.txt**  Provides a mandatory file with mapping from OpenSSL cipher suites names to the ones from IANA / used in the RFCs.
 
-**etc/tls_data.txt**      Provides a mandatory file for ciphers (bash sockets) and key material.
+**etc/tls_data.txt**        Provides a mandatory file for ciphers (bash sockets) and key material.
 
 
 ## AUTHORS
