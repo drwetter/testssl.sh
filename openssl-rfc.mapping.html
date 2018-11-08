@@ -227,6 +227,13 @@ xB9  TLS_RSA_PSK_WITH_NULL_SHA384
 <!-- https://tools.ietf.org/html/rfc5746 -->
 <tr><td> [0x5600]</td><td>   TLS_FALLBACK_SCSV            </td><td>          </td><td>           </td><td>               </td><td> TLS_EMPTY_RENEGOTIATION_INFO_SCSV     </td></tr>
 
+<!-- RFC 8846 -->
+<tr><td> [0x1301]</td><td>   TLS_AES_128_GCM_SHA256       </td><td> ECDH     </td><td> AESGCM    </td><td> 128           </td><td> TLS_AES_128_GCM_SHA256     </td></tr>
+<tr><td> [0x1302]</td><td>   TLS_AES_256_GCM_SHA384       </td><td> ECDH     </td><td> AESGCM    </td><td> 256           </td><td> TLS_AES_256_GCM_SHA384     </td></tr>
+<tr><td> [0x1303]</td><td>   TLS_CHACHA20_POLY1305_SHA256 </td><td> ECDH     </td><td>ChaCha20-Poly1305 </td><td> 256    </td><td> TLS_CHACHA20_POLY1305_SHA256     </td></tr>
+<tr><td> [0x1304]</td><td>   TLS_AES_128_CCM_SHA256       </td><td> ECDH     </td><td> AESCCM    </td><td> 128    </td><td> TLS_AES_128_CCM_SHA256     </td></tr>
+<tr><td> [0x1305]</td><td>   TLS_AES_128_CCM_8_SHA256     </td><td> ECDH     </td><td> AESCCM8  </td><td> 128    </td><td> TLS_AES_128_CCM_8_SHA256   </td></tr>
+
 <!-- RFC 4492 -->
 <tr><td> [0xc001]</td><td>   ECDH-ECDSA-NULL-SHA          </td><td> ECDH/ECDSA</td><td>  Null    </td><td>  0            </td><td> TLS_ECDH_ECDSA_WITH_NULL_SHA            </td></tr>
 <tr><td> [0xc002]</td><td>   ECDH-ECDSA-RC4-SHA           </td><td> ECDH/ECDSA</td><td>  RC4     </td><td>  128          </td><td> TLS_ECDH_ECDSA_WITH_RC4_128_SHA         </td></tr>
