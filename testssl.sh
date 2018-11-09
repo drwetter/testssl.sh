@@ -4569,7 +4569,7 @@ run_client_simulation() {
                          fi
                          bits="${bits/bits/}"
                          bits="${bits// /}"
-                         if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
+                         if [[ "$what_dh" == X25519 ]] || [[ "$what_dh" == X448 ]]; then
                               curve="$what_dh"
                               what_dh="ECDH"
                          fi
@@ -4631,19 +4631,19 @@ run_client_simulation() {
                                    done
                               fi
                          fi
-                         if ! "$WIDE"; then
-                              "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && has_dh_bits=$HAS_DH_BITS && HAS_DH_BITS=true
-                              "$HAS_DH_BITS" && read_dhbits_from_file $TMPFILE
-                              "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] && HAS_DH_BITS=$has_dh_bits
-                         elif [[ -n "$what_dh" ]]; then
+                         if [[ -n "$what_dh" ]]; then
                               [[ -n "$curve" ]] && curve="($curve)"
-                              if [[ "$what_dh" == "ECDH" ]]; then
+                              "$WIDE" || out ", "
+                              if [[ "$what_dh" == ECDH ]]; then
                                    pr_ecdh_quality "$bits" "$(printf -- "%-12s" "$bits bit $what_dh") $curve"
                               else
                                    pr_dh_quality "$bits" "$(printf -- "%-12s" "$bits bit $what_dh") $curve"
                               fi
-                         elif "$HAS_DH_BITS" || ( "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] ); then
-                              out "No FS"
+                         else
+                              if "$HAS_DH_BITS" || ( "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] ); then
+                                   "$WIDE" || out ", "
+                                   out "No FS"
+                              fi
                          fi
                          outln
                          if [[ -n "${warning[i]}" ]]; then
