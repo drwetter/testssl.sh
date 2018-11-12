@@ -27,8 +27,11 @@ The output rates findings by color (screen) or severity (file output) so that yo
 .P
 Only you see the result\. You also can use it internally on your LAN\. Except DNS lookups it doesn\'t use any other hosts or even third parties for checks\.
 .
+.SH "REQUIREMENTS"
+Testssl\.sh is out of the box pretty much portable: it runs under any Unix\-like stack: Linux, *BSD, MacOS X, WSL=Windows Subsystem for Linux,, Cygwin and MSYS2\. \fBbash\fR (also version 3 is still supported) is a prerequisite as well as standard utilities like awk, sed, tr and head\. This can be of BSD, System 5 or GNU flavor whereas grep from System V is not yet supported\.
+.
 .P
-It is out of the box pretty much portable: testssl\.sh runs under any Unix\-like stack (Linux, *BSD, MacOS X, WSL=bash on Windows, Cygwin and MSYS2)\. \fBbash\fR (also version 3 is still supported) is a prerequisite as well as standard utilities like awk, sed, tr and head\. This can be of BSD, System 5 or GNU flavor whereas grep from System V is not yet supported\.
+Any OpenSSL or LibreSSL version is needed as a helper\. Unless previous versions of testssl\.sh almost every check is done via (TCP) sockets\. Despite that some some statically linked OpenSSL binaries for major operating systems are supplied in \fB\./bin/\fR \.
 .
 .SH "GENERAL"
 \fBtestssl\.sh URI\fR as the default invocation does the so\-called default run which does a number of checks and puts out the results colorized (ANSI and termcap) on the screen\. It does every check listed below except \fB\-E\fR which are (order of appearance):
@@ -58,7 +61,7 @@ It is out of the box pretty much portable: testssl\.sh runs under any Unix\-like
 7) vulnerabilities
 .
 .P
-8) testing each of 359 ciphers
+8) testing each of 370 preconfigured ciphers
 .
 .P
 9) client simulation
@@ -88,7 +91,7 @@ Options are either short or long options\. Any option requiring a value can be c
 \fB\-\-file <fname>\fR is the mass testing option\. Per default it implicitly turns on \fB\-\-warnings batch\fR\. In its first incarnation the mass testing option reads command lines from \fBfname\fR\. \fBfname\fR consists of command lines of testssl, one line per instance\. Comments after \fB#\fR are ignored, \fBEOF\fR signals the end of fname any subsequent lines will be ignored too\. You can also supply additional options which will be inherited to each child, e\.g\. When invoking \fBtestssl\.sh \-\-wide \-\-log \-\-file <fname>\fR \. Each single line in \fBfname\fR is parsed upon execution\. If there\'s a conflicting option and serial mass testing option is being performed the check will be aborted at the time it occurs and depending on the output option potentially leaving you with an output file without footer\. In parallel mode the mileage varies\.
 .
 .P
-Alternatively \fBfname\fR can be in \fBnmap\fR\'s grep(p)able output format (\fB\-oG\fR)\. Only open ports will be considered\. Multiple ports per line are allowed\. The ports can be different and will be tested by testssl\.sh according to common practice in the internet, \.i\.e\. if nmap shows in its output an open port 25, automatically \fB\-t smtp\fR will be added before the URI whereas port 465 will be treated as a plain TLS/SSL port, not requiring an STARTTLS SMTP handshake upfront\. This is done by an internal table which correlates nmap\'s open port to the STARTTLS/plain text decision from testssl\.sh\.
+Alternatively \fBfname\fR can be in \fBnmap\fR\'s grep(p)able output format (\fB\-oG\fR)\. Only open ports will be considered\. Multiple ports per line are allowed\. The ports can be different and will be tested by testssl\.sh according to common practice in the internet, i\.e\. if nmap shows in its output an open port 25, automatically \fB\-t smtp\fR will be added before the URI whereas port 465 will be treated as a plain TLS/SSL port, not requiring an STARTTLS SMTP handshake upfront\. This is done by an internal table which correlates nmap\'s open port detected to the STARTTLS/plain text decision from testssl\.sh\.
 .
 .P
 The nmap output always returns IP addresses and \-\- only if there\'s a PTR DNS record available \-\- a hostname\. As it is not checked by nmap whether the hostname matches the IP (A or AAAA record), testssl\.sh does this for you\. If the A record of the hostname matches the IP address, the hostname is used and not the IP address\. Watch out as stated above checks against an IP address might not hit the vhost you maybe were aiming at\.
@@ -155,7 +158,7 @@ Please note that the content of \fBfname\fR has to be in Unix format\. DOS carri
 \fB\-\-sneaky\fR is a friendly feature for the server side testssl\.sh uses a HTTP user agent \fBTLS tester from ${URL}\fR\. With this option your traces are less verbose and a Firefox user agent is being used\. Be aware that it doesn\'t hide your activities\. That is just not possible (environment preset via \fBSNEAKY=true\fR)\.
 .
 .P
-\fB\-\-ids\-friendly\fR is a switch which may help to get a scan finished which otherwise will be blocked by a server side IDS\. This switch skips tests for the following vulnerabilities:heartbleed, CCS injection, ticketbleed and ROBOT\. The environment variable OFFENSIVE set to false will achieve the same result\. Please be advised that as an alternative or as a general approach you can try to apply evasion techniques by changing the variables USLEEP_SND and / or USLEEP_REC and maybe *MAX_WAITSOCK\.
+\fB\-\-ids\-friendly\fR is a switch which may help to get a scan finished which otherwise would be blocked by a server side IDS\. This switch skips tests for the following vulnerabilities:heartbleed, CCS injection, ticketbleed and ROBOT\. The environment variable OFFENSIVE set to false will achieve the same result\. Please be advised that as an alternative or as a general approach you can try to apply evasion techniques by changing the variables USLEEP_SND and / or USLEEP_REC and maybe *MAX_WAITSOCK\.
 .
 .P
 \fB\-\-phone\-out\fR instructs testssl\.sh to query external \-\- in a sense of the current run \-\- URLs or URIs\. This is needed for checking revoked certificates via CRL and OCSP\. By using this switch you acknowledge that the check might could have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting CA which testssl\.sh doesn\'t handle\. PHONE_OUT is the environment variable for this which needs to be set to true if you want this\.
@@ -196,7 +199,7 @@ Any single check switch supplied as an argument prevents testssl\.sh from doing 
 .IP "" 0
 .
 .P
-\fB\-p, \-\-protocols\fR checks TLS/SSL protocols SSLv2, SSLv3, TLS 1\.0 \- TLS 1\.3 and for HTTP: SPDY (NPN) and ALPN, a\.k\.a\. HTTP/2\. For TLS 1\.3 several drafts (18\-23) and TLS 1\.3 final are supported\.
+\fB\-p, \-\-protocols\fR checks TLS/SSL protocols SSLv2, SSLv3, TLS 1\.0 \- TLS 1\.3 and for HTTP: SPDY (NPN) and ALPN, a\.k\.a\. HTTP/2\. For TLS 1\.3 several drafts (from 18 on) and TLS 1\.3 final are supported and tested\.
 .
 .P
 \fB\-P, \-\-preference\fR displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher\. If there\'s a cipher order enforced by the server it displays it for each protocol (openssl+sockets)\. If there\'s not, it displays instead which ciphers from the server were picked with each protocol (by using openssl only)
@@ -247,6 +250,9 @@ Decodes BIG IP F5 non\-encrypted cookies
 Security headers (X\-Frame\-Options, X\-XSS\-Protection, \.\.\., CSP headers)
 .
 .IP "" 0
+.
+.P
+\fB\-\-c, \-\-client\-simulation\fR This simulates a handshake with preconfigured clients so that you can figure out which client cannot or can connect\. For the latter case the protocol, cipher and curve is displayed\. If there\'s no Forward Secrecy it will be displayed\. testssl\.sh uses a handselected set of clients which are retrieved by the SSLlabs API\. If you want the full nine yards of clients displayed use the environment variable ALL_CLIENTS\. The output is aligned in columns when combined with the \fB\-\-wide\fR option\.
 .
 .SS "VULNERABILITIES"
 \fB\-U, \-\-vulnerable\fR Just tests all (following) vulnerabilities\. The environment variable \fBVULN_THRESHLD\fR determines after which value a separate headline for each vulnerability is being displayed\. Default is \fB1\fR which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed \-\- in addition to the vulnerability and the result\. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result\. A vulnerability section is comprised of more than one check, e\.g\. the renegotiation vulnerability check has two checks, so has Logjam\.
