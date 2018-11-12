@@ -4,12 +4,21 @@ use strict;
 use Data::Dumper;
 use JSON;
 
-# we get all data from here
-my $json = `curl 'https://api.dev.ssllabs.com/api/v3/getClients'`;
+my @spec;
+my %ciphers;
 
 my @spec;
 my %ciphers;
-foreach my $line ( split /\n/, `../bin/openssl.Linux.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'`) {
+my $ossl = "bin/openssl." . `uname -s` . "." . `uname -m`;
+$ossl =~ s/\R//g; 					# remove LFs
+
+die "Unable to open $ossl" unless -f $ossl;
+my $ossl = "$ossl" . " ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'";
+
+# we get all data from here
+my $json = `curl 'https://api.dev.ssllabs.com/api/v3/getClients'`;
+
+foreach my $line ( split /\n/, `$ossl`) {
 	my @fields = split /\s+/, $line;
 	my $hex = "";
 	foreach my $byte ( split /,/, $fields[1] ) {
