@@ -9039,50 +9039,31 @@ run_alpn() {
 # arg2: possible success strings a egrep pattern, needed!
 # arg3: wait in seconds
 starttls_io() {
-     local waitsleep=$((STARTTLS_SLEEP/5))
-
-     [[ -n "$3" ]] && waitsleep=$3
-     [[ -z "$2" ]] && echo "FIXME $((LINENO))"
-     debugme echo -en "C: \"$1\""
-     echo -en "$1" >&5
-     cat <&5 >$TMPFILE &
-     wait_kill $! $waitsleep
-     [[ "$DEBUG" -ge 2 ]] && echo -n "S: " && cat $TMPFILE
-
-     if [[ "$(cat $TMPFILE)" =~ $2 ]]; then
-          debugme echo "     ---> reply matched \"$2\""
-          return 0
-     fi
-     return 1
-}
-
-# arg1: string to send
-# arg2: possible success strings a egrep pattern, needed!
-# arg3: wait in seconds
-_starttls_io() {
      local waitsleep=$STARTTLS_SLEEP
+     local buffer=""
 
      [[ -n "$3" ]] && waitsleep=$3
-waitsleep=4
      [[ -z "$2" ]] && echo "FIXME $((LINENO))"
      debugme echo -en "C: \"$1\""
      echo -en "$1" >&5
-     cat <&5 >$TMPFILE &
-     [[ "$DEBUG" -ge 2 ]] && echo -n "S: " && cat $TMPFILE
+
+     # This seems a bit dangerous but works. No blockings yet. "if=nonblock" doesn't work on BSDs
+     buffer="$(dd bs=512 count=1 <&5 2>/dev/null)"
+     [[ "$DEBUG" -ge 2 ]] && echo -en "\nS: " && echo $buffer
 
      for ((i=1; i < $waitsleep; i++ )); do
-          #if [[ "$(cat $TMPFILE)" =~ $2 ]]; then
-          if grep -E -q $2 $TMPFILE; then
+          if [[ "$buffer" =~ $2 ]]; then
                debugme echo "     ---> reply matched \"$2\""
-               # buffer seems? sometimes to contain still chars which confuses the TLS handshake, trying to empty:
-               #dd of=/dev/null count=20 <&5 2>/dev/null &
-               #sleep 0.5
+               # the fd sometimes still seem to contain chars which confuses the following TLS handshake, trying to empty:
+               dd of=/dev/null bs=512 count=1 <&5 2>/dev/null
                return 0
+          else
+               # no match yet, more reading from fd helps.
+               buffer+=$(dd bs=512 count=1 <&5 2>/dev/null)
           fi
           sleep 0.5
-          debugme cat $TMPFILE
      done
-     return 1
+     return 0
 }
 
 
@@ -9224,47 +9205,12 @@ starttls_imap_dialog() {
      return $ret
 }
 
-# works:
-_starttls_xmpp_dialog() {
-     debugme echo "=== starting imap XMPP dialog ==="
-     [[ -z $XMPP_HOST ]] && XMPP_HOST="$NODE"
-
-     # send w/o no LF:
-     starttls_just_send "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" "no-lf" \
-                                                         && debugme echo "sent server xmpp greeting" && \
-     starttls_just_read 1                                && debugme echo "received server greeting" && \
-     starttls_just_send "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" && debugme echo "initiated STARTTLS" && \
-     starttls_just_read 1                                && debugme echo "probably received ack for STARTTLS"
-     local ret=$?
-     debugme echo "=== finished XMPP STARTTLS dialog with ${ret} ==="
-     return $ret
-
-     # works, too:
-     starttls_io "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" 'starttls(.*)features' 2 &&
-     starttls_io "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" 'proceed' 2
-}
-
 starttls_xmpp_dialog() {
      debugme echo "=== starting imap XMPP dialog ==="
      [[ -z $XMPP_HOST ]] && XMPP_HOST="$NODE"
 
-     # starttls_just_send "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" "no-lf" \
-     #                                                      && debugme echo "done"
-     #starttls_just_read 1                                && debugme echo "received server greeting"
-     #starttls_just_send "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" && debugme echo "initiated STARTTLS" &&
-     #starttls_just_read 1                                && debugme echo "probably received ack for STARTTLS"
-
-     # not working as starttls_full_read waits for LF
-     # stream w/o lf:
-     #starttls_just_send "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" "no-lf" && \
-     #                                                   debugme echo "done" &&
-     #starttls_full_read '' '' 'starttls(.*)features' && debugme echo "received server features and starttls" &&
-     #tarttls_just_send "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" && debugme echo "initiated STARTTLS" &&
-     #starttls_full_read '' '' 'proceed'             && debugme echo "received ack for STARTTLS"
-
-     starttls_io "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" 'starttls(.*)features' 1 &&
-     starttls_io "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" 'proceed' 1
-
+     starttls_io "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>"  'starttls(.*)features'  1 &&
+     starttls_io "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>"  '<proceed'  1
      local ret=$?
      debugme echo "=== finished XMPP STARTTLS dialog with ${ret} ==="
      return $ret
