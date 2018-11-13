@@ -1,15 +1,19 @@
 #!/usr/bin/perl
+################################################################################
+# This script reads client simulationd data from the sslabs.com API and turns 
+# it into a file called cleint-simulation_generated.txt. If this file is moved 
+# to etc/client-simulation.txt it will be used by testssl.sh to perform 
+# client simulations
+################################################################################
+
 
 use strict;
 use Data::Dumper;
 use JSON;
 
-# we get all data from here
-my $json = `curl 'https://api.dev.ssllabs.com/api/v3/getClients'`;
-
-my @spec;
+# Get all alvailable ciphers
 my %ciphers;
-foreach my $line ( split /\n/, `../bin/openssl.Linux.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'`) {
+foreach my $line ( split /\n/, `bin/openssl.Darwin.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'`) {
 	my @fields = split /\s+/, $line;
 	my $hex = "";
 	foreach my $byte ( split /,/, $fields[1] ) {
@@ -18,12 +22,39 @@ foreach my $line ( split /\n/, `../bin/openssl.Linux.x86_64 ciphers -V 'ALL:COMP
 		$hex .= $byte;
 	}
 	$hex =~ s/^0+//;
-	$ciphers{hex "0x$hex"} = $fields[3];
+	$ciphers{hex($hex)} = $fields[3];
 }
 
-my $namelength = 30;
-# Get the data
+# Read ssllabs.com API. This is where we get out data
+my $json = `curl 'https://api.dev.ssllabs.com/api/v3/getClients'`;
 my $ssllabs = decode_json($json);
+
+# Some signatures are not on the ssllabs website
+# This is where we maintain our own clients
+my $sim = {};
+
+# example of self generated / provided handshake:
+$sim->{name} = "names+=(\"Thunderbird 45.1.1 OSX 10.11  \")";
+$sim->{shortname} = "short+=(\"thunderbird_45.1.1_osx_101115\")";
+$sim->{ciphers} = "ciphers+=(\"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:AES128-SHA:AES256-SHA:DES-CBC3-SHA\")";
+$sim->{ciphersuites} = "ciphersuites+=(\"\")";
+$sim->{sni} = "sni+=(\"\$SNI\")";
+$sim->{warning} = "warning+=(\"\")";
+$sim->{handshakebytes} = "handshakebytes+=(\"160301009d010000990303c7c5b3ff80b3aa597c770c538b98ae34a94c9590ad8f947ba7bc28692061cb57000016c02bc02fc00ac009c013c01400330039002f0035000a0100005a0000001800160000136d78332e73656374696f6e7a65726f2e6f7267ff01000100000a00080006001700180019000b0002010000230000000500050100000000000d001600140401050106010201040305030603020304020202\")";
+$sim->{protos} = "protos+=(\"-no_ssl3 -no_ssl2\")";
+$sim->{tlsvers} = "tlsvers+=(\"-tls1_2 -tls1_1 -tls1\")";
+$sim->{lowestProtocol} = "lowest_protocol+=(\"0x0301\")";
+$sim->{highestProtocol} = "highest_protocol+=(\"0x0303\")";
+$sim->{service} = "service+=(\"SMTP,POP,IMAP\")";
+$sim->{minDhBits} = "minDhBits+=(-1)";
+$sim->{maxDhBits} = "maxDhBits+=(-1)";
+$sim->{minRsaBits} = "minRsaBits+=(-1)";
+$sim->{maxRsaBits} = "maxRsaBits+=(-1)";
+$sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
+$sim->{ellipticCurves} = "curves+=(\"sect233k1:secp256r1:secp384r1:secp521r1\")";
+$sim->{requiresSha2} = "requiresSha2+=(false)";
+
+my $namelength = 30;
 
 my %sims;
 foreach my $client ( @$ssllabs ) {
@@ -53,7 +84,9 @@ foreach my $client ( @$ssllabs ) {
 		my @ciphers = ();
 		my @ciphersuites = ();
 		foreach my $suite ( @{$client->{suiteIds}} ) {
-			if  ( $suite == "4865" ) {
+			if ( exists $ciphers{$suite} ) {
+				push @ciphers, $ciphers{$suite}; }
+			elsif  ( $suite == "4865" ) {
 				push @ciphersuites, "TLS_AES_128_GCM_SHA256"; }
 			elsif ( $suite == "4866" ) {
 				push @ciphersuites, "TLS_AES_256_GCM_SHA384"; }
@@ -63,8 +96,6 @@ foreach my $client ( @$ssllabs ) {
 				push @ciphersuites, "TLS_AES_128_CCM_SHA256"; }
 			elsif ( $suite == "4869" ) {
 				push @ciphersuites, "TLS_AES_128_CCM_8_SHA256"; }
-			elsif ( exists $ciphers{$suite} ) {
-				push @ciphers, $ciphers{$suite}; }
 			elsif ( $suite == "255" ) {
 				# no openssl name for this:
 				if ( $has_matched ) {
@@ -290,70 +321,6 @@ foreach my $client ( @$ssllabs ) {
 		$sim->{ellipticCurves} = "curves+=(\"" . (join ":", @curves) . "\")";
 	}
 }
-
-#
-# This is where we maintain our own clients
-my $sim = {};
-#$sim->{name} = "names+=(\"Mail iOS 9.3.2                \")";
-#$sim->{shortname} = "short+=(\"mail_ios_932\")";
-#$sim->{ciphers} = "ciphers+=(\"ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:EDH-RSA-DES-CBC3-SHA:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-RSA-RC4-SHA:RC4-SHA:RC4-MD5\")";
-#$sim->{ciphersuites} = "ciphersuites+=(\"\")";
-#$sim->{sni} = "sni+=(\"\$SNI\")";
-#$sim->{warning} = "warning+=(\"\")";
-#$sim->{handshakebytes} = "handshakebytes+=(\"16030100bb010000b703015767e6ae46f9abf3138e26a9f9880f9697bf3387f7eff709db1fa220e692d80420fb04b0979bae1664e11ef172d4dfba15af59dd200b7831992a35c73cde9efed9003200ffc024c023c00ac009c008c028c027c014c013c012006b0067003900330016003d003c0035002f000ac007c011000500040100003c000000190017000014696d61702e73656374696f6e7a65726f2e6f7267000a00080006001700180019000b0002010000050005010000000000120000\")";
-#$sim->{protos} = "protos+=(\"#-no_tls1_2 -no_ssl3 -no_ssl2\")";
-#$sim->{tlsvers} = "tlsvers+=(\"#-tls1_1 -tls1\")";
-#$sim->{lowestProtocol} = "lowest_protocol+=(\"0x0300\")";
-#$sim->{highestProtocol} = "highest_protocol+=(\"0x0301\")";
-#$sim->{service} = "service+=(\"SMTP,POP,IMAP\")";
-#$sim->{minDhBits} = "minDhBits+=(-1)";
-#$sim->{maxDhBits} = "maxDhBits+=(-1)";
-#$sim->{minRsaBits} = "minRsaBits+=(-1)";
-#$sim->{maxRsaBits} = "maxRsaBits+=(-1)";
-#$sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
-#$sim->{ellipticCurves} = "curves+=(\"sect233k1:secp256r1:secp384r1:secp521r1\")";
-#$sim->{requiresSha2} = "requiresSha2+=(false)";
-#
-#$sim->{name} = "names+=(\"Mail OSX 10.11.15             \")";
-#$sim->{shortname} = "short+=(\"mail_osx_101115\")";
-#$sim->{ciphers} = "ciphers+=(\"ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:EDH-RSA-DES-CBC3-SHA:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:ECDHE-ECDSA-RC4-SHA:ECDHE-RSA-RC4-SHA:RC4-SHA:RC4-MD5\")";
-#$sim->{ciphersuites} = "ciphersuites+=(\"\")";
-#$sim->{sni} = "sni+=(\"\$SNI\")";
-#$sim->{warning} = "warning+=(\"\")";
-#$sim->{handshakebytes} = "handshakebytes+=(\"16030100940100009003015770e928499e82df2eb7477200e2a828d9fa4109514385bd1602df44aaf2b0f400003200ffc024c023c00ac009c008c028c027c014c013c012006b0067003900330016003d003c0035002f000ac007c011000500040100003500000012001000000d3137382e3233372e33342e3932000a00080006001700180019000b0002010000050005010000000000120000\")";
-#$sim->{protos} = "protos+=(\"-tls1\")";
-#$sim->{tlsvers} = "tlsvers+=(\"-tls1\")";
-#$sim->{lowestProtocol} = "lowest_protocol+=(\"0x0301\")";
-#$sim->{highestProtocol} = "highest_protocol+=(\"0x0301\")";
-#$sim->{service} = "service+=(\"SMTP,POP,IMAP\")";
-#$sim->{minDhBits} = "minDhBits+=(-1)";
-#$sim->{maxDhBits} = "maxDhBits+=(-1)";
-#$sim->{minRsaBits} = "minRsaBits+=(-1)";
-#$sim->{maxRsaBits} = "maxRsaBits+=(-1)";
-#$sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
-#$sim->{ellipticCurves} = "curves+=(\"sect233k1:secp256r1:secp384r1:secp521r1\")";
-#$sim->{requiresSha2} = "requiresSha2+=(false)";
-
-# example of self generated / provided handshake:
-$sim->{name} = "names+=(\"Thunderbird 45.1.1 OSX 10.11  \")";
-$sim->{shortname} = "short+=(\"thunderbird_45.1.1_osx_101115\")";
-$sim->{ciphers} = "ciphers+=(\"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:AES128-SHA:AES256-SHA:DES-CBC3-SHA\")";
-$sim->{ciphersuites} = "ciphersuites+=(\"\")";
-$sim->{sni} = "sni+=(\"\$SNI\")";
-$sim->{warning} = "warning+=(\"\")";
-$sim->{handshakebytes} = "handshakebytes+=(\"160301009d010000990303c7c5b3ff80b3aa597c770c538b98ae34a94c9590ad8f947ba7bc28692061cb57000016c02bc02fc00ac009c013c01400330039002f0035000a0100005a0000001800160000136d78332e73656374696f6e7a65726f2e6f7267ff01000100000a00080006001700180019000b0002010000230000000500050100000000000d001600140401050106010201040305030603020304020202\")";
-$sim->{protos} = "protos+=(\"-no_ssl3 -no_ssl2\")";
-$sim->{tlsvers} = "tlsvers+=(\"-tls1_2 -tls1_1 -tls1\")";
-$sim->{lowestProtocol} = "lowest_protocol+=(\"0x0301\")";
-$sim->{highestProtocol} = "highest_protocol+=(\"0x0303\")";
-$sim->{service} = "service+=(\"SMTP,POP,IMAP\")";
-$sim->{minDhBits} = "minDhBits+=(-1)";
-$sim->{maxDhBits} = "maxDhBits+=(-1)";
-$sim->{minRsaBits} = "minRsaBits+=(-1)";
-$sim->{maxRsaBits} = "maxRsaBits+=(-1)";
-$sim->{minEcdsaBits} = "minEcdsaBits+=(-1)";
-$sim->{ellipticCurves} = "curves+=(\"sect233k1:secp256r1:secp384r1:secp521r1\")";
-$sim->{requiresSha2} = "requiresSha2+=(false)";
 
 my %count;
 foreach my $shortname ( reverse sort keys %sims ) {
