@@ -23,7 +23,7 @@
      minEcdsaBits+=(-1)
      curves+=("")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Android 4.0.4")
      short+=("android_404")
@@ -44,7 +44,7 @@
      minEcdsaBits+=(-1)
      curves+=("sect163k1:sect163r1:sect163r2:sect193r1:sect193r2:sect233k1:sect233r1:sect239k1:sect283k1:sect283r1:sect409k1:sect409r1:sect571k1:sect571r1:secp160k1:secp160r1:secp160r2:secp192k1:prime192v1:secp224k1:secp224r1:secp256k1:prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Android 4.1.1")
      short+=("android_411")
@@ -65,7 +65,7 @@
      minEcdsaBits+=(-1)
      curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Android 4.2.2")
      short+=("android_422")
@@ -86,7 +86,7 @@
      minEcdsaBits+=(-1)
      curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Android 4.3")
      short+=("android_43")
@@ -107,7 +107,7 @@
      minEcdsaBits+=(-1)
      curves+=("sect571r1:sect571k1:secp521r1:sect409k1:sect409r1:secp384r1:sect283k1:sect283r1:secp256k1:prime256v1:sect239k1:sect233k1:sect233r1:secp224k1:secp224r1:sect193r1:sect193r2:secp192k1:prime192v1:sect163k1:sect163r1:sect163r2:secp160k1:secp160r1:secp160r2")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Android 4.4.2")
      short+=("android_442")
@@ -128,7 +128,7 @@
      minEcdsaBits+=(-1)
      curves+=("secp521r1:secp384r1:prime256v1")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Android 5.0.0")
      short+=("android_500")
@@ -149,7 +149,7 @@
      minEcdsaBits+=(-1)
      curves+=("secp521r1:secp384r1:prime256v1")
      requiresSha2+=(false)
-     current+=(false)
+     current+=(true)
 
      names+=("Android 6.0")
      short+=("android_60")
@@ -170,7 +170,7 @@
      minEcdsaBits+=(-1)
      curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
-     current+=(false)
+     current+=(true)
 
      names+=("Android 7.0")
      short+=("android_70")
@@ -191,7 +191,7 @@
      minEcdsaBits+=(-1)
      curves+=("X25519:prime256v1:secp384r1")
      requiresSha2+=(false)
-     current+=(false)
+     current+=(true)
 
      names+=("Apple ATS 9 iOS 9")
      short+=("apple_ats_9_ios9")

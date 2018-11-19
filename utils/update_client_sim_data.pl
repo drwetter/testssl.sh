@@ -336,7 +336,7 @@ foreach my $client ( @$ssllabs ) {
 my %count;
 foreach my $shortname ( reverse sort keys %sims ) {
 	if ( $shortname =~ /^android_(\d)/ ) {
-		if ( $1 < $minimum_current_android_version ) {
+		if ( $1 >= $minimum_current_android_version ) {
 			$sims{$shortname}->{current} = "current+=(true)";
 		} else {
 			$sims{$shortname}->{current} = "current+=(false)";			
