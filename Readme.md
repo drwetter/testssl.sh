@@ -161,3 +161,9 @@ respective projects
 
 * see [#233](https://github.com/drwetter/testssl.sh/issues/233) and
   [https://github.com/Homebrew/homebrew](https://github.com/Homebrew/homebrew)
+
+#### Daemon for batch execution of testssl.sh command files
+* https://github.com/bitsofinfo/testssl.sh-processor
+
+#### Daemon for batch processing of testssl.sh JSON result files for sending Slack alerts, reactive copying etc
+* https://github.com/bitsofinfo/testssl.sh-alerts
