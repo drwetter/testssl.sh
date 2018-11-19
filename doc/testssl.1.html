@@ -57,6 +57,7 @@
     <a href="#NAME">NAME</a>
     <a href="#SYNOPSIS">SYNOPSIS</a>
     <a href="#DESCRIPTION">DESCRIPTION</a>
+    <a href="#REQUIREMENTS">REQUIREMENTS</a>
     <a href="#GENERAL">GENERAL</a>
     <a href="#OPTIONS-AND-PARAMETERS">OPTIONS AND PARAMETERS</a>
     <a href="#EXAMPLES">EXAMPLES</a>
@@ -100,11 +101,18 @@
 
 <p>Only you see the result. You also can use it internally on your LAN. Except DNS lookups it doesn't use any other hosts or even third parties for checks.</p>
 
-<p>It is out of the box pretty much portable: testssl.sh runs under any Unix-like
-stack (Linux, *BSD, MacOS X, WSL=bash on Windows, Cygwin and MSYS2). <code>bash</code>
+<h2 id="REQUIREMENTS">REQUIREMENTS</h2>
+
+<p>Testssl.sh is out of the box pretty much portable: it runs under any Unix-like
+stack: Linux, *BSD, MacOS X, WSL=Windows Subsystem for Linux,, Cygwin and MSYS2. <code>bash</code>
 (also version 3 is still supported) is a prerequisite as well as standard
 utilities like awk, sed, tr and head. This can be of BSD, System 5 or GNU
 flavor whereas grep from System V is not yet supported.</p>
+
+<p>Any OpenSSL or LibreSSL version is needed as a helper. Unless previous versions
+of testssl.sh almost every check is done via (TCP) sockets. Despite that some
+some statically linked OpenSSL binaries for major operating systems are
+supplied in <code>./bin/</code> .</p>
 
 <h2 id="GENERAL">GENERAL</h2>
 
@@ -126,7 +134,7 @@ flavor whereas grep from System V is not yet supported.</p>
 
 <p>7) vulnerabilities</p>
 
-<p>8) testing each of 359 ciphers</p>
+<p>8) testing each of 370 preconfigured ciphers</p>
 
 <p>9) client simulation</p>
 
@@ -153,7 +161,7 @@ flavor whereas grep from System V is not yet supported.</p>
 <p><code>--file &lt;fname></code> is the mass testing option. Per default it implicitly turns on <code>--warnings batch</code>.
 In its first incarnation the mass testing option reads command lines from <code>fname</code>. <code>fname</code> consists of command lines of testssl, one line per instance. Comments after <code>#</code> are ignored, <code>EOF</code> signals the end of fname any subsequent lines will be ignored too. You can also supply additional options which will be inherited to each child, e.g.  When invoking <code>testssl.sh --wide --log --file &lt;fname></code> . Each single line in <code>fname</code> is parsed upon execution. If there's a conflicting option and serial mass testing option is being performed the check will be aborted at the time it occurs and depending on the output option potentially leaving you with an output file without footer. In parallel mode the mileage varies.</p>
 
-<p>Alternatively <code>fname</code> can be in <code>nmap</code>'s grep(p)able output format (<code>-oG</code>). Only open ports will be considered. Multiple ports per line are allowed. The ports can be different and will be tested by testssl.sh according to common practice in the internet, .i.e. if nmap shows in its output an open port 25, automatically <code>-t smtp</code> will be added before the URI whereas port 465 will be treated as a plain TLS/SSL port, not requiring an STARTTLS SMTP handshake upfront. This is done by an internal table which correlates nmap's open port to the STARTTLS/plain text decision from testssl.sh.</p>
+<p>Alternatively <code>fname</code> can be in <code>nmap</code>'s grep(p)able output format (<code>-oG</code>). Only open ports will be considered. Multiple ports per line are allowed. The ports can be different and will be tested by testssl.sh according to common practice in the internet, i.e. if nmap shows in its output an open port 25, automatically <code>-t smtp</code> will be added before the URI whereas port 465 will be treated as a plain TLS/SSL port, not requiring an STARTTLS SMTP handshake upfront. This is done by an internal table which correlates nmap's open port detected to the STARTTLS/plain text decision from testssl.sh.</p>
 
 <p>The nmap output always returns IP addresses and -- only if there's a PTR DNS record available -- a hostname. As it is not checked by nmap whether the hostname matches the IP (A or AAAA record), testssl.sh does this for you. If the A record of the hostname matches the IP address, the hostname is used and not the IP address. Watch out as stated above checks against an IP address might not hit the vhost you maybe were aiming at.</p>
 
@@ -202,7 +210,7 @@ in /etc/hosts.  The use of the switch is only useful if you either can't or are 
 
 <p><code>--sneaky</code> is a friendly feature for the server side testssl.sh uses a HTTP user agent <code>TLS tester from ${URL}</code>. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via <code>SNEAKY=true</code>).</p>
 
-<p><code>--ids-friendly</code> is a switch which may help to get a scan finished which otherwise will be blocked by a server side IDS. This switch skips tests for the following vulnerabilities:heartbleed, CCS injection, ticketbleed and ROBOT. The environment variable OFFENSIVE set to false will achieve the same result. Please be advised that as an alternative or as a general approach you can try to apply evasion techniques by changing the variables USLEEP_SND and / or USLEEP_REC and maybe *MAX_WAITSOCK.</p>
+<p><code>--ids-friendly</code> is a switch which may help to get a scan finished which otherwise would be blocked by a server side IDS. This switch skips tests for the following vulnerabilities:heartbleed, CCS injection, ticketbleed and ROBOT. The environment variable OFFENSIVE set to false will achieve the same result. Please be advised that as an alternative or as a general approach you can try to apply evasion techniques by changing the variables USLEEP_SND and / or USLEEP_REC and maybe *MAX_WAITSOCK.</p>
 
 <p><code>--phone-out</code> instructs testssl.sh to query external -- in a sense of the current run -- URLs or URIs. This is needed for checking revoked certificates via CRL and OCSP. By using this switch you acknowledge that the check might could have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting CA which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.</p>
 
@@ -227,7 +235,7 @@ in /etc/hosts.  The use of the switch is only useful if you either can't or are 
 </ul>
 
 
-<p><code>-p, --protocols</code>               checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 - TLS 1.3 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2. For TLS 1.3 several drafts (18-23) and TLS 1.3 final are supported.</p>
+<p><code>-p, --protocols</code>               checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 - TLS 1.3 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2. For TLS 1.3 several drafts (from 18 on) and TLS 1.3 final are supported and tested.</p>
 
 <p><code>-P, --preference</code>              displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher. If there's a cipher order enforced by the server it displays it for each protocol (openssl+sockets). If there's not, it displays instead which ciphers from the server were picked with each protocol (by using openssl only)</p>
 
@@ -282,6 +290,10 @@ Also the Certification Authority Authorization (CAA) record is displayed.</p>
 <li>Security headers (X-Frame-Options, X-XSS-Protection, ..., CSP headers)</li>
 </ul>
 
+
+<p><code>--c, --client-simulation</code>     This simulates a handshake with preconfigured clients so that you can figure out which client cannot or can connect. For the latter case the protocol, cipher and curve is displayed.
+If there's no Forward Secrecy it will be displayed. testssl.sh uses a handselected set of clients which are retrieved by the SSLlabs API. If you want the full nine yards of clients displayed use the environment
+variable ALL_CLIENTS. The output is aligned in columns when combined with the <code>--wide</code> option.</p>
 
 <h3 id="VULNERABILITIES">VULNERABILITIES</h3>
 

@@ -6,10 +6,16 @@ use JSON;
 
 my $namelength = 30;
 
-# Get all ciphers first (sorry only works on 64 bit mac atm)
+# Get all ciphers first
 my @spec;
 my %ciphers;
-foreach my $line ( split /\n/, `bin/openssl.Darwin.x86_64 ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'`) {
+my $ossl = "bin/openssl." . `uname -s` . "." . `uname -m`;
+$ossl =~ s/\R//g;                                       # remove LFs
+
+die "Unable to open $ossl" unless -f $ossl;
+my $ossl = "$ossl" . " ciphers -V 'ALL:COMPLEMENTOFALL:\@STRENGTH'";
+
+foreach my $line ( split /\n/, `$ossl` ) {
 	my @fields = split /\s+/, $line;
 	my $hex = "";
 	foreach my $byte ( split /,/, $fields[1] ) {

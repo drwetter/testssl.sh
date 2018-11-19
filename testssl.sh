@@ -9037,68 +9037,79 @@ run_alpn() {
 
 # arg1: string to send
 # arg2: possible success strings a egrep pattern, needed!
-starttls_line() {
-     debugme echo -e "\n=== sending \"$1\" ..."
-     echo -e "$1" >&5
+# arg3: wait in seconds
+starttls_io() {
+     local waitsleep=$((STARTTLS_SLEEP/5))
 
-     # we don't know how much to read and it's blocking! So we just put a cat into the
-     # background and read until $STARTTLS_SLEEP and: cross our fingers
+     [[ -n "$3" ]] && waitsleep=$3
+     [[ -z "$2" ]] && echo "FIXME $((LINENO))"
+     debugme echo -en "C: \"$1\""
+     echo -en "$1" >&5
      cat <&5 >$TMPFILE &
-     wait_kill $! $STARTTLS_SLEEP
-     debugme echo "... received result: "
-     debugme cat $TMPFILE
-     if [[ -n "$2" ]]; then
-          if egrep -q "$2" $TMPFILE; then
-               debugme echo "---> reply matched \"$2\""
-          else
-               # slow down for exim and friends who need a proper handshake:, see
-               # https://github.com/drwetter/testssl.sh/issues/218
-               FAST_STARTTLS=false
-               debugme echo -e "\n=== sending with automated FAST_STARTTLS=false \"$1\" ..."
-               echo -e "$1" >&5
-               cat <&5 >$TMPFILE &
-               debugme echo "... received result: "
-               debugme cat $TMPFILE
-               if [[ -n "$2" ]]; then
-                    debugme echo "---> reply with automated FAST_STARTTLS=false matched \"$2\""
-               else
-                    debugme echo "---> reply didn't match \"$2\", see $TMPFILE"
-                    pr_warning "STARTTLS handshake problem. "
-                    outln "Either switch to native openssl (--ssl-native), "
-                    outln "   give the server more time to reply (STARTTLS_SLEEP=<seconds> ./testssh.sh ..) -- "
-                    outln "   or debug what happened (add --debug=2)"
-                    return 3
-               fi
-          fi
+     wait_kill $! $waitsleep
+     [[ "$DEBUG" -ge 2 ]] && echo -n "S: " && cat $TMPFILE
+
+     if [[ "$(cat $TMPFILE)" =~ $2 ]]; then
+          debugme echo "     ---> reply matched \"$2\""
+          return 0
      fi
-
-     return 0
+     return 1
 }
 
-# Line-based send with newline characters appended
+# arg1: string to send
+# arg2: possible success strings a egrep pattern, needed!
+# arg3: wait in seconds
+_starttls_io() {
+     local waitsleep=$STARTTLS_SLEEP
+
+     [[ -n "$3" ]] && waitsleep=$3
+waitsleep=4
+     [[ -z "$2" ]] && echo "FIXME $((LINENO))"
+     debugme echo -en "C: \"$1\""
+     echo -en "$1" >&5
+     cat <&5 >$TMPFILE &
+     [[ "$DEBUG" -ge 2 ]] && echo -n "S: " && cat $TMPFILE
+
+     for ((i=1; i < $waitsleep; i++ )); do
+          #if [[ "$(cat $TMPFILE)" =~ $2 ]]; then
+          if grep -E -q $2 $TMPFILE; then
+               debugme echo "     ---> reply matched \"$2\""
+               # buffer seems? sometimes to contain still chars which confuses the TLS handshake, trying to empty:
+               #dd of=/dev/null count=20 <&5 2>/dev/null &
+               #sleep 0.5
+               return 0
+          fi
+          sleep 0.5
+          debugme cat $TMPFILE
+     done
+     return 1
+}
+
+
+# Line-based send with newline characters appended (arg2 empty)
+# Stream-based send: arg2: <any>
 starttls_just_send(){
-     debugme echo -e "C: $1"
-     echo -ne "$1\r\n" >&5
-}
-
-# Stream-based send
-starttls_just_send2(){
-     debugme echo -e "C: $1"
-     echo -ne "$1" >&5
+     if [[ -z "$2" ]] ; then
+          debugme echo -e "C: $1 plus lf"
+          echo -ne "$1\r\n" >&5
+     else
+          debugme echo -e "C: $1"
+          echo -ne "$1" >&5
+     fi
+     return $?
 }
 
 # arg1: (optional): wait time
 starttls_just_read(){
-     [[ -z "$1" ]] && waitsleep=$STARTTLS_SLEEP || waitsleep=$1
-     debugme echo "=== just read banner ==="
+     local waitsleep=$STARTTLS_SLEEP
+     [[ -n "$1" ]] && waitsleep=$1
      if [[ "$DEBUG" -ge 2 ]]; then
+          echo "=== just read banner ==="
           cat <&5 &
-          wait_kill $! $waitsleep
      else
           dd of=/dev/null count=8 <&5 2>/dev/null &
-          wait_kill $! $waitsleep
      fi
-
+     wait_kill $! $waitsleep
      return 0
 }
 
@@ -9109,11 +9120,12 @@ starttls_full_read(){
      local cont_pattern="$1"
      local end_pattern="$2"
      local ret_found=0
+
+     debugme echo "=== reading banner ... ==="
      if [[ $# -ge 3 ]]; then
-          debugme echo "=== we have to search for $3 pattern ==="
+          debugme echo "=== we'll have to search for \"$3\" pattern ==="
           ret_found=3
      fi
-     debugme echo "=== full read banner ==="
 
      local oldIFS="$IFS"
      IFS=''
@@ -9142,7 +9154,13 @@ starttls_full_read(){
                return 2
           fi
      done <&5
-     debugme echo "=== full read error/timeout ==="
+     if [[ $DEBUG -ge 2 ]]; then
+          if [[ $ret -ge 128 ]]; then
+               echo "=== timeout reading ==="
+          else
+               echo "=== full read error (no timeout) ==="
+          fi
+     fi
      IFS="${oldIFS}"
      return $ret
 }
@@ -9206,6 +9224,52 @@ starttls_imap_dialog() {
      return $ret
 }
 
+# works:
+_starttls_xmpp_dialog() {
+     debugme echo "=== starting imap XMPP dialog ==="
+     [[ -z $XMPP_HOST ]] && XMPP_HOST="$NODE"
+
+     # send w/o no LF:
+     starttls_just_send "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" "no-lf" \
+                                                         && debugme echo "sent server xmpp greeting" && \
+     starttls_just_read 1                                && debugme echo "received server greeting" && \
+     starttls_just_send "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" && debugme echo "initiated STARTTLS" && \
+     starttls_just_read 1                                && debugme echo "probably received ack for STARTTLS"
+     local ret=$?
+     debugme echo "=== finished XMPP STARTTLS dialog with ${ret} ==="
+     return $ret
+
+     # works, too:
+     starttls_io "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" 'starttls(.*)features' 2 &&
+     starttls_io "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" 'proceed' 2
+}
+
+starttls_xmpp_dialog() {
+     debugme echo "=== starting imap XMPP dialog ==="
+     [[ -z $XMPP_HOST ]] && XMPP_HOST="$NODE"
+
+     # starttls_just_send "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" "no-lf" \
+     #                                                      && debugme echo "done"
+     #starttls_just_read 1                                && debugme echo "received server greeting"
+     #starttls_just_send "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" && debugme echo "initiated STARTTLS" &&
+     #starttls_just_read 1                                && debugme echo "probably received ack for STARTTLS"
+
+     # not working as starttls_full_read waits for LF
+     # stream w/o lf:
+     #starttls_just_send "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" "no-lf" && \
+     #                                                   debugme echo "done" &&
+     #starttls_full_read '' '' 'starttls(.*)features' && debugme echo "received server features and starttls" &&
+     #tarttls_just_send "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" && debugme echo "initiated STARTTLS" &&
+     #starttls_full_read '' '' 'proceed'             && debugme echo "received ack for STARTTLS"
+
+     starttls_io "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>" 'starttls(.*)features' 1 &&
+     starttls_io "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" 'proceed' 1
+
+     local ret=$?
+     debugme echo "=== finished XMPP STARTTLS dialog with ${ret} ==="
+     return $ret
+}
+
 starttls_nntp_dialog() {
      debugme echo "=== starting nntp STARTTLS dialog ==="
      starttls_full_read '$^' '^20[01] '                    && debugme echo "received server greeting" &&
@@ -9241,8 +9305,8 @@ starttls_mysql_dialog() {
      00, 00, 00, 00, 00, 00, 00"
      code2network "${login_request}"
      # 1 is the timeout value which only MySQL needs
-     starttls_just_read 1                   && debugme echo -e "\nreceived server greeting" &&
-     starttls_just_send2 "$NW_STR"          && debugme echo "initiated STARTTLS"
+     starttls_just_read 1                    && debugme echo -e "\nreceived server greeting" &&
+     starttls_just_send  "$NW_STR" "no-lf"   && debugme echo "initiated STARTTLS"
      # TODO: We could detect if the server supports STARTTLS via the "Server Capabilities"
      # bit field, but we'd need to parse the binary stream, with greater precision than regex.
      local ret=$?
@@ -9328,21 +9392,8 @@ fd_socket() {
                     fatal "ACAP Easteregg: not implemented -- probably never will" $ERR_NOSUPPORT
                     ;;
                xmpp|xmpps) # XMPP, see https://tools.ietf.org/html/rfc6120
-                    starttls_just_read
-                    [[ -z $XMPP_HOST ]] && XMPP_HOST="$NODE"
-                    jabber=$(cat <<EOF
-<?xml version='1.0' ?>
-<stream:stream
-xmlns:stream='http://etherx.jabber.org/streams'
-xmlns='jabber:client'
-to='$XMPP_HOST'
-xml:lang='en'
-version='1.0'>
-EOF
-)
-                    starttls_line "$jabber"
-                    starttls_line "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>" "proceed"
-                    # BTW: https://xmpp.net !
+                    starttls_xmpp_dialog
+                   # IM observatory: https://xmpp.net , XMPP server directory: https://xmpp.net/directory.php
                     ;;
                postgres) # Postgres SQL, see http://www.postgresql.org/docs/devel/static/protocol-message-formats.html
                     starttls_postgres_dialog
@@ -15790,7 +15841,7 @@ help() {
 "$PROG_NAME [options] <URI>", where [options] is:
 
      -t, --starttls <protocol>     Does a default run against a STARTTLS enabled <protocol,
-                                   protocol is <ftp|smtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql> (latter 4 require supplied openssl)
+                                   protocol is <ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql>
      --xmpphost <to_domain>        For STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
      --file <fname|fname.gnmap>    Mass testing option: Reads command lines from <fname>, one line per instance.
@@ -16768,7 +16819,7 @@ determine_optimal_proto() {
 }
 
 
-# arg1: ftp smtp, pop3, imap, xmpp, telnet, ldap, postgres, mysql (maybe with trailing s)
+# arg1: ftp smtp, lmtp, pop3, imap, xmpp, telnet, ldap, postgres, mysql (maybe with trailing s)
 determine_service() {
      local ua
      local protocol
@@ -16856,7 +16907,7 @@ determine_service() {
                     outln
                     ;;
                *)   outln
-                    fatal "momentarily only ftp, smtp, pop3, imap, xmpp, telnet, ldap, postgres, and mysql allowed" $ERR_CMDLINE
+                    fatal "momentarily only ftp, smtp, lmtp, pop3, imap, xmpp, telnet, ldap, postgres, and mysql allowed" $ERR_CMDLINE
                     ;;
           esac
      fi
