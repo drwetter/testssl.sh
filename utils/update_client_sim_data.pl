@@ -470,7 +470,7 @@ open OUT, ">client-simulation_generated.txt" or die "Unable to open client-simul
 print OUT "$header";
 
 foreach my $shortname ( @$shortnames, @$own_shortnames ) {
-	if ( $sims{$shortname}->{shortname} eq $shortname ) {
+	if ( exists $sims{$shortname}->{name} ) {
 		foreach my $k ( qw(name shortname ciphers ciphersuites sni warning handshakebytes protos tlsvers lowestProtocol highestProtocol service 
 			minDhBits maxDhBits minRsaBits maxRsaBits minEcdsaBits ellipticCurves requiresSha2 current) ) {
 			print OUT "     $sims{$shortname}->{$k}\n";
