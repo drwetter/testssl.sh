@@ -337,7 +337,6 @@ foreach my $client ( @$ssllabs ) {
 	}
 }
 
-$shortnames = [ @$shortnames, @$own_shortnames ];
 my %count;
 foreach my $shortname ( reverse @$shortnames ) {
 	if ( $shortname =~ /^android_(\d)/ ) {
@@ -458,7 +457,6 @@ foreach my $shortname ( reverse @$shortnames ) {
 	}
 }
 
-
 my $header = <<"EOF";
 # This file contains client handshake data used in the run_client_simulation() function.
 # The file distributed with testssl.sh (etc/client-simulation.txt) has been generated
@@ -471,7 +469,7 @@ EOF
 open OUT, ">client-simulation_generated.txt" or die "Unable to open client-simulation_generated.txt";
 print OUT "$header";
 
-foreach my $shortname ( @$shortnames ) {
+foreach my $shortname ( @$shortnames, @$own_shortnames ) {
 	foreach my $k ( qw(name shortname ciphers ciphersuites sni warning handshakebytes protos tlsvers lowestProtocol highestProtocol service 
 		minDhBits maxDhBits minRsaBits maxRsaBits minEcdsaBits ellipticCurves requiresSha2 current) ) {
 		print OUT "     $sims{$shortname}->{$k}\n";
