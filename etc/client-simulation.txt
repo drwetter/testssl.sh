@@ -884,7 +884,7 @@
      minEcdsaBits+=(-1)
      curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Edge 13 Win 10")
      short+=("edge_13_win10")
@@ -905,7 +905,7 @@
      minEcdsaBits+=(-1)
      curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Edge 13 Win Phone 10")
      short+=("edge_13_winphone10")
@@ -926,7 +926,7 @@
      minEcdsaBits+=(-1)
      curves+=("prime256v1:secp384r1")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Edge 15 Win 10")
      short+=("edge_15_win10")

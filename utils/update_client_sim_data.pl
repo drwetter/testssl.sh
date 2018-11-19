@@ -362,6 +362,13 @@ foreach my $shortname ( reverse sort keys %sims ) {
 		} else {
 			$sims{$shortname}->{current} = "current+=(false)";
 		}
+	} elsif ($shortname =~ /^edge/) {
+		$count{edge}++;
+		if ( $count{edge} <= 1 ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";
+		}
 	} elsif ($shortname =~ /^firefox/) {
 		# Latest version + ESR releases
 		if ( $shortname =~ /ESR/ ) {
