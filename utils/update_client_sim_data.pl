@@ -43,10 +43,13 @@ my $ssllabs = decode_json($json);
 # Some signatures are not on the ssllabs website
 # This is where we maintain our own clients
 my $sim = {};
+my $shortnames = [];
+my $own_shortnames = [];
 
 # example of self generated / provided handshake:
 $sim->{name} = "names+=(\"Thunderbird 45.1.1 OSX 10.11  \")";
 $sim->{shortname} = "short+=(\"thunderbird_45.1.1_osx_101115\")";
+push @$shortnames, $sim->{shortname};
 $sim->{ciphers} = "ciphers+=(\"ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:AES128-SHA:AES256-SHA:DES-CBC3-SHA\")";
 $sim->{ciphersuites} = "ciphersuites+=(\"\")";
 $sim->{sni} = "sni+=(\"\$SNI\")";
@@ -80,6 +83,7 @@ foreach my $client ( @$ssllabs ) {
 
 	# Deduplicate
 	if ( ! exists $sims{$shortname} || $sims{$shortname}->{id} < $client->{id} ) {
+		push @$shortnames, $shortname;
 		my $sim = {};
 		$sims{$shortname} = $sim;
 		$sim->{shortname} = "short+=(\"$shortname\")";
@@ -333,8 +337,9 @@ foreach my $client ( @$ssllabs ) {
 	}
 }
 
+$shortnames = [ @$shortnames, @$own_shortnames ];
 my %count;
-foreach my $shortname ( reverse sort keys %sims ) {
+foreach my $shortname ( reverse @$shortnames ) {
 	if ( $shortname =~ /^android_(\d)/ ) {
 		if ( $1 >= $minimum_current_android_version ) {
 			$sims{$shortname}->{current} = "current+=(true)";
@@ -466,7 +471,7 @@ EOF
 open OUT, ">client-simulation_generated.txt" or die "Unable to open client-simulation_generated.txt";
 print OUT "$header";
 
-foreach my $shortname ( sort keys %sims ) {
+foreach my $shortname ( @$shortnames ) {
 	foreach my $k ( qw(name shortname ciphers ciphersuites sni warning handshakebytes protos tlsvers lowestProtocol highestProtocol service 
 		minDhBits maxDhBits minRsaBits maxRsaBits minEcdsaBits ellipticCurves requiresSha2 current) ) {
 		print OUT "     $sims{$shortname}->{$k}\n";
