@@ -11,6 +11,11 @@ use strict;
 use Data::Dumper;
 use JSON;
 
+################################################################################
+# Constants
+################################################################################
+my $minimum_current_android_version = 5;
+
 my @spec;
 my %ciphers;
 my $ossl = "bin/openssl." . `uname -s` . "." . `uname -m`;
@@ -330,7 +335,13 @@ foreach my $client ( @$ssllabs ) {
 
 my %count;
 foreach my $shortname ( reverse sort keys %sims ) {
-	if ( $shortname =~ /^baidu/ ) {
+	if ( $shortname =~ /^android_(\d)/ ) {
+		if ( $1 < $minimum_current_android_version ) {
+			$sims{$shortname}->{current} = "current+=(true)";
+		} else {
+			$sims{$shortname}->{current} = "current+=(false)";			
+		}
+	}  elsif ( $shortname =~ /^baidu/ ) {
 		$count{baidu}++;
 		if ( $count{baidu} <= 1 ) {
 			$sims{$shortname}->{current} = "current+=(true)";
