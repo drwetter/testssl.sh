@@ -5444,6 +5444,19 @@ pr_dh_quality() {
      fi
 }
 
+# prints out dh group=prime and in round brackets DH bits and labels it accordingly
+# arg1: name of dh group, arg2=bit length
+pr_dh() {
+     local -i quality=0
+
+     pr_italic "$1"
+     out " ("
+     pr_dh_quality "$2" "$2 bits"
+     quality=$?
+     out ")"
+     return $quality
+}
+
 pr_ecdh_quality() {
      local bits="$1"
      local string="$2"
@@ -8795,8 +8808,9 @@ run_pfs() {
                fi
           fi
      fi
+
+     # find out what groups are supported.
      if "$using_sockets" && ( "$pfs_tls13_offered" || "$ffdhe_offered" ); then
-          # find out what groups are supported.
           nr_curves=0
           for curve in "${ffdhe_groups_output[@]}"; do
                supported_curve[nr_curves]=false
@@ -8857,26 +8871,29 @@ run_pfs() {
           fi
           if [[ -z "$curves_offered" ]] && [[ -n "$curve_found" ]]; then
                # The server is not using one of the groups from RFC 7919.
-               key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
-               get_common_prime "$jsonID" "$key_bitstring" ""
-               [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
+               if [[ -z "$DH_GROUP_OFFERED" ]]; then
+                    # this global will get athe name of the group eithe here or in run_logjam()
+                    key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
+                    get_common_prime "$jsonID" "$key_bitstring" ""
+                    [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
+               else
+                    curves_offered="$DH_GROUP_OFFERED"
+                    len_dh_p=$DH_GROUP_LEN_P
+               fi
           fi
           if [[ -n "$curves_offered" ]]; then
                if [[ ! "$curves_offered" =~ ffdhe ]] || [[ ! "$curves_offered" =~ \  ]]; then
                     pr_bold " DH group offered:            "
                else
-                    pr_bold " DH group offered:            "
+                    pr_bold " Finite field group:          "
                fi
                if [[ "$curves_offered" =~ ffdhe ]]; then
                     # ok not to display them in italics:
                     pr_svrty_good "$curves_offered"
                     quality=6
                else
-                    pr_italic "$curves_offered"
-                    out " ("
-                    pr_dh_quality "$len_dh_p" "$len_dh_p bits"
+                    pr_dh "$curves_offered" "$len_dh_p"
                     quality=$?
-                    out ")"
                fi
                case "$quality" in
                     1) quality_str="CRITICAL" ;;
@@ -13919,33 +13936,37 @@ get_common_prime() {
      fi
 }
 
-# helper function for run_logjam, see below
+
+# helper function for run_logjam see below
 #
 out_common_prime() {
      local jsonID2="$1"
      local cve="$2"
      local cwe="$3"
 
-     # now size matters -- i.e. the bit size ;-)
-     [[ "$DH_GROUP_OFFERED" == ffdhe* ]] && [[ ! "$DH_GROUP_OFFERED" =~ \  ]] && DH_GROUP_OFFERED="RFC7919/$DH_GROUP_OFFERED"
-     if [[ "$DH_GROUP_OFFERED" =~ ffdhe ]] && [[ "$DH_GROUP_OFFERED" =~ \  ]]; then
-          out "common primes detected: "; pr_italic "$DH_GROUP_OFFERED"
-          fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
-     elif [[ $DH_GROUP_LEN_P -le 512 ]]; then
-          pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$DH_GROUP_OFFERED"; out " detected ($DH_GROUP_LEN_P bits)"
+     if [[ "$DH_GROUP_OFFERED" =~ ffdhe ]]; then
+          :
+     # now size matters -- i.e. the bit size. As this is about a known prime we label it more strict.
+     # This needs maybe needs a another thought as it could appear inconsitent with run_pfs and elsewhere.
+     # for now we label the bit size similar in the screen, but distiguish the leading text for logjam before
+     elif [[ $DH_GROUP_LEN_P -le 800 ]]; then
+          pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime: "
           fileout "$jsonID2" "CRITICAL" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+          pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
      elif [[ $DH_GROUP_LEN_P -le 1024 ]]; then
-          pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$DH_GROUP_OFFERED"; out " detected ($DH_GROUP_LEN_P bits)"
+          # really? Here we assume that 1024bit common prime for nation states are worth and possible to precompute (TBC)
+          # otherwise 1024 are just medium
+          pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime: "
           fileout "$jsonID2" "HIGH" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+          pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
      elif [[ $DH_GROUP_LEN_P -le 1536 ]]; then
-          pr_svrty_medium "common prime with $DH_GROUP_LEN_P bits detected: "; pr_italic "$DH_GROUP_OFFERED"
-          fileout "$jsonID2" "MEDIUM" "$DH_GROUP_OFFERED" "$cve" "$cwe"
-     elif [[ $DH_GROUP_LEN_P -lt 2048 ]]; then
-          pr_svrty_low "common prime with $DH_GROUP_LEN_P bits detected: "; pr_italic "$DH_GROUP_OFFERED"
+          pr_svrty_low "common prime: "
           fileout "$jsonID2" "LOW" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+          pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
      else
-          out "common prime with $DH_GROUP_LEN_P bits detected: "; pr_italic "$DH_GROUP_OFFERED"
+          out "common prime with $DH_GROUP_LEN_P bits detected: "
           fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+          pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
      fi
 }
 
@@ -14105,13 +14126,25 @@ run_logjam() {
           elif [[ $subret -eq 0 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
-               out ", no common primes detected"
-               fileout "$jsonID2" "OK" "--" "$cve" "$cwe"
+               # we issue a special warning if there's no common prime but the bit length is too low
+               if [[ $DH_GROUP_LEN_P -le 1024 ]]; then
+                    out "\n${spaces}But: "
+                    pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
+                    case $? in
+                         1) fileout "$jsonID" "CRITICAL" "no DH EXPORT ciphers, no common prime but $DH_GROUP_OFFERED has only $DH_GROUP_LEN_P bits,  $addtl_warning" "$cve" "$cwe" ;;
+                         2) fileout "$jsonID" "HIGH" "no DH EXPORT ciphers, no common prime but $DH_GROUP_OFFERED has only $DH_GROUP_LEN_P bits,  $addtl_warning" "$cve" "$cwe";;
+                         3) fileout "$jsonID" "MEDIUM" "no DH EXPORT ciphers, no common prime but $DH_GROUP_OFFERED has only $DH_GROUP_LEN_P bits,  $addtl_warning" "$cve" "$cwe";;
+                    esac
+               else
+                    out ", no common prime detected"
+                    fileout "$jsonID2" "OK" "--" "$cve" "$cwe"
+               fi
           elif [[ $ret -eq 1 ]]; then
                pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
           fi
      fi
+
      outln
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
