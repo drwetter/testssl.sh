@@ -225,7 +225,7 @@ OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulne
 
 ########### Tuning vars which cannot be set by a cmd line switch. Use instead e.g "HEADER_MAXSLEEP=10 ./testssl.sh <your_args_here>"
 #
-EXPERIMENTAL=${EXPERIMENTAL:-false}
+EXPERIMENTAL=${EXPERIMENTAL:-false}     # a development hook which allows us to disable code
 PROXY_WAIT=${PROXY_WAIT:-20}            # waiting at max 20 seconds for socket reply through proxy
 DNS_VIA_PROXY=${DNS_VIA_PROXY:-true}    # do DNS lookups via proxy. --ip=proxy reverses this
 IGN_OCSP_PROXY=${IGN_OCSP_PROXY:-false} # Also when --proxy is supplied it is ignored when testing for revocation via OCSP via --phone-out
@@ -5444,6 +5444,19 @@ pr_dh_quality() {
      fi
 }
 
+# prints out dh group=prime and in round brackets DH bits and labels it accordingly
+# arg1: name of dh group, arg2=bit length
+pr_dh() {
+     local -i quality=0
+
+     pr_italic "$1"
+     out " ("
+     pr_dh_quality "$2" "$2 bits"
+     quality=$?
+     out ")"
+     return $quality
+}
+
 pr_ecdh_quality() {
      local bits="$1"
      local string="$2"
@@ -8721,7 +8734,7 @@ run_pfs() {
                          sclient_connect_successful $? $TMPFILE || break
                          temp=$(awk -F': ' '/^Server Temp Key/ { print $2 }' "$TMPFILE")
                          curve_found="${temp%%,*}"
-                         if [[ "$curve_found" == "ECDH" ]]; then
+                         if [[ "$curve_found" == ECDH ]]; then
                               curve_found="${temp#*, }"
                               curve_found="${curve_found%%,*}"
                          fi
@@ -8738,14 +8751,14 @@ run_pfs() {
           protos_to_try="03"
           "$pfs_tls13_offered" && protos_to_try="04 03"
           for proto in $protos_to_try; do
-               if [[ "$proto" == "03" ]]; then
+               if [[ "$proto" == 03 ]]; then
                     ecdhe_cipher_list_hex="$(strip_inconsistent_ciphers "03" "$ecdhe_cipher_list_hex")"
                     [[ -z "$ecdhe_cipher_list_hex" ]] && continue
                fi
                while true; do
                     curves_to_test=""
                     for (( i=0; i < nr_curves; i++ )); do
-                         if ! "${curves_deprecated[i]}" || [[ "$proto" == "03" ]]; then
+                         if ! "${curves_deprecated[i]}" || [[ "$proto" == 03 ]]; then
                               ! "${supported_curve[i]}" && curves_to_test+=", ${curves_hex[i]}"
                          fi
                     done
@@ -8795,8 +8808,9 @@ run_pfs() {
                fi
           fi
      fi
-     if "$using_sockets" && ( "$pfs_tls13_offered" || ( "$ffdhe_offered" && "$EXPERIMENTAL" ) ); then
-          # find out what groups are supported.
+
+     # find out what groups are supported.
+     if "$using_sockets" && ( "$pfs_tls13_offered" || "$ffdhe_offered" ); then
           nr_curves=0
           for curve in "${ffdhe_groups_output[@]}"; do
                supported_curve[nr_curves]=false
@@ -8805,7 +8819,7 @@ run_pfs() {
           done
           protos_to_try=""
           "$pfs_tls13_offered" && protos_to_try="04"
-          if "$ffdhe_offered" && "$EXPERIMENTAL"; then
+          if "$ffdhe_offered"; then
                if "$pfs_tls13_offered"; then
                     protos_to_try="04 03"
                else
@@ -8845,7 +8859,7 @@ run_pfs() {
                "${supported_curve[i]}" && curves_offered+="${ffdhe_groups_output[i]} "
           done
           curves_offered="$(strip_trailing_space "$curves_offered")"
-          if "$ffdhe_offered" && "$EXPERIMENTAL" && [[ -z "$curves_offered" ]] && [[ -z "$curve_found" ]]; then
+          if "$ffdhe_offered" && [[ -z "$curves_offered" ]] && [[ -z "$curve_found" ]]; then
                # Some servers will fail if the supported_groups extension is present.
                tls_sockets "03" "${ffdhe_cipher_list_hex:2}, 00,ff" "ephemeralkey"
                sclient_success=$?
@@ -8857,24 +8871,29 @@ run_pfs() {
           fi
           if [[ -z "$curves_offered" ]] && [[ -n "$curve_found" ]]; then
                # The server is not using one of the groups from RFC 7919.
-               key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
-               get_common_prime "$jsonID" "$key_bitstring" ""
-               [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
+               if [[ -z "$DH_GROUP_OFFERED" ]]; then
+                    # this global will get athe name of the group eithe here or in run_logjam()
+                    key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
+                    get_common_prime "$jsonID" "$key_bitstring" ""
+                    [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
+               else
+                    curves_offered="$DH_GROUP_OFFERED"
+                    len_dh_p=$DH_GROUP_LEN_P
+               fi
           fi
           if [[ -n "$curves_offered" ]]; then
                if [[ ! "$curves_offered" =~ ffdhe ]] || [[ ! "$curves_offered" =~ \  ]]; then
-                    pr_bold " Finite field group offered:  "
+                    pr_bold " DH group offered:            "
                else
-                    pr_bold " Finite field groups offered: "
+                    pr_bold " Finite field group:          "
                fi
                if [[ "$curves_offered" =~ ffdhe ]]; then
+                    # ok not to display them in italics:
                     pr_svrty_good "$curves_offered"
                     quality=6
                else
-                    out "$curves_offered ("
-                    pr_dh_quality "$len_dh_p" "$len_dh_p bits"
+                    pr_dh "$curves_offered" "$len_dh_p"
                     quality=$?
-                    out ")"
                fi
                case "$quality" in
                     1) quality_str="CRITICAL" ;;
@@ -8885,9 +8904,9 @@ run_pfs() {
                     6|7) quality_str="OK" ;;
                esac
                if [[ "$curves_offered" =~ Unknown ]]; then
-                    fileout "DHE_groups" "$quality_str" "$curves_offered ($len_dh_p bits)"
+                    fileout "DH_groups" "$quality_str" "$curves_offered ($len_dh_p bits)"
                else
-                    fileout "DHE_groups" "$quality_str" "$curves_offered"
+                    fileout "DH_groups" "$quality_str" "$curves_offered"
                fi
           fi
      fi
@@ -8895,11 +8914,6 @@ run_pfs() {
 
      tmpfile_handle ${FUNCNAME[0]}.txt
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
-     #if "$pfs_offered"; then
-          # return 0
-     #else
-     #     :
-     #fi
      return 0
 }
 
@@ -13923,33 +13937,37 @@ get_common_prime() {
      fi
 }
 
-# helper function for run_logjam, see below
+
+# helper function for run_logjam see below
 #
 out_common_prime() {
      local jsonID2="$1"
      local cve="$2"
      local cwe="$3"
 
-     # now size matters -- i.e. the bit size ;-)
-     [[ "$DH_GROUP_OFFERED" == ffdhe* ]] && [[ ! "$DH_GROUP_OFFERED" =~ \  ]] && DH_GROUP_OFFERED="RFC7919/$DH_GROUP_OFFERED"
-     if [[ "$DH_GROUP_OFFERED" =~ ffdhe ]] && [[ "$DH_GROUP_OFFERED" =~ \  ]]; then
-          out "common primes detected: "; pr_italic "$DH_GROUP_OFFERED"
-          fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
-     elif [[ $DH_GROUP_LEN_P -le 512 ]]; then
-          pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$DH_GROUP_OFFERED"; out " detected ($DH_GROUP_LEN_P bits)"
+     if [[ "$DH_GROUP_OFFERED" =~ ffdhe ]]; then
+          :
+     # now size matters -- i.e. the bit size. As this is about a known prime we label it more strict.
+     # This needs maybe needs a another thought as it could appear inconsitent with run_pfs and elsewhere.
+     # for now we label the bit size similar in the screen, but distiguish the leading text for logjam before
+     elif [[ $DH_GROUP_LEN_P -le 800 ]]; then
+          pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime: "
           fileout "$jsonID2" "CRITICAL" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+          pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
      elif [[ $DH_GROUP_LEN_P -le 1024 ]]; then
-          pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime "; pr_italic "$DH_GROUP_OFFERED"; out " detected ($DH_GROUP_LEN_P bits)"
+          # really? Here we assume that 1024bit common prime for nation states are worth and possible to precompute (TBC)
+          # otherwise 1024 are just medium
+          pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime: "
           fileout "$jsonID2" "HIGH" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+          pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
      elif [[ $DH_GROUP_LEN_P -le 1536 ]]; then
-          pr_svrty_medium "common prime with $DH_GROUP_LEN_P bits detected: "; pr_italic "$DH_GROUP_OFFERED"
-          fileout "$jsonID2" "MEDIUM" "$DH_GROUP_OFFERED" "$cve" "$cwe"
-     elif [[ $DH_GROUP_LEN_P -lt 2048 ]]; then
-          pr_svrty_low "common prime with $DH_GROUP_LEN_P bits detected: "; pr_italic "$DH_GROUP_OFFERED"
+          pr_svrty_low "common prime: "
           fileout "$jsonID2" "LOW" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+          pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
      else
-          out "common prime with $DH_GROUP_LEN_P bits detected: "; pr_italic "$DH_GROUP_OFFERED"
+          out "common prime with $DH_GROUP_LEN_P bits detected: "
           fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+          pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
      fi
 }
 
@@ -14109,13 +14127,25 @@ run_logjam() {
           elif [[ $subret -eq 0 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
-               out ", no common primes detected"
-               fileout "$jsonID2" "OK" "--" "$cve" "$cwe"
+               # we issue a special warning if there's no common prime but the bit length is too low
+               if [[ $DH_GROUP_LEN_P -le 1024 ]]; then
+                    out "\n${spaces}But: "
+                    pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
+                    case $? in
+                         1) fileout "$jsonID" "CRITICAL" "no DH EXPORT ciphers, no common prime but $DH_GROUP_OFFERED has only $DH_GROUP_LEN_P bits,  $addtl_warning" "$cve" "$cwe" ;;
+                         2) fileout "$jsonID" "HIGH" "no DH EXPORT ciphers, no common prime but $DH_GROUP_OFFERED has only $DH_GROUP_LEN_P bits,  $addtl_warning" "$cve" "$cwe";;
+                         3) fileout "$jsonID" "MEDIUM" "no DH EXPORT ciphers, no common prime but $DH_GROUP_OFFERED has only $DH_GROUP_LEN_P bits,  $addtl_warning" "$cve" "$cwe";;
+                    esac
+               else
+                    out ", no common prime detected"
+                    fileout "$jsonID2" "OK" "--" "$cve" "$cwe"
+               fi
           elif [[ $ret -eq 1 ]]; then
                pr_svrty_good "partly not vulnerable:"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
           fi
      fi
+
      outln
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
