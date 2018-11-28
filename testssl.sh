@@ -8397,7 +8397,17 @@ run_server_defaults() {
                             "all"
                success[0]=$?
                if [[ ${success[0]} -eq 0 ]] || [[ ${success[0]} -eq 2 ]]; then
-                    mv $HOSTCERT $HOSTCERT.nosni
+                    if [[ -s $HOSTCERT ]]; then
+                         mv $HOSTCERT $HOSTCERT.nosni
+                    else
+                         # The connection was successful, but the certificate could
+                         # not be obtained (probably because the connection was TLS 1.3
+                         # and $OPENSSL does not support the key exchange group that was
+                         # selected). So, try again using OpenSSL (which will not use a TLS 1.3
+                         # ClientHello).
+                         $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO") 2>>$ERRFILE </dev/null | \
+                              awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
+                    fi
                else
                     >$HOSTCERT.nosni
                fi
