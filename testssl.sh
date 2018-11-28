@@ -8394,7 +8394,7 @@ run_server_defaults() {
                             c0,14, 00,39, c0,09, c0,13, 00,33, 00,9d, 00,9c, 13,02,
                             13,03, 13,01, 13,04, 13,05, 00,3d, 00,3c, 00,35, 00,2f,
                             00,ff" \
-                            "all"
+                            "all+"
                success[0]=$?
                if [[ ${success[0]} -eq 0 ]] || [[ ${success[0]} -eq 2 ]]; then
                     mv $HOSTCERT $HOSTCERT.nosni
@@ -9016,7 +9016,7 @@ run_alpn() {
                alpn_extn="${len:0:2},${len:2:2},$alpn_extn"
                len="$(printf "%04x" $((${#proto}+3)))"
                alpn_extn="00,10,${len:0:2},${len:2:2},$alpn_extn"
-               tls_sockets "03" "$TLS12_CIPHER" "all" "$alpn_extn"
+               tls_sockets "03" "$TLS12_CIPHER" "all+" "$alpn_extn"
                if [[ -r "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ]]; then
                     cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
                else
@@ -10503,7 +10503,7 @@ check_tls_serverhellodone() {
                     fi
                     # A version of {0x7F, xx} represents an implementation of a draft version of TLS 1.3
                     [[ "${DETECTED_TLS_VERSION:0:2}" == "7F" ]] && DETECTED_TLS_VERSION="0304"
-                    if [[ 0x$DETECTED_TLS_VERSION -ge 0x0304 ]] && [[ "$process_full" == "ephemeralkey" ]]; then
+                    if [[ 0x$DETECTED_TLS_VERSION -ge 0x0304 ]] && [[ "$process_full" == ephemeralkey ]]; then
                          tls_serverhello_ascii_len=2*$(hex2dec "${tls_handshake_ascii:2:6}")
                          if [[ $tls_handshake_ascii_len -ge $tls_serverhello_ascii_len+8 ]]; then
                               tm_out ""
@@ -10567,7 +10567,7 @@ check_tls_serverhellodone() {
      # If the response is TLSv1.3 and the full response is to be processed, but the
      # key and IV have not been provided to decrypt the response, then return 3 if
      # the entire ServerHello has been received.
-     if [[ "$DETECTED_TLS_VERSION" == "0304" ]] && [[ "$process_full" == "all" ]] && \
+     if [[ "$DETECTED_TLS_VERSION" == "0304" ]] && [[ "$process_full" =~ all ]] && \
         [[ -z "$key_and_iv" ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
           return 3
      fi
@@ -10623,8 +10623,8 @@ tls_alert() {
 }
 
 # arg1: ASCII-HEX encoded reply
-# arg2: (optional): "all" -  process full response (including Certificate and certificate_status handshake messages)
-#                   "ephemeralkey" - extract the server's ephemeral key (if any)
+# arg2: (optional): "all" or "all+" - process full response (including Certificate and certificate_status handshake messages)
+#                   "ephemeralkey"  - extract the server's ephemeral key (if any)
 # arg3: (optional): CIPHER_SUITES string (lowercase, and in the format output by code2network())
 #       If present, parse_tls_serverhello() will check that the cipher in the ServerHello appears in
 #       the CIPHER_SUITES string.
@@ -10673,7 +10673,7 @@ parse_tls_serverhello() {
      fi
      for (( i=0; i<tls_hello_ascii_len; i=i+msg_len )); do
           if [[ $tls_hello_ascii_len-$i -lt 10 ]]; then
-               if [[ "$process_full" == all ]]; then
+               if [[ "$process_full" =~ all ]]; then
                     # The entire server response should have been retrieved.
                     debugme tmln_warning "Malformed message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -10729,7 +10729,7 @@ parse_tls_serverhello() {
           DETECTED_TLS_VERSION=$tls_protocol
 
           if [[ $msg_len -gt $tls_hello_ascii_len-$i ]]; then
-               if [[ "$process_full" == all ]]; then
+               if [[ "$process_full" =~ all ]]; then
                     debugme tmln_warning "Malformed message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 7
@@ -10749,7 +10749,7 @@ parse_tls_serverhello() {
 
      # Now check the alert messages.
      tls_alert_ascii_len=${#tls_alert_ascii}
-     if [[ "$process_full" == all ]] && [[ $tls_alert_ascii_len%4 -ne 0 ]]; then
+     if [[ "$process_full" =~ all ]] && [[ $tls_alert_ascii_len%4 -ne 0 ]]; then
           debugme tmln_warning "Malformed message."
           [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
@@ -10798,7 +10798,7 @@ parse_tls_serverhello() {
      fi
      for (( i=0; i<tls_handshake_ascii_len; i=i+msg_len )); do
           if [[ $tls_handshake_ascii_len-$i -lt 8 ]]; then
-               if [[ "$process_full" == "all" ]]; then
+               if [[ "$process_full" =~ all ]]; then
                     # The entire server response should have been retrieved.
                     debugme tmln_warning "Malformed message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -10842,7 +10842,7 @@ parse_tls_serverhello() {
                tmln_out
           fi
           if [[ $msg_len -gt $tls_handshake_ascii_len-$i ]]; then
-               if [[ "$process_full" == "all" ]]; then
+               if [[ "$process_full" =~ all ]]; then
                     debugme tmln_warning "Malformed message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
@@ -10862,7 +10862,7 @@ parse_tls_serverhello() {
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverhello_ascii_len=$msg_len
-          elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "08" ]]; then
+          elif [[ "$process_full" =~ all ]] && [[ "$tls_msg_type" == "08" ]]; then
                # Add excrypted extensions (now decrypted) to end of extensions in SeverHello
                tls_encryptedextensions_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_encryptedextensions_ascii_len=$msg_len
@@ -10870,7 +10870,7 @@ parse_tls_serverhello() {
                     debugme tmln_warning "Response contained a malformed encrypted extensions message"
                     return 1
                fi
-          elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "0B" ]]; then
+          elif [[ "$process_full" =~ all ]] && [[ "$tls_msg_type" == 0B ]]; then
                if [[ -n "$tls_certificate_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one Certificate handshake message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -10878,7 +10878,7 @@ parse_tls_serverhello() {
                fi
                tls_certificate_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_certificate_ascii_len=$msg_len
-          elif ( [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]] ) && [[ "$tls_msg_type" == "0C" ]]; then
+          elif ( [[ "$process_full" =~ all ]] || [[ "$process_full" == ephemeralkey ]] ) && [[ "$tls_msg_type" == 0C ]]; then
                if [[ -n "$tls_serverkeyexchange_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one ServerKeyExchange handshake message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -10886,7 +10886,7 @@ parse_tls_serverhello() {
                fi
                tls_serverkeyexchange_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverkeyexchange_ascii_len=$msg_len
-          elif [[ "$process_full" == "all" ]] && [[ "$tls_msg_type" == "16" ]]; then
+          elif [[ "$process_full" =~ all ]] && [[ "$tls_msg_type" == 16 ]]; then
                if [[ -n "$tls_certificate_status_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one certificate_status handshake message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -10963,8 +10963,8 @@ parse_tls_serverhello() {
      fi
 
      if [[ $tls_serverhello_ascii_len -gt $extns_offset ]] && \
-        ( [[ "$process_full" == "all" ]] || [[ "$DETECTED_TLS_VERSION" == "0303" ]] || \
-          ( [[ "$process_full" == "ephemeralkey" ]] && [[ "0x${DETECTED_TLS_VERSION:2:2}" -gt "0x03" ]] ) ); then
+        ( [[ "$process_full" =~ all ]] || [[ "$DETECTED_TLS_VERSION" == 0303 ]] || \
+          ( [[ "$process_full" == ephemeralkey ]] && [[ "0x${DETECTED_TLS_VERSION:2:2}" -gt "0x03" ]] ) ); then
           if [[ $tls_serverhello_ascii_len -lt $extns_offset+4 ]]; then
                debugme echo "Malformed response"
                [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -10998,7 +10998,7 @@ parse_tls_serverhello() {
                     0003) tls_extensions+="TLS server extension \"trusted CA keys\" (id=3, len=$extension_len\n)" ;;
                     0004) tls_extensions+="TLS server extension \"truncated HMAC\" (id=4), len=$extension_len\n" ;;
                     0005) tls_extensions+="TLS server extension \"status request\" (id=5), len=$extension_len\n"
-                          if [[ $extension_len -gt 0 ]] && [[ "$process_full" == "all" ]]; then
+                          if [[ $extension_len -gt 0 ]] && [[ "$process_full" =~ all ]]; then
                                # In TLSv1.3 the status_request extension contains the CertificateStatus message, unlike
                                # TLSv1.2 and below where CertificateStatus appears in its own handshake message. So, if
                                # the status_request extension is not empty, extract the value and place it in
@@ -11013,7 +11013,7 @@ parse_tls_serverhello() {
                     0008) tls_extensions+="TLS server extension \"server authz\" (id=8), len=$extension_len\n" ;;
                     0009) tls_extensions+="TLS server extension \"cert type\" (id=9), len=$extension_len\n" ;;
                     000A) tls_extensions+="TLS server extension \"supported_groups\" (id=10), len=$extension_len\n"
-                          if [[ "$process_full" == "all" ]]; then
+                          if [[ "$process_full" =~ all ]]; then
                                if [[ $extension_len -lt 4 ]]; then
                                     debugme tmln_warning "Malformed supported groups extension."
                                     return 1
@@ -11052,7 +11052,7 @@ parse_tls_serverhello() {
                     000E) tls_extensions+="TLS server extension \"use SRTP\" (id=14), len=$extension_len\n" ;;
                     000F) tls_extensions+="TLS server extension \"heartbeat\" (id=15), len=$extension_len\n" ;;
                     0010) tls_extensions+="TLS server extension \"application layer protocol negotiation\" (id=16), len=$extension_len\n"
-                          if [[ "$process_full" == "all" ]]; then
+                          if [[ "$process_full" =~ all ]]; then
                                if [[ $extension_len -lt 4 ]]; then
                                     debugme echo "Malformed application layer protocol negotiation extension."
                                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -11104,7 +11104,7 @@ parse_tls_serverhello() {
                           else
                                tls_extensions+=" (id=51), len=$extension_len\n"
                           fi
-                          if [[ "$process_full" == "all" ]] || [[ "$process_full" == "ephemeralkey" ]]; then
+                          if [[ "$process_full" =~ all ]] || [[ "$process_full" == ephemeralkey ]]; then
                                if [[ $extension_len -lt 4  ]]; then
                                     debugme tmln_warning "Malformed key share extension."
                                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -11200,7 +11200,7 @@ parse_tls_serverhello() {
                     0030) tls_extensions+="TLS server extension \"oid filters\" (id=48), len=$extension_len\n" ;;
                     0031) tls_extensions+="TLS server extension \"post handshake auth\" (id=49), len=$extension_len\n" ;;
                     3374) tls_extensions+="TLS server extension \"next protocol\" (id=13172), len=$extension_len\n"
-                          if [[ "$process_full" == "all" ]]; then
+                          if [[ "$process_full" =~ all ]]; then
                                local -i protocol_len
                                echo -n "Protocols advertised by server: " >> $TMPFILE
                                let offset=$extns_offset+12+$i
@@ -11444,7 +11444,7 @@ parse_tls_serverhello() {
      fi
 
      # Now parse the Certificate message.
-     if [[ "$process_full" == "all" ]]; then
+     if [[ "$process_full" =~ all ]]; then
           # not sure why we need this
           [[ -e "$HOSTCERT" ]] && rm "$HOSTCERT"
           [[ -e "$TEMPDIR/intermediatecerts.pem" ]] && rm "$TEMPDIR/intermediatecerts.pem"
@@ -11580,7 +11580,7 @@ parse_tls_serverhello() {
                     $OPENSSL ocsp -respin /dev/stdin -resp_text >> $TMPFILE 2>$ERRFILE
           fi
           echo "===============================================================================" >> $TMPFILE
-     elif [[ "$process_full" == "all" ]]; then
+     elif [[ "$process_full" =~ all ]]; then
           echo "OCSP response: no response sent" >> $TMPFILE
           echo "===============================================================================" >> $TMPFILE
      fi
@@ -11869,6 +11869,8 @@ generate_key_share_extension() {
 # ARG1: TLS version low byte (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # ARG2: CIPHER_SUITES string (lowercase, and in the format output by code2network())
 # ARG3: "all" - process full response (including Certificate and certificate_status handshake messages)
+#       "all+" - same as "all", but do not offer any curves with TLSv1.3 that are not supported by
+#                $OPENSSL, since response MUST be decrypted.
 #       "ephemeralkey" - extract the server's ephemeral key (if any)
 # ARG4: (optional) additional request extensions
 # ARG5: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
@@ -12001,7 +12003,7 @@ prepare_tls_clienthello() {
                00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
           elif [[ 0x$tls_low_byte -gt 0x03 ]]; then
                # Supported Groups Extension
-               if [[ "$process_full" != "all" ]] || \
+               if [[ ! "$process_full" =~ all ]] || \
                   [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see RFC 8446
@@ -12009,17 +12011,31 @@ prepare_tls_clienthello() {
                     00,1d, 00,17, 00,1e, 00,18, 00,19,
                     01,00, 01,01"
                     # OpenSSL prior to 1.1.1 does not support X448, so list it as the least
-                    # preferred option if the response needs to be decrypted.
+                    # preferred option if the response needs to be decrypted, and do not
+                    # list it at all if the response MUST be decrypted.
+               elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] && [[ "$process_full" == all+ ]]; then
+                    extension_supported_groups="
+                    00,0a,                      # Type: Supported Groups, see RFC 8446
+                    00,0e, 00,0c,               # lengths
+                    00,1d, 00,17, 00,18, 00,19,
+                    01,00, 01,01"
                elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,10, 00,0e,               # lengths
                     00,1d, 00,17, 00,18, 00,19,
                     01,00, 01,01, 00,1e"
-               else
                     # OpenSSL prior to 1.1.0 does not support either X25519 or X448,
                     # so list them as the least referred options if the response
-                    # needs to be decrypted.
+                    # needs to be decrypted, and do not list them at all if the
+                    # response MUST be decrypted.
+               elif [[ "$process_full" == all+ ]]; then
+                    extension_supported_groups="
+                    00,0a,                      # Type: Supported Groups, see RFC 8446
+                    00,0c, 00,0a,               # lengths
+                    00,17, 00,18, 00,19,
+                    01,00, 01,01"
+               else
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,10, 00,0e,               # lengths
@@ -12279,8 +12295,8 @@ prepare_tls_clienthello() {
 # arg1: The server's response
 # arg2: CIPHER_SUITES string (lowercase, and in the format output by code2network())
 # arg3: (optional) additional request extensions
-# arg4: "all" - process full response (including Certificate and certificate_status handshake messages)
-#       "ephemeralkey" - extract the server's ephemeral key (if any)
+# arg4: "all" or "all+" - process full response (including Certificate and certificate_status handshake messages)
+#       "ephemeralkey"  - extract the server's ephemeral key (if any)
 # Return 0 if the response is not a HelloRetryRequest.
 # Return 1 if the response is a malformed HelloRetryRequest or if a new ClientHello cannot be sent.
 # Return 2 if the response is a HelloRetryRequest, and sending a new ClientHello succeeded.
@@ -12490,6 +12506,8 @@ resend_if_hello_retry_request() {
 #       (00: SSLv3,  01: TLS 1.0,  02: TLS 1.1,  03: TLS 1.2)
 # arg2: (optional) list of cipher suites
 # arg3: (optional): "all" - process full response (including Certificate and certificate_status handshake messages)
+#                   "all+" - same as "all", but do not offer any curves with TLSv1.3 that are not supported by
+#                            $OPENSSL, since response MUST be decrypted.
 #                   "ephemeralkey" - extract the server's ephemeral key (if any)
 # arg4: (optional) additional request extensions
 # arg5: (optional) "true" if ClientHello should advertise compression methods other than "NULL"
@@ -12558,7 +12576,7 @@ tls_sockets() {
           # if the ephemeral key is needed (which comes last for TLS 1.2 and
           # below), then we need to check if response appears to be complete,
           # and if it isn't then try to get another packet from the server.
-          if [[ "$process_full" == all ]] || [[ "$process_full" == ephemeralkey ]]; then
+          if [[ "$process_full" =~ all ]] || [[ "$process_full" == ephemeralkey ]]; then
                hello_done=1; skip=true
           fi
           for (( 1 ; hello_done==1; 1 )); do
