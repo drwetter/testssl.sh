@@ -5779,13 +5779,14 @@ run_server_preference() {
      outln
 
      pr_bold " Has server cipher order?     "
-     if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
+     if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
           addcmd="$OPTIMAL_PROTO"
      else
           # the supplied openssl will send an SSLv2 ClientHello if $SNI is empty
           # and the -no_ssl2 isn't provided.
           addcmd="-no_ssl2 $SNI"
      fi
+     [[ $DEBUG -ge 4 ]] && echo -e "\n Forward: ${list_fwd}\n ${tls13_list_fwd}"
      $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>$ERRFILE >$TMPFILE
      if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
           list_fwd="$(actually_supported_ciphers $list_fwd $tls13_list_fwd '-tls1')"
@@ -5811,12 +5812,13 @@ run_server_preference() {
                return 1
           fi
      fi
-
      cipher1=$(get_cipher $TMPFILE)               # cipher1 from 1st serverhello
+     debugme tm_out "--> $cipher1\n"
+
      if [[ -n "$STARTTLS_OPTIMAL_PROTO" ]]; then
           addcmd2="$STARTTLS_OPTIMAL_PROTO $SNI"
      else
-          if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
+          if [[ "$OPTIMAL_PR1866OTO" == -ssl2 ]]; then
                addcmd2="$OPTIMAL_PROTO"
           else
                addcmd2="-no_ssl2 $SNI"
@@ -5824,9 +5826,11 @@ run_server_preference() {
      fi
 
      # second client hello with reverse list
+     [[ $DEBUG -ge 4 ]] && echo -e "\n Reverse: ${list_reverse}\n ${tls13_list_reverse}"
      $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_reverse -ciphersuites $tls13_list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>>$ERRFILE >$TMPFILE
      # first handshake worked above so no error handling here
      cipher2=$(get_cipher $TMPFILE)               # cipher2 from 2nd serverhello
+     debugme tm_out "--> $cipher2\n"
 
      if [[ "$cipher1" != "$cipher2" ]]; then
           # server used the different ends (ciphers) from the client hello
@@ -5839,7 +5843,6 @@ run_server_preference() {
           limitedsense=""
           fileout "$jsonID" "OK" "server"
      fi
-     debugme tm_out "  $cipher1 | $cipher2"
      outln
 
      pr_bold " Negotiated protocol          "
