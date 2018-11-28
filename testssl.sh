@@ -8153,7 +8153,8 @@ run_server_defaults() {
           # try again, but only with TLSv1.1 and without SNI.
           if [[ $n -ge 10 ]]; then
                ciphers_to_test[n]=""
-               [[ ${success[n-9]} -eq 0 ]] && ciphers_to_test[n]="${ciphers_to_test[n-9]}" && certificate_type[n]="${certificate_type[n-9]}"
+               [[ ${success[n-9]} -eq 0 ]] && [[ $(has_server_protocol "tls1_1") -ne 1 ]] && \
+                    ciphers_to_test[n]="${ciphers_to_test[n-9]}" && certificate_type[n]="${certificate_type[n-9]}"
           fi
 
           if [[ -n "${ciphers_to_test[n]}" ]] && \
