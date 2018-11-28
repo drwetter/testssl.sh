@@ -18033,6 +18033,7 @@ parse_cmd_line() {
           [[ -n "$2" ]] && fatal "URI comes last" $ERR_CMDLINE
      fi
      [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal "\"--ip=one\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
+     [[ $CMDLINE_IP == one ]] && ( is_ipv4addr "$URI" || is_ipv6addr "$URI" )  && fatal "\"--ip=one\" plus supplying an IP address doesn't work" $ERR_CMDLINE
      "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
 
      ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES//,/ }"
