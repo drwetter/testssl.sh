@@ -9236,9 +9236,6 @@ starttls_xmpp_dialog() {
 starttls_nntp_dialog() {
      debugme echo "=== starting nntp STARTTLS dialog ==="
      starttls_full_read '$^' '^20[01] '                    && debugme echo "received server greeting" &&
-     starttls_just_send 'CAPABILITIES'                     && debugme echo "sent CAPABILITIES" &&
-     starttls_full_read '$^' '^101 '                       &&
-     starttls_full_read '' '^\.$' "^STARTTLS$"             && debugme echo "received server capabilities and checked STARTTLS availability" &&
      starttls_just_send 'STARTTLS'                         && debugme echo "initiated STARTTLS" &&
      starttls_full_read '$^' '^382 '                       && debugme echo "received ack for STARTTLS"
      local ret=$?
@@ -16830,7 +16827,7 @@ determine_service() {
                protocol=${1%s}     # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           fi
           case "$protocol" in
-               ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql)
+               ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql|nntp)
                     STARTTLS="-starttls $protocol"
                     SNI=""
                     if [[ "$protocol" == xmpp ]]; then
@@ -16869,6 +16866,11 @@ determine_service() {
                          # Check if openssl version supports lmtp.
                          if ! "$HAS_LMTP"; then
                               fatal "Your $OPENSSL does not support the \"-starttls lmtp\" option" $ERR_OSSLBIN
+                         fi
+                    elif [[ "$protocol" == nntp ]]; then
+                         # Check if openssl version supports lmtp.
+                         if ! "$HAS_NNTP"; then
+                              fatal "Your $OPENSSL does not support the \"-starttls nntp\" option" $ERR_OSSLBIN
                          fi
                     fi
                     $OPENSSL s_client $(s_client_options "-connect $NODEIP:$PORT $PROXY $BUGS $STARTTLS") 2>$ERRFILE >$TMPFILE </dev/null
