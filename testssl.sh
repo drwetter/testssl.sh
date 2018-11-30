@@ -11,7 +11,7 @@
 # Please file bugs at github!        https://github.com/drwetter/testssl.sh/issues
 #
 # Project lead and initiator: Dirk Wetter, copyleft: 2007-today, contributions so far see CREDITS.md
-# Main contriubtions from David Cooper
+# Main contributions from David Cooper
 #
 # License: GPLv2, see http://www.fsf.org/licensing/licenses/info/GPLv2.html
 # and accompanying license "LICENSE.txt". Redistribution + modification under this
@@ -93,7 +93,7 @@ declare -r ALLOK=0                 # All is fine
 #
 declare -r PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 DEBUGTIME=${DEBUGTIME:-false}                     # stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353, profiling bash
-DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one sceen (old behaviour for testssl.sh and bash3's default
+DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one screen (old behavior for testssl.sh and bash3's default
                                                   # false: needed for performance analysis or useful for just having an extra file
 DEBUG_ALLINONE=${SETX:-false}                     # SETX as a shortcut for old style debugging, overriding DEBUG_ALLINONE
 if [[ "$SHELLOPTS" =~ xtrace ]]; then
@@ -139,7 +139,7 @@ TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # If you run testssl.sh and it
 CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # You can have your stores some place else
 ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES:-""}"  # single file with a CA in PEM format or comma separated lists of them
 CIPHERS_BY_STRENGTH_FILE=""
-TLS_DATA_FILE=""                                  # mandatory file for socket-based handdhakes
+TLS_DATA_FILE=""                                  # mandatory file for socket-based handshakes
 OPENSSL_LOCATION=""
 HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
@@ -202,7 +202,7 @@ SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where p
 ASSUME_HTTP=${ASSUME_HTTP:-false}       # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
 WARNINGS=${WARNINGS:-""}                # can be either off or batch
-DEBUG=${DEBUG:-0}                       # 1: normal putput the files in /tmp/ are kept for further debugging purposes
+DEBUG=${DEBUG:-0}                       # 1: normal output the files in /tmp/ are kept for further debugging purposes
                                         # 2: list more what's going on , also lists some errors of connections
                                         # 3: slight hexdumps + other info,
                                         # 4: display bytes sent via sockets
@@ -237,7 +237,7 @@ MAX_WAITSOCK=${MAX_WAITSOCK:-10}        # waiting at max 10 seconds for socket r
 CCS_MAX_WAITSOCK=${CCS_MAX_WAITSOCK:-5} # for the two CCS payload (each). There shouldn't be any reason to change this.
 HEARTBLEED_MAX_WAITSOCK=${HEARTBLEED_MAX_WAITSOCK:-8}      # for the heartbleed payload. There shouldn't be any reason to change this.
 STARTTLS_SLEEP=${STARTTLS_SLEEP:-10}    # max time wait on a socket for STARTTLS. MySQL has a fixed value of 1 which can't be overwritten (#914)
-FAST_STARTTLS=${FAST_STARTTLS:-true}    # at the cost of reliabilty decrease the handshakes for STARTTLS
+FAST_STARTTLS=${FAST_STARTTLS:-true}    # at the cost of reliability decrease the handshakes for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
 HSTS_MIN=${HSTS_MIN:-179}               # >179 days is ok for HSTS
@@ -286,7 +286,7 @@ PROTOS_OFFERED=""                       # This keeps which protocol is being off
 DETECTED_TLS_VERSION=""
 TLS_EXTENSIONS=""
 declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
-# alpn_protos needs to be space-separated, not comma-seperated, including odd ones observerd @ facebook and others, old ones like h2-17 omitted as they could not be found
+# alpn_protos needs to be space-separated, not comma-seperated, including odd ones observed @ facebook and others, old ones like h2-17 omitted as they could not be found
 declare -r ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
 declare -a SESS_RESUMPTION
 TEMPDIR=""
@@ -469,7 +469,7 @@ html_reserved(){
 html_out() {
      "$do_html" || return 0
      [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "${1//%/%%}" >> "$HTMLFILE"
-     # here and other printf's: a little bit of sanitzing with bash internal search&replace -- otherwise printf will hiccup at '%'. '--' and %b do the rest.
+     # here and other printf's: a little bit of sanitizing with bash internal search&replace -- otherwise printf will hiccup at '%'. '--' and %b do the rest.
 }
 
 # This is intentionally the same.
@@ -1490,7 +1490,7 @@ http_get() {
           fi
           return $?
      else
-          # Worst option: slower and hiccups with chunked transfers. Workround for the
+          # Worst option: slower and hiccups with chunked transfers. Workaround for the
           # latter is using HTTP/1.0. We do not support https here, yet.
           # First the URL will be split
           IFS=/ read -r proto z node query <<< "$1"
@@ -1766,7 +1766,7 @@ asciihex_to_binary_file(){
 }
 
 # arg1: text string
-# Output a comma-separated ASCII-HEX string resprestation of the input string.
+# Output a comma-separated ASCII-HEX string representation of the input string.
 string_to_asciihex() {
      local string="$1"
      local -i i eos
@@ -1821,7 +1821,7 @@ s_client_options() {
      ! "$HAS_NO_SSL2" && options="${options//-no_ssl2/}"
 
      # At least one server will fail under some circumstances if compression methods are offered.
-     # So, only offer compression methds if necessary for the test. In OpenSSL 1.1.0 and
+     # So, only offer compression methods if necessary for the test. In OpenSSL 1.1.0 and
      # 1.1.1 compression is only offered if the "-comp" option is provided.
      # OpenSSL 1.0.0, 1.0.1, and 1.0.2 offer compression unless the "-no_comp" option is provided.
      # OpenSSL 0.9.8 does not support either the "-comp" or the "-no_comp" option.
@@ -1874,7 +1874,7 @@ service_detection() {
      local -i was_killed
 
      if ! "$CLIENT_AUTH"; then
-          # SNI is not standardardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
+          # SNI is not standardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
           printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
           was_killed=$?
@@ -2299,7 +2299,7 @@ run_hpkp() {
                fileout "HPKP_SPKIs" "INFO" "Only Public-Key-Pins-Report-Only"
           fi
 
-          # remove leading Public-Key-Pins* and convert it to mulitline arg
+          # remove leading Public-Key-Pins* and convert it to multiline arg
           sed -e 's/Public-Key-Pins://g' -e s'/Public-Key-Pins-Report-Only://' <<< "$first_hpkp_header" | \
                tr ';' '\n' | sed -e 's/\"//g' -e 's/^ //' >$TMPFILE
 
@@ -4710,7 +4710,7 @@ run_prototest_openssl() {
 }
 
 # idempotent function to add SSL/TLS protocols. It should accelerate testing.
-# PROTOS_OFFERED can be e.g. "ssl2:no ssl3:no tls1_2:yes" which means tha
+# PROTOS_OFFERED can be e.g. "ssl2:no ssl3:no tls1_2:yes" which means that
 # SSLv2 and SSLv3 was tested but not available, TLS 1.2 was tested and available
 # TLS 1.0 and TLS 1.2 not tested yet
 #
@@ -4725,7 +4725,7 @@ add_tls_offered() {
      fi
 }
 
-# function which checks whether SSLv2 - TLS 1.2 is being offereed, see add_tls_offered()
+# function which checks whether SSLv2 - TLS 1.2 is being offered, see add_tls_offered()
 has_server_protocol() {
      local proto
      local proto_val_pair
@@ -6176,8 +6176,8 @@ cipher_pref_check() {
                if [[ $p == tls1_2 ]] && ! "$SERVER_SIZE_LIMIT_BUG"; then
                     # for some servers the ClientHello is limited to 128 ciphers or the ClientHello itself has a length restriction.
                     # So far, this was only observed in TLS 1.2, affected are e.g. old Cisco LBs or ASAs, see issue #189
-                    # To check whether a workaround is needed we send a laaarge list of ciphers/big client hello. If connect fails,
-                    # we hit the bug and automagically do the workround. Cost: this is for all servers only 1x more connect
+                    # To check whether a workaround is needed we send a large list of ciphers/big client hello. If connect fails,
+                    # we hit the bug and automagically do the workaround. Cost: this is for all servers only 1x more connect
                     $OPENSSL s_client $(s_client_options "$STARTTLS -tls1_2 $BUGS -cipher "$overflow_probe_cipherlist" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
                     if ! sclient_connect_successful $? $TMPFILE; then
 #FIXME this needs to be handled differently. We need 2 status: BUG={true,false,not tested yet}
@@ -6723,7 +6723,7 @@ extract_certificates() {
              issuerDN="$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>/dev/null)"
              issuerDN="${issuerDN:8}"
              previssuerDN="$issuerDN"
-             # The second certficate (level1.crt) SHOULD be issued to the CA
+             # The second certificate (level1.crt) SHOULD be issued to the CA
              # that issued the server's certificate. But, according to RFC 8446
              # clients SHOULD be prepared to handle cases in which the server
              # does not order the certificates correctly.
@@ -6916,7 +6916,7 @@ get_cn_from_cert() {
      # attention! openssl 1.0.2 doesn't properly handle online output from certificates from trustwave.com/github.com
      #FIXME: use -nameopt oid for robustness
 
-     # for e.g. russian sites -esc_msb,utf8 works in an UTF8 terminal -- any way to check platform indepedent?
+     # for e.g. russian sites -esc_msb,utf8 works in an UTF8 terminal -- any way to check platform independent?
      # see x509(1ssl):
      subject="$($OPENSSL x509 -in $1 -noout -subject -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
      echo "$(awk -F'=' '/CN=/ { print $2 }' <<< "$subject")"
@@ -6964,7 +6964,7 @@ wildcard_match()
      is_wildcard "$certname"
      [[ $? -ne 0 ]] && return 1
 
-     # Comparisons of DNS names are case insenstive, so convert both names to uppercase.
+     # Comparisons of DNS names are case insensitive, so convert both names to uppercase.
      certname="$(toupper "$certname")"
      servername="$(toupper "$servername")"
 
@@ -8886,7 +8886,7 @@ run_pfs() {
           if [[ -z "$curves_offered" ]] && [[ -n "$curve_found" ]]; then
                # The server is not using one of the groups from RFC 7919.
                if [[ -z "$DH_GROUP_OFFERED" ]]; then
-                    # this global will get the name of the group eithe here or in run_logjam()
+                    # this global will get the name of the group either here or in run_logjam()
                     key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
                     get_common_prime "$jsonID" "$key_bitstring" ""
                     [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
@@ -10582,7 +10582,7 @@ check_tls_serverhellodone() {
         [[ -z "$key_and_iv" ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
           return 3
      fi
-     # If we haven't encoountered a fatal alert or a server hello done,
+     # If we haven't encountered a fatal alert or a server hello done,
      # then there must be more data to retrieve.
      return 1
 }
@@ -12995,7 +12995,7 @@ sub_session_ticket_tls() {
 
      #FIXME: we likely have done this already before (either @ run_server_defaults() or at least the output
      #       from a previous handshake) --> would save 1x connect
-     #ATTENTION: we DO NOT use SNI here as we assume ticketbleed is a vulnerabilty of the TLS stack. If we'd do SNI here, we'd also need
+     #ATTENTION: we DO NOT use SNI here as we assume ticketbleed is a vulnerability of the TLS stack. If we'd do SNI here, we'd also need
      #           it in the ClientHello of run_ticketbleed() otherwise the ticket will be different and the whole thing won't work!
      #
      sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $OPTIMAL_PROTO $PROXY -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
@@ -13979,14 +13979,14 @@ out_common_prime() {
           out "common primes detected: "; pr_italic "$DH_GROUP_OFFERED"
           fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
      # Now (below) size matters -- i.e. the bit size. As this is about a known prime we label it more strict.
-     # This needs maybe needs a another thought as it could appear inconsitent with run_pfs and elsewhere.
-     # for now we label the bit size similar in the screen, but distiguish the leading text for logjam before
+     # This needs maybe needs another thought as it could appear inconsistent with run_pfs and elsewhere.
+     # for now we label the bit size similar in the screen, but distinguish the leading text for logjam before
      elif [[ $DH_GROUP_LEN_P -le 800 ]]; then
           pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime: "
           fileout "$jsonID2" "CRITICAL" "$DH_GROUP_OFFERED" "$cve" "$cwe"
           pr_dh "$DH_GROUP_OFFERED" $DH_GROUP_LEN_P
      elif [[ $DH_GROUP_LEN_P -le 1024 ]]; then
-          # really? Here we assume that 1024bit common prime for nation states are worth and possible to precompute (TBC)
+          # really? Here we assume that 1024-bit common prime for nation states are worth and possible to precompute (TBC)
           # otherwise 1024 are just medium
           pr_svrty_high "VULNERABLE (NOT ok):"; out " common prime: "
           fileout "$jsonID2" "HIGH" "$DH_GROUP_OFFERED" "$cve" "$cwe"
@@ -14154,7 +14154,7 @@ run_logjam() {
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
                out ", no DH key detected with <= TLS 1.2"
-               fileout "$jsonID2" "OK" "no DH key13977 with <= TLS 1.2" "$cve" "$cwe"
+               fileout "$jsonID2" "OK" "no DH key with <= TLS 1.2" "$cve" "$cwe"
           elif [[ $subret -eq 0 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
@@ -15436,7 +15436,7 @@ run_robot() {
                     "$vulnerable" && break
                fi
                # Don't continue testing if it has already been determined that the server is
-               # stronly vulnerable.
+               # strongly vulnerable.
                if [[ $testnum -eq 2 ]]; then
                     [[ "${response[1]}" != "${response[2]}" ]] && break
                elif [[ $testnum -eq 3 ]]; then
@@ -15902,7 +15902,7 @@ tuning / connect options (most also can be preset via environment variables):
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
      -n, --nodns <min|none>        if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records
      --sneaky                      leave less traces in target logs: user agent, referer
-     --ids-friendly                skips a few vulnerablity checks which may cause IDSs to block the scanning IP
+     --ids-friendly                skips a few vulnerability checks which may cause IDSs to block the scanning IP
      --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
 
 output options (can also be preset via environment variables):
