@@ -8886,7 +8886,7 @@ run_pfs() {
           if [[ -z "$curves_offered" ]] && [[ -n "$curve_found" ]]; then
                # The server is not using one of the groups from RFC 7919.
                if [[ -z "$DH_GROUP_OFFERED" ]]; then
-                    # this global will get athe name of the group eithe here or in run_logjam()
+                    # this global will get the name of the group eithe here or in run_logjam()
                     key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
                     get_common_prime "$jsonID" "$key_bitstring" ""
                     [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
@@ -13974,9 +13974,11 @@ out_common_prime() {
      local cve="$2"
      local cwe="$3"
 
-     if [[ "$DH_GROUP_OFFERED" =~ ffdhe ]]; then
-          :
-     # now size matters -- i.e. the bit size. As this is about a known prime we label it more strict.
+     [[ "$DH_GROUP_OFFERED" == ffdhe* ]] && [[ ! "$DH_GROUP_OFFERED" =~ \  ]] && DH_GROUP_OFFERED="RFC7919/$DH_GROUP_OFFERED"
+     if [[ "$DH_GROUP_OFFERED" =~ ffdhe ]] && [[ "$DH_GROUP_OFFERED" =~ \  ]]; then
+          out "common primes detected: "; pr_italic "$DH_GROUP_OFFERED"
+          fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
+     # Now (below) size matters -- i.e. the bit size. As this is about a known prime we label it more strict.
      # This needs maybe needs a another thought as it could appear inconsitent with run_pfs and elsewhere.
      # for now we label the bit size similar in the screen, but distiguish the leading text for logjam before
      elif [[ $DH_GROUP_LEN_P -le 800 ]]; then
@@ -14129,8 +14131,8 @@ run_logjam() {
           pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DH EXPORT ciphers"
           fileout "$jsonID" "HIGH" "VULNERABLE, uses DH EXPORT ciphers" "$cve" "$cwe" "$hint"
           if [[ $subret -eq 3 ]]; then
-               out ", no DH key detected"
-               fileout "$jsonID2" "OK" "no DH key detected"
+               out ", no DH key detected with <= TLS 1.2"
+               fileout "$jsonID2" "OK" "no DH key detected with <= TLS 1.2"
           elif [[ $subret -eq 1 ]]; then
                out "\n${spaces}"
                out_common_prime "$jsonID2" "$cve" "$cwe"
@@ -14151,8 +14153,8 @@ run_logjam() {
           elif [[ $subret -eq 3 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
-               out ", no DH key detected"
-               fileout "$jsonID2" "OK" "no DH key" "$cve" "$cwe"
+               out ", no DH key detected with <= TLS 1.2"
+               fileout "$jsonID2" "OK" "no DH key13977 with <= TLS 1.2" "$cve" "$cwe"
           elif [[ $subret -eq 0 ]]; then
                pr_svrty_good "not vulnerable (OK):"; out " no DH EXPORT ciphers${addtl_warning}"
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
