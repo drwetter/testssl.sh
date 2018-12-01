@@ -5818,7 +5818,7 @@ run_server_preference() {
      if [[ -n "$STARTTLS_OPTIMAL_PROTO" ]]; then
           addcmd2="$STARTTLS_OPTIMAL_PROTO $SNI"
      else
-          if [[ "$OPTIMAL_PR1866OTO" == -ssl2 ]]; then
+          if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
                addcmd2="$OPTIMAL_PROTO"
           else
                addcmd2="-no_ssl2 $SNI"
