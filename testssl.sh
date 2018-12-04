@@ -1884,7 +1884,7 @@ service_detection() {
           [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -waq "IMAP|IMAP4|Cyrus IMAP4IMAP4rev1|IMAP4REV1|Gimap" && SERVICE=IMAP       # I know some overlap here
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq FTP && SERVICE=FTP
           [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqi "jabber|xmpp" && SERVICE=XMPP
-          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN" && SERVICE=NNTP
+          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN|Kerio Connect|NNTP Service|Kerio MailServer|NNTP server" && SERVICE=NNTP
           # MongoDB port 27017 will respond to a GET request with a mocked HTTP response
           [[ "$SERVICE" == HTTP ]] && head $TMPFILE | egrep -aqw "MongoDB" && SERVICE=MongoDB
           debugme head -50 $TMPFILE | sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<\?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d'
