@@ -4186,12 +4186,22 @@ run_cipher_per_proto() {
 }
 
 # arg1 is an ASCII-HEX encoded SSLv3 or TLS ClientHello.
-# If the ClientHello contains a server name extension, then
-# either:
+# arg2: new key_share extension (only present to response to HelloRetryRequest)
+# arg3: cookie extension (if needed for response to HelloRetryRequest)
+#
+# This function may be used to either modify a ClientHello for client simulation
+# or to create a second ClientHello in response to a HelloRetryRequest.
+# If arg2 is present, then this is a response to a HelloRetryRequest, so the
+# function replaces the key_share extension with arg2 and adds the cookie
+# extension, if present.
+# If arg2 is not present, then this is an initial ClientHello for client simulation.
+# In this case, if the provided ClientHello contains a server name extension,
+# then either:
 #  1) replace it with one corresponding to $SNI; or
 #  2) remove it, if $SNI is empty
-create_client_simulation_tls_clienthello() {
+modify_clienthello() {
      local tls_handshake_ascii="$1"
+     local new_key_share="$2" cookie="$3"
      local -i len offset tls_handshake_ascii_len len_all len_clienthello
      local -i len_extensions len_extension
      local tls_content_type tls_version_reclayer handshake_msg_type tls_clientversion
@@ -4231,19 +4241,15 @@ create_client_simulation_tls_clienthello() {
      fi
 
      len_extensions=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
-     offset=$offset+4
+     offset+=4
      for (( 1; offset < tls_handshake_ascii_len; 1 )); do
           extension_type="${tls_handshake_ascii:$offset:4}"
-          offset=$offset+4
+          offset+=+4
           len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
 
-          if [[ "$extension_type" != "0000" ]]; then
-             # The extension will just be copied into the revised ClientHello
-             offset=$offset-4
-             len=$len_extension+8
-             tls_extensions+="${tls_handshake_ascii:$offset:$len}"
-             offset=$offset+$len
-          else
+          if [[ "$extension_type" == 0000 ]] && [[ -z "$key_share" ]]; then
+               # If this is an initial ClientHello, then either remove
+               # the SNI extension or replace it with the correct server name.
                sni_extension_found=true
                if [[ -n "$SNI" ]]; then
                     # Create a server name extension that corresponds to $SNI
@@ -4255,12 +4261,23 @@ create_client_simulation_tls_clienthello() {
                     len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
                     len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
                     tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
-                    offset=$offset+$len_extension+4
+                    offset+=$len_extension+4
                fi
+          elif [[ "$extension_type" != 00$KEY_SHARE_EXTN_NR ]] || [[ -z "$key_share" ]]; then
+               # If this is in response to a HelloRetryRequest, then do
+               # not copy over the old key_share extension, but
+               # all other extensions should be copied into the new ClientHello.
+               offset=$offset-4
+               len=$len_extension+8
+               tls_extensions+="${tls_handshake_ascii:$offset:$len}"
+               offset+=$len
+          else
+               offset+=$len_extension+4
           fi
      done
+     tls_extensions+="$new_key_share$cookie"
 
-     if ! $sni_extension_found; then
+     if ! "$sni_extension_found" && [[ -z "$key_share" ]]; then
           tm_out "$tls_handshake_ascii"
           return 0
      fi
@@ -4294,7 +4311,7 @@ client_simulation_sockets() {
      local -i sid_len offset1 offset2
 
      if [[ "${1:0:4}" == "1603" ]]; then
-          clienthello="$(create_client_simulation_tls_clienthello "$1")"
+          clienthello="$(modify_clienthello "$1")"
           TLS_CLIENT_HELLO="${clienthello:10}"
      else
           clienthello="$1"
@@ -4338,7 +4355,7 @@ client_simulation_sockets() {
      tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
 
      # Check if the response is a HelloRetryRequest.
-     resend_if_hello_retry_request "$tls_hello_ascii" "$cipher_list_2send" "$4" "$process_full"
+     resend_if_hello_retry_request "$clienthello" "$tls_hello_ascii"
      ret=$?
      if [[ $ret -eq 2 ]]; then
           tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
@@ -11886,12 +11903,11 @@ generate_key_share_extension() {
 # ARG4: (optional) additional request extensions
 # ARG5: (optional): "true" if ClientHello should advertise compression methods other than "NULL"
 # ARG6: (optional): "false" if prepare_tls_clienthello() should not open a new socket
-# ARG7: (optional): "true" if this is a second ClientHello that follows receipt of a HelloRetryRequest
 #
 prepare_tls_clienthello() {
      local tls_low_byte="$1" tls_legacy_version="$1"
      local process_full="$3"
-     local new_socket=true is_second_clienthello=false
+     local new_socket=true
      local tls_word_reclayer="03, 01"      # the first TLS version number is the record layer and always 0301
                                            # -- except: SSLv3 and second ClientHello after HelloRetryRequest
      local servername_hexstr len_servername len_servername_hex
@@ -11912,7 +11928,6 @@ prepare_tls_clienthello() {
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
      [[ "$5" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
      [[ "$6" == "false" ]] && new_socket=false
-     [[ "$7" == "true" ]] && is_second_clienthello=true
 
      cipher_suites="$2"                      # we don't have the leading \x here so string length is two byte less, see next
      len_ciph_suites_byte=${#cipher_suites}
@@ -12254,7 +12269,6 @@ prepare_tls_clienthello() {
      # if we have SSLv3, the first occurrence of TLS protocol -- record layer -- is SSLv3, otherwise TLS 1.0,
      # except in the case of a second ClientHello in TLS 1.3, in which case it is TLS 1.2.
      [[ $tls_low_byte == "00" ]] && tls_word_reclayer="03, 00"
-     "$is_second_clienthello" && tls_word_reclayer="03, 03"
 
      [[ 0x$tls_legacy_version -ge 0x04 ]] && tls_legacy_version="03"
 
@@ -12315,37 +12329,34 @@ prepare_tls_clienthello() {
      return 0
 }
 
-# arg1: The server's response
-# arg2: CIPHER_SUITES string (lowercase, and in the format output by code2network())
-# arg3: (optional) additional request extensions
-# arg4: "all" or "all+" - process full response (including Certificate and certificate_status handshake messages)
-#       "ephemeralkey"  - extract the server's ephemeral key (if any)
+# arg1: The original ClientHello
+# arg2: The server's response
 # Return 0 if the response is not a HelloRetryRequest.
 # Return 1 if the response is a malformed HelloRetryRequest or if a new ClientHello cannot be sent.
 # Return 2 if the response is a HelloRetryRequest, and sending a new ClientHello succeeded.
 # Return 6 if the response is a HelloRetryRequest, and sending a new ClientHello failed.
 resend_if_hello_retry_request() {
-     local tls_hello_ascii="$1"
-     local cipher_list_2send="$2"
-     local process_full="$4"
-     local msg_type tls_low_byte server_version cipher_suite rfc_cipher_suite key_share=""
+     local original_clienthello="$1"
+     local tls_hello_ascii="$2"
+     local msg_type tls_low_byte server_version cipher_suite rfc_cipher_suite
+     local key_share="" new_key_share="" cookie="" second_clienthello data=""
      local -i i j msg_len tls_hello_ascii_len sid_len
      local -i extns_offset hrr_extns_len extra_extensions_len len_extn
-     local extra_extensions extn_type part2 new_extra_extns="" new_key_share temp
+     local extra_extensions extn_type part2 new_extra_extns=""
      local sha256_hrr="CF21AD74E59A6111BE1D8C021E65B891C2A211167ABB8C5E079E09E2C8A8339C"
 
      tls_hello_ascii_len=${#tls_hello_ascii}
      # A HelloRetryRequest is at least 13 bytes long
      [[ $tls_hello_ascii_len -lt 26 ]] && return 0
      # A HelloRetryRequest is a handshake message (16) with a major record version of 03.
-     [[ "${tls_hello_ascii:0:4}" != "1603" ]] && return 0
+     [[ "${tls_hello_ascii:0:4}" != 1603 ]] && return 0
      msg_type="${tls_hello_ascii:10:2}"
-     if [[ "$msg_type" == "02" ]]; then
+     if [[ "$msg_type" == 02 ]]; then
           # A HRR is a ServerHello with a Random value equal to the
           # SHA-256 hash of "HelloRetryRequest"
           [[ $tls_hello_ascii_len -lt 76 ]] && return 0
-          [[ "${tls_hello_ascii:22:64}" != "$sha256_hrr" ]] && return 0
-     elif [[ "$msg_type" != "06" ]]; then
+          [[ "${tls_hello_ascii:22:64}" != $sha256_hrr ]] && return 0
+     elif [[ "$msg_type" != 06 ]]; then
           # The handshake type for hello_retry_request in draft versions was 06.
           return 0
      fi
@@ -12376,7 +12387,7 @@ resend_if_hello_retry_request() {
           return 1
      fi
 
-     if [[ "$msg_type" == "06" ]]; then
+     if [[ "$msg_type" == 06 ]]; then
           server_version="${tls_hello_ascii:18:4}"
           if [[ 0x$server_version -ge 0x7f13 ]]; then
                # Starting with TLSv1.3 draft 19, a HelloRetryRequest is at least 15 bytes long
@@ -12411,12 +12422,12 @@ resend_if_hello_retry_request() {
                debugme echo "malformed HelloRetryRequest"
                return 1
           fi
-          if [[ "$extn_type" == "002C" ]]; then
+          if [[ "$extn_type" == 002C ]]; then
                # If the HRR includes a cookie extension, then it needs to be
                # included in the next ClientHello.
                j=8+$len_extn
-               new_extra_extns+="${tls_hello_ascii:i:j}"
-          elif [[ "$extn_type" == "00$KEY_SHARE_EXTN_NR" ]]; then
+               cookie="${tls_hello_ascii:i:j}"
+          elif [[ "$extn_type" == 00$KEY_SHARE_EXTN_NR ]]; then
                # If the HRR includes a key_share extension, then it specifies the
                # group to be used in the next ClientHello. So, create a key_share
                # extension that specifies this group.
@@ -12425,41 +12436,16 @@ resend_if_hello_retry_request() {
                     return 1
                fi
                key_share="${tls_hello_ascii:j:4}"
-               new_key_share="$(generate_key_share_extension "000a00040002$key_share" "$process_full")"
+               new_key_share="$(generate_key_share_extension "000a00040002$key_share" "ephemeralkey")"
                [[ $? -ne 0 ]] && return 1
                [[ -z "$new_key_share" ]] && return 1
-               new_extra_extns+="${new_key_share//,/}"
-          elif [[ "$extn_type" == "002B" ]]; then
+               new_key_share="${new_key_share//,/}"
+          elif [[ "$extn_type" == 002B ]]; then
                if [[ $len_extn -ne 4 ]]; then
                     debugme echo "malformed supported versions extension in HelloRetryRequest"
                     return 1
                fi
                server_version="${tls_hello_ascii:j:4}"
-          fi
-     done
-     if [[ -n "$new_extra_extns" ]]; then
-          temp="$new_extra_extns"
-          extra_extensions_len=${#temp}
-          new_extra_extns=""
-          for (( i=0 ; i < extra_extensions_len; i=i+2 )); do
-               new_extra_extns+=",${temp:i:2}"
-          done
-          new_extra_extns="${new_extra_extns:1}"
-     fi
-
-     # Include any extra extensions that were included in the first ClientHello,
-     # except key_share and cookie.
-     extra_extensions="$(strip_spaces "$(tolower "$3")")"
-     extra_extensions_len=${#extra_extensions}
-     for (( i=0; i < extra_extensions_len; i=i+12+len_extn )); do
-          part2=$i+3
-          extn_type="${extra_extensions:i:2}${extra_extensions:part2:2}"
-          j=$i+6
-          part2=$j+3
-          len_extn=3*$(hex2dec "${extra_extensions:j:2}${extra_extensions:part2:2}")
-          if [[ "$extn_type" != "00$KEY_SHARE_EXTN_NR" ]] && [[ "$extn_type" != "002c" ]]; then
-               j=11+$len_extn
-               new_extra_extns+=",${extra_extensions:i:j}"
           fi
      done
 
@@ -12479,7 +12465,7 @@ resend_if_hello_retry_request() {
           echo
           echo "TLS hello retry request message:"
           echo "     server version:         $server_version"
-          if [[ "$server_version" == "0304" ]] || [[ 0x$server_version -ge 0x7f13 ]]; then
+          if [[ "$server_version" == 0304 ]] || [[ 0x$server_version -ge 0x7f13 ]]; then
                echo -n "     cipher suite:           $cipher_suite"
                if [[ $TLS_NR_CIPHERS -ne 0 ]]; then
                     if [[ "${cipher_suite:0:2}" == "00" ]]; then
@@ -12497,30 +12483,27 @@ resend_if_hello_retry_request() {
                fi
           fi
           [[ -n "$key_share" ]] && echo "     key share:              0x$key_share"
+          [[ -n "$cookie" ]] && echo "     cookie:                 $cookie"
      fi
 
-     if [[ "${server_version:0:2}" == "7F" ]]; then
-          tls_low_byte="04"
-     else
-          tls_low_byte="${server_version:2:2}"
+     # Starting with TLSv1.3 draft 24, the second ClientHello should specify a record layer version of 0x0303
+     if [[ "$server_version" == 0304 ]] || [[ 0x$server_version -ge 0x7f18 ]]; then
+          original_clienthello="160303${original_clienthello:6}"
      fi
 
-     if [[ "$server_version" == "0304" ]] || [[ 0x$server_version -ge 0x7f16 ]]; then
+     if [[ "$server_version" == 0304 ]] || [[ 0x$server_version -ge 0x7f16 ]]; then
          # Send a dummy change cipher spec for middlebox compatibility.
          debugme echo -en "\nsending dummy change cipher spec... "
          socksend ", x14, x03, x03 ,x00, x01, x01" 0
      fi
      debugme echo -en "\nsending second client hello... "
-     # Starting with TLSv1.3 draft 24, the second ClientHello should specify a record layer version of 0x0303
-     if [[ "$server_version" == "0304" ]] || [[ 0x$server_version -ge 0x7f18 ]]; then
-          prepare_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false" "true"
-     else
-          prepare_tls_clienthello "$tls_low_byte" "$cipher_list_2send" "$process_full" "$new_extra_extns" "" "false"
-     fi
-     if [[ $? -ne 0 ]]; then
-          debugme echo "stuck on sending: $ret"
-          return 6
-     fi
+     second_clienthello="$(modify_clienthello "$original_clienthello" "$new_key_share" "$cookie")"
+     msg_len=${#second_clienthello}
+     for (( i=0; i < msg_len; i=i+2 )); do
+          data+=", ${second_clienthello:i:2}"
+     done
+     debugme echo -n "sending client hello... "
+     socksend_clienthello "$data" $USLEEP_SND
      sockread_serverhello 32768
      return 2
 }
@@ -12545,7 +12528,7 @@ tls_sockets() {
      local cipher_list_2send
      local sock_reply_file2 sock_reply_file3
      local tls_hello_ascii next_packet
-     local clienthello1 hrr=""
+     local clienthello1 original_clienthello hrr=""
      local process_full="$3" offer_compression=false skip=false
      local close_connection=true
      local -i hello_done=0
@@ -12580,7 +12563,8 @@ tls_sockets() {
           tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
 
           # Check if the response is a HelloRetryRequest.
-          resend_if_hello_retry_request "$tls_hello_ascii" "$cipher_list_2send" "$4" "$process_full"
+          original_clienthello="160301$(printf "%04x" "${#clienthello1}")$clienthello1"
+          resend_if_hello_retry_request "$original_clienthello" "$tls_hello_ascii"
           ret=$?
           if [[ $ret -eq 2 ]]; then
                hrr="${tls_hello_ascii:10}"
