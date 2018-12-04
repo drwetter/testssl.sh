@@ -11905,7 +11905,7 @@ prepare_tls_clienthello() {
      local extension_signature_algorithms extension_heartbeat session_id
      local extension_session_ticket extension_next_protocol extension_padding
      local extension_supported_groups="" extension_supported_point_formats=""
-     local extensions_key_share="" extn_type supported_groups_c2n=""
+     local extensions_key_share="" extn_type supported_groups_c2n="" extn_psk_mode=""
      local extra_extensions extra_extensions_list="" extension_supported_versions=""
      local offer_compression=false compression_methods
 
@@ -12002,6 +12002,9 @@ prepare_tls_clienthello() {
 
           extension_next_protocol="
           33, 74, 00, 00"
+
+          extn_psk_mode="
+          00, 2d, 00, 02, 01, 01"
 
           if "$ecc_cipher_suite_found"; then
                # Supported Groups Extension
@@ -12122,6 +12125,15 @@ prepare_tls_clienthello() {
                else
                     all_extensions+="00, 2b, 00, $(printf "%02x" $((2*0x$tls_low_byte+11))), $(printf "%02x" $((2*0x$tls_low_byte+10)))$extension_supported_versions"
                fi
+          fi
+
+          # There does not seem to be any reason to include this extension. However, it appears that
+          # OpenSSL, Firefox, and Chrome include it in TLS 1.3 ClientHello messages, and there is at
+          # least one server that will fail the connection if it is absent
+          # (see https://github.com/drwetter/testssl.sh/issues/990).
+          if [[ "0x$tls_low_byte" -ge "0x04" ]] && [[ ! "$extra_extensions_list" =~ " 002d " ]]; then
+               [[ -n "$all_extensions" ]] && all_extensions+=","
+               all_extensions+="$extn_psk_mode"
           fi
 
           if [[ ! "$extra_extensions_list" =~ " 0023 " ]]; then
@@ -15212,6 +15224,9 @@ run_grease() {
      # TODO: For servers that support TLSv1.3, check that servers ignore unrecognized
      # values in the supported_versions extension.
      # see https://www.ietf.org/mail-archive/web/tls/current/msg22319.html
+
+     # TODO: For servers that support TLSv1.3, check that servers don't require the
+     # psk_key_exchange_modes extension to be present in the ClientHello.
 
      if ! "$bug_found"; then
           outln " No bugs found."
