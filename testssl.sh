@@ -1930,12 +1930,15 @@ service_detection() {
 # 4: string for repeated occurrence of problem
 #
 connectivity_problem() {
+     if [[ $1 -lt $2 ]]; then
+          prln_warning "Oops: $3"
+          return 0
+     fi
      if [[ $1 -ge $2 ]]; then
-          if [[ $2 -eq 1 ]]; then
-                fatal "$3" $ERR_CONNECT
-          fi
           if [[ "$4" =~ openssl\ s_client\ connect ]] ; then
-               fatal "$4" $ERR_CONNECT "consider increasing MAX_OSSL_FAIL (currently: $2)"
+               fatal "$4" $ERR_CONNECT "Consider increasing MAX_OSSL_FAIL (currently: $2)"
+          elif [[ "$4" =~ repeated\ TCP\ connect ]]; then
+               fatal "$4" $ERR_CONNECT "Consider increasing MAX_SOCKET_FAIL (currently: $2)"
           fi
           fatal "$4" $ERR_CONNECT
      fi
