@@ -28,10 +28,10 @@ The output rates findings by color (screen) or severity (file output) so that yo
 Only you see the result\. You also can use it internally on your LAN\. Except DNS lookups it doesn\'t use any other hosts or even third parties for checks\.
 .
 .SH "REQUIREMENTS"
-Testssl\.sh is out of the box pretty much portable: it runs under any Unix\-like stack: Linux, *BSD, MacOS X, WSL=Windows Subsystem for Linux,, Cygwin and MSYS2\. \fBbash\fR (also version 3 is still supported) is a prerequisite as well as standard utilities like awk, sed, tr and head\. This can be of BSD, System 5 or GNU flavor whereas grep from System V is not yet supported\.
+Testssl\.sh is out of the box portable: it runs under any Unix\-like stack: Linux, *BSD, MacOS X, WSL=Windows Subsystem for Linux, Cygwin and MSYS2\. \fBbash\fR is a prerequisite, also version 3 is still supported\. Standard utilities like awk, sed, tr and head are also needed\. This can be of a BSD, System 5 or GNU flavor whereas grep from System V is not yet supported\.
 .
 .P
-Any OpenSSL or LibreSSL version is needed as a helper\. Unless previous versions of testssl\.sh almost every check is done via (TCP) sockets\. Despite that some some statically linked OpenSSL binaries for major operating systems are supplied in \fB\./bin/\fR \.
+Any OpenSSL or LibreSSL version is needed as a helper\. Unlike previous versions of testssl\.sh almost every check is done via (TCP) sockets\. In addition statically linked OpenSSL binaries for major operating systems are supplied in \fB\./bin/\fR\.
 .
 .SH "GENERAL"
 \fBtestssl\.sh URI\fR as the default invocation does the so\-called default run which does a number of checks and puts out the results colorized (ANSI and termcap) on the screen\. It does every check listed below except \fB\-E\fR which are (order of appearance):
@@ -82,7 +82,7 @@ Options are either short or long options\. Any option requiring a value can be c
 \fB\-v, \-\-version\fR same as before
 .
 .P
-\fB\-V [pattern] , \-\-local [pattern]\fR pretty print all local ciphers supported by openssl version\. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below\. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or RFC), key exchange, encryption, bits\. It does a word pattern match for non\-numbers, for number just a normal match applies\. Numbers here are defined as [0\-9,A\-F]\. This means (attention: catch) that the pattern CBC is matched as non\-word, but AES as word\.
+\fB\-V [pattern] , \-\-local [pattern]\fR pretty print all local ciphers supported by openssl version\. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below\. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or IANA), key exchange, encryption, bits\. It does a word pattern match for non\-numbers, for number just a normal match applies\. Numbers here are defined as [0\-9,A\-F]\. This means (attention: catch) that the pattern CBC is matched as non\-word, but AES as word\.
 .
 .SS "INPUT PARAMETERS"
 \fBURI\fR can be a hostname, an IPv4 or IPv6 address (restriction see below) or an URL\. IPv6 addresses need to be in square brackets\. For any given parameter port 443 is assumed unless specified by appending a colon and a port number\. The only preceding protocol specifier allowed is \fBhttps\fR\. You need to be aware that checks for an IP address might not hit the vhost you want\. DNS resolution (A/AAAA record) is being performed unless you have an \fB/etc/hosts\fR entry for the hostname\.

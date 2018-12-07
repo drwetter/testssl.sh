@@ -21,16 +21,15 @@ Only you see the result. You also can use it internally on your LAN. Except DNS 
 
 ## REQUIREMENTS
 
-Testssl.sh is out of the box pretty much portable: it runs under any Unix-like
-stack: Linux, *BSD, MacOS X, WSL=Windows Subsystem for Linux,, Cygwin and MSYS2. `bash`
-(also version 3 is still supported) is a prerequisite as well as standard
-utilities like awk, sed, tr and head. This can be of BSD, System 5 or GNU
-flavor whereas grep from System V is not yet supported.
+Testssl.sh is out of the box portable: it runs under any Unix-like
+stack: Linux, *BSD, MacOS X, WSL=Windows Subsystem for Linux, Cygwin and MSYS2.
+`bash` is a prerequisite, also version 3 is still supported.
+Standard utilities like awk, sed, tr and head are also needed. This can be of a BSD,
+System 5 or GNU flavor whereas grep from System V is not yet supported.
 
-Any OpenSSL or LibreSSL version is needed as a helper. Unless previous versions
-of testssl.sh almost every check is done via (TCP) sockets. Despite that some
-some statically linked OpenSSL binaries for major operating systems are
-supplied in `./bin/` .
+Any OpenSSL or LibreSSL version is needed as a helper. Unlike previous versions
+of testssl.sh almost every check is done via (TCP) sockets. In addition statically
+linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 
 ## GENERAL
@@ -72,7 +71,7 @@ Options are either short or long options. Any option requiring a value can be ca
 
 `-v, --version`     same as before
 
-`-V [pattern] , --local [pattern]`  pretty print all local ciphers supported by openssl version. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or RFC), key exchange, encryption, bits. It does a word pattern match for non-numbers, for number just a normal match applies. Numbers here are defined as [0-9,A-F]. This means (attention: catch) that the pattern CBC is matched as non-word, but AES as word.
+`-V [pattern] , --local [pattern]`  pretty print all local ciphers supported by openssl version. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or IANA), key exchange, encryption, bits. It does a word pattern match for non-numbers, for number just a normal match applies. Numbers here are defined as [0-9,A-F]. This means (attention: catch) that the pattern CBC is matched as non-word, but AES as word.
 
 ### INPUT PARAMETERS
 
