@@ -699,6 +699,8 @@ strip_quote() {
           -e 's/ *$//g' <<< "$1"
 }
 
+# " deconfuse vim\'s syntax highlighting ;-)
+
 #################### JSON FILE FORMATTING ####################
 
 fileout_json_footer() {
@@ -836,15 +838,10 @@ fileout_pretty_json_banner() {
 }
 
 fileout_banner() {
-     #if ! "$APPEND"; then
-     #     if "$CSVHEADER"; then
-     #          :
-     #     fi
-          if "$JSONHEADER"; then
-               # "$do_json" &&                    # here we maybe should add a banner, too
-               "$do_pretty_json" && (printf "%s\n" "$(fileout_pretty_json_banner)") >> "$JSONFILE"
-          fi
-     #fi
+     if "$JSONHEADER"; then
+          # "$do_json" &&                    # here we maybe should add a banner, too
+          "$do_pretty_json" && (printf "%s\n" "$(fileout_pretty_json_banner)") >> "$JSONFILE"
+     fi
 }
 
 fileout_separator() {
@@ -866,6 +863,13 @@ fileout_insert_warning() {
      # See #815. Make sure we don't mess up the JSON PRETTY format if we complain with a client side warning.
      # This should only be called if an *extra* warning will be printed (previously: 'fileout <extra_warning_ID> "WARN" '
      # arg1: json identifier,  arg2: normally "WARN",  arg3: finding
+     #
+     # Also, we have to be careful with any form of mass testing so that a warning won't lead to an invalid
+     # JSON file. As any child will do any check as well (to be reconsidered later), we don't need also the parent
+     # to issue warnings upfront, see #1169. As a detection we'll use --file as in the children jobs it'll be removed:
+     [[ "$CMDLINE=" =~ --file ]] && return 0
+     # Note we still have the message on screen + in HTML which is not as optimal as it could be
+
      if "$do_pretty_json"; then
           echo -e "          \"clientProblem${CLIENT_PROB_NO}\" : [" >>"$JSONFILE"
           CLIENT_PROB_NO=$((CLIENT_PROB_NO + 1))
@@ -6816,7 +6820,7 @@ extract_stapled_ocsp() {
           ocsp_len=2*$(hex2dec "${tls_certificate_status_ascii:8:6}")
           STAPLED_OCSP_RESPONSE="${ocsp:14:ocsp_len}"
      fi
-     return 0     
+     return 0
 }
 
 # arg1 is "-cipher <OpenSSL cipher>" or empty
@@ -6871,7 +6875,7 @@ get_server_certificate() {
      # throwing 1st every cipher/protocol at the server to know what works
      success=7
 
-     if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
+     if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
           $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY -ssl2 </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && success=0
           if [[ $success -eq 0 ]]; then
@@ -6889,7 +6893,7 @@ get_server_certificate() {
      sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE >$TEMPDIR/tlsext.txt
      for proto in $protocols_to_try; do
           [[ 1 -eq $(has_server_protocol $proto) ]] && continue
-          [[ "$proto" == "ssl3" ]] && ! "$HAS_SSL3" && continue
+          [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && continue
           addcmd=""
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status -msg") </dev/null 2>$ERRFILE >$TMPFILE
           if sclient_connect_successful $? $TMPFILE; then
@@ -6900,7 +6904,7 @@ get_server_certificate() {
      done                          # this loop is needed for IIS6 and others which have a handshake size limitations
      if [[ $success -eq 7 ]]; then
           # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
-          [[ "$proto" == "ssl3" ]] && ! "$HAS_SSL3" && return 7
+          [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && return 7
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug") </dev/null 2>>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE; then
                if [ -z "$1" ]; then
@@ -17065,13 +17069,13 @@ create_mass_testing_cmdline() {
      debugme echo "${CMDLINE_ARRAY[@]}"
      for cmd in "${CMDLINE_ARRAY[@]}"; do
           "$skip_next" && skip_next=false && continue
-          if [[ "$cmd" == "--file"* ]]; then
+          if [[ "$cmd" =~ --file ]]; then
                # Don't include the "--file[=...] argument in the child's command
                # line, but do include "--warnings=batch".
                MASS_TESTING_CMDLINE[nr_cmds]="--warnings=batch"
                nr_cmds+=1
                # next is the file itself, as no '=' was supplied
-               [[ "$cmd" == '--file' ]] && skip_next=true
+               [[ "$cmd" == --file ]] && skip_next=true
           elif [[ "$testing_type" == "serial" ]]; then
                if "$JSONHEADER" && [[ "$cmd" == "--jsonfile-pretty"* ]]; then
                     >"$TEMPDIR/jsonfile_child.json"
@@ -18274,7 +18278,7 @@ lets_roll() {
 
      if "$do_mass_testing"; then
           prepare_logging
-          if [[ "$MASS_TESTING_MODE" == "parallel" ]]; then
+          if [[ "$MASS_TESTING_MODE" == parallel ]]; then
                run_mass_testing_parallel
           else
                run_mass_testing
