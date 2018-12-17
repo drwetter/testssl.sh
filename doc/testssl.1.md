@@ -22,7 +22,7 @@ Only you see the result. You also can use it internally on your LAN. Except DNS 
 ## REQUIREMENTS
 
 Testssl.sh is out of the box portable: it runs under any Unix-like
-stack: Linux, *BSD, MacOS X, WSL=Windows Subsystem for Linux, Cygwin and MSYS2.
+stack: Linux, \*BSD, MacOS X, WSL=Windows Subsystem for Linux, Cygwin and MSYS2.
 `bash` is a prerequisite, also version 3 is still supported.
 Standard utilities like awk, sed, tr and head are also needed. This can be of a BSD,
 System 5 or GNU flavor whereas grep from System V is not yet supported.
@@ -59,7 +59,7 @@ linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 ## OPTIONS AND PARAMETERS
 
-Options are either short or long options. Any long or short option requiring a value can be called with or without an equal sign '=' e.g. `testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>` (short options with equal sign) is equivalent to `testssl.sh --starttls smtp --wide --openssl /usr/bin/openssl <URI>` (long option without equal sign). Some command line options can also be preset via ENV variables. `WIDE=true OPENSSL=/usr/bin/openssl testssl.sh --starttls=smtp <URI>` would be the equivalent to the aforementioned examples. Preference has the command line over any environment variables.
+Options are either short or long options. Any long or short option requiring a value can be called with or without an equal sign. E.g. `testssl.sh -t=smtp --wide --openssl=/usr/bin/openssl <URI>` (short options with equal sign) is equivalent to `testssl.sh --starttls smtp --wide --openssl /usr/bin/openssl <URI>` (long option without equal sign). Some command line options can also be preset via ENV variables. `WIDE=true OPENSSL=/usr/bin/openssl testssl.sh --starttls=smtp <URI>` would be the equivalent to the aforementioned examples. Preference has the command line over any environment variables.
 
 `<URI>` or `--file <FILE>` always needs to be the last parameter.
 
@@ -75,16 +75,15 @@ Options are either short or long options. Any long or short option requiring a v
 
 ### INPUT PARAMETERS
 
-`URI`     can be a hostname, an IPv4 or IPv6 address (restriction see below) or an URL. IPv6 addresses need to be in square brackets. For any given parameter port 443 is assumed unless specified by appending a colon and a port number. The only preceding protocol specifier allowed is `https`. You need to be aware that checks for an IP address might not hit the vhost you want. DNS resolution (A/AAAA record) is being performed unless you have an `/etc/hosts` entry for the hostname.
+`URI` can be a hostname, an IPv4 or IPv6 address (restriction see below) or an URL. IPv6 addresses need to be in square brackets. For any given parameter port 443 is assumed unless specified by appending a colon and a port number. The only preceding protocol specifier allowed is `https`. You need to be aware that checks for an IP address might not hit the vhost you want. DNS resolution (A/AAAA record) is being performed unless you have an `/etc/hosts` entry for the hostname.
 
-`--file <fname>` is the mass testing option. Per default it implicitly turns on `--warnings batch`.
-In its first incarnation the mass testing option reads command lines from `fname`. `fname` consists of command lines of testssl, one line per instance. Comments after `#` are ignored, `EOF` signals the end of fname any subsequent lines will be ignored too. You can also supply additional options which will be inherited to each child, e.g.  When invoking `testssl.sh --wide --log --file <fname>` . Each single line in `fname` is parsed upon execution. If there's a conflicting option and serial mass testing option is being performed the check will be aborted at the time it occurs and depending on the output option potentially leaving you with an output file without footer. In parallel mode the mileage varies.
+`--file <fname>` or the equivalent `-iL <fname>` are mass testing options. Per default it implicitly turns on `--warnings batch`. In its first incarnation the mass testing option reads command lines from `fname`. `fname` consists of command lines of testssl, one line per instance. Comments after `#` are ignored, `EOF` signals the end of fname any subsequent lines will be ignored too. You can also supply additional options which will be inherited to each child, e.g.  When invoking `testssl.sh --wide --log --file <fname>` . Each single line in `fname` is parsed upon execution. If there's a conflicting option and serial mass testing option is being performed the check will be aborted at the time it occurs and depending on the output option potentially leaving you with an output file without footer. In parallel mode the mileage varies, likely a line won't be scanned.
 
 Alternatively `fname` can be in `nmap`'s grep(p)able output format (`-oG`). Only open ports will be considered. Multiple ports per line are allowed. The ports can be different and will be tested by testssl.sh according to common practice in the internet, i.e. if nmap shows in its output an open port 25, automatically `-t smtp` will be added before the URI whereas port 465 will be treated as a plain TLS/SSL port, not requiring an STARTTLS SMTP handshake upfront. This is done by an internal table which correlates nmap's open port detected to the STARTTLS/plain text decision from testssl.sh.
 
-The nmap output always returns IP addresses and -- only if there's a PTR DNS record available -- a hostname. As it is not checked by nmap whether the hostname matches the IP (A or AAAA record), testssl.sh does this for you. If the A record of the hostname matches the IP address, the hostname is used and not the IP address. Watch out as stated above checks against an IP address might not hit the vhost you maybe were aiming at.
+Nmap's output always returns IP addresses and only if there's a PTR DNS record available a hostname. As it is not checked by nmap whether the hostname matches the IP (A or AAAA record), testssl.sh does this automatically for you. If the A record of the hostname matches the IP address, the hostname is used and not the IP address. Please keep in mind that checks against an IP address might not hit the vhost you maybe were aiming at and thus it may lead to different results.
 
-A typical internal conversion from nmap's grep(p)able format could look like:
+A typical internal conversion to testssl.sh file format from nmap's grep(p)able format could look like:
 
 ```
 10.10.12.16:443
@@ -96,7 +95,6 @@ host.example.com:631
 10.10.12.11:8443
 ```
 Please note that `fname` has to be in Unix format. DOS carriage returns won't be accepted. Instead of the command line switch the environment variable FNAME will be honored too.
-
 
 `--mode <serial|parallel>`. Mass testing to be done serial (default) or parallel (`--parallel` is shortcut for the latter, `--serial` is the opposite option). Per default mass testing is being run in serial mode, i.e. one line after the other is processed and invoked. The variable `MASS_TESTING_MODE` can be defined to be either equal `serial` or `parallel`.
 
@@ -117,11 +115,14 @@ Please note that `fname` has to be in Unix format. DOS carriage returns won't be
 
 `--ssl-native`  Instead of using a mixture of bash sockets and a few openssl s_client connects, testssl.sh uses the latter (almost) only. This is faster at the moment but provides less accurate results, especially for the client simulation and for cipher support. For all checks you will see a warning if testssl.sh cannot tell if a particular check cannot be performed. For some checks however you might end up getting false negatives without a warning. This option is only recommended if you prefer speed over accuracy or you know that your target has sufficient overlap with the protocols and cipher provided by your openssl binary.
 
-`--openssl <path_to_openssl>`           testssl.sh tries very hard to find automagically the binary supplied (where the tree of testssl.sh resides, from the directory where testssl.sh has been started from, etc.). If all that doesn't work it falls back to openssl supplied from the OS (`$PATH`). With this option you can point testssl.sh to your binary of choice and override any internal magic to find the openssl binary. (environment preset via `OPENSSL=<path_to_openssl>`).
+`--openssl <path_to_openssl>`           testssl.sh tries very hard to find automagically the binary supplied (where the tree of testssl.sh resides, from the directory where testssl.sh has been started from, etc.). If all that doesn't work it falls back to openssl supplied from the OS (`$PATH`). With this option you can point testssl.sh to your binary of choice and override any internal magic to find the openssl binary. (Environment preset via `OPENSSL=<path_to_openssl>`).
 
-`--bugs`                    does some workarounds for buggy servers like padding for old F5 devices. The option is passed as `-bug` to openssl when needed, see `s_client(1)`, environment preset via `BUGS="-bugs"` (1x dash). For the socket part testssl.sh has always workarounds in place to cope with broken server implementations.
 
-`--assuming-http`           testssl.sh normally does upfront an application protocol detection. In cases where HTTP cannot be automatically detected you may want to use this option. It enforces testssl.sh not to skip HTTP specific tests (HTTP header) and to run a browser based client simulation. Please note that sometimes also the severity depends on the application protocol, e.g. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server.
+### TUNING OPTIONS
+
+`--bugs`  does some workarounds for buggy servers like padding for old F5 devices. The option is passed as `-bug` to openssl when needed, see `s_client(1)`, environment preset via `BUGS="-bugs"` (1x dash). For the socket part testssl.sh has always workarounds in place to cope with broken server implementations.
+
+`--assuming-http`  testssl.sh normally does upfront an application protocol detection. In cases where HTTP cannot be automatically detected you may want to use this option. It enforces testssl.sh not to skip HTTP specific tests (HTTP header) and to run a browser based client simulation. Please note that sometimes also the severity depends on the application protocol, e.g. SHA1 signed certificates, the lack of any SAN matches and some vulnerabilities will be punished harder when checking a web server as opposed to a mail server.
 
 `-n, --nodns <min|none>` tells testssl.sh which DNS lookups should be performed. `min` uses only forward DNS resolution (A and AAAA record or MX record) and skips CAA lookups and PTR records from the IP address back to a DNS name.  `none` performs no DNS lookups at all. For the latter you either have to supply the IP address as a target, to use `--ip` or have the IP address
 in `/etc/hosts`.  The use of the switch is only useful if you either can't or are not willing to perform DNS lookups. The latter can apply e.g. to some pentests. In general this option could e.g. help you to avoid timeouts by DNS lookups. `NODNS` is the enviroment variable for this.
@@ -132,13 +133,15 @@ in `/etc/hosts`.  The use of the switch is only useful if you either can't or ar
 
 `--phone-out` Checking for revoked certificates via CRL and OCSP is not done per default. This switch instructs testssl.sh to query external -- in a sense of the current run -- URIs. By using this switch you acknowledge that the check might have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting the endpoint which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.
 
+`--add-ca <cafile>` enables you to add your own CA(s) for trust chain checks. `cafile` can be a single path or multiple paths as a comma separated list of root CA files. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates is issued by internal CAs. Alternatively 
+ADDITIONAL_CA_FILES is the environment variable for this.
+
 
 ### SINGLE CHECK OPTIONS
 
 Any single check switch supplied as an argument prevents testssl.sh from doing a default run. It just takes this and if supplied other options and runs them - in the order they would also appear in the default run.
 
 `-e, --each-cipher` checks each of the (currently configured) 370 ciphers via openssl + sockets remotely on the server and reports back the result in wide mode. If you want to display each cipher tested you need to add `--show-each`. Per default it lists the following parameters: `hexcode`, `OpenSSL cipher suite name`, `key exchange`, `encryption bits`, `IANA/RFC cipher suite name`. Please note the `--mapping` parameter changes what cipher suite names you will see here and at which position. Also please note that the __bit__ length for the encryption is shown and not the __security__ length, albeit it'll be sorted by the latter. For 3DES due to the Meet-in-the-Middle problem the bit size of 168 bits is equivalent to the security size of 112 bits.
-
 
 `-E, --cipher-per-proto`  is similar to `-e, --each-cipher`. It checks each of the possible ciphers, here: per protocol. If you want to display each cipher tested you need to add `--show-each`. The output is sorted by security strength, it lists the encryption bits though.
 
@@ -160,14 +163,10 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 
 `-S, --server_defaults`  displays information from the server hello(s):
 available TLS extensions, TLS ticket + session information/capabilities, session resumption
-capabilities, time skew relative to localhost (most server implementations
-return random values) and several certificate info: certificate signature algorithm,
-certificate key size, X509v3 key usage and extended key usage, certificate
-fingerprints and serial, revocation info (CRL, OCSP, OCSP
+capabilities, time skew relative to localhost (most server implementations return random values) and several certificate info: certificate signature algorithm, certificate key size, X509v3 key usage and extended key usage, certificate fingerprints and serial, revocation info (CRL, OCSP, OCSP
 stapling/must staple), certificate transparency info (if provided by
 server).  When `--phone-out` supplied it checks against the certificate issuer
-whether the host certificate has been revoked.  `-S, --server_defaults` also displays certificate start and expiration time in GMT. In addition testssl.sh checks the trust (CN, SAN, chain of trust). For the trust chain check there are 5 certificate stores provided. If the trust is not confirmed the trust store which failed is being identified (and the reason is displayed) and the ones which think your certificate is ok, too. You can configure your own CA via ADDITIONAL_CA_FILES, see section `FILES` below.  If the server provides
-no matching record in Subject Alternative Name (SAN) but in Common Name (CN),
+whether the host certificate has been revoked.  `-S, --server_defaults` also displays certificate start and expiration time in GMT. In addition testssl.sh checks the trust (CN, SAN, chain of trust). For the trust chain check there are 5 certificate stores provided. If the trust is not confirmed the trust store which failed is being identified (and the reason is displayed) and the ones which think your certificate is ok, too. If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN),
 it will be clearly indicated as this is deprecated. Also multiple server certificates are
 being checked for as well as the certificate reply to a non-SNI (Server Name
 Indication) client hello to the IP address. Also the Certification Authority Authorization (CAA) record is displayed and whether "Certificate Transparency" (CT) is supported (and if: how).
@@ -192,7 +191,7 @@ TLS clock skew matches the time difference to the client. Only a few TLS stacks 
 
 `--c, --client-simulation`     This simulates a handshake with a number of standard clients so that you can figure out which client cannot or can connect to your site. For the latter case the protocol, cipher and curve is displayed, also if there's Forward Secrecy. testssl.sh uses a handselected set of clients which are retrieved by the SSLlabs API. The output is aligned in columns when combined with the `--wide` option. If you want the full nine yards of clients displayed use the environment variable ALL_CLIENTS.
 
-`-g, --grease` Checks several server implementation bugs like tolerance to size limitations and GREASE, see https://www.ietf.org/archive/id/draft-ietf-tls-grease-01.txt . This checks doesn't run per default.
+`-g, --grease` checks several server implementation bugs like tolerance to size limitations and GREASE, see https://www.ietf.org/archive/id/draft-ietf-tls-grease-01.txt . This checks doesn't run per default.
 
 
 
@@ -362,7 +361,6 @@ Except the environment variables mentioned above which can replace command line 
 * DAYS2WARN1 is the first threshold when you'll be warning of a certificate expiration of a host, preset to 60 (days). For Let's Encrypt this value will be divided internally by 2.
 * DAYS2WARN2 is the second threshold when you'll be warning of a certificate expiration of a host, preset to 30 (days). For Let's Encrypt this value will be divided internally by 2.
 * TESTSSL_INSTALL_DIR is the derived installation directory of testssl.sh. Relatively to that the `bin` and mandatory `etc` directory will be looked for.
-* ADDITIONAL_CA_FILES: path to your CA(s) you want to check trust against. Useful for internal hosts with internal CAs. Usage: `ADDITIONAL_CA_FILES=<path> ./testssl.sh <cmdline>`
 * CA_BUNDLES_PATH: If you have an own set of CA bundles or you want to point testssl.sh to a specific location of a CA bundle, you can use this variable to set the directory which testssl.sh will use. Please note that it overrides completely the builtin path of testssl.sh which means that you will only test against the bundles you point to. Also you might want to use `~/utils/create_ca_hashes.sh` to create the hashes for HPKP.
 * MAX_SOCKET_FAIL: A number which tells testssl.sh how often a TCP socket connection may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated openssl s_client connect problem, doesn't make sense to continue*.
 * MAX_OSSL_FAIL: A number which tells testssl.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated TCP connect problems, giving up*.
@@ -386,7 +384,7 @@ does the same checks as above, with the difference that one IP address is being 
 
       testssl.sh -6 https://testssl.net
 
-As opposed to the second example it also tests the IPv6 part (two hosts) -- supposed you have an IPv6 netwrk and your openssl supports IPv6 (see above).
+As opposed to the first example it also tests the IPv6 part -- supposed you have an IPv6 network and your openssl supports IPv6 (see above).
 
       testssl.sh -t smtp smtp.gmail.com:25
 
@@ -394,7 +392,7 @@ Checks are done via a STARTTLS handshake on the plain text port 25. It checks ev
 
         testssl.sh --starttls=imap imap.gmx.net:143
 
-does the same on the plain text IMAP port. 
+does the same on the plain text IMAP port.
 
 Please note that for plain TLS-encrypted ports you must not specify the protocol option when no STARTTLS handshake is offered: `testssl.sh smtp.gmail.com:465` just checks the encryption on the SMTPS port, `testssl.sh imap.gmx.net:993` on the IMAPS port. Also MongoDB which provides TLS support without STARTTLS can be tested directly.
 

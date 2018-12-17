@@ -67,7 +67,7 @@ Any OpenSSL or LibreSSL version is needed as a helper\. Unlike previous versions
 9) client simulation
 .
 .SH "OPTIONS AND PARAMETERS"
-Options are either short or long options\. Any long or short option requiring a value can be called with or without an equal sign \'=\' e\.g\. \fBtestssl\.sh \-t=smtp \-\-wide \-\-openssl=/usr/bin/openssl <URI>\fR (short options with equal sign) is equivalent to \fBtestssl\.sh \-\-starttls smtp \-\-wide \-\-openssl /usr/bin/openssl <URI>\fR (long option without equal sign)\. Some command line options can also be preset via ENV variables\. \fBWIDE=true OPENSSL=/usr/bin/openssl testssl\.sh \-\-starttls=smtp <URI>\fR would be the equivalent to the aforementioned examples\. Preference has the command line over any environment variables\.
+Options are either short or long options\. Any long or short option requiring a value can be called with or without an equal sign\. E\.g\. \fBtestssl\.sh \-t=smtp \-\-wide \-\-openssl=/usr/bin/openssl <URI>\fR (short options with equal sign) is equivalent to \fBtestssl\.sh \-\-starttls smtp \-\-wide \-\-openssl /usr/bin/openssl <URI>\fR (long option without equal sign)\. Some command line options can also be preset via ENV variables\. \fBWIDE=true OPENSSL=/usr/bin/openssl testssl\.sh \-\-starttls=smtp <URI>\fR would be the equivalent to the aforementioned examples\. Preference has the command line over any environment variables\.
 .
 .P
 \fB<URI>\fR or \fB\-\-file <FILE>\fR always needs to be the last parameter\.
@@ -88,16 +88,16 @@ Options are either short or long options\. Any long or short option requiring a 
 \fBURI\fR can be a hostname, an IPv4 or IPv6 address (restriction see below) or an URL\. IPv6 addresses need to be in square brackets\. For any given parameter port 443 is assumed unless specified by appending a colon and a port number\. The only preceding protocol specifier allowed is \fBhttps\fR\. You need to be aware that checks for an IP address might not hit the vhost you want\. DNS resolution (A/AAAA record) is being performed unless you have an \fB/etc/hosts\fR entry for the hostname\.
 .
 .P
-\fB\-\-file <fname>\fR is the mass testing option\. Per default it implicitly turns on \fB\-\-warnings batch\fR\. In its first incarnation the mass testing option reads command lines from \fBfname\fR\. \fBfname\fR consists of command lines of testssl, one line per instance\. Comments after \fB#\fR are ignored, \fBEOF\fR signals the end of fname any subsequent lines will be ignored too\. You can also supply additional options which will be inherited to each child, e\.g\. When invoking \fBtestssl\.sh \-\-wide \-\-log \-\-file <fname>\fR \. Each single line in \fBfname\fR is parsed upon execution\. If there\'s a conflicting option and serial mass testing option is being performed the check will be aborted at the time it occurs and depending on the output option potentially leaving you with an output file without footer\. In parallel mode the mileage varies\.
+\fB\-\-file <fname>\fR or the equivalent \fB\-iL <fname>\fR are mass testing options\. Per default it implicitly turns on \fB\-\-warnings batch\fR\. In its first incarnation the mass testing option reads command lines from \fBfname\fR\. \fBfname\fR consists of command lines of testssl, one line per instance\. Comments after \fB#\fR are ignored, \fBEOF\fR signals the end of fname any subsequent lines will be ignored too\. You can also supply additional options which will be inherited to each child, e\.g\. When invoking \fBtestssl\.sh \-\-wide \-\-log \-\-file <fname>\fR \. Each single line in \fBfname\fR is parsed upon execution\. If there\'s a conflicting option and serial mass testing option is being performed the check will be aborted at the time it occurs and depending on the output option potentially leaving you with an output file without footer\. In parallel mode the mileage varies, likely a line won\'t be scanned\.
 .
 .P
 Alternatively \fBfname\fR can be in \fBnmap\fR\'s grep(p)able output format (\fB\-oG\fR)\. Only open ports will be considered\. Multiple ports per line are allowed\. The ports can be different and will be tested by testssl\.sh according to common practice in the internet, i\.e\. if nmap shows in its output an open port 25, automatically \fB\-t smtp\fR will be added before the URI whereas port 465 will be treated as a plain TLS/SSL port, not requiring an STARTTLS SMTP handshake upfront\. This is done by an internal table which correlates nmap\'s open port detected to the STARTTLS/plain text decision from testssl\.sh\.
 .
 .P
-The nmap output always returns IP addresses and \-\- only if there\'s a PTR DNS record available \-\- a hostname\. As it is not checked by nmap whether the hostname matches the IP (A or AAAA record), testssl\.sh does this for you\. If the A record of the hostname matches the IP address, the hostname is used and not the IP address\. Watch out as stated above checks against an IP address might not hit the vhost you maybe were aiming at\.
+Nmap\'s output always returns IP addresses and only if there\'s a PTR DNS record available a hostname\. As it is not checked by nmap whether the hostname matches the IP (A or AAAA record), testssl\.sh does this automatically for you\. If the A record of the hostname matches the IP address, the hostname is used and not the IP address\. Please keep in mind that checks against an IP address might not hit the vhost you maybe were aiming at and thus it may lead to different results\.
 .
 .P
-A typical internal conversion from nmap\'s grep(p)able format could look like:
+A typical internal conversion to testssl\.sh file format from nmap\'s grep(p)able format could look like:
 .
 .IP "" 4
 .
@@ -143,9 +143,9 @@ Please note that \fBfname\fR has to be in Unix format\. DOS carriage returns won
 \fB\-\-ssl\-native\fR Instead of using a mixture of bash sockets and a few openssl s_client connects, testssl\.sh uses the latter (almost) only\. This is faster at the moment but provides less accurate results, especially for the client simulation and for cipher support\. For all checks you will see a warning if testssl\.sh cannot tell if a particular check cannot be performed\. For some checks however you might end up getting false negatives without a warning\. This option is only recommended if you prefer speed over accuracy or you know that your target has sufficient overlap with the protocols and cipher provided by your openssl binary\.
 .
 .P
-\fB\-\-openssl <path_to_openssl>\fR testssl\.sh tries very hard to find automagically the binary supplied (where the tree of testssl\.sh resides, from the directory where testssl\.sh has been started from, etc\.)\. If all that doesn\'t work it falls back to openssl supplied from the OS (\fB$PATH\fR)\. With this option you can point testssl\.sh to your binary of choice and override any internal magic to find the openssl binary\. (environment preset via \fBOPENSSL=<path_to_openssl>\fR)\.
+\fB\-\-openssl <path_to_openssl>\fR testssl\.sh tries very hard to find automagically the binary supplied (where the tree of testssl\.sh resides, from the directory where testssl\.sh has been started from, etc\.)\. If all that doesn\'t work it falls back to openssl supplied from the OS (\fB$PATH\fR)\. With this option you can point testssl\.sh to your binary of choice and override any internal magic to find the openssl binary\. (Environment preset via \fBOPENSSL=<path_to_openssl>\fR)\.
 .
-.P
+.SS "TUNING OPTIONS"
 \fB\-\-bugs\fR does some workarounds for buggy servers like padding for old F5 devices\. The option is passed as \fB\-bug\fR to openssl when needed, see \fBs_client(1)\fR, environment preset via \fBBUGS="\-bugs"\fR (1x dash)\. For the socket part testssl\.sh has always workarounds in place to cope with broken server implementations\.
 .
 .P
@@ -162,6 +162,9 @@ Please note that \fBfname\fR has to be in Unix format\. DOS carriage returns won
 .
 .P
 \fB\-\-phone\-out\fR Checking for revoked certificates via CRL and OCSP is not done per default\. This switch instructs testssl\.sh to query external \-\- in a sense of the current run \-\- URIs\. By using this switch you acknowledge that the check might have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting the endpoint which testssl\.sh doesn\'t handle\. PHONE_OUT is the environment variable for this which needs to be set to true if you want this\.
+.
+.P
+\fB\-\-add\-ca <cafile>\fR enables you to add your own CA(s) for trust chain checks\. \fBcafile\fR can be a single path or multiple paths as a comma separated list of root CA files\. Internally they will be added during runtime to all CA stores\. This is (only) useful for internal hosts whose certificates is issued by internal CAs\. Alternatively ADDITIONAL_CA_FILES is the environment variable for this\.
 .
 .SS "SINGLE CHECK OPTIONS"
 Any single check switch supplied as an argument prevents testssl\.sh from doing a default run\. It just takes this and if supplied other options and runs them \- in the order they would also appear in the default run\.
@@ -208,7 +211,7 @@ Any single check switch supplied as an argument prevents testssl\.sh from doing 
 \fB\-P, \-\-preference\fR displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher\. If there\'s a cipher order enforced by the server it displays it for each protocol (openssl+sockets)\. If there\'s not, it displays instead which ciphers from the server were picked with each protocol\.
 .
 .P
-\fB\-S, \-\-server_defaults\fR displays information from the server hello(s): available TLS extensions, TLS ticket + session information/capabilities, session resumption capabilities, time skew relative to localhost (most server implementations return random values) and several certificate info: certificate signature algorithm, certificate key size, X509v3 key usage and extended key usage, certificate fingerprints and serial, revocation info (CRL, OCSP, OCSP stapling/must staple), certificate transparency info (if provided by server)\. When \fB\-\-phone\-out\fR supplied it checks against the certificate issuer whether the host certificate has been revoked\. \fB\-S, \-\-server_defaults\fR also displays certificate start and expiration time in GMT\. In addition testssl\.sh checks the trust (CN, SAN, chain of trust)\. For the trust chain check there are 5 certificate stores provided\. If the trust is not confirmed the trust store which failed is being identified (and the reason is displayed) and the ones which think your certificate is ok, too\. You can configure your own CA via ADDITIONAL_CA_FILES, see section \fBFILES\fR below\. If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be clearly indicated as this is deprecated\. Also multiple server certificates are being checked for as well as the certificate reply to a non\-SNI (Server Name Indication) client hello to the IP address\. Also the Certification Authority Authorization (CAA) record is displayed and whether "Certificate Transparency" (CT) is supported (and if: how)\. TLS clock skew matches the time difference to the client\. Only a few TLS stacks nowadays still support this and return the local clock \fBgmt_unix_time\fR, e\.g\. IIS, openssl < 1\.0\.1f\. In addition to the HTTP date you could e\.g\. derive that there are different hosts where your TLS and your HTTP request ended \-\- if the time deltas differ significantly\.
+\fB\-S, \-\-server_defaults\fR displays information from the server hello(s): available TLS extensions, TLS ticket + session information/capabilities, session resumption capabilities, time skew relative to localhost (most server implementations return random values) and several certificate info: certificate signature algorithm, certificate key size, X509v3 key usage and extended key usage, certificate fingerprints and serial, revocation info (CRL, OCSP, OCSP stapling/must staple), certificate transparency info (if provided by server)\. When \fB\-\-phone\-out\fR supplied it checks against the certificate issuer whether the host certificate has been revoked\. \fB\-S, \-\-server_defaults\fR also displays certificate start and expiration time in GMT\. In addition testssl\.sh checks the trust (CN, SAN, chain of trust)\. For the trust chain check there are 5 certificate stores provided\. If the trust is not confirmed the trust store which failed is being identified (and the reason is displayed) and the ones which think your certificate is ok, too\. If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be clearly indicated as this is deprecated\. Also multiple server certificates are being checked for as well as the certificate reply to a non\-SNI (Server Name Indication) client hello to the IP address\. Also the Certification Authority Authorization (CAA) record is displayed and whether "Certificate Transparency" (CT) is supported (and if: how)\. TLS clock skew matches the time difference to the client\. Only a few TLS stacks nowadays still support this and return the local clock \fBgmt_unix_time\fR, e\.g\. IIS, openssl < 1\.0\.1f\. In addition to the HTTP date you could e\.g\. derive that there are different hosts where your TLS and your HTTP request ended \-\- if the time deltas differ significantly\.
 .
 .P
 \fB\-x <pattern>, \-\-single\-cipher <pattern>\fR tests matched \fBpattern\fR of ciphers against a server\. Patterns are similar to \fB\-V pattern , \-\-local pattern\fR, see above about matching\.
@@ -258,7 +261,7 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, Expect\-CT,\.\.\. , CSP
 \fB\-\-c, \-\-client\-simulation\fR This simulates a handshake with a number of standard clients so that you can figure out which client cannot or can connect to your site\. For the latter case the protocol, cipher and curve is displayed, also if there\'s Forward Secrecy\. testssl\.sh uses a handselected set of clients which are retrieved by the SSLlabs API\. The output is aligned in columns when combined with the \fB\-\-wide\fR option\. If you want the full nine yards of clients displayed use the environment variable ALL_CLIENTS\.
 .
 .P
-\fB\-g, \-\-grease\fR Checks several server implementation bugs like tolerance to size limitations and GREASE, see https://www\.ietf\.org/archive/id/draft\-ietf\-tls\-grease\-01\.txt \. This checks doesn\'t run per default\.
+\fB\-g, \-\-grease\fR checks several server implementation bugs like tolerance to size limitations and GREASE, see https://www\.ietf\.org/archive/id/draft\-ietf\-tls\-grease\-01\.txt \. This checks doesn\'t run per default\.
 .
 .SS "VULNERABILITIES"
 \fB\-U, \-\-vulnerable\fR Just tests all (of the following) vulnerabilities\. The environment variable \fBVULN_THRESHLD\fR determines after which value a separate headline for each vulnerability is being displayed\. Default is \fB1\fR which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed \-\- in addition to the vulnerability and the result\. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result\. A vulnerability section is comprised of more than one check, e\.g\. the renegotiation vulnerability check has two checks, so has Logjam\.
@@ -545,9 +548,6 @@ DAYS2WARN2 is the second threshold when you\'ll be warning of a certificate expi
 TESTSSL_INSTALL_DIR is the derived installation directory of testssl\.sh\. Relatively to that the \fBbin\fR and mandatory \fBetc\fR directory will be looked for\.
 .
 .IP "\(bu" 4
-ADDITIONAL_CA_FILES: path to your CA(s) you want to check trust against\. Useful for internal hosts with internal CAs\. Usage: \fBADDITIONAL_CA_FILES=<path> \./testssl\.sh <cmdline>\fR
-.
-.IP "\(bu" 4
 CA_BUNDLES_PATH: If you have an own set of CA bundles or you want to point testssl\.sh to a specific location of a CA bundle, you can use this variable to set the directory which testssl\.sh will use\. Please note that it overrides completely the builtin path of testssl\.sh which means that you will only test against the bundles you point to\. Also you might want to use \fB~/utils/create_ca_hashes\.sh\fR to create the hashes for HPKP\.
 .
 .IP "\(bu" 4
@@ -609,7 +609,7 @@ does the same checks as above, with the difference that one IP address is being 
 .IP "" 0
 .
 .P
-As opposed to the second example it also tests the IPv6 part (two hosts) \-\- supposed you have an IPv6 netwrk and your openssl supports IPv6 (see above)\.
+As opposed to the first example it also tests the IPv6 part \-\- supposed you have an IPv6 network and your openssl supports IPv6 (see above)\.
 .
 .IP "" 4
 .
