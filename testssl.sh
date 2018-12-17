@@ -864,10 +864,11 @@ fileout_insert_warning() {
      # This should only be called if an *extra* warning will be printed (previously: 'fileout <extra_warning_ID> "WARN" '
      # arg1: json identifier,  arg2: normally "WARN",  arg3: finding
      #
-     # Also, we have to be careful with any form of mass testing so that a warning won't lead to an invalid
-     # JSON file. As any child will do any check as well (to be reconsidered later), we don't need also the parent
-     # to issue warnings upfront, see #1169. As a detection we'll use --file as in the children jobs it'll be removed:
+     # Also, we have to be careful with any form of mass testing so that a warning won't lead to an invalid JSON
+     # file. As any child will do any check as well (to be reconsidered later), we don't need also the parent to issue
+     # warnings upfront, see #1169. As a detection we'll use --file/-iL as in the children jobs it'll be removed:
      [[ "$CMDLINE=" =~ --file ]] && return 0
+     [[ "$CMDLINE=" =~ -iL ]] && return 0
      # Note we still have the message on screen + in HTML which is not as optimal as it could be
 
      if "$do_pretty_json"; then
@@ -15857,11 +15858,10 @@ help() {
                                    protocol is <ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql>
      --xmpphost <to_domain>        For STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
-     --file <fname|fname.gnmap>    Mass testing option: Reads command lines from <fname>, one line per instance.
+     --file/-iL <fname>            Mass testing options: Reads command lines from <fname>, one line per instance.
                                    Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch".
                                    Alternatively: nmap output in greppable format (-oG) (1x port per line allowed)
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
-     --add-ca <cafile>             <cafile> or a comma separated list of CA files will be added during runtime to all CA stores
 
 single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
@@ -15910,6 +15910,7 @@ tuning / connect options (most also can be preset via environment variables):
      --sneaky                      leave less traces in target logs: user agent, referer
      --ids-friendly                skips a few vulnerability checks which may cause IDSs to block the scanning IP
      --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
+     --add-ca <cafile>             path to <cafile> or a comma separated list of CA files enables test against additional CAs.
 
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't ask for a confirmation, "off" or "false" skips connection warnings
@@ -17039,7 +17040,7 @@ run_mx_all_ips() {
 
 # If run_mass_testing() is being used, then create the command line
 # for the test based on the global command line (all elements of the
-# command line provided to the parent, except the --file option) and the
+# command line provided to the parent, except the --file/-iL option) and the
 # specific command line options for the test to be run. Each argument
 # in the command line needs to be a separate element in an array in order
 # to deal with word splitting within file names (see #702).
@@ -17069,20 +17070,21 @@ create_mass_testing_cmdline() {
      debugme echo "${CMDLINE_ARRAY[@]}"
      for cmd in "${CMDLINE_ARRAY[@]}"; do
           "$skip_next" && skip_next=false && continue
-          if [[ "$cmd" =~ --file ]]; then
-               # Don't include the "--file[=...] argument in the child's command
+          if [[ "$cmd" =~ --file ]] || [[ "$cmd" =~ -iL ]]; then
+               # Don't include the "--file[=...] or -iL argument in the child's command
                # line, but do include "--warnings=batch".
                MASS_TESTING_CMDLINE[nr_cmds]="--warnings=batch"
                nr_cmds+=1
                # next is the file itself, as no '=' was supplied
                [[ "$cmd" == --file ]] && skip_next=true
-          elif [[ "$testing_type" == "serial" ]]; then
-               if "$JSONHEADER" && [[ "$cmd" == "--jsonfile-pretty"* ]]; then
+               [[ "$cmd" == -iL ]] && skip_next=true
+          elif [[ "$testing_type" == serial ]]; then
+               if "$JSONHEADER" && [[ "$cmd" =~ --jsonfile-pretty ]]; then
                     >"$TEMPDIR/jsonfile_child.json"
                     MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
                     [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
-               elif "$JSONHEADER" && [[ "$cmd" == "--jsonfile"* ]]; then
+               elif "$JSONHEADER" && [[ "$cmd" =~ --jsonfile ]]; then
                     >"$TEMPDIR/jsonfile_child.json"
                     MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
@@ -17852,7 +17854,7 @@ parse_cmd_line() {
                -q|--quiet)
                     QUIET=true
                     ;;
-               --file|--file=*)
+               --file|--file=*|-iL|-iL=*)
                     # no shift here as otherwise URI is empty and it bails out
                     FNAME="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
