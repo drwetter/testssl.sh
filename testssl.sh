@@ -15855,12 +15855,13 @@ help() {
 "$PROG_NAME [options] <URI>", where [options] is:
 
      -t, --starttls <protocol>     Does a default run against a STARTTLS enabled <protocol,
-                                   protocol is <ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql>
+                                   protocol is <ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres|mysql>
      --xmpphost <to_domain>        For STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
-     --file/-iL <fname>            Mass testing options: Reads command lines from <fname>, one line per instance.
-                                   Comments via # allowed, EOF signals end of <fname>. Implicitly turns on "--warnings batch".
-                                   Alternatively: nmap output in greppable format (-oG) (1x port per line allowed)
+     --file/-iL <fname>            Mass testing option: Reads one testssl.sh command line per line from <fname>.
+                                   Implicitly turns on "--warnings batch". Can be combined with --serial or --parallel
+                                   Text format 1: Comments via # allowed, EOF signals end of <fname>
+                                   Text format 2: nmap output in greppable format (-oG), 1 port per line allowed
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
 
 single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
