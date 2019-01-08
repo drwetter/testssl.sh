@@ -166,8 +166,13 @@ available TLS extensions, TLS ticket + session information/capabilities, session
 capabilities, time skew relative to localhost (most server implementations return random values) and several certificate info: certificate signature algorithm, certificate key size, X509v3 key usage and extended key usage, certificate fingerprints and serial, revocation info (CRL, OCSP, OCSP
 stapling/must staple), certificate transparency info (if provided by
 server).  When `--phone-out` supplied it checks against the certificate issuer
-whether the host certificate has been revoked.  `-S, --server_defaults` also displays certificate start and expiration time in GMT. In addition testssl.sh checks the trust (CN, SAN, chain of trust). For the trust chain check there are 5 certificate stores provided. If the trust is not confirmed the trust store which failed is being identified (and the reason is displayed) and the ones which think your certificate is ok, too. If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN),
-it will be clearly indicated as this is deprecated. Also multiple server certificates are
+whether the host certificate has been revoked.
+This section also displays certificate start and expiration time in GMT. In addition it checks the trust (CN, SAN, chain of trust).
+For the trust chain check there are 5 certificate stores provided. If the test against one of the trust stores failed, the one
+is being identified and the reason for the failure is displayed - in addition the ones which succeeded are displayed too.
+You can configure your own CA via ADDITIONAL_CA_FILES, see section `FILES` below.  If the server provides
+no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be indicated as this is deprecated.
+Also multiple server certificates are
 being checked for as well as the certificate reply to a non-SNI (Server Name
 Indication) client hello to the IP address. Also the Certification Authority Authorization (CAA) record is displayed and whether "Certificate Transparency" (CT) is supported (and if: how).
 TLS clock skew matches the time difference to the client. Only a few TLS stacks nowadays still support this and return the local clock `gmt_unix_time`, e.g. IIS, openssl < 1.0.1f. In addition to the HTTP date you could e.g. derive that there are different hosts where your TLS and your HTTP request ended -- if the time deltas differ significantly.
@@ -255,7 +260,7 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 `--show-each` This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  `SHOW_EACH_C` is your friend if you prefer to set this via the shell environment.
 
 
-`--color <0|1|2|3>`               It determines the use of colors on the screen: `2` is the default and makes use of ANSI and termcap escape codes on your terminal. `1` just uses non-colored mark-up like bold, italics, underline, reverse.  `0` means no mark-up at all = no escape codes. `3` will color ciphers and EC according to an internal (not yet perfect) rating. Setting the environment variable `COLOR` to the value achieves the same result.
+`--color <0|1|2|3>`               It determines the use of colors on the screen: `2` is the default and makes use of ANSI and termcap escape codes on your terminal. `1` just uses non-colored mark-up like bold, italics, underline, reverse.  `0` means no mark-up at all = no escape codes. This is also what you want when you want a log file without any escape codes. `3` will color ciphers and EC according to an internal (not yet perfect) rating. Setting the environment variable `COLOR` to the value achieves the same result.
 
 
 `--colorblind`                  Swaps green and blue colors in the output, so that this percentage of folks (up to 8% of males, see https://en.wikipedia.org/wiki/Color_blindness) can distinguish those findings better. `COLORBLIND` is the according variable if you want to set this in the environment.
@@ -273,7 +278,7 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 
 ### FILE OUTPUT OPTIONS
 
-`--log, --logging`      Logs stdout also to `${NODE}-p${port}${YYYYMMDD-HHMM}.log` in current working directory of the shell. Depending on the color output option (see above) the output file will contain color and other markup escape codes. `cat` and -- if properly configured `less` -- will show the output properly formatted on your terminal. The output shows a banner with the almost the same information as on the screen. In addition it shows the command line of the testssl.sh instance. Please note that the resulting log file is formatted according to the width of your screen while running testssl.sh. You can override the width with the environment variable TERM_WIDTH.
+`--log, --logging`      Logs stdout also to `${NODE}-p${port}${YYYYMMDD-HHMM}.log` in current working directory of the shell. Depending on the color output option (see above) the output file will contain color and other markup escape codes, unless you specify `--color 0` too. `cat` and -- if properly configured `less` -- will show the output properly formatted on your terminal. The output shows a banner with the almost the same information as on the screen. In addition it shows the command line of the testssl.sh instance. Please note that the resulting log file is formatted according to the width of your screen while running testssl.sh. You can override the width with the environment variable TERM_WIDTH.
 
 `--logfile <logfile>` or `-oL <logfile>`  Instead of the previous option you may want to use this one if you want to log into a directory or if you rather want to specify the log file name yourself. If `logfile` is a directory the output will put into `logfile/${NODE}-p${port}${YYYYMMDD-HHMM}.log`. If `logfile` is a file it will use that file name, an absolute path is also permitted here. LOGFILE is the variable you need to set if you prefer to work environment variables instead. Please note that the resulting log file is formatted according to the width of your screen while running testssl.sh. You can override the width with the environment variable TERM_WIDTH.
 
@@ -426,6 +431,7 @@ Please note that for plain TLS-encrypted ports you must not specify the protocol
 * RFC 7685: A Transport Layer Security (TLS) ClientHello Padding Extension
 * RFC 7905: ChaCha20-Poly1305 Cipher Suites for Transport Layer Security (TLS)
 * RFC 7919: Negotiated Finite Field Diffie-Hellman Ephemeral Parameters for Transport Layer Security
+* RFC 8143: Using Transport Layer Security (TLS) with Network News Transfer Protocol (NNTP)
 * RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3
 * W3C CSP: Content Security Policy Level 1-3
 * TLSWG Draft: The Transport Layer Security (TLS) Protocol Version 1.3
@@ -449,18 +455,18 @@ Please note that for plain TLS-encrypted ports you must not specify the protocol
 * 252 (ERR_FNAMEPARSE)  Input file couldn't be parsed
 * 253 (ERR_FCREATE)     Output file couldn't be created
 * 254 (ERR_CMDLINE)     Cmd line couldn't be parsed
-* 255 (ERR_BASH )       Bash version incorrect
+* 255 (ERR_BASH)       Bash version incorrect
 
 ## FILES
 
-**etc/\*pem**               These are the certificate stores from Apple, Linux, Mozilla Firefox, Windows.
+**etc/\*pem**               are the certificate stores from Apple, Linux, Mozilla Firefox, Windows and Java.
 
-**etc/client-simulation.txt**  Client simulation data.
+**etc/client-simulation.txt**  contains client simulation data.
 
 
-**etc/cipher-mapping.txt**  Provides a mandatory file with mapping from OpenSSL cipher suites names to the ones from IANA / used in the RFCs.
+**etc/cipher-mapping.txt**  provides a mandatory file with mapping from OpenSSL cipher suites names to the ones from IANA / used in the RFCs.
 
-**etc/tls_data.txt**        Provides a mandatory file for ciphers (bash sockets) and key material.
+**etc/tls_data.txt**        provides a mandatory file for ciphers (bash sockets) and key material.
 
 
 ## AUTHORS
