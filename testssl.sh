@@ -287,7 +287,7 @@ DETECTED_TLS_VERSION=""
 TLS_EXTENSIONS=""
 declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observed @ facebook and others, old ones like h2-17 omitted as they could not be found
-declare -r ALPN_PROTOs="h2 spdy/3.1 http/1.1 h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
+declare -r ALPN_PROTOs="h2 spdy/3.1 http/1.1 grpc-exp h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
 declare -a SESS_RESUMPTION
 TEMPDIR=""
 TMPFILE=""
@@ -3124,7 +3124,7 @@ openssl2rfc() {
      local -i i
 
      for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-          [[ "$1" == "${TLS_CIPHER_OSSL_NAME[i]}" ]] && rfcname="${TLS_CIPHER_RFC_NAME[i]}" && break
+          [[ "$1" == ${TLS_CIPHER_OSSL_NAME[i]} ]] && rfcname="${TLS_CIPHER_RFC_NAME[i]}" && break
      done
      [[ "$rfcname" == "-" ]] && rfcname=""
      [[ -n "$rfcname" ]] && tm_out "$rfcname"
@@ -3136,7 +3136,7 @@ rfc2openssl() {
      local -i i
 
      for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-          [[ "$1" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && ossl_name="${TLS_CIPHER_OSSL_NAME[i]}" && break
+          [[ "$1" == ${TLS_CIPHER_RFC_NAME[i]} ]] && ossl_name="${TLS_CIPHER_OSSL_NAME[i]}" && break
      done
      [[ "$ossl_name" == "-" ]] && ossl_name=""
      [[ -n "$ossl_name" ]] && tm_out "$ossl_name"
@@ -3151,7 +3151,7 @@ openssl2hexcode() {
           hexc="$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V" | awk '/ '"$1"' / { print $1 }')"
      else
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-               [[ "$1" == "${TLS_CIPHER_OSSL_NAME[i]}" ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
+               [[ "$1" == ${TLS_CIPHER_OSSL_NAME[i]} ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
           done
      fi
      [[ -z "$hexc" ]] && return 1
@@ -3183,7 +3183,7 @@ show_rfc_style(){
           *) return 1 ;;
      esac
      for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-          [[ "$hexcode" == "${TLS_CIPHER_HEXCODE[i]}" ]] && rfcname="${TLS_CIPHER_RFC_NAME[i]}" && break
+          [[ "$hexcode" == ${TLS_CIPHER_HEXCODE[i]} ]] && rfcname="${TLS_CIPHER_RFC_NAME[i]}" && break
      done
      [[ "$rfcname" == "-" ]] && rfcname=""
      [[ -n "$rfcname" ]] && tm_out "$rfcname"
@@ -3193,17 +3193,17 @@ show_rfc_style(){
 neat_header(){
      if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
           out "$(printf -- "Hexcode  Cipher Suite Name (IANA/RFC)                      KeyExch.   Encryption  Bits")"
-          [[ "$DISPLAY_CIPHERNAMES" != "rfc-only" ]] && out "$(printf -- "     Cipher Suite Name (OpenSSL)")"
+          [[ "$DISPLAY_CIPHERNAMES" != rfc-only ]] && out "$(printf -- "     Cipher Suite Name (OpenSSL)")"
           outln
           out "$(printf -- "%s------------------------------------------------------------------------------------------")"
-          [[ "$DISPLAY_CIPHERNAMES" != "rfc-only" ]] && out "$(printf -- "---------------------------------------")"
+          [[ "$DISPLAY_CIPHERNAMES" != rfc-only ]] && out "$(printf -- "---------------------------------------")"
           outln
      else
           out "$(printf -- "Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.   Encryption  Bits")"
-          [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && out "$(printf -- "     Cipher Suite Name (IANA/RFC)")"
+          [[ "$DISPLAY_CIPHERNAMES" != openssl-only ]] && out "$(printf -- "     Cipher Suite Name (IANA/RFC)")"
           outln
           out "$(printf -- "%s--------------------------------------------------------------------------")"
-          [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && out "$(printf -- "---------------------------------------------------")"
+          [[ "$DISPLAY_CIPHERNAMES" != openssl-only ]] && out "$(printf -- "---------------------------------------------------")"
           outln
      fi
 }
@@ -4767,7 +4767,7 @@ has_server_protocol() {
      if [[ "$PROTOS_OFFERED" =~ $proto: ]]; then
           for proto_val_pair in $PROTOS_OFFERED; do
                if [[ $proto_val_pair =~ $proto: ]]; then
-                    if [[ ${proto_val_pair#*:} == "yes" ]]; then
+                    if [[ ${proto_val_pair#*:} == yes ]]; then
                          echo 0
                          return 0
                     else
@@ -5780,16 +5780,20 @@ sub_session_resumption() {
 }
 
 run_server_preference() {
-     local cipher1 cipher2 prev_cipher=""
-     local default_cipher="" default_proto
-     local limitedsense supported_sslv2_ciphers
+     local cipher1="" cipher2="" tls13_cipher1="" tls13_cipher2="" default_proto=""
+     local prev_cipher="" default_cipher=""
+     local limitedsense="" supported_sslv2_ciphers
      local -a cipher proto
      local proto_ossl proto_txt proto_hex cipherlist i
      local -i ret=0 j sclient_success str_len
-     local list_fwd="DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-SHA256:ADH-AES256-GCM-SHA384:AECDH-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-AES128-SHA"
-     local list_reverse="ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:AECDH-AES128-SHA:ADH-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-GCM-SHA256:AES128-GCM-SHA256:AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-DES-CBC3-SHA:AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA"
+     local list_fwd="DHE-RSA-SEED-SHA:SEED-SHA:DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-SHA256:ADH-AES256-GCM-SHA384:AECDH-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-AES128-SHA"
+     local list_reverse="ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:AECDH-AES128-SHA:ADH-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-GCM-SHA256:AES128-GCM-SHA256:AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-DES-CBC3-SHA:AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA:SEED-SHA:DHE-RSA-SEED-SHA"
      tls13_list_fwd="TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256"
      tls13_list_reverse="TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384"
+     tls_list_fwd="c0,2c, c0,30, 00,9f, cc,a9, cc,a8, cc,aa, c0,2b, c0,2f, 00,9e, c0,24, c0,28, 00,6b, c0,23, c0,27, 00,67, c0,0a, 00,04, 00,05, 00,09, 00,0a, 00,9a, 00,96,
+                   c0,14, 00,39, c0,09, c0,13, 00,33, 00,9d, 00,9c, 13,01, 13,02, 13,03, 13,04, 13,05, 00,3d, 00,3c, 00,35, 00,2f, 00,ff"
+     tls_list_rev="00,2f, 00,35, 00,3c, 00,3d, 13,05, 13,04, 13,03, 13,02, 13,01, 00,9c, 00,9d, 00,33, c0,13, c0,09, 00,39, c0,14, 00,96, 00,9a, 00,0a, 00,09, 00,05, 00,04,
+                   c0,0a, 00,67, c0,27, c0,23, 00,6b, c0,28, c0,24, 00,9e, c0,2f, c0,2b, cc,aa, cc,a8, cc,a9, 00,9f, c0,30, c0,2c, 00,ff"
      local has_cipher_order=false
      local addcmd="" addcmd2=""
      local using_sockets=true
@@ -5801,9 +5805,10 @@ run_server_preference() {
 
      outln
      pr_headlineln " Testing server preferences "
-     outln
 
+     outln
      pr_bold " Has server cipher order?     "
+
      if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
           addcmd="$OPTIMAL_PROTO"
      else
@@ -5811,93 +5816,123 @@ run_server_preference() {
           # and the -no_ssl2 isn't provided.
           addcmd="-no_ssl2 $SNI"
      fi
-     [[ $DEBUG -ge 4 ]] && echo -e "\n Forward: ${list_fwd}\n ${tls13_list_fwd}"
-     $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>$ERRFILE >$TMPFILE
-     if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
-          list_fwd="$(actually_supported_ciphers $list_fwd $tls13_list_fwd '-tls1')"
-          pr_warning "no matching cipher in this list found (pls report this): "
-          outln "$list_fwd  . "
-          fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd"
-          tmpfile_handle ${FUNCNAME[0]}.txt
-          return 1
-          # we assume the problem is with testing here but it could be also the server side
-     elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
-          # now it still could be that we hit this bug: https://github.com/drwetter/testssl.sh/issues/188
-          # workaround is to connect with a protocol
-          debugme tm_out "(workaround #188) "
-          determine_optimal_proto $STARTTLS_PROTOCOL
-          [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$SNI"
-          $OPENSSL s_client $(s_client_options "$STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>$ERRFILE >$TMPFILE
-          if ! sclient_connect_successful $? $TMPFILE; then
+
+     # Determine negotiated protocol upfront
+     sclient_success=1
+     if "$using_sockets" && [[ $(has_server_protocol "tls1_3") -ne 1 ]]; then
+          # Send similar list of cipher suites as OpenSSL 1.1.1 does
+          tls_sockets "04" \
+                      "c0,2c, c0,30, 00,9f, cc,a9, cc,a8, cc,aa, c0,2b, c0,2f, 00,9a, 00,96,
+                       00,9e, c0,24, c0,28, 00,6b, c0,23, c0,27, 00,67, c0,0a,
+                       c0,14, 00,39, c0,09, c0,13, 00,33, 00,9d, 00,9c, 13,02,
+                       13,03, 13,01, 13,04, 13,05, 00,3d, 00,3c, 00,35, 00,2f, 00,ff" \
+                      "ephemeralkey"
+          [[ $sclient_success -eq 2 ]] && sclient_success=0           # 2: downgraded
+          sclient_success=$?
+          if [[ $sclient_success -eq 0 ]] ; then
+               cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+               cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"
+          fi
+     fi
+     if [[ $sclient_success -ne 0 ]]; then
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>>$ERRFILE >$TMPFILE
+          if sclient_connect_successful $? $TMPFILE; then
+               cipher0=$(get_cipher $TMPFILE)
+               debugme tm_out "0 --> $cipher0\n"
+          else
+               # 2 second try with $OPTIMAL_PROTO especially for intolerant IIS6 servers:
+               $OPENSSL s_client $(s_client_options "$STARTTLS $OPTIMAL_PROTO $BUGS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
+               if ! sclient_connect_successful $? $TMPFILE; then
+                    pr_warning "Handshake error!"
+                    ret=1
+               fi
+          fi
+     fi
+     [[ "$default_proto" == TLSv1.0 ]] && default_proto="TLSv1"
+     default_proto=$(get_protocol $TMPFILE)
+
+     # Some servers don't have a TLS 1.3 cipher order, see #1163
+     if [[ "$default_proto" == TLSv1.3 ]]; then
+          tls_sockets "04" "13,05, 13,04, 13,03, 13,02, 13,01, 00,ff"
+          [[ $sclient_success -ne 0 ]] && ret=1 && prln_fixme "something weird happened around line $((LINENO - 1))"
+          cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+          tls13_cipher1=$(get_cipher $TMPFILE)
+          debugme tm_out "TLS 1.3: --> $tls13_cipher1\n"
+          tls_sockets "04" "13,01, 13,02, 13,03, 13,04, 13,05, 00,ff"
+          [[ $sclient_success -ne 0 ]] && ret=1 && prln_fixme "something weird happened around line $((LINENO - 1))"
+          cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
+          tls13_cipher2=$(get_cipher $TMPFILE)
+          debugme tm_out "TLS 1.3: --> $tls13_cipher2\n"
+     else
+          [[ $DEBUG -ge 4 ]] && echo -e "\n Forward: ${list_fwd}\n ${tls13_list_fwd}"
+          $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>$ERRFILE >$TMPFILE
+          if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
                list_fwd="$(actually_supported_ciphers $list_fwd $tls13_list_fwd '-tls1')"
                pr_warning "no matching cipher in this list found (pls report this): "
                outln "$list_fwd  . "
-               fileout "$jsonID" "WARN" "Could not determine cipher order, no matching cipher in list found (pls report this): $list_fwd"
+               fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd"
                tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
+               # we assume the problem is with testing here but it could be also the server side
+          elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
+               # now it still could be that we hit this bug: https://github.com/drwetter/testssl.sh/issues/188
+               # workaround is to connect with a protocol
+               debugme tm_out "(workaround #188) "
+               determine_optimal_proto $STARTTLS_PROTOCOL
+               [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$SNI"
+               $OPENSSL s_client $(s_client_options "$STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>$ERRFILE >$TMPFILE
+               if ! sclient_connect_successful $? $TMPFILE; then
+                    list_fwd="$(actually_supported_ciphers $list_fwd $tls13_list_fwd '-tls1')"
+                    pr_warning "no matching cipher in this list found (pls report this): "
+                    outln "$list_fwd  . "
+                    fileout "$jsonID" "WARN" "Could not determine cipher order, no matching cipher in list found (pls report this): $list_fwd"
+                    tmpfile_handle ${FUNCNAME[0]}.txt
+                    return 1
+               fi
           fi
-     fi
-     cipher1=$(get_cipher $TMPFILE)               # cipher1 from 1st serverhello
-     debugme tm_out "--> $cipher1\n"
+          cipher1=$(get_cipher $TMPFILE)               # cipher1 from 1st serverhello
+          debugme tm_out "1 --> $cipher1\n"
 
-     if [[ -n "$STARTTLS_OPTIMAL_PROTO" ]]; then
-          addcmd2="$STARTTLS_OPTIMAL_PROTO $SNI"
-     else
-          if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
-               addcmd2="$OPTIMAL_PROTO"
+          if [[ -n "$STARTTLS_OPTIMAL_PROTO" ]]; then
+               addcmd2="$STARTTLS_OPTIMAL_PROTO $SNI"
           else
-               addcmd2="-no_ssl2 $SNI"
+               if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
+                    addcmd2="$OPTIMAL_PROTO"
+               else
+                    addcmd2="-no_ssl2 $SNI"
+               fi
           fi
+
+          # second client hello with reverse list
+          [[ $DEBUG -ge 4 ]] && echo -e "\n Reverse: ${list_reverse}\n ${tls13_list_reverse}"
+          $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_reverse -ciphersuites $tls13_list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>>$ERRFILE >$TMPFILE
+          # first handshake worked above so no error handling here
+          cipher2=$(get_cipher $TMPFILE)               # cipher2 from 2nd serverhello
+          debugme tm_out "2 --> $cipher2\n"
      fi
 
-     # second client hello with reverse list
-     [[ $DEBUG -ge 4 ]] && echo -e "\n Reverse: ${list_reverse}\n ${tls13_list_reverse}"
-     $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_reverse -ciphersuites $tls13_list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>>$ERRFILE >$TMPFILE
-     # first handshake worked above so no error handling here
-     cipher2=$(get_cipher $TMPFILE)               # cipher2 from 2nd serverhello
-     debugme tm_out "--> $cipher2\n"
 
-     if [[ "$cipher1" != "$cipher2" ]]; then
+     if [[ "$default_proto" == TLSv1.3 ]] && [[ $tls13_cipher1 != $tls13_cipher2 ]]; then
+          pr_svrty_good "yes (OK)"; out " -- no TLS 1.3 cipher order"
+          has_cipher_order=true
+          fileout "$jsonID" "OK" "server -- TLS 1.3 client determined"
+          cipher1="$tls13_cipher1"
+          cipher2="$tls13_cipher2"
+     elif [[ "$cipher1" != $cipher2 ]]; then
           # server used the different ends (ciphers) from the client hello
           pr_svrty_high "nope (NOT ok)"
           limitedsense=" (limited sense as client will pick)"
-          fileout "$jsonID" "HIGH" "NOT cipher order configured"
+          fileout "$jsonID" "HIGH" "NOT a cipher order configured"
      else
           pr_svrty_best "yes (OK)"
           has_cipher_order=true
-          limitedsense=""
           fileout "$jsonID" "OK" "server"
      fi
      outln
 
      pr_bold " Negotiated protocol          "
      jsonID="protocol_negotiated"
-     sclient_success=1
-     if "$using_sockets" && ! "$HAS_TLS13" && [[ $(has_server_protocol "tls1_3") -ne 1 ]]; then
-          # Send same list of cipher suites as OpenSSL 1.1.1 sends.
-          tls_sockets "04" \
-                      "c0,2c, c0,30, 00,9f, cc,a9, cc,a8, cc,aa, c0,2b, c0,2f,
-                       00,9e, c0,24, c0,28, 00,6b, c0,23, c0,27, 00,67, c0,0a,
-                       c0,14, 00,39, c0,09, c0,13, 00,33, 00,9d, 00,9c, 13,02,
-                       13,03, 13,01, 00,3d, 00,3c, 00,35, 00,2f, 00,ff" \
-                      "ephemeralkey"
-          sclient_success=$?
-          [[ $sclient_success -eq 2 ]] && sclient_success=0           # 2: downgraded
-          [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
-     fi
-     if [[ $sclient_success -ne  0 ]]; then
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>>$ERRFILE >$TMPFILE
-          if ! sclient_connect_successful $? $TMPFILE; then
-               # 2 second try with $OPTIMAL_PROTO especially for intolerant IIS6 servers:
-               $OPENSSL s_client $(s_client_options "$STARTTLS $OPTIMAL_PROTO $BUGS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
-               if ! sclient_connect_successful $? $TMPFILE; then
-                     pr_warning "Handshake error!"
-                    ret=1
-               fi
-          fi
-     fi
-     default_proto=$(get_protocol $TMPFILE)
-     [[ "$default_proto" == "TLSv1.0" ]] && default_proto="TLSv1"
+
      case "$default_proto" in
           *TLSv1.3)
                prln_svrty_best $default_proto
@@ -5943,7 +5978,16 @@ run_server_preference() {
 
      pr_bold " Negotiated cipher            "
      jsonID="cipher_negotiated"
+
+     # restore file from above
+     [[ "$default_proto" == TLSv1.3 ]] && cp "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt" $TMPFILE
      cipher1=$(get_cipher $TMPFILE)
+
+     # Sanity check: Handshake with no ciphers and one with forward list didn't overlap
+     if [[ "$cipher0" != $cipher1 ]]; then
+          limitedsense=" (matching cipher in list missing)"
+     fi
+
      if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && ( [[ "$cipher1" == TLS_* ]] || [[ "$cipher1" == SSL_* ]] ); then
           default_cipher="$(rfc2openssl "$cipher1")"
      elif [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ "$cipher1" != TLS_* ]] && [[ "$cipher1" != SSL_* ]]; then
@@ -5975,7 +6019,14 @@ run_server_preference() {
                ;;
      esac
      read_dhbits_from_file "$TMPFILE"
-     outln "$limitedsense"
+
+     if [[ "$cipher0" != $cipher1 ]]; then
+          pr_warning " -- inconclusive test, matching cipher in list missing"
+          outln ", better see below"
+          #FIXME: This is ugly but the best we can do before rewrite this section
+     else
+          outln "$limitedsense"
+     fi
 
      if "$has_cipher_order"; then
           cipher_pref_check
@@ -5997,7 +6048,7 @@ run_server_preference() {
                                    if [[ "${TLS_CIPHER_SSLVERS[j]}" == "SSLv2" ]]; then
                                         cipher1="${TLS_CIPHER_HEXCODE[j]}"
                                         cipher1="$(tolower "x${cipher1:2:2}${cipher1:7:2}${cipher1:12:2}")"
-                                        if [[ "$supported_sslv2_ciphers" =~ "$cipher1" ]]; then
+                                        if [[ "$supported_sslv2_ciphers" =~ $cipher1 ]]; then
                                              if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${TLS_CIPHER_OSSL_NAME[j]}" != "-" ]] ) || [[ "${TLS_CIPHER_RFC_NAME[j]}" == "-" ]]; then
                                                   cipher[i]="${TLS_CIPHER_OSSL_NAME[j]}"
                                              else
@@ -6249,10 +6300,10 @@ cipher_pref_check() {
                               rfc_ciph[nr_nonossl_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
                               index[nr_nonossl_ciphers]=$i
                               # Only test ciphers that are relevant to the protocol.
-                              if [[ "$p" == "tls1_3" ]]; then
+                              if [[ "$p" == tls1_3 ]]; then
                                    [[ "${hexc:2:2}" == "13" ]] && nr_nonossl_ciphers+=1
-                              elif [[ "$p" == "tls1_2" ]]; then
-                                   [[ "${hexc:2:2}" != "13" ]] && nr_nonossl_ciphers+=1
+                              elif [[ "$p" == tls1_2 ]]; then
+                                   [[ "${hexc:2:2}" != 13 ]] && nr_nonossl_ciphers+=1
                               elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
                                    [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
                                    [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && \
@@ -6343,7 +6394,7 @@ cipher_pref_check() {
                     [[ $? -ne 0 ]] && break
                     cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                     for (( i=0; i < nr_ciphers; i++ )); do
-                         [[ "$cipher" == "${rfc_ciph[i]}" ]] && ciphers_found2[i]=true && break
+                         [[ "$cipher" == ${rfc_ciph[i]} ]] && ciphers_found2[i]=true && break
                     done
                     if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
                          cipher="$(rfc2openssl "$cipher")"
@@ -16080,7 +16131,7 @@ prepare_arrays() {
                          ossl_ciph="$(awk '/'"$hexc"'/ { print $3 }' <<< "$ossl_supported_tls")"
                          if [[ -n "$ossl_ciph" ]]; then
                               TLS_CIPHER_OSSL_SUPPORTED[i]=true
-                              [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[i]}" ]] && TLS_CIPHER_OSSL_NAME[i]="$ossl_ciph"
+                              [[ "$ossl_ciph" != ${TLS_CIPHER_OSSL_NAME[i]} ]] && TLS_CIPHER_OSSL_NAME[i]="$ossl_ciph"
                               [[ "${hexc:2:2}" == 13 ]] && TLS13_OSSL_CIPHERS+=":$ossl_ciph"
                          fi
                     fi
@@ -16788,7 +16839,7 @@ determine_optimal_proto() {
           done
           "$all_failed" && OPTIMAL_PROTO=""
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
-          if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
+          if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
                prln_magenta "$NODEIP:$PORT appears to only support SSLv2."
                ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
                [[ $? -ne 0 ]] && exit $ERR_CLUELESS
@@ -17828,6 +17879,9 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     ;;
                --devel) ### this development feature will soon disappear
+                    # arg1: SSL/TLS protocol (SSLv2=22)
+                    # arg2: list of cipher suites / hostname/ip
+                    # arg3: hostname/ip
                     HEX_CIPHER="$TLS12_CIPHER"
                     # DEBUG=3  ./testssl.sh --devel 03 "cc, 13, c0, 13" google.de                              --> TLS 1.2, old CHACHA/POLY
                     # DEBUG=3  ./testssl.sh --devel 03 "cc,a8, cc,a9, cc,aa, cc,ab, cc,ac" blog.cloudflare.com -->          new CHACHA/POLY
@@ -18124,6 +18178,7 @@ stopwatch() {
      LAST_TIME=$(( new_delta + LAST_TIME ))
 }
 
+
 lets_roll() {
      local -i ret=0
      local section_number=1
@@ -18147,14 +18202,25 @@ lets_roll() {
      determine_service "$1"        # STARTTLS service? Other will be determined here too. Returns always 0 or has already exited if fatal error occurred
 
      # "secret" devel options --devel:
-     $do_tls_sockets && [[ $TLS_LOW_BYTE -eq 22 ]] && { sslv2_sockets "" "true"; echo $? ; exit $ALLOK; }
-     $do_tls_sockets && [[ $TLS_LOW_BYTE -ne 22 ]] && { tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"; echo $? ; exit $ALLOK; }
-     $do_cipher_match && { fileout_section_header $section_number false; run_cipher_match ${single_cipher}; }
+     if "$do_tls_sockets"; then
+          if [[ "$TLS_LOW_BYTE" == 22 ]]; then
+               sslv2_sockets "" "true"
+          else
+               if [[ "$TLS_LOW_BYTE" == 04 ]]; then
+                    tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "ephemeralkey"
+               else
+                    tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"
+               fi
+          fi
+          echo $?
+          exit $ALLOK;
+     fi
+     "$do_cipher_match" && { fileout_section_header $section_number false; run_cipher_match ${single_cipher}; }
      ((section_number++))
 
      # all top level functions  now following have the prefix "run_"
      fileout_section_header $section_number false && ((section_number++))
-     $do_protocols && {
+     "$do_protocols" && {
           run_protocols; ret=$(($? + ret)); stopwatch run_protocols;
           run_npn; ret=$(($? + ret)); stopwatch run_npn;
           run_alpn; ret=$(($? + ret)); stopwatch run_alpn;
@@ -18163,18 +18229,18 @@ lets_roll() {
      "$do_grease" && { run_grease; ret=$(($? + ret)); stopwatch run_grease; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_cipherlists && { run_cipherlists; ret=$(($? + ret)); stopwatch run_cipherlists; }
+     "$do_cipherlists" && { run_cipherlists; ret=$(($? + ret)); stopwatch run_cipherlists; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_pfs && { run_pfs; ret=$(($? + ret)); stopwatch run_pfs; }
+     "$do_pfs" && { run_pfs; ret=$(($? + ret)); stopwatch run_pfs; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_preference && { run_server_preference; ret=$(($? + ret)); stopwatch run_server_preference; }
+     "$do_server_preference" && { run_server_preference; ret=$(($? + ret)); stopwatch run_server_preference; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_server_defaults && { run_server_defaults; ret=$(($? + ret)); stopwatch run_server_defaults; }
+     "$do_server_defaults" && { run_server_defaults; ret=$(($? + ret)); stopwatch run_server_defaults; }
 
-     if $do_header; then
+     if "$do_header"; then
           #TODO: refactor this into functions
           fileout_section_header $section_number true && ((section_number++))
           if [[ $SERVICE == "HTTP" ]]; then
@@ -18194,35 +18260,35 @@ lets_roll() {
      fi
 
      # vulnerabilities
-     if [[ $VULN_COUNT -gt $VULN_THRESHLD ]] || $do_vulnerabilities; then
+     if [[ $VULN_COUNT -gt $VULN_THRESHLD ]] || "$do_vulnerabilities"; then
           outln; pr_headlineln " Testing vulnerabilities "
           outln
      fi
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_heartbleed && { run_heartbleed; ret=$(($? + ret)); stopwatch run_heartbleed; }
-     $do_ccs_injection && { run_ccs_injection; ret=$(($? + ret)); stopwatch run_ccs_injection; }
-     $do_ticketbleed && { run_ticketbleed; ret=$(($? + ret)); stopwatch run_ticketbleed; }
-     $do_robot && { run_robot; ret=$(($? + ret)); stopwatch run_robot; }
-     $do_renego && { run_renego; ret=$(($? + ret)); stopwatch run_renego; }
-     $do_crime && { run_crime; ret=$(($? + ret)); stopwatch run_crime; }
-     $do_breach && { run_breach "$URL_PATH" ; ret=$(($? + ret));  stopwatch run_breach; }
-     $do_ssl_poodle && { run_ssl_poodle; ret=$(($? + ret)); stopwatch run_ssl_poodle; }
-     $do_tls_fallback_scsv && { run_tls_fallback_scsv; ret=$(($? + ret)); stopwatch run_tls_fallback_scsv; }
-     $do_sweet32 && { run_sweet32; ret=$(($? + ret)); stopwatch run_sweet32; }
-     $do_freak && { run_freak; ret=$(($? + ret)); stopwatch run_freak; }
-     $do_drown && { run_drown ret=$(($? + ret)); stopwatch run_drown; }
-     $do_logjam && { run_logjam; ret=$(($? + ret)); stopwatch run_logjam; }
-     $do_beast && { run_beast; ret=$(($? + ret)); stopwatch run_beast; }
-     $do_lucky13 && { run_lucky13; ret=$(($? + ret)); stopwatch run_lucky13; }
-     $do_rc4 && { run_rc4; ret=$(($? + ret)); stopwatch run_rc4; }
+     "$do_heartbleed" && { run_heartbleed; ret=$(($? + ret)); stopwatch run_heartbleed; }
+     "$do_ccs_injection" && { run_ccs_injection; ret=$(($? + ret)); stopwatch run_ccs_injection; }
+     "$do_ticketbleed" && { run_ticketbleed; ret=$(($? + ret)); stopwatch run_ticketbleed; }
+     "$do_robot" && { run_robot; ret=$(($? + ret)); stopwatch run_robot; }
+     "$do_renego" && { run_renego; ret=$(($? + ret)); stopwatch run_renego; }
+     "$do_crime" && { run_crime; ret=$(($? + ret)); stopwatch run_crime; }
+     "$do_breach" && { run_breach "$URL_PATH" ; ret=$(($? + ret));  stopwatch run_breach; }
+     "$do_ssl_poodle" && { run_ssl_poodle; ret=$(($? + ret)); stopwatch run_ssl_poodle; }
+     "$do_tls_fallback_scsv" && { run_tls_fallback_scsv; ret=$(($? + ret)); stopwatch run_tls_fallback_scsv; }
+     "$do_sweet32" && { run_sweet32; ret=$(($? + ret)); stopwatch run_sweet32; }
+     "$do_freak" && { run_freak; ret=$(($? + ret)); stopwatch run_freak; }
+     "$do_drown" && { run_drown ret=$(($? + ret)); stopwatch run_drown; }
+     "$do_logjam" && { run_logjam; ret=$(($? + ret)); stopwatch run_logjam; }
+     "$do_beast" && { run_beast; ret=$(($? + ret)); stopwatch run_beast; }
+     "$do_lucky13" && { run_lucky13; ret=$(($? + ret)); stopwatch run_lucky13; }
+     "$do_rc4" && { run_rc4; ret=$(($? + ret)); stopwatch run_rc4; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_allciphers && { run_allciphers; ret=$(($? + ret)); stopwatch run_allciphers; }
-     $do_cipher_per_proto && { run_cipher_per_proto; ret=$(($? + ret)); stopwatch run_cipher_per_proto; }
+     "$do_allciphers" && { run_allciphers; ret=$(($? + ret)); stopwatch run_allciphers; }
+     "$do_cipher_per_proto" && { run_cipher_per_proto; ret=$(($? + ret)); stopwatch run_cipher_per_proto; }
 
      fileout_section_header $section_number true && ((section_number++))
-     $do_client_simulation && { run_client_simulation; ret=$(($? + ret)); stopwatch run_client_simulation; }
+     "$do_client_simulation" && { run_client_simulation; ret=$(($? + ret)); stopwatch run_client_simulation; }
 
      fileout_section_footer true
 
