@@ -5827,11 +5827,12 @@ run_server_preference() {
                        c0,14, 00,39, c0,09, c0,13, 00,33, 00,9d, 00,9c, 13,02,
                        13,03, 13,01, 13,04, 13,05, 00,3d, 00,3c, 00,35, 00,2f, 00,ff" \
                       "ephemeralkey"
-          [[ $sclient_success -eq 2 ]] && sclient_success=0           # 2: downgraded
           sclient_success=$?
+          [[ $sclient_success -eq 2 ]] && sclient_success=0           # 2: downgraded
           if [[ $sclient_success -eq 0 ]] ; then
                cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
                cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"
+               cipher0=$(get_cipher $TMPFILE)
           fi
      fi
      if [[ $sclient_success -ne 0 ]]; then
@@ -5848,8 +5849,9 @@ run_server_preference() {
                fi
           fi
      fi
-     [[ "$default_proto" == TLSv1.0 ]] && default_proto="TLSv1"
      default_proto=$(get_protocol $TMPFILE)
+     [[ "$default_proto" == TLSv1.0 ]] && default_proto="TLSv1"
+     # debugme tm_out " --> $default_proto\n"
 
      # Some servers don't have a TLS 1.3 cipher order, see #1163
      if [[ "$default_proto" == TLSv1.3 ]]; then
@@ -5911,9 +5913,8 @@ run_server_preference() {
           debugme tm_out "2 --> $cipher2\n"
      fi
 
-
      if [[ "$default_proto" == TLSv1.3 ]] && [[ $tls13_cipher1 != $tls13_cipher2 ]]; then
-          pr_svrty_good "yes (OK)"; out " -- no TLS 1.3 cipher order"
+          pr_svrty_good "yes (OK)"; out " -- only for < TLS 1.3"
           has_cipher_order=true
           fileout "$jsonID" "OK" "server -- TLS 1.3 client determined"
           cipher1="$tls13_cipher1"
