@@ -2978,7 +2978,7 @@ sub_cipherlists() {
      local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
      local jsonID="cipherlist"
 
-     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && proto="$OPTIMAL_PROTO"
+     [[ "$OPTIMAL_PROTO" == -ssl2 ]] && proto="$OPTIMAL_PROTO"
      pr_bold "$3    "                   # to be indented equal to server preferences
      if [[ -n "$6" ]] || listciphers "$1" "$2" $proto; then
           if [[ -z "$6" ]] || ( "$FAST" && listciphers "$1" "$2" -tls1 ); then
@@ -2990,8 +2990,8 @@ sub_cipherlists() {
                          ! "$HAS_TLS13" && continue
                          [[ -z "$2" ]] && continue
                     fi
-                    ! "$HAS_SSL3" && [[ "$proto" == "-ssl3" ]] && continue
-                    if [[ "$proto" != "-no_ssl2" ]]; then
+                    ! "$HAS_SSL3" && [[ "$proto" == -ssl3 ]] && continue
+                    if [[ "$proto" != -no_ssl2 ]]; then
                          "$FAST" && continue
                          [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
                     fi
@@ -3005,11 +3005,11 @@ sub_cipherlists() {
                for proto in 04 03 02 01 00; do
                     # If $cipherlist doesn't contain any TLSv1.3 ciphers, then there is
                     # no reason to try a TLSv1.3 ClientHello.
-                    [[ "$proto" == "04" ]] && [[ ! "$6" =~ "13,0" ]] && continue
+                    [[ "$proto" == 04 ]] && [[ ! "$6" =~ 13,0 ]] && continue
                     [[ $(has_server_protocol "$proto") -eq 1 ]] && continue
                     cipherlist="$(strip_inconsistent_ciphers "$proto" ", $6")"
                     cipherlist="${cipherlist:2}"
-                    if [[ -n "$cipherlist" ]] && [[ "$cipherlist" != "00,ff" ]]; then
+                    if [[ -n "$cipherlist" ]] && [[ "$cipherlist" != 00,ff ]]; then
                          tls_sockets "$proto" "$cipherlist"
                          sclient_success=$?
                          [[ $sclient_success -eq 2 ]] && sclient_success=0
@@ -3037,7 +3037,7 @@ sub_cipherlists() {
           fi
           if [[ $sclient_success -ne 0 ]] && $BAD_SERVER_HELLO_CIPHER; then
                # If server failed with a known error, raise it to the user.
-               if [[ $STARTTLS_PROTOCOL == "mysql" ]]; then
+               if [[ $STARTTLS_PROTOCOL == mysql ]]; then
                     pr_warning "SERVER_ERROR: test inconclusive due to MySQL Community Edition (yaSSL) bug."
                     fileout "${jsonID}_$5" "WARN" "SERVER_ERROR, test inconclusive due to MySQL Community Edition (yaSSL) bug."
                else
@@ -3108,7 +3108,7 @@ sub_cipherlists() {
           outln
      else
           singlespaces=$(sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g' <<< "$3")
-          if [[ "$OPTIMAL_PROTO" == "-ssl2" ]]; then
+          if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
                prln_local_problem "No $singlespaces for SSLv2 configured in $OPENSSL"
           else
                prln_local_problem "No $singlespaces configured in $OPENSSL"
@@ -3226,8 +3226,8 @@ neat_list(){
      enc="${4//Enc=/}"
      # In two cases LibreSSL uses very long names for encryption algorithms
      # and doesn't include the number of bits.
-     [[ "$enc" == "ChaCha20-Poly1305" ]] && enc="CHACHA20(256)"
-     [[ "$enc" == "GOST-28178-89-CNT" ]] && enc="GOST(256)"
+     [[ "$enc" == ChaCha20-Poly1305 ]] && enc="CHACHA20(256)"
+     [[ "$enc" == GOST-28178-89-CNT ]] && enc="GOST(256)"
 
      strength="${enc//\)/}"             # retrieve (). first remove traling ")"
      strength="${strength#*\(}"         # exfiltrate (VAL
@@ -3238,15 +3238,15 @@ neat_list(){
 
      [[ "$export" =~ export ]] && strength="$strength,exp"
 
-     [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && tls_cipher="$(show_rfc_style "$hexcode")"
+     [[ "$DISPLAY_CIPHERNAMES" != openssl-only ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
      if [[ "$5" != "true" ]]; then
           if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
                line="$(printf -- " %-7s %-49s %-10s %-12s%-8s" "$hexcode" "$tls_cipher" "$kx" "$enc" "$strength")"
-               [[ "$DISPLAY_CIPHERNAMES" != "rfc-only" ]] && line+="$(printf -- " %-33s${SHOW_EACH_C:+  %-0s}" "$ossl_cipher")"
+               [[ "$DISPLAY_CIPHERNAMES" != rfc-only ]] && line+="$(printf -- " %-33s${SHOW_EACH_C:+  %-0s}" "$ossl_cipher")"
           else
                line="$(printf -- " %-7s %-33s %-10s %-12s%-8s" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength")"
-               [[ "$DISPLAY_CIPHERNAMES" != "openssl-only" ]] && line+="$(printf -- " %-49s${SHOW_EACH_C:+  %-0s}" "$tls_cipher")"
+               [[ "$DISPLAY_CIPHERNAMES" != openssl-only ]] && line+="$(printf -- " %-49s${SHOW_EACH_C:+  %-0s}" "$tls_cipher")"
           fi
           if [[ -z "$5" ]]; then
                tm_out "$line"
@@ -3278,9 +3278,9 @@ neat_list(){
      fi
      out "$what_dh"
      if [[ -n "$bits" ]]; then
-          if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]]; then
+          if [[ $what_dh == DH ]] || [[ $what_dh == EDH ]]; then
                pr_dh_quality "$bits" " $bits"
-          elif [[ $what_dh == "ECDH" ]]; then
+          elif [[ $what_dh == ECDH ]]; then
                pr_ecdh_quality "$bits" " $bits"
           fi
      fi
