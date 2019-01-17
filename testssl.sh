@@ -5383,12 +5383,12 @@ run_cipherlists() {
   # ~ grep -i EXP etc/cipher-mapping.txt
      local exp_ciphers="00,63, 00,62, 00,61, 00,65, 00,64, 00,60, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e, 00,17, 00,03, 00,28, 00,2b, 00,ff"
      local sslv2_exp_ciphers="04,00,80, 02,00,80, 00,00,00"
-  # ~ egrep -w '64|56' etc/cipher-mapping.txt | grep -v export
-     local low_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, 00,ff"
-     local sslv2_low_ciphers="08,00,80, 06,00,40, 06,01,40, FF,80,00"
-  # ~ egrep -w 128 etc/cipher-mapping.txt | egrep -v "Au=None|AEAD|ARIA|Camellia|AES"
-     local medium_ciphers="00,9a, 00,99, 00,98, 00,97, 00,96, 00,07, 00,21, 00,25, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, 00,92, 00,8a, 00,20, 00,24, c0,33, 00,8e, 00,ff"
-     local sslv2_medium_ciphers="01,00,80, 03,00,80, 05,00,80"
+  # ~ egrep -w '64|56|RC2|RC4' etc/cipher-mapping.txt | grep -v export
+     local low_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, 00,92, 00,8a, 00,20, 00,24, c0,33, 00,8e, 00,ff"
+     local sslv2_low_ciphers="01,00,80, 03,00,80, 08,00,80, 06,00,40, 06,01,40, FF,80,00"
+  # ~ egrep -w 128 etc/cipher-mapping.txt | egrep -v "Au=None|AEAD|ARIA|Camellia|AES|RC2|RC4"
+     local medium_ciphers="00,9a, 00,99, 00,98, 00,97, 00,96, 00,07, 00,21, 00,25, 00,ff"
+     local sslv2_medium_ciphers="05,00,80"
   # ~ egrep -w '3DES' etc/cipher-mapping.txt
      local tdes_ciphers="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,ff"
      local sslv2_tdes_ciphers="07,00,c0, 07,01,c0"
@@ -5400,6 +5400,10 @@ run_cipherlists() {
      local cwe="CWE-327"
      local cwe2="CWE-310"
      local cve=""
+
+     # decoding the SSLv3-TLS1.2 ciphers, e.g:
+     # echo "00,15, c0,11, fe,fe' | sed -e 's/00,/0x00,0x/g' -e 's/c0,/0xc0,0x/g' -e 's/cc,/0xcc,0x/g' -e 's/13,/0x13,0x/g' -e 's/16,/0x16,0x/g' -e 's/fe,/0xfe,0x/g' -e 's/ff,/0xff,0x/g' -e 's/, /\n/g' | \
+     #                             while read ci; do grep -wi $ci etc/cipher-mapping.txt; done
 
 
      "$SSL_NATIVE" && using_sockets=false
@@ -5427,10 +5431,10 @@ run_cipherlists() {
      ret=$((ret + $?))
      sub_cipherlists 'EXPORT:!ADH:!NULL'                     "" " Export ciphers (w/o ADH+NULL)             "    -2 "EXPORT"    "$exp_ciphers"    "$sslv2_exp_ciphers"  "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists 'LOW:DES:!ADH:!EXP:!NULL'               "" " LOW: 64 Bit + DES encryption (w/o export) "    -2 "DES+64Bit" "$low_ciphers"    "$sslv2_low_ciphers" "$cve" "$cwe"
+     sub_cipherlists 'LOW:DES:RC2:RC4:!ADH:!EXP:!NULL'       "" " LOW: 64 Bit + DES, RC[2,4] (w/o export)   "    -2 "LOW"       "$low_ciphers"    "$sslv2_low_ciphers" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists 'MEDIUM:!aNULL:!AES:!CAMELLIA:!ARIA:!CHACHA20:!3DES' \
-                                                             "" " Weak 128 Bit ciphers (SEED, IDEA, RC[2,4])"    -1 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers" "$cve" "$cwe2"
+     sub_cipherlists 'MEDIUM:!aNULL:!AES:!CAMELLIA:!ARIA:!CHACHA20:!3DES:!RC2:!RC4' \
+                                                             "" " Weak 128 Bit ciphers (SEED, IDEA)         "    -1 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers" "$cve" "$cwe2"
      ret=$((ret + $?))
      sub_cipherlists '3DES:!aNULL:!ADH'                      "" " Triple DES Ciphers (Medium)               "     0 "3DES"      "$tdes_ciphers"   "$sslv2_tdes_ciphers" "$cve" "$cwe2"
      ret=$((ret + $?))
