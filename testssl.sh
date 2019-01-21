@@ -431,7 +431,7 @@ set_severity_level() {
    elif [[ "$severity" == CRITICAL ]]; then
            SEVERITY_LEVEL=$CRITICAL
    else
-        # WARN will always be logged
+        # WARN and FATAL will always be logged as the represent scanning problems
         echo "Supported severity levels are LOW, MEDIUM, HIGH, CRITICAL!"
         help 1
    fi
@@ -446,8 +446,9 @@ show_finding() {
    ( [[ "$severity" == LOW ]] && [[ $SEVERITY_LEVEL -le $LOW ]] ) ||
    ( [[ "$severity" == MEDIUM ]] && [[ $SEVERITY_LEVEL -le $MEDIUM ]] ) ||
    ( [[ "$severity" == HIGH ]] && [[ $SEVERITY_LEVEL -le $HIGH ]] ) ||
+   ( [[ "$severity" == CRITICAL ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] ) ||
    ( [[ "$severity" == WARN ]] ) ||
-   ( [[ "$severity" == CRITICAL ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] )
+   ( [[ "$severity" == FATAL ]] )
 }
 
 ########### Output functions
@@ -16252,8 +16253,12 @@ child_error() {
 fatal() {
      outln
      prln_magenta "Fatal error: $1" >&2
-     [[ -n "$3" ]] && outln "$3" >&2
-     fileout "fatal_error"  "ERROR" "$1"
+     [[ -n "$LOGFILE" ]] && prln_magenta "Fatal error: $1" >>$LOGFILE
+     if [[ -n "$3" ]]; then
+          outln "$3" >&2
+          [[ -n "$LOGFILE" ]] && outln "$3" >>$LOGFILE
+     fi
+     fileout "scanProblem" "FATAL" "$1"
      exit $2
 }
 
