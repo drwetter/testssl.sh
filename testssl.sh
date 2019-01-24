@@ -158,7 +158,7 @@ HAS_OPENBSDDATE=false
 if date -d @735275209 >/dev/null 2>&1; then
      if date -r @735275209  >/dev/null 2>&1; then
           # it can't do any conversion from a plain date output
-	     HAS_OPENBSDDATE=true
+          HAS_OPENBSDDATE=true
      else
           HAS_GNUDATE=true
      fi
@@ -277,6 +277,7 @@ HTMLHEADER=true                         # same for HTML
 SECTION_FOOTER_NEEDED=false             # kludge for tracking whether we need to close the JSON section object
 GIVE_HINTS=false                        # give an additional info to findings
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
+MULTIPLE_CHECKS=false                   # need to know whether an MX record or a hostname resolves to multiple IPs to check
 CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
 HAD_SLEPT=0
 NR_SOCKET_FAIL=0                        # Counter for socket failures
@@ -1937,7 +1938,7 @@ service_detection() {
 #
 connectivity_problem() {
      if [[ $1 -lt $2 ]]; then
-          prln_warning "Oops: $3"
+          prln_warning " Oops: $3"
           return 0
      fi
      if [[ $1 -ge $2 ]]; then
@@ -3241,7 +3242,7 @@ neat_list(){
 
      [[ "$DISPLAY_CIPHERNAMES" != openssl-only ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
-     if [[ "$5" != "true" ]]; then
+     if [[ "$5" != true ]]; then
           if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
                line="$(printf -- " %-7s %-49s %-10s %-12s%-8s" "$hexcode" "$tls_cipher" "$kx" "$enc" "$strength")"
                [[ "$DISPLAY_CIPHERNAMES" != rfc-only ]] && line+="$(printf -- " %-33s${SHOW_EACH_C:+  %-0s}" "$ossl_cipher")"
@@ -3601,15 +3602,6 @@ run_cipher_match(){
           done
           "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
           tmpfile_handle ${FUNCNAME[0]}.txt
-          stopwatch run_cipher_match
-          fileout_section_footer true
-          outln
-          calc_scantime
-          datebanner " Done"
-
-          "$MEASURE_TIME" && printf "%${COLUMNS}s\n" "$SCAN_TIME"
-          [[ -e "$MEASURE_TIME_FILE" ]] && echo "Total : $SCAN_TIME " >> "$MEASURE_TIME_FILE"
-          exit
      done
      outln
 
@@ -9438,6 +9430,9 @@ fd_socket() {
                imap|imaps) # IMAP, https://tools.ietf.org/html/rfc2595, https://tools.ietf.org/html/rfc3501
                     starttls_imap_dialog
                     ;;
+               irc|ircs) # IRC, https://ircv3.net/specs/extensions/tls-3.1.html, https://ircv3.net/specs/core/capability-negotiation.html
+                    fatal "FIXME: IRC+STARTTLS not yet supported" $ERR_NOSUPPORT
+                    ;;
                ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
                     fatal "FIXME: LDAP+STARTTLS over sockets not yet supported (try \"--ssl-native\")" $ERR_NOSUPPORT
                     ;;
@@ -9459,7 +9454,7 @@ fd_socket() {
           esac
      fi
      [[ $? -eq 0 ]] && return 0
-     prln_warning "STARTTLS handshake failed"
+     prln_warning " STARTTLS handshake failed"
      return 1
 }
 
@@ -16246,9 +16241,11 @@ child_error() {
      exit $ERR_CHILD
 }
 
+
+# Program terminates prematurely, with error code
 # arg1: string to print / to write to file
-# arg2: error code, is a global, see ERR_* above
-# arg3: an optional string
+# arg2: global error code, see ERR_* above
+# arg3: an optional hint (string)
 #
 fatal() {
      outln
@@ -16262,6 +16259,18 @@ fatal() {
      exit $2
 }
 
+# This OTOH doesn't exit but puts a fatal error to the screen but continues with the next
+# IP/hostname. It should only be used if a single IP/Hostname in a scan is not reachable.
+# arg1: string to print / to write to file
+#
+ip_fatal() {
+     outln
+     prln_magenta "Fatal error: $1, proceeding with next IP (if any)" >&2
+     [[ -n "$LOGFILE" ]] && prln_magenta "Fatal error: $1, proceeding with next IP (if any)" >>$LOGFILE
+     outln
+     fileout "scanProblem" "FATAL" "$1, proceeding with next IP (if any)"
+     return 0
+}
 
 initialize_engine(){
      # for now only GOST engine
@@ -16895,21 +16904,26 @@ determine_optimal_proto() {
 }
 
 
-# arg1: ftp smtp, lmtp, pop3, imap, xmpp, telnet, ldap, postgres, mysql (maybe with trailing s)
+# arg1: ftp smtp, lmtp, pop3, imap, xmpp, telnet, ldap, postgres, mysql, irc, nntp (maybe with trailing s)
 determine_service() {
      local ua
-     local protocol
+     local protocol error_msg
 
-     if ! fd_socket 5; then          # check if we can connect to $NODEIP:$PORT
+     # check if we can connect to $NODEIP:$PORT
+     if ! fd_socket 5; then
           if [[ -n "$PROXY" ]]; then
                fatal "You're sure $PROXYNODE:$PROXYPORT allows tunneling here? Can't connect to \"$NODEIP:$PORT\"" $ERR_CONNECT
           else
-               fatal "Can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" $ERR_CONNECT
+               if "$MULTIPLE_CHECKS"; then
+                    ip_fatal "Couldn't connect to $NODEIP:$PORT"
+                    return 1
+               else
+                    fatal "Can't connect to \"$NODEIP:$PORT\"\nMake sure a firewall is not between you and your scanning target!" $ERR_CONNECT
+               fi
           fi
      fi
      close_socket
 
-     datebanner " Start"
      outln
      if [[ -z "$1" ]]; then
           # no STARTTLS.
@@ -16926,6 +16940,7 @@ determine_service() {
           else
                protocol=${1%s}     # strip trailing 's' in ftp(s), smtp(s), pop3(s), etc
           fi
+
           case "$protocol" in
                ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql|nntp)
                     STARTTLS="-starttls $protocol"
@@ -16973,12 +16988,20 @@ determine_service() {
                               fatal "Your $OPENSSL does not support the \"-starttls nntp\" option" $ERR_OSSLBIN
                          fi
                     fi
+
                     $OPENSSL s_client $(s_client_options "-connect $NODEIP:$PORT $PROXY $BUGS $STARTTLS") 2>$ERRFILE >$TMPFILE </dev/null
                     if [[ $? -ne 0 ]]; then
+                         error_msg="$OPENSSL couldn't connect to $NODEIP:$PORT via STARTTLS using $protocol"
                          debugme cat $TMPFILE | head -25
                          outln
-                         fatal " $OPENSSL couldn't establish STARTTLS via $protocol to $NODEIP:$PORT" $ERR_CONNECT
+                         if "$MULTIPLE_CHECKS"; then
+                              ip_fatal "$error_msg"
+                              return 1
+                          else
+                              fatal " $error_msg" $ERR_CONNECT
+                          fi
                     fi
+
                     grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
                     out " Service set:$CORRECT_SPACES            STARTTLS via "
                     out "$(toupper "$protocol")"
@@ -16988,7 +17011,7 @@ determine_service() {
                     outln
                     ;;
                *)   outln
-                    fatal "momentarily only ftp, smtp, lmtp, pop3, imap, xmpp, telnet, ldap, postgres, and mysql allowed" $ERR_CMDLINE
+                    fatal "momentarily only ftp, smtp, lmtp, pop3, imap, xmpp, telnet, ldap, nntp, postgres and mysql allowed" $ERR_CMDLINE
                     ;;
           esac
      fi
@@ -17071,15 +17094,16 @@ run_mx_all_ips() {
           prepare_logging "${FNAME_PREFIX}mx-$1"
      fi
      if [[ -n "$mxs" ]] && [[ "$mxs" != ' ' ]]; then
-          [[ $mxport == "465" ]] && \
-               STARTTLS_PROTOCOL=""                              # no starttls for tcp 465, all other ports are starttls
+          [[ $(count_words "$mxs") -gt 1 ]] && MULTIPLE_CHECKS=true
           pr_bold "Testing all MX records (on port $mxport): "; outln "$mxs"
+          [[ $mxport == 465 ]] &&  STARTTLS_PROTOCOL=""          # no starttls for tcp 465, all other ports are starttls
           for mx in $mxs; do
                draw_line "-" $((TERM_WIDTH * 2 / 3))
                outln
                parse_hn_port "$mx:$mxport"
                determine_ip_addresses || continue
                if [[ $(count_words "$IPADDRs") -gt 1 ]]; then    # we have more than one ipv4 address to check
+                    MULTIPLE_CHECKS=true
                     pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
                     for ip in $IPADDRs; do
                          NODEIP="$ip"
@@ -17218,7 +17242,7 @@ ports2starttls() {
      local tcp_port=$1
      local ret=0
 
-# https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
+     # https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
      case $tcp_port in
           21)       echo "-t ftp " ;;
           23)       echo "-t telnet " ;;
@@ -17358,7 +17382,7 @@ run_mass_testing() {
 get_next_message_testing_parallel_result() {
      draw_line "=" $((TERM_WIDTH / 2)); outln;
      outln "${PARALLEL_TESTING_CMDLINE[NEXT_PARALLEL_TEST_TO_FINISH]}"
-     if [[ "$1" == "completed" ]]; then
+     if [[ "$1" == completed ]]; then
           cat "$TEMPDIR/term_output_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).log"
           if "$JSONHEADER" && [[ -s "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" ]]; then
                # Need to ensure that a separator is only added if the test
@@ -17717,7 +17741,7 @@ parse_cmd_line() {
                          unset CMDLINE_IP
                     fi
                     # normalize any IPv6 address
-                    CMDLINE_IP="${CMDLINE_IP//[/}"
+                    CMDLINE_IP="${CMDLINE_IP//[/}"      # fix vim syntax highlighting "]
                     CMDLINE_IP="${CMDLINE_IP//]/}"
                     ;;
                -n|--nodns|-n=*|--nodns=*)
@@ -18209,98 +18233,105 @@ lets_roll() {
      stopwatch determine_rdns
 
      ((SERVER_COUNTER++))
-     determine_service "$1"        # STARTTLS service? Other will be determined here too. Returns always 0 or has already exited if fatal error occurred
-
-     # "secret" devel options --devel:
-     if "$do_tls_sockets"; then
-          if [[ "$TLS_LOW_BYTE" == 22 ]]; then
-               sslv2_sockets "" "true"
-          else
-               if [[ "$TLS_LOW_BYTE" == 04 ]]; then
-                    tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "ephemeralkey"
+     datebanner " Start"
+     determine_service "$1"        # STARTTLS service? Other will be determined here too. Returns 0 if test connect was ok or has already exited if fatal error occurred
+                                   # determine_service() can return 1, it indicates that this IP cannot be reached but there are more IPs to check
+     if [[ $? -eq 0 ]] ; then
+          # "secret" devel options --devel:
+          if "$do_tls_sockets"; then
+               if [[ "$TLS_LOW_BYTE" == 22 ]]; then
+                    sslv2_sockets "" "true"
                else
-                    tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"
+                    if [[ "$TLS_LOW_BYTE" == 04 ]]; then
+                         tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "ephemeralkey"
+                    else
+                         tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"
+                    fi
                fi
+               echo $?
+               exit $ALLOK;
           fi
-          echo $?
-          exit $ALLOK;
+          if "$do_cipher_match"; then
+               # we will have an invalid JSON with no if statement
+               fileout_section_header $section_number false
+               run_cipher_match ${single_cipher}
+               stopwatch run_cipher_match
+          else
+               ((section_number++))
+               # all top level functions now following have the prefix "run_"
+               fileout_section_header $section_number false && ((section_number++))
+               "$do_protocols" && {
+                    run_protocols; ret=$(($? + ret)); stopwatch run_protocols;
+                    run_npn; ret=$(($? + ret)); stopwatch run_npn;
+                    run_alpn; ret=$(($? + ret)); stopwatch run_alpn;
+               }
+               fileout_section_header $section_number true && ((section_number++))
+               "$do_grease" && { run_grease; ret=$(($? + ret)); stopwatch run_grease; }
+
+               fileout_section_header $section_number true && ((section_number++))
+               "$do_cipherlists" && { run_cipherlists; ret=$(($? + ret)); stopwatch run_cipherlists; }
+
+               fileout_section_header $section_number true && ((section_number++))
+               "$do_pfs" && { run_pfs; ret=$(($? + ret)); stopwatch run_pfs; }
+
+               fileout_section_header $section_number true && ((section_number++))
+               "$do_server_preference" && { run_server_preference; ret=$(($? + ret)); stopwatch run_server_preference; }
+
+               fileout_section_header $section_number true && ((section_number++))
+               "$do_server_defaults" && { run_server_defaults; ret=$(($? + ret)); stopwatch run_server_defaults; }
+
+               if "$do_header"; then
+                    #TODO: refactor this into functions
+                    fileout_section_header $section_number true && ((section_number++))
+                         if [[ $SERVICE == HTTP ]]; then
+                              run_http_header "$URL_PATH";       ret=$(($? + ret))
+                              run_http_date "$URL_PATH";         ret=$(($? + ret))
+                              run_hsts "$URL_PATH";              ret=$(($? + ret))
+                              run_hpkp "$URL_PATH";              ret=$(($? + ret))
+                              run_server_banner "$URL_PATH";     ret=$(($? + ret))
+                              run_appl_banner "$URL_PATH";       ret=$(($? + ret))
+                              run_cookie_flags "$URL_PATH";      ret=$(($? + ret))
+                              run_security_headers "$URL_PATH";  ret=$(($? + ret))
+                              run_rp_banner "$URL_PATH";         ret=$(($? + ret))
+                              stopwatch do_header
+                         fi
+               else
+                    ((section_number++))
+               fi
+
+               # vulnerabilities
+               if [[ $VULN_COUNT -gt $VULN_THRESHLD ]] || "$do_vulnerabilities"; then
+                    outln; pr_headlineln " Testing vulnerabilities "
+                    outln
+               fi
+
+               fileout_section_header $section_number true && ((section_number++))
+               "$do_heartbleed" && { run_heartbleed; ret=$(($? + ret)); stopwatch run_heartbleed; }
+               "$do_ccs_injection" && { run_ccs_injection; ret=$(($? + ret)); stopwatch run_ccs_injection; }
+               "$do_ticketbleed" && { run_ticketbleed; ret=$(($? + ret)); stopwatch run_ticketbleed; }
+               "$do_robot" && { run_robot; ret=$(($? + ret)); stopwatch run_robot; }
+               "$do_renego" && { run_renego; ret=$(($? + ret)); stopwatch run_renego; }
+               "$do_crime" && { run_crime; ret=$(($? + ret)); stopwatch run_crime; }
+               "$do_breach" && { run_breach "$URL_PATH" ; ret=$(($? + ret));  stopwatch run_breach; }
+               "$do_ssl_poodle" && { run_ssl_poodle; ret=$(($? + ret)); stopwatch run_ssl_poodle; }
+               "$do_tls_fallback_scsv" && { run_tls_fallback_scsv; ret=$(($? + ret)); stopwatch run_tls_fallback_scsv; }
+               "$do_sweet32" && { run_sweet32; ret=$(($? + ret)); stopwatch run_sweet32; }
+               "$do_freak" && { run_freak; ret=$(($? + ret)); stopwatch run_freak; }
+               "$do_drown" && { run_drown ret=$(($? + ret)); stopwatch run_drown; }
+               "$do_logjam" && { run_logjam; ret=$(($? + ret)); stopwatch run_logjam; }
+               "$do_beast" && { run_beast; ret=$(($? + ret)); stopwatch run_beast; }
+               "$do_lucky13" && { run_lucky13; ret=$(($? + ret)); stopwatch run_lucky13; }
+               "$do_rc4" && { run_rc4; ret=$(($? + ret)); stopwatch run_rc4; }
+
+               fileout_section_header $section_number true && ((section_number++))
+               "$do_allciphers" && { run_allciphers; ret=$(($? + ret)); stopwatch run_allciphers; }
+               "$do_cipher_per_proto" && { run_cipher_per_proto; ret=$(($? + ret)); stopwatch run_cipher_per_proto; }
+
+               fileout_section_header $section_number true && ((section_number++))
+               "$do_client_simulation" && { run_client_simulation; ret=$(($? + ret)); stopwatch run_client_simulation; }
+          fi
+         fileout_section_footer true
      fi
-     "$do_cipher_match" && { fileout_section_header $section_number false; run_cipher_match ${single_cipher}; }
-     ((section_number++))
-
-     # all top level functions  now following have the prefix "run_"
-     fileout_section_header $section_number false && ((section_number++))
-     "$do_protocols" && {
-          run_protocols; ret=$(($? + ret)); stopwatch run_protocols;
-          run_npn; ret=$(($? + ret)); stopwatch run_npn;
-          run_alpn; ret=$(($? + ret)); stopwatch run_alpn;
-     }
-     fileout_section_header $section_number true && ((section_number++))
-     "$do_grease" && { run_grease; ret=$(($? + ret)); stopwatch run_grease; }
-
-     fileout_section_header $section_number true && ((section_number++))
-     "$do_cipherlists" && { run_cipherlists; ret=$(($? + ret)); stopwatch run_cipherlists; }
-
-     fileout_section_header $section_number true && ((section_number++))
-     "$do_pfs" && { run_pfs; ret=$(($? + ret)); stopwatch run_pfs; }
-
-     fileout_section_header $section_number true && ((section_number++))
-     "$do_server_preference" && { run_server_preference; ret=$(($? + ret)); stopwatch run_server_preference; }
-
-     fileout_section_header $section_number true && ((section_number++))
-     "$do_server_defaults" && { run_server_defaults; ret=$(($? + ret)); stopwatch run_server_defaults; }
-
-     if "$do_header"; then
-          #TODO: refactor this into functions
-          fileout_section_header $section_number true && ((section_number++))
-          if [[ $SERVICE == "HTTP" ]]; then
-               run_http_header "$URL_PATH"; ret=$(($? + ret))
-               run_http_date "$URL_PATH";   ret=$(($? + ret))
-               run_hsts "$URL_PATH";        ret=$(($? + ret))
-               run_hpkp "$URL_PATH";        ret=$(($? + ret))
-               run_server_banner "$URL_PATH";  ret=$(($? + ret))
-               run_appl_banner "$URL_PATH";    ret=$(($? + ret))
-               run_cookie_flags "$URL_PATH";      ret=$(($? + ret))
-               run_security_headers "$URL_PATH";  ret=$(($? + ret))
-               run_rp_banner "$URL_PATH";         ret=$(($? + ret))
-               stopwatch do_header
-         fi
-     else
-         ((section_number++))
-     fi
-
-     # vulnerabilities
-     if [[ $VULN_COUNT -gt $VULN_THRESHLD ]] || "$do_vulnerabilities"; then
-          outln; pr_headlineln " Testing vulnerabilities "
-          outln
-     fi
-
-     fileout_section_header $section_number true && ((section_number++))
-     "$do_heartbleed" && { run_heartbleed; ret=$(($? + ret)); stopwatch run_heartbleed; }
-     "$do_ccs_injection" && { run_ccs_injection; ret=$(($? + ret)); stopwatch run_ccs_injection; }
-     "$do_ticketbleed" && { run_ticketbleed; ret=$(($? + ret)); stopwatch run_ticketbleed; }
-     "$do_robot" && { run_robot; ret=$(($? + ret)); stopwatch run_robot; }
-     "$do_renego" && { run_renego; ret=$(($? + ret)); stopwatch run_renego; }
-     "$do_crime" && { run_crime; ret=$(($? + ret)); stopwatch run_crime; }
-     "$do_breach" && { run_breach "$URL_PATH" ; ret=$(($? + ret));  stopwatch run_breach; }
-     "$do_ssl_poodle" && { run_ssl_poodle; ret=$(($? + ret)); stopwatch run_ssl_poodle; }
-     "$do_tls_fallback_scsv" && { run_tls_fallback_scsv; ret=$(($? + ret)); stopwatch run_tls_fallback_scsv; }
-     "$do_sweet32" && { run_sweet32; ret=$(($? + ret)); stopwatch run_sweet32; }
-     "$do_freak" && { run_freak; ret=$(($? + ret)); stopwatch run_freak; }
-     "$do_drown" && { run_drown ret=$(($? + ret)); stopwatch run_drown; }
-     "$do_logjam" && { run_logjam; ret=$(($? + ret)); stopwatch run_logjam; }
-     "$do_beast" && { run_beast; ret=$(($? + ret)); stopwatch run_beast; }
-     "$do_lucky13" && { run_lucky13; ret=$(($? + ret)); stopwatch run_lucky13; }
-     "$do_rc4" && { run_rc4; ret=$(($? + ret)); stopwatch run_rc4; }
-
-     fileout_section_header $section_number true && ((section_number++))
-     "$do_allciphers" && { run_allciphers; ret=$(($? + ret)); stopwatch run_allciphers; }
-     "$do_cipher_per_proto" && { run_cipher_per_proto; ret=$(($? + ret)); stopwatch run_cipher_per_proto; }
-
-     fileout_section_header $section_number true && ((section_number++))
-     "$do_client_simulation" && { run_client_simulation; ret=$(($? + ret)); stopwatch run_client_simulation; }
-
-     fileout_section_footer true
 
      outln
      calc_scantime
@@ -18381,6 +18412,7 @@ lets_roll() {
           fatal "No IP address could be determined" $ERR_DNSLOOKUP
      fi
      if [[ $(count_words "$IPADDRs") -gt 1 ]]; then    # we have more than one ipv4 address to check
+          MULTIPLE_CHECKS=true
           pr_bold "Testing all IPv4 addresses (port $PORT): "; outln "$IPADDRs"
           for ip in $IPADDRs; do
                draw_line "-" $((TERM_WIDTH * 2 / 3))
