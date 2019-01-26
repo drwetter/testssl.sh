@@ -325,6 +325,8 @@ OSSL_SUPPORTED_CURVES=""
 HAS_SSL2=false
 HAS_SSL3=false
 HAS_TLS13=false
+HAS_X448=false
+HAS_X25519=false
 HAS_PKUTIL=false
 HAS_PKEY=false
 HAS_NO_SSL2=false
@@ -15718,6 +15720,12 @@ find_openssl_binary() {
      $OPENSSL s_client -tls1_3 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_TLS13=true
 
+     $OPENSSL genpkey -algorithm X448 -out - 2>&1 | grep -aq "not found" || \
+          HAS_X448=true
+
+     $OPENSSL genpkey -algorithm X25519 -out - 2>&1 | grep -aq "not found" || \
+          HAS_X25519=true
+
      $OPENSSL s_client -no_ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_NO_SSL2=true
 
@@ -16054,6 +16062,8 @@ HAS_IPv6: $HAS_IPv6
 HAS_SSL2: $HAS_SSL2
 HAS_SSL3: $HAS_SSL3
 HAS_TLS13: $HAS_TLS13
+HAS_X448: $HAS_X448
+HAS_X25519: $HAS_X25519
 HAS_NO_SSL2: $HAS_NO_SSL2
 HAS_SPDY: $HAS_SPDY
 HAS_ALPN: $HAS_ALPN
