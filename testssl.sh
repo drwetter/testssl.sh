@@ -1968,29 +1968,39 @@ run_http_header() {
      fi
 
      [[ -z "$1" ]] && url="/" || url="$1"
-     printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
-     wait_kill $! $HEADER_MAXSLEEP
-     if [[ $? -eq 0 ]]; then
-          # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
-          # Doing it again in the foreground to get an accurate header time
-          printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
-          NOW_TIME=$(date "+%s")
-          HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
-          HAD_SLEPT=0
+     if [[ "$SOCKETHEADER" == true ]]; then
+          # This is just for testing only. It doesn't work (yet)
+          tls_sockets "03" "$TLS12_CIPHER" "" "" "" false
+          debugme echo "--> $?"
+          printf -- "%b" "$GET_REQ11" >&5         # This GET request is not being logged on the server side --> probably we're still on the TLS layer
+          cat <&5 >$HEADERFILE
+          debugme xxd "$HEADERFILE"               # 1503 -> TLS alert
+          close_socket
      else
-          # 1st GET request hung and needed to be killed. Check whether it succeeded anyway:
-          if grep -Eiaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
-               # correct by seconds we slept, HAD_SLEPT comes from wait_kill()
-               NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
+          printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
+          wait_kill $! $HEADER_MAXSLEEP
+          if [[ $? -eq 0 ]]; then
+               # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
+               # Doing it again in the foreground to get an accurate header time
+               printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
+               NOW_TIME=$(date "+%s")
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
+               HAD_SLEPT=0
           else
-               prln_warning " likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE | awk '{ print $1 }'))"
-               [[ "$DEBUG" -lt 1 ]] & outln "Rerun with DEBUG>=1 and inspect $HEADERFILE\n"
-               fileout "HTTP_status_code" "WARN" "HTTP header request failed"
-               debugme cat $HEADERFILE
-               ((NR_HEADER_FAIL++))
-               connectivity_problem $NR_HEADER_FAIL $MAX_HEADER_FAIL "HTTP header connect problem" "repeated HTTP header connect problems, doesn't make sense to continue"
-               return 1
+               # 1st GET request hung and needed to be killed. Check whether it succeeded anyway:
+               if grep -Eiaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
+                    # correct by seconds we slept, HAD_SLEPT comes from wait_kill()
+                    NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
+                    HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
+               else
+                    prln_warning " likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE | awk '{ print $1 }'))"
+                    [[ "$DEBUG" -lt 1 ]] & outln "Rerun with DEBUG>=1 and inspect $HEADERFILE\n"
+                    fileout "HTTP_status_code" "WARN" "HTTP header request failed"
+                    debugme cat $HEADERFILE
+                    ((NR_HEADER_FAIL++))
+                    connectivity_problem $NR_HEADER_FAIL $MAX_HEADER_FAIL "HTTP header connect problem" "repeated HTTP header connect problems, doesn't make sense to continue"
+                    return 1
+               fi
           fi
      fi
      if [[ ! -s $HEADERFILE ]]; then
@@ -12596,13 +12606,13 @@ tls_sockets() {
      local -i hello_done=0
      local cipher="" key_and_iv="" decrypted_response
 
-     [[ "$5" == "true" ]] && offer_compression=true
-     [[ "$6" == "false" ]] && close_connection=false
+     [[ "$5" == true ]] && offer_compression=true
+     [[ "$6" == false ]] && close_connection=false
      tls_low_byte="$1"
      if [[ -n "$2" ]]; then             # use supplied string in arg2 if there is one
           cipher_list_2send="$2"
      else                               # otherwise use std ciphers then
-          if [[ "$tls_low_byte" == "03" ]]; then
+          if [[ "$tls_low_byte" == 03 ]]; then
                cipher_list_2send="$TLS12_CIPHER"
           else
                cipher_list_2send="$TLS_CIPHER"
