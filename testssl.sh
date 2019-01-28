@@ -2987,7 +2987,7 @@ sub_cipherlists() {
      if [[ -n "$6" ]] || listciphers "$1" "$2" $proto; then
           if [[ -z "$6" ]] || ( "$FAST" && listciphers "$1" "$2" -tls1 ); then
                for proto in -no_ssl2 -tls1_2 -tls1_1 -tls1 -ssl3; do
-                    if [[ "$proto" == "-tls1_2" ]]; then
+                    if [[ "$proto" == -tls1_2 ]]; then
                          # If $OPENSSL doesn't support TLSv1.3 or if no TLSv1.3
                          # ciphers are being tested, then a TLSv1.2 ClientHello
                          # was tested in the first iteration.
@@ -3061,24 +3061,23 @@ sub_cipherlists() {
                               fileout "${jsonID}_$5" "MEDIUM" "not offered"
                          fi
                          ;;
-
                     1)  if [[ $sclient_success -eq 0 ]]; then
                               # High is good to offer
                               pr_svrty_good "offered (OK)"
                               fileout "${jsonID}_$5" "OK" "offered"
                          else
-                              # FIXME: the rating could be readjusted if we knew the result of STRONG before
+                              # FIXME: we penalize the absence of high but don't know the result of strong encryption yet (next)
                               pr_svrty_medium "not offered"
                               fileout "${jsonID}_$5" "MEDIUM" "not offered"
                          fi
                          ;;
                     0)   if [[ $sclient_success -eq 0 ]]; then
                               # medium is not that bad
-                              pr_svrty_medium "offered"
-                              fileout "${jsonID}_$5" "MEDIUM" "offered"
+                              pr_svrty_low "offered"
+                              fileout "${jsonID}_$5" "LOW" "offered"
                          else
-                              out "not offered (OK)"
-                              fileout "${jsonID}_$5" "OK" "not offered"
+                              out "not offered"
+                              fileout "${jsonID}_$5" "INFO" "not offered"
                          fi
                          ;;
                     -1)  if [[ $sclient_success -eq 0 ]]; then
@@ -3120,6 +3119,48 @@ sub_cipherlists() {
           fileout "${jsonID}_$5" "WARN" "Cipher $3 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
      return $ret
+}
+
+# Generic function for a rated output, no used yet.
+# arg1: rating from 2 to -4 if available or not
+# arg2: no/yes: decides whether positive or negative logic will be applied and "not" will be printed
+# arg3: jsonID
+#
+rated_output() {
+     local jsonID=$3
+     local logic=""
+
+     if [[ $2 == no ]] || [[ $2 == negative ]]; then
+          logic="not "
+     fi
+     case $1 in
+          2)   pr_svrty_best "${logic}offered (OK)"
+               fileout "${jsonID}" "OK" "${logic}offered"
+               ;;
+          1)   pr_svrty_good "${logic}offered (OK)"
+               fileout "${jsonID}" "OK" "${logic}offered"
+               ;;
+          0)   out "${logic}offered"
+               fileout "${jsonID}" "INFO" "${logic}offered"
+               ;;
+          -1)  pr_svrty_low "${logic}offered"
+               fileout "${jsonID}" "LOW" "${logic}offered"
+               ;;
+          -2)  pr_svrty_medium "${logic}offered"
+               fileout "${jsonID}" "MEDIUM" "${logic}offered"
+               ;;
+          -3)  pr_svrty_high "${logic}offered (NOT ok)"
+               fileout "${jsonID}" "HIGH" "${logic}offered"
+               ;;
+          -4)  pr_svrty_critical "${logic}offered (NOT ok)"
+               fileout "${jsonID}" "CRITICAL" "${logic}offered"
+               ;;
+          *)   pr_warning "FIXME: error around $LINENO, (please report this)"
+               fileout "${jsonID}" "WARN" "return condition $2 when $1 unclear"
+               return 1
+               ;;
+     esac
+     return 0
 }
 
 
@@ -5381,22 +5422,22 @@ run_cipherlists() {
   # ~ egrep -w '64|56|RC2|RC4' etc/cipher-mapping.txt | grep -v export
      local low_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, 00,92, 00,8a, 00,20, 00,24, c0,33, 00,8e, 00,ff"
      local sslv2_low_ciphers="01,00,80, 03,00,80, 08,00,80, 06,00,40, 06,01,40, FF,80,00"
-  # ~ egrep -w 128 etc/cipher-mapping.txt | egrep -v "Au=None|AEAD|ARIA|Camellia|AES|RC2|RC4"
-     local medium_ciphers="00,9a, 00,99, 00,98, 00,97, 00,96, 00,07, 00,21, 00,25, 00,ff"
-     local sslv2_medium_ciphers="05,00,80"
   # ~ egrep -w '3DES' etc/cipher-mapping.txt
      local tdes_ciphers="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,ff"
      local sslv2_tdes_ciphers="07,00,c0, 07,01,c0"
-  # ~ equivalent to 'egrep -w "GOST|128|256" etc/cipher-mapping.txt | grep -v '=None' | egrep -vw 'RC4|AEAD|IDEA|SEED|RC2'. Attention: 127 ciphers currently
-     local high_ciphers="c0,28, c0,24, c0,14, c0,0a, c0,22, c0,21, c0,20, 00,b7, 00,b3, 00,91, c0,9b, c0,99, c0,97, 00,af, c0,95, 00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87, 00,86, 00,85, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, 00,3d, 00,35, 00,c0, c0,38, c0,36, 00,84, 00,95, 00,8d, c0,3d, c0,3f, c0,41, c0,43, c0,45, c0,49, c0,4b, c0,4d, c0,4f, c0,65, c0,67, c0,69, c0,71, 00,80, 00,81, ff,00, ff,01, ff,02, ff,03, ff,85, c0,27, c0,23, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,45, 00,44, 00,43, 00,42, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,3c, 00,2f, 00,ba, c0,37, c0,35, 00,b6, 00,b2, 00,90, 00,41, c0,9a, c0,98, c0,96, 00,ae, c0,94, 00,94, 00,8c, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,48, c0,4a, c0,4c, c0,4e, c0,64, c0,66, c0,68, c0,70"
-     # no SSLv2 here and in strong
-  # ~ equivalent to 'grep AEAD etc/cipher-mapping.txt | grep -v Au=None'
+  # ~ egrep -w 128 etc/cipher-mapping.txt | egrep -v "Au=None|AEAD|RC2|RC4"
+     local medium_ciphers="00,07, 00,21, 00,25, 00,2F, 00,30, 00,31, 00,32, 00,33, 00,3C, 00,3E, 00,3F, 00,40, 00,41, 00,42, 00,43, 00,44, 00,45, 00,67, 00,8C, 00,90, 00,94, 00,96, 00,97, 00,98, 00,99, 00,9A, 00,AE, 00,B2, 00,B6, 00,BA, 00,BB, 00,BC, 00,BD, 00,BE, C0,04, C0,09, C0,0E, C0,13, C0,1D, C0,1E, C0,1F, C0,23, C0,25, C0,27, C0,29, C0,35, C0,37, C0,3C, C0,3E, C0,40, C0,42, C0,44, C0,48, C0,4A, C0,4C, C0,4E, C0,64, C0,66, C0,68, C0,70, C0,72, C0,74, C0,76, C0,78, C0,94, C0,96, C0,98, C0,9A, 00, FF"
+  # Attention we have a SSLv2 cipher here: IDEA-CBC-MD5 / SSL_CK_IDEA_128_CBC_WITH_MD5
+     local sslv2_medium_ciphers="05,00,80"
+  # ~ egrep -w "256" etc/cipher-mapping.txt | grep -v '=None' | egrep -vw 'RC4|AEAD|IDEA|SEED|RC2|GOST'
+     local high_ciphers="00,35, 00,36, 00,37, 00,38, 00,39, 00,3D, 00,68, 00,69, 00,6A, 00,6B, 00,84, 00,85, 00,86, 00,87, 00,88, 00,8D, 00,91, 00,95, 00,AF, 00,B3, 00,B7, 00,C0, 00,C1, 00,C2, 00,C3, 00,C4, C0,05, C0,0A, C0,0F, C0,14, C0,20, C0,21, C0,22, C0,24, C0,26, C0,28, C0,2A, C0,36, C0,38, C0,3D, C0,3F, C0,41, C0,43, C0,45, C0,49, C0,4B, C0,4D, C0,4F, C0,65, C0,67, C0,69, C0,71, C0,73, C0,75, C0,77, C0,79, C0,95, C0,97, C0,99, C0,9B"
+  # ~ grep AEAD etc/cipher-mapping.txt | grep -v Au=None
      local strong_ciphers="13,01, 13,02, 13,03, 13,04, 13,05, cc,14, cc,13, cc,15, c0,30, c0,2c, 00,a5, 00,a3, 00,a1, 00,9f, cc,a9, cc,a8, cc,aa, c0,af, c0,ad, c0,a3, c0,9f, 00,ad, 00,ab, cc,ae, cc,ad, cc,ac, c0,ab, c0,a7, c0,32, c0,2e, 00,9d, c0,a1, c0,9d, 00,a9, cc,ab, c0,a9, c0,a5, c0,51, c0,53, c0,55, c0,57, c0,59, c0,5d, c0,5f, c0,61, c0,63, c0,6b, c0,6d, c0,6f, c0,7b, c0,7d, c0,7f, c0,81, c0,83, c0,87, c0,89, c0,8b, c0,8d, c0,8f, c0,91, c0,93, 16,b7, 16,b8, 16,b9, 16,ba, c0,2f, c0,2b, 00,a4, 00,a2, 00,a0, 00,9e, c0,ae, c0,ac, c0,a2, c0,9e, 00,ac, 00,aa, c0,aa, c0,a6, c0,a0, c0,9c, 00,a8, c0,a8, c0,a4, c0,31, c0,2d, 00,9c, c0,50, c0,52, c0,54, c0,56, c0,58, c0,5c, c0,5e, c0,60, c0,62, c0,6a, c0,6c, c0,6e, c0,7a, c0,7c, c0,7e, c0,80, c0,82, c0,86, c0,88, c0,8a, c0,8c, c0,8e, c0,90, c0,92, 00,ff"
      local cwe="CWE-327"
      local cwe2="CWE-310"
      local cve=""
 
-     # decoding the SSLv3-TLS1.2 ciphers, e.g:
+     # decoding the >= SSLv3 ciphers in the code above , e.g:
      # echo "00,15, c0,11, fe,fe' | sed -e 's/00,/0x00,0x/g' -e 's/c0,/0xc0,0x/g' -e 's/cc,/0xcc,0x/g' -e 's/13,/0x13,0x/g' -e 's/16,/0x16,0x/g' -e 's/fe,/0xfe,0x/g' -e 's/ff,/0xff,0x/g' -e 's/, /\n/g' | \
      #                             while read ci; do grep -wi $ci etc/cipher-mapping.txt; done
 
@@ -5414,7 +5455,7 @@ run_cipherlists() {
      outln
      pr_headlineln " Testing cipher categories "
      outln
-     # argv[1]: cipher list to test in OpenSSL syntax (see ciphers(1ssl) or run 'openssl ciphers -v/-V)'
+     # argv[1]: cipher list to test in OpenSSL syntax (see ciphers(1ssl) or run 'openssl ciphers -v/-V)', TLS 1.3 ciphers will be treated automatically
      # argv[2]: string on console / HTML or "finding"
      # argv[3]: rating whether ok to offer
      # argv[4]: string to be appended for fileout
@@ -5428,15 +5469,15 @@ run_cipherlists() {
      ret=$((ret + $?))
      sub_cipherlists 'LOW:DES:RC2:RC4:!ADH:!EXP:!NULL'       "" " LOW: 64 Bit + DES, RC[2,4] (w/o export)   "    -2 "LOW"       "$low_ciphers"    "$sslv2_low_ciphers" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists 'MEDIUM:!aNULL:!AES:!CAMELLIA:!ARIA:!CHACHA20:!3DES:!RC2:!RC4' \
-                                                             "" " Weak 128 Bit ciphers (SEED, IDEA)         "    -1 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers" "$cve" "$cwe2"
+     sub_cipherlists '3DES:!aNULL:!ADH'                      "" " Triple DES Ciphers                        "    -1 "3DES"     "$tdes_ciphers"   "$sslv2_tdes_ciphers" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists '3DES:!aNULL:!ADH'                      "" " Triple DES Ciphers (Medium)               "     0 "3DES"      "$tdes_ciphers"   "$sslv2_tdes_ciphers" "$cve" "$cwe2"
+     sub_cipherlists 'MEDIUM:!aNULL:AES128:CAMELLIA128:ARIA128:!CHACHA20:!3DES:!RC2:!RC4:!AESCCM8:!AESCCM:!AESGCM:!ARIAGCM' \
+                                                             "" " 128 Bit ciphers (SEED, IDEA, 128 Bit CBC) "     0 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!AESGCM:!CamelliaGCM:!AESCCM8:!AESCCM' \
-                                                             "" " High encryption (AES+Camellia, no AEAD)   "     1 "HIGH"      "$high_ciphers"    ""
+     sub_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!CamelliaGCM:!AESCCM:!AESCCM8:!AES128:!CAMELLIA128:!ARIAGCM:!ARIACCM' \
+                                                             "" " High encryption (AES/Aria/Camellia, !AEAD)"     1 "HIGH"      "$high_ciphers"    ""
      ret=$((ret + $?))
-     sub_cipherlists 'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM8:AESCCM' 'ALL' \
+     sub_cipherlists 'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM:ARIAGCM' 'ALL' \
                                                                 " Strong encryption (AEAD ciphers)          "     2 "STRONG"    "$strong_ciphers"  ""
      ret=$((ret + $?))
      outln
@@ -16482,6 +16523,11 @@ get_a_record() {
           echo 127.0.0.1
           return 0
      fi
+     if is_ipv4addr "$1"; then
+          # This saves walking through this. Also it avoids hangs e.g. if you run docker locally without reachabale DNS
+          echo $1
+          return 0
+     fi
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
@@ -16495,7 +16541,7 @@ get_a_record() {
      fi
      if [[ -z "$ip4" ]]; then
           if type -p dig &> /dev/null ; then
-               ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | awk '/^[0-9]/'))
+               ip4=$(filter_ip4_address $(dig +timeout=2 +tries=2 +short -t a "$1" 2>/dev/null | awk '/^[0-9]/'))
           fi
      fi
      if [[ -z "$ip4" ]]; then
@@ -16523,6 +16569,14 @@ get_aaaa_record() {
 
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
+     if is_ipv6addr "$1"; then
+          # This saves walking through this. Also it avoids hangs e.g. if you run docker locally without reachabale DNS
+          echo "$1"
+          return 0
+     elif is_ipv4addr "$1"; then
+          # we need also this here as get_aaaa_record is always called after get_a_record and we want to handle this at a low level
+          return 0
+     fi
      check_resolver_bins
      if [[ -z "$ip6" ]]; then
           if [[ "$NODE" == *.local ]]; then
@@ -16533,10 +16587,10 @@ get_aaaa_record() {
                else
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
                fi
+          elif type -p dig &> /dev/null; then
+               ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/'))
           elif type -p host &> /dev/null ; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
-          elif type -p dig &> /dev/null; then
-               ip6=$(filter_ip6_address $(dig +short -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/'))
           elif type -p drill &> /dev/null; then
                ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
           elif type -p nslookup &>/dev/null; then
@@ -16567,7 +16621,7 @@ get_caa_rr_record() {
      OPENSSL_CONF=""
      check_resolver_bins
      if type -p dig &> /dev/null; then
-          raw_caa="$(dig $1 type257 +short)"
+          raw_caa="$(dig +timeout=3 +tries=3 $1 type257 +short)"
           # empty if no CAA record
      elif type -p drill &> /dev/null; then
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
@@ -16739,7 +16793,8 @@ determine_rdns() {
                rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
           fi
      elif type -p dig &> /dev/null; then
-          rDNS=$(dig -x $nodeip +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
+          # 1+2 should suffice. It's a compromise for if e.g. network is down but we have a docker/localhost server
+          rDNS=$(dig -x $nodeip +timeout=1 +tries=2 +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
      elif type -p host &> /dev/null; then
           rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
      elif type -p drill &> /dev/null; then
