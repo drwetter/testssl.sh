@@ -7289,6 +7289,152 @@ compare_server_name_to_cert() {
      return $subret
 }
 
+# This function determines whether the certificate (arg3) contains "visibility
+# information" (see Section 4.3.3 of
+# https://www.etsi.org/deliver/etsi_ts/103500_103599/10352303/01.01.01_60/ts_10352303v010101p.pdf.
+etsi_etls_visibility_info() {
+     local jsonID="$1"
+     local spaces="$2"
+     local cert="$3"
+     local cert_txt="$4"
+     local dercert tag
+     local -a fingerprint=() access_description=()
+     local -i i j len len1 len_name nr_visnames=0
+
+     # If "visibility information" is present, it will appear in the subjectAltName
+     # extension (0603551D11) as an otherName with OID 0.4.0.3523.3.1 (060604009B430301).
+     # OpenSSL displays all names of type otherName as "othername:<unsupported>".
+     # As certificates will rarely include a name encoded as an otherName, check the
+     # text version of the certificate for "othername:<unsupported>" before calling
+     # external functions to obtain the DER encoded certficate.
+     if [[ "$cert_txt" =~ X509v3\ Subject\ Alternative\ Name:.*othername:\<unsupported\> ]]; then
+          dercert="$($OPENSSL x509 -in "$cert" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
+          if [[ "$dercert" =~ 0603551D110101FF04[0-9A-F]*060604009B430301 ]] || \
+             [[ "$dercert" =~ 0603551D1104[0-9A-F]*060604009B430301 ]]; then
+               # Look for the beginning of the subjectAltName extension. It
+               # will begin with the OID (2.5.29.17 = 0603551D11). After the OID
+               # there may be an indication that the extension is critical (0101FF).
+               # Finally will be the tag indicating that the value of the extension is
+               # encoded as an OCTET STRING (04).
+               if [[ "$dercert" =~ 0603551D110101FF04 ]]; then
+                    dercert="${dercert##*0603551D110101FF04}"
+               else
+                    dercert="${dercert##*0603551D1104}"
+               fi
+               # Skip over the encoding of the length of the OCTET STRING.
+               if [[ "${dercert:0:1}" == 8 ]]; then
+                    i="${dercert:1:1}"
+                    i=2*$i+2
+                    dercert="${dercert:i}"
+               else
+                    dercert="${dercert:2}"
+               fi
+               # Next byte should be a 30 (SEQUENCE).
+               if [[ "${dercert:0:2}" == 30 ]]; then
+                    # Get the length of the subjectAltName extension and then skip
+                    # over the encoding of the length.
+                    if [[ "${dercert:2:1}" == 8 ]]; then
+                         case "${dercert:3:1}" in
+                              1) len=2*0x${dercert:4:2}; dercert="${dercert:6}" ;;
+                              2) len=2*0x${dercert:4:4}; dercert="${dercert:8}" ;;
+                              3) len=2*0x${dercert:4:6}; dercert="${dercert:10}" ;;
+                              *) len=0 ;;
+                         esac
+                    else
+                         len=2*0x${dercert:2:2}
+                         dercert="${dercert:4}"
+                    fi
+                    if [[ $len -ne 0 ]] && [[ $len -lt ${#dercert} ]]; then
+                         # loop through all the names and extract the visibility information
+                         for (( i=0; i < len; i=i+len_name )); do
+                              tag="${dercert:i:2}"
+                              i+=2
+                              if [[ "${dercert:i:1}" == 8 ]]; then
+                                   i+=1
+                                   case "${dercert:i:1}" in
+                                        1) i+=1; len_name=2*0x${dercert:i:2}; i+=2 ;;
+                                        2) i+=1; len_name=2*0x${dercert:i:4}; i+=4 ;;
+                                        3) i+=1; len_name=2*0x${dercert:i:6}; i+=4 ;;
+                                        *) len=0 ;;
+                                   esac
+                              else
+                                   len_name=2*0x${dercert:i:2}
+                                   i+=2
+                              fi
+                              [[ "$tag" == A0 ]] || continue
+                              # This is an otherName.
+                              [[ $len_name -gt 16 ]] || continue
+                              [[ "${dercert:i:16}" == 060604009B430301 ]] || continue
+                              # According to the OID, this is visibility information.
+                              j=$i+16
+                              # Skip over the tag (A0) and length for the otherName value.
+                              [[ "${dercert:j:2}" == A0 ]] || continue
+                              j+=2
+                              if [[ "${dercert:j:1}" == 8 ]]; then
+                                   j+=1
+                                   j+=2*0x${dercert:j:1}+1
+                              else
+                                  j+=2
+                              fi
+                              # The value for this otherName is encoded as a SEQUENCE (30):
+                              #    VisibilityInformation ::= SEQUENCE {
+                              #         fingerprint         OCTET STRING (SIZE(10)),
+                              #         accessDescription   UTF8String }
+                              [[ "${dercert:j:2}" == 30 ]] || continue
+                              j+=2
+                              if [[ "${dercert:j:1}" == 8 ]]; then
+                                   j+=1
+                                   case "${dercert:j:1}" in
+                                        1) j+=1; len1=2*0x${dercert:j:2}; j+=2 ;;
+                                        2) j+=1; len1=2*0x${dercert:j:4}; j+=4 ;;
+                                        3) j+=1; len1=2*0x${dercert:j:6}; j+=6 ;;
+                                        4) len1=0 ;;
+                                   esac
+                              else
+                                   len1=2*0x${dercert:j:2}
+                                   j+=2
+                              fi
+                              [[ $len1 -ne 0 ]] || continue
+                              # Next is the 10-byte fingerprint, encoded as an OCTET STRING (04)
+                              [[ "${dercert:j:4}" == 040A ]] || continue
+                              j+=4
+                              fingerprint[nr_visnames]="$(asciihex_to_binary_file "${dercert:j:20}" "/dev/stdout")"
+                              j+=20
+                              # Finally comes the access description, encoded as a UTF8String (0C).
+                              [[ "${dercert:j:2}" == 0C ]] || continue
+                              j+=2
+                              if [[ "${dercert:j:1}" == "8" ]]; then
+                                   j+=1
+                                   case "${dercert:j:1}" in
+                                        1) j+=1; len1=2*0x${dercert:j:2}; j+=2 ;;
+                                        2) j+=1; len1=2*0x${dercert:j:4}; j+=4 ;;
+                                        3) j+=1; len1=2*0x${dercert:j:6}; j+=6 ;;
+                                        4) len1=0 ;;
+                                   esac
+                              else
+                                   len1=2*0x${dercert:j:2}
+                                   j+=2
+                              fi
+                              access_description[nr_visnames]=""$(asciihex_to_binary_file "${dercert:j:len1}" "/dev/stdout")""
+                              nr_visnames+=1
+                         done
+                    fi
+               fi
+          fi
+     fi
+     if [[ $nr_visnames -eq 0 ]]; then
+          outln "Not present"
+          fileout "$jsonID" "INFO" "Not present"
+     else
+          for (( i=0; i < nr_visnames; i++ )); do
+               [[ $i -ne 0 ]] && out "$spaces"
+               outln "$(out_row_aligned_max_width "${fingerprint[i]} / ${access_description[i]}" "$spaces" $TERM_WIDTH)"
+               fileout "$jsonID" "INFO" "${fingerprint[i]} / ${access_description[i]}"
+          done
+     fi
+     return 0
+}
+
 # NOTE: arg3 must contain the text output of $HOSTCERT.
 must_staple() {
      local jsonID="cert_mustStapleExtension"
@@ -7998,6 +8144,10 @@ certificate_info() {
 #         http://src.chromium.org/chrome/trunk/src/net/cert/ev_root_ca_metadata.cc
 #         https://certs.opera.com/03/ev-oids.xml
 #         see #967
+
+     out "$indent"; pr_bold " eTLS                         "
+     jsonID="cert_eTLS"
+     etsi_etls_visibility_info "$jsonID" "$spaces" "$HOSTCERT" "$cert_txt"
 
      out "$indent"; pr_bold " Certificate Validity (UTC)   "
 
