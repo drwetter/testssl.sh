@@ -7433,8 +7433,8 @@ etsi_etls_visibility_info() {
           fi
      fi
      if [[ $nr_visnames -eq 0 ]]; then
-          outln "Not present"
-          fileout "$jsonID" "INFO" "Not present"
+          outln "not present"
+          fileout "$jsonID" "INFO" "not present"
      else
           for (( i=0; i < nr_visnames; i++ )); do
                [[ $i -ne 0 ]] && out "$spaces"
@@ -7565,7 +7565,7 @@ certificate_transparency() {
           fi
      fi
 
-     if [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH"; then
+     if [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH"; then
           # At the moment Certificate Transparency only applies to HTTPS.
           tm_out "N/A"
      else
@@ -8155,7 +8155,8 @@ certificate_info() {
 #         https://certs.opera.com/03/ev-oids.xml
 #         see #967
 
-     out "$indent"; pr_bold " eTLS                         "
+     out "$indent"; pr_bold " \"eTLS\""
+     out " (visibility info)     "
      jsonID="cert_eTLS"
      etsi_etls_visibility_info "$jsonID" "$spaces" "$HOSTCERT" "$cert_txt"
 
