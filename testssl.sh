@@ -4301,7 +4301,7 @@ modify_clienthello() {
           offset+=+4
           len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
 
-          if [[ "$extension_type" == 0000 ]] && [[ -z "$key_share" ]]; then
+          if [[ "$extension_type" == 0000 ]] && [[ -z "$new_key_share" ]]; then
                # If this is an initial ClientHello, then either remove
                # the SNI extension or replace it with the correct server name.
                sni_extension_found=true
@@ -4317,7 +4317,7 @@ modify_clienthello() {
                     tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
                     offset+=$len_extension+4
                fi
-          elif [[ "$extension_type" != 00$KEY_SHARE_EXTN_NR ]] || [[ -z "$key_share" ]]; then
+          elif [[ "$extension_type" != 00$KEY_SHARE_EXTN_NR ]] || [[ -z "$new_key_share" ]]; then
                # If this is in response to a HelloRetryRequest, then do
                # not copy over the old key_share extension, but
                # all other extensions should be copied into the new ClientHello.
@@ -4326,12 +4326,16 @@ modify_clienthello() {
                tls_extensions+="${tls_handshake_ascii:$offset:$len}"
                offset+=$len
           else
+               # This is the key_share extension, and the modified ClientHello
+               # is being created in response to a HelloRetryRequest. Replace
+               # the existing key_share extension with the new one.
+               tls_extensions+="$new_key_share"
                offset+=$len_extension+4
           fi
      done
-     tls_extensions+="$new_key_share$cookie"
+     tls_extensions+="$cookie"
 
-     if ! "$sni_extension_found" && [[ -z "$key_share" ]]; then
+     if ! "$sni_extension_found" && [[ -z "$new_key_share" ]]; then
           tm_out "$tls_handshake_ascii"
           return 0
      fi
