@@ -232,7 +232,7 @@ IGN_OCSP_PROXY=${IGN_OCSP_PROXY:-false} # Also when --proxy is supplied it is ig
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 MAX_SOCKET_FAIL=${MAX_SOCKET_FAIL:-2}   # If this many failures for TCP socket connects are reached we terminate
 MAX_OSSL_FAIL=${MAX_OSSL_FAIL:-2}       # If this many failures for s_client connects are reached we terminate
-MAX_HEADER_FAIL=${MAX_HEADER_FAIL:-3}   # If this many failures for HTTP GET are encountered we terminate
+MAX_HEADER_FAIL=${MAX_HEADER_FAIL:-2}   # If this many failures for HTTP GET are encountered we don't try again to get the header
 MAX_WAITSOCK=${MAX_WAITSOCK:-10}        # waiting at max 10 seconds for socket reply. There shouldn't be any reason to change this.
 CCS_MAX_WAITSOCK=${CCS_MAX_WAITSOCK:-5} # for the two CCS payload (each). There shouldn't be any reason to change this.
 HEARTBLEED_MAX_WAITSOCK=${HEARTBLEED_MAX_WAITSOCK:-8}      # for the heartbleed payload. There shouldn't be any reason to change this.
@@ -284,6 +284,8 @@ NR_SOCKET_FAIL=0                        # Counter for socket failures
 NR_OSSL_FAIL=0                          # .. for OpenSSL connects
 NR_HEADER_FAIL=0                        # .. for HTTP_GET
 PROTOS_OFFERED=""                       # This keeps which protocol is being offered. See has_server_protocol().
+CURVES_OFFERED=""                       # This keeps which curves have been detected. Just for error handling
+KNOWN_OSSL_PROB=false                   # We need OpenSSL a few times. This variable is an indicator if we can't connect. Eases handling
 DETECTED_TLS_VERSION=""
 TLS_EXTENSIONS=""
 declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
@@ -1959,6 +1961,8 @@ run_http_header() {
      local header
      local referer useragent
      local url redirect
+     local jsonID="HTTP_status_code"
+     local spaces="                            "
 
      HEADERFILE=$TEMPDIR/$NODEIP.http_header.txt
      if [[ $NR_HEADER_FAIL -eq 0 ]]; then
@@ -1966,16 +1970,16 @@ run_http_header() {
           outln; pr_headlineln " Testing HTTP header response @ \"$URL_PATH\" "
           outln
      fi
+     if [[ $NR_HEADER_FAIL -ge $MAX_HEADER_FAIL ]]; then
+          # signal to caller we have a problem
+          return 1
+     fi
 
+     pr_bold " HTTP Status Code           "
      [[ -z "$1" ]] && url="/" || url="$1"
      if [[ "$SOCKETHEADER" == true ]]; then
-          # This is just for testing only. It doesn't work (yet)
-          tls_sockets "03" "$TLS12_CIPHER" "" "" "" false
-          debugme echo "--> $?"
-          printf -- "%b" "$GET_REQ11" >&5         # This GET request is not being logged on the server side --> probably we're still on the TLS layer
-          cat <&5 >$HEADERFILE
-          debugme xxd "$HEADERFILE"               # 1503 -> TLS alert
-          close_socket
+          :
+          #FIXME: would be great to complete the handshake and then e.g. tunnel HTTP over it
      else
           printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
@@ -1998,26 +2002,38 @@ run_http_header() {
                     fileout "HTTP_status_code" "WARN" "HTTP header request failed"
                     debugme cat $HEADERFILE
                     ((NR_HEADER_FAIL++))
-                    connectivity_problem $NR_HEADER_FAIL $MAX_HEADER_FAIL "HTTP header connect problem" "repeated HTTP header connect problems, doesn't make sense to continue"
-                    return 1
                fi
           fi
      fi
      if [[ ! -s $HEADERFILE ]]; then
-          prln_warning " HTTP header reply empty"
-          fileout "HTTP_status_code" "WARN" "HTTP header reply empty"
           ((NR_HEADER_FAIL++))
-          connectivity_problem $NR_HEADER_FAIL $MAX_HEADER_FAIL "HTTP header zero" "repeatedly HTTP header was zero, doesn't make sense to continue"
-          return 1
+          if [[ $NR_HEADER_FAIL -ge $MAX_HEADER_FAIL ]]; then
+               # Now, try to give a hint whether it would make sense to try with OpenSSL 1.1.0 or 1.1.1 instead
+               if [[ $CURVES_OFFERED == X448 ]] && ! "$HAS_X448" ; then
+                    generic_nonfatal "HTTP header was repeatedly zero due to missing X448 curve." "${spaces}OpenSSL 1.1.1 might help. Skipping complete HTTP header section."
+               elif [[ $CURVES_OFFERED == X25519 ]] && ! "$HAS_X25519" ; then
+                    generic_nonfatal "HTTP header was repeatedly zero due to missing X25519 curve." "${spaces}OpenSSL 1.1.0 might help. Skipping complete HTTP header section."
+               elif [[ $CURVES_OFFERED =~ X25519 ]] && [[ $CURVES_OFFERED =~ X448 ]] && ! "$HAS_X25519" && ! "$HAS_X448"; then
+                    generic_nonfatal "HTTP header was repeatedly zero due to missing X25519/X448 curves." "${spaces}OpenSSL >=1.1.0 might help. Skipping complete HTTP header section."
+               else
+                    # we could give more hints but these are the most likely cases
+                    generic_nonfatal "HTTP header was repeatedly zero." "Skipping complete HTTP header section."
+               fi
+               KNOWN_OSSL_PROB=true
+               return 1
+          else
+               pr_warning "HTTP header reply empty. "
+               fileout "$jsonID" "WARN" "HTTP header reply empty"
+          fi
      fi
 
-     # populate vars for HTTP time
+     # Populate vars for HTTP time
      debugme echo "$NOW_TIME: $HTTP_TIME"
 
      # delete from pattern til the end. We ignore any leading spaces (e.g. www.amazon.de)
      sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' \
          -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<?xml/,$d' $HEADERFILE >$HEADERFILE.tmp
-         # ^^^ Attention: the filtering for the html body only as of now, doesn't work for other content yet
+         # ^^^ Attention: filtering is for html body only as of now, doesn't work for other content yet
      mv $HEADERFILE.tmp $HEADERFILE
 
      HTTP_STATUS_CODE=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
@@ -2025,14 +2041,12 @@ run_http_header() {
      msg_thereafter=$(strip_lf "$msg_thereafter")                                                   # field separator, otherwise we need a loop with awk
      debugme echo "Status/MSG: $HTTP_STATUS_CODE $msg_thereafter"
 
-     pr_bold " HTTP Status Code           "
-     jsonID="HTTP_status_code"
-     out "  $HTTP_STATUS_CODE$msg_thereafter"
+     [[ -n "$HTTP_STATUS_CODE" ]] && out "  $HTTP_STATUS_CODE$msg_thereafter"
      case $HTTP_STATUS_CODE in
           301|302|307|308)
                redirect=$(grep -a '^Location' $HEADERFILE | sed 's/Location: //' | tr -d '\r\n')
                out ", redirecting to \""; pr_url "$redirect"; out "\""
-               if [[ $redirect == "http://"* ]]; then
+               if [[ $redirect =~ http:// ]]; then
                     pr_svrty_high " -- Redirect to insecure URL (NOT ok)"
                     fileout "insecure_redirect" "HIGH" "Redirect to insecure URL: \"$redirect\""
                fi
@@ -2059,7 +2073,7 @@ run_http_header() {
                fileout "$jsonID" "INFO" "$HTTP_STATUS_CODE$msg_thereafter (\"$URL_PATH\")"
                ;;
           "")
-               pr_warning ". No HTTP status code??"
+               prln_warning "No HTTP status code."
                fileout "$jsonID" "WARN" "No HTTP status code"
                return 1
                ;;
@@ -5791,7 +5805,11 @@ sub_session_resumption() {
 
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>/dev/null
      ret1=$?
-     if "$byID" && [[ $OSSL_VER_MINOR == "1.1" ]] && [[ $OSSL_VER_MAJOR == "1" ]] && [[ ! -s "$sess_data" ]]; then
+     if [[ $ret1 -ne 0 ]]; then
+          debugme echo -n "Couldn't connect #1  "
+          return 7
+     fi
+     if "$byID" && [[ $OSSL_VER_MINOR == 1.1 ]] && [[ $OSSL_VER_MAJOR == 1 ]] && [[ ! -s "$sess_data" ]]; then
           # it seems OpenSSL indicates no Session ID resumption by just not generating output
           debugme echo -n "No session resumption byID (empty file)"
           ret=2
@@ -5801,6 +5819,10 @@ sub_session_resumption() {
           if [[ $DEBUG -ge 2 ]]; then
                echo -n "$ret1, $ret2, "
                [[ -s "$sess_data" ]] && echo "not empty" || echo "empty"
+          fi
+          if [[ $ret2 -ne 0 ]]; then
+               debugme echo -n "Couldn't connect #2  "
+               return 7
           fi
           # now get the line and compare the numbers read" and "written" as a second criteria.
           rw_line="$(awk '/^SSL handshake has read/ { print $5" "$(NF-1) }' "$tmpfile" )"
@@ -5821,7 +5843,7 @@ sub_session_resumption() {
                ret=0
           else
                debugme echo -n "unclear status: $ret1, $ret2, $new_sid, $new_sid2  -- "
-               ret=7
+               ret=5
           fi
           if [[ $DEBUG -ge 2 ]]; then
                "$byID" && echo "byID" || echo "by ticket"
@@ -8228,7 +8250,6 @@ certificate_info() {
           outln
      fi
 
-
      out "$indent"; pr_bold " Certificate Revocation List  "
      jsonID="cert_crlDistributionPoints"
      # ~ get next 50 lines after pattern , strip until Signature Algorithm and retrieve URIs
@@ -8541,12 +8562,13 @@ run_server_defaults() {
      done
 
      determine_tls_extensions
-     if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != "-ssl2" ]]; then
+     if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
           cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
           >$ERRFILE
           [[ -z "$sessticket_lifetime_hint" ]] && sessticket_lifetime_hint=$(awk '/session ticket lifetime/' $TMPFILE)
      fi
 
+     debugme echo "# certificates found $certs_found"
      # Now that all of the server's certificates have been found, determine for
      # each certificate whether certificate transparency information is provided.
      for (( i=1; i <= certs_found; i++ )); do
@@ -8622,13 +8644,18 @@ run_server_defaults() {
              out "Tickets no, "
              fileout "$jsonID" "INFO" "not supported"
              ;;
+          5) SESS_RESUMPTION[2]="ticket=noclue"
+             pr_warning "Ticket resumption test failed, pls report / "
+             fileout "$jsonID" "WARN" "check failed, pls report"
+             ((ret++))
+             ;;
           6) SESS_RESUMPTION[2]="ticket=clientauth"
              pr_warning "Client Auth: Ticket resumption test not supported / "
              fileout "$jsonID" "WARN" "check couldn't be performed because of client authentication"
              ;;
-          7) SESS_RESUMPTION[2]="ticket=noclue"
-             pr_warning "Ticket resumption test failed, pls report / "
-             fileout "$jsonID" "WARN" "check failed, pls report"
+          7) SESS_RESUMPTION[2]="ticket=unsuccessful"
+             pr_warning "Connect problem: Ticket resumption test not possible / "
+             fileout "$jsonID" "WARN" "check failed because of connect problem"
              ((ret++))
              ;;
      esac
@@ -8649,14 +8676,19 @@ run_server_defaults() {
                   outln "ID: no"
                   fileout "$jsonID" "INFO" "not supported"
                   ;;
+               5) SESS_RESUMPTION[1]="ID=noclue"
+                  prln_warning "ID resumption test failed, pls report"
+                  fileout "$jsonID" "WARN" "check failed, pls report"
+                  ((ret++))
+                  ;;
                6) SESS_RESUMPTION[1]="ID=clientauth"
                   [[ ${SESS_RESUMPTION[2]} =~ clientauth ]] || pr_warning "Client Auth: "
                   prln_warning "ID resumption resumption test not supported"
                   fileout "$jsonID" "WARN" "check couldn't be performed because of client authentication"
                   ;;
-               7) SESS_RESUMPTION[1]="ID=noclue"
-                  prln_warning "ID resumption test failed, pls report"
-                  fileout "$jsonID" "WARN" "check failed, pls report"
+               7) SESS_RESUMPTION[1]="ID=unsuccessful"
+                  prln_warning "ID resumption test failed"
+                  fileout "$jsonID" "WARN" "check failed because of connect problem"
                   ((ret++))
                   ;;
           esac
@@ -8700,6 +8732,9 @@ run_server_defaults() {
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $OPTIMAL_PROTO") 2>>$ERRFILE </dev/null | \
                     awk '/-----BEGIN/,/-----END/ { print $0 }'  >$HOSTCERT.nosni
           fi
+     elif [[ $certs_found -eq 0 ]] && [[ -s "$HOSTCERT" ]]; then
+          outln
+          generic_nonfatal "Problem: Host certificate found but we can't continue with \"server defaults\""
      fi
      [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
 
@@ -9104,6 +9139,8 @@ run_pfs() {
                fi
           fi
      fi
+     CURVES_OFFERED="$curves_offered"
+     CURVES_OFFERED=$(strip_trailing_space "$CURVES_OFFERED")
 
      # find out what groups are supported.
      if "$using_sockets" && ( "$pfs_tls13_offered" || "$ffdhe_offered" ); then
@@ -10840,7 +10877,7 @@ check_tls_serverhellodone() {
           remaining=$tls_alert_ascii_len-$i
           [[ $remaining -lt 4 ]] && return 1
           tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
-          [[ $tls_err_level == "02" ]] && DETECTED_TLS_VERSION="" && tm_out "" && return 0
+          [[ $tls_err_level == 02 ]] && DETECTED_TLS_VERSION="" && tm_out "" && return 0
      done
 
      # If there is a serverHelloDone or Finished, then we are done.
@@ -12194,8 +12231,8 @@ prepare_tls_clienthello() {
      local offer_compression=false compression_methods
 
      # TLSv1.3 ClientHello messages MUST specify only the NULL compression method.
-     [[ "$5" == "true" ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
-     [[ "$6" == "false" ]] && new_socket=false
+     [[ "$5" == true ]] && [[ "0x$tls_low_byte" -le "0x03" ]] && offer_compression=true
+     [[ "$6" == false ]] && new_socket=false
 
      cipher_suites="$2"                      # we don't have the leading \x here so string length is two byte less, see next
      len_ciph_suites_byte=${#cipher_suites}
@@ -13564,8 +13601,8 @@ run_renego() {
                     ;;
           esac
      else
-          prln_warning "handshake didn't succeed"
-          fileout "$jsonID" "WARN" "handshake didn't succeed" "$cve" "$cwe"
+          prln_warning "OpenSSL handshake didn't succeed"
+          fileout "$jsonID" "WARN" "OpenSSL handshake didn't succeed" "$cve" "$cwe"
      fi
 
      # see: https://community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
@@ -13752,7 +13789,7 @@ run_breach() {
      local hint=""
      local jsonID="BREACH"
 
-     [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH" && return 7
+     [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH" && return 7
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
@@ -13761,15 +13798,20 @@ run_breach() {
           fileout "$jsonID" "INFO" "was not tested, server side requires x509 authentication" "$cve" "$cwe"
      fi
 
+     # if [[ $NR_HEADER_FAIL -ge $MAX_HEADER_FAIL ]]; then
+     #      pr_warning "Retrieving HTTP header failed before. Skipping."
+     #      fileout "$jsonID" "WARN" "HTTP response was wampty before" "$cve" "$cwe"
+     #      outln
+     #      return 1
+     # fi
+
      [[ -z "$url" ]] && url="/"
      disclaimer=" - only supplied \"$url\" tested"
 
      referer="https://google.com/"
      [[ "$NODE" =~ google ]] && referer="https://yandex.ru/"     # otherwise we have a false positive for google.com
-
      useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
-
      printf "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      was_killed=$?                           # !=0 was killed
@@ -13777,12 +13819,12 @@ run_breach() {
      result=$(strip_lf "$result")
      debugme grep '^Content-Encoding' $TMPFILE
      if [[ ! -s $TMPFILE ]]; then
-          pr_warning "failed (HTTP header request stalled"
+          pr_warning "failed (HTTP header request stalled or empty return"
           if [[ $was_killed -ne 0 ]]; then
                pr_warning " and was terminated"
                fileout "$jsonID" "WARN" "Test failed as HTTP request stalled and was terminated" "$cve" "$cwe"
           else
-               fileout "$jsonID" "WARN" "Test failed as HTTP request stalled" "$cve" "$cwe"
+               fileout "$jsonID" "WARN" "Test failed as HTTP response was empty" "$cve" "$cwe"
           fi
           prln_warning ") "
           ret=1
@@ -13828,7 +13870,7 @@ run_sweet32() {
      # Measurements show that there's little impact whether we use sockets or TLS here, so the default is sockets here
      if "$using_sockets"; then
           for proto in 03 02 01 00; do
-               "$FAST" && [[ "$proto" != "03" ]] && break
+               "$FAST" && [[ "$proto" != 03 ]] && break
                ! "$FAST" && [[ $(has_server_protocol "$proto") -eq 1 ]] && continue
                tls_sockets "$proto" "${sweet32_ciphers_hex}, 00,ff"
                sclient_success=$?
@@ -13840,8 +13882,8 @@ run_sweet32() {
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $sweet32_ciphers))
           for proto in -no_ssl2 -tls1_1 -tls1 -ssl3; do
                [[ $nr_supported_ciphers -eq 0 ]] && break
-               ! "$HAS_SSL3" && [[ "$proto" == "-ssl3" ]] && continue
-               if [[ "$proto" != "-no_ssl2" ]]; then
+               ! "$HAS_SSL3" && [[ "$proto" == -ssl3 ]] && continue
+               if [[ "$proto" != -no_ssl2 ]]; then
                     "$FAST" && break
                     [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
                fi
@@ -16488,6 +16530,18 @@ ip_fatal() {
      return 0
 }
 
+# This gneric function outputs an error onto the screen and handles logging.
+# arg1: string to print / to write to file, arg2 (optional): additional hint to write
+#
+generic_nonfatal() {
+     prln_magenta "$1" >&2
+     [[ -n $2 ]] && outln "$2"
+     [[ -n "$LOGFILE" ]] && prln_magenta "$1" >>$LOGFILE && [[ -n $2 ]] && outln "$2" >>$LOGFILE
+     outln
+     fileout "scanProblem" "WARN" "$1"
+     return 0
+}
+
 initialize_engine(){
      # for now only GOST engine
      grep -q '^# testssl config file' "$OPENSSL_CONF" 2>/dev/null && \
@@ -17031,7 +17085,7 @@ sclient_auth() {
 }
 
 
-# this function determines OPTIMAL_PROTO. It is a workaround function as under certain circumstances
+# This function determines OPTIMAL_PROTO. It is a workaround function as under certain circumstances
 # (e.g. IIS6.0 and openssl 1.0.2 as opposed to 1.0.1) needs a protocol otherwise s_client -connect will fail!
 # Circumstances observed so far: 1.) IIS 6  2.) starttls + dovecot imap
 # The first try in the loop is empty as we prefer not to specify always a protocol if we can get along w/o it
@@ -17039,8 +17093,12 @@ sclient_auth() {
 determine_optimal_proto() {
      local all_failed=true
      local tmp=""
+     local proto=""
+     local using_sockets=true
 
      >$ERRFILE
+     "$SSL_NATIVE" && using_sockets=false
+
      if [[ -n "$1" ]]; then
           # starttls workaround needed see https://github.com/drwetter/testssl.sh/issues/188 -- kind of odd
           for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -tls1_3 -ssl2; do
@@ -17050,6 +17108,7 @@ determine_optimal_proto() {
                     -ssl2)   "$HAS_SSL2" || continue ;;
                     *) ;;
                esac
+               #FIXME: to be replaced / added by socket ( if "$using_sockets" ...)
                $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg -starttls $1") </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
                     all_failed=false
@@ -17060,32 +17119,90 @@ determine_optimal_proto() {
           "$all_failed" && STARTTLS_OPTIMAL_PROTO=""
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
-          for OPTIMAL_PROTO in '' -tls1_2 -tls1 -tls1_3 -ssl3 -tls1_1 -ssl2; do
-               case $OPTIMAL_PROTO in
-                    -tls1_3) "$HAS_TLS13" || continue ;;
-                    -ssl3)   "$HAS_SSL3" || continue ;;
-                    -ssl2)   "$HAS_SSL2" || continue ;;
-                    *) ;;
-               esac
-               $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
-               if sclient_auth $? $TMPFILE; then
-                    # we use the successful handshake at least to get one valid protocol supported -- it saves us time later
-                    if [[ -z "$OPTIMAL_PROTO" ]]; then
-                         # convert to openssl terminology
-                         tmp=$(get_protocol $TMPFILE)
-                         tmp=${tmp/\./_}
-                         tmp=${tmp/v/}
-                         tmp="$(tolower $tmp)"
-                         add_tls_offered "${tmp}" yes
-                    else
-                         add_tls_offered "${OPTIMAL_PROTO/-/}" yes
+          if "$using_sockets"; then
+               for proto in 03 01 04 00 02 22; do
+                    case $proto in
+                         03) tls_sockets "$proto" "$TLS12_CIPHER"
+                              if [[ $? -eq 0 ]]; then
+                                   add_tls_offered tls1_2 yes; OPTIMAL_PROTO="-tls1_2"
+                                   all_failed=false
+                                   break
+                              elif [[ $? -eq 2 ]]; then
+                                   case $(get_protocol "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt") in
+                                        *1.1)   add_tls_offered tls1_1 yes; OPTIMAL_PROTO="-tls1_1" ;;
+                                        TLSv1)  add_tls_offered tls1 yes; OPTIMAL_PROTO="-tls1" ;;
+                                        SSLv3)  add_tls_offered ssl3 yes; OPTIMAL_PROTO="-ssl3" ;;
+                                   esac
+                                   all_failed=false
+                                   break
+                              fi ;;
+                         04) tls_sockets "$proto" "$TLS13_CIPHER"
+                              if [[ $? -eq 0 ]]; then
+                                   add_tls_offered tls1_3 yes; OPTIMAL_PROTO="-tls1_3"
+                                   all_failed=false
+                                   break
+                              fi ;;
+                         01|00|02) tls_sockets "$proto" "$TLS_CIPHER" "" "" "true"
+                              if [[ $? -eq 0 ]]; then
+                                   case $proto in
+                                        01)  add_tls_offered tls1 yes; OPTIMAL_PROTO="-tls1" ;;
+                                        00)  add_tls_offered ssl3 yes; OPTIMAL_PROTO="-ssl3" ;;
+                                        02)  add_tls_offered tls1_1 yes; OPTIMAL_PROTO="-tls1_1" ;;
+                                   esac
+                                   all_failed=false
+                                   break
+                              elif [[ $? -eq 2 ]]; then
+                                   case $(get_protocol "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt") in
+                                        *1.1)  add_tls_offered tls1_1 yes; OPTIMAL_PROTO="-tls1_1" ;;
+                                        TLSv1)  add_tls_offered tls1 yes; OPTIMAL_PROTO="-tls1" ;;
+                                        SSLv3)  add_tls_offered ssl3 yes; OPTIMAL_PROTO="-ssl3" ;;
+                                   esac
+                                   all_failed=false
+                                   break
+                              fi ;;
+                         22)  sslv2_sockets
+                              [[ $? -eq 0 ]] && all_failed=false && add_tls_offered ssl2 yes && OPTIMAL_PROTO="-ssl2"
+                              ;;
+                    esac
+               done
+               cp $TEMPDIR/$NODEIP.parse_tls_serverhello.txt $TMPFILE
+               debugme echo "proto: $proto"
+          else
+               # no sockets
+               for OPTIMAL_PROTO in '' -tls1_2 -tls1 -tls1_3 -ssl3 -tls1_1 -ssl2; do
+                    case $OPTIMAL_PROTO in
+                         -tls1_3) "$HAS_TLS13" || continue ;;
+                         -ssl3)   "$HAS_SSL3" || continue ;;
+                         -ssl2)   "$HAS_SSL2" || continue ;;
+                         *) ;;
+                    esac
+                    $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
+                    if sclient_auth $? $TMPFILE; then
+                         # we use the successful handshake at least to get one valid protocol supported -- it saves us time later
+                         if [[ -z "$OPTIMAL_PROTO" ]]; then
+                              # convert to openssl terminology
+                              tmp=$(get_protocol $TMPFILE)
+                              tmp=${tmp/\./_}
+                              tmp=${tmp/v/}
+                              tmp="$(tolower $tmp)"
+                              add_tls_offered "${tmp}" yes
+                              case $tmp in
+                                   tls1)   OPTIMAL_PROTO="-tls1" ;;
+                                   tls1_1) OPTIMAL_PROTO="-tls1_1" ;;
+                                   tls1_2) OPTIMAL_PROTO="-tls1_2" ;;
+                                   tls1_3) OPTIMAL_PROTO="-tls1_3" ;;
+                                   ssl2)   OPTIMAL_PROTO="-ssl2" ;;
+                              esac
+                         else
+                              add_tls_offered "${OPTIMAL_PROTO/-/}" yes
+                         fi
+                         debugme echo "one proto determined: $tmp"
+                         all_failed=false
+                         break
                     fi
-                    debugme echo "one proto determined: $tmp"
-                    all_failed=false
-                    break
-               fi
-               all_failed=true
-          done
+                    all_failed=true
+               done
+          fi
           "$all_failed" && OPTIMAL_PROTO=""
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
           if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
@@ -17093,8 +17210,8 @@ determine_optimal_proto() {
                ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
                [[ $? -ne 0 ]] && exit $ERR_CLUELESS
           fi
+          grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
      fi
-     grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
 
      if "$all_failed"; then
           outln
@@ -18424,6 +18541,7 @@ nodeip_to_proper_ip6() {
 reset_hostdepended_vars() {
      TLS_EXTENSIONS=""
      PROTOS_OFFERED=""
+     CURVES_OFFERED=""
      OPTIMAL_PROTO=""
      SERVER_SIZE_LIMIT_BUG=false
 }
