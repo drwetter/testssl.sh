@@ -1246,9 +1246,9 @@ get_cipher() {
      local cipher=""
      local server_hello="$(< "$1")"
 
-     if [[ "$server_hello" =~ Cipher\ *:\ ([A-Z0-9]+-[A-Z0-9\-]+|TLS_[A-Z0-9_]+) ]]; then
+     if [[ "$server_hello" =~ Cipher\ *:\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]]; then
           cipher="${BASH_REMATCH##* }"
-     elif [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Z0-9\-]+|TLS_[A-Z0-9_]+) ]]; then
+     elif [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]]; then
           cipher="${BASH_REMATCH##* }"
      fi
      tm_out "$cipher"
@@ -6729,7 +6729,7 @@ sclient_connect_successful() {
      if [[ "$server_hello" =~ $re ]]; then
           [[ -n "${BASH_REMATCH[1]}" ]] && return 0
      fi
-     [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Z0-9\-]+|TLS_[A-Z0-9_]+) ]] && return 0
+     [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]] && return 0
      # what's left now is: master key empty and Session-ID not empty
      # ==> probably client-based auth with x509 certificate. We handle that at other places
      #
