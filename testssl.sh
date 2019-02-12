@@ -17161,11 +17161,11 @@ determine_optimal_proto() {
                                    break
                               fi ;;
                          22)  sslv2_sockets
-                              [[ $? -eq 0 ]] && all_failed=false && add_tls_offered ssl2 yes && OPTIMAL_PROTO="-ssl2"
+                              [[ $? -eq 3 ]] && all_failed=false && add_tls_offered ssl2 yes && OPTIMAL_PROTO="-ssl2"
                               ;;
                     esac
                done
-               cp $TEMPDIR/$NODEIP.parse_tls_serverhello.txt $TMPFILE
+               [[ "$proto" != 22 ]] && cp $TEMPDIR/$NODEIP.parse_tls_serverhello.txt $TMPFILE
                debugme echo "proto: $proto"
           else
                # no sockets
@@ -17210,7 +17210,7 @@ determine_optimal_proto() {
                ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
                [[ $? -ne 0 ]] && exit $ERR_CLUELESS
           fi
-          grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
+          [[ "$proto" != 22 ]] && grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
      fi
 
      if "$all_failed"; then
