@@ -7005,11 +7005,11 @@ get_server_certificate() {
      success=7
 
      if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
-          $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY -ssl2 </dev/null 2>$ERRFILE >$TMPFILE
-          sclient_connect_successful $? $TMPFILE && success=0
-          if [[ $success -eq 0 ]]; then
-               extract_certificates "ssl2"
-               success=$?
+          success=1
+          sslv2_sockets "" "true"
+          if [[ $? -eq 3 ]]; then
+               mv $TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt $TMPFILE
+               success=0
           fi
           tmpfile_handle ${FUNCNAME[0]}.txt
           return $success
@@ -8454,7 +8454,9 @@ run_server_defaults() {
           # specifies TLSv1.1 and doesn't include a server name extension.
           # So, for each public key type for which a certificate was found,
           # try again, but only with TLSv1.1 and without SNI.
-          if [[ $n -ge 10 ]]; then
+          if [[ $n -ne 2 ]] && [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
+               ciphers_to_test[n]=""
+          elif [[ $n -ge 10 ]]; then
                ciphers_to_test[n]=""
                [[ ${success[n-9]} -eq 0 ]] && [[ $(has_server_protocol "tls1_1") -ne 1 ]] && \
                     ciphers_to_test[n]="${ciphers_to_test[n-9]}" && certificate_type[n]="${certificate_type[n-9]}"
@@ -10127,7 +10129,8 @@ parse_sslv2_serverhello() {
      "$parse_complete" || return $ret
 
      # not sure why we need this
-     rm -f $HOSTCERT $TEMPDIR/intermediatecerts.pem
+     rm -f $HOSTCERT
+     > $TEMPDIR/intermediatecerts.pem
      if [[ $ret -eq 3 ]]; then
           certificate_len=2*$(hex2dec "$v2_hello_cert_length")
 
@@ -11780,7 +11783,7 @@ parse_tls_serverhello() {
      if [[ "$process_full" =~ all ]]; then
           # not sure why we need this
           [[ -e "$HOSTCERT" ]] && rm "$HOSTCERT"
-          [[ -e "$TEMPDIR/intermediatecerts.pem" ]] && rm "$TEMPDIR/intermediatecerts.pem"
+          [[ -e "$TEMPDIR/intermediatecerts.pem" ]] && > "$TEMPDIR/intermediatecerts.pem"
      fi
      if [[ $tls_certificate_ascii_len -ne 0 ]]; then
           # The first certificate is the server's certificate. If there are anything
