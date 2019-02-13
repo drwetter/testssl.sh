@@ -2965,194 +2965,6 @@ prettyprint_local() {
 }
 
 
-# list ciphers (and makes sure you have them locally configured)
-# arg[1]: non-TLSv1.3 cipher list (or anything else)
-# arg[2]: TLSv1.3 cipher list
-# arg[3]: protocol (e.g., -ssl2)
-listciphers() {
-     local -i ret
-     local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
-     local tls13_ciphers="$TLS13_OSSL_CIPHERS"
-
-     [[ "$2" != "ALL" ]] && tls13_ciphers="$2"
-     if "$HAS_CIPHERSUITES"; then
-          $OPENSSL ciphers $3 -ciphersuites "$tls13_ciphers" "$1" &>$TMPFILE
-     elif [[ -n "$tls13_ciphers" ]]; then
-          $OPENSSL ciphers $3 "$tls13_ciphers:$1" &>$TMPFILE
-     else
-          $OPENSSL ciphers $3 "$1" &>$TMPFILE
-     fi
-     ret=$?
-     debugme cat $TMPFILE
-
-     tmpfile_handle $FUNCNAME.$debugname.txt
-     return $ret
-}
-
-
-# argv[1]: non-TLSv1.3 cipher list to test in OpenSSL syntax
-# argv[2]: TLSv1.3 cipher list to test in OpenSSL syntax
-# argv[3]: string on console / HTML or "finding"
-# argv[4]: rating whether ok to offer
-# argv[5]: string to be appended for fileout
-# argv[6]: non-SSLv2 cipher list to test (hexcodes), if using sockets
-# argv[7]: SSLv2 cipher list to test (hexcodes), if using sockets
-# argv[8]: true if using sockets, false if not
-# argv[9]: CVE
-# argv[10]: CWE
-#
-sub_cipherlists() {
-     local -i i len sclient_success=1
-     local cipherlist sslv2_cipherlist detected_ssl2_ciphers
-     local singlespaces
-     local proto=""
-     local -i ret=0
-     local jsonID="cipherlist"
-     local using_sockets="${8}"
-     local cve="${9}"
-     local cwe="${10}"
-
-     pr_bold "$3    "
-     [[ "$OPTIMAL_PROTO" == -ssl2 ]] && proto="$OPTIMAL_PROTO"
-     jsonID="${jsonID}_$5"
-
-     if "$using_sockets" || listciphers "$1" "$2" $proto; then
-          if ! "$using_sockets" || ( "$FAST" && listciphers "$1" "$2" -tls1 ); then
-               for proto in -no_ssl2 -tls1_2 -tls1_1 -tls1 -ssl3; do
-                    if [[ "$proto" == -tls1_2 ]]; then
-                         # If $OPENSSL doesn't support TLSv1.3 or if no TLSv1.3
-                         # ciphers are being tested, then a TLSv1.2 ClientHello
-                         # was tested in the first iteration.
-                         ! "$HAS_TLS13" && continue
-                         [[ -z "$2" ]] && continue
-                    fi
-                    ! "$HAS_SSL3" && [[ "$proto" == -ssl3 ]] && continue
-                    if [[ "$proto" != -no_ssl2 ]]; then
-                         "$FAST" && continue
-                         [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
-                    fi
-                    $OPENSSL s_client $(s_client_options "-cipher "$1" -ciphersuites "\'$2\'" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $proto") 2>$ERRFILE >$TMPFILE </dev/null
-                    sclient_connect_successful $? $TMPFILE
-                    sclient_success=$?
-                    debugme cat $ERRFILE
-                    [[ $sclient_success -eq 0 ]] && break
-               done
-          else
-               for proto in 04 03 02 01 00; do
-                    # If $cipherlist doesn't contain any TLSv1.3 ciphers, then there is
-                    # no reason to try a TLSv1.3 ClientHello.
-                    [[ "$proto" == 04 ]] && [[ ! "$6" =~ 13,0 ]] && continue
-                    [[ $(has_server_protocol "$proto") -eq 1 ]] && continue
-                    cipherlist="$(strip_inconsistent_ciphers "$proto" ", $6")"
-                    cipherlist="${cipherlist:2}"
-                    if [[ -n "$cipherlist" ]] && [[ "$cipherlist" != 00,ff ]]; then
-                         tls_sockets "$proto" "$cipherlist"
-                         sclient_success=$?
-                         [[ $sclient_success -eq 2 ]] && sclient_success=0
-                         [[ $sclient_success -eq 0 ]] && break
-                    fi
-               done
-          fi
-          if [[ $sclient_success -ne 0 ]] && [[ 1 -ne $(has_server_protocol ssl2) ]]; then
-               if ( [[ -z "$7" ]] || "$FAST" ) && "$HAS_SSL2" && listciphers "$1" "" -ssl2; then
-                    $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY -ssl2 2>$ERRFILE >$TMPFILE </dev/null
-                    sclient_connect_successful $? $TMPFILE
-                    sclient_success=$?
-                    debugme cat $ERRFILE
-               elif [[ -n "$7" ]]; then
-                    sslv2_sockets "$7" "true"
-                    if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
-                         sslv2_cipherlist="$(strip_spaces "${6//,/}")"
-                         len=${#sslv2_cipherlist}
-                         detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
-                         for (( i=0; i<len; i=i+6 )); do
-                              [[ "$detected_ssl2_ciphers" =~ "x${sslv2_cipherlist:i:6}" ]] && sclient_success=0 && break
-                         done
-                    fi
-               fi
-          fi
-          if [[ $sclient_success -ne 0 ]] && $BAD_SERVER_HELLO_CIPHER; then
-               # If server failed with a known error, raise it to the user.
-               if [[ $STARTTLS_PROTOCOL == mysql ]]; then
-                    pr_warning "SERVER_ERROR: test inconclusive due to MySQL Community Edition (yaSSL) bug."
-                    fileout "$jsonID" "WARN" "SERVER_ERROR, test inconclusive due to MySQL Community Edition (yaSSL) bug." "$cve" "$cwe"
-               else
-                    pr_warning "SERVER_ERROR: test inconclusive."
-                    fileout "$jsonID" "WARN" "SERVER_ERROR, test inconclusive." "$cve" "$cwe"
-               fi
-               ((ret++))
-          else
-               # Otherwise the error means the server doesn't support that cipher list.
-               case $4 in
-                    2)  if [[ $sclient_success -eq 0 ]]; then
-                              # Strong is excellent to offer
-                              pr_svrty_best "offered (OK)"
-                              fileout "$jsonID" "OK" "offered" "$cve" "$cwe"
-                         else
-                              pr_svrty_medium "not offered"
-                              fileout "$jsonID" "MEDIUM" "not offered" "$cve" "$cwe"
-                         fi
-                         ;;
-                    1)  if [[ $sclient_success -eq 0 ]]; then
-                              # High is good to offer
-                              pr_svrty_good "offered (OK)"
-                              fileout "$jsonID" "OK" "offered" "$cve" "$cwe"
-                         else
-                              # FIXME: we penalize the absence of high but don't know the result of strong encryption yet (next)
-                              pr_svrty_medium "not offered"
-                              fileout "$jsonID" "MEDIUM" "not offered" "$cve" "$cwe"
-                         fi
-                         ;;
-                    0)   if [[ $sclient_success -eq 0 ]]; then
-                              # medium is not that bad
-                              pr_svrty_low "offered"
-                              fileout "$jsonID" "LOW" "offered" "$cve" "$cwe"
-                         else
-                              out "not offered"
-                              fileout "$jsonID" "INFO" "not offered" "$cve" "$cwe"
-                         fi
-                         ;;
-                    -1)  if [[ $sclient_success -eq 0 ]]; then
-                              # bad but there is worse
-                              pr_svrty_high "offered (NOT ok)"
-                              fileout "$jsonID" "HIGH" "offered" "$cve" "$cwe"
-                         else
-                              # need a check for -eq 1 here
-                              pr_svrty_good "not offered (OK)"
-                              fileout "$jsonID" "OK" "not offered" "$cve" "$cwe"
-                         fi
-                         ;;
-                    -2)  if [[ $sclient_success -eq 0 ]]; then
-                              # the ugly ones
-                              pr_svrty_critical "offered (NOT ok)"
-                              fileout "$jsonID" "CRITICAL" "offered" "$cve" "$cwe"
-                         else
-                              pr_svrty_best "not offered (OK)"
-                              fileout "$jsonID" "OK" "not offered" "$cve" "$cwe"
-                         fi
-                         ;;
-                    *) # we shouldn't reach this
-                         pr_warning "?: $4 (please report this)"
-                         fileout "$jsonID" "WARN" "return condition $4 unclear" "$cve" "$cwe"
-                         ((ret++))
-                         ;;
-               esac
-          fi
-          tmpfile_handle ${FUNCNAME[0]}.${5}.txt
-          [[ $DEBUG -ge 1 ]] && tm_out " -- $1"
-          outln
-     else
-          singlespaces=$(sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g' <<< "$3")
-          if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
-               prln_local_problem "No $singlespaces for SSLv2 configured in $OPENSSL"
-          else
-               prln_local_problem "No $singlespaces configured in $OPENSSL"
-          fi
-          fileout "$jsonID" "WARN" "Cipher $3 ($1) not supported by local OpenSSL ($OPENSSL)"
-     fi
-     return $ret
-}
-
 # Generic function for a rated output, no used yet.
 # arg1: rating from 2 to -4 if available or not
 # arg2: no/yes: decides whether positive or negative logic will be applied and "not" will be printed
@@ -5452,6 +5264,196 @@ run_protocols() {
           outln
           ignore_no_or_lame "You should not proceed as no protocol was detected. If you still really really want to, say \"YES\"" "YES"
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
+     fi
+     return $ret
+}
+
+
+# list ciphers (and makes sure you have them locally configured)
+# arg[1]: non-TLSv1.3 cipher list (or anything else)
+# arg[2]: TLSv1.3 cipher list
+# arg[3]: protocol (e.g., -ssl2)
+#
+listciphers() {
+     local -i ret
+     local debugname=""
+     local tls13_ciphers="$TLS13_OSSL_CIPHERS"
+
+     [[ "$2" != "ALL" ]] && tls13_ciphers="$2"
+     if "$HAS_CIPHERSUITES"; then
+          $OPENSSL ciphers $3 -ciphersuites "$tls13_ciphers" "$1" &>$TMPFILE
+     elif [[ -n "$tls13_ciphers" ]]; then
+          $OPENSSL ciphers $3 "$tls13_ciphers:$1" &>$TMPFILE
+     else
+          $OPENSSL ciphers $3 "$1" &>$TMPFILE
+     fi
+     ret=$?
+     debugme cat $TMPFILE
+     debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
+     tmpfile_handle $FUNCNAME.${debugname}.txt
+     return $ret
+}
+
+
+# argv[1]: non-TLSv1.3 cipher list to test in OpenSSL syntax
+# argv[2]: TLSv1.3 cipher list to test in OpenSSL syntax
+# argv[3]: string on console / HTML or "finding"
+# argv[4]: rating whether ok to offer
+# argv[5]: string to be appended for fileout
+# argv[6]: non-SSLv2 cipher list to test (hexcodes), if using sockets
+# argv[7]: SSLv2 cipher list to test (hexcodes), if using sockets
+# argv[8]: true if using sockets, false if not
+# argv[9]: CVE
+# argv[10]: CWE
+#
+sub_cipherlists() {
+     local -i i len sclient_success=1
+     local cipherlist sslv2_cipherlist detected_ssl2_ciphers
+     local singlespaces
+     local proto=""
+     local -i ret=0
+     local jsonID="cipherlist"
+     local using_sockets="${8}"
+     local cve="${9}"
+     local cwe="${10}"
+
+     pr_bold "$3    "
+     [[ "$OPTIMAL_PROTO" == -ssl2 ]] && proto="$OPTIMAL_PROTO"
+     jsonID="${jsonID}_$5"
+
+     if "$using_sockets" || listciphers "$1" "$2" $proto; then
+          if ! "$using_sockets" || ( "$FAST" && listciphers "$1" "$2" -tls1 ); then
+               for proto in -no_ssl2 -tls1_2 -tls1_1 -tls1 -ssl3; do
+                    if [[ "$proto" == -tls1_2 ]]; then
+                         # If $OPENSSL doesn't support TLSv1.3 or if no TLSv1.3
+                         # ciphers are being tested, then a TLSv1.2 ClientHello
+                         # was tested in the first iteration.
+                         ! "$HAS_TLS13" && continue
+                         [[ -z "$2" ]] && continue
+                    fi
+                    ! "$HAS_SSL3" && [[ "$proto" == -ssl3 ]] && continue
+                    if [[ "$proto" != -no_ssl2 ]]; then
+                         "$FAST" && continue
+                         [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
+                    fi
+                    $OPENSSL s_client $(s_client_options "-cipher "$1" -ciphersuites "\'$2\'" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI $proto") 2>$ERRFILE >$TMPFILE </dev/null
+                    sclient_connect_successful $? $TMPFILE
+                    sclient_success=$?
+                    debugme cat $ERRFILE
+                    [[ $sclient_success -eq 0 ]] && break
+               done
+          else
+               for proto in 04 03 02 01 00; do
+                    # If $cipherlist doesn't contain any TLSv1.3 ciphers, then there is
+                    # no reason to try a TLSv1.3 ClientHello.
+                    [[ "$proto" == 04 ]] && [[ ! "$6" =~ 13,0 ]] && continue
+                    [[ $(has_server_protocol "$proto") -eq 1 ]] && continue
+                    cipherlist="$(strip_inconsistent_ciphers "$proto" ", $6")"
+                    cipherlist="${cipherlist:2}"
+                    if [[ -n "$cipherlist" ]] && [[ "$cipherlist" != 00,ff ]]; then
+                         tls_sockets "$proto" "$cipherlist"
+                         sclient_success=$?
+                         [[ $sclient_success -eq 2 ]] && sclient_success=0
+                         [[ $sclient_success -eq 0 ]] && break
+                    fi
+               done
+          fi
+          if [[ $sclient_success -ne 0 ]] && [[ 1 -ne $(has_server_protocol ssl2) ]]; then
+               if ( [[ -z "$7" ]] || "$FAST" ) && "$HAS_SSL2" && listciphers "$1" "" -ssl2; then
+                    $OPENSSL s_client -cipher "$1" $BUGS $STARTTLS -connect $NODEIP:$PORT $PROXY -ssl2 2>$ERRFILE >$TMPFILE </dev/null
+                    sclient_connect_successful $? $TMPFILE
+                    sclient_success=$?
+                    debugme cat $ERRFILE
+               elif [[ -n "$7" ]]; then
+                    sslv2_sockets "$7" "true"
+                    if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+                         sslv2_cipherlist="$(strip_spaces "${6//,/}")"
+                         len=${#sslv2_cipherlist}
+                         detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+                         for (( i=0; i<len; i=i+6 )); do
+                              [[ "$detected_ssl2_ciphers" =~ "x${sslv2_cipherlist:i:6}" ]] && sclient_success=0 && break
+                         done
+                    fi
+               fi
+          fi
+          if [[ $sclient_success -ne 0 ]] && $BAD_SERVER_HELLO_CIPHER; then
+               # If server failed with a known error, raise it to the user.
+               if [[ $STARTTLS_PROTOCOL == mysql ]]; then
+                    pr_warning "SERVER_ERROR: test inconclusive due to MySQL Community Edition (yaSSL) bug."
+                    fileout "$jsonID" "WARN" "SERVER_ERROR, test inconclusive due to MySQL Community Edition (yaSSL) bug." "$cve" "$cwe"
+               else
+                    pr_warning "SERVER_ERROR: test inconclusive."
+                    fileout "$jsonID" "WARN" "SERVER_ERROR, test inconclusive." "$cve" "$cwe"
+               fi
+               ((ret++))
+          else
+               # Otherwise the error means the server doesn't support that cipher list.
+               case $4 in
+                    2)  if [[ $sclient_success -eq 0 ]]; then
+                              # Strong is excellent to offer
+                              pr_svrty_best "offered (OK)"
+                              fileout "$jsonID" "OK" "offered" "$cve" "$cwe"
+                         else
+                              pr_svrty_medium "not offered"
+                              fileout "$jsonID" "MEDIUM" "not offered" "$cve" "$cwe"
+                         fi
+                         ;;
+                    1)  if [[ $sclient_success -eq 0 ]]; then
+                              # High is good to offer
+                              pr_svrty_good "offered (OK)"
+                              fileout "$jsonID" "OK" "offered" "$cve" "$cwe"
+                         else
+                              # FIXME: we penalize the absence of high but don't know the result of strong encryption yet (next)
+                              pr_svrty_medium "not offered"
+                              fileout "$jsonID" "MEDIUM" "not offered" "$cve" "$cwe"
+                         fi
+                         ;;
+                    0)   if [[ $sclient_success -eq 0 ]]; then
+                              # medium is not that bad
+                              pr_svrty_low "offered"
+                              fileout "$jsonID" "LOW" "offered" "$cve" "$cwe"
+                         else
+                              out "not offered"
+                              fileout "$jsonID" "INFO" "not offered" "$cve" "$cwe"
+                         fi
+                         ;;
+                    -1)  if [[ $sclient_success -eq 0 ]]; then
+                              # bad but there is worse
+                              pr_svrty_high "offered (NOT ok)"
+                              fileout "$jsonID" "HIGH" "offered" "$cve" "$cwe"
+                         else
+                              # need a check for -eq 1 here
+                              pr_svrty_good "not offered (OK)"
+                              fileout "$jsonID" "OK" "not offered" "$cve" "$cwe"
+                         fi
+                         ;;
+                    -2)  if [[ $sclient_success -eq 0 ]]; then
+                              # the ugly ones
+                              pr_svrty_critical "offered (NOT ok)"
+                              fileout "$jsonID" "CRITICAL" "offered" "$cve" "$cwe"
+                         else
+                              pr_svrty_best "not offered (OK)"
+                              fileout "$jsonID" "OK" "not offered" "$cve" "$cwe"
+                         fi
+                         ;;
+                    *) # we shouldn't reach this
+                         pr_warning "?: $4 (please report this)"
+                         fileout "$jsonID" "WARN" "return condition $4 unclear" "$cve" "$cwe"
+                         ((ret++))
+                         ;;
+               esac
+          fi
+          tmpfile_handle ${FUNCNAME[0]}.${5}.txt
+          [[ $DEBUG -ge 1 ]] && tm_out " -- $1"
+          outln
+     else
+          singlespaces=$(sed -e 's/ \+/ /g' -e 's/^ //' -e 's/ $//g' -e 's/  //g' <<< "$3")
+          if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
+               prln_local_problem "No $singlespaces for SSLv2 configured in $OPENSSL"
+          else
+               prln_local_problem "No $singlespaces configured in $OPENSSL"
+          fi
+          fileout "$jsonID" "WARN" "Cipher $3 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
      return $ret
 }
