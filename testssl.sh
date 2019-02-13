@@ -3707,7 +3707,7 @@ run_allciphers() {
                ciphers_found[i]=false
                sigalg[i]=""
                ossl_supported[i]=${TLS_CIPHER_OSSL_SUPPORTED[i]}
-               if "$using_sockets" && ! "$HAS_DH_BITS" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+               if "$using_sockets" && ! "$HAS_DH_BITS" && ( [[ ${kx[i]} == Kx=ECDH ]] || [[ ${kx[i]} == Kx=DH ]] || [[ ${kx[i]} == Kx=EDH ]] ); then
                     ossl_supported[i]=false
                fi
                if [[ ${#hexc} -eq 9 ]]; then
@@ -3752,7 +3752,7 @@ run_allciphers() {
                supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
                "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$HOSTCERT")"
                for (( i=0 ; i<nr_ciphers; i++ )); do
-                    if [[ "${sslvers[i]}" == "SSLv2" ]] && [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
+                    if [[ "${sslvers[i]}" == SSLv2 ]] && [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
                          ciphers_found[i]=true
                          "$SHOW_SIGALGO" && sigalg[i]="$s"
                     fi
@@ -3790,7 +3790,7 @@ run_allciphers() {
 
      for (( i=0; i < nr_ciphers; i++ )); do
           if "${ossl_supported[i]}"; then
-               [[ "${sslvers[i]}" == "SSLv2" ]] && continue
+               [[ "${sslvers[i]}" == SSLv2 ]] && continue
                ciphers_found2[nr_ossl_ciphers]=false
                ciph2[nr_ossl_ciphers]="${ciph[i]}"
                index[nr_ossl_ciphers]=$i
@@ -3855,7 +3855,7 @@ run_allciphers() {
                     if [[ "$cipher" == TLS13* ]] || [[ "$cipher" == TLS_* ]]; then
                          kx[i]="$(read_dhtype_from_file $TMPFILE)"
                     fi
-                    if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                    if [[ ${kx[i]} == Kx=ECDH ]] || [[ ${kx[i]} == Kx=DH ]] || [[ ${kx[i]} == Kx=EDH ]]; then
                          dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                          kx[i]="${kx[i]} $dhlen"
                     fi
@@ -3972,7 +3972,7 @@ ciphers_by_strength() {
      local id
      local has_dh_bits="$HAS_DH_BITS"
 
-     pr_underline "$(printf "%s" "$proto_text")"
+     pr_underline "$(printf -- "%b" "$proto_text")"
      # for local problem if it happens
      out "  "
      if ! "$using_sockets" && ! locally_supported "$proto"; then
@@ -4011,16 +4011,16 @@ ciphers_by_strength() {
                     normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}${hexc:12:2}"
                fi
                if ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
-                    if [[ ${#hexc} -eq 9 ]] && [[ "$proto_text" != "SSLv2" ]]; then
-                         if [[ "$proto_text" == "TLS 1.3" ]]; then
-                              [[ "${hexc:2:2}" == "13" ]] && nr_ciphers+=1
-                         elif [[ "$proto_text" == "TLS 1.2" ]]; then
-                              [[ "${hexc:2:2}" != "13" ]] && nr_ciphers+=1
+                    if [[ ${#hexc} -eq 9 ]] && [[ "$proto_text" != SSLv2 ]]; then
+                         if [[ "$proto_text" == TLS\ 1.3 ]]; then
+                              [[ "${hexc:2:2}" == 13 ]] && nr_ciphers+=1
+                         elif [[ "$proto_text" == TLS\ 1.2 ]]; then
+                              [[ "${hexc:2:2}" != 13 ]] && nr_ciphers+=1
                          elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
-                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM" ]] && [[ "${TLS_CIPHER_RFC_NAME[i]}" != *"_CCM_8" ]]; then
+                              [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM ]] && [[ "${TLS_CIPHER_RFC_NAME[i]}" != *_CCM_8 ]]; then
                               nr_ciphers+=1
                          fi
-                    elif [[ ${#hexc} -eq 14 ]] && [[ "$proto_text" == "SSLv2" ]]; then
+                    elif [[ ${#hexc} -eq 14 ]] && [[ "$proto_text" == SSLv2 ]]; then
                          sslv2_ciphers+=", ${hexcode[nr_ciphers]}"
                          nr_ciphers+=1
                     fi
@@ -4028,21 +4028,21 @@ ciphers_by_strength() {
           done
      else # no sockets, openssl!
           # The OpenSSL ciphers function, prior to version 1.1.0, could only understand -ssl2, -ssl3, and -tls1.
-          if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == "-ssl3" ]] || \
-               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
+          if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == -ssl3 ]] || \
+               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.0* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]]; then
                ossl_ciphers_proto="$proto"
           else
                ossl_ciphers_proto="-tls1"
           fi
           while read hexc n ciph[nr_ciphers] sslvers kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
-               if [[ "$proto_text" == "TLS 1.3" ]]; then
+               if [[ "$proto_text" == TLS\ 1.3 ]]; then
                     [[ "${ciph[nr_ciphers]}" == TLS13* ]] || [[ "${ciph[nr_ciphers]}" == TLS_* ]] || continue
                elif [[ "$proto_text" == "TLS 1.2" ]]; then
                     if [[ "${ciph[nr_ciphers]}" == TLS13* ]] || [[ "${ciph[nr_ciphers]}" == TLS_* ]]; then
                          continue
                     fi
-               elif [[ "${ciph[nr_ciphers]}" == *"-SHA256" ]] || [[ "${ciph[nr_ciphers]}" == *"-SHA384" ]] || \
-                    [[ "${ciph[nr_ciphers]}" == *"-CCM" ]] || [[ "${ciph[nr_ciphers]}" == *"-CCM8" ]] || \
+               elif [[ "${ciph[nr_ciphers]}" == *-SHA256 ]] || [[ "${ciph[nr_ciphers]}" == *-SHA384 ]] || \
+                    [[ "${ciph[nr_ciphers]}" == *-CCM ]] || [[ "${ciph[nr_ciphers]}" == *-CCM8 ]] || \
                     [[ "${ciph[nr_ciphers]}" =~ CHACHA20-POLY1305 ]]; then
                     continue
                fi
@@ -4113,7 +4113,7 @@ ciphers_by_strength() {
                     tls13_ciphers_to_test=""
                     for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
                          if ! "${ciphers_found2[i]}"; then
-                              if [[ "$proto" == "-tls1_3" ]]; then
+                              if [[ "$proto" == -tls1_3 ]]; then
                                    tls13_ciphers_to_test+=":${ciph2[i]}"
                               else
                                    ciphers_to_test+=":${ciph2[i]}"
@@ -4133,8 +4133,8 @@ ciphers_by_strength() {
                                    done
                                    i=${index[i]}
                                    ciphers_found[i]=true
-                                   [[ "$proto_text" == "TLS 1.3" ]] && kx[i]="$(read_dhtype_from_file $TMPFILE)"
-                                   if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                                   [[ "$proto_text" == TLS\ 1.3 ]] && kx[i]="$(read_dhtype_from_file $TMPFILE)"
+                                   if [[ ${kx[i]} == Kx=ECDH ]] || [[ ${kx[i]} == Kx=DH ]] || [[ ${kx[i]} == Kx=EDH ]]; then
                                         dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                                         kx[i]="${kx[i]} $dhlen"
                                    fi
@@ -4196,8 +4196,8 @@ ciphers_by_strength() {
                               done
                               i=${index[i]}
                               ciphers_found[i]=true
-                              [[ "$proto_text" == "TLS 1.3" ]] && kx[i]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
-                              if [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]]; then
+                              [[ "$proto_text" == TLS\ 1.3 ]] && kx[i]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+                              if [[ ${kx[i]} == Kx=ECDH ]] || [[ ${kx[i]} == Kx=DH ]] || [[ ${kx[i]} == Kx=EDH ]]; then
                                    dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
                                    kx[i]="${kx[i]} $dhlen"
                               fi
@@ -6361,7 +6361,7 @@ cipher_pref_check() {
                tested_cipher=""
                while true; do
                     if [[ $p != tls1_3 ]]; then
-                         ciphers_to_test="-cipher ALL:COMPLEMENTOFALL$tested_cipher"
+                         ciphers_to_test="-cipher ALL:COMPLEMENTOFALL${tested_cipher}"
                     else
                          ciphers_to_test=""
                          for cipher in $(colon_to_spaces "$TLS13_OSSL_CIPHERS"); do
