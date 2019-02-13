@@ -5955,7 +5955,7 @@ run_server_preference() {
           cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
           tls13_cipher2=$(get_cipher $TMPFILE)
           debugme tm_out "TLS 1.3: --> $tls13_cipher2\n"
-     else
+     elif [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
           [[ $DEBUG -ge 4 ]] && echo -e "\n Forward: ${list_fwd}\n ${tls13_list_fwd}"
           $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>$ERRFILE >$TMPFILE
           if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
@@ -6009,7 +6009,7 @@ run_server_preference() {
           fileout "$jsonID" "OK" "server -- TLS 1.3 client determined"
           cipher1="$tls13_cipher1"
           cipher2="$tls13_cipher2"
-     elif [[ "$cipher1" != $cipher2 ]]; then
+     elif [[ "$OPTIMAL_PROTO" == -ssl2 ]] || [[ "$cipher1" != $cipher2 ]]; then
           # server used the different ends (ciphers) from the client hello
           pr_svrty_high "nope (NOT ok)"
           limitedsense=" (limited sense as client will pick)"
