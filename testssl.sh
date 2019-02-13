@@ -2997,19 +2997,27 @@ listciphers() {
 # argv[5]: string to be appended for fileout
 # argv[6]: non-SSLv2 cipher list to test (hexcodes), if using sockets
 # argv[7]: SSLv2 cipher list to test (hexcodes), if using sockets
+# argv[8]: true if using sockets, false if not
+# argv[9]: CVE
+# argv[10]: CWE
+#
 sub_cipherlists() {
      local -i i len sclient_success=1
      local cipherlist sslv2_cipherlist detected_ssl2_ciphers
      local singlespaces
      local proto=""
      local -i ret=0
-     local debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
      local jsonID="cipherlist"
+     local using_sockets="${8}"
+     local cve="${9}"
+     local cwe="${10}"
 
+     pr_bold "$3    "
      [[ "$OPTIMAL_PROTO" == -ssl2 ]] && proto="$OPTIMAL_PROTO"
-     pr_bold "$3    "                   # to be indented equal to server preferences
-     if [[ -n "$6" ]] || listciphers "$1" "$2" $proto; then
-          if [[ -z "$6" ]] || ( "$FAST" && listciphers "$1" "$2" -tls1 ); then
+     jsonID="${jsonID}_$5"
+
+     if "$using_sockets" || listciphers "$1" "$2" $proto; then
+          if ! "$using_sockets" || ( "$FAST" && listciphers "$1" "$2" -tls1 ); then
                for proto in -no_ssl2 -tls1_2 -tls1_1 -tls1 -ssl3; do
                     if [[ "$proto" == -tls1_2 ]]; then
                          # If $OPENSSL doesn't support TLSv1.3 or if no TLSv1.3
@@ -3067,10 +3075,10 @@ sub_cipherlists() {
                # If server failed with a known error, raise it to the user.
                if [[ $STARTTLS_PROTOCOL == mysql ]]; then
                     pr_warning "SERVER_ERROR: test inconclusive due to MySQL Community Edition (yaSSL) bug."
-                    fileout "${jsonID}_$5" "WARN" "SERVER_ERROR, test inconclusive due to MySQL Community Edition (yaSSL) bug."
+                    fileout "$jsonID" "WARN" "SERVER_ERROR, test inconclusive due to MySQL Community Edition (yaSSL) bug." "$cve" "$cwe"
                else
                     pr_warning "SERVER_ERROR: test inconclusive."
-                    fileout "${jsonID}_$5" "WARN" "SERVER_ERROR, test inconclusive."
+                    fileout "$jsonID" "WARN" "SERVER_ERROR, test inconclusive." "$cve" "$cwe"
                fi
                ((ret++))
           else
@@ -3079,58 +3087,58 @@ sub_cipherlists() {
                     2)  if [[ $sclient_success -eq 0 ]]; then
                               # Strong is excellent to offer
                               pr_svrty_best "offered (OK)"
-                              fileout "${jsonID}_$5" "OK" "offered"
+                              fileout "$jsonID" "OK" "offered" "$cve" "$cwe"
                          else
                               pr_svrty_medium "not offered"
-                              fileout "${jsonID}_$5" "MEDIUM" "not offered"
+                              fileout "$jsonID" "MEDIUM" "not offered" "$cve" "$cwe"
                          fi
                          ;;
                     1)  if [[ $sclient_success -eq 0 ]]; then
                               # High is good to offer
                               pr_svrty_good "offered (OK)"
-                              fileout "${jsonID}_$5" "OK" "offered"
+                              fileout "$jsonID" "OK" "offered" "$cve" "$cwe"
                          else
                               # FIXME: we penalize the absence of high but don't know the result of strong encryption yet (next)
                               pr_svrty_medium "not offered"
-                              fileout "${jsonID}_$5" "MEDIUM" "not offered"
+                              fileout "$jsonID" "MEDIUM" "not offered" "$cve" "$cwe"
                          fi
                          ;;
                     0)   if [[ $sclient_success -eq 0 ]]; then
                               # medium is not that bad
                               pr_svrty_low "offered"
-                              fileout "${jsonID}_$5" "LOW" "offered"
+                              fileout "$jsonID" "LOW" "offered" "$cve" "$cwe"
                          else
                               out "not offered"
-                              fileout "${jsonID}_$5" "INFO" "not offered"
+                              fileout "$jsonID" "INFO" "not offered" "$cve" "$cwe"
                          fi
                          ;;
                     -1)  if [[ $sclient_success -eq 0 ]]; then
                               # bad but there is worse
                               pr_svrty_high "offered (NOT ok)"
-                              fileout "${jsonID}_$5" "HIGH" "offered"
+                              fileout "$jsonID" "HIGH" "offered" "$cve" "$cwe"
                          else
                               # need a check for -eq 1 here
                               pr_svrty_good "not offered (OK)"
-                              fileout "${jsonID}_$5" "OK" "not offered"
+                              fileout "$jsonID" "OK" "not offered" "$cve" "$cwe"
                          fi
                          ;;
                     -2)  if [[ $sclient_success -eq 0 ]]; then
                               # the ugly ones
                               pr_svrty_critical "offered (NOT ok)"
-                              fileout "${jsonID}_$5" "CRITICAL" "offered"
+                              fileout "$jsonID" "CRITICAL" "offered" "$cve" "$cwe"
                          else
                               pr_svrty_best "not offered (OK)"
-                              fileout "${jsonID}_$5" "OK" "not offered"
+                              fileout "$jsonID" "OK" "not offered" "$cve" "$cwe"
                          fi
                          ;;
                     *) # we shouldn't reach this
                          pr_warning "?: $4 (please report this)"
-                         fileout "${jsonID}_$5" "WARN" "return condition $4 unclear"
+                         fileout "$jsonID" "WARN" "return condition $4 unclear" "$cve" "$cwe"
                          ((ret++))
                          ;;
                esac
           fi
-          tmpfile_handle ${FUNCNAME[0]}.$debugname.txt
+          tmpfile_handle ${FUNCNAME[0]}.${5}.txt
           [[ $DEBUG -ge 1 ]] && tm_out " -- $1"
           outln
      else
@@ -3140,7 +3148,7 @@ sub_cipherlists() {
           else
                prln_local_problem "No $singlespaces configured in $OPENSSL"
           fi
-          fileout "${jsonID}_$5" "WARN" "Cipher $3 ($1) not supported by local OpenSSL ($OPENSSL)"
+          fileout "$jsonID" "WARN" "Cipher $3 ($1) not supported by local OpenSSL ($OPENSSL)"
      fi
      return $ret
 }
@@ -5238,7 +5246,7 @@ run_protocols() {
            3)  out "not offered, "
                fileout "$jsonID" "OK" "not offered"
                add_tls_offered tls1_2 no
-               pr_warning "TLS downgraded to STARTTLS plaintext"; outl 
+               pr_warning "TLS downgraded to STARTTLS plaintext"; outln
                fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
                ;;
            4)  out "likely "; pr_svrty_medium "not offered, "
@@ -5451,77 +5459,89 @@ run_protocols() {
 #TODO: work with fixed lists here --> atm ok, as sockets are preferred. If there would be a single function for testing: yes.
 run_cipherlists() {
      local hexc hexcode strength
-     local using_sockets=true
      local -i i
      local -i ret=0
-     local null_ciphers="c0,10, c0,06, c0,15, c0,0b, c0,01, c0,3b, c0,3a, c0,39, 00,b9, 00,b8, 00,b5, 00,b4, 00,2e, 00,2d, 00,b1, 00,b0, 00,2c, 00,3b, 00,02, 00,01, 00,82, 00,83, ff,87, 00,ff"
-     local sslv2_null_ciphers="FF,80,10, 00,00,00"
-     local anon_ciphers="c0,19, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, c0,47, c0,5b, c0,85, c0,18, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,46, c0,5a, c0,84, c0,16, 00,18, c0,17, 00,1b, 00,1a, 00,19, 00,17, c0,15, 00,ff"
-     local sslv2_anon_ciphers="FF,80,10"
-  # ~ grep -i EXP etc/cipher-mapping.txt
-     local exp_ciphers="00,63, 00,62, 00,61, 00,65, 00,64, 00,60, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e, 00,17, 00,03, 00,28, 00,2b, 00,ff"
-     local sslv2_exp_ciphers="04,00,80, 02,00,80, 00,00,00"
-  # ~ egrep -w '64|56|RC2|RC4' etc/cipher-mapping.txt | grep -v export
-     local low_ciphers="00,15, 00,12, 00,0f, 00,0c, 00,09, 00,1e, 00,22, fe,fe, ff,e1, c0,11, c0,07, 00,66, c0,0c, c0,02, 00,05, 00,04, 00,92, 00,8a, 00,20, 00,24, c0,33, 00,8e, 00,ff"
-     local sslv2_low_ciphers="01,00,80, 03,00,80, 08,00,80, 06,00,40, 06,01,40, FF,80,00"
-  # ~ egrep -w '3DES' etc/cipher-mapping.txt
-     local tdes_ciphers="c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,ff"
-     local sslv2_tdes_ciphers="07,00,c0, 07,01,c0"
-  # ~ egrep -w 128 etc/cipher-mapping.txt | egrep -v "Au=None|AEAD|RC2|RC4"
-     local medium_ciphers="00,07, 00,21, 00,25, 00,2F, 00,30, 00,31, 00,32, 00,33, 00,3C, 00,3E, 00,3F, 00,40, 00,41, 00,42, 00,43, 00,44, 00,45, 00,67, 00,8C, 00,90, 00,94, 00,96, 00,97, 00,98, 00,99, 00,9A, 00,AE, 00,B2, 00,B6, 00,BA, 00,BB, 00,BC, 00,BD, 00,BE, C0,04, C0,09, C0,0E, C0,13, C0,1D, C0,1E, C0,1F, C0,23, C0,25, C0,27, C0,29, C0,35, C0,37, C0,3C, C0,3E, C0,40, C0,42, C0,44, C0,48, C0,4A, C0,4C, C0,4E, C0,64, C0,66, C0,68, C0,70, C0,72, C0,74, C0,76, C0,78, C0,94, C0,96, C0,98, C0,9A, 00,ff"
-  # Attention we have a SSLv2 cipher here: IDEA-CBC-MD5 / SSL_CK_IDEA_128_CBC_WITH_MD5
-     local sslv2_medium_ciphers="05,00,80"
-  # ~ egrep -w "256" etc/cipher-mapping.txt | grep -v '=None' | egrep -vw 'RC4|AEAD|IDEA|SEED|RC2|GOST'
-     local high_ciphers="00,35, 00,36, 00,37, 00,38, 00,39, 00,3D, 00,68, 00,69, 00,6A, 00,6B, 00,84, 00,85, 00,86, 00,87, 00,88, 00,8D, 00,91, 00,95, 00,AF, 00,B3, 00,B7, 00,C0, 00,C1, 00,C2, 00,C3, 00,C4, C0,05, C0,0A, C0,0F, C0,14, C0,20, C0,21, C0,22, C0,24, C0,26, C0,28, C0,2A, C0,36, C0,38, C0,3D, C0,3F, C0,41, C0,43, C0,45, C0,49, C0,4B, C0,4D, C0,4F, C0,65, C0,67, C0,69, C0,71, C0,73, C0,75, C0,77, C0,79, C0,95, C0,97, C0,99, C0,9B, 00,ff"
-  # ~ grep AEAD etc/cipher-mapping.txt | grep -v Au=None
-     local strong_ciphers="13,01, 13,02, 13,03, 13,04, 13,05, cc,14, cc,13, cc,15, c0,30, c0,2c, 00,a5, 00,a3, 00,a1, 00,9f, cc,a9, cc,a8, cc,aa, c0,af, c0,ad, c0,a3, c0,9f, 00,ad, 00,ab, cc,ae, cc,ad, cc,ac, c0,ab, c0,a7, c0,32, c0,2e, 00,9d, c0,a1, c0,9d, 00,a9, cc,ab, c0,a9, c0,a5, c0,51, c0,53, c0,55, c0,57, c0,59, c0,5d, c0,5f, c0,61, c0,63, c0,6b, c0,6d, c0,6f, c0,7b, c0,7d, c0,7f, c0,81, c0,83, c0,87, c0,89, c0,8b, c0,8d, c0,8f, c0,91, c0,93, 16,b7, 16,b8, 16,b9, 16,ba, c0,2f, c0,2b, 00,a4, 00,a2, 00,a0, 00,9e, c0,ae, c0,ac, c0,a2, c0,9e, 00,ac, 00,aa, c0,aa, c0,a6, c0,a0, c0,9c, 00,a8, c0,a8, c0,a4, c0,31, c0,2d, 00,9c, c0,50, c0,52, c0,54, c0,56, c0,58, c0,5c, c0,5e, c0,60, c0,62, c0,6a, c0,6c, c0,6e, c0,7a, c0,7c, c0,7e, c0,80, c0,82, c0,86, c0,88, c0,8a, c0,8c, c0,8e, c0,90, c0,92, 00,ff"
+     local ossl_null_ciphers null_ciphers sslv2_null_ciphers
+     local ossl_anon_ciphers anon_ciphers sslv2_anon_ciphers
+     local ossl_exp_ciphers exp_ciphers sslv2_exp_ciphers
+     local ossl_low_ciphers low_ciphers sslv2_low_ciphers
+     local ossl_tdes_ciphers tdes_ciphers sslv2_tdes_cipher
+     local ossl_medium_ciphers medium_ciphers
+     local strong_ciphers
      local cwe="CWE-327"
      local cwe2="CWE-310"
      local cve=""
-
-     # decoding the >= SSLv3 ciphers in the code above , e.g:
-     # echo "00,15, c0,11, fe,fe' | sed -e 's/00,/0x00,0x/g' -e 's/c0,/0xc0,0x/g' -e 's/cc,/0xcc,0x/g' -e 's/13,/0x13,0x/g' -e 's/16,/0x16,0x/g' -e 's/fe,/0xfe, 0x/g' -e 's/ff,/0xff,0x/g' -e 's/, /\n/g' |
-     #                             while read ci; do grep -wi $ci etc/cipher-mapping.txt; done
-
-
-     "$SSL_NATIVE" && using_sockets=false
-     if ! "$using_sockets"; then
-          null_ciphers=""; anon_ciphers=""
-          exp_ciphers=""; low_ciphers="" medium_ciphers="";
-          tdes_ciphers=""; high_ciphers=""; strong_ciphers=""
-          sslv2_null_ciphers=""; sslv2_anon_ciphers=""
-          sslv2_exp_ciphers=""; sslv2_low_ciphers=""
-          sslv2_medium_ciphers=""; sslv2_tdes_ciphers=""
-     fi
+     local using_sockets=true
 
      outln
      pr_headlineln " Testing cipher categories "
      outln
-     # argv[1]: cipher list to test in OpenSSL syntax (see ciphers(1ssl) or run 'openssl ciphers -v/-V)', TLS 1.3 ciphers will be treated automatically
-     # argv[2]: string on console / HTML or "finding"
-     # argv[3]: rating whether ok to offer
-     # argv[4]: string to be appended for fileout
-     # argv[5]: non-SSLv2 cipher list to test (hexcodes), if using sockets
-     # argv[6]: SSLv2 cipher list to test (hexcodes), if using sockets
-     sub_cipherlists 'NULL:eNULL'                            "" " NULL ciphers (no encryption)              "    -2 "NULL"      "$null_ciphers"   "$sslv2_null_ciphers" "$cve" "$cwe"
+     "$SSL_NATIVE" && using_sockets=false
+
+     # conversion 2 byte ciphers via:  echo "$@" | sed -e 's/[[:xdigit:]]\{2\},/0x&/g'  -e 's/, /\n/g' | while read ci; do grep -wi $ci etc/cipher-mapping.txt; done
+
+     ossl_null_ciphers='NULL:eNULL'
+     null_ciphers="c0,10, c0,06, c0,15, c0,0b, c0,01, c0,3b, c0,3a, c0,39, 00,b9, 00,b8, 00,b5, 00,b4, 00,2e, 00,2d, 00,b1, 00,b0, 00,2c, 00,3b, 00,02, 00,01, 00,82, 00,83, ff,87, 00,ff"
+     sslv2_null_ciphers="FF,80,10, 00,00,00"
+
+     ossl_anon_ciphers='aNULL:ADH'
+     anon_ciphers="c0,19, 00,a7, 00,6d, 00,3a, 00,c5, 00,89, c0,47, c0,5b, c0,85, c0,18, 00,a6, 00,6c, 00,34, 00,bf, 00,9b, 00,46, c0,46, c0,5a, c0,84, c0,16, 00,18, c0,17, 00,1b, 00,1a, 00,19, 00,17, c0,15, 00,ff"
+     sslv2_anon_ciphers="FF,80,10"
+
+     ossl_exp_ciphers='EXPORT:!ADH:!NULL'
+     # grep -i EXP etc/cipher-mapping.txt
+     exp_ciphers="00,63, 00,62, 00,61, 00,65, 00,64, 00,60, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e, 00,17, 00,03, 00,28, 00,2b, 00,ff"
+     sslv2_exp_ciphers="04,00,80, 02,00,80, 00,00,00"
+
+     ossl_low_ciphers='LOW:DES:RC2:RC4:!ADH:!EXP:!NULL:!eNULL'
+     # egrep -w '64|56|RC2|RC4' etc/cipher-mapping.txt | egrep -v 'Au=None|export'
+     low_ciphers="00,04, 00,05, 00,09, 00,0C, 00,0F, 00,12, 00,15, 00,1E, 00,20, 00,22, 00,24, 00,66, 00,8A, 00,8E, 00,92, C0,02, C0,07, C0,0C, C0,11, C0,33, FE,FE, FF,E1, 00,FF"
+     sslv2_low_ciphers="01,00,80, 03,00,80, 06,00,40, 06,01,40, 08,00,80, FF,80,00"
+
+     ossl_tdes_ciphers='3DES:IDEA:!aNULL:!ADH'
+     # egrep -w '3DES|IDEA' etc/cipher-mapping.txt | grep -v "Au=None"
+     tdes_ciphers="00,07, 00,0A, 00,0D, 00,10, 00,13, 00,16, 00,1F, 00,21, 00,23, 00,25, 00,8B, 00,8F, 00,93, C0,03, C0,08, C0,0D, C0,12, C0,1A, C0,1B, C0,1C, C0,34, FE,FF, FF,E0, 00,FF"
+     sslv2_tdes_ciphers="05,00,80, 07,00,c0, 07,01,c0"
+
+     ossl_medium_ciphers='HIGH:MEDIUM:AES:CAMELLIA:ARIA:!IDEA:!CHACHA20:!3DES:!RC2:!RC4:!AESCCM8:!AESCCM:!AESGCM:!ARIAGCM:!aNULL'
+     # egrep -w "256|128" etc/cipher-mapping.txt | egrep -v "Au=None|AEAD|RC2|RC4|IDEA"
+     medium_ciphers="00,2F, 00,30, 00,31, 00,32, 00,33, 00,35, 00,36, 00,37, 00,38, 00,39, 00,3C, 00,3D, 00,3E, 00,3F, 00,40, 00,41, 00,42, 00,43, 00,44, 00,45, 00,67, 00,68, 00,69, 00,6A, 00,6B, 00,84, 00,85, 00,86, 00,87, 00,88, 00,8C, 00,8D, 00,90, 00,91, 00,94, 00,95, 00,96, 00,97, 00,98, 00,99, 00,9A, 00,AE, 00,AF, 00,B2, 00,B3, 00,B6, 00,B7, 00,BA, 00,BB, 00,BC, 00,BD, 00,BE, 00,C0, 00,C1, 00,C2, 00,C3, 00,C4, C0,04, C0,05, C0,09, C0,0A, C0,0E, C0,0F, C0,13, C0,14, C0,1D, C0,1E, C0,1F, C0,20, C0,21, C0,22, C0,23, C0,24, C0,25, C0,26, C0,27, C0,28, C0,29, C0,2A, C0,35, C0,36, C0,37, C0,38, C0,3C, C0,3D, C0,3E, C0,3F, C0,40, C0,41, C0,42, C0,43, C0,44, C0,45, C0,48, C0,49, C0,4A, C0,4B, C0,4C, C0,4D, C0,4E, C0,4F, C0,64, C0,65, C0,66, C0,67, C0,68, C0,69, C0,70, C0,71, C0,72, C0,73, C0,74, C0,75, C0,76, C0,77, C0,78, C0,79, C0,94, C0,95, C0,96, C0,97, C0,98, C0,99, C0,9A, C0,9B"
+     # Workaround: If we use sockets and in order not to hit 132+1 ciphers we omit the GOST ciphers if SERVER_SIZE_LIMIT_BUG is true.
+     # This won't be supported by Cisco ACE anyway. Catch is, if SERVER_SIZE_LIMIT_BUG was not tested for before (only this function is being called)
+     "$SERVER_SIZE_LIMIT_BUG" || medium_ciphers="${medium_ciphers}, 00,80, 00,81, FF,00, FF,01, FF,02, FF,03, FF,85"
+     medium_ciphers="${medium_ciphers}, 00,FF"
+
+     # Here's the strongest discrepancy between sockets and OpenSSL
+     ossl_strong_ciphers='AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM:ARIAGCM'
+     # grep AEAD etc/cipher-mapping.txt | grep -v Au=None
+     strong_ciphers="00,9C, 00,9D, 00,9E, 00,9F, 00,A0, 00,A1, 00,A2, 00,A3, 00,A4, 00,A5, 00,A8, 00,A9, 00,AA, 00,AB, 00,AC, 00,AD, 13,01, 13,02, 13,03, 13,04, 13,05, 16,B7, 16,B8, 16,B9, 16,BA, C0,2B, C0,2C, C0,2D, C0,2E, C0,2F, C0,30, C0,31, C0,32, C0,50, C0,51, C0,52, C0,53, C0,54, C0,55, C0,56, C0,57, C0,58, C0,59, C0,5C, C0,5D, C0,5E, C0,5F, C0,60, C0,61, C0,62, C0,63, C0,6A, C0,6B, C0,6C, C0,6D, C0,6E, C0,6F, C0,7A, C0,7B, C0,7C, C0,7D, C0,7E, C0,7F, C0,80, C0,81, C0,82, C0,83, C0,86, C0,87, C0,88, C0,89, C0,8A, C0,8B, C0,8C, C0,8D, C0,8E, C0,8F, C0,90, C0,91, C0,92, C0,93, C0,9C, C0,9D, C0,9E, C0,9F, C0,A0, C0,A1, C0,A2, C0,A3, C0,A4, C0,A5, C0,A6, C0,A7, C0,A8, C0,A9, C0,AA, C0,AB, C0,AC, C0,AD, C0,AE, C0,AF, CC,13, CC,14, CC,15, CC,A8, CC,A9, CC,AA, CC,AB, CC,AC, CC,AD, CC,AE, 00,FF"
+
+     # argv[1]: non-TLSv1.3 cipher list to test in OpenSSL syntax
+     # argv[2]: TLSv1.3 cipher list to test in OpenSSL syntax
+     # argv[3]: string on console / HTML or "finding"
+     # argv[4]: rating whether ok to offer
+     # argv[5]: string to be appended for fileout
+     # argv[6]: non-SSLv2 cipher list to test (hexcodes), if using sockets
+     # argv[7]: SSLv2 cipher list to test (hexcodes), if using sockets
+     # argv[8]: true if using sockets, false if not
+     # argv[9]: CVE
+     # argv[10]: CWE
+
+     sub_cipherlists "$ossl_null_ciphers"      "" " NULL ciphers (no encryption)              "    -2 "NULL"      "$null_ciphers"    "$sslv2_null_ciphers"   "$using_sockets" "$cve" "$cwe"
      ret=$?
-     sub_cipherlists 'aNULL:ADH'                             "" " Anonymous NULL Ciphers (no authentication)"    -2 "aNULL"     "$anon_ciphers"   "$sslv2_anon_ciphers" "$cve" "$cwe"
+     sub_cipherlists "$ossl_anon_ciphers"      "" " Anonymous NULL Ciphers (no authentication)"    -2 "aNULL"     "$anon_ciphers"    "$sslv2_anon_ciphers"   "$using_sockets" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists 'EXPORT:!ADH:!NULL'                     "" " Export ciphers (w/o ADH+NULL)             "    -2 "EXPORT"    "$exp_ciphers"    "$sslv2_exp_ciphers"  "$cve" "$cwe"
+     sub_cipherlists "$ossl_exp_ciphers"       "" " Export ciphers (w/o ADH+NULL)             "    -2 "EXPORT"    "$exp_ciphers"     "$sslv2_exp_ciphers"    "$using_sockets" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists 'LOW:DES:RC2:RC4:!ADH:!EXP:!NULL'       "" " LOW: 64 Bit + DES, RC[2,4] (w/o export)   "    -2 "LOW"       "$low_ciphers"    "$sslv2_low_ciphers" "$cve" "$cwe"
+     sub_cipherlists "$ossl_low_ciphers"       "" " LOW: 64 Bit + DES, RC[2,4] (w/o export)   "    -2 "LOW"       "$low_ciphers"     "$sslv2_low_ciphers"    "$using_sockets" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists '3DES:!aNULL:!ADH'                      "" " Triple DES Ciphers                        "    -1 "3DES"     "$tdes_ciphers"   "$sslv2_tdes_ciphers" "$cve" "$cwe2"
+     sub_cipherlists "$ossl_tdes_ciphers"      "" " Triple DES Ciphers / IDEA                 "    -1 "3DES_IDEA" "$tdes_ciphers"    "$sslv2_tdes_ciphers"   "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists 'MEDIUM:!aNULL:AES128:CAMELLIA128:ARIA128:!CHACHA20:!3DES:!RC2:!RC4:!AESCCM8:!AESCCM:!AESGCM:!ARIAGCM' \
-                                                             "" " 128 Bit ciphers (SEED, IDEA, 128 Bit CBC) "     0 "128Bit"    "$medium_ciphers" "$sslv2_medium_ciphers" "$cve" "$cwe2"
+     sub_cipherlists "$ossl_medium_ciphers"    "" " Average: SEED + 128+256 Bit CBC ciphers   "     0 "AVERAGE"   "$average_ciphers"  ""                     "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!CamelliaGCM:!AESCCM:!AESCCM8:!AES128:!CAMELLIA128:!ARIAGCM:!ARIACCM' \
-                                                             "" " High encryption (AES/Aria/Camellia, !AEAD)"     1 "HIGH"      "$high_ciphers"    ""
+     sub_cipherlists "$ossl_strong_ciphers" 'ALL' " Strong encryption (AEAD ciphers)          "     2 "STRONG"    "$strong_ciphers"   ""                     "$using_sockets" ""      ""
      ret=$((ret + $?))
-     sub_cipherlists 'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM:ARIAGCM' 'ALL' \
-                                                                " Strong encryption (AEAD ciphers)          "     2 "STRONG"    "$strong_ciphers"  ""
-     ret=$((ret + $?))
+
      outln
      return $ret
 }
