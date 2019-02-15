@@ -6989,20 +6989,38 @@ extract_stapled_ocsp() {
      return 0
 }
 
-# arg1 is "-cipher <OpenSSL cipher>" or empty
+# arg1 is "<OpenSSL cipher>"
 # arg2 is a list of protocols to try (tls1_2, tls1_1, tls1, ssl3) or empty (if all should be tried)
 get_server_certificate() {
      local protocols_to_try proto
-     local success
+     local success ret
      local npn_params="" line
+     local ciphers_to_test=""
+     # Cipher suites that use a certifiate with an RSA (signature) public key
+     local -r a_rsa="cc,13, cc,15, c0,30, c0,28, c0,14, 00,9f, cc,a8, cc,aa, c0,a3, c0,9f, 00,6b, 00,39, c0,77, 00,c4, 00,88, c0,45, c0,4d, c0,53, c0,61, c0,7d, c0,8b, 16,b7, 16,b9, c0,2f, c0,27, c0,13, 00,9e, c0,a2, c0,9e, 00,67, 00,33, c0,76, 00,be, 00,9a, 00,45, c0,44, c0,4c, c0,52, c0,60, c0,7c, c0,8a, c0,11, c0,12, 00,16, 00,15, 00,14, c0,10"
+     # Cipher suites that use a certifiate with an RSA (encryption) public key
+     local -r e_rsa="00,b7, c0,99, 00,ad, cc,ae, 00,9d, c0,a1, c0,9d, 00,3d, 00,35, 00,c0, 00,84, 00,95, c0,3d, c0,51, c0,69, c0,6f, c0,7b, c0,93, ff,01, 00,ac, c0,a0, c0,9c, 00,9c, 00,3c, 00,2f, 00,ba, 00,b6, 00,96, 00,41, c0,98, 00,07, 00,94, c0,3c, c0,50, c0,68, c0,6e, c0,7a, c0,92, 00,05, 00,04, 00,92, 00,0a, 00,93, fe,ff, ff,e0, 00,62, 00,09, 00,61, fe,fe, ff,e1, 00,64, 00,60, 00,08, 00,06, 00,03, 00,b9, 00,b8, 00,2e, 00,3b, 00,02, 00,01"
+     # Cipher suites that use a certifiate with a DSA public key
+     local -r a_dss="00,a3, 00,6a, 00,38, 00,c3, 00,87, c0,43, c0,57, c0,81, 00,a2, 00,40, 00,32, 00,bd, 00,99, 00,44, c0,42, c0,56, c0,80, 00,66, 00,13, 00,63, 00,12, 00,65, 00,11"
+     # Cipher suites that use a certifiate with a DH public key
+     local -r a_dh="00,a5, 00,a1, 00,69, 00,68, 00,37, 00,36, 00,c2, 00,c1, 00,86, 00,85, c0,3f, c0,41, c0,55, c0,59, c0,7f, c0,83, 00,a4, 00,a0, 00,3f, 00,3e, 00,31, 00,30, 00,bc, 00,bb, 00,98, 00,97, 00,43, 00,42, c0,3e, c0,40, c0,54, c0,58, c0,7e, c0,82, 00,10, 00,0d, 00,0f, 00,0c, 00,0b, 00,0e"
+     # Cipher suites that use a certifiate with an ECDH public key
+     local -r a_ecdh="c0,32, c0,2e, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, c0,4b, c0,4f, c0,5f, c0,63, c0,89, c0,8d, c0,31, c0,2d, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, c0,4a, c0,4e, c0,5e, c0,62, c0,88, c0,8c, c0,0c, c0,02, c0,0d, c0,03, c0,0b, c0,01"
+     # Cipher suites that use a certifiate with an ECDSA public key
+     local -r a_ecdsa="cc,14, c0,2c, c0,24, c0,0a, cc,a9, c0,af, c0,ad, c0,73, c0,49, c0,5d, c0,87, 16,b8, 16,ba, c0,2b, c0,23, c0,09, c0,ae, c0,ac, c0,72, c0,48, c0,5c, c0,86, c0,07, c0,08, c0,06"
+     # Cipher suites that use a certifiate with a GOST public key
+     local -r a_gost="00,80, 00,81, ff,00, 00,82, 00,83"
+     local using_sockets=true
+
+     "$SSL_NATIVE" && using_sockets=false
 
      CERTIFICATE_LIST_ORDERING_PROBLEM=false
-     if [[ "$1" =~ "-cipher tls1_3" ]]; then
+     if [[ "$1" =~ "tls1_3" ]]; then
           [[ $(has_server_protocol "tls1_3") -eq 1 ]] && return 1
           if "$HAS_TLS13"; then
-               if [[ "$1" =~ "-cipher tls1_3_RSA" ]]; then
+               if [[ "$1" =~ "tls1_3_RSA" ]]; then
                     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs PSS+SHA256:PSS+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
-               elif [[ "$1" =~ "-cipher tls1_3_ECDSA" ]]; then
+               elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
                     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs ECDSA+SHA256:ECDSA+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
                else
                     return 1
@@ -7013,9 +7031,9 @@ get_server_certificate() {
                extract_stapled_ocsp
                success=$?
           else
-               if [[ "$1" =~ "-cipher tls1_3_RSA" ]]; then
+               if [[ "$1" =~ "tls1_3_RSA" ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
-               elif [[ "$1" =~ "-cipher tls1_3_ECDSA" ]]; then
+               elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
                else
                     return 1
@@ -7052,48 +7070,109 @@ get_server_certificate() {
           return $success
      fi
 
-     # this all needs to be moved into determine_tls_extensions()
-     >$TEMPDIR/tlsext.txt
-     # first shot w/o any protocol, then in turn we collect all extensions
-     $OPENSSL s_client $STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
-     sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE >$TEMPDIR/tlsext.txt
-     for proto in $protocols_to_try; do
-          [[ 1 -eq $(has_server_protocol $proto) ]] && continue
-          [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && continue
-          addcmd=""
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status -msg") </dev/null 2>$ERRFILE >$TMPFILE
-          if sclient_connect_successful $? $TMPFILE; then
-               success=0
-               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
-               break               # now we have the certificate
-          fi
-     done                          # this loop is needed for IIS6 and others which have a handshake size limitations
-     if [[ $success -eq 7 ]]; then
-          # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
-          [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && return 7
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $1 -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug") </dev/null 2>>$ERRFILE >$TMPFILE
-          if ! sclient_connect_successful $? $TMPFILE; then
-               if [ -z "$1" ]; then
-                   prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
-               fi
-               tmpfile_handle ${FUNCNAME[0]}.txt
-               return 7  # this is ugly, I know
-          else
-               grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
-               GOST_STATUS_PROBLEM=true
-          fi
-     fi
-     case "$proto" in
-          "tls1_2") DETECTED_TLS_VERSION="0303" ;;
-          "tls1_1") DETECTED_TLS_VERSION="0302" ;;
-          "tls1") DETECTED_TLS_VERSION="0301" ;;
-          "ssl3") DETECTED_TLS_VERSION="0300" ;;
-     esac
-     extract_new_tls_extensions $TMPFILE
-     extract_certificates "$proto"
-     extract_stapled_ocsp
-     success=$?
+     if "$using_sockets"; then
+          protocols_to_try="${protocols_to_try/tls1_2/03}"
+          protocols_to_try="${protocols_to_try/tls1_1/02}"
+          protocols_to_try="${protocols_to_try/tls1/01}"
+          protocols_to_try="${protocols_to_try/ssl3/00}"
 
+          [[ "$1" =~ aRSA ]] && ciphers_to_test+=", $a_rsa"
+          [[ "$1" =~ eRSA ]] && ciphers_to_test+=", $e_rsa"
+          [[ "$1" =~ aDSS ]] && ciphers_to_test+=", $a_dss"
+          [[ "$1" =~ aDH ]] && ciphers_to_test+=", $a_dh"
+          [[ "$1" =~ aECDH ]] && ciphers_to_test+=", $a_ecdh"
+          [[ "$1" =~ aECDSA ]] && ciphers_to_test+=", $a_ecdsa"
+          [[ "$1" =~ aGOST ]] && ciphers_to_test+=", $a_gost"
+
+          [[ -z "$ciphers_to_test" ]] && return 1
+          ciphers_to_test="${ciphers_to_test:2}"
+
+          for proto in $protocols_to_try; do
+               [[ 1 -eq $(has_server_protocol $proto) ]] && continue
+               tls_sockets "$proto" "$ciphers_to_test, 00,ff" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00"
+               ret=$?
+               [[ $ret -eq 0 ]] && success=0 && break
+               [[ $ret -eq 2 ]] && success=0 && break
+          done                          # this loop is needed for IIS6 and others which have a handshake size limitations
+          if [[ $success -eq 7 ]]; then
+               # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
+               tls_sockets "$proto" "$ciphers_to_test, 00,ff" "all" "00,12,00,00"
+               ret=$?
+               [[ $ret -eq 0 ]] && success=0
+               [[ $ret -eq 2 ]] && success=0
+               if [[ $success -eq 7 ]]; then
+                    if [ -z "$1" ]; then
+                        prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+                    fi
+                    tmpfile_handle ${FUNCNAME[0]}.txt
+                    return 7  # this is ugly, I know
+               else
+                    GOST_STATUS_PROBLEM=true
+               fi
+          fi
+          cp $TEMPDIR/$NODEIP.parse_tls_serverhello.txt $TMPFILE
+          extract_new_tls_extensions $TMPFILE
+     else
+          ciphers_to_test="$1"
+          if [[ "$1" =~ aRSA ]] && [[ "$1" =~ eRSA ]]; then
+               ciphers_to_test="${ciphers_to_test/eRSA/}"
+          elif [[ "$1" =~ aRSA ]]; then
+               ciphers_to_test="${ciphers_to_test/aRSA/}"
+               for ciph in $(colon_to_spaces $(actually_supported_ciphers "aRSA")); do
+                    [[ "$ciph" =~ -RSA- ]] && ciphers_to_test+=":$ciph"
+               done
+          elif [[ "$1" =~ eRSA ]]; then
+               ciphers_to_test="${ciphers_to_test/eRSA/}"
+               for ciph in $(colon_to_spaces $(actually_supported_ciphers "aRSA")); do
+                    [[ ! "$ciph" =~ -RSA- ]] && ciphers_to_test+=":$ciph"
+               done
+          fi
+          ciphers_to_test="${ciphers_to_test/::/:}"
+          [[ "${ciphers_to_test:0:1}" == : ]] &&  ciphers_to_test="${ciphers_to_test:1}"
+          [[ $(count_ciphers $(actually_supported_ciphers "$ciphers_to_test")) -ge 1 ]] || return 1
+
+          # this all needs to be moved into determine_tls_extensions()
+          >$TEMPDIR/tlsext.txt
+          # first shot w/o any protocol, then in turn we collect all extensions
+          $OPENSSL s_client $STARTTLS $BUGS -cipher $ciphers_to_test -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tlsextdebug -status </dev/null 2>$ERRFILE >$TMPFILE
+          sclient_connect_successful $? $TMPFILE && grep -a 'TLS server extension' $TMPFILE >$TEMPDIR/tlsext.txt
+          for proto in $protocols_to_try; do
+               [[ 1 -eq $(has_server_protocol $proto) ]] && continue
+               [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && continue
+               addcmd=""
+               $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $ciphers_to_test -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug $npn_params -status -msg") </dev/null 2>$ERRFILE >$TMPFILE
+               if sclient_connect_successful $? $TMPFILE; then
+                    success=0
+                    grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
+                    break               # now we have the certificate
+               fi
+          done                          # this loop is needed for IIS6 and others which have a handshake size limitations
+          if [[ $success -eq 7 ]]; then
+               # "-status" above doesn't work for GOST only servers, so we do another test without it and see whether that works then:
+               [[ "$proto" == ssl3 ]] && ! "$HAS_SSL3" && return 7
+               $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $ciphers_to_test -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug") </dev/null 2>>$ERRFILE >$TMPFILE
+               if ! sclient_connect_successful $? $TMPFILE; then
+                    if [ -z "$1" ]; then
+                        prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+                    fi
+                    tmpfile_handle ${FUNCNAME[0]}.txt
+                    return 7  # this is ugly, I know
+               else
+                    grep -a 'TLS server extension' $TMPFILE >>$TEMPDIR/tlsext.txt
+                    GOST_STATUS_PROBLEM=true
+               fi
+          fi
+          case "$proto" in
+               "tls1_2") DETECTED_TLS_VERSION="0303" ;;
+               "tls1_1") DETECTED_TLS_VERSION="0302" ;;
+               "tls1") DETECTED_TLS_VERSION="0301" ;;
+               "ssl3") DETECTED_TLS_VERSION="0300" ;;
+          esac
+          extract_new_tls_extensions $TMPFILE
+          extract_certificates "$proto"
+          extract_stapled_ocsp
+          success=$?
+     fi
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $success
 }
@@ -7575,6 +7654,20 @@ certificate_transparency() {
      local hexc n ciph sslver kx auth enc mac export
      local extra_extns=""
      local -i success
+     # Cipher suites that use a certifiate with an RSA (signature) public key
+     local -r a_rsa="cc,13, cc,15, c0,30, c0,28, c0,14, 00,9f, cc,a8, cc,aa, c0,a3, c0,9f, 00,6b, 00,39, c0,77, 00,c4, 00,88, c0,45, c0,4d, c0,53, c0,61, c0,7d, c0,8b, 16,b7, 16,b9, c0,2f, c0,27, c0,13, 00,9e, c0,a2, c0,9e, 00,67, 00,33, c0,76, 00,be, 00,9a, 00,45, c0,44, c0,4c, c0,52, c0,60, c0,7c, c0,8a, c0,11, c0,12, 00,16, 00,15, 00,14, c0,10"
+     # Cipher suites that use a certifiate with an RSA (encryption) public key
+     local -r e_rsa="00,b7, c0,99, 00,ad, cc,ae, 00,9d, c0,a1, c0,9d, 00,3d, 00,35, 00,c0, 00,84, 00,95, c0,3d, c0,51, c0,69, c0,6f, c0,7b, c0,93, ff,01, 00,ac, c0,a0, c0,9c, 00,9c, 00,3c, 00,2f, 00,ba, 00,b6, 00,96, 00,41, c0,98, 00,07, 00,94, c0,3c, c0,50, c0,68, c0,6e, c0,7a, c0,92, 00,05, 00,04, 00,92, 00,0a, 00,93, fe,ff, ff,e0, 00,62, 00,09, 00,61, fe,fe, ff,e1, 00,64, 00,60, 00,08, 00,06, 00,03, 00,b9, 00,b8, 00,2e, 00,3b, 00,02, 00,01"
+     # Cipher suites that use a certifiate with a DSA public key
+     local -r a_dss="00,a3, 00,6a, 00,38, 00,c3, 00,87, c0,43, c0,57, c0,81, 00,a2, 00,40, 00,32, 00,bd, 00,99, 00,44, c0,42, c0,56, c0,80, 00,66, 00,13, 00,63, 00,12, 00,65, 00,11"
+     # Cipher suites that use a certifiate with a DH public key
+     local -r a_dh="00,a5, 00,a1, 00,69, 00,68, 00,37, 00,36, 00,c2, 00,c1, 00,86, 00,85, c0,3f, c0,41, c0,55, c0,59, c0,7f, c0,83, 00,a4, 00,a0, 00,3f, 00,3e, 00,31, 00,30, 00,bc, 00,bb, 00,98, 00,97, 00,43, 00,42, c0,3e, c0,40, c0,54, c0,58, c0,7e, c0,82, 00,10, 00,0d, 00,0f, 00,0c, 00,0b, 00,0e"
+     # Cipher suites that use a certifiate with an ECDH public key
+     local -r a_ecdh="c0,32, c0,2e, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, c0,4b, c0,4f, c0,5f, c0,63, c0,89, c0,8d, c0,31, c0,2d, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, c0,4a, c0,4e, c0,5e, c0,62, c0,88, c0,8c, c0,0c, c0,02, c0,0d, c0,03, c0,0b, c0,01"
+     # Cipher suites that use a certifiate with an ECDSA public key
+     local -r a_ecdsa="cc,14, c0,2c, c0,24, c0,0a, cc,a9, c0,af, c0,ad, c0,73, c0,49, c0,5d, c0,87, 16,b8, 16,ba, c0,2b, c0,23, c0,09, c0,ae, c0,ac, c0,72, c0,48, c0,5c, c0,86, c0,07, c0,08, c0,06"
+     # Cipher suites that use a certifiate with a GOST public key
+     local -r a_gost="00,80, 00,81, ff,00, 00,82, 00,83"
 
      # First check whether signed certificate timestamps (SCT) are included in the
      # server's certificate. If they aren't, check whether the server provided
@@ -7609,11 +7702,15 @@ certificate_transparency() {
                     return 1
                fi
           else
-               while read -r hexc n ciph sslver kx auth enc mac export; do
-                    if [[ ${#hexc} -eq 9 ]]; then
-                         ciphers+=", ${hexc:2:2},${hexc:7:2}"
-                    fi
-               done < <(actually_supported_ciphers $cipher '' "-V")
+               [[ "$cipher" =~ aRSA ]] && ciphers+=", $a_rsa"
+               [[ "$cipher" =~ eRSA ]] && ciphers+=", $e_rsa"
+               [[ "$cipher" =~ aDSS ]] && ciphers+=", $a_dss"
+               [[ "$cipher" =~ aDH ]] && ciphers+=", $a_dh"
+               [[ "$cipher" =~ aECDH ]] && ciphers+=", $a_ecdh"
+               [[ "$cipher" =~ aECDSA ]] && ciphers+=", $a_ecdsa"
+               [[ "$cipher" =~ aGOST ]] && ciphers+=", $a_gost"
+
+               [[ -z "$ciphers" ]] && return 1
                ciphers+=", 00,ff"
           fi
           [[ -z "$sni_used" ]] && sni="$SNI" && SNI=""
@@ -8453,6 +8550,9 @@ run_server_defaults() {
      local -a ciphers_to_test certificate_type
      local -a -i success
      local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
+     local using_sockets=true
+
+     "$SSL_NATIVE" && using_sockets=false
 
      # Try each public key type once:
      # ciphers_to_test[1]: cipher suites using certificates with RSA signature public keys
@@ -8462,28 +8562,19 @@ run_server_defaults() {
      # ciphers_to_test[5]: cipher suites using certificates with ECDH key agreement public keys
      # ciphers_to_test[6]: cipher suites using certificates with ECDSA signature public keys
      # ciphers_to_test[7]: cipher suites using certificates with GOST R 34.10 (either 2001 or 94) public keys
-     ciphers_to_test[1]=""
+     ciphers_to_test[1]="aRSA:eRSA"
      ciphers_to_test[2]=""
-     for ciph in $(colon_to_spaces $(actually_supported_ciphers "aRSA")); do
-          if [[ "$ciph" =~ -RSA- ]]; then
-               ciphers_to_test[1]="${ciphers_to_test[1]}:$ciph"
-          else
-               ciphers_to_test[2]="${ciphers_to_test[2]}:$ciph"
-          fi
-     done
-     [[ -n "${ciphers_to_test[1]}" ]] && ciphers_to_test[1]="${ciphers_to_test[1]:1}"
-     [[ -n "${ciphers_to_test[2]}" ]] && ciphers_to_test[2]="${ciphers_to_test[2]:1}"
-     ciphers_to_test[3]="aDSS"
-     ciphers_to_test[4]="aDH"
-     ciphers_to_test[5]="aECDH"
-     ciphers_to_test[6]="aECDSA"
-     ciphers_to_test[7]="aGOST"
+     ciphers_to_test[3]="aDSS:aDH:aECDH:aECDSA:aGOST"
+     ciphers_to_test[4]=""
+     ciphers_to_test[5]=""
+     ciphers_to_test[6]=""
+     ciphers_to_test[7]=""
      ciphers_to_test[8]="tls1_3_RSA"
      ciphers_to_test[9]="tls1_3_ECDSA"
-     certificate_type[1]="RSASig" ; certificate_type[2]="RSAKMK"
-     certificate_type[3]="DSA"; certificate_type[4]="DH"
-     certificate_type[5]="ECDH" ; certificate_type[6]="ECDSA"
-     certificate_type[7]="GOST" ; certificate_type[8]="RSASig"
+     certificate_type[1]="" ; certificate_type[2]=""
+     certificate_type[3]=""; certificate_type[4]=""
+     certificate_type[5]="" ; certificate_type[6]=""
+     certificate_type[7]="" ; certificate_type[8]="RSASig"
      certificate_type[9]="ECDSA"
 
      for (( n=1; n <= 16 ; n++ )); do
@@ -8491,7 +8582,7 @@ run_server_defaults() {
           # specifies TLSv1.1 and doesn't include a server name extension.
           # So, for each public key type for which a certificate was found,
           # try again, but only with TLSv1.1 and without SNI.
-          if [[ $n -ne 2 ]] && [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
+          if [[ $n -ne 1 ]] && [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
                ciphers_to_test[n]=""
           elif [[ $n -ge 10 ]]; then
                ciphers_to_test[n]=""
@@ -8499,16 +8590,15 @@ run_server_defaults() {
                     ciphers_to_test[n]="${ciphers_to_test[n-9]}" && certificate_type[n]="${certificate_type[n-9]}"
           fi
 
-          if [[ -n "${ciphers_to_test[n]}" ]] && \
-             ( [[ "${ciphers_to_test[n]}" =~ "tls1_3" ]] || [[ $(count_ciphers $(actually_supported_ciphers "${ciphers_to_test[n]}")) -ge 1 ]] ); then
+          if [[ -n "${ciphers_to_test[n]}" ]]; then
                if [[ $n -ge 10 ]]; then
                     sni="$SNI"
                     SNI=""
-                    get_server_certificate "-cipher ${ciphers_to_test[n]}" "tls1_1"
+                    get_server_certificate "${ciphers_to_test[n]}" "tls1_1"
                     success[n]=$?
                     SNI="$sni"
                else
-                    get_server_certificate "-cipher ${ciphers_to_test[n]}"
+                    get_server_certificate "${ciphers_to_test[n]}"
                     success[n]=$?
                fi
                if [[ ${success[n]} -eq 0 ]] && [[ -s "$HOSTCERT" ]]; then
@@ -8519,6 +8609,69 @@ run_server_defaults() {
                          sessticket_lifetime_hint=$(awk '/session ticket life/' $TMPFILE)
                     fi
 
+                    if [[ $n -le 7 ]]; then
+                         ciph="$(get_cipher $TMPFILE)"
+                         if [[ "$ciph" != TLS_* ]] && [[ "$ciph" != SSL_* ]]; then
+                              ciph="$(openssl2rfc "$ciph")"
+                         fi
+                         if [[ "$ciph" == TLS_DHE_RSA_* ]] || [[ "$ciph" == TLS_ECDHE_RSA_* ]] || [[ "$ciph" == TLS_CECPQ1_RSA_* ]]; then
+                              certificate_type[n]="RSASig"
+                              if [[ -z "${ciphers_to_test[n+1]}" ]]; then
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n]/aRSA/}"
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n+1]/::/:}"
+                                   [[ "${ciphers_to_test[n+1]:0:1}" == : ]] && ciphers_to_test[n+1]="${ciphers_to_test[n+1]:1}"
+                              fi
+                              ciphers_to_test[n]="aRSA"
+                         elif [[ "$ciph" == TLS_RSA_* ]] || [[ "$ciph" == SSL_* ]]; then
+                              certificate_type[n]="RSAKMK"
+                              if [[ -z "${ciphers_to_test[n+1]}" ]]; then
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n]/eRSA/}"
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n+1]/::/:}"
+                                   [[ "${ciphers_to_test[n+1]:0:1}" == : ]] && ciphers_to_test[n+1]="${ciphers_to_test[n+1]:1}"
+                              fi
+                              ciphers_to_test[n]="eRSA"
+                         elif [[ "$ciph" == TLS_DHE_DSS_* ]]; then
+                              certificate_type[n]="DSA"
+                              if [[ -z "${ciphers_to_test[n+1]}" ]]; then
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n]/aDSS/}"
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n+1]/::/:}"
+                                   [[ "${ciphe-S 127.0.0.1rs_to_test[n+1]:0:1}" == : ]] && ciphers_to_test[n+1]="${ciphers_to_test[n+1]:1}"
+                              fi
+                              ciphers_to_test[n]="aDSS"
+                         elif [[ "$ciph" == TLS_DH_* ]]; then
+                              certificate_type[n]="DH"
+                              if [[ -z "${ciphers_to_test[n+1]}" ]]; then
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n]/aDH/}"
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n+1]/::/:}"
+                                   [[ "${ciphers_to_test[n+1]:0:1}" == : ]] && ciphers_to_test[n+1]="${ciphers_to_test[n+1]:1}"
+                              fi
+                              ciphers_to_test[n]="aDH"
+                         elif [[ "$ciph" == TLS_ECDH_* ]]; then
+                              certificate_type[n]="ECDH"
+                              if [[ -z "${ciphers_to_test[n+1]}" ]]; then
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n]/aECDH/}"
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n+1]/::/:}"
+                                   [[ "${ciphers_to_test[n+1]:0:1}" == : ]] && ciphers_to_test[n+1]="${ciphers_to_test[n+1]:1}"
+                              fi
+                              ciphers_to_test[n]="aECDH"
+                         elif [[ "$ciph" == TLS_ECDHE_ECDSA_* ]] || [[ "$ciph" == TLS_CECPQ1_ECDSA_* ]]; then
+                              certificate_type[n]="ECDSA"
+                              if [[ -z "${ciphers_to_test[n+1]}" ]]; then
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n]/aECDSA/}"
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n+1]/::/:}"
+                                   [[ "${ciphers_to_test[n+1]:0:1}" == : ]] && ciphers_to_test[n+1]="${ciphers_to_test[n+1]:1}"
+                              fi
+                              ciphers_to_test[n]="aECDSA"
+                         elif [[ "$ciph" == TLS_GOST* ]]; then
+                              certificate_type[n]="GOST"
+                              if [[ -z "${ciphers_to_test[n+1]}" ]]; then
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n]/aGOST/}"
+                                   ciphers_to_test[n+1]="${ciphers_to_test[n+1]/::/:}"
+                                   [[ "${ciphers_to_test[n+1]:0:1}" == : ]] && ciphers_to_test[n+1]="${ciphers_to_test[n+1]:1}"
+                              fi
+                              ciphers_to_test[n]="aGOST"
+                         fi
+                    fi
                     # check whether the host's certificate has been seen before
                     match_found=false
                     i=1
@@ -8584,7 +8737,8 @@ run_server_defaults() {
                          previous_hostcert_txt[certs_found]="$($OPENSSL x509 -noout -text 2>>$ERRFILE <<< "$newhostcert")"
                          previous_intermediates[certs_found]=$(cat $TEMPDIR/intermediatecerts.pem)
                          previous_hostcert_issuer[certs_found]=""
-                         [[ -n "${previous_intermediates[certs_found]}" ]] && previous_hostcert_issuer[certs_found]=$(cat $TEMPDIR/hostcert_issuer.pem)
+                         [[ -n "${previous_intermediates[certs_found]}" ]] && [[ -r $TEMPDIR/hostcert_issuer.pem ]] && \
+                              previous_hostcert_issuer[certs_found]=$(cat $TEMPDIR/hostcert_issuer.pem)
                          previous_ordering_problem[certs_found]=$CERTIFICATE_LIST_ORDERING_PROBLEM
                          [[ $n -ge 10 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                          tls_version[certs_found]="$DETECTED_TLS_VERSION"
@@ -8605,6 +8759,10 @@ run_server_defaults() {
           cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
           >$ERRFILE
           [[ -z "$sessticket_lifetime_hint" ]] && sessticket_lifetime_hint=$(awk '/session ticket lifetime/' $TMPFILE)
+     fi
+     if "$using_sockets" && [[ -z "$sessticket_lifetime_hint" ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher ALL:COMPLEMENTOFALL -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>$ERRFILE >$TMPFILE
+          sclient_connect_successful $? $TMPFILE && sessticket_lifetime_hint=$(awk '/session ticket lifetime/' $TMPFILE)
      fi
 
      debugme echo "# certificates found $certs_found"
