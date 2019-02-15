@@ -8931,7 +8931,7 @@ run_server_defaults() {
           fi
      elif [[ $certs_found -eq 0 ]] && [[ -s "$HOSTCERT" ]]; then
           outln
-          generic_nonfatal "Problem: Host certificate found but we can't continue with \"server defaults\""
+          generic_nonfatal "Client problem, shouldn't happen: Host certificate found but we can't continue with \"server defaults\""
      fi
      [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
 
