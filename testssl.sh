@@ -6822,7 +6822,7 @@ determine_tls_extensions() {
      local cbc_cipher_list_hex="c0,28, c0,24, c0,14, c0,0a, 00,6b, 00,6a, 00,69, 00,68, 00,39, 00,38, 00,37, 00,36, c0,77, c0,73, 00,c4, 00,c3, 00,c2, 00,c1, 00,88, 00,87, 00,86, 00,85, c0,2a, c0,26, c0,0f, c0,05, c0,79, c0,75, 00,3d, 00,35, 00,c0, 00,84, c0,3d, c0,3f, c0,41, c0,43, c0,45, c0,49, c0,4b, c0,4d, c0,4f, c0,27, c0,23, c0,13, c0,09, 00,67, 00,40, 00,3f, 00,3e, 00,33, 00,32, 00,31, 00,30, c0,76, c0,72, 00,be, 00,bd, 00,bc, 00,bb, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44, 00,43, 00,42, c0,29, c0,25, c0,0e, c0,04, c0,78, c0,74, 00,3c, 00,2f, 00,ba, 00,96, 00,41, 00,07, c0,3c, c0,3e, c0,40, c0,42, c0,44, c0,48, c0,4a, c0,4c, c0,4e, c0,12, c0,08, 00,16, 00,13, 00,10, 00,0d, c0,0d, c0,03, 00,0a, fe,ff, ff,e0, 00,63, 00,15, 00,12, 00,0f, 00,0c, 00,62, 00,09, fe,fe, ff,e1, 00,14, 00,11, 00,08, 00,06, 00,0b, 00,0e"
      local using_sockets=true
 
-     [[ "$OPTIMAL_PROTO" == "-ssl2" ]] && return 0
+     [[ "$OPTIMAL_PROTO" == -ssl2 ]] && return 0
      "$SSL_NATIVE" && using_sockets=false
 
      if "$using_sockets"; then
@@ -6888,7 +6888,7 @@ extract_certificates() {
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
      savedir=$(pwd); cd $TEMPDIR
      # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
-     if [[ "$version" == "ssl2" ]]; then
+     if [[ "$version" == ssl2 ]]; then
           awk -v n=-1 '/Server certificate/ {start=1}
                /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
                inc { print > ("level" n ".crt") }
@@ -6946,7 +6946,7 @@ extract_stapled_ocsp() {
      local response="$(cat $TMPFILE)"
      local ocsp tmp
      local -i ocsp_len
-     
+
      STAPLED_OCSP_RESPONSE=""
      if [[ "$response" =~ "CertificateStatus" ]]; then
           # This is OpenSSL 1.1.0 or 1.1.1 and the response
@@ -8614,7 +8614,7 @@ run_server_defaults() {
           ct[i]="$(certificate_transparency "${previous_hostcert_txt[i]}" "${ocsp_response[i]}" "$certs_found" "${cipher[i]}" "${sni_used[i]}" "${tls_version[i]}")"
           # If certificate_transparency() called tls_sockets() and found a "signed certificate timestamps" extension,
           # then add it to $TLS_EXTENSIONS, since it may not have been found by determine_tls_extensions().
-          [[ $certs_found -gt 1 ]] && [[ "${ct[i]}" == "TLS extension" ]] && extract_new_tls_extensions "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
+          [[ $certs_found -gt 1 ]] && [[ "${ct[i]}" == TLS\ extension ]] && extract_new_tls_extensions "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
      done
 
      outln
@@ -10826,24 +10826,24 @@ check_tls_serverhellodone() {
           [[ $remaining -lt 10 ]] && return 1
 
           tls_content_type="${tls_hello_ascii:i:2}"
-          [[ "$tls_content_type" != "14" ]] && [[ "$tls_content_type" != "15" ]] && \
-               [[ "$tls_content_type" != "16" ]] && [[ "$tls_content_type" != "17" ]] && return 2
+          [[ "$tls_content_type" != 14 ]] && [[ "$tls_content_type" != 15 ]] && \
+               [[ "$tls_content_type" != 16 ]] && [[ "$tls_content_type" != 17 ]] && return 2
           i=$i+2
           tls_protocol="${tls_hello_ascii:i:4}"
           [[ -z "$DETECTED_TLS_VERSION" ]] && DETECTED_TLS_VERSION="$tls_protocol"
-          [[ "${tls_protocol:0:2}" != "03" ]] && return 2
+          [[ "${tls_protocol:0:2}" != 03 ]] && return 2
           i=$i+4
           msg_len=2*$(hex2dec "${tls_hello_ascii:i:4}")
           i=$i+4
           remaining=$tls_hello_ascii_len-$i
           [[ $msg_len -gt $remaining ]] && return 1
 
-          if [[ "$tls_content_type" == "16" ]]; then
+          if [[ "$tls_content_type" == 16 ]]; then
                tls_handshake_ascii+="${tls_hello_ascii:i:msg_len}"
                tls_handshake_ascii_len=${#tls_handshake_ascii}
                decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $((msg_len/2)))${tls_hello_ascii:i:msg_len}"
                # the ServerHello MUST be the first handshake message
-               [[ $tls_handshake_ascii_len -ge 2 ]] && [[ "${tls_handshake_ascii:0:2}" != "02" ]] && return 2
+               [[ $tls_handshake_ascii_len -ge 2 ]] && [[ "${tls_handshake_ascii:0:2}" != 02 ]] && return 2
                if [[ $tls_handshake_ascii_len -ge 12 ]]; then
                     DETECTED_TLS_VERSION="${tls_handshake_ascii:8:4}"
 
@@ -10851,7 +10851,7 @@ check_tls_serverhellodone() {
                     # there is a supported_versions extension that specifies the actual version. So,
                     # if the version field specifies TLSv1.2, then check to see if there is a
                     # supported_versions extension.
-                    if [[ "$DETECTED_TLS_VERSION" == "0303" ]]; then
+                    if [[ "$DETECTED_TLS_VERSION" == 0303 ]]; then
                          tls_serverhello_ascii_len=2*$(hex2dec "${tls_handshake_ascii:2:6}")
                          sid_len=2*$(hex2dec "${tls_handshake_ascii:76:2}")
                          if [[ $tls_serverhello_ascii_len -gt 76+$sid_len ]]; then
@@ -10866,7 +10866,7 @@ check_tls_serverhellodone() {
                                    offset=92+$sid_len+$j
                                    extension_len=2*$(hex2dec "${tls_handshake_ascii:offset:4}")
                                    [[ $extension_len -gt $tls_extensions_len-$j-8 ]] && return 2
-                                   if [[ "$extension_type" == "002B" ]]; then # supported_versions
+                                   if [[ "$extension_type" == 002B ]]; then # supported_versions
                                         [[ $extension_len -ne 4 ]] && return 2
                                         offset=96+$sid_len+$j
                                         DETECTED_TLS_VERSION="${tls_handshake_ascii:offset:4}"
@@ -10875,7 +10875,7 @@ check_tls_serverhellodone() {
                          fi
                     fi
                     # A version of {0x7F, xx} represents an implementation of a draft version of TLS 1.3
-                    [[ "${DETECTED_TLS_VERSION:0:2}" == "7F" ]] && DETECTED_TLS_VERSION="0304"
+                    [[ "${DETECTED_TLS_VERSION:0:2}" == 7F ]] && DETECTED_TLS_VERSION=0304
                     if [[ 0x$DETECTED_TLS_VERSION -ge 0x0304 ]] && [[ "$process_full" == ephemeralkey ]]; then
                          tls_serverhello_ascii_len=2*$(hex2dec "${tls_handshake_ascii:2:6}")
                          if [[ $tls_handshake_ascii_len -ge $tls_serverhello_ascii_len+8 ]]; then
@@ -10884,10 +10884,10 @@ check_tls_serverhellodone() {
                          fi
                     fi
                fi
-          elif [[ "$tls_content_type" == "15" ]]; then   # TLS ALERT
+          elif [[ "$tls_content_type" == 15 ]]; then   # TLS ALERT
                tls_alert_ascii+="${tls_hello_ascii:i:msg_len}"
                decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $((msg_len/2)))${tls_hello_ascii:i:msg_len}"
-          elif [[ "$tls_content_type" == "17" ]] && [[ -n "$key_and_iv" ]]; then # encrypted data
+          elif [[ "$tls_content_type" == 17 ]] && [[ -n "$key_and_iv" ]]; then # encrypted data
                nonce="$(get-nonce "$iv" "$seq_num")"
                [[ $? -ne 0 ]] && return 2
                plaintext="$(sym-decrypt "$cipher" "$key" "$nonce" "${tls_hello_ascii:i:msg_len}")"
@@ -10896,14 +10896,14 @@ check_tls_serverhellodone() {
 
                # Remove zeros from end of plaintext, if any
                plaintext_len=${#plaintext}-2
-               while [[ "${plaintext:plaintext_len:2}" == "00" ]]; do
+               while [[ "${plaintext:plaintext_len:2}" == 00 ]]; do
                     plaintext_len=$plaintext_len-2
                done
                tls_content_type="${plaintext:plaintext_len:2}"
                decrypted_response+="${tls_content_type}0301$(printf "%04X" $((plaintext_len/2)))${plaintext:0:plaintext_len}"
-               if [[ "$tls_content_type" == "16" ]]; then
+               if [[ "$tls_content_type" == 16 ]]; then
                     tls_handshake_ascii+="${plaintext:0:plaintext_len}"
-               elif [[ "$tls_content_type" == "15" ]]; then
+               elif [[ "$tls_content_type" == 15 ]]; then
                     tls_alert_ascii+="${plaintext:0:plaintext_len}"
                else
                     return 2
@@ -10934,13 +10934,13 @@ check_tls_serverhellodone() {
 
           # For SSLv3 - TLS1.2 look for a ServerHelloDone message.
           # For TLS 1.3 look for a Finished message.
-          [[ $tls_msg_type == "0E" ]] && tm_out "" && return 0
-          [[ $tls_msg_type == "14" ]] && tm_out "$decrypted_response" && return 0
+          [[ $tls_msg_type == 0E ]] && tm_out "" && return 0
+          [[ $tls_msg_type == 14 ]] && tm_out "$decrypted_response" && return 0
      done
      # If the response is TLSv1.3 and the full response is to be processed, but the
      # key and IV have not been provided to decrypt the response, then return 3 if
      # the entire ServerHello has been received.
-     if [[ "$DETECTED_TLS_VERSION" == "0304" ]] && [[ "$process_full" =~ all ]] && \
+     if [[ "$DETECTED_TLS_VERSION" == 0304 ]] && [[ "$process_full" =~ all ]] && \
         [[ -z "$key_and_iv" ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
           return 3
      fi
@@ -11094,7 +11094,7 @@ parse_tls_serverhello() {
                debugme tmln_warning "Content type other than alert, handshake, change cipher spec, or application data detected."
                [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 8
-          elif [[ "${tls_protocol:0:2}" != "03" ]]; then
+          elif [[ "${tls_protocol:0:2}" != 03 ]]; then
                debugme tmln_warning "Protocol record_version.major is not 03."
                [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
@@ -11113,9 +11113,9 @@ parse_tls_serverhello() {
                fi
           fi
 
-          if [[ $tls_content_type == "16" ]]; then
+          if [[ $tls_content_type == 16 ]]; then
                tls_handshake_ascii="$tls_handshake_ascii${tls_hello_ascii:i:msg_len}"
-          elif [[ $tls_content_type == "15" ]]; then   # TLS ALERT
+          elif [[ $tls_content_type == 15 ]]; then   # TLS ALERT
                tls_alert_ascii="$tls_alert_ascii${tls_hello_ascii:i:msg_len}"
           fi
      done
@@ -11151,11 +11151,11 @@ parse_tls_serverhello() {
                     echo "===============================================================================" >> $TMPFILE
                fi
 
-               if [[ "$tls_err_level" != "01" ]] && [[ "$tls_err_level" != "02" ]]; then
+               if [[ "$tls_err_level" != 01 ]] && [[ "$tls_err_level" != 02 ]]; then
                     debugme tmln_warning "Unexpected AlertLevel (0x$tls_err_level)."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
-               elif [[ "$tls_err_level" == "02" ]]; then
+               elif [[ "$tls_err_level" == 02 ]]; then
                     # Fatal alert
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
@@ -11227,7 +11227,7 @@ parse_tls_serverhello() {
                fi
           fi
 
-          if [[ "$tls_msg_type" == "02" ]]; then
+          if [[ "$tls_msg_type" == 02 ]]; then
                if [[ -n "$tls_serverhello_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one ServerHello handshake message."
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -11235,7 +11235,7 @@ parse_tls_serverhello() {
                fi
                tls_serverhello_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverhello_ascii_len=$msg_len
-          elif [[ "$process_full" =~ all ]] && [[ "$tls_msg_type" == "08" ]]; then
+          elif [[ "$process_full" =~ all ]] && [[ "$tls_msg_type" == 08 ]]; then
                # Add excrypted extensions (now decrypted) to end of extensions in SeverHello
                tls_encryptedextensions_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_encryptedextensions_ascii_len=$msg_len
@@ -11280,7 +11280,7 @@ parse_tls_serverhello() {
           debugme echo "Malformed response"
           [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
-     elif [[ "${tls_handshake_ascii:0:2}" != "02" ]]; then
+     elif [[ "${tls_handshake_ascii:0:2}" != 02 ]]; then
           # the ServerHello MUST be the first handshake message
           DETECTED_TLS_VERSION="reply contained no ServerHello"
           debugme tmln_warning "The first handshake protocol message is not a ServerHello."
@@ -11303,8 +11303,8 @@ parse_tls_serverhello() {
      # byte 38+39+sid-len:  extension length
      tls_protocol2="${tls_serverhello_ascii:0:4}"
      DETECTED_TLS_VERSION="$tls_protocol2"
-     [[ "${DETECTED_TLS_VERSION:0:2}" == "7F" ]] && DETECTED_TLS_VERSION="0304"
-     if [[ "${DETECTED_TLS_VERSION:0:2}" != "03" ]]; then
+     [[ "${DETECTED_TLS_VERSION:0:2}" == 7F ]] && DETECTED_TLS_VERSION="0304"
+     if [[ "${DETECTED_TLS_VERSION:0:2}" != 03 ]]; then
           debugme tmln_warning "server_version.major in ServerHello is not 03."
           [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
           return 1
@@ -11472,7 +11472,7 @@ parse_tls_serverhello() {
                           else
                                tls_extensions+="TLS server extension \"unrecognized extension\""
                           fi
-                          if [[ "$extension_type" == "0028" ]]; then
+                          if [[ "$extension_type" == 0028 ]]; then
                                tls_extensions+=" (id=40), len=$extension_len\n"
                           else
                                tls_extensions+=" (id=51), len=$extension_len\n"
@@ -12295,27 +12295,27 @@ prepare_tls_clienthello() {
                     part1="0x${cipher_suites:$i:2}"
                     part2="0x${cipher_suites:$j:2}"
                     if [[ "$part1" == "0xc0" ]]; then
-                         if [[ "$part2" -ge "0x01" ]] && [[ "$part2" -le "0x19" ]]; then
+                         if [[ "$part2" -ge 0x01 ]] && [[ "$part2" -le 0x19 ]]; then
                               ecc_cipher_suite_found=true && break
-                         elif [[ "$part2" -ge "0x23" ]] && [[ "$part2" -le "0x3b" ]]; then
+                         elif [[ "$part2" -ge 0x23 ]] && [[ "$part2" -le 0x3b ]]; then
                               ecc_cipher_suite_found=true && break
-                         elif [[ "$part2" -ge "0x48" ]] && [[ "$part2" -le "0x4f" ]]; then
+                         elif [[ "$part2" -ge 0x48 ]] && [[ "$part2" -le 0x4f ]]; then
                               ecc_cipher_suite_found=true && break
-                         elif [[ "$part2" -ge "0x5c" ]] && [[ "$part2" -le "0x63" ]]; then
+                         elif [[ "$part2" -ge 0x5c ]] && [[ "$part2" -le 0x63 ]]; then
                               ecc_cipher_suite_found=true && break
-                         elif [[ "$part2" -ge "0x70" ]] && [[ "$part2" -le "0x79" ]]; then
+                         elif [[ "$part2" -ge 0x70 ]] && [[ "$part2" -le 0x79 ]]; then
                               ecc_cipher_suite_found=true && break
-                         elif [[ "$part2" -ge "0x86" ]] && [[ "$part2" -le "0x8d" ]]; then
+                         elif [[ "$part2" -ge 0x86 ]] && [[ "$part2" -le 0x8d ]]; then
                               ecc_cipher_suite_found=true && break
-                         elif [[ "$part2" -ge "0x9a" ]] && [[ "$part2" -le "0x9b" ]]; then
+                         elif [[ "$part2" -ge 0x9a ]] && [[ "$part2" -le 0x9b ]]; then
                               ecc_cipher_suite_found=true && break
-                         elif [[ "$part2" -ge "0xac" ]] && [[ "$part2" -le "0xaf" ]]; then
+                         elif [[ "$part2" -ge 0xac ]] && [[ "$part2" -le 0xaf ]]; then
                               ecc_cipher_suite_found=true && break
                          fi
-                    elif [[ "$part1" == "0xcc" ]]; then
-                         if [[ "$part2" == "0xa8" ]] || [[ "$part2" == "0xa9" ]] || \
-                            [[ "$part2" == "0xac" ]] || [[ "$part2" == "0x13" ]] || \
-                            [[ "$part2" == "0x14" ]]; then
+                    elif [[ "$part1" == 0xcc ]]; then
+                         if [[ "$part2" == 0xa8 ]] || [[ "$part2" == 0xa9 ]] || \
+                            [[ "$part2" == 0xac ]] || [[ "$part2" == 0x13 ]] || \
+                            [[ "$part2" == 0x14 ]]; then
                               ecc_cipher_suite_found=true && break
                          fi
                     fi
@@ -12378,7 +12378,7 @@ prepare_tls_clienthello() {
           elif [[ 0x$tls_low_byte -gt 0x03 ]]; then
                # Supported Groups Extension
                if [[ ! "$process_full" =~ all ]] || \
-                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
+                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]]; then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,10, 00,0e,               # lengths
@@ -12387,7 +12387,7 @@ prepare_tls_clienthello() {
                     # OpenSSL prior to 1.1.1 does not support X448, so list it as the least
                     # preferred option if the response needs to be decrypted, and do not
                     # list it at all if the response MUST be decrypted.
-               elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] && [[ "$process_full" == all+ ]]; then
+               elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.0* ]] && [[ "$process_full" == all+ ]]; then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,0e, 00,0c,               # lengths
@@ -12469,7 +12469,7 @@ prepare_tls_clienthello() {
                          # FIXME: The ClientHello currently advertises support for various
                          # draft versions of TLSv1.3. Eventually it should only adversize
                          # support for the final version (0304).
-                         if [[ "$KEY_SHARE_EXTN_NR" == "33" ]]; then
+                         if [[ "$KEY_SHARE_EXTN_NR" == 33 ]]; then
                               extension_supported_versions+=", 03, 04, 7f, 1c, 7f, 1b, 7f, 1a, 7f, 19, 7f, 18, 7f, 17"
                          else
                               extension_supported_versions+=", 7f, 16, 7f, 15, 7f, 14, 7f, 13, 7f, 12"
@@ -12491,7 +12491,7 @@ prepare_tls_clienthello() {
           # OpenSSL, Firefox, and Chrome include it in TLS 1.3 ClientHello messages, and there is at
           # least one server that will fail the connection if it is absent
           # (see https://github.com/drwetter/testssl.sh/issues/990).
-          if [[ "0x$tls_low_byte" -ge "0x04" ]] && [[ ! "$extra_extensions_list" =~ " 002d " ]]; then
+          if [[ "0x$tls_low_byte" -ge 0x04 ]] && [[ ! "$extra_extensions_list" =~ " 002d " ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extn_psk_mode"
           fi
@@ -12509,7 +12509,7 @@ prepare_tls_clienthello() {
 
           # RFC 5246 says that clients MUST NOT offer the signature algorithms
           # extension if they are offering TLS versions prior to 1.2.
-          if [[ "0x$tls_low_byte" -ge "0x03" ]] && [[ ! "$extra_extensions_list" =~ " 000d " ]]; then
+          if [[ "0x$tls_low_byte" -ge 0x03 ]] && [[ ! "$extra_extensions_list" =~ " 000d " ]]; then
                [[ -n "$all_extensions" ]] && all_extensions+=","
                all_extensions+="$extension_signature_algorithms"
           fi
