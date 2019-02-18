@@ -6270,7 +6270,7 @@ run_server_preference() {
 check_tls12_pref() {
      local batchremoved="-CAMELLIA:-IDEA:-KRB5:-PSK:-SRP:-aNULL:-eNULL"
      local batchremoved_success=false
-     local tested_cipher=""
+     local tested_cipher="" cipher ciphers_to_test
      local order=""
      local -i nr_ciphers_found_r1=0 nr_ciphers_found_r2=0
 
@@ -6309,11 +6309,15 @@ check_tls12_pref() {
 
      if "$batchremoved_success"; then
           # now we combine the two cipher sets from both while loops
-          [[ "${order:0:1}" == " " ]] && order="${order:1}"
-          combined_ciphers="${order// /:}"
+          combined_ciphers="$order"
           order="" ; tested_cipher=""
           while true; do
-               $OPENSSL s_client $(s_client_options "$STARTTLS -tls1_2 $BUGS -cipher "$combined_ciphers$tested_cipher" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
+               ciphers_to_test=""
+               for cipher in $combined_ciphers; do
+                    [[ ! "$tested_cipher:" =~ :-$cipher: ]] && ciphers_to_test+=":$cipher"
+               done
+               [[ -z "$ciphers_to_test" ]] && break
+               $OPENSSL s_client $(s_client_options "$STARTTLS -tls1_2 $BUGS -cipher "${ciphers_to_test:1}" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
                if sclient_connect_successful $? $TMPFILE ; then
                     cipher=$(get_cipher $TMPFILE)
                     order+=" $cipher"
@@ -6321,7 +6325,7 @@ check_tls12_pref() {
                     nr_ciphers_found_r2+=1
                     "$FAST" && break
                else
-                    # nothing left, we're done
+                    # This shouldn't happen.
                     break
                fi
           done
