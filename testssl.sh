@@ -4649,6 +4649,9 @@ add_tls_offered() {
 }
 
 # function which checks whether SSLv2 - TLS 1.2 is being offered, see add_tls_offered()
+# arg1:    protocol string or hex code for TLS protocol
+# echos:   0 if proto known being offered, 1: known not being offered, 2: we don't know yet whether proto is being offered
+# return value is always zero
 has_server_protocol() {
      local proto
      local proto_val_pair
@@ -12241,9 +12244,10 @@ parse_tls_serverhello() {
 }
 
 
-#arg1: list of ciphers suites or empty
-#arg2: "true" if full server response should be parsed.
-# return: 6: couldn't open socket, 0: OK, else: return value of parse_sslv2_serverhello()
+#arg1 (optional): list of ciphers suites or empty
+#arg2 (optional): "true" if full server response should be parsed.
+# return: 6: couldn't open socket, 3(!): sslv2 handshake succeeded, 0=no SSLv2
+#         1,4,6,7: see return value of parse_sslv2_serverhello()
 sslv2_sockets() {
      local ret
      local client_hello cipher_suites len_client_hello
@@ -12252,10 +12256,10 @@ sslv2_sockets() {
      local -i response_len server_hello_len
      local parse_complete=false
 
+     # this could be empty so swe use '=='
      if [[ "$2" == true ]]; then
           parse_complete=true
      fi
-
      if [[ -n "$1" ]]; then
           cipher_suites="$1"
      else
@@ -14048,17 +14052,22 @@ run_breach() {
 
 
 # SWEET32 (https://sweet32.info/). Birthday attacks on 64-bit block ciphers.
-# In a nutshell: don't use 3DES ciphers anymore (DES, RC2 and IDEA too)
+# In a nutshell: don't use 3DES ciphers anymore (DES, RC2 and IDEA too).
+# Please note as opposed to RC4 (stream cipher) RC2 is a block cipher.
 #
 run_sweet32() {
-     local -i sclient_success=1
-      local sweet32_ciphers="IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:DES-CBC3-SHA:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:DES-CFB-M1:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:EXP1024-RC2-CBC-MD5:DES-CBC-MD5:DES-CBC-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5:EXP-DH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA"
+     local -i sclient_success=1 ssl2_sclient_success=1
+     local sweet32_ciphers="IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:DES-CBC3-SHA:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:DES-CFB-M1:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:EXP1024-RC2-CBC-MD5:DES-CBC-MD5:DES-CBC-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5:EXP-DH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA"
      local sweet32_ciphers_hex="00,07, 00,21, 00,25, c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,17, 00,1b, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,63, 00,15, 00,12, 00,0f, 00,0c, 00,1a, 00,62, 00,09, 00,61, 00,1e, 00,22, fe,fe, ff,e1, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e"
+     local ssl2_sweet32_ciphers='RC2-CBC-MD5:EXP-RC2-CBC-MD5:IDEA-CBC-MD5:DES-CBC-MD5:DES-CBC-SHA:DES-CBC3-MD5:DES-CBC3-SHA:DES-CFB-M1'
+     local ssl2_sweet32_ciphers_hex='03,00,80, 04,00,80, 05,00,80, 06,00,40, 06,01,40, 07,00,C0, 07,01,C0, FF,80,00'
+     local nr_cipher_minimal=21
      local proto
      local cve="CVE-2016-2183 CVE-2016-6329"
      local cwe="CWE-327"
      local hint=""
-     local -i nr_sweet32_ciphers=0
+     local -i nr_sweet32_ciphers=0 nr_supported_ciphers=0 nr_ssl2_sweet32_ciphers=0 nr_ssl2_supported_ciphers=0
+     local ssl2_sweet=false
      local using_sockets=true
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SWEET32 (Birthday Attacks on 64-bit Block Ciphers)       " && outln
@@ -14076,9 +14085,31 @@ run_sweet32() {
                [[ $sclient_success -eq 2 ]] && sclient_success=0
                [[ $sclient_success -eq 0 ]] && break
           done
+          if [[ 1 -ne $(has_server_protocol "ssl2") ]]; then
+               sslv2_sockets "$ssl2_sweet32_ciphers_hex"
+               case $? in
+                    3)   ssl2_sweet=true
+                         add_tls_offered ssl2 yes ;;
+                    0)   ;; # ssl2_sweet=false
+                    1|4|6|7)  debugme "${FUNCNAME[0]}: test problem we don't handle here"
+                         ;;
+               esac
+          fi
      else
           nr_sweet32_ciphers=$(count_ciphers $sweet32_ciphers)
           nr_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $sweet32_ciphers))
+          debugme echo "$nr_sweet32_ciphers / $nr_supported_ciphers"
+
+          nr_ssl2_sweet32_ciphers=$(count_ciphers $ssl2_sweet32_ciphers)
+          nr_ssl2_supported_ciphers=$(count_ciphers $(actually_supported_ciphers $ssl2_sweet32_ciphers))
+          debugme echo "$nr_ssl2_sweet32_ciphers / $nr_ssl2_supported_ciphers"
+
+          if [[ $(( nr_supported_ciphers + nr_ssl2_supported_ciphers )) -le $nr_cipher_minimal ]]; then
+               pr_local_problem "Only ${nr_supported_ciphers}+${nr_ssl2_supported_ciphers} \"SWEET32 ciphers\" found in your $OPENSSL."
+               outln " Test skipped"
+               fileout "SWEET32" "WARN" "Not tested, lack of local support ($((nr_supported_ciphers + nr_ssl2_supported_ciphers)) ciphers only)" "$cve" "$cwe" "$hint"
+               return 1
+          fi
           for proto in -no_ssl2 -tls1_1 -tls1 -ssl3; do
                [[ $nr_supported_ciphers -eq 0 ]] && break
                ! "$HAS_SSL3" && [[ "$proto" == -ssl3 ]] && continue
@@ -14092,22 +14123,52 @@ run_sweet32() {
                [[ $DEBUG -ge 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
                [[ $sclient_success -eq 0 ]] && break
           done
+          if "$HAS_SSL2"; then
+               if [[ 1 -ne $(has_server_protocol "ssl2") ]]; then
+                    $OPENSSL s_client $STARTTLS $BUGS -ssl2 -cipher $ssl2_sweet32_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
+                    sclient_connect_successful $? $TMPFILE
+                    if [[ $? -eq 0 ]]; then
+                         ssl2_sweet=true
+                         add_tls_offered ssl2 yes
+                    fi
+               fi
+          else
+               debugme tm_warning "Can't test with SSLv2 here as $OPENSSL lacks support"
+               #  we omit adding a string for DEBUG==0 here as using sockets is the default and the following elif statement becomes ugly
+          fi
      fi
-     if [[ $sclient_success -eq 0 ]]; then
+     if [[ $sclient_success -eq 0 ]] && "$ssl2_sweet" ; then
+          pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers for SSLv2 and above"
+          fileout "SWEET32" "LOW" "uses 64 bit block ciphers for SSLv2 and above" "$cve" "$cwe" "$hint"
+     elif [[ $sclient_success -eq 0 ]]; then
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers" "$cve" "$cwe" "$hint"
+     elif "$ssl2_sweet"; then
+          pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers wth SSLv2 only"
+          fileout "SWEET32" "LOW" "uses 64 bit block ciphers with SSLv2 only" "$cve" "$cwe" "$hint"
      else
           pr_svrty_best "not vulnerable (OK)";
           if "$using_sockets"; then
                fileout "SWEET32" "OK" "not vulnerable" "$cve" "$cwe"
           else
-               if [[ "$nr_supported_ciphers" -ge 17 ]]; then
+               if [[ "$nr_supported_ciphers" -ge 38 ]]; then
                     # Likely only PSK/KRB5 ciphers are missing: display discrepancy but no warning
-                    out ", $nr_supported_ciphers/$nr_sweet32_ciphers local ciphers"
+                    if "$HAS_SSL2"; then
+                         out ", $nr_supported_ciphers/$nr_sweet32_ciphers (SSLv2: $nr_ssl2_sweet32_ciphers/$nr_ssl2_supported_ciphers) local ciphers"
+                         fileout "SWEET32" "OK" "not vulnerable ($nr_supported_ciphers of $nr_sweet32_ciphers (SSLv2: $nr_ssl2_sweet32_ciphers/$nr_ssl2_supported_ciphers)) local ciphers" "$cve" "$cwe"
+                    else
+                         out ", $nr_supported_ciphers/$nr_sweet32_ciphers local ciphers"
+                         fileout "SWEET32" "OK" "not vulnerable ($nr_supported_ciphers of $nr_sweet32_ciphers local ciphers" "$cve" "$cwe"
+                    fi
                else
-                    pr_warning ", $nr_supported_ciphers/$nr_sweet32_ciphers local ciphers"
+                    if "$HAS_SSL2"; then
+                         pr_warning ", $nr_supported_ciphers/$nr_sweet32_ciphers (SSLv2: $nr_ssl2_sweet32_ciphers/$nr_ssl2_supported_ciphers) local ciphers"
+                         fileout "SWEET32" "WARN" "not vulnerable but ($nr_supported_ciphers of $nr_sweet32_ciphers (SSLv2: $nr_ssl2_sweet32_ciphers/$nr_ssl2_supported_ciphers)) local ciphers only" "$cve" "$cwe"
+                    else
+                         pr_warning ", $nr_supported_ciphers/$nr_sweet32_ciphers local ciphers"
+                         fileout "SWEET32" "WARN" "not vulnerable but ($nr_supported_ciphers of $nr_sweet32_ciphers) local ciphers only" "$cve" "$cwe"
+                    fi
                fi
-               fileout "SWEET32" "OK" "not vulnerable ($nr_supported_ciphers of $nr_sweet32_ciphers local ciphers" "$cve" "$cwe"
           fi
      fi
      outln
