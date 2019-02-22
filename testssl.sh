@@ -349,6 +349,7 @@ HAS_IRC=false
 HAS_CHACHA20=false
 HAS_AES128_GCM=false
 HAS_AES256_GCM=false
+OSSL_CIPHERS_S=""
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
@@ -1181,11 +1182,11 @@ actually_supported_ciphers() {
 
      [[ "$2" != "ALL" ]] && tls13_ciphers="$2"
      if "$HAS_CIPHERSUITES"; then
-          $OPENSSL ciphers $3 -ciphersuites "$tls13_ciphers" "$1" 2>/dev/null || echo ""
+          $OPENSSL ciphers $3 $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$1" 2>/dev/null || echo ""
      elif [[ -n "$tls13_ciphers" ]]; then
-          $OPENSSL ciphers $3 "$tls13_ciphers:$1" 2>/dev/null || echo ""
+          $OPENSSL ciphers $3 $OSSL_CIPHERS_S "$tls13_ciphers:$1" 2>/dev/null || echo ""
      else
-          $OPENSSL ciphers $3 "$1" 2>/dev/null || echo ""
+          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$1" 2>/dev/null || echo ""
      fi
 }
 
@@ -3037,7 +3038,11 @@ openssl2hexcode() {
      local -i i
 
      if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
-          hexc="$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V" | awk '/ '"$1"' / { print $1 }')"
+          if "$HAS_CIPHERSUITES"; then
+               hexc="$($OPENSSL ciphers -V -ciphersuites "$TLS13_OSSL_CIPHERS" 'ALL:COMPLEMENTOFALL:@STRENGTH' | awk '/ '"$1"' / { print $1 }')"
+          else
+               hexc="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' | awk '/ '"$1"' / { print $1 }')"
+          fi
      else
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                [[ "$1" == ${TLS_CIPHER_OSSL_NAME[i]} ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
@@ -5284,11 +5289,11 @@ listciphers() {
 
      [[ "$2" != "ALL" ]] && tls13_ciphers="$2"
      if "$HAS_CIPHERSUITES"; then
-          $OPENSSL ciphers $3 -ciphersuites "$tls13_ciphers" "$1" &>$TMPFILE
+          $OPENSSL ciphers $OSSL_CIPHERS_S $3 -ciphersuites "$tls13_ciphers" "$1" &>$TMPFILE
      elif [[ -n "$tls13_ciphers" ]]; then
-          $OPENSSL ciphers $3 "$tls13_ciphers:$1" &>$TMPFILE
+          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$tls13_ciphers:$1" &>$TMPFILE
      else
-          $OPENSSL ciphers $3 "$1" &>$TMPFILE
+          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$1" &>$TMPFILE
      fi
      ret=$?
      debugme cat $TMPFILE
@@ -11847,8 +11852,10 @@ parse_tls_serverhello() {
           else
                rfc_cipher_suite="$(show_rfc_style "x${tls_cipher_suite:0:4}")"
           fi
+     elif "$HAS_CIPHERSUITES"; then
+          rfc_cipher_suite="$($OPENSSL ciphers -V -ciphersuites "$TLS13_OSSL_CIPHERS" 'ALL:COMPLEMENTOFALL' | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')"
      else
-          rfc_cipher_suite="$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL' 'ALL' "-V" | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')"
+          rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${tls_cipher_suite:0:2},0x${tls_cipher_suite:2:2} " | awk '{ print $3 }')"
      fi
      echo "Cipher    : $rfc_cipher_suite" >> $TMPFILE
      if [[ $dh_bits -ne 0 ]]; then
@@ -12983,8 +12990,10 @@ resend_if_hello_retry_request() {
                     else
                          rfc_cipher_suite="$(show_rfc_style "x${cipher_suite:0:2}${cipher_suite:3:2}")"
                     fi
+               elif "$HAS_CIPHERSUITES"; then
+                    rfc_cipher_suite="$($OPENSSL ciphers -V -ciphersuites "$TLS13_OSSL_CIPHERS" 'ALL:COMPLEMENTOFALL' | grep -i " 0x${cipher_suite:0:2},0x${cipher_suite:3:2} " | awk '{ print $3 }')"
                else
-                    rfc_cipher_suite="$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL' 'ALL' "-V" | grep -i " 0x${cipher_suite:0:2},0x${cipher_suite:3:2} " | awk '{ print $3 }')"
+                    rfc_cipher_suite="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL' | grep -i " 0x${cipher_suite:0:2},0x${cipher_suite:3:2} " | awk '{ print $3 }')"
                fi
                if [[ -n "$rfc_cipher_suite" ]]; then
                     echo " ($rfc_cipher_suite)"
@@ -15264,7 +15273,7 @@ run_rc4() {
                     ossl_supported[nr_ciphers]=true
                     nr_ciphers+=1
                fi
-          done < <($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
+          done < <($OPENSSL ciphers $OSSL_CIPHERS_S -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
      fi
 
      if "$using_sockets" && [[ -n "$sslv2_ciphers_hex" ]]; then
@@ -15493,9 +15502,11 @@ run_grease() {
                     [[ "$selected_cipher" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && selected_cipher_hex="${TLS_CIPHER_HEXCODE[i]}" && break
                done
           elif "$HAS_SSL2"; then
-               selected_cipher_hex="$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL' 'ALL' "-V -tls1" | awk '/'" $selected_cipher "'/ { print $1 }')"
+               selected_cipher_hex="$($OPENSSL ciphers -V -tls1 'ALL:COMPLEMENTOFALL' | awk '/'" $selected_cipher "'/ { print $1 }')"
+          elif "$HAS_CIPHERSUITES"; then
+               selected_cipher_hex="$($OPENSSL ciphers -V -ciphersuites "$TLS13_OSSL_CIPHERS" 'ALL:COMPLEMENTOFALL'| awk '/'" $selected_cipher "'/ { print $1 }')"
           else
-               selected_cipher_hex="$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL' 'ALL' "-V" | awk '/'" $selected_cipher "'/ { print $1 }')"
+               selected_cipher_hex="$($OPENSSL ciphers -V 'ALL:COMPLEMENTOFALL'| awk '/'" $selected_cipher "'/ { print $1 }')"
           fi
           if [[ -n "$selected_cipher_hex" ]]; then
                normal_hello_ok=true
@@ -16223,6 +16234,9 @@ find_openssl_binary() {
          OPENSSL_LOCATION="$openssl_location"
      fi
 
+     $OPENSSL ciphers -s 2>&1 | grep -aq "unknown option" || \
+          OSSL_CIPHERS_S="-s"
+
      $OPENSSL s_client -ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
           HAS_SSL2=true
 
@@ -16641,7 +16655,11 @@ prepare_arrays() {
 
      if [[ -e "$CIPHERS_BY_STRENGTH_FILE" ]]; then
           "$HAS_SSL2" && ossl_supported_sslv2="$($OPENSSL ciphers -ssl2 -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>$ERRFILE)"
-          ossl_supported_tls="$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-tls1 -V")"
+          if "$HAS_SSL2"; then
+               ossl_supported_tls="$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-tls1 -V")"
+          else
+               ossl_supported_tls="$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V")"
+          fi
           TLS13_OSSL_CIPHERS=""
           while read hexc n TLS_CIPHER_OSSL_NAME[i] TLS_CIPHER_RFC_NAME[i] TLS_CIPHER_SSLVERS[i] TLS_CIPHER_KX[i] TLS_CIPHER_AUTH[i] TLS_CIPHER_ENC[i] mac TLS_CIPHER_EXPORT[i]; do
                TLS_CIPHER_HEXCODE[i]="$hexc"
