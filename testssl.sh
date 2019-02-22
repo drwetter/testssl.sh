@@ -6378,8 +6378,9 @@ cipher_pref_check() {
                # we hit the bug and automagically do the workaround. Cost: this is for all servers only 1x more connect
                $OPENSSL s_client $(s_client_options "$STARTTLS -tls1_2 $BUGS -cipher "$overflow_probe_cipherlist" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
                if ! sclient_connect_successful $? $TMPFILE; then
-#FIXME this needs to be handled differently. We need 2 status: BUG={true,false,not tested yet}
                     SERVER_SIZE_LIMIT_BUG=true
+# A simple check upfront for every server would be better. tls_sockets() would be better as we cannot be sure that the 
+# binary supports >=128 ciphers.
                fi
           fi
           if [[ $p == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
@@ -14835,8 +14836,8 @@ run_beast(){
      local cr=$'\n'
      local first=true
      local continued=false
-     local cbc_cipher_list="ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:SRP-DSS-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-AES-256-CBC-SHA:DHE-PSK-AES256-CBC-SHA:DHE-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DH-RSA-AES256-SHA:DH-DSS-AES256-SHA:DHE-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:AECDH-AES256-SHA:ADH-AES256-SHA:ADH-CAMELLIA256-SHA:ECDH-RSA-AES256-SHA:ECDH-ECDSA-AES256-SHA:AES256-SHA:ECDHE-PSK-AES256-CBC-SHA:CAMELLIA256-SHA:RSA-PSK-AES256-CBC-SHA:PSK-AES256-CBC-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-AES-128-CBC-SHA:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DH-RSA-AES128-SHA:DH-DSS-AES128-SHA:DHE-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DH-RSA-SEED-SHA:DH-DSS-SEED-SHA:DHE-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:AECDH-AES128-SHA:ADH-AES128-SHA:ADH-SEED-SHA:ADH-CAMELLIA128-SHA:ECDH-RSA-AES128-SHA:ECDH-ECDSA-AES128-SHA:AES128-SHA:ECDHE-PSK-AES128-CBC-SHA:DHE-PSK-AES128-CBC-SHA:SEED-SHA:CAMELLIA128-SHA:IDEA-CBC-SHA:RSA-PSK-AES128-CBC-SHA:PSK-AES128-CBC-SHA:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5:EXP-DH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA"
-     local cbc_ciphers_hex="c0,14, c0,0a, c0,22, c0,21, c0,20, 00,91, 00,39, 00,38, 00,37, 00,36, 00,88, 00,87, 00,86, 00,85, c0,19, 00,3a, 00,89, c0,0f, c0,05, 00,35, c0,36, 00,84, 00,95, 00,8d, c0,13, c0,09, c0,1f, c0,1e, c0,1d, 00,33, 00,32, 00,31, 00,30, 00,9a, 00,99, 00,98, 00,97, 00,45, 00,44, 00,43, 00,42, c0,18, 00,34, 00,9b, 00,46, c0,0e, c0,04, 00,2f, c0,35, 00,90, 00,96, 00,41, 00,07, 00,94, 00,8c, 00,21, 00,25, c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,17, 00,1b, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, 00,63, 00,15, 00,12, 00,0f, 00,0c, 00,1a, 00,62, 00,09, 00,1e, 00,22, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e"
+     local cbc_cipher_list="EXP-RC2-CBC-MD5:IDEA-CBC-SHA:EXP-DES-CBC-SHA:DES-CBC-SHA:DES-CBC3-SHA:EXP-DH-DSS-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:DH-DSS-DES-CBC3-SHA:EXP-DH-RSA-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-RSA-DES-CBC3-SHA:EXP-EDH-DSS-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:EDH-DSS-DES-CBC3-SHA:EXP-EDH-RSA-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EXP-ADH-DES-CBC-SHA:ADH-DES-CBC-SHA:ADH-DES-CBC3-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-IDEA-CBC-SHA:KRB5-DES-CBC-MD5:KRB5-DES-CBC3-MD5:KRB5-IDEA-CBC-MD5:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-MD5:EXP-KRB5-RC2-CBC-MD5:AES128-SHA:DH-DSS-AES128-SHA:DH-RSA-AES128-SHA:DHE-DSS-AES128-SHA:DHE-RSA-AES128-SHA:ADH-AES128-SHA:AES256-SHA:DH-DSS-AES256-SHA:DH-RSA-AES256-SHA:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:ADH-AES256-SHA:CAMELLIA128-SHA:DH-DSS-CAMELLIA128-SHA:DH-RSA-CAMELLIA128-SHA:DHE-DSS-CAMELLIA128-SHA:DHE-RSA-CAMELLIA128-SHA:ADH-CAMELLIA128-SHA:EXP1024-RC2-CBC-MD5:EXP1024-DES-CBC-SHA:EXP1024-DHE-DSS-DES-CBC-SHA:CAMELLIA256-SHA:DH-DSS-CAMELLIA256-SHA:DH-RSA-CAMELLIA256-SHA:DHE-DSS-CAMELLIA256-SHA:DHE-RSA-CAMELLIA256-SHA:ADH-CAMELLIA256-SHA:PSK-3DES-EDE-CBC-SHA:PSK-AES128-CBC-SHA:PSK-AES256-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-AES128-CBC-SHA:DHE-PSK-AES256-CBC-SHA:RSA-PSK-3DES-EDE-CBC-SHA:RSA-PSK-AES128-CBC-SHA:RSA-PSK-AES256-CBC-SHA:SEED-SHA:DH-DSS-SEED-SHA:DH-RSA-SEED-SHA:DHE-DSS-SEED-SHA:DHE-RSA-SEED-SHA:ADH-SEED-SHA:PSK-AES128-CBC-SHA256:PSK-AES256-CBC-SHA384:DHE-PSK-AES128-CBC-SHA256:DHE-PSK-AES256-CBC-SHA384:RSA-PSK-AES128-CBC-SHA256:RSA-PSK-AES256-CBC-SHA384:ECDH-ECDSA-DES-CBC3-SHA:ECDH-ECDSA-AES128-SHA:ECDH-ECDSA-AES256-SHA:ECDHE-ECDSA-DES-CBC3-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:AECDH-DES-CBC3-SHA:AECDH-AES128-SHA:AECDH-AES256-SHA:SRP-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-AES-128-CBC-SHA:SRP-RSA-AES-128-CBC-SHA:SRP-DSS-AES-128-CBC-SHA:SRP-AES-256-CBC-SHA:SRP-RSA-AES-256-CBC-SHA:SRP-DSS-AES-256-CBC-SHA:ECDHE-PSK-3DES-EDE-CBC-SHA:ECDHE-PSK-AES128-CBC-SHA:ECDHE-PSK-AES256-CBC-SHA:ECDHE-PSK-AES128-CBC-SHA256:ECDHE-PSK-AES256-CBC-SHA384:PSK-CAMELLIA128-SHA256:PSK-CAMELLIA256-SHA384:DHE-PSK-CAMELLIA128-SHA256:DHE-PSK-CAMELLIA256-SHA384:RSA-PSK-CAMELLIA128-SHA256:RSA-PSK-CAMELLIA256-SHA384:ECDHE-PSK-CAMELLIA128-SHA256:ECDHE-PSK-CAMELLIA256-SHA384"
+     local cbc_ciphers_hex="00,06, 00,07, 00,08, 00,09, 00,0A, 00,0B, 00,0C, 00,0D, 00,0E, 00,0F, 00,10, 00,11, 00,12, 00,13, 00,14, 00,15, 00,16, 00,19, 00,1A, 00,1B, 00,1E, 00,1F, 00,21, 00,22, 00,23, 00,25, 00,26, 00,27, 00,29, 00,2A, 00,2F, 00,30, 00,31, 00,32, 00,33, 00,34, 00,35, 00,36, 00,37, 00,38, 00,39, 00,3A, 00,41, 00,42, 00,43, 00,44, 00,45, 00,46, 00,61, 00,62, 00,63, 00,84, 00,85, 00,86, 00,87, 00,88, 00,89, 00,8B, 00,8C, 00,8D, 00,8F, 00,90, 00,91, 00,93, 00,94, 00,95, 00,96, 00,97, 00,98, 00,99, 00,9A, 00,9B, 00,AE, 00,AF, 00,B2, 00,B3, 00,B6, 00,B7, C0,03, C0,04, C0,05, C0,08, C0,09, C0,0A, C0,0D, C0,0E, C0,0F, C0,12, C0,13, C0,14, C0,17, C0,18, C0,19, C0,1A, C0,1B, C0,1C, C0,1D, C0,1E, C0,1F, C0,21, C0,22, C0,34, C0,35, C0,36, C0,37, C0,38, C0,64, C0,65, C0,66, C0,67, C0,68, C0,69, C0,70, C0,71, C0,94, C0,95, C0,96, C0,97, C0,98, C0,99, C0,9A, C0,9B, FE,FE, FE,FF, FF,E0, FF,E1"
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
      local cve="CVE-2011-3389"
@@ -14844,6 +14845,7 @@ run_beast(){
      local hint=""
      local jsonID="BEAST"
 
+     "$SSL_NATIVE" && using_sockets=false
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
           pr_headlineln " Testing for BEAST vulnerability "
@@ -14851,7 +14853,10 @@ run_beast(){
      fi
      pr_bold " BEAST"; out " ($cve)                     "
 
-     "$SSL_NATIVE" && using_sockets=false
+     # $cbc_ciphers_hex has 126 ciphers, we omitted SRP-AES-256-CBC-SHA bc the trailing 00,ff below will pose
+     # a problem for ACE loadbalancers otherwise. So in case we know this is  not true, we'll re-add it
+     ! "$SERVER_SIZE_LIMIT_BUG" & "$using_sockets" && cbc_ciphers_hex="$cbc_ciphers_hex, C0,20"
+
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
      if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
@@ -14866,10 +14871,10 @@ run_beast(){
                     export2[nr_ciphers]="${TLS_CIPHER_EXPORT[i]}"
                     ossl_supported[nr_ciphers]=${TLS_CIPHER_OSSL_SUPPORTED[i]}
                     if "$using_sockets" && "$WIDE" && ! "$has_dh_bits" && \
-                       ( [[ ${kx[nr_ciphers]} == "Kx=ECDH" ]] || [[ ${kx[nr_ciphers]} == "Kx=DH" ]] || [[ ${kx[nr_ciphers]} == "Kx=EDH" ]] ); then
+                       ( [[ ${kx[nr_ciphers]} == Kx=ECDH ]] || [[ ${kx[nr_ciphers]} == Kx=DH ]] || [[ ${kx[nr_ciphers]} == Kx=EDH ]] ); then
                          ossl_supported[nr_ciphers]=false
                     fi
-                    if [[ "${hexc:2:2}" == "00" ]]; then
+                    if [[ "${hexc:2:2}" == 00 ]]; then
                          normalized_hexcode[nr_ciphers]="x${hexc:7:2}"
                     else
                          normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}"
@@ -14900,7 +14905,7 @@ run_beast(){
                     tls1_2) higher_proto_supported+=" TLSv1.2" ;;
                esac
           elif [[ $subret -eq 2 ]]; then
-               $OPENSSL s_client $(s_client_options "-state -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") 2>>$ERRFILE >$TMPFILE </dev/null
+               $OPENSSL s_client $(s_client_options "-state -"${proto}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") 2>>$ERRFILE >$TMPFILE </dev/null
                if sclient_connect_successful $? $TMPFILE; then
                     higher_proto_supported+=" $(get_protocol $TMPFILE)"
                     add_tls_offered "$proto" yes
@@ -14909,7 +14914,7 @@ run_beast(){
      done
 
      for proto in ssl3 tls1; do
-          if [[ "$proto" == "ssl3" ]] && ! "$using_sockets" && ! locally_supported "-$proto"; then
+          if [[ "$proto" == ssl3 ]] && ! "$using_sockets" && ! locally_supported "-${proto}"; then
                continued=true
                out "                                           "
                continue
@@ -14969,7 +14974,7 @@ run_beast(){
                     ! "${ciphers_found[i]}" && "${ossl_supported[i]}" && ciphers_to_test+=":${ciph[i]}"
                done
                [[ -z "$ciphers_to_test" ]] && break
-               $OPENSSL s_client $(s_client_options "-cipher "${ciphers_to_test:1}" -"$proto" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE </dev/null
+               $OPENSSL s_client $(s_client_options "-cipher "${ciphers_to_test:1}" -"${proto}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE || break
                cbc_cipher=$(get_cipher $TMPFILE)
                [[ -z "$cbc_cipher" ]] && break
@@ -14977,13 +14982,13 @@ run_beast(){
                     [[ "$cbc_cipher" == "${ciph[i]}" ]] && break
                done
                ciphers_found[i]=true
-               if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] || [[ "${rfc_ciph[i]}" == "-" ]]; then
+               if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] || [[ "${rfc_ciph[i]}" == - ]]; then
                     detected_cbc_ciphers+="${ciph[i]} "
                else
                     detected_cbc_ciphers+="${rfc_ciph[i]} "
                fi
                vuln_beast=true
-               if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+               if "$WIDE" && ( [[ ${kx[i]} == Kx=ECDH ]] || [[ ${kx[i]} == Kx=DH ]] || [[ ${kx[i]} == Kx=EDH ]] ); then
                     dhlen=$(read_dhbits_from_file "$TMPFILE" quiet)
                     kx[i]="${kx[i]} $dhlen"
                fi
@@ -15008,13 +15013,13 @@ run_beast(){
                          [[ "$cbc_cipher" == "${rfc_ciph[i]}" ]] && break
                     done
                     ciphers_found[i]=true
-                    if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
+                    if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${ciph[i]}" != - ]] ) || [[ "${rfc_ciph[i]}" == - ]]; then
                          detected_cbc_ciphers+="${ciph[i]} "
                     else
                          detected_cbc_ciphers+="${rfc_ciph[i]} "
                     fi
                     vuln_beast=true
-                    if "$WIDE" && ( [[ ${kx[i]} == "Kx=ECDH" ]] || [[ ${kx[i]} == "Kx=DH" ]] || [[ ${kx[i]} == "Kx=EDH" ]] ); then
+                    if "$WIDE" && ( [[ ${kx[i]} == Kx=ECDH ]] || [[ ${kx[i]} == Kx=DH ]] || [[ ${kx[i]} == Kx=EDH ]] ); then
                          dhlen=$(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)
                          kx[i]="${kx[i]} $dhlen"
                     fi
@@ -15620,7 +15625,8 @@ run_grease() {
      # Check for SERVER_SIZE_LIMIT_BUG.
      # Send a ClientHello with 129 cipher suites (including 0x00,0xff) to see
      # if adding a 129th cipher to the list causes a failure.
-     if "$normal_hello_ok" && [[ "$proto" == "03" ]]; then
+#TODO: we need to clarify whether the mit is hit at 128 or 129 ciphers.
+     if "$normal_hello_ok" && [[ "$proto" == 03 ]]; then
           debugme echo -e "\nSending ClientHello with 129 cipher suites."
           tls_sockets "$proto" "00,27, $cipher_list"
           success=$?
@@ -15640,7 +15646,7 @@ run_grease() {
      # bytes if the server_name extension were included. Removing the SNI
      # extension, however, may not be an option, since the server may reject the
      # connection attempt for that reason.
-     if "$normal_hello_ok" && [[ "$proto" != "00" ]] && [[ ${#SNI} -le 87 ]]; then
+     if "$normal_hello_ok" && [[ "$proto" != 00 ]] && [[ ${#SNI} -le 87 ]]; then
           # Normally prepare_tls_clienthello() will add a padding extension with a length
           # that will make the ClientHello be 512 bytes in length. Providing an "extra
           # extensions" parameter with a short padding extension prevents that.
@@ -17414,10 +17420,10 @@ determine_optimal_proto_sockets_helper() {
      fi
 }
 
-# This function determines (STARTTLS_)OPTIMAL_PROTO. It is basically is a workaround function as under certain 
-# circumstances (e.g. IIS6.0 and openssl 1.0.2 as opposed to 1.0.1) needs a protocol otherwise s_client -connect will fail!
-# Circumstances observed so far: 1.) IIS 6  2.) starttls + dovecot imap.
-# Except those cases it seems reasonable to to know upfront which protocol always works
+# This function determines (STARTTLS_)OPTIMAL_PROTO. It is basically a workaround function as under certain
+# circumstances a ClientHello without specifying a protocol will fail.
+# Circumstances observed so far: 1.) IIS 6 and openssl 1.0.2 as opposed to 1.0.1  2.) starttls + dovecot imap.
+# Independent on the server side it seems reasonable to to know upfront which protocol always works
 #
 # arg1: if empty: no STARTTLS, else: STARTTLS protocol
 # The first try in the loop is empty as we prefer not to specify always a protocol if we can get along w/o it
