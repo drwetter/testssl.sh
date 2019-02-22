@@ -5,7 +5,9 @@
 # instructions @ https://github.com/drwetter/testssl.sh/tree/2.9dev/bin
 
 
-STDOPTIONS="--prefix=/usr/ --openssldir=/etc/ssl -DOPENSSL_USE_BUILD_DATE enable-zlib \
+OPENSSLDIR="/etc/ssl"
+
+STDOPTIONS="--prefix=/usr/ -DOPENSSL_USE_BUILD_DATE enable-zlib \
 enable-ssl2 enable-ssl3 enable-ssl-trace enable-rc5 enable-rc2 \
 enable-gost enable-cms enable-md2 enable-mdc2 enable-ec enable-ec2m enable-ecdh enable-ecdsa \
 enable-seed enable-camellia enable-idea enable-rfc3779 experimental-jpake"
@@ -21,8 +23,11 @@ error() {
 clean() {
      case $NOCLEAN in
           yes|Y|YES) ;;
-          *) make clean
-     	[ $? -ne 0 ] && error "no openssl directory"
+          *)
+          if [ -e "Makefile" ]; then
+              make clean
+              [ $? -ne 0 ] && error "no openssl directory"
+          fi
 		;;
      esac
      return 0
@@ -86,7 +91,11 @@ testv6_patch
 if [ "$1" = krb ]; then
 	name2add=krb
 else
-	name2add=static
+	if [ $(uname) != "Darwin" ]; then
+		name2add=static
+	else
+		name2add=dynamic
+	fi
 fi
 
 echo "doing a build for $(uname).$(uname -m)".$name2add
@@ -99,17 +108,17 @@ case $(uname) in
 		case $(uname -m) in
          		i686|armv7l) clean
 				if [ "$1" = krb ]; then
-					./config $STDOPTIONS no-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT
+					./config --openssldir=$OPENSSLDIR $STDOPTIONS no-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT
 				else
-					./config $STDOPTIONS no-ec_nistp_64_gcc_128 -static
+					./config --openssldir=$OPENSSLDIR $STDOPTIONS no-ec_nistp_64_gcc_128 -static
 				fi
 				[ $? -ne 0 ] && error "configuring"
 				;;
 			x86_64|amd64) clean
                	if [ "$1" = krb ]; then
-					./config $STDOPTIONS enable-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT
+					./config --openssldir=$OPENSSLDIR $STDOPTIONS enable-ec_nistp_64_gcc_128 --with-krb5-flavor=MIT
 				else
-					./config $STDOPTIONS enable-ec_nistp_64_gcc_128 -static
+					./config --openssldir=$OPENSSLDIR $STDOPTIONS enable-ec_nistp_64_gcc_128 -static
 				fi
 				[ $? -ne 0 ] && error "configuring"
 				;;
@@ -121,12 +130,12 @@ case $(uname) in
      Darwin)
 		case $(uname -m) in
 			# No Keberos (yet?) for Darwin
-			x86_64) clean
-				./config $STDOPTIONS enable-ec_nistp_64_gcc_128 -static
+			x86_64) clean || echo "nothing to clean"
+				./Configure --openssldir=/private/etc/ssl/ $STDOPTIONS enable-ec_nistp_64_gcc_128 darwin64-x86_64-cc
 				[ $? -ne 0 ] && error "configuring"
           		;;
-			i386) clean
-				./config $STDOPTIONS no-ec_nistp_64_gcc_128 -static
+			i386) clean || echo "nothing to clean"
+				./config --openssldir=/private/etc/ssl $STDOPTIONS no-ec_nistp_64_gcc_128 darwin64-x86_64-cc
 				[ $? -ne 0 ] && error "configuring"
 				;;
 		esac
