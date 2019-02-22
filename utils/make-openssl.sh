@@ -120,11 +120,14 @@ case $(uname) in
          ;;
      Darwin)
 		case $(uname -m) in
+			# No Keberos (yet?) for Darwin
 			x86_64) clean
-				echo "FIXME"
+				./config $STDOPTIONS enable-ec_nistp_64_gcc_128 -static
+				[ $? -ne 0 ] && error "configuring"
           		;;
 			i386) clean
-				echo "FIXME"
+				./config $STDOPTIONS no-ec_nistp_64_gcc_128 -static
+				[ $? -ne 0 ] && error "configuring"
 				;;
 		esac
 		;;
@@ -143,5 +146,5 @@ echo
 
 
 #  vim:ts=5:sw=5
-#  $Id: make-openssl.sh,v 1.19 2017/05/12 15:56:24 dirkw Exp $
+#  $Id: make-openssl.sh,v 1.20 2019/02/22 09:07:07 dirkw Exp $
 
