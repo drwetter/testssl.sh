@@ -7762,7 +7762,7 @@ certificate_info() {
      local sni_used="${10}"
      local ct="${11}"
      local certificate_list_ordering_problem="${12}"
-     local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_keyusage cert_ext_keyusage
+     local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_keyusage cert_ext_keyusage short_keyAlgo
      local outok=true
      local expire days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
@@ -7923,60 +7923,61 @@ certificate_info() {
           ((ret++))
      else
           case $cert_key_algo in
-               *RSA*|*rsa*)             out "RSA ";;
-               *DSA*|*dsa*)             out "DSA ";;
-               *ecdsa*|*ecPublicKey)    out "EC ";;
-               *GOST*|*gost*)           out "GOST ";;
-               *dh*|*DH*)               out "DH " ;;
+               *RSA*|*rsa*)             short_keyAlgo="RSA";;
+               *ecdsa*|*ecPublicKey)    short_keyAlgo="EC";;
+               *DSA*|*dsa*)             short_keyAlgo="DSA";;
+               *GOST*|*gost*)           short_keyAlgo="GOST";;
+               *dh*|*DH*)               short_keyAlgo="DH" ;;
                *)                       pr_fixme "don't know $cert_key_algo "
                                         let ret++ ;;
           esac
+          out "$short_keyAlgo "
           # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
           # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
           # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
           # Table 2 @ chapter 5.6.1 (~ p64)
-          if [[ $cert_key_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey  ]]; then
+          if [[ $cert_key_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey ]]; then
                if [[ "$cert_keysize" -le 110 ]]; then       # a guess
                     pr_svrty_critical "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "CRITICAL" "$cert_keysize EC bits"
+                    fileout "${jsonID}${json_postfix}" "CRITICAL" "$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 123 ]]; then     # a guess
                     pr_svrty_high "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "HIGH" "$cert_keysize EC bits"
+                    fileout "${jsonID}${json_postfix}" "HIGH" "$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 163 ]]; then
                     pr_svrty_medium "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "MEDIUM" "$cert_keysize EC bits"
+                    fileout "${jsonID}${json_postfix}" "MEDIUM" "$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 224 ]]; then
                     out "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "INFO" "$cert_keysize EC bits"
+                    fileout "${jsonID}${json_postfix}" "INFO" "$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 533 ]]; then
                     pr_svrty_good "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "OK" "$cert_keysize EC bits"
+                    fileout "${jsonID}${json_postfix}" "OK" "$short_keyAlgo $cert_keysize bits"
                else
                     out "keysize: $cert_keysize (not expected, FIXME)"
                     fileout "${jsonID}${json_postfix}" "DEBUG" " $cert_keysize bits (not expected)"
                     ((ret++))
                fi
                outln " bits"
-          elif [[ $cert_key_algo = *RSA* ]] || [[ $cert_key_algo = *rsa* ]] || [[ $cert_key_algo = *dsa* ]] || \
-               [[ $cert_key_algo =~ dhKeyAgreement ]] || [[ $cert_key_algo =~ 'X9.42 DH' ]]; then
+          elif [[ $cert_key_algo =~ RSA ]] || [[ $cert_key_algo =~ rsa ]] || [[ $cert_key_algo =~ dsa ]] || \
+               [[ $cert_key_algo =~ dhKeyAgreement ]] || [[ $cert_key_algo == X9.42\ DH ]]; then
                if [[ "$cert_keysize" -le 512 ]]; then
                     pr_svrty_critical "$cert_keysize"
                     outln " bits"
-                    fileout "${jsonID}${json_postfix}" "CRITICAL" "$cert_keysize bits"
+                    fileout "${jsonID}${json_postfix}" "CRITICAL" "$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 768 ]]; then
                     pr_svrty_high "$cert_keysize"
                     outln " bits"
-                    fileout "${jsonID}${json_postfix}" "HIGH" "$cert_keysize bits"
+                    fileout "${jsonID}${json_postfix}" "HIGH" "$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 1024 ]]; then
                     pr_svrty_medium "$cert_keysize"
                     outln " bits"
-                    fileout "${jsonID}${json_postfix}" "MEDIUM" "$cert_keysize bits"
+                    fileout "${jsonID}${json_postfix}" "MEDIUM" "$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 2048 ]]; then
                     outln "$cert_keysize bits"
-                    fileout "${jsonID}${json_postfix}" "INFO" "$cert_keysize bits"
+                    fileout "${jsonID}${json_postfix}" "INFO" "$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 4096 ]]; then
                     pr_svrty_good "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "OK" "$cert_keysize bits"
+                    fileout "${jsonID}${json_postfix}" "OK" "$short_keyAlgo $cert_keysize bits"
                     outln " bits"
                else
                     pr_warning "weird key size: $cert_keysize bits"; outln " (could cause compatibility problems)"
@@ -7984,10 +7985,10 @@ certificate_info() {
                     ((ret++))
                fi
           else
-               out "$cert_keysize bits ("
+               out "$cert_key_algo + $cert_keysize bits ("
                pr_warning "FIXME: can't tell whether this is good or not"
                outln ")"
-               fileout "${jsonID}${json_postfix}" "WARN" "Server keys $cert_keysize bits (unknown signature algorithm)"
+               fileout "${jsonID}${json_postfix}" "WARN" "Server keys $cert_keysize bits, unknown public key algorithm $cert_key_algo"
                ((ret++))
           fi
      fi
