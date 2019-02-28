@@ -1367,7 +1367,7 @@ service_detection() {
      local -i was_killed
 
      if ! "$CLIENT_AUTH"; then
-          # SNI is not standardardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
+          # SNI is not standardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
           printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
           was_killed=$?
@@ -11391,14 +11391,14 @@ find_openssl_binary() {
           prln_warning "\ncannot find specified (\$OPENSSL=$OPENSSL) binary."
           tmln_out " Looking some place else ..."
      elif [[ -x "$OPENSSL" ]]; then
-          :    # 1. all ok supplied $OPENSSL was found and has excutable bit set -- testrun comes below
+          :    # 1. all ok supplied $OPENSSL was found and has executable bit set -- testrun comes below
      elif [[ -e "/mnt/c/Windows/System32/bash.exe" ]] && test_openssl_suffix "$(dirname "$(type -p openssl)")"; then
           # 2. otherwise, only if on Bash on Windows, use system binaries only.
           SYSTEM2="WSL"
      elif test_openssl_suffix "$TESTSSL_INSTALL_DIR"; then
           :    # 3. otherwise try openssl in path of testssl.sh
      elif test_openssl_suffix "$TESTSSL_INSTALL_DIR/bin"; then
-          :    # 4. otherwise here, this is supposed to be the standard --platform independed path in the future!!!
+          :    # 4. otherwise here, this is supposed to be the standard --platform independent path in the future!!!
      elif test_openssl_suffix "$(dirname "$(type -p openssl)")"; then
           :    # 5. we tried hard and failed, so now we use the system binaries
      fi
@@ -11415,7 +11415,7 @@ find_openssl_binary() {
      OSSL_VER_MINOR=$(sed -e 's/^.\.//' <<< "$OSSL_VER" | tr -d '[a-zA-Z]-')
      OSSL_VER_APPENDIX=$(tr -d '0-9.' <<< "$OSSL_VER")
      OSSL_VER_PLATFORM=$($OPENSSL version -p 2>/dev/null | sed 's/^platform: //')
-     OSSL_BUILD_DATE=$($OPENSSL version -a  2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
+     OSSL_BUILD_DATE=$($OPENSSL version -a 2>/dev/null | grep '^built' | sed -e 's/built on//' -e 's/: ... //' -e 's/: //' -e 's/ UTC//' -e 's/ +0000//' -e 's/.000000000//')
      grep -q "not available" <<< "$OSSL_BUILD_DATE" && OSSL_BUILD_DATE=""
 
      # see #190, reverting logic: unless otherwise proved openssl has no dh bits
@@ -11483,12 +11483,14 @@ find_openssl_binary() {
           HAS_MYSQL=true
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
-          if type -p timeout 2>&1 >/dev/null ; then
-               # there are different "timeout". Check whether --preserve-status is supported
-               if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
-                    OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
-               else
-                    OPENSSL="timeout $OPENSSL_TIMEOUT $OPENSSL"
+          if type -p timeout >/dev/null 2>&1; then
+               if ! "$do_mass_testing"; then
+                    # there are different "timeout". Check whether --preserve-status is supported
+                    if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
+                         OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
+                    else
+                         OPENSSL="timeout $OPENSSL_TIMEOUT $OPENSSL"
+                    fi
                fi
           else
                outln
@@ -11775,7 +11777,7 @@ prepare_arrays() {
                          ossl_ciph="$(awk '/'"$hexc"'/ { print $3 }' <<< "$ossl_supported_tls")"
                          if [[ -n "$ossl_ciph" ]]; then
                               TLS_CIPHER_OSSL_SUPPORTED[i]=true
-                              [[ "$ossl_ciph" != "${TLS_CIPHER_OSSL_NAME[i]}" ]] && TLS_CIPHER_OSSL_NAME[i]="$ossl_ciph"
+                              [[ "$ossl_ciph" != ${TLS_CIPHER_OSSL_NAME[i]} ]] && TLS_CIPHER_OSSL_NAME[i]="$ossl_ciph"
                          fi
                     fi
                elif [[ $OSSL_VER_MAJOR -lt 1 ]]; then
@@ -11840,7 +11842,7 @@ EOF
 }
 
 
-cleanup () {
+cleanup() {
      # If parallel mass testing is being performed, then the child tests need
      # to be killed before $TEMPDIR is deleted. Otherwise, error messages
      # will be created if testssl.sh is stopped before all testing is complete.
@@ -12707,7 +12709,7 @@ create_mass_testing_cmdline() {
      local skip_next=false
 
      MASS_TESTING_CMDLINE=()
-     [[ "$testing_type" =~ parallel ]] && read testing_type test_number <<< "$testing_type"
+     [[ "$testing_type" =~ parallel ]] && read -r testing_type test_number <<< "$testing_type"
 
      # Start by adding the elements from the global command line to the command line for the
      # test. If run_mass_testing_parallel(), then modify the command line so that, when
@@ -12716,20 +12718,20 @@ create_mass_testing_cmdline() {
      debugme echo "${CMDLINE_ARRAY[@]}"
      for cmd in "${CMDLINE_ARRAY[@]}"; do
           "$skip_next" && skip_next=false && continue
-          if [[ "$cmd" == "--file"* ]]; then
+          if [[ "$cmd" =~ --file ]]; then
                # Don't include the "--file[=...] argument in the child's command
                # line, but do include "--warnings=batch".
                MASS_TESTING_CMDLINE[nr_cmds]="--warnings=batch"
                nr_cmds+=1
                # next is the file itself, as no '=' was supplied
-               [[ "$cmd" == '--file' ]] && skip_next=true
-          elif [[ "$testing_type" == "serial" ]]; then
-               if "$JSONHEADER" && [[ "$cmd" == "--jsonfile-pretty"* ]]; then
+               [[ "$cmd" == --file ]] && skip_next=true
+          elif [[ "$testing_type" == serial ]]; then
+               if "$JSONHEADER" && [[ "$cmd" =~ --jsonfile-pretty ]]; then
                     >"$TEMPDIR/jsonfile_child.json"
                     MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
                     [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
-               elif "$JSONHEADER" && [[ "$cmd" == "--jsonfile"* ]]; then
+               elif "$JSONHEADER" && [[ "$cmd" =~ --jsonfile ]]; then
                     >"$TEMPDIR/jsonfile_child.json"
                     MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
@@ -12801,7 +12803,7 @@ ports2starttls() {
      local tcp_port=$1
      local ret=0
 
-# https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
+     # https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
      case $tcp_port in
           21)       echo "-t ftp " ;;
           23)       echo "-t telnet " ;;
@@ -12906,10 +12908,10 @@ run_mass_testing() {
      fi
 
      pr_reverse "====== Running in file batch mode with ${gmapadd}file=\"$saved_fname\" ======"; outln "\n"
-     while read cmdline; do
+     while read -r cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
-          [[ "$cmdline" == "EOF" ]] && break
+          [[ "$cmdline" == EOF ]] && break
           # Create the command line for the child in the form of an array (see #702)
           create_mass_testing_cmdline "serial" $cmdline
           draw_line "=" $((TERM_WIDTH / 2)); outln;
@@ -12940,18 +12942,19 @@ run_mass_testing() {
 get_next_message_testing_parallel_result() {
      draw_line "=" $((TERM_WIDTH / 2)); outln;
      outln "${PARALLEL_TESTING_CMDLINE[NEXT_PARALLEL_TEST_TO_FINISH]}"
-     if [[ "$1" == "completed" ]]; then
+     if [[ "$1" == completed ]]; then
           cat "$TEMPDIR/term_output_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).log"
           if "$JSONHEADER" && [[ -s "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" ]]; then
                # Need to ensure that a separator is only added if the test
                # produced some JSON output.
                "$FIRST_JSON_OUTPUT" || fileout_separator                     # this is needed for appended output, see #687
                FIRST_JSON_OUTPUT=false
+               FIRST_FINDING=false
                cat "$TEMPDIR/jsonfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).json" >> "$JSONFILE"
           fi
           "$CSVHEADER" && cat "$TEMPDIR/csvfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).csv" >> "$CSVFILE"
           "$HTMLHEADER" && cat "$TEMPDIR/htmlfile_$(printf "%08d" $NEXT_PARALLEL_TEST_TO_FINISH).html" >> "$HTMLFILE"
-     elif [[ "$1" == "stopped" ]]; then
+     elif [[ "$1" == stopped ]]; then
           outln "\nTest was stopped before it completed.\n"
      else
           outln "\nTest timed out before it completed.\n"
@@ -12977,10 +12980,10 @@ run_mass_testing_parallel() {
      fi
 
      pr_reverse "====== Running in file batch mode with ${gmapadd}file=\"$saved_fname\" ======"; outln "\n"
-     while read cmdline; do
+     while read -r cmdline; do
           cmdline="$(filter_input "$cmdline")"
           [[ -z "$cmdline" ]] && continue
-          [[ "$cmdline" == "EOF" ]] && break
+          [[ "$cmdline" == EOF ]] && break
           # Create the command line for the child in the form of an array (see #702)
           create_mass_testing_cmdline "parallel $(printf "%08d" $NR_PARALLEL_TESTS)" $cmdline
 
@@ -13636,7 +13639,7 @@ nodeip_to_proper_ip6() {
           ${UNBRACKTD_IPV6} || NODEIP="[$NODEIP]"
           len_nodeip=${#NODEIP}
           CORRECT_SPACES="$(printf -- " "'%.s' $(eval "echo {1.."$((len_nodeip - 17))"}"))"
-          # IPv6 addresses are longer, this varaible takes care that "further IP" and "Service" is properly aligned
+          # IPv6 addresses are longer, this variable takes care that "further IP" and "Service" is properly aligned
      fi
 }
 
@@ -13709,7 +13712,7 @@ lets_roll() {
      if $do_header; then
           #TODO: refactor this into functions
           fileout_section_header $section_number true && ((section_number++))
-          if [[ $SERVICE == "HTTP" ]]; then
+          if [[ $SERVICE == HTTP ]]; then
                run_http_header "$URL_PATH"
                run_http_date "$URL_PATH"
                run_hsts "$URL_PATH"
@@ -13809,7 +13812,7 @@ lets_roll() {
 
      if "$do_mass_testing"; then
           prepare_logging
-          if [[ "$MASS_TESTING_MODE" == "parallel" ]]; then
+          if [[ "$MASS_TESTING_MODE" == parallel ]]; then
                run_mass_testing_parallel
           else
                run_mass_testing
@@ -13818,11 +13821,11 @@ lets_roll() {
      fi
      html_banner
 
-     #TODO: there shouldn't be the need for a special case for --mx, only the ip adresses we would need upfront and the do-parser
+     #TODO: there shouldn't be the need for a special case for --mx, only the ip addresses we would need upfront and the do-parser
      if "$do_mx_all_ips"; then
           query_globals                                # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
           [[ $? -eq 1 ]] && set_scanning_defaults
-          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff neccessary as ~15 lines later we have similar code
+          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff necessary as ~15 lines later we have similar code
           exit $?
      fi
 
