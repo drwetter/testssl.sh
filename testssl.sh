@@ -2550,6 +2550,7 @@ emphasize_stuff_in_headers(){
           -e "s/Win64/${yellow}Win64${off}/g" \
           -e "s/Ubuntu/${yellow}Ubuntu${off}/g" \
           -e "s/ubuntu/${yellow}ubuntu${off}/g" \
+          -e "s/buster/${yellow}buster${off}/g" \
           -e "s/stretch/${yellow}stretch${off}/g" \
           -e "s/jessie/${yellow}jessie${off}/g" \
           -e "s/squeeze/${yellow}squeeze${off}/g" \
@@ -2582,6 +2583,7 @@ emphasize_stuff_in_headers(){
           -e "s/x-note/${yellow}x-note${off}/g" \
           -e "s/x-global-transaction-id/${yellow}x-global-transaction-id${off}/g" \
           -e "s/X-Global-Transaction-ID/${yellow}X-Global-Transaction-ID${off}/g" \
+          -e "s/Alt-Svc/${yellow}Alt-Svc${off}/g" \
           -e "s/system-wsgw-management-loopback/${yellow}system-wsgw-management-loopback${off}/g"
 
      if "$do_html"; then
@@ -2595,6 +2597,7 @@ emphasize_stuff_in_headers(){
                     -e "s/Win64/${html_yellow}Win64${html_off}/g" \
                     -e "s/Ubuntu/${html_yellow}Ubuntu${html_off}/g" \
                     -e "s/ubuntu/${html_yellow}ubuntu${html_off}/g" \
+                    -e "s/buster/${html_yellow}buster${html_off}/g" \
                     -e "s/stretch/${html_yellow}stretch${html_off}/g" \
                     -e "s/jessie/${html_yellow}jessie${html_off}/g" \
                     -e "s/squeeze/${html_yellow}squeeze${html_off}/g" \
@@ -2624,10 +2627,15 @@ emphasize_stuff_in_headers(){
                     -e "s/X-Pingback/${html_yellow}X-Pingback${html_off}/g" \
                     -e "s/X-Permitted-Cross-Domain-Policies/${yellow}X-Permitted-Cross-Domain-Policies${html_off}/g" \
                     -e "s/X-AspNet-Version/${html_yellow}X-AspNet-Version${html_off}/g")" \
-                    -e "s/x-note/${yellow}x-note${html_off}/g" \
-                    -e "s/X-Global-Transaction-ID/${yellow}X-Global-Transaction-ID${html_off}/g" \
-                    -e "s/x-global-transaction-id/${yellow}x-global-transaction-id${html_off}/g" \
+                    -e "s/x-note/${html_yellow}x-note${html_off}/g" \
+                    -e "s/X-Global-Transaction-ID/${html_yellow}X-Global-Transaction-ID${html_off}/g" \
+                    -e "s/x-global-transaction-id/${html_yellow}x-global-transaction-id${html_off}/g" \
+                    -e "s/Alt-Svc/${html_yellow}Alt-Svc${html_off}/g" \
                     -e "s/system-wsgw-management-loopback/${yellow}system-wsgw-management-loopback${html_off}/g"
+#FIXME: this is double code. The pattern to emphasize would fit better into
+# one function.
+# Also we need another function like run_other_header as otherwise "Link" "Alt-Svc" will never be found.
+# And: I matches case sensitive only which might not detect all banners. (sed ignorecase is not possible w/ BSD sed)
           else
                html_out "$(html_reserved "$1")"
           fi
@@ -2652,7 +2660,7 @@ run_server_banner() {
           else
                emphasize_stuff_in_headers "$serverbanner"
                fileout "$jsonID" "INFO" "$serverbanner"
-               if [[ "$serverbanner" = *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
+               if [[ "$serverbanner" == *Microsoft-IIS/6.* ]] && [[ $OSSL_VER == 1.0.2* ]]; then
                     prln_warning "                              It's recommended to run another test w/ OpenSSL 1.0.1 !"
                     # see https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
                     fileout "${jsonID}" "WARN" "IIS6_openssl_mismatch: Recommended to rerun this test w/ OpenSSL 1.0.1. See https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892"
