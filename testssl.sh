@@ -4609,7 +4609,8 @@ run_client_simulation() {
      return $ret
 }
 
-# generic function whether $1 is supported by s_client ($2: string to display)
+# generic function whether $1 is supported by s_client ($2: string to display, currently nowhere being used)
+#
 locally_supported() {
      [[ -n "$2" ]] && out "$2 "
      if $OPENSSL s_client "$1" -connect x 2>&1 | grep -aq "unknown option"; then
@@ -4620,18 +4621,19 @@ locally_supported() {
 }
 
 
-# the protocol check needs to be revamped. It sucks.
-# 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this again.
-# 2) the code is too old and one can do that way better
-# 3) HAS_SSL3/2 does already exist
-# we should do what's available and faster (openssl vs. sockets). Keep in mind that the socket reply for SSLv2 returns the number # of ciphers!
+# The protocol check in run_protocols needs to be redone. The using_socket part there kind of sucks.
+# 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this agai
+#   --> we have that but certain information like "downgraded" are not being passed. That's not ok for run_protocols()/
+#   for all other functions we can use it
+# 2) the code is old and one can do that way better
+# We should do what's available and faster (openssl vs. sockets). Keep in mind that the socket reply for SSLv2 returns the number # of ciphers!
 #
-# arg1: -ssl2|-ssl3|-tls1
-# arg2: doesn't seem to be used in calling, seems to be a textstring with the protocol though
+# arg1: -ssl2|-ssl3|-tls1|-tls1_1|-tls1_2|-tls1_3
+#
 run_prototest_openssl() {
      local -i ret=0
 
-     ! locally_supported "$1" "$2" && return 7
+     ! locally_supported "$1" && return 7
      $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
@@ -4651,7 +4653,7 @@ run_prototest_openssl() {
      # 7: no local support
 }
 
-# idempotent function to add SSL/TLS protocols. It should accelerate testing.
+# Idempotent function to add SSL/TLS protocols. It should accelerate testing.
 # PROTOS_OFFERED can be e.g. "ssl2:no ssl3:no tls1_2:yes" which means that
 # SSLv2 and SSLv3 was tested but not available, TLS 1.2 was tested and available
 # TLS 1.0 and TLS 1.2 not tested yet
