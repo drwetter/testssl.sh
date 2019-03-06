@@ -927,7 +927,6 @@ json_header() {
      local filename_provided=false
 
      [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && filename_provided=true
-
      # Similar to HTML: Don't create headers and footers in the following scenarios:
      #  * no JSON/CSV output is being created.
      #  * mass testing is being performed and each test will have its own file.
@@ -943,14 +942,18 @@ json_header() {
      elif "$do_mx_all_ips"; then
           fname_prefix="${FNAME_PREFIX}mx-${URI}"
      else
+          # ensure NODE, URL_PATH, PORT, IPADDR and IP46ADDR are set
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
-          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${FNAME_PREFIX}${NODE}_p${PORT}"
      fi
      if [[ -z "$JSONFILE" ]]; then
           JSONFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".json)"
      elif [[ -d "$JSONFILE" ]]; then
           JSONFILE="$JSONFILE/${fname_prefix}-$(date +"%Y%m%d-%H%M".json)"
+     fi
+     # Silently reset APPEND var if the file doesn't exist as otherwise it won't be created
+     if "$APPEND" && [[ ! -s "$JSONFILE" ]]; then
+          APPEND=false
      fi
      if "$APPEND"; then
           JSONHEADER=false
@@ -959,7 +962,6 @@ json_header() {
           "$do_json" && echo "[" > "$JSONFILE"
           "$do_pretty_json" && echo "{" > "$JSONFILE"
      fi
-     #FIRST_FINDING=false
      return 0
 }
 
@@ -969,8 +971,7 @@ csv_header() {
      local filename_provided=false
 
      [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && filename_provided=true
-
-     # CSV similar:
+     # CSV similar to JSON
      ! "$do_csv" && CSVHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && CSVHEADER=false && return 0
      "$CHILD_MASS_TESTING" && "$filename_provided" && CSVHEADER=false && return 0
@@ -980,17 +981,20 @@ csv_header() {
      elif "$do_mass_testing"; then
           :
      elif "$do_mx_all_ips"; then
-          fname_prefix="${FNAME_PREFIX}mx-$URI"
+          fname_prefix="${FNAME_PREFIX}mx-${URI}"
      else
+          # ensure NODE, URL_PATH, PORT, IPADDR and IP46ADDR are set
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
-          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${FNAME_PREFIX}${NODE}_p${PORT}"
      fi
-
      if [[ -z "$CSVFILE" ]]; then
           CSVFILE="${fname_prefix}-$(date +"%Y%m%d-%H%M".csv)"
      elif [[ -d "$CSVFILE" ]]; then
           CSVFILE="$CSVFILE/${fname_prefix}-$(date +"%Y%m%d-%H%M".csv)"
+     fi
+     # Silently reset APPEND var if the file doesn't exist as otherwise it won't be created
+     if "$APPEND" && [[ ! -s "$CSVFILE" ]]; then
+          APPEND=false
      fi
      if "$APPEND"; then
           CSVHEADER=false
@@ -1013,7 +1017,6 @@ html_header() {
      local filename_provided=false
 
      [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && filename_provided=true
-
      # Don't create HTML headers and footers in the following scenarios:
      #  * HTML output is not being created.
      #  * mass testing is being performed and each test will have its own HTML file.
@@ -1027,17 +1030,20 @@ html_header() {
      elif "$do_mass_testing"; then
           :
      elif "$do_mx_all_ips"; then
-          fname_prefix="${FNAME_PREFIX}mx-$URI"
+          fname_prefix="${FNAME_PREFIX}mx-${URI}"
      else
+          # ensure NODE, URL_PATH, PORT, IPADDR and IP46ADDR are set
           ! "$filename_provided" && [[ -z "$NODE" ]] && parse_hn_port "${URI}"
-          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
           fname_prefix="${FNAME_PREFIX}${NODE}_p${PORT}"
      fi
-
      if [[ -z "$HTMLFILE" ]]; then
           HTMLFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".html)"
      elif [[ -d "$HTMLFILE" ]]; then
           HTMLFILE="$HTMLFILE/$fname_prefix-$(date +"%Y%m%d-%H%M".html)"
+     fi
+     # Silently reset APPEND var if the file doesn't exist as otherwise it won't be created
+     if "$APPEND" && [[ ! -s "$HTMLFILE" ]]; then
+          APPEND=false
      fi
      if "$APPEND"; then
           HTMLHEADER=false
