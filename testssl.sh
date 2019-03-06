@@ -5026,11 +5026,6 @@ run_protocols() {
      if "$using_sockets"; then
           tls_sockets "03" "$TLS12_CIPHER"
           subret=$?
-          if [[ $subret -ne 0 ]]; then
-               tls_sockets "03" "$TLS12_CIPHER_2ND_TRY"
-               [[ $? -eq 0 ]] && subret=0
-               # see #807 and #806
-          fi
      else
           run_prototest_openssl "-tls1_2"
           subret=$?
@@ -15490,7 +15485,6 @@ run_grease() {
      for (( i=0; i < 5; i++ )); do
           case $i in
                0) proto="03" ; cipher_list="$TLS12_CIPHER" ;;
-               1) proto="03" ; cipher_list="$TLS12_CIPHER_2ND_TRY" ;;
                2) proto="02" ; cipher_list="$TLS_CIPHER" ;;
                3) proto="01" ; cipher_list="$TLS_CIPHER" ;;
                4) proto="00" ; cipher_list="$TLS_CIPHER" ;;
@@ -17379,7 +17373,7 @@ sclient_auth() {
 #
 determine_optimal_proto_sockets_helper() {
      local all_failed=true
-     local proto=""
+     local proto="" p
      local optimal_proto=""
      local starttls="$1"
      local -i ret
@@ -17396,26 +17390,68 @@ determine_optimal_proto_sockets_helper() {
                               0300)  add_tls_offered ssl3 yes; optimal_proto="-ssl3" ;;
                          esac
                          all_failed=false
-                         break
-                    fi ;;
+                    fi
+                    # Try again with a different, less common, set of cipher suites
+                    # see #807 and #806
+                    if [[ $ret -ne 0 ]]; then
+                         tls_sockets "$proto" "$TLS12_CIPHER_2ND_TRY"
+                         ret=$?
+                         if [[ $ret -eq 0 ]]; then
+                              add_tls_offered tls1_2 yes; optimal_proto="-tls1_2"
+                              TLS12_CIPHER="$TLS12_CIPHER_2ND_TRY"
+                              all_failed=false
+                         else
+                              add_tls_offered tls1_2 no
+                         fi
+                         if [[ $ret -eq 2 ]]; then
+                              case $DETECTED_TLS_VERSION in
+                                   0302)  p="tls1_1" ;;
+                                   0301)  p="tls1" ;;
+                                   0300)  p="ssl3" ;;
+                              esac
+                              add_tls_offered "$p" yes
+                              if [[ -z "$optimal_proto" ]]; then
+                                   TLS12_CIPHER="$TLS12_CIPHER_2ND_TRY"
+                                   optimal_proto="-${p}"
+                              fi
+                              all_failed=false
+                         fi
+                    fi
+                    "$all_failed" || break ;;
                04) tls_sockets "$proto" "$TLS13_CIPHER"
                     if [[ $? -eq 0 ]]; then
                          add_tls_offered tls1_3 yes; optimal_proto="-tls1_3"
                          all_failed=false
-                         break
+                         # Don't break if this test succeeds, as some tests
+                         # need to know whether the server supports any protocols
+                         # earlier than TLSv1.3. So, keep going until some other
+                         # supported protocol has been found or until
+                         #      add_tls_offered "$p" no
+                         # has been called for every non-TLSv1.3 protocol.
                     fi ;;
                01|00|02) tls_sockets "$proto" "$TLS_CIPHER" "" "" "true"
                     ret=$?
+                    if [[ $ret -ne 0 ]]; then
+                         case $proto in
+                              01)  add_tls_offered "tls1" no ;;
+                              00)  add_tls_offered "ssl3" no ;;
+                              02)  add_tls_offered "tls1_1" no ;;
+                         esac
+                         add_tls_offered "$p" no
+                    fi
                     if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
                          case $DETECTED_TLS_VERSION in
-                              0302)  add_tls_offered tls1_1 yes; optimal_proto="-tls1_1" ;;
-                              0301)  add_tls_offered tls1 yes; optimal_proto="-tls1" ;;
-                              0300)  add_tls_offered ssl3 yes; optimal_proto="-ssl3" ;;
+                              0302)  p="tls1_1" ;;
+                              0301)  p="tls1" ;;
+                              0300)  p="ssl3" ;;
                          esac
+                         add_tls_offered "$p" yes
+                         [[ -z "$optimal_proto" ]] && optimal_proto="-${p}"
                          all_failed=false
                          break
                     fi ;;
-               22)  sslv2_sockets
+               22)  "$all_failed" || break
+                    sslv2_sockets
                     [[ $? -eq 3 ]] && all_failed=false && add_tls_offered ssl2 yes && optimal_proto="-ssl2"
                     ;;
           esac
