@@ -9755,7 +9755,7 @@ starttls_pop3_dialog() {
 
 starttls_imap_dialog() {
      debugme echo "=== starting imap STARTTLS dialog ==="
-     local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS( .*)?|( .*)? STARTTLS( .*)? IMAP4rev1( .*)?)$'
+     local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS(.*)?|( .*)? STARTTLS( .*)? IMAP4rev1(.*)?)$'
      starttls_full_read '^\* ' '^\* OK '                   && debugme echo "received server greeting" &&
      starttls_just_send 'a001 CAPABILITY'                  && debugme echo "sent CAPABILITY" &&
      starttls_full_read '^\* ' '^a001 OK ' "${reSTARTTLS}" && debugme echo "received server capabilities and checked STARTTLS availability" &&
