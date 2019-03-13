@@ -8,7 +8,7 @@ readonly TLS13_CIPHER="
 13,01, 13,02, 13,03, 13,04, 13,05"
 
 # 123 standard cipher + 4x GOST for TLS 1.2 and SPDY/NPN HTTP2/ALPN
-readonly TLS12_CIPHER="
+declare TLS12_CIPHER="
 c0,30, c0,2c, c0,28, c0,24, c0,14, c0,0a, 00,9f, 00,6b,
 00,39, 00,9d, 00,3d, 00,35, c0,2f, c0,2b, c0,27, c0,23,
 c0,13, c0,09, 00,9e, 00,67, 00,33, 00,9c, 00,3c, 00,2f,
