@@ -5178,11 +5178,6 @@ run_protocols() {
      if "$using_sockets"; then
           tls_sockets "03" "$TLS12_CIPHER"
           ret_val_tls12=$?
-          if [[ $ret_val_tls12 -ne 0 ]]; then
-               tls_sockets "03" "$TLS12_CIPHER_2ND_TRY"
-               [[ $? -eq 0 ]] && ret_val_tls12=0
-               # see #807 and #806
-          fi
           tls12_detected_version="$DETECTED_TLS_VERSION"
           # Need to ensure that at most 128 ciphers are included in ClientHello.
           # If the TLSv1.2 test was successful, then use the 5 TLSv1.3 ciphers
@@ -15841,7 +15836,6 @@ run_grease() {
      for (( i=0; i < 5; i++ )); do
           case $i in
                0) proto="03" ; cipher_list="$TLS12_CIPHER" ;;
-               1) proto="03" ; cipher_list="$TLS12_CIPHER_2ND_TRY" ;;
                2) proto="02" ; cipher_list="$TLS_CIPHER" ;;
                3) proto="01" ; cipher_list="$TLS_CIPHER" ;;
                4) proto="00" ; cipher_list="$TLS_CIPHER" ;;
@@ -17740,6 +17734,75 @@ sclient_auth() {
      return 1
 }
 
+# Determine the best parameters to use with tls_sockets():
+#   For TLSv1.3, determine what extension number to use for the key_share extension.
+#   For TLSv1.2, determine what cipher list to send, since there are more than 128
+#   TLSv1.2 ciphers and some servers fail if the ClientHello contains too many ciphers.
+determine_optimal_sockets_params() {
+     local -i ret1 ret2
+
+     # If a STARTTLS protocol is specified and $SSL_NATIVE is true, then skip this test, since 
+     # $SSL_NATIVE may have been set to true as a result of tls_sockets() not supporting the STARTTLS
+     # protocol.
+     [[ -n "$STARTTLS_PROTOCOL" ]] && "$SSL_NATIVE" && return 0
+
+     # NOTE: The following code is only needed as long as draft versions of TLSv1.3 prior to draft 23
+     # are supported. It is used to determine whether a draft 23 or pre-draft 23 ClientHello should be
+     # sent.
+     KEY_SHARE_EXTN_NR="33"
+     tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0f, 0e, 03,04, 7f,1c, 7f,1b, 7f,1a, 7f,19, 7f,18, 7f,17"
+     if [[ $? -eq 0 ]]; then
+          add_tls_offered tls1_3 yes
+     else
+          KEY_SHARE_EXTN_NR="28"
+          tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0b, 0a, 7f,16, 7f,15, 7f,14, 7f,13, 7f,12"
+          if [[ $? -eq 0 ]]; then
+               add_tls_offered tls1_3 yes
+          else
+               add_tls_offered tls1_3 no
+               KEY_SHARE_EXTN_NR="33"
+          fi
+     fi
+
+     # Need to determine which set of ciphers is best to use with
+     # a TLSv1.2 ClientHello since there are far more than 128 ciphers
+     # that can be used.
+     tls_sockets "03" "$TLS12_CIPHER"
+     ret1=$?
+     if [[ $ret1 -eq 0 ]] || [[ $ret1 -eq 2 ]]; then
+          case $DETECTED_TLS_VERSION in
+               0303)  add_tls_offered tls1_2 yes ;;
+               0302)  add_tls_offered tls1_1 yes ;;
+               0301)  add_tls_offered tls1 yes ;;
+               0300)  add_tls_offered ssl3 yes ;;
+          esac
+     fi
+
+     # Try again with a different, less common, set of cipher suites
+     # see #807 and #806. If using these cipher suites results in a
+     # successful connection, then change $TLS12_CIPHER to these
+     # cipher suites so that later tests will use this list of cipher
+     # suites.
+     if [[ $ret1 -ne 0 ]]; then
+          tls_sockets "03" "$TLS12_CIPHER_2ND_TRY"
+          ret2=$?
+          if [[ $ret2 -eq 0 ]]; then
+               add_tls_offered tls1_2 yes
+               TLS12_CIPHER="$TLS12_CIPHER_2ND_TRY"
+          else
+               add_tls_offered tls1_2 no
+          fi
+          if [[ $ret2 -eq 2 ]]; then
+               case $DETECTED_TLS_VERSION in
+                    0302)  add_tls_offered tls1_1 yes ;;
+                    0301)  add_tls_offered tls1 yes ;;
+                    0300)  add_tls_offered ssl3 yes ;;
+               esac
+               [[ $ret1 -ne 2 ]] && TLS12_CIPHER="$TLS12_CIPHER_2ND_TRY"
+          fi
+     fi
+     return 0
+}
 
 # This is a helper function for determine_optimal_proto() below. It sets the
 # the global STARTTLS_OPTIMAL_PROTO / OPTIMAL_PROTO accordingly and returns 1
@@ -17912,26 +17975,6 @@ determine_optimal_proto() {
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
 
-     # NOTE: The following code is only needed as long as draft versions of TLSv1.3 prior to draft 23
-     # are supported. It is used to determine whether a draft 23 or pre-draft 23 ClientHello should be
-     # sent.
-     if [[ -z "$1" ]]; then
-          KEY_SHARE_EXTN_NR="33"
-          tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0f, 0e, 03,04, 7f,1c, 7f,1b, 7f,1a, 7f,19, 7f,18, 7f,17"
-          if [[ $? -eq 0 ]]; then
-               add_tls_offered tls1_3 yes
-          else
-               KEY_SHARE_EXTN_NR="28"
-               tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0b, 0a, 7f,16, 7f,15, 7f,14, 7f,13, 7f,12"
-               if [[ $? -eq 0 ]]; then
-                    add_tls_offered tls1_3 yes
-               else
-                    add_tls_offered tls1_3 no
-                    KEY_SHARE_EXTN_NR="33"
-               fi
-          fi
-     fi
-
      tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
@@ -17961,6 +18004,7 @@ determine_service() {
      outln
      if [[ -z "$1" ]]; then
           # no STARTTLS.
+          determine_optimal_sockets_params
           determine_optimal_proto
           $SNEAKY && \
                ua="$UA_SNEAKY" || \
@@ -18021,6 +18065,7 @@ determine_service() {
                               fatal "Your $OPENSSL does not support the \"-starttls nntp\" option" $ERR_OSSLBIN
                          fi
                     fi
+                    determine_optimal_sockets_params
                     determine_optimal_proto "$1"
 
                     out " Service set:$CORRECT_SPACES            STARTTLS via "
