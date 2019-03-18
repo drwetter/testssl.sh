@@ -378,6 +378,7 @@ STARTTLS_PROTOCOL=""
 OPTIMAL_PROTO=""                        # Need this for IIS6 (sigh) + OpenSSL 1.0.2, otherwise some handshakes will fail see
                                         # https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 STARTTLS_OPTIMAL_PROTO=""               # Same for STARTTLS, see https://github.com/drwetter/testssl.sh/issues/188
+OPTIMAL_SOCKETS_PROTO=""                # Same for tls_sockets(). -- not yet used
 TLS_TIME=""                             # To keep the value of TLS server timestamp
 TLS_NOW=""                              # Similar
 TLS_DIFFTIME_SET=false                  # Tells TLS functions to measure the TLS difftime or not
@@ -17738,8 +17739,17 @@ sclient_auth() {
 #   For TLSv1.3, determine what extension number to use for the key_share extension.
 #   For TLSv1.2, determine what cipher list to send, since there are more than 128
 #   TLSv1.2 ciphers and some servers fail if the ClientHello contains too many ciphers.
+# If both TLSv1.3 and TLSv1.2 ClientHello messages result in failed connection attempts,
+# then try to determine whether:
+#   (1) This is an SSLv2-only server
+#   (2) This server supports some protocol in SSLv3 - TLSv1.1, but cannot handle version negotiation.
+#   (3) This is not a TLS/SSL enabled server.
+# This information can be used by determine_optimal_proto() to help distinguish between a server
+# that is not TLS/SSL enabled and one that is not compatible with the version of OpenSSL being used.
 determine_optimal_sockets_params() {
      local -i ret1 ret2
+     local proto
+     local all_failed=true
 
      # If a STARTTLS protocol is specified and $SSL_NATIVE is true, then skip this test, since 
      # $SSL_NATIVE may have been set to true as a result of tls_sockets() not supporting the STARTTLS
@@ -17753,11 +17763,13 @@ determine_optimal_sockets_params() {
      tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0f, 0e, 03,04, 7f,1c, 7f,1b, 7f,1a, 7f,19, 7f,18, 7f,17"
      if [[ $? -eq 0 ]]; then
           add_tls_offered tls1_3 yes
+          all_failed=false
      else
           KEY_SHARE_EXTN_NR="28"
           tls_sockets "04" "$TLS13_CIPHER" "" "00, 2b, 00, 0b, 0a, 7f,16, 7f,15, 7f,14, 7f,13, 7f,12"
           if [[ $? -eq 0 ]]; then
                add_tls_offered tls1_3 yes
+               all_failed=false
           else
                add_tls_offered tls1_3 no
                KEY_SHARE_EXTN_NR="33"
@@ -17776,6 +17788,7 @@ determine_optimal_sockets_params() {
                0301)  add_tls_offered tls1 yes ;;
                0300)  add_tls_offered ssl3 yes ;;
           esac
+          all_failed=false
      fi
 
      # Try again with a different, less common, set of cipher suites
@@ -17789,6 +17802,7 @@ determine_optimal_sockets_params() {
           if [[ $ret2 -eq 0 ]]; then
                add_tls_offered tls1_2 yes
                TLS12_CIPHER="$TLS12_CIPHER_2ND_TRY"
+               all_failed=false
           else
                add_tls_offered tls1_2 no
           fi
@@ -17799,7 +17813,40 @@ determine_optimal_sockets_params() {
                     0300)  add_tls_offered ssl3 yes ;;
                esac
                [[ $ret1 -ne 2 ]] && TLS12_CIPHER="$TLS12_CIPHER_2ND_TRY"
+               all_failed=false
           fi
+     fi
+
+     if "$all_failed"; then
+          # One of the following must be true:
+          #   * This is not a TLS/SSL enabled server.
+          #   * The server only supports SSLv2
+          #   * The server does not handle version negotiation correctly.
+          for proto in 01 00 02; do
+               tls_sockets "$proto" "$TLS_CIPHER" "" "" "true"
+               ret1=$?
+               if [[ $ret1 -ne 0 ]]; then
+                    case $proto in
+                         02)  add_tls_offered tls1_1 no ;;
+                         01)  add_tls_offered tls1 no ;;
+                         00)  add_tls_offered ssl3 no ;;
+                    esac
+               fi
+               if [[ $ret1 -eq 0 ]] || [[ $ret1 -eq 2 ]]; then
+                    case $DETECTED_TLS_VERSION in
+                         0302)  add_tls_offered tls1_1 yes ;;
+                         0301)  add_tls_offered tls1 yes ;;
+                         0300)  add_tls_offered ssl3 yes ;;
+                    esac
+                    OPTIMAL_SOCKETS_PROTO="$proto"
+                    all_failed=false
+                    break
+               fi
+          done
+     fi
+     if "$all_failed"; then
+          sslv2_sockets
+          [[ $? -eq 3 ]] && all_failed=false && add_tls_offered ssl2 yes
      fi
      return 0
 }
