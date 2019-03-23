@@ -132,7 +132,7 @@ case $(uname) in
 		case $(uname -m) in
 			# No Kerberos (yet?) for Darwin. Static doesn't work for Darwin (#1204)
 			x86_64) clean || echo "nothing to clean"
-				./config $openssldir_option  $STDOPTIONS enable-ec_nistp_64_gcc_128 darwin64-x86_64-cc
+				./Configure $openssldir_option  $STDOPTIONS enable-ec_nistp_64_gcc_128 darwin64-x86_64-cc
 				[ $? -ne 0 ] && error "configuring"
           		;;
 			i386) clean || echo "nothing to clean"

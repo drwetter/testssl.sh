@@ -17405,19 +17405,18 @@ determine_optimal_proto_sockets_helper() {
      local proto=""
      local optimal_proto=""
      local starttls="$1"
+     local -i ret
 
      for proto in 03 01 04 00 02 22; do
           case $proto in
                03) tls_sockets "$proto" "$TLS12_CIPHER"
-                    if [[ $? -eq 0 ]]; then
-                         add_tls_offered tls1_2 yes; optimal_proto="-tls1_2"
-                         all_failed=false
-                         break
-                    elif [[ $? -eq 2 ]]; then
-                         case $(get_protocol "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt") in
-                              *1.1)   add_tls_offered tls1_1 yes; optimal_proto="-tls1_1" ;;
-                              TLSv1)  add_tls_offered tls1 yes; optimal_proto="-tls1" ;;
-                              SSLv3)  add_tls_offered ssl3 yes; optimal_proto="-ssl3" ;;
+                    ret=$?
+                    if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
+                         case $DETECTED_TLS_VERSION in
+                              0303)  add_tls_offered tls1_2 yes; optimal_proto="-tls1_2" ;;
+                              0302)  add_tls_offered tls1_1 yes; optimal_proto="-tls1_1" ;;
+                              0301)  add_tls_offered tls1 yes; optimal_proto="-tls1" ;;
+                              0300)  add_tls_offered ssl3 yes; optimal_proto="-ssl3" ;;
                          esac
                          all_failed=false
                          break
@@ -17429,19 +17428,12 @@ determine_optimal_proto_sockets_helper() {
                          break
                     fi ;;
                01|00|02) tls_sockets "$proto" "$TLS_CIPHER" "" "" "true"
-                    if [[ $? -eq 0 ]]; then
-                         case $proto in
-                              01)  add_tls_offered tls1 yes; optimal_proto="-tls1" ;;
-                              00)  add_tls_offered ssl3 yes; optimal_proto="-ssl3" ;;
-                              02)  add_tls_offered tls1_1 yes; optimal_proto="-tls1_1" ;;
-                         esac
-                         all_failed=false
-                         break
-                    elif [[ $? -eq 2 ]]; then
-                         case $(get_protocol "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt") in
-                              *1.1)   add_tls_offered tls1_1 yes; optimal_proto="-tls1_1" ;;
-                              TLSv1)  add_tls_offered tls1 yes; optimal_proto="-tls1" ;;
-                              SSLv3)  add_tls_offered ssl3 yes; optimal_proto="-ssl3" ;;
+                    ret=$?
+                    if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
+                         case $DETECTED_TLS_VERSION in
+                              0302)  add_tls_offered tls1_1 yes; optimal_proto="-tls1_1" ;;
+                              0301)  add_tls_offered tls1 yes; optimal_proto="-tls1" ;;
+                              0300)  add_tls_offered ssl3 yes; optimal_proto="-ssl3" ;;
                          esac
                          all_failed=false
                          break
