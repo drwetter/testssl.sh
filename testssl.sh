@@ -296,6 +296,7 @@ TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
 CLIENT_AUTH=false
+TLS_TICKETS=false
 NO_SSL_SESSIONID=false
 HOSTCERT=""                             # File with host certificate, without intermediate certificate
 HEADERFILE=""
@@ -5845,13 +5846,21 @@ read_dhbits_from_file() {
 }
 
 
-# arg1: ID or empty. if empty resumption by ticket will be tested
+# arg1: ID or empty. If empty resumption by ticket will be tested, otherwise by ID
 # return: 0: it has resumption, 1:nope, 2: nope (OpenSSL 1.1.1),  6: CLIENT_AUTH --> problem for resumption, 7: can't tell
+#
+# This is basically a short(?) version from Bulletproof SSL and TLS (p386). The version according to that would be e.g.
+#     echo | $OPENSSL s_client -connect testssl.sh:443 -servername testssl.sh -no_ssl2            -reconnect 2>&1 | grep -E 'New|Reused'
+#     echo | $OPENSSL s_client -connect testssl.sh:443 -servername testssl.sh -no_ssl2 -no_ticket -reconnect 2>&1 | grep -E 'New|Reused|Session-ID'
+#
+# FIXME: actually Ivan's version seems faster. Worth to check and since when -reconnect is a/v
+#
 sub_session_resumption() {
      local ret ret1 ret2
      local tmpfile=$(mktemp $TEMPDIR/session_resumption.$NODEIP.XXXXXX)
      local sess_data=$(mktemp $TEMPDIR/sub_session_data_resumption.$NODEIP.XXXXXX)
      local -a rw_line
+     local not_new_reused=false
 
      if [[ "$1" == ID ]]; then
           local byID=true
@@ -5859,6 +5868,9 @@ sub_session_resumption() {
      else
           local byID=false
           local addcmd=""
+          if ! "$TLS_TICKETS"; then
+               return 1
+          fi
      fi
      "$CLIENT_AUTH" && return 3
      "$HAS_NO_SSL2" && addcmd+=" -no_ssl2" || addcmd+=" $OPTIMAL_PROTO"
@@ -5884,7 +5896,17 @@ sub_session_resumption() {
                debugme echo -n "Couldn't connect #2  "
                return 7
           fi
-          # now get the line and compare the numbers read" and "written" as a second criteria.
+          # "Reused" indicates session material was reused, "New": not
+          if grep -aq "^Reused" "$tmpfile"; then
+               new_sid=false
+          elif grep -aq "^New" "$tmpfile"; then
+               new_sid=true
+          else
+               debugme echo -n "Problem with 2nd ServerHello  "
+               not_new_reused=true
+          fi
+          # Now get the line and compare the numbers "read" and "written" as a second criteria.
+          # If the "read" number is bigger: a new session ID was probably used
           rw_line="$(awk '/^SSL handshake has read/ { print $5" "$(NF-1) }' "$tmpfile" )"
           rw_line=($rw_line)
           if [[ "${rw_line[0]}" -gt "${rw_line[1]}" ]]; then
@@ -5893,8 +5915,7 @@ sub_session_resumption() {
                new_sid2=false
           fi
           debugme echo "${rw_line[0]}, ${rw_line[1]}"
-          #   grep -aq "^New" "$tmpfile" && new_sid=true || new_sid=false
-          grep -aq "^Reused" "$tmpfile" && new_sid=false || new_sid=true
+ 
           if "$new_sid2" && "$new_sid"; then
                debugme echo -n "No session resumption "
                ret=1
@@ -7689,11 +7710,11 @@ certificate_transparency() {
      # server's certificate. If they aren't, check whether the server provided
      # a stapled OCSP response with SCTs. If no SCTs were found in the certificate
      # or OCSP response, check for an SCT TLS extension.
-     if [[ "$cert_txt" =~ "CT Precertificate SCTs" ]] || [[ "$cert_txt" =~ '1.3.6.1.4.1.11129.2.4.2' ]]; then
+     if [[ "$cert_txt" =~ CT\ Precertificate\ SCTs ]] || [[ "$cert_txt" =~ '1.3.6.1.4.1.11129.2.4.2' ]]; then
           tm_out "certificate extension"
           return 0
      fi
-     if [[ "$ocsp_response" =~ "CT Certificate SCTs" ]] || [[ "$ocsp_response" =~ '1.3.6.1.4.1.11129.2.4.5' ]]; then
+     if [[ "$ocsp_response" =~ CT\ Certificate\ SCTs ]] || [[ "$ocsp_response" =~ '1.3.6.1.4.1.11129.2.4.5' ]]; then
           tm_out "OCSP extension"
           return 0
      fi
@@ -7708,11 +7729,11 @@ certificate_transparency() {
      fi
 
      if [[ $number_of_certificates -gt 1 ]] && ! "$SSL_NATIVE"; then
-          if [[ "$tls_version" == "0304" ]]; then
+          if [[ "$tls_version" == 0304 ]]; then
                ciphers=", 13,01, 13,02, 13,03, 13,04, 13,05"
-               if [[ "$cipher" == "tls1_3_RSA" ]]; then
+               if [[ "$cipher" == tls1_3_RSA ]]; then
                     extra_extns=", 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
-               elif [[ "$cipher" == "tls1_3_ECDSA" ]]; then
+               elif [[ "$cipher" == tls1_3_ECDSA ]]; then
                     extra_extns=", 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
                else
                     return 1
@@ -8772,15 +8793,17 @@ run_server_defaults() {
      done
 
      determine_tls_extensions
+
      if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
           cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
           >$ERRFILE
           [[ -z "$sessticket_lifetime_hint" ]] && sessticket_lifetime_hint=$(awk '/session ticket lifetime/' $TMPFILE)
      fi
      if "$using_sockets" && [[ -z "$sessticket_lifetime_hint" ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher ALL:COMPLEMENTOFALL -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>$ERRFILE >$TMPFILE
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS "$OPTIMAL_PROTO" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>$ERRFILE >$TMPFILE
           sclient_connect_successful $? $TMPFILE && sessticket_lifetime_hint=$(awk '/session ticket lifetime/' $TMPFILE)
      fi
+     [[ -z "$sessticket_lifetime_hint" ]] && TLS_TICKETS=false || TLS_TICKETS=true
 
      debugme echo "# certificates found $certs_found"
      # Now that all of the server's certificates have been found, determine for
@@ -8819,8 +8842,8 @@ run_server_defaults() {
      pr_bold " Session Ticket RFC 5077 hint "
      jsonID="TLS_session_ticket"
      if [[ -z "$sessticket_lifetime_hint" ]]; then
-          outln "(no lifetime advertised)"
-          fileout "${jsonID}" "INFO" "No lifetime advertised"
+          outln "no -- no lifetime advertised"
+          fileout "${jsonID}" "INFO" "no -- no lifetime advertised"
           # it MAY be given a hint of the lifetime of the ticket, see https://tools.ietf.org/html/rfc5077#section-5.6 .
           # Sometimes it just does not -- but it then may also support TLS session tickets reuse
      else
@@ -13513,15 +13536,15 @@ run_ccs_injection(){
 
 sub_session_ticket_tls() {
      local sessticket_tls=""
-
      #FIXME: we likely have done this already before (either @ run_server_defaults() or at least the output
-     #       from a previous handshake) --> would save 1x connect
+     #       from a previous handshake) --> would save 1x connect. We have TLS_TICKET but not yet the ticket itself #FIXME
      #ATTENTION: we DO NOT use SNI here as we assume ticketbleed is a vulnerability of the TLS stack. If we'd do SNI here, we'd also need
      #           it in the ClientHello of run_ticketbleed() otherwise the ticket will be different and the whole thing won't work!
      #
      sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $OPTIMAL_PROTO $PROXY -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
      sessticket_tls="$(sed -e 's/^.* - /x/g' -e 's/  .*$//g' <<< "$sessticket_tls" | tr '\n' ',')"
      sed -e 's/ /,x/g' -e 's/-/,x/g' <<< "$sessticket_tls"
+
 }
 
 
