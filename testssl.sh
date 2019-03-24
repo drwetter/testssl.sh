@@ -87,7 +87,7 @@ declare -r ALLOK=0                 # All is fine
 [ -z "${BASH_VERSINFO[0]}" ] && printf "\n\033[1;35m Please make sure you're using \"bash\"! Bye...\033[m\n\n" >&2 && exit $ERR_BASH
 [ $(kill -l | grep -c SIG) -eq 0 ] && printf "\n\033[1;35m Please make sure you're calling me without leading \"sh\"! Bye...\033[m\n\n"  >&2 && exit $ERR_BASH
 [ ${BASH_VERSINFO[0]} -lt 3 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit $ERR_BASH
-[ ${BASH_VERSINFO[0]} -le 3 -a ${BASH_VERSINFO[1]} -le 1 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit $ERR_BASH
+[ ${BASH_VERSINFO[0]} -le 3 ] && [ ${BASH_VERSINFO[1]} -le 1 ] && printf "\n\033[1;35m Minimum requirement is bash 3.2. You have $BASH_VERSION \033[m\n\n"  >&2 && exit $ERR_BASH
 
 ########### Debugging helpers + profiling
 #
@@ -119,7 +119,7 @@ trap "child_error" USR1
 #
 declare -r VERSION="3.0rc4"
 declare -r SWCONTACT="dirk aet testssl dot sh"
-egrep -q "dev|rc|beta" <<< "$VERSION" && \
+grep -E -q "dev|rc|beta" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
      SWURL="https://testssl.sh/"
 declare -r CVS_REL="$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')"
@@ -1096,7 +1096,7 @@ prepare_logging() {
      "$do_mass_testing" && ! "$filename_provided" && return 0
      "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
 
-     [[ -z "$fname_prefix" ]] && fname_prefix="${FNAME_PREFIX}${NODE}"_p"${PORT}"
+     [[ -z "$fname_prefix" ]] && fname_prefix="${FNAME_PREFIX}${NODE}_p${PORT}"
 
      if [[ -z "$LOGFILE" ]]; then
           LOGFILE="$fname_prefix-$(date +"%Y%m%d-%H%M".log)"
@@ -1899,13 +1899,13 @@ service_detection() {
           was_killed=$?
           head $TMPFILE | grep -aq '^HTTP\/' && SERVICE=HTTP
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -waq "SMTP|ESMTP|Exim|IdeaSmtpServer|Kerio Connect|Postfix" && SERVICE=SMTP   # I know some overlap here
-          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -waq "POP|Gpop|MailEnable POP3 Server|OK Dovecot|Cyrus POP3" && SERVICE=POP  # I know some overlap here
-          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -waq "IMAP|IMAP4|Cyrus IMAP4IMAP4rev1|IMAP4REV1|Gimap" && SERVICE=IMAP       # I know some overlap here
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "POP|Gpop|MailEnable POP3 Server|OK Dovecot|Cyrus POP3" && SERVICE=POP  # I know some overlap here
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "IMAP|IMAP4|Cyrus IMAP4IMAP4rev1|IMAP4REV1|Gimap" && SERVICE=IMAP       # I know some overlap here
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -aq FTP && SERVICE=FTP
-          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqi "jabber|xmpp" && SERVICE=XMPP
-          [[ -z "$SERVICE" ]] && head $TMPFILE | egrep -aqw "Jive News|InterNetNews|NNRP|INN|Kerio Connect|NNTP Service|Kerio MailServer|NNTP server" && SERVICE=NNTP
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Eaqi "jabber|xmpp" && SERVICE=XMPP
+          [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Eaqw "Jive News|InterNetNews|NNRP|INN|Kerio Connect|NNTP Service|Kerio MailServer|NNTP server" && SERVICE=NNTP
           # MongoDB port 27017 will respond to a GET request with a mocked HTTP response
-          [[ "$SERVICE" == HTTP ]] && head $TMPFILE | egrep -aqw "MongoDB" && SERVICE=MongoDB
+          [[ "$SERVICE" == HTTP ]] && head $TMPFILE | grep -Eaqw "MongoDB" && SERVICE=MongoDB
           debugme head -50 $TMPFILE | sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<\?xml/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d'
      fi
 
@@ -2330,7 +2330,7 @@ run_hpkp() {
                fileout "HPKP_notice" "INFO" "multiple Public-Key-Pins-Report-Only in header"
                first_hpkp_header="$(grep -aiw '^Public-Key-Pins-Report-Only:' $TMPFILE | head -1)"
                out "$spaces "
-          elif [[ $(egrep -aciw '^Public-Key-Pins:|^Public-Key-Pins-Report-Only:' $TMPFILE) -eq 2 ]]; then
+          elif [[ $(grep -Eaciw '^Public-Key-Pins:|^Public-Key-Pins-Report-Only:' $TMPFILE) -eq 2 ]]; then
                outln "Public-Key-Pins + Public-Key-Pins-Report-Only detected. Continue with first one"
                first_hpkp_header="$(grep -aiw '^Public-Key-Pins:' $TMPFILE)"
                out "$spaces "
@@ -2695,7 +2695,7 @@ run_appl_banner() {
           run_http_header "$1" || return 1
      fi
      pr_bold " Application banner           "
-     egrep -ai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
+     grep -Eai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "$jsonID" "INFO" "No application banner found"
@@ -2730,7 +2730,7 @@ run_rp_banner() {
           run_http_header "$1" || return 1
      fi
      pr_bold " Reverse Proxy banner         "
-     egrep -ai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded|^Forwarded' $HEADERFILE >$TMPFILE
+     grep -Eai '^Via:|^X-Cache|^X-Squid|^X-Varnish:|^X-Server-Name:|^X-Server-Port:|^x-forwarded|^Forwarded' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "$jsonID" "INFO" "--" "$cve" "$cwe"
@@ -4638,12 +4638,12 @@ run_prototest_openssl() {
      $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
-     debugme egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      # try again without $PROXY
      $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI") >$TMPFILE 2>$ERRFILE </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
-     debugme egrep "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+     debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
      tmpfile_handle $FUNCNAME$1.txt
      return $ret
@@ -6982,7 +6982,7 @@ extract_stapled_ocsp() {
      local -i ocsp_len
 
      STAPLED_OCSP_RESPONSE=""
-     if [[ "$response" =~ "CertificateStatus" ]]; then
+     if [[ "$response" =~ CertificateStatus ]]; then
           # This is OpenSSL 1.1.0 or 1.1.1 and the response
           # is TLS 1.2 or earlier.
           ocsp="${response##*CertificateStatus}"
@@ -8137,7 +8137,7 @@ certificate_info() {
      fileout "cert_commonName_wo_SNI${json_postfix}" "INFO" "$cnfinding"
 
      sans=$(grep -A2 "Subject Alternative Name" <<< "$cert_txt" | \
-          egrep "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
+          grep -E "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
           sed -e 's/ *DNS://g' -e 's/ *IP Address://g' -e 's/ *email://g' -e 's/ *URI://g' -e 's/ *DirName://g' \
               -e 's/ *Registered ID://g' \
               -e 's/ *othername:<unsupported>//g' -e 's/ *X400Name:<unsupported>//g' -e 's/ *EdiPartyName:<unsupported>//g')
@@ -8331,7 +8331,7 @@ certificate_info() {
      jsonID="cert_certificatePolicies_EV"
      # only the first one, seldom we have two
      policy_oid=$(awk '/ .Policy: / { print $2 }' <<< "$cert_txt" | awk 'NR < 2')
-     if echo "$issuer" | egrep -q 'Extended Validation|Extended Validated|EV SSL|EV CA' || \
+     if grep -Eq 'Extended Validation|Extended Validated|EV SSL|EV CA' <<< "$issuer" || \
           [[ 2.16.840.1.114028.10.1.2 == "$policy_oid" ]] || \
           [[ 2.16.840.1.114412.1.3.0.2 == "$policy_oid" ]] || \
           [[ 2.16.840.1.114412.2.1 == "$policy_oid" ]] || \
@@ -9384,7 +9384,7 @@ run_pfs() {
           nr_curves=0
           for curve in "${ffdhe_groups_output[@]}"; do
                supported_curve[nr_curves]=false
-               [[ "$DH_GROUP_OFFERED" =~ "$curve" ]] && supported_curve[nr_curves]=true
+               [[ "$DH_GROUP_OFFERED" =~ $curve ]] && supported_curve[nr_curves]=true
                nr_curves+=1
           done
           protos_to_try=""
@@ -10381,11 +10381,11 @@ parse_sslv2_serverhello() {
           fi
 
           # Output list of supported ciphers
-          let offset=26+$certificate_len
+          offset=$((certificate_len+26))
           nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
           for (( i=0 ; i<nr_ciphers_detected; i++ )); do
                echo "Supported cipher: x$(tolower "${v2_hello_ascii:offset:6}")" >> $TMPFILE
-               let offset=$offset+6
+               offset=$((offset+6))
           done
           echo "======================================" >> $TMPFILE
 
@@ -10937,11 +10937,11 @@ sym-decrypt() {
           else
                plaintext="$(chacha20 "$key" "$nonce" "${ciphertext:0:ciphertext_len}")"
           fi
-     elif [[ "$cipher" == "TLS_AES_128_GCM_SHA256" ]] && "$HAS_AES128_GCM"; then
+     elif [[ "$cipher" == TLS_AES_128_GCM_SHA256 ]] && "$HAS_AES128_GCM"; then
           plaintext="$(asciihex_to_binary_file "${ciphertext:0:ciphertext_len}" "/dev/stdout" | \
                        $OPENSSL enc -aes-128-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           plaintext="$(strip_spaces "$plaintext")"
-     elif [[ "$cipher" == "TLS_AES_256_GCM_SHA384" ]] && "$HAS_AES256_GCM"; then
+     elif [[ "$cipher" == TLS_AES_256_GCM_SHA384 ]] && "$HAS_AES256_GCM"; then
           plaintext="$(asciihex_to_binary_file "${ciphertext:0:ciphertext_len}" "/dev/stdout" | \
                        $OPENSSL enc -aes-256-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           plaintext="$(strip_spaces "$plaintext")"
@@ -11513,24 +11513,24 @@ parse_tls_serverhello() {
           [[ "$TLS_DIFFTIME_SET" || "$DEBUG" ]] && TLS_TIME=$(hex2dec "$tls_hello_time")
           tls_sid_len_hex="${tls_serverhello_ascii:68:2}"
           tls_sid_len=2*$(hex2dec "$tls_sid_len_hex")
-          let offset=70+$tls_sid_len
+          offset=$((tls_sid_len+70))
           if [[ $tls_serverhello_ascii_len -lt 76+$tls_sid_len ]]; then
                debugme echo "Malformed response"
                [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
      else
-          let offset=68
+          offset=68
      fi
 
      tls_cipher_suite="${tls_serverhello_ascii:offset:4}"
 
      if [[ "0x${DETECTED_TLS_VERSION:2:2}" -le "0x03" ]]; then
-          let offset=74+$tls_sid_len
+          offset=$((tls_sid_len+78))
           tls_compression_method="${tls_serverhello_ascii:offset:2}"
-          let extns_offset=76+$tls_sid_len
+          extns_offset=$((tls_sid_len+76))
      else
-          let extns_offset=72
+          extns_offset=72
      fi
 
      if [[ $tls_serverhello_ascii_len -gt $extns_offset ]] && \
@@ -11553,9 +11553,9 @@ parse_tls_serverhello() {
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
-               let offset=$extns_offset+4+$i
+               offset=$((extns_offset+i+4))
                extension_type="${tls_serverhello_ascii:offset:4}"
-               let offset=$extns_offset+8+$i
+               offset=$((extns_offset+i+8))
                extension_len=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
                if [[  $extension_len -gt $tls_extensions_len-$i-8 ]]; then
                     debugme echo "Malformed response"
@@ -11575,7 +11575,7 @@ parse_tls_serverhello() {
                                # the status_request extension is not empty, extract the value and place it in
                                # $tls_certificate_status_ascii.
                                tls_certificate_status_ascii_len=$extension_len
-                               let offset=$extns_offset+12+$i
+                               offset=$((extns_offset+12+i))
                                tls_certificate_status_ascii="${tls_serverhello_ascii:offset:tls_certificate_status_ascii_len}"
                           fi
                           ;;
@@ -11590,13 +11590,13 @@ parse_tls_serverhello() {
                                     return 1
                                fi
                                echo -n "Supported groups: " >> $TMPFILE
-                               let offset=$extns_offset+12+$i
+                               offset=$((extns_offset+12+i))
                                len1=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
                                if [[ $extension_len -lt $len1+4 ]] || [[ $len1 -lt 4 ]]; then
                                     debugme tmln_warning "Malformed supported groups extension."
                                     return 1
                                fi
-                               let offset=$offset+4
+                               offset=$((offset+4))
                                for (( j=0; j < len1; j=j+4 )); do
                                     [[ $j -ne 0 ]] && echo -n ", " >> $TMPFILE
                                     case "${tls_serverhello_ascii:offset:4}" in
@@ -11612,7 +11612,7 @@ parse_tls_serverhello() {
                                          "0104") echo -n "ffdhe8192" >> $TMPFILE ;;
                                               *) echo -n "unknown (${tls_serverhello_ascii:offset:4})" >> $TMPFILE ;;
                                     esac
-                                    let offset=$offset+4
+                                    offset=$((offset+4))
                                done
                                echo "" >> $TMPFILE
                           fi
@@ -11630,21 +11630,21 @@ parse_tls_serverhello() {
                                     return 1
                                fi
                                echo -n "ALPN protocol:  " >> $TMPFILE
-                               let offset=$extns_offset+12+$i
+                               offset=$((extns_offset+12+i))
                                j=2*$(hex2dec "${tls_serverhello_ascii:offset:4}")
                                if [[ $extension_len -ne $j+4 ]] || [[ $j -lt 2 ]]; then
                                     debugme echo "Malformed application layer protocol negotiation extension."
                                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
                                fi
-                               let offset=$offset+4
+                               offset=$((offset+4))
                                j=2*$(hex2dec "${tls_serverhello_ascii:offset:2}")
                                if [[ $extension_len -ne $j+6 ]]; then
                                     debugme echo "Malformed application layer protocol negotiation extension."
                                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
                                fi
-                               let offset=$offset+2
+                               offset=$((offset+2))
                                asciihex_to_binary_file "${tls_serverhello_ascii:offset:j}" "$TMPFILE"
                                echo "" >> $TMPFILE
                                echo "===============================================================================" >> $TMPFILE
@@ -11681,9 +11681,9 @@ parse_tls_serverhello() {
                                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                     return 1
                                fi
-                               let offset=$extns_offset+12+$i
+                               offset=$((extns_offset+12+i))
                                named_curve=$(hex2dec "${tls_serverhello_ascii:offset:4}")
-                               let offset=$extns_offset+16+$i
+                               offset=$((extns_offset+16+i))
                                msg_len=2*"$(hex2dec "${tls_serverhello_ascii:offset:4}")"
                                if [[ $msg_len -ne $extension_len-8 ]]; then
                                     debugme tmln_warning "Malformed key share extension."
@@ -11704,7 +11704,7 @@ parse_tls_serverhello() {
                                     260) dh_bits=8192 ; named_curve_str="ffdhe8192" ;;
                                     *) named_curve_str="" ; named_curve_oid="" ;;
                                esac
-                               let offset=$extns_offset+20+$i
+                               offset=$((extns_offset+20+i))
                                if ! "$HAS_PKEY"; then
                                     # The key can't be extracted without the pkey utility.
                                     key_bitstring=""
@@ -11759,10 +11759,10 @@ parse_tls_serverhello() {
                                debugme tmln_warning "Malformed supported versions extension."
                                return 1
                           fi
-                          let offset=$extns_offset+12+$i
+                          offset=$((extns_offset+12+i))
                           tls_protocol2="${tls_serverhello_ascii:offset:4}"
                           DETECTED_TLS_VERSION="$tls_protocol2"
-                          [[ "${DETECTED_TLS_VERSION:0:2}" == "7F" ]] && DETECTED_TLS_VERSION="0304"
+                          [[ "${DETECTED_TLS_VERSION:0:2}" == 7F ]] && DETECTED_TLS_VERSION="0304"
                           ;;
                     002C) tls_extensions+="TLS server extension \"cookie\" (id=44), len=$extension_len\n" ;;
                     002D) tls_extensions+="TLS server extension \"psk key exchange modes\" (id=45), len=$extension_len\n" ;;
@@ -11774,7 +11774,7 @@ parse_tls_serverhello() {
                           if [[ "$process_full" =~ all ]]; then
                                local -i protocol_len
                                echo -n "Protocols advertised by server: " >> $TMPFILE
-                               let offset=$extns_offset+12+$i
+                               offset=$((extns_offset+12+i))
                                for (( j=0; j<extension_len; j=j+protocol_len+2 )); do
                                     if [[ $extension_len -lt $j+2 ]]; then
                                          debugme echo "Malformed next protocol extension."
@@ -11787,9 +11787,9 @@ parse_tls_serverhello() {
                                          [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                                          return 1
                                     fi
-                                    let offset=$offset+2
+                                    offset=$((offset+2))
                                     asciihex_to_binary_file "${tls_serverhello_ascii:offset:protocol_len}" "$TMPFILE"
-                                    let offset=$offset+$protocol_len
+                                    offset=$((offset+protocol_len))
                                     [[ $j+$protocol_len+2 -lt $extension_len ]] && echo -n ", " >> $TMPFILE
                                done
                                echo "" >> $TMPFILE
@@ -11813,7 +11813,7 @@ parse_tls_serverhello() {
                          tls_serverhello_ascii_len+=$tls_encryptedextensions_ascii_len-4
                          tls_extensions_len+=$tls_encryptedextensions_ascii_len-4
                          tls_encryptedextensions_ascii_len=$tls_encryptedextensions_ascii_len/2-2
-                         let offset=$extns_offset+4
+                         offset=$((extns_offset+4))
                          tls_serverhello_ascii="${tls_serverhello_ascii:0:extns_offset}$(printf "%04X" $((0x${tls_serverhello_ascii:extns_offset:4}+$tls_encryptedextensions_ascii_len)))${tls_serverhello_ascii:offset}${tls_encryptedextensions_ascii:4}"
                     fi
                     if [[ -n "$tls_certificate_ascii" ]]; then
@@ -11858,7 +11858,7 @@ parse_tls_serverhello() {
                                    # TODO: Should only the extensions associated with the EE certificate be added to $tls_serverhello_ascii?
                                    tls_serverhello_ascii_len+=$extn_len
                                    tls_extensions_len+=$extn_len
-                                   let offset=$extns_offset+4
+                                   offset=$((extns_offset+4))
                                    tls_serverhello_ascii="${tls_serverhello_ascii:0:extns_offset}$(printf "%04X" $(( 0x${tls_serverhello_ascii:extns_offset:4}+extn_len/2)) )${tls_serverhello_ascii:offset}${tls_certificate_ascii:j:extn_len}"
                               done
                               tls_certificate_ascii_len=${#tls_revised_certificate_msg}+6
@@ -13361,7 +13361,7 @@ ok_ids(){
 #FIXME: At a certain point ccs needs to be changed and make use of code2network using a file, then tls_sockets
 #
 run_ccs_injection(){
-     local tls_hexcode ccs_message client_hello byte6 sockreply
+     local tls_hexcode ccs_message client_hello byte6
      local -i retval ret=0
      local tls_hello_ascii=""
      local jsonID="CCS"
@@ -13558,7 +13558,6 @@ run_ticketbleed() {
      local -i len_tckt_tls=0 nr_sid_detected=0
      local xlen_tckt_tls="" xlen_handshake_record_layer="" xlen_handshake_ssl_layer=""
      local -i len_handshake_record_layer=0
-     local tls_version=""
      local i
      local -a memory sid_detected
      local early_exit=true
@@ -14093,7 +14092,7 @@ run_breach() {
 # Please note as opposed to RC4 (stream cipher) RC2 is a block cipher.
 #
 run_sweet32() {
-     local -i sclient_success=1 ssl2_sclient_success=1
+     local -i sclient_success=1
      local sweet32_ciphers="IDEA-CBC-SHA:IDEA-CBC-MD5:RC2-CBC-MD5:KRB5-IDEA-CBC-SHA:KRB5-IDEA-CBC-MD5:ECDHE-RSA-DES-CBC3-SHA:ECDHE-ECDSA-DES-CBC3-SHA:SRP-DSS-3DES-EDE-CBC-SHA:SRP-RSA-3DES-EDE-CBC-SHA:SRP-3DES-EDE-CBC-SHA:EDH-RSA-DES-CBC3-SHA:EDH-DSS-DES-CBC3-SHA:DH-RSA-DES-CBC3-SHA:DH-DSS-DES-CBC3-SHA:AECDH-DES-CBC3-SHA:ADH-DES-CBC3-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-ECDSA-DES-CBC3-SHA:DES-CBC3-SHA:DES-CBC3-MD5:DES-CBC3-SHA:RSA-PSK-3DES-EDE-CBC-SHA:PSK-3DES-EDE-CBC-SHA:KRB5-DES-CBC3-SHA:KRB5-DES-CBC3-MD5:ECDHE-PSK-3DES-EDE-CBC-SHA:DHE-PSK-3DES-EDE-CBC-SHA:DES-CFB-M1:EXP1024-DHE-DSS-DES-CBC-SHA:EDH-RSA-DES-CBC-SHA:EDH-DSS-DES-CBC-SHA:DH-RSA-DES-CBC-SHA:DH-DSS-DES-CBC-SHA:ADH-DES-CBC-SHA:EXP1024-DES-CBC-SHA:DES-CBC-SHA:EXP1024-RC2-CBC-MD5:DES-CBC-MD5:DES-CBC-SHA:KRB5-DES-CBC-SHA:KRB5-DES-CBC-MD5:EXP-EDH-RSA-DES-CBC-SHA:EXP-EDH-DSS-DES-CBC-SHA:EXP-ADH-DES-CBC-SHA:EXP-DES-CBC-SHA:EXP-RC2-CBC-MD5:EXP-RC2-CBC-MD5:EXP-KRB5-RC2-CBC-SHA:EXP-KRB5-DES-CBC-SHA:EXP-KRB5-RC2-CBC-MD5:EXP-KRB5-DES-CBC-MD5:EXP-DH-DSS-DES-CBC-SHA:EXP-DH-RSA-DES-CBC-SHA"
      local sweet32_ciphers_hex="00,07, 00,21, 00,25, c0,12, c0,08, c0,1c, c0,1b, c0,1a, 00,16, 00,13, 00,10, 00,0d, c0,17, 00,1b, c0,0d, c0,03, 00,0a, 00,93, 00,8b, 00,1f, 00,23, c0,34, 00,8f, fe,ff, ff,e0, 00,63, 00,15, 00,12, 00,0f, 00,0c, 00,1a, 00,62, 00,09, 00,61, 00,1e, 00,22, fe,fe, ff,e1, 00,14, 00,11, 00,19, 00,08, 00,06, 00,27, 00,26, 00,2a, 00,29, 00,0b, 00,0e"
      local ssl2_sweet32_ciphers='RC2-CBC-MD5:EXP-RC2-CBC-MD5:IDEA-CBC-MD5:DES-CBC-MD5:DES-CBC-SHA:DES-CBC3-MD5:DES-CBC3-SHA:DES-CFB-M1'
@@ -14157,7 +14156,7 @@ run_sweet32() {
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $proto -cipher $sweet32_ciphers -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
-               [[ $DEBUG -ge 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+               [[ $DEBUG -ge 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
                [[ $sclient_success -eq 0 ]] && break
           done
           if "$HAS_SSL2"; then
@@ -14247,7 +14246,7 @@ run_ssl_poodle() {
           $OPENSSL s_client -ssl3 $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          [[ "$DEBUG" -eq 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      fi
      if [[ $sclient_success -eq 0 ]]; then
           POODLE=0
@@ -14486,7 +14485,7 @@ run_freak() {
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY $SNI -no_ssl2") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          debugme egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          debugme grep -Ea "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
           if [[ $sclient_success -ne 0 ]] && "$HAS_SSL2"; then
                $OPENSSL s_client $STARTTLS $BUGS -cipher $exportrsa_cipher_list -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
                sclient_connect_successful $? $TMPFILE
@@ -14517,7 +14516,7 @@ run_freak() {
                done
                tmln_out
           else
-               echo $(actually_supported_ciphers $exportrsa_cipher_list)
+               actually_supported_ciphers $exportrsa_cipher_list
           fi
      fi
      debugme echo $nr_supported_ciphers
@@ -14535,13 +14534,12 @@ get_common_prime() {
      local jsonID2="$1"
      local key_bitstring="$2"
      local spaces="$3"
-     local comment=""
      local dh_p=""
      local -i subret=0
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local -i lineno_matched=0
 
-     dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:/,/generator:/' | egrep -v "prime|generator")"
+     dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:/,/generator:/' | grep -Ev "prime|generator")"
      dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
      [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
      DH_GROUP_LEN_P="$((4*${#dh_p}))"
@@ -14656,7 +14654,7 @@ run_logjam() {
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $exportdh_cipher_list -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          debugme egrep -a "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          debugme grep -Ea "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      fi
      [[ $sclient_success -eq 0 ]] && \
           vuln_exportdh_ciphers=true || \
@@ -14922,7 +14920,7 @@ run_beast(){
           done
      else
           while read hexc dash ciph[nr_ciphers] sslvers kx[nr_ciphers] auth enc[nr_ciphers] mac export2[nr_ciphers]; do
-               if [[ ":${cbc_cipher_list}:" =~ ":${ciph[nr_ciphers]}:" ]]; then
+               if [[ ":${cbc_cipher_list}:" =~ :${ciph[nr_ciphers]}: ]]; then
                     ossl_supported[nr_ciphers]=true
                     if [[ "${hexc:2:2}" == "00" ]]; then
                          normalized_hexcode[nr_ciphers]="x${hexc:7:2}"
@@ -15190,7 +15188,7 @@ run_lucky13() {
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -no_ssl2 -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
-          [[ "$DEBUG" -eq 2 ]] && egrep -q "error|failure" $ERRFILE | egrep -av "unable to get local|verify error"
+          [[ "$DEBUG" -eq 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      fi
      if [[ $sclient_success -eq 0 ]]; then
           out "potentially "
@@ -16299,7 +16297,7 @@ find_openssl_binary() {
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_ciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
      for curve in "${curves_ossl[@]}"; do
-          $OPENSSL s_client -curves $curve -connect x 2>&1 | egrep -iaq "Error with command|unknown option"
+          $OPENSSL s_client -curves $curve -connect x 2>&1 | grep -Eiaq "Error with command|unknown option"
           [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
      done
 
@@ -16861,7 +16859,7 @@ initialize_engine(){
           # Avoid potential conflicts also -- manual hook, see #1117
           export OPENSSL_CONF=''
           return 1
-     elif $OPENSSL engine gost -v 2>&1 | egrep -q 'invalid command|no such engine'; then
+     elif $OPENSSL engine gost -v 2>&1 | grep -Eq 'invalid command|no such engine'; then
           outln
           pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
@@ -17012,7 +17010,7 @@ get_local_aaaa() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip6=$(grep -wih "$1" $etchosts 2>/dev/null | grep ':' | egrep -v '^#|\.local' | egrep -i "[[:space:]]$1" | awk '{ print $1 }')
+     ip6=$(grep -wih "$1" $etchosts 2>/dev/null | grep ':' | grep -Ev '^#|\.local' | grep -Ei "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv6addr "$ip6"; then
           echo "$ip6"
      else
@@ -17025,7 +17023,7 @@ get_local_a() {
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
      # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
-     ip4=$(grep -wih "$1" $etchosts 2>/dev/null | egrep -v ':|^#|\.local' | egrep -i "[[:space:]]$1" | awk '{ print $1 }')
+     ip4=$(grep -wih "$1" $etchosts 2>/dev/null | grep -Ev ':|^#|\.local' | grep -Ei "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv4addr "$ip4"; then
           echo "$ip4"
      else
@@ -17157,7 +17155,7 @@ get_caa_rr_record() {
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
      elif type -p host &> /dev/null; then
           raw_caa="$(host -t type257 $1)"
-          if egrep -wvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
+          if grep -Ewvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
                raw_caa="$(sed -e 's/^.*has CAA record //' -e 's/^.*has TYPE257 record //' <<< "$raw_caa")"
           fi
      elif type -p nslookup &> /dev/null; then
@@ -17594,7 +17592,7 @@ determine_optimal_proto() {
 #
 determine_service() {
      local ua
-     local protocol error_msg
+     local protocol
 
      # check if we can connect to $NODEIP:$PORT
      if ! fd_socket 5; then
@@ -17788,10 +17786,10 @@ display_rdns_etc() {
           fi
      fi
      if [[ "$rDNS" =~ instructed ]]; then
-          out "$(printf " %-23s %s" "rDNS ($nodeip):")"
+          out "$(printf " %-23s " "rDNS ($nodeip):")"
           out "$rDNS"
      elif [[ -n "$rDNS" ]]; then
-          out "$(printf " %-23s %s" "rDNS ($nodeip):")"
+          out "$(printf " %-23s " "rDNS ($nodeip):")"
           out "$(out_row_aligned_max_width "$rDNS" "                         $CORRECT_SPACES" $TERM_WIDTH)"
      fi
 }
@@ -18509,7 +18507,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
                          ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres|mysql) ;;
-                         ftps|smtps|lmtp|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
+                         ftps|smtps|lmtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
                          *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
@@ -18798,7 +18796,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_html=true
                     ;;
-               --outfile|--outfile|-oa|-oa=*)
+               --outfile|--outfile=*|-oa|-oa=*)
                     outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
                     if [[ "$outfile_arg" != "auto" ]]; then
                          HTMLFILE="$outfile_arg.html"
@@ -18812,7 +18810,7 @@ parse_cmd_line() {
                     do_csv=true
                     do_logging=true
                     ;;
-               --outFile|--outFile|-oA|-oA=*)
+               --outFile|--outFile=*|-oA|-oA=*)
                     outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
                     if [[ "$outfile_arg" != "auto" ]]; then
                          HTMLFILE="$outfile_arg.html"
