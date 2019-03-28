@@ -9188,7 +9188,7 @@ run_pfs() {
                          done
                          [[ $i -eq $nr_supported_ciphers ]] && break
                          ciphers_found[i]=true
-                         if [[ "${kx[i]}" == "Kx=any" ]]; then
+                         if [[ "${kx[i]}" == Kx=any ]]; then
                               pfs_tls13_offered=true
                               "$WIDE" && kx[i]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
                          fi
@@ -9211,7 +9211,7 @@ run_pfs() {
                     fi
                     pfs_ciphers+="$pfs_cipher "
 
-                    if [[ "${ciph[i]}" == "ECDHE-"* ]] || [[ "${ciph[i]}" == TLS13* ]] || [[ "${ciph[i]}" == TLS_* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == "TLS_ECDHE_"* ]] ); then
+                    if [[ "${ciph[i]}" == ECDHE-* ]] || [[ "${ciph[i]}" == TLS13* ]] || [[ "${ciph[i]}" == TLS_* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == TLS_ECDHE_* ]] ); then
                          ecdhe_offered=true
                          ecdhe_cipher_list_hex+=", ${hexcode[i]}"
                          if [[ "${ciph[i]}" != "-" ]]; then
@@ -18742,31 +18742,37 @@ parse_cmd_line() {
                     COLORBLIND=true
                     ;;
                --log|--logging)
+                    "$do_logging" && fatal "two --log* arguments" $ERR_CMDLINE
                     do_logging=true
                     ;;   # DEFINITION of LOGFILE if no arg specified: automagically in parse_hn_port()
-                    # following does the same but we can specify a log location additionally
+                    # following does the same but additionally we can specify a log location
                --logfile|--logfile=*|-oL|-oL=*)
+                    "$do_logging" && fatal "two --log* arguments" $ERR_CMDLINE
                     LOGFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_logging=true
                     ;;
                --json)
-                    $do_pretty_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_pretty_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_json" && fatal "--json and --jsonfile are mutually exclusive" $ERR_CMDLINE
                     do_json=true
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
-                    # following does the same but we can specify a log location additionally
+                    # following does the same but additionally we can specify a log location
                --jsonfile|--jsonfile=*|-oj|-oj=*)
-                    $do_pretty_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_pretty_json"  && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_json" && fatal "--json and --jsonfile are mutually exclusive" $ERR_CMDLINE
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_json=true
                     ;;
                --json-pretty)
-                    $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_pretty_json" && fatal "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
                     do_pretty_json=true
                     ;;
                --jsonfile-pretty|--jsonfile-pretty=*|-oJ|-oJ=*)
-                    $do_json && JSONHEADER=false && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_pretty_json" && fatal "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_pretty_json=true
@@ -18779,24 +18785,29 @@ parse_cmd_line() {
                     GIVE_HINTS=true
                     ;;
                --csv)
+                    "$do_csv" && fatal "two --csv* arguments" $ERR_CMDLINE
                     do_csv=true
                     ;;   # DEFINITION of CSVFILE is not arg specified: automagically in parse_hn_port()
-                    # following does the same but we can specify a log location additionally
+                    # following does the same but additionally we can specify a log location
                --csvfile|--csvfile=*|-oC|-oC=*)
+                    "$do_csv" && fatal "two --csv* arguments" $ERR_CMDLINE
                     CSVFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
                     ;;
                --html)
+                    "$do_html" && fatal "two --html* arguments" $ERR_CMDLINE
                     do_html=true
                     ;;  # DEFINITION of HTMLFILE is not arg specified: automagically in parse_hn_port()
-                    # following does the same but we can specify a file location additionally
+                    # following does the same but additionally we can specify a file location
                --htmlfile|--htmlfile=*|-oH|-oH=*)
+                    "$do_html" && fatal "two --html* arguments" $ERR_CMDLINE
                     HTMLFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_html=true
                     ;;
                --outfile|--outfile=*|-oa|-oa=*)
+                    ( "$do_html" || "$do_json" || "$do_pretty_json" || "$do_csv" || "$do_logging" ) && fatal "check your arguments four multiple file output options" $ERR_CMDLINE
                     outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
                     if [[ "$outfile_arg" != "auto" ]]; then
                          HTMLFILE="$outfile_arg.html"
@@ -18811,6 +18822,7 @@ parse_cmd_line() {
                     do_logging=true
                     ;;
                --outFile|--outFile=*|-oA|-oA=*)
+                    ( "$do_html" || "$do_json" || "$do_pretty_json" || "$do_csv" || "$do_logging" ) && fatal "check your arguments four multiple file output options" $ERR_CMDLINE
                     outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
                     if [[ "$outfile_arg" != "auto" ]]; then
                          HTMLFILE="$outfile_arg.html"
