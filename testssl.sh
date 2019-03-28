@@ -11954,13 +11954,13 @@ parse_tls_serverhello() {
                         -e 's/,.*$/,/g' -e 's/),$/\"/g' \
                         -e 's/elliptic curves\/#10/supported_groups\/#10/g')"
                echo ""
-               if [[ "$tls_extensions" =~ "supported_groups" ]]; then
+               if [[ "$tls_extensions" =~ supported_groups ]]; then
                     echo "     Supported Groups:       $(grep "Supported groups:" "$TMPFILE" | sed 's/Supported groups: //')"
                fi
-               if [[ "$tls_extensions" =~ "application layer protocol negotiation" ]]; then
+               if [[ "$tls_extensions" =~ application\ layer\ protocol\ negotiation ]]; then
                     echo "     ALPN protocol:          $(grep "ALPN protocol:" "$TMPFILE" | sed 's/ALPN protocol:  //')"
                fi
-               if [[ "$tls_extensions" =~ "next protocol" ]]; then
+               if [[ "$tls_extensions" =~ next\ protocol ]]; then
                     echo "     NPN protocols:          $(grep "Protocols advertised by server:" "$TMPFILE" | sed 's/Protocols advertised by server: //')"
                fi
           fi
@@ -11975,6 +11975,7 @@ parse_tls_serverhello() {
           tls_cipher_suite="${tls_cipher_suite:0:2}\\x${tls_cipher_suite:2:2}"
           cipherlist_len=${#cipherlist}
           for (( i=0; i < cipherlist_len; i=i+8 )); do
+               # At the right hand side we need the quotes here!
                [[ "${cipherlist:i:6}" == "$tls_cipher_suite" ]] && break
           done
           if [[ $i -ge $cipherlist_len ]]; then
@@ -11999,7 +12000,7 @@ parse_tls_serverhello() {
                extension_type="${TLS_CLIENT_HELLO:i:4}"
                offset=4+$i
                extension_len=2*$(hex2dec "${TLS_CLIENT_HELLO:offset:4}")
-               if [[ "$extension_type" == "002b" ]]; then
+               if [[ "$extension_type" == 002b ]]; then
                     offset+=6
                     tls_protocol2="$(tolower "$tls_protocol2")"
                     for (( j=0; j < extension_len-2; j=j+4 )); do
@@ -12495,7 +12496,7 @@ prepare_tls_clienthello() {
                     j=$i+4
                     part1="0x${cipher_suites:$i:2}"
                     part2="0x${cipher_suites:$j:2}"
-                    if [[ "$part1" == "0xc0" ]]; then
+                    if [[ "$part1" == 0xc0 ]]; then
                          if [[ "$part2" -ge 0x01 ]] && [[ "$part2" -le 0x19 ]]; then
                               ecc_cipher_suite_found=true && break
                          elif [[ "$part2" -ge 0x23 ]] && [[ "$part2" -le 0x3b ]]; then
@@ -12802,7 +12803,7 @@ prepare_tls_clienthello() {
      len_client_hello_word="$LEN_STR"
      #[[ $DEBUG -ge 3 ]] && echo $len_client_hello_word
 
-     if [[ "$tls_low_byte" == "00" ]]; then
+     if [[ "$tls_low_byte" == 00 ]]; then
           len_all=$((0x$len_ciph_suites + len_session_id + 0x2b))
      else
           len_all=$((0x$len_ciph_suites + len_session_id + 0x2b + 0x$len_extension_hex + 0x2))
@@ -17548,7 +17549,7 @@ determine_optimal_proto() {
           fi
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
      fi
-     [[ "$OPTIMAL_PROTO" != -ssl2 ]] && grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
+     [[ "$OPTIMAL_PROTO" != -ssl2 ]]  && ! "$all_failed" && grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
 
      if "$all_failed"; then
           outln
@@ -17700,6 +17701,8 @@ determine_sizelimitbug() {
      local overflow_cipher1='C0,86'
      local overflow_cipher2='C0,88'
 
+     debugme echo -n "${FUNCNAME[0]} starting at # of ciphers (excl. 00FF): "
+     debugme 'echo  "$test_ciphers" | tr ' ' '\n' | wc -l'
      # Only with TLS 1.2 offered at the server side it is possible to hit this bug, in practise. Thus
      # we assume if TLS 1.2 is not supported, the server has no cipher size limit bug. It still may,
      # theoretically, but in a regular check with testssl.sh we won't hit this limit with lower protocols.
@@ -17711,14 +17714,15 @@ determine_sizelimitbug() {
      if [[ 1 -eq $(has_server_protocol 03) ]]; then
           SERVER_SIZE_LIMIT_BUG=false
      elif [[ 0 -eq $(has_server_protocol 03) ]]; then
-          # Send 127 ciphers
+          debugme echo "Sending 127 ciphers"
           tls_sockets 03 "${test_ciphers}, 00,FF"
           if [[ $? -eq 0 ]]; then
-               # send 128 ciphers
+               debugme echo "Sending 128 ciphers"
                tls_sockets 03 "${test_ciphers}, ${overflow_cipher1}, 00,FF"
                if [[ $? -ne 0 ]]; then
                     SERVER_SIZE_LIMIT_BUG=true
                else
+                    debugme echo "Sending 129 ciphers"
                     tls_sockets 03 "${test_ciphers}, ${overflow_cipher1}, ${overflow_cipher2}, 00,FF"
                     if [[ $? -ne 0 ]]; then
                          SERVER_SIZE_LIMIT_BUG=true
@@ -17750,6 +17754,14 @@ determine_sizelimitbug() {
           else
                debugme echo -e "\nNo TLS 1.2 in ${FUNCNAME[0]} found"
           fi
+     fi
+     if "$SERVER_SIZE_LIMIT_BUG"; then
+          out " Pre-test: "
+          prln_svrty_medium "128 cipher limit bug"
+          fileout "pre_128cipher" "MEDIUM" "128 cipher limit bug"
+     else
+          [[ "$DEBUG" -ge 1 ]] && outln " Pre-test: No 128 cipher limit bug"
+          fileout "pre_128cipher" "INFO" "No 128 cipher limit bug"
      fi
      return 0
 }
