@@ -17070,7 +17070,7 @@ get_a_record() {
      fi
      if [[ -z "$ip4" ]]; then
           if type -p dig &> /dev/null ; then
-               ip4=$(filter_ip4_address $(dig +timeout=2 +tries=2 +short -t a "$1" 2>/dev/null | awk '/^[0-9]/'))
+               ip4=$(filter_ip4_address $(dig +timeout=2 +tries=2 +short -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           fi
      fi
      if [[ -z "$ip4" ]]; then
@@ -17117,7 +17117,7 @@ get_aaaa_record() {
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
                fi
           elif type -p dig &> /dev/null; then
-               ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/'))
+               ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           elif type -p host &> /dev/null ; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
           elif type -p drill &> /dev/null; then
@@ -17150,7 +17150,7 @@ get_caa_rr_record() {
      OPENSSL_CONF=""
      check_resolver_bins
      if type -p dig &> /dev/null; then
-          raw_caa="$(dig +timeout=3 +tries=3 $1 type257 +short)"
+          raw_caa="$(dig +timeout=3 +tries=3 $1 type257 +short | awk '{ print $1" "$2" "$3 }')"
           # empty if no CAA record
      elif type -p drill &> /dev/null; then
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
@@ -17220,7 +17220,7 @@ get_mx_record() {
      if type -p host &> /dev/null; then
           mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif type -p dig &> /dev/null; then
-          mxs="$(dig +short -t MX "$1" 2>/dev/null | awk '/^[0-9]/')"
+          mxs="$(dig +short -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
      elif type -p drill &> /dev/null; then
           mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
      elif type -p nslookup &> /dev/null; then
@@ -17319,11 +17319,11 @@ determine_rdns() {
           if type -p avahi-resolve &>/dev/null; then
                rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
           elif type -p dig &>/dev/null; then
-               rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
+               rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer +short | awk '{ print $1 }')
           fi
      elif type -p dig &> /dev/null; then
           # 1+2 should suffice. It's a compromise for if e.g. network is down but we have a docker/localhost server
-          rDNS=$(dig -x $nodeip +timeout=1 +tries=2 +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
+          rDNS=$(dig -x $nodeip +timeout=1 +tries=2 +noall +answer +short | awk '{ print $1 }')    # +short returns also CNAME, e.g. openssl.org
      elif type -p host &> /dev/null; then
           rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
      elif type -p drill &> /dev/null; then
