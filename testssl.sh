@@ -7808,6 +7808,7 @@ certificate_info() {
      local days2warn1=$DAYS2WARN1
      local provides_stapling=false
      local caa_node="" all_caa="" caa_property_name="" caa_property_value=""
+     local response=""
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -8511,6 +8512,10 @@ certificate_info() {
                fileout "${jsonID}${json_postfix}" "OK" "offered"
                provides_stapling=true
                check_revocation_ocsp "" "$ocsp_response_binary" "cert_ocspRevoked${json_postfix}"
+          elif [[ "$ocsp_response" =~ Responder\ Error: ]]; then
+               response="$(awk '/Responder Error:/ { print $3 }' <<< "$ocsp_response")"
+               pr_warning "stapled OCSP response contained an error response from OCSP responder: $response"
+               fileout "${jsonID}${json_postfix}" "WARN" "stapled OCSP response contained an error response from OCSP responder: $response"
           else
                if $GOST_STATUS_PROBLEM; then
                     pr_warning "(GOST servers make problems here, sorry)"
