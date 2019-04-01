@@ -8518,7 +8518,7 @@ certificate_info() {
                     ((ret++))
                else
                     out "(response status unknown)"
-                    fileout "${jsonID}${json_postfix}" "OK" " not sure what's going on here, \'$ocsp_response\'"
+                    fileout "${jsonID}${json_postfix}" "OK" " not sure what's going on here, '$ocsp_response'"
                     debugme grep -a -A20 -B2 "OCSP response"  <<<"$ocsp_response"
                     ((ret++))
                fi
