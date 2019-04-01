@@ -1001,10 +1001,11 @@ csv_header() {
           CSVHEADER=false
      else
           [[ -s "$CSVFILE" ]] && fatal "non-empty \"$CSVFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+          touch "$CSVFILE"
           if "$GIVE_HINTS"; then
-               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" "hint" > "$CSVFILE"
+               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" "hint"
           else
-               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" > "$CSVFILE"
+               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe"
           fi
      fi
      return 0
