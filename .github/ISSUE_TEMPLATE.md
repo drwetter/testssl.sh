@@ -6,11 +6,11 @@ Please make sure that you provide enough information so that we understand what 
 
 3. git log | head -1 (if running from git repo)
 
-4. openssl version: testssl.sh -b 2>/dev/null | awk -F':' '/openssl/ { print $2}'
+4. openssl version used by testssl.sh: testssl.sh -b 2>/dev/null | awk -F':' '/openssl/ { print $2}'
 
-4. steps to reproduce: testssl.sh or docker command line, if possible incl. host
+5. steps to reproduce: testssl.sh or docker command line, if possible incl. host
 
-5. what exactly was happening, output is needed
+6. what exactly was happening, output is needed
 
-6. what did you expect instead?
+7. what did you expect instead?
 
