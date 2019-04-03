@@ -18764,6 +18764,16 @@ parse_cmd_line() {
                     do_logging=true
                     ;;   # DEFINITION of LOGFILE if no arg specified: automagically in parse_hn_port()
                     # following does the same but additionally we can specify a log location
+               --log-color|--log-color=*)
+                    LOG_COLOR="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    case $LOG_COLOR in
+                         [0-3]) ;;
+                         *)   COLOR=2
+                              tmln_magenta "\nunrecognized log color: \"$1\", must be between 0..3" 1>&2
+                              help 1
+                    esac
+                    ;;
                --logfile|--logfile=*|-oL|-oL=*)
                     "$do_logging" && fatal "two --log* arguments" $ERR_CMDLINE
                     LOGFILE="$(parse_opt_equal_sign "$1" "$2")"
