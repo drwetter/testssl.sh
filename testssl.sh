@@ -732,8 +732,9 @@ fileout_json_footer() {
 
 fileout_json_section() {
      case $1 in
+           0) echo -e    "                    \"pretest\"           : [" ;;
            1) echo -e    "                    \"singleCipher\"      : [" ;;
-           2) echo -e    "                    \"protocols\"         : [" ;;
+           2) echo -e ",\n                    \"protocols\"         : [" ;;
            3) echo -e ",\n                    \"grease\"            : [" ;;
            4) echo -e ",\n                    \"ciphers\"           : [" ;;
            5) echo -e ",\n                    \"pfs\"               : [" ;;
@@ -18982,7 +18983,7 @@ stopwatch() {
 # arg1(optional): "init" --> just initializing. Or: STARTTLS protocol
 lets_roll() {
      local -i ret=0
-     local section_number=1
+     local section_number=0
 
      if [[ "$1" == init ]]; then
           # called once upfront to be able to measure preparation time b4 everything starts
@@ -19003,7 +19004,6 @@ lets_roll() {
      datebanner " Start"
      determine_service "$1"        # STARTTLS service? Other will be determined here too. Returns 0 if test connect was ok or has already exited if fatal error occurred
                                    # determine_service() can return 1, it indicates that this IP cannot be reached but there are more IPs to check
-     determine_sizelimitbug
      if [[ $? -eq 0 ]] ; then
           # "secret" devel options --devel:
           if "$do_tls_sockets"; then
@@ -19025,6 +19025,10 @@ lets_roll() {
                run_cipher_match ${single_cipher}
                stopwatch run_cipher_match
           else
+               fileout_section_header $section_number false && ((section_number++))
+               determine_sizelimitbug
+               fileout_section_footer false
+
                ((section_number++))
                # all top level functions now following have the prefix "run_"
                fileout_section_header $section_number false && ((section_number++))
