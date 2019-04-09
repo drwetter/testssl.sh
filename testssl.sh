@@ -134,6 +134,7 @@ fi
 declare -r PROG_NAME="$(basename "$0")"
 declare -r RUN_DIR="$(dirname "$0")"
 declare -r SYSTEM="$(uname -s)"
+declare -r SYSTEMREV="$(uname -r)"
 SYSTEM2=""                                        # currently only being used for WSL = bash on windows
 TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # If you run testssl.sh and it doesn't find it necessary file automagically set TESTSSL_INSTALL_DIR
 CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # You can have your stores some place else
@@ -576,7 +577,15 @@ tmln_bold()     { tm_bold "$1"; tmln_out; }
 pr_bold()       { tm_bold "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 prln_bold()     { pr_bold "$1" ; outln; }
 
-tm_italic()     { [[ "$COLOR" -ne 0 ]] && tm_out "\033[3m$1" || tm_out "$1"; tm_off; }
+NO_ITALICS=false
+if [[ $SYSTEM == OpenBSD ]]; then
+     NO_ITALICS=true
+elif [[ $SYSTEM == FreeBSD ]]; then
+     if [[ ${SYSTEMREV%\.*} -le 9 ]]; then
+          NO_ITALICS=true
+     fi
+fi
+tm_italic()     { ( [[ "$COLOR" -ne 0 ]] && ! "$NO_ITALICS" ) && tm_out "\033[3m$1" || tm_out "$1"; tm_off; }
 tmln_italic()   { tm_italic "$1" ; tmln_out; }
 pr_italic()     { tm_italic "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<i>$(html_reserved "$1")</i>" || html_out "$(html_reserved "$1")"; }
 prln_italic()   { pr_italic "$1"; outln; }
@@ -631,14 +640,14 @@ pr_boldurl() { tm_bold "$1"; html_out "<a href=\"$1\" style=\"font-weight:bold;c
 set_color_functions() {
      local ncurses_tput=true
 
-     if [[ $(uname) == OpenBSD ]] && [[ "$TERM" =~ xterm-256 ]]; then
+     if [[ $SYSTEM == OpenBSD ]] && [[ "$TERM" =~ xterm-256 ]]; then
           export TERM=xterm
-          # openBSD can't handle 256 colors (yet) in xterm which might lead to ugly errors
+          # OpenBSD can't handle 256 colors (yet) in xterm which might lead to ugly errors
           # like "tput: not enough arguments (3) for capability `AF'". Not our fault but
           # before we get blamed we fix it here.
      fi
 
-     # empty all vars if we have COLOR=0 equals no escape code:
+     # Empty all vars if we have COLOR=0 equals no escape code -- these are globals:
      red=""
      green=""
      brown=""
@@ -666,7 +675,7 @@ set_color_functions() {
                cyan=$(tput setaf 6)
                grey=$(tput setaf 7)
                yellow=$(tput setaf 3; tput bold)
-          else      # this is a try for old BSD, see terminfo(5)
+          else                                    # this is a try for old BSD, see terminfo(5)
                red=$(tput AF 1)
                green=$(tput AF 2)
                brown=$(tput AF 3)
@@ -677,25 +686,23 @@ set_color_functions() {
                yellow=$(tput AF 3; tput md)
           fi
      fi
-
      if [[ "$COLOR" -ge 1 ]]; then
           if $ncurses_tput; then
                bold=$(tput bold)
                underline=$(tput sgr 0 1 2>/dev/null)
-               italic=$(tput sitm)
-               italic_end=$(tput ritm)
+               italic=$(tput sitm)                # This doesn't work on FreeBSDi (9,10) and OpenBSD ...
+               italic_end=$(tput ritm)            # ... and this, too
                off=$(tput sgr0)
-          else      # this is a try for old BSD, see terminfo(5)
+          else                                    # this is a try for old BSD, see terminfo(5)
                bold=$(tput md)
                underline=$(tput us)
-               italic=$(tput ZH)        # that doesn't work on FreeBSD 9+10.x
-               italic_end=$(tput ZR)    # here too. Probably entry missing in /etc/termcap
+               italic=$(tput ZH 2>/dev/null)       # This doesn't work on FreeBSDi (9,10) and OpenBSD
+               italic_end=$(tput ZR 2>/dev/null)   # ... probably entry missing in /etc/termcap
                reverse=$(tput mr)
                off=$(tput me)
           fi
-     # italic doesn't work under Linux, FreeBSD (9). But both work under OpenBSD.
-     # alternatively we could use escape codes
      fi
+     # FreeBSD 10 understands ESC codes like 'echo -e "\e[3mfoobar\e[23m"', but also no tput for italics
 }
 
 strip_quote() {
@@ -1822,7 +1829,7 @@ s_client_options() {
           options="${options//-ciphersuites $tls13_ciphers/}"
           tls13_ciphers="${tls13_ciphers##\'}"
           tls13_ciphers="${tls13_ciphers%%\'}"
-          [[ "$tls13_ciphers" == "ALL" ]] && tls13_ciphers="$TLS13_OSSL_CIPHERS"
+          [[ "$tls13_ciphers" == ALL ]] && tls13_ciphers="$TLS13_OSSL_CIPHERS"
      fi
 
      # Don't include the -servername option for an SSLv2 or SSLv3 ClientHello.
@@ -7795,7 +7802,7 @@ certificate_info() {
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial
      local policy_oid
      local spaces=""
-     local -i trust_sni=0 trust_nosni=0
+     local -i trust_sni=0 trust_nosni=0 diffseconds=0
      local has_dns_sans has_dns_sans_nosni
      local trust_sni_finding
      local -i certificates_provided
@@ -7811,6 +7818,7 @@ certificate_info() {
      local provides_stapling=false
      local caa_node="" all_caa="" caa_property_name="" caa_property_value=""
      local response=""
+     local a b c yearstart yearend
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -8368,12 +8376,20 @@ certificate_info() {
      enddate="${enddate%%GMT*}GMT"
      startdate="${cert_txt#*Validity*Not Before: }"
      startdate="${startdate%%GMT*}GMT"
+     # Now we have a normalized enddate and startdate like "Feb 27 10:03:20 2017 GMT" -- also for OpenBSD
+     debugme echo "$enddate - $startdate"
+     # In all OS except OpenBSD it'll be reduced to "2017-02-27 11:03"
      enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
      startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
 
      if "$HAS_OPENBSDDATE"; then
           # best we are able to do under OpenBSD
           days2expire=""
+          read a b c yearstart tz  <<< "$startdate"
+          read a b c yearend tz  <<< "$enddate"
+          # we only take the year here as OpenBSD's date is not for conversion
+          diffseconds=$((yearend - yearstart))
+          diffseconds=$((diffseconds * 3600 * 24 * 365))
      else
           days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
           days2expire=$((days2expire  / 3600 / 24 ))
@@ -8383,7 +8399,9 @@ certificate_info() {
                  days2warn2=$((days2warn2 / 2))
                  days2warn1=$((days2warn1 / 2))
           fi
+          diffseconds=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(parse_date "$startdate" "+%s" $'%F %H:%M') ))
      fi
+     debugme echo -n "diffseconds: $diffseconds"
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! grep -qw not <<< "$expire" ; then
           pr_svrty_critical "expired"
@@ -8410,9 +8428,23 @@ certificate_info() {
           fi
      fi
      outln " ($startdate --> $enddate)"
-     fileout "cert_expiration_status${json_postfix}" "$expok" "$expfinding"
+     fileout "cert_expirationStatus${json_postfix}" "$expok" "$expfinding"
      fileout "cert_notBefore${json_postfix}" "INFO" "$startdate"      # we assume that the certificate has no start time in the future
      fileout "cert_notAfter${json_postfix}" "$expok" "$enddate"       # They are in UTC
+
+     if [[ $diffseconds -ge $((3600 * 24 * 365 * 10)) ]]; then
+          # certificate is valid >= 10 years
+          out "$spaces"
+          prln_svrty_high ">= 10 years is way too long"
+          fileout "cert_validityPeriod${json_postfix}" "HIGH" "$((diffseconds / 3600 * 24 )) days"
+     elif [[ $diffseconds -ge $((3600 * 24 * 365 * 5)) ]]; then
+          out "$spaces"
+          prln_svrty_medium ">= 5 years is too long"
+          fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / 3600 * 24 )) days"
+     else
+          [[ "$DEBUG" -ge 1 ]] && outln "OK: below 5 years certificate life time"
+          fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / 3600 * 24 )) days"
+     fi
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; out "   $certificates_provided"
@@ -16603,10 +16635,11 @@ commandline: "$CMDLINE"
 bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}
 status: ${BASH_VERSINFO[4]}
 machine: ${BASH_VERSINFO[5]}
-operating system: $SYSTEM
+operating system: $SYSTEM $SYSTEMREV
 os constraint: $SYSTEM2
 shellopts: $SHELLOPTS
 printf: $PRINTF
+NO_ITALICS: $NO_ITALICS
 
 $($OPENSSL version -a 2>/dev/null)
 OSSL_VER_MAJOR: $OSSL_VER_MAJOR

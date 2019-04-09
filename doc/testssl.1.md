@@ -149,10 +149,10 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 
 * `NULL encryption ciphers`: 'NULL:eNULL'
 * `Anonymous NULL ciphers`: 'aNULL:ADH'
-* `Export ciphers` (w/o the preceding ones): 'EXPORT:!ADH:!NULL' * `LOW` (64 Bit + DES ciphers, without EXPORT ciphers): 'LOW:DES:!ADH:!EXP:!NULL'
-* `Weak 128 Bit ciphers`: 'MEDIUM:!aNULL:!AES:!CAMELLIA:!ARIA:!CHACHA20:!3DES'
-* `3DES Ciphers`: '3DES:!aNULL:!ADH'
-* `High grade Ciphers`: 'HIGH:!NULL:!aNULL:!DES:!3DES:!AESGCM:!CHACHA20:!AESGCM:!CamelliaGCM:!AESCCM8:!AESCCM'
+* `Export ciphers` (w/o the preceding ones): 'EXPORT:!ADH:!NULL'
+* `LOW` (64 Bit + DES ciphers, without EXPORT ciphers): 'LOW:DES:RC2:RC4:!ADH:!EXP:!NULL:!eNULL'
+* `3DES + IDEA Ciphers`: '3DES:IDEA:!aNULL:!ADH'
+* `Average grade Ciphers`: 'HIGH:MEDIUM:AES:CAMELLIA:ARIA:!IDEA:!CHACHA20:!3DES:!RC2:!RC4:!AESCCM8:!AESCCM:!AESGCM:!ARIAGCM:!aNULL'
 * `Strong grade Ciphers` (AEAD): 'AESGCM:CHACHA20:AESGCM:CamelliaGCM:AESCCM8:AESCCM'
 
 `-f, --pfs, --fs,--nsa ` Checks robust (perfect) forward secrecy key exchange. "Robust" means that ciphers having intrinsic severe weaknesses like Null Authentication or Encryption, 3DES and RC4 won't be considered here. There shouldn't be the wrong impression that a secure key exchange has been taking place and everything is fine when in reality the encryption sucks. Also this section lists the available elliptical curves and Diffie Hellman groups, as well as FFDHE groups (TLS 1.2 and TLS 1.3).
@@ -162,20 +162,28 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 `-P, --preference`  displays the servers preferences: cipher order, with used openssl client: negotiated protocol and cipher. If there's a cipher order enforced by the server it displays it for each protocol (openssl+sockets). If there's not, it displays instead which ciphers from the server were picked with each protocol.
 
 `-S, --server_defaults`  displays information from the server hello(s):
-available TLS extensions, TLS ticket + session information/capabilities, session resumption
-capabilities, time skew relative to localhost (most server implementations return random values) and several certificate info: certificate signature algorithm, certificate key size, X509v3 key usage and extended key usage, certificate fingerprints and serial, revocation info (CRL, OCSP, OCSP
-stapling/must staple), certificate transparency info (if provided by
-server).  When `--phone-out` supplied it checks against the certificate issuer
-whether the host certificate has been revoked.
-This section also displays certificate start and expiration time in GMT. In addition it checks the trust (CN, SAN, chain of trust).
-For the trust chain check there are 5 certificate stores provided. If the test against one of the trust stores failed, the one
-is being identified and the reason for the failure is displayed - in addition the ones which succeeded are displayed too.
-You can configure your own CA via ADDITIONAL_CA_FILES, see section `FILES` below.  If the server provides
-no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be indicated as this is deprecated.
-Also multiple server certificates are
-being checked for as well as the certificate reply to a non-SNI (Server Name
-Indication) client hello to the IP address. Also the Certification Authority Authorization (CAA) record is displayed and whether "Certificate Transparency" (CT) is supported (and if: how).
-TLS clock skew matches the time difference to the client. Only a few TLS stacks nowadays still support this and return the local clock `gmt_unix_time`, e.g. IIS, openssl < 1.0.1f. In addition to the HTTP date you could e.g. derive that there are different hosts where your TLS and your HTTP request ended -- if the time deltas differ significantly.
+
+* Available TLS extensions,
+* TLS ticket + session ID information/capabilities,
+* session resumption capabilities, 
+* Time skew relative to localhost (most server implementations return random values).
+* Several certificate information
+    - signature algorithm,
+    - key size,
+    - key usage and extended key usage,
+    - fingerprints and serial
+    - Common Name (CN), Subject Alternative Name (SAN), Issuer,
+    - Trust via hostname + chain of trust against supplied certificates
+    - EV certificate detection
+    - experimental "eTLS" detection
+    - validity: start + end time, how many days to go (warning for certificate lifetime >=5 years)
+    - revocation info (CRL, OCSP, OCSP stapling + must staple). When `--phone-out` supplied it checks against the certificate issuer whether the host certificate has been revoked (plain OCSP, CRL).
+    - displaying DNS Certification Authority Authorization resource record
+    - Certificate Transparency info (if provided by server).  
+
+For the trust chain check 5 certificate stores are provided. If the test against one of the trust stores failed, the one is being identified and the reason for the failure is displayed - in addition the ones which succeeded are displayed too.
+You can configure your own CA via ADDITIONAL_CA_FILES, see section `FILES` below.  If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be indicated as this is deprecated.
+Also for multiple server certificates are being checked for as well as for the certificate reply to a non-SNI (Server Name Indication) client hello to the IP address. Regarding the TLS clock skew: it displays the time difference to the client. Only a few TLS stacks nowadays still support this and return the local clock `gmt_unix_time`, e.g. IIS, openssl < 1.0.1f. In addition to the HTTP date you could e.g. derive that there are different hosts where your TLS and your HTTP request ended -- if the time deltas differ significantly.
 
 `-x <pattern>, --single-cipher <pattern>` tests matched `pattern` of ciphers against a server. Patterns are similar to `-V pattern , --local pattern`, see above about matching.
 
@@ -260,7 +268,7 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 `--show-each` This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  `SHOW_EACH_C` is your friend if you prefer to set this via the shell environment.
 
 
-`--color <0|1|2|3>`               It determines the use of colors on the screen: `2` is the default and makes use of ANSI and termcap escape codes on your terminal. `1` just uses non-colored mark-up like bold, italics, underline, reverse.  `0` means no mark-up at all = no escape codes. This is also what you want when you want a log file without any escape codes. `3` will color ciphers and EC according to an internal (not yet perfect) rating. Setting the environment variable `COLOR` to the value achieves the same result.
+`--color <0|1|2|3>` determines the use of colors on the screen and in the log file: `2` is the default and makes use of ANSI and termcap escape codes on your terminal. `1` just uses non-colored mark-up like bold, italics, underline, reverse.  `0` means no mark-up at all = no escape codes. This is also what you want when you want a log file without any escape codes. `3` will color ciphers and EC according to an internal (not yet perfect) rating. Setting the environment variable `COLOR` to the value achieves the same result. Please not that OpenBSD and early FreeBSD do not support italics.
 
 
 `--colorblind`                  Swaps green and blue colors in the output, so that this percentage of folks (up to 8% of males, see https://en.wikipedia.org/wiki/Color_blindness) can distinguish those findings better. `COLORBLIND` is the according variable if you want to set this in the environment.
@@ -495,5 +503,5 @@ Probably. Current known ones and interface for filing new ones: https://testssl.
 
 ## SEE ALSO
 
-`ciphers`(1), `openssl`(1), `s_client`(1), `x509`(1), `verify`(1), `ocsp`(1), `crl`(1), `bash`(1) and the websites __https://testssl.sh/__ and __https://github.com/drwetter/testssl.sh/__ .
+`ciphers`(1), `openssl`(1), `s_client`(1), `x509`(1), `verify`(1), `ocsp`(1), `crl`(1), `bash`(1) and the websites https://testssl.sh/ and https://github.com/drwetter/testssl.sh/ .
 
