@@ -8442,7 +8442,7 @@ certificate_info() {
           prln_svrty_medium ">= 5 years is too long"
           fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / 3600 * 24 )) days"
      else
-          [[ "$DEBUG" -ge 1 ]] && outln "OK: below 5 years certificate life time"
+          [[ "$DEBUG" -ge 1 ]] && outln "${spaces}OK: below 5 years certificate life time"
           fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / 3600 * 24 )) days"
      fi
 
@@ -18479,6 +18479,10 @@ check_base_requirements() {
      for binary in 'hexdump' 'dd' 'grep' 'awk' 'tr' 'sed' 'date' 'cat' 'ps' 'kill' 'head' 'tail' 'dirname';  do
           if ! type -p "${binary}" &> /dev/null; then
                fatal "You need to install ${binary} for this program to work" $ERR_RESOURCE
+          fi
+          "${binary}" --help 2>&1 | grep -ivq busybox
+          if [[ $? -ne 0 ]]; then
+               fatal "${binary} is from busybox. Please install a regular binary" $ERR_RESOURCE
           fi
      done
 }
