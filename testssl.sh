@@ -11565,7 +11565,7 @@ parse_tls_serverhello() {
      tls_cipher_suite="${tls_serverhello_ascii:offset:4}"
 
      if [[ "0x${DETECTED_TLS_VERSION:2:2}" -le "0x03" ]]; then
-          offset=$((tls_sid_len+78))
+          offset=$((tls_sid_len+74))
           tls_compression_method="${tls_serverhello_ascii:offset:2}"
           extns_offset=$((tls_sid_len+76))
      else
