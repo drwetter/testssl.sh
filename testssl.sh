@@ -18480,8 +18480,8 @@ check_base_requirements() {
           if ! type -p "${binary}" &> /dev/null; then
                fatal "You need to install ${binary} for this program to work" $ERR_RESOURCE
           fi
-          "${binary}" --help 2>&1 | grep -ivq busybox
-          if [[ $? -ne 0 ]]; then
+          "${binary}" --help 2>&1 | grep -iq busybox
+          if [[ $? -eq 0 ]]; then
                fatal "${binary} is from busybox. Please install a regular binary" $ERR_RESOURCE
           fi
      done
