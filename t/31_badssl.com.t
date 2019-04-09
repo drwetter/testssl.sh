@@ -27,7 +27,7 @@ $json = json('tmp.json');
 unlink 'tmp.json';
 $found = 0;
 foreach my $f ( @$json ) {
-	if ( $f->{id} eq "cert_expiration_status" ) {
+	if ( $f->{id} eq "cert_expirationStatus" ) {
 		$found = 1;
 		like($f->{finding},qr/^expired/,"Finding reads expired."); $tests++;
 		is($f->{severity}, "CRITICAL", "Severity should be CRITICAL"); $tests++;
@@ -44,7 +44,7 @@ $json = json('tmp.json');
 unlink 'tmp.json';
 $found = 0;
 foreach my $f ( @$json ) {
-	if ( $f->{id} eq "cert_expiration_status" ) {
+	if ( $f->{id} eq "cert_expirationStatus" ) {
 		$found = 1;
 		like($f->{finding},qr/days/,"Finding doesn't read expired."); $tests++;
 		isnt($f->{severity}, "CRITICAL", "Severity should be OK, MEDIUM or HIGH"); $tests++;

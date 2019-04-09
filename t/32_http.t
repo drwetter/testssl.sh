@@ -5,6 +5,7 @@ use Test::More;
 use Data::Dumper;
 
 my $tests = 0;
+unlink 'tmp.html';
 
 pass("Running testssl.sh against badssl.com to create HTML and terminal outputs (may take 2~3 minutes)"); $tests++;
 # specify a TERM_WIDTH so that the two calls to testssl.sh don't create HTML files with different values of TERM_WIDTH
@@ -49,6 +50,7 @@ $okhtml =~ s/HTTP clock skew              \+?-?[0-9]* /HTTP clock skew          
 $debughtml =~ s/HTTP clock skew              \+?-?[0-9]* /HTTP clock skew              X /;
 
 $debughtml =~ s/ Pre-test: .*\n//g;
+$debughtml =~ s/.*OK: below 5 years.*\n//g;
 
 pass("Checking that using the --debug option doesn't affect the HTML file"); $tests++;
 cmp_ok($debughtml, "eq", $okhtml, "HTML file created with --debug 4 matches HTML file created without --debug"); $tests++;
