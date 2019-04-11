@@ -1130,7 +1130,7 @@ prepare_logging() {
 
 ###### START helper function definitions ######
 
-if [[ "$BASH_VERSINFO" == 3 ]]; then
+if [[ "${BASH_VERSINFO[0]}" == 3 ]]; then
      # older bash can do this only (MacOS X), even SLES 11, see #697
      toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
      tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
@@ -4298,7 +4298,7 @@ client_simulation_sockets() {
      elif [[ $ret -eq 1 ]] || [[ $ret -eq 6 ]]; then
           close_socket
           TMPFILE=$SOCK_REPLY_FILE
-          tmpfile_handle $FUNCNAME.dd
+          tmpfile_handle ${FUNCNAME[0]}.dd
           return $ret
      fi
 
@@ -4385,7 +4385,7 @@ client_simulation_sockets() {
 
      close_socket
      TMPFILE=$SOCK_REPLY_FILE
-     tmpfile_handle $FUNCNAME.dd
+     tmpfile_handle ${FUNCNAME[0]}.dd
      return $ret
 }
 
@@ -4654,7 +4654,7 @@ run_prototest_openssl() {
      ret=$?
      debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
-     tmpfile_handle $FUNCNAME$1.txt
+     tmpfile_handle ${FUNCNAME[0]}$1.txt
      return $ret
 
      # 0: offered
@@ -5324,7 +5324,7 @@ listciphers() {
      ret=$?
      debugme cat $TMPFILE
      debugname="$(sed -e s'/\!/not/g' -e 's/\:/_/g' <<< "$1")"
-     tmpfile_handle $FUNCNAME.${debugname}.txt
+     tmpfile_handle ${FUNCNAME[0]}.${debugname}.txt
      return $ret
 }
 
@@ -5940,8 +5940,8 @@ sub_session_resumption() {
           fi
      fi
      "$byID" && \
-          tmpfile_handle $FUNCNAME.byID.log $tmpfile || \
-          tmpfile_handle $FUNCNAME.byticket.log $tmpfile
+          tmpfile_handle ${FUNCNAME[0]}.byID.log $tmpfile || \
+          tmpfile_handle ${FUNCNAME[0]}.byticket.log $tmpfile
      return $ret
 }
 
@@ -12407,7 +12407,7 @@ sslv2_sockets() {
      ret=$?
 
      close_socket
-     tmpfile_handle $FUNCNAME.dd $SOCK_REPLY_FILE
+     tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      return $ret
 }
 
@@ -13161,7 +13161,7 @@ tls_sockets() {
           elif [[ $ret -eq 1 ]] || [[ $ret -eq 6 ]]; then
                close_socket
                TMPFILE=$SOCK_REPLY_FILE
-               tmpfile_handle $FUNCNAME.dd
+               tmpfile_handle ${FUNCNAME[0]}.dd
                return $ret
           fi
 
@@ -13281,7 +13281,7 @@ tls_sockets() {
      fi
 
      "$close_connection" && close_socket
-     tmpfile_handle $FUNCNAME.dd $SOCK_REPLY_FILE
+     tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      return $ret
 }
 
@@ -13385,7 +13385,7 @@ run_heartbleed(){
           fi
      fi
      outln
-     tmpfile_handle $FUNCNAME.dd $SOCK_REPLY_FILE
+     tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      close_socket
      return 0
 }
@@ -13798,7 +13798,7 @@ run_ticketbleed() {
                     echo -n "$sid_input in SID:       " ;
                          [[ "${sid_detected[i]}"  =~ $sid_input ]] && echo "yes" || echo "no"
                fi
-               [[ "$DEBUG" -ge 1 ]] && echo $tls_hello_ascii >$TEMPDIR/$FUNCNAME.tls_hello_ascii${i}.txt
+               [[ "$DEBUG" -ge 1 ]] && echo $tls_hello_ascii >$TEMPDIR/${FUNCNAME[0]}.tls_hello_ascii${i}.txt
           else
                ret=1
                pr_warning "test failed"
