@@ -1766,7 +1766,7 @@
      minEcdsaBits+=(-1)
      curves+=("prime256v1:secp384r1:secp521r1")
      requiresSha2+=(false)
-     current+=(true)
+     current+=(false)
 
      names+=("Safari 5.1.9 OS X 10.6.8")
      short+=("safari_519_osx1068")
