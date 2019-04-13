@@ -6801,7 +6801,7 @@ tls_time() {
 # returns 0 if connect was successful, 1 if not
 #
 sclient_connect_successful() {
-     local server_hello="$(cat "$2")"
+     local server_hello="$(<"$2")"
      local re='Master-Key: ([^\
 ]*)'
 
@@ -17869,11 +17869,17 @@ run_mx_all_ips() {
      local mxs mx
      local mxport
      local -i ret=0
+     local word=""
 
      STARTTLS_PROTOCOL="smtp"
-
      # test first higher priority servers
      mxs=$(get_mx_record "$1" | sort -n | sed -e 's/^.* //' -e 's/\.$//' | tr '\n' ' ')
+     if [[ $CMDLINE_IP == one ]]; then
+          word="as instructed one"                               # with highest priority
+          mxs=${mxs%% *}
+     else
+          word="the only"
+     fi
      mxport=${2:-25}
      if [[ -n "$LOGFILE" ]]; then
           prepare_logging
@@ -17882,7 +17888,12 @@ run_mx_all_ips() {
      fi
      if [[ -n "$mxs" ]] && [[ "$mxs" != ' ' ]]; then
           [[ $(count_words "$mxs") -gt 1 ]] && MULTIPLE_CHECKS=true
-          pr_bold "Testing all MX records (on port $mxport): "; outln "$mxs"
+          if "$MULTIPLE_CHECKS"; then
+               pr_bold "Testing all MX records (on port $mxport): "
+          else
+               pr_bold "Testing $word MX record (on port $mxport): "
+          fi
+          outln "$mxs"
           [[ $mxport == 465 ]] &&  STARTTLS_PROTOCOL=""          # no starttls for tcp 465, all other ports are starttls
           for mx in $mxs; do
                draw_line "-" $((TERM_WIDTH * 2 / 3))
