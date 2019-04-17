@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:3.9
 
 RUN apk update && apk upgrade
 RUN apk add bash procps drill git coreutils
