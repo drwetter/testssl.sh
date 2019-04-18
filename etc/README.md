@@ -34,4 +34,5 @@ If you want to test against e.g. a company internal CA you want to avoid warning
 
 * ``client-simulation.txt`` as the name indicates it's the data for the client simulation. Use
   ``~/utils/update_client_sim_data.pl`` for an update. Note: This list has been manually
-  edited to sort it and weed it out.
+  edited to sort it and weed it out. In addition the file named ``client-simulation.wiresharked.txt``
+  provides more client data and some instructions how to generate it yourself
