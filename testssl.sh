@@ -4479,7 +4479,7 @@ run_client_simulation() {
      for name in "${short[@]}"; do
           if "${current[i]}" || "$ALL_CLIENTS" ; then
                # for ANY we test this service or if the service we determined from STARTTLS matches
-               if [[ "${service[i]}" == "ANY" ]] || [[ "${service[i]}" =~ $client_service ]]; then
+               if [[ "${service[i]}" == ANY ]] || [[ "${service[i]}" =~ $client_service ]]; then
                     out " $(printf -- "%-29s" "${names[i]}")"
                     if "$using_sockets" && [[ -n "${handshakebytes[i]}" ]]; then
                          client_simulation_sockets "${handshakebytes[i]}"
@@ -4514,7 +4514,7 @@ run_client_simulation() {
                          bits="${temp##*, }"
                          # formatting
                          curve="${temp#*, }"
-                         if [[ "$curve" == "$bits" ]]; then
+                         if [[ "$curve" == $bits ]]; then
                               curve=""
                          else
                               curve="${curve%%,*}"
@@ -4525,7 +4525,7 @@ run_client_simulation() {
                               curve="$what_dh"
                               what_dh="ECDH"
                          fi
-                         if [[ "$what_dh" == "DH" ]]; then
+                         if [[ "$what_dh" == DH ]]; then
                               [[ ${minDhBits[i]} -ne -1 ]] && [[ $bits -lt ${minDhBits[i]} ]] && sclient_success=1
                               [[ ${maxDhBits[i]} -ne -1 ]] && [[ $bits -gt ${maxDhBits[i]} ]] && sclient_success=1
                          fi
