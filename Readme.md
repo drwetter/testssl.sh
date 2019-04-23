@@ -50,15 +50,19 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 #### Status
 
-2.9.5 is an interim release snapshot from the current 2.9dev version. It
+<s>2.9.5 is an interim release snapshot from the current 2.9dev version. It
 has reached a point which is considered to be mature enough for day-to-day
-usage before taking the next step in the development of this project.
+usage before taking the next step in the development of this project.</s>
 
-2.9.5 has less bugs and has evolved considerably since 2.8.
+<s>2.9.5 has less bugs and has evolved considerably since 2.8.
+</s>
+
+Time has passed by, development evolved. It is not recommended to use 2.9.5 anymore. There are bugs in 2.9.5 which would require larger efforts to fix.
+As of 2019 it is recommended to switch to the 2.9dev branch -- 3.0 release is imminent, it's build on 2.9.5., it has matured and has less known bugs.
 
 
 #### Features implemented in 2.9.5
-* Way better coverage of ciphers as most checks are done via sockets, using bash sockets where ever possible
+* Way better coverage of ciphers as most checks are done via bash sockets where ever possible
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
 * Testing 359 default ciphers (``testssl.sh -e/-E``) with a mixture of sockets and openssl. Same speed as with openssl only but addtional ciphers such as post-quantum ciphers, new CHAHA20/POLY1305, CamelliaGCM etc.
 * TLS 1.2 protocol check via sockets in production
@@ -86,7 +90,7 @@ usage before taking the next step in the development of this project.
 
 Contributions, feedback,  bug reports are welcome! For contributions please
 note: One patch per feature -- bug fix/improvement. Please test your
-changes thouroughly as reliability is important for this project.
+changes thoroughly as reliability is important for this project.
 
 There's a [coding guideline](https://github.com/drwetter/testssl.sh/wiki/Coding-Style).
 
