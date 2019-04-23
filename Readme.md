@@ -32,7 +32,7 @@ You can download testssl.sh by cloning this git repository:
 
     git clone --depth 1 --branch 2.9.5 https://github.com/drwetter/testssl.sh.git
 
-Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl.sh/archive/v2.9.5-1.zip.
+Or help yourself downloading the ZIP archive https://github.com/drwetter/testssl.sh/archive/v2.9.5-8.zip.
 Then ``testssl.sh --help`` will give you some help upfront. More help: see doc directory. Older
 sample runs are at https://testssl.sh/.
 
@@ -58,7 +58,7 @@ usage before taking the next step in the development of this project.</s>
 </s>
 
 Time has passed by, development evolved. It is not recommended to use 2.9.5 anymore. There are bugs in 2.9.5 which would require larger efforts to fix.
-As of 2019 it is recommended to switch to the 2.9dev branch -- 3.0 release is imminent, it's build on 2.9.5., it has matured and has less known bugs.
+As of 2019 it is recommended to switch to the 2.9dev branch -- 3.0 release is imminent, it's build on 2.9.5, has matured and has less known bugs.
 
 
 #### Features implemented in 2.9.5
