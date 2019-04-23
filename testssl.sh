@@ -105,7 +105,7 @@ fi
 trap "cleanup" QUIT EXIT
 trap "child_error" USR1
 
-readonly VERSION="2.9.5-7"
+readonly VERSION="2.9.5-8"
 readonly SWCONTACT="dirk aet testssl dot sh"
 egrep -q "dev|rc" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
@@ -911,10 +911,11 @@ csv_header() {
           CSVHEADER=false
      else
           [[ -e "$CSVFILE" ]] && fatal "\"$CSVFILE\" exists. Either use \"--append\" or (re)move it" 1
+          touch "$CSVFILE"
           if "$GIVE_HINTS"; then
-               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" "hint" > "$CSVFILE"
+               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" "hint"
           else
-               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" > "$CSVFILE"
+               fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe"
           fi
      fi
      return 0
@@ -4490,8 +4491,15 @@ read_dhbits_from_file() {
 }
 
 
-# arg1: ID or empty. if empty resumption by ticket will be tested
-# return: 0: it has resumption, 1:nope, 2: can't tell
+# arg1: ID or empty. If empty resumption by ticket will be tested, otherwise by ID
+# return: 0: it has resumption, 1:nope, 2: nope (OpenSSL 1.1.1),  6: CLIENT_AUTH --> problem for resumption, 7: can't tell
+#
+# This is basically a short(?) version from Bulletproof SSL and TLS (p386). The version according to that would be e.g.
+#     echo | $OPENSSL s_client -connect testssl.sh:443 -servername testssl.sh -no_ssl2            -reconnect 2>&1 | grep -E 'New|Reused'
+#     echo | $OPENSSL s_client -connect testssl.sh:443 -servername testssl.sh -no_ssl2 -no_ticket -reconnect 2>&1 | grep -E 'New|Reused|Session-ID'
+#
+# FIXME: actually Ivan's version seems faster. Worth to check and since when -reconnect is a/v
+#
 sub_session_resumption() {
      local tmpfile=$(mktemp $TEMPDIR/session_resumption.$NODEIP.XXXXXX)
      local sess_data=$(mktemp $TEMPDIR/sub_session_data_resumption.$NODEIP.XXXXXX)
@@ -6523,6 +6531,7 @@ run_server_defaults() {
      done
 
      determine_tls_extensions
+
      if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != "-ssl2" ]]; then
           cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
           >$ERRFILE
@@ -7273,7 +7282,7 @@ starttls_pop3_dialog() {
 
 starttls_imap_dialog() {
      debugme echo "=== starting imap STARTTLS dialog ==="
-     local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS( .*)?|( .*)? STARTTLS( .*)? IMAP4rev1( .*)?)$'
+     local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS(.*)?|( .*)? STARTTLS( .*)? IMAP4rev1(.*)?)$'
      starttls_full_read '^\* ' '^\* OK '                   && debugme echo "received server greeting" &&
      starttls_just_send 'a001 CAPABILITY'                  && debugme echo "sent CAPABILITY" &&
      starttls_full_read '^\* ' '^a001 OK ' "${reSTARTTLS}" && debugme echo "received server capabilities and checked STARTTLS availability" &&
@@ -12120,7 +12129,7 @@ get_a_record() {
      fi
      if [[ -z "$ip4" ]]; then
           if type -p dig &> /dev/null ; then
-               ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | awk '/^[0-9]/'))
+               ip4=$(filter_ip4_address $(dig +short -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           fi
      fi
      if [[ -z "$ip4" ]]; then
@@ -12161,7 +12170,7 @@ get_aaaa_record() {
           elif type -p host &> /dev/null ; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
           elif type -p dig &> /dev/null; then
-               ip6=$(filter_ip6_address $(dig +short -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/'))
+               ip6=$(filter_ip6_address $(dig +short -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           elif type -p drill &> /dev/null; then
                ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
           elif type -p nslookup &>/dev/null; then
@@ -12192,7 +12201,7 @@ get_caa_rr_record() {
      OPENSSL_CONF=""
      check_resolver_bins
      if type -p dig &> /dev/null; then
-          raw_caa="$(dig $1 type257 +short)"
+          raw_caa="$(dig $1 type257 +short | awk '{ print $1" "$2" "$3 }')"
           # empty if no CAA record
      elif type -p drill &> /dev/null; then
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
@@ -12252,7 +12261,7 @@ get_mx_record() {
      if type -p host &> /dev/null; then
           mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif type -p dig &> /dev/null; then
-          mxs="$(dig +short -t MX "$1" 2>/dev/null | awk '/^[0-9]/')"
+          mxs="$(dig +short -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
      elif type -p drill &> /dev/null; then
           mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
      elif type -p nslookup &> /dev/null; then
@@ -12347,10 +12356,10 @@ determine_rdns() {
           if type -p avahi-resolve &>/dev/null; then
                rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
           elif type -p dig &>/dev/null; then
-               rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer | awk '/PTR/ { print $NF }')
+               rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer +short | awk '{ print $1 }')
           fi
      elif type -p dig &> /dev/null; then
-          rDNS=$(dig -x $nodeip +noall +answer | awk  '/PTR/ { print $NF }')    # +short returns also CNAME, e.g. openssl.org
+          rDNS=$(dig -x $nodeip +timeout=1 +tries=2 +noall +answer +short | awk '{ print $1 }')    # +short returns also CNAME, e.g. openssl.org
      elif type -p host &> /dev/null; then
           rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
      elif type -p drill &> /dev/null; then
