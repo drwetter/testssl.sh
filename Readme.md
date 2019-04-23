@@ -82,14 +82,14 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * JSON output now valid also for non-responding servers
 * Testing now per default 370 ciphers
 * Further improving the robustness of TLS sockets (sending and parsing)
-* Support of supplying timeout value for ``openssl connect`` -- useful for batch/mass scanning
+* Support of supplying timeout value for `openssl connect` -- useful for batch/mass scanning
 * File input for serial or parallel mass testing can be also in nmap grep(p)able (-oG) format
 * LOGJAM: now checking also for DH  and FFDHE groups (TLS 1.2)
 * PFS: Display of elliptical curves supported, DH and FFDHE groups (TLS 1.2 + TLS 1.3)
 * Check for session resumption (Ticket, ID)
 * TLS Robustness check (GREASE)
 * Expect-CT Header Detection
-* --phone-out does certificate revocation checks via OCSP (LDAP+HTTP) and with CRL
+* `--phone-out` does certificate revocation checks via OCSP (LDAP+HTTP) and with CRL
 * Fully OpenBSD and LibreSSL support
 * Missing SAN warning
 * Added support for private CAs
@@ -105,6 +105,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 * More robustness for any STARTTLS protocol (fall back to plaintext while in TLS)
 * Fixed TCP fragmentation
 * Added `--ids-friendly` switch
+* Major update of client simulations with self-collected data
 
 [Planned for 3.0](https://github.com/drwetter/testssl.sh/milestone/4).
 
