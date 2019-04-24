@@ -32,6 +32,6 @@ If you want to test against e.g. a company internal CA you want to avoid warning
 
 * ``common-primes.txt`` is used for LOGJAM and the PFS section
 
-* ``client-simulation.txt`` as the name indicates it's the data for the client simulation. Use
-  ``~/utils/update_client_sim_data.pl`` for an update. Note: This list has been manually
-  edited to sort it and weed it out.
+* ``client-simulation.txt`` / ``client-simulation.wiresharked.txt`` are as the names indicate data for the client simulation.
+  The first one is derived from ``~/utils/update_client_sim_data.pl``, and manually edited to sort and label those we don't want.
+  The second file provides more client data retrieved from wireshark captures and some instructions how to do that yourself.
