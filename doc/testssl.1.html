@@ -248,8 +248,7 @@ ADDITIONAL_CA_FILES is the environment variable for this.</p>
 <li>TLS ticket + session ID information/capabilities,</li>
 <li>session resumption capabilities,</li>
 <li>Time skew relative to localhost (most server implementations return random values).</li>
-<li>Several certificate info:
-
+<li>Several certificate information
 <ul>
 <li>signature algorithm,</li>
 <li>key size,</li>
@@ -395,7 +394,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--htmlfile &lt;htmlfile></code> or <code>-oH &lt;htmlfile></code>         Similar to  the aforementioned <code>--jsonfile</code> or <code>--logfile</code> it logs the output in HTML format (see <code>--html</code>) additionally into a file or a directory. For further explanation see <code>--jsonfile</code> or <code>--logfile</code>.</p>
 
-<p><code>-oA &lt;filename></code> / <code>--outFile &lt;filename></code>    Similar to nmap it does a file output to all available file formats: LOG, JSON pretty, CSV, HTML. If the filename supplied is equal <code>auto</code> the filename is automatically generated using '${NODE}-p${port}${YYYYMMDD-HHMM}.${EXT}' with the according extension.</p>
+<p><code>-oA &lt;filename></code> / <code>--outFile &lt;filename></code>    Similar to nmap it does a file output to all available file formats: LOG, JSON pretty, CSV, HTML. If the filename supplied is equal <code>auto</code> the filename is automatically generated using '${NODE}-p${port}${YYYYMMDD-HHMM}.${EXT}' with the according extension. If a directory is provided all output files will put into <code>&lt;filename>/${NODE}-p${port}${YYYYMMDD-HHMM}.{log,json,csv,html}</code>.</p>
 
 <p><code>-oa &lt;filename></code> / <code>--outfile &lt;filename></code> Does the same as the previous option but uses flat JSON instead.</p>
 

@@ -306,7 +306,7 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 
 `--htmlfile <htmlfile>` or `-oH <htmlfile>`         Similar to  the aforementioned `--jsonfile` or `--logfile` it logs the output in HTML format (see `--html`) additionally into a file or a directory. For further explanation see `--jsonfile` or `--logfile`.
 
-`-oA <filename>` / `--outFile <filename>`    Similar to nmap it does a file output to all available file formats: LOG, JSON pretty, CSV, HTML. If the filename supplied is equal `auto` the filename is automatically generated using '${NODE}-p${port}${YYYYMMDD-HHMM}.${EXT}' with the according extension.
+`-oA <filename>` / `--outFile <filename>`    Similar to nmap it does a file output to all available file formats: LOG, JSON pretty, CSV, HTML. If the filename supplied is equal `auto` the filename is automatically generated using '${NODE}-p${port}${YYYYMMDD-HHMM}.${EXT}' with the according extension. If a directory is provided all output files will put into `<filename>/${NODE}-p${port}${YYYYMMDD-HHMM}.{log,json,csv,html}`.
 
 `-oa <filename>` / `--outfile <filename>` Does the same as the previous option but uses flat JSON instead.
 
