@@ -226,7 +226,7 @@ session resumption capabilities,
 Time skew relative to localhost (most server implementations return random values)\.
 .
 .IP "\(bu" 4
-Several certificate information:
+Several certificate information
 .
 .IP "\(bu" 4
 signature algorithm,
@@ -263,6 +263,9 @@ displaying DNS Certification Authority Authorization resource record
 .
 .IP "\(bu" 4
 Certificate Transparency info (if provided by server)\.
+.
+.IP "" 0
+
 .
 .IP "" 0
 .
@@ -465,7 +468,7 @@ whole 9 yards
 \fB\-\-htmlfile <htmlfile>\fR or \fB\-oH <htmlfile>\fR Similar to the aforementioned \fB\-\-jsonfile\fR or \fB\-\-logfile\fR it logs the output in HTML format (see \fB\-\-html\fR) additionally into a file or a directory\. For further explanation see \fB\-\-jsonfile\fR or \fB\-\-logfile\fR\.
 .
 .P
-\fB\-oA <filename>\fR / \fB\-\-outFile <filename>\fR Similar to nmap it does a file output to all available file formats: LOG, JSON pretty, CSV, HTML\. If the filename supplied is equal \fBauto\fR the filename is automatically generated using \'${NODE}\-p${port}${YYYYMMDD\-HHMM}\.${EXT}\' with the according extension\.
+\fB\-oA <filename>\fR / \fB\-\-outFile <filename>\fR Similar to nmap it does a file output to all available file formats: LOG, JSON pretty, CSV, HTML\. If the filename supplied is equal \fBauto\fR the filename is automatically generated using \'${NODE}\-p${port}${YYYYMMDD\-HHMM}\.${EXT}\' with the according extension\. If a directory is provided all output files will put into \fB<filename>/${NODE}\-p${port}${YYYYMMDD\-HHMM}\.{log,json,csv,html}\fR\.
 .
 .P
 \fB\-oa <filename>\fR / \fB\-\-outfile <filename>\fR Does the same as the previous option but uses flat JSON instead\.
