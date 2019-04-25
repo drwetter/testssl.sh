@@ -17941,7 +17941,8 @@ run_mx_all_ips() {
 create_mass_testing_cmdline() {
      local testing_type="$1"
      local cmd test_number
-     local -i nr_cmds=0
+     local outfile_arg
+     local -i nr_cmds=0 index=0
      local skip_next=false
 
      MASS_TESTING_CMDLINE=()
@@ -17949,11 +17950,11 @@ create_mass_testing_cmdline() {
 
      # Start by adding the elements from the global command line to the command line for the
      # test. If run_mass_testing_parallel(), then modify the command line so that, when
-     # required, each child process sends its test # results to a separate file.  If a cmd
+     # required, each child process sends its test results to a separate file.  If a cmd
      # uses '=' for supplying a value we just skip next parameter (we don't use 'parse_opt_equal_sign' here)
      debugme echo "${CMDLINE_ARRAY[@]}"
      for cmd in "${CMDLINE_ARRAY[@]}"; do
-          "$skip_next" && skip_next=false && continue
+          "$skip_next" && skip_next=false && index+=1 && continue
           if [[ "$cmd" =~ --file ]] || [[ "$cmd" =~ -iL ]]; then
                # Don't include the "--file[=...] or -iL argument in the child's command
                # line, but do include "--warnings=batch".
@@ -17963,16 +17964,40 @@ create_mass_testing_cmdline() {
                [[ "$cmd" == --file ]] && skip_next=true
                [[ "$cmd" == -iL ]] && skip_next=true
           elif [[ "$testing_type" == serial ]]; then
-               if "$JSONHEADER" && [[ "$cmd" =~ --jsonfile-pretty ]]; then
+               if "$JSONHEADER" && ( [[ "$cmd" =~ --jsonfile-pretty ]] || [[ "$cmd" =~ -oJ ]] ); then
                     >"$TEMPDIR/jsonfile_child.json"
                     MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
                     [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
-               elif "$JSONHEADER" && [[ "$cmd" =~ --jsonfile ]]; then
+                    [[ "$cmd" == -oJ ]] && skip_next=true
+               elif "$JSONHEADER" && ( [[ "$cmd" =~ --jsonfile ]] || [[ "$cmd" =~ -oj ]] ); then
                     >"$TEMPDIR/jsonfile_child.json"
                     MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
                     [[ "$cmd" == --jsonfile ]] && skip_next=true
+                    [[ "$cmd" == -oj ]] && skip_next=true
+               elif "$JSONHEADER" && ( [[ "$cmd" =~ --outFile ]] || [[ "$cmd" =~ -oA ]] ); then
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[index+1]}")"
+                    >"$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="-oJ=$TEMPDIR/jsonfile_child.json"
+                    nr_cmds+=1
+                    MASS_TESTING_CMDLINE[nr_cmds]="-oC=$outfile_arg.csv"
+                    nr_cmds+=1
+                    MASS_TESTING_CMDLINE[nr_cmds]="-oH=$outfile_arg.html"
+                    # next is the filename itself, as no '=' was supplied
+                    [[ "$cmd" == --outFile ]] && skip_next=true
+                    [[ "$cmd" == -oA ]] && skip_next=true
+               elif "$JSONHEADER" && ( [[ "$cmd" =~ --outfile ]] || [[ "$cmd" =~ -oa ]] ); then
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[index+1]}")"
+                    >"$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="-oj=$TEMPDIR/jsonfile_child.json"
+                    nr_cmds+=1
+                    MASS_TESTING_CMDLINE[nr_cmds]="-oC=$outfile_arg.csv"
+                    nr_cmds+=1
+                    MASS_TESTING_CMDLINE[nr_cmds]="-oH=$outfile_arg.html"
+                    # next is the filename itself, as no '=' was supplied
+                    [[ "$cmd" == --outfile ]] && skip_next=true
+                    [[ "$cmd" == -oa ]] && skip_next=true
                else
                     MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                fi
@@ -18015,12 +18040,41 @@ create_mass_testing_cmdline() {
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
                          ;;
+                    --outfile|--outfile=*|-oa|-oa=*)
+                         if "$JSONHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="-oj=$TEMPDIR/jsonfile_${test_number}.json"
+                              nr_cmds+=1
+                              MASS_TESTING_CMDLINE[nr_cmds]="-oC=$TEMPDIR/csvfile_${test_number}.csv"
+                              nr_cmds+=1
+                              MASS_TESTING_CMDLINE[nr_cmds]="-oH=$TEMPDIR/htmlfile_${test_number}.html"
+                              # next is the filename itself, as no '=' was supplied
+                              [[ "$cmd" == --outfile ]] && skip_next=true
+                              [[ "$cmd" == -oa ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
+                    --outFile|--outFile=*|-oA|-oA=*)
+                         if "$JSONHEADER"; then
+                              MASS_TESTING_CMDLINE[nr_cmds]="-oJ=$TEMPDIR/jsonfile_${test_number}.json"
+                              nr_cmds+=1
+                              MASS_TESTING_CMDLINE[nr_cmds]="-oC=$TEMPDIR/csvfile_${test_number}.csv"
+                              nr_cmds+=1
+                              MASS_TESTING_CMDLINE[nr_cmds]="-oH=$TEMPDIR/htmlfile_${test_number}.html"
+                              # next is the filename itself, as no '=' was supplied
+                              [[ "$cmd" == --outFile ]] && skip_next=true
+                              [[ "$cmd" == -oA ]] && skip_next=true
+                         else
+                              MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
+                         fi
+                         ;;
                     *)
                          MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          ;;
                esac
                nr_cmds+=1
           fi
+          index+=1
      done
 
      # Now add the command line arguments for the specific test to the command line.
