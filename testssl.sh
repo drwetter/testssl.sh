@@ -16591,7 +16591,8 @@ file output options (can also be preset via environment variables)
      --csvfile|-oC <csvfile>       additional output as CSV to the specified file or directory, similar to --logfile
      --html                        additional output as HTML to file '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.html'
      --htmlfile|-oH <htmlfile>     additional output as HTML to the specified file or directory, similar to --logfile
-     --out(f,F)ile|-oa/-oA <fname> log to a LOG,JSON,CSV,HTML file (see nmap). -oA/-oa: pretty/flat JSON. "auto" uses '\${NODE}-p\${port}\${YYYYMMDD-HHMM}'
+     --out(f,F)ile|-oa/-oA <fname> log to a LOG,JSON,CSV,HTML file (see nmap). -oA/-oa: pretty/flat JSON. 
+                                   "auto" uses '\${NODE}-p\${port}\${YYYYMMDD-HHMM}'. If fname if a dir uses 'dir/\${NODE}-p\${port}\${YYYYMMDD-HHMM}'
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if (non-empty) <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists, append to file. Omits any header
@@ -18933,10 +18934,17 @@ parse_cmd_line() {
                     ( "$do_html" || "$do_json" || "$do_pretty_json" || "$do_csv" || "$do_logging" ) && fatal "check your arguments four multiple file output options" $ERR_CMDLINE
                     outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
                     if [[ "$outfile_arg" != "auto" ]]; then
-                         HTMLFILE="$outfile_arg.html"
-                         CSVFILE="$outfile_arg.csv"
-                         JSONFILE="$outfile_arg.json"
-                         LOGFILE="$outfile_arg.log"
+                         if [[ -d "$outfile_arg" ]]; then
+                              HTMLFILE="$outfile_arg"
+                              CSVFILE="$outfile_arg"
+                              JSONFILE="$outfile_arg"
+                              LOGFILE="$outfile_arg"
+                         else
+                              HTMLFILE="$outfile_arg.html"
+                              CSVFILE="$outfile_arg.csv"
+                              JSONFILE="$outfile_arg.json"
+                              LOGFILE="$outfile_arg.log"
+                         fi
                     fi
                     [[ $? -eq 0 ]] && shift
                     do_html=true
@@ -18948,10 +18956,17 @@ parse_cmd_line() {
                     ( "$do_html" || "$do_json" || "$do_pretty_json" || "$do_csv" || "$do_logging" ) && fatal "check your arguments four multiple file output options" $ERR_CMDLINE
                     outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
                     if [[ "$outfile_arg" != "auto" ]]; then
-                         HTMLFILE="$outfile_arg.html"
-                         CSVFILE="$outfile_arg.csv"
-                         JSONFILE="$outfile_arg.json"
-                         LOGFILE="$outfile_arg.log"
+                         if [[ -d "$outfile_arg" ]]; then
+                              HTMLFILE="$outfile_arg"
+                              CSVFILE="$outfile_arg"
+                              JSONFILE="$outfile_arg"
+                              LOGFILE="$outfile_arg"
+                         else
+                              HTMLFILE="$outfile_arg.html"
+                              CSVFILE="$outfile_arg.csv"
+                              JSONFILE="$outfile_arg.json"
+                              LOGFILE="$outfile_arg.log"
+                         fi
                     fi
                     [[ $? -eq 0 ]] && shift
                     do_html=true
