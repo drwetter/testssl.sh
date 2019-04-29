@@ -4906,7 +4906,7 @@ run_protocols() {
                ;;
           2)   pr_svrty_medium "not offered"
                add_tls_offered tls1 no
-               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+               if [[ "$DETECTED_TLS_VERSION" == 0300 ]]; then
                     [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
                     outln
                     fileout "$jsonID" "MEDIUM" "not offered, and downgraded to SSL"
@@ -4984,7 +4984,7 @@ run_protocols() {
                     [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
                     outln
                     fileout "$jsonID" "CRITICAL" "TLSv1.1 is not offered, and downgraded to a weaker protocol"
-               elif [[ "$DETECTED_TLS_VERSION" == "0300" ]] && [[ "$latest_supported" == "0301" ]]; then
+               elif [[ "$DETECTED_TLS_VERSION" == 0300 ]] && [[ "$latest_supported" == 0301 ]]; then
                     prln_svrty_critical " -- server supports TLSv1.0, but downgraded to SSLv3 (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "not offered, and downgraded to SSLv3 rather than TLSv1.0"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0302 ]]; then
@@ -5064,7 +5064,7 @@ run_protocols() {
                ;;
           2)   pr_svrty_medium "not offered"
                add_tls_offered tls1_2 no
-               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+               if [[ "$DETECTED_TLS_VERSION" == 0300 ]]; then
                     detected_version_string="SSLv3"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
@@ -5146,20 +5146,20 @@ run_protocols() {
      fi
      case $? in
           0)   if ! "$using_sockets"; then
-                    outln "offered (OK)"
+                    prln_svrty_best "offered (OK)"
                     fileout "$jsonID" "OK" "offered"
                else
                     # Determine which version of TLS 1.3 was offered. For drafts 18-21 the
                     # version appears in the ProtocolVersion field of the ServerHello. For
                     # drafts 22-28 and the final TLS 1.3 the ProtocolVersion field contains
                     # 0303 and the actual version appears in the supported_versions extension.
-                    if [[ "${TLS_SERVER_HELLO:8:3}" == "7F1" ]]; then
+                    if [[ "${TLS_SERVER_HELLO:8:3}" == 7F1 ]]; then
                          drafts_offered+=" ${TLS_SERVER_HELLO:8:4} "
-                    elif [[ "$TLS_SERVER_HELLO" =~ "002B00020304" ]]; then
+                    elif [[ "$TLS_SERVER_HELLO" =~ 002B00020304 ]]; then
                          drafts_offered+=" 0304 "
                     else
                          for i in 1C 1B 1A 19 18 17 16 15 14 13 12; do
-                              if [[ "$TLS_SERVER_HELLO" =~ "002B00027F$i" ]]; then
+                              if [[ "$TLS_SERVER_HELLO" =~ 002B00027F$i ]]; then
                                    drafts_offered+=" 7F$i "
                                    break
                               fi
@@ -5169,17 +5169,17 @@ run_protocols() {
                     while true; do
                          supported_versions=""
                          for i in 16 15 14 13 12; do
-                              [[ "$drafts_offered" =~ " 7F$i " ]] || supported_versions+=",7f,$i"
+                              [[ "$drafts_offered" =~ \ 7F$i\  ]] || supported_versions+=",7f,$i"
                          done
                          [[ -z "$supported_versions" ]] && break
                          supported_versions="00, 2b, 00, $(printf "%02x" $((${#supported_versions}/3+1))), $(printf "%02x" $((${#supported_versions}/3))) $supported_versions"
                          tls_sockets "04" "$TLS13_CIPHER" "" "$supported_versions"
                          [[ $? -eq 0 ]] || break
-                         if [[ "${TLS_SERVER_HELLO:8:3}" == "7F1" ]]; then
+                         if [[ "${TLS_SERVER_HELLO:8:3}" == 7F1 ]]; then
                               drafts_offered+=" ${TLS_SERVER_HELLO:8:4} "
                          else
                               for i in 16 15 14 13 12; do
-                                   if [[ "$TLS_SERVER_HELLO" =~ "002B00027F$i" ]]; then
+                                   if [[ "$TLS_SERVER_HELLO" =~ 002B00027F$i ]]; then
                                         drafts_offered+=" 7F$i "
                                         break
                                    fi
@@ -5190,18 +5190,18 @@ run_protocols() {
                     while true; do
                          supported_versions=""
                          for i in 1C 1B 1A 19 18 17; do
-                              [[ "$drafts_offered" =~ " 7F$i " ]] || supported_versions+=",7f,$i"
+                              [[ "$drafts_offered" =~ \ 7F$i\  ]] || supported_versions+=",7f,$i"
                          done
-                         [[ "$drafts_offered" =~ " 0304 " ]] || supported_versions+=",03,04"
+                         [[ "$drafts_offered" =~ \ 0304\  ]] || supported_versions+=",03,04"
                          [[ -z "$supported_versions" ]] && break
                          supported_versions="00, 2b, 00, $(printf "%02x" $((${#supported_versions}/3+1))), $(printf "%02x" $((${#supported_versions}/3))) $supported_versions"
                          tls_sockets "04" "$TLS13_CIPHER" "" "$supported_versions"
                          [[ $? -eq 0 ]] || break
-                         if [[ "$TLS_SERVER_HELLO" =~ "002B00020304" ]]; then
+                         if [[ "$TLS_SERVER_HELLO" =~ 002B00020304 ]]; then
                               drafts_offered+=" 0304 "
                          else
                               for i in 1C 1B 1A 19 18 17; do
-                                   if [[ "$TLS_SERVER_HELLO" =~ "002B00027F$i" ]]; then
+                                   if [[ "$TLS_SERVER_HELLO" =~ 002B00027F$i ]]; then
                                         drafts_offered+=" 7F$i "
                                         break
                                    fi
@@ -5211,17 +5211,22 @@ run_protocols() {
                     KEY_SHARE_EXTN_NR="$key_share_extn_nr"
                     if [[ -n "$drafts_offered" ]]; then
                          for i in 1C 1B 1A 19 18 17 16 15 14 13 12; do
-                              if [[ "$drafts_offered" =~ " 7F$i " ]]; then
+                              if [[ "$drafts_offered" =~ \ 7F$i\  ]]; then
                                    [[ -n "$drafts_offered_str" ]] && drafts_offered_str+=", "
                                    drafts_offered_str+="draft $(printf "%d" 0x$i)"
                               fi
                          done
-                         if [[ "$drafts_offered" =~ " 0304 " ]]; then
+                         if [[ "$drafts_offered" =~ \ 0304\  ]]; then
                               [[ -n "$drafts_offered_str" ]] && drafts_offered_str+=", "
                               drafts_offered_str+="final"
                          fi
-                         pr_svrty_best "offered (OK)"; outln ": $drafts_offered_str"
-                         fileout "$jsonID" "OK" "offered with $drafts_offered_str"
+                         if [[ "$drafts_offered" =~ \ 0304\  ]]; then
+                              pr_svrty_best "offered (OK)"; outln ": $drafts_offered_str"
+                              fileout "$jsonID" "OK" "offered with $drafts_offered_str"
+                         else
+                              out "offered (OK)"; outln ": $drafts_offered_str"
+                              fileout "$jsonID" "INFO" "offered with $drafts_offered_str"
+                         fi
                     else
                          pr_warning "Unexpected results"; outln "$debug_recomm"
                          fileout "$jsonID" "WARN" "unexpected results"
@@ -5242,7 +5247,7 @@ run_protocols() {
                add_tls_offered tls1_3 no
                ;;
           2)   out "not offered"
-               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
+               if [[ "$DETECTED_TLS_VERSION" == 0300 ]]; then
                     detected_version_string="SSLv3"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
