@@ -17379,6 +17379,9 @@ determine_rdns() {
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
      rDNS="$(echo $rDNS)"
+     # remove chars which under weird circumstances can show up here
+     rDNS=${rDNS// /}
+     rDNS=${rDNS//;/}
      [[ -z "$rDNS" ]] && rDNS="--"
      return 0
 }
