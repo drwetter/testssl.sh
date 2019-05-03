@@ -6795,6 +6795,12 @@ tls_time() {
      local jsonID="TLS_timestamp"
 
      pr_bold " TLS clock skew" ; out "$spaces"
+
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
+
      TLS_DIFFTIME_SET=true                                       # this is a switch whether we want to measure the remote TLS_TIME
      tls_sockets "01" "$TLS_CIPHER"                              # try first TLS 1.0 (most frequently used protocol)
      [[ -z "$TLS_TIME" ]] && tls_sockets "03" "$TLS12_CIPHER"    #           TLS 1.2
@@ -7101,7 +7107,10 @@ get_server_certificate() {
                extract_stapled_ocsp
                success=$?
           else
-               if [[ "$1" =~ "tls1_3_RSA" ]]; then
+               # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
+               if ( [[ "$STARTTLS" =~ ldap ]] || [[ "$STARTTLS" =~ irc ]] ); then
+                    return 1
+               elif [[ "$1" =~ "tls1_3_RSA" ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
                elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
@@ -9127,7 +9136,7 @@ run_pfs() {
                     sigalg[nr_supported_ciphers]=""
                     ossl_supported[nr_supported_ciphers]="${TLS_CIPHER_OSSL_SUPPORTED[i]}"
                     hexcode[nr_supported_ciphers]="${hexc:2:2},${hexc:7:2}"
-                    if [[ "${hexc:2:2}" == "00" ]]; then
+                    if [[ "${hexc:2:2}" == 00 ]]; then
                          normalized_hexcode[nr_supported_ciphers]="x${hexc:7:2}"
                     else
                          normalized_hexcode[nr_supported_ciphers]="x${hexc:2:2}${hexc:7:2}"
@@ -9139,7 +9148,7 @@ run_pfs() {
      else
           while read -r hexc dash ciph[nr_supported_ciphers] sslvers kx[nr_supported_ciphers] auth enc[nr_supported_ciphers] mac export; do
                ciphers_found[nr_supported_ciphers]=false
-               if [[ "${hexc:2:2}" == "00" ]]; then
+               if [[ "${hexc:2:2}" == 00 ]]; then
                     normalized_hexcode[nr_supported_ciphers]="x${hexc:7:2}"
                else
                     normalized_hexcode[nr_supported_ciphers]="x${hexc:2:2}${hexc:7:2}"
@@ -9909,6 +9918,7 @@ starttls_mysql_dialog() {
 
 # arg1: fd for socket -- which we don't use as it is a hassle and it is not clear whether it works under every bash version
 # returns 6 if opening the socket caused a problem, 1 if STARTTLS handshake failed, 0: all ok
+#
 fd_socket() {
      local jabber=""
      local proyxline=""
@@ -9982,7 +9992,7 @@ fd_socket() {
                     fatal "FIXME: IRC+STARTTLS not yet supported" $ERR_NOSUPPORT
                     ;;
                ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
-                    fatal "FIXME: LDAP+STARTTLS over sockets not yet supported (try \"--ssl-native\")" $ERR_NOSUPPORT
+                    fatal "FIXME: LDAP+STARTTLS over sockets not supported yet (try \"--ssl-native\")" $ERR_NOSUPPORT
                     ;;
                acap|acaps) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
                     fatal "ACAP Easteregg: not implemented -- probably never will" $ERR_NOSUPPORT
@@ -13313,11 +13323,9 @@ tls_sockets() {
 }
 
 
-####### vulnerabilities follow #######
-
-# general overview which browser "supports" which vulnerability:
+####### Vulnerabilities follow #######
+# General overview which browser "supports" which vulnerability:
 # http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#Web_browsers
-
 
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 #
@@ -13334,6 +13342,11 @@ run_heartbleed(){
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
      pr_bold " Heartbleed"; out " ($cve)                "
+
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if [[ ! "${TLS_EXTENSIONS}" =~ heartbeat ]]; then
@@ -13389,8 +13402,8 @@ run_heartbleed(){
                tmln_out
           fi
 
-          if [[ $lines_returned -gt 1 ]] && [[ "${tls_hello_ascii:0:4}" == "1803" ]]; then
-               if [[ "$STARTTLS_PROTOCOL" == "ftp" ]] || [[ "$STARTTLS_PROTOCOL" == "ftps" ]]; then
+          if [[ $lines_returned -gt 1 ]] && [[ "${tls_hello_ascii:0:4}" == 1803 ]]; then
+               if [[ "$STARTTLS_PROTOCOL" =~ ftp ]]; then
                     # check possibility of weird vsftpd reply, see #426, despite "1803" seems very unlikely...
                     if grep -q '500 OOPS' "$SOCK_REPLY_FILE" ; then
                          append=", successful weeded out vsftpd false positive"
@@ -13438,6 +13451,11 @@ run_ccs_injection(){
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CCS injection vulnerability " && outln
      pr_bold " CCS"; out " ($cve)                       "
+
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
 
      if [[ 0 -eq $(has_server_protocol tls1) ]]; then
           tls_hexcode="x03, x01"
@@ -14879,7 +14897,17 @@ run_drown() {
           cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
      fi
 
-     sslv2_sockets
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
+
+     if [[ $(has_server_protocol ssl2) -ne 1 ]]; then
+          sslv2_sockets
+     else
+          [[ aaa == bbb ]]    # provoke retrurn code=1
+     fi
+
      case $? in
           7) # strange reply, couldn't convert the cipher spec length to a hex number
                pr_fixme "strange v2 reply "
@@ -14891,6 +14919,7 @@ run_drown() {
           3)   # vulnerable, [[ -n "$cert_fingerprint_sha2" ]] test is not needed as we should have RSA certificate here
                lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
                debugme tm_out "  ($lines lines)  "
+               add_tls_offered ssl2 yes
                if [[ "$lines" -gt 1 ]]; then
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$nr_ciphers_detected" ]]; then
@@ -15927,6 +15956,11 @@ run_robot() {
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability " && outln
      pr_bold " ROBOT                                     "
+
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
 
      if [[ ! "$HAS_PKUTIL" ]]; then
           prln_local_problem "Your $OPENSSL does not support the pkeyutl utility."
@@ -17776,6 +17810,10 @@ determine_sizelimitbug() {
      local test_ciphers='CC,14, CC,13, CC,15, C0,30, C0,2C, C0,28, C0,24, 00,A5, 00,A3, 00,A1, 00,9F, CC,A9, CC,A8, CC,AA, C0,AF, C0,AD, C0,A3, C0,9F, 00,6B, 00,6A, 00,69, 00,68, C0,77, C0,73, 00,C4, 00,C3, 00,C2, 00,C1, C0,32, C0,2E, C0,2A, C0,26, C0,79, C0,75, 00,9D, C0,A1, C0,9D, 00,3D, 00,C0, C0,3D, C0,3F, C0,41, C0,43, C0,45, C0,49, C0,4B, C0,4D, C0,4F, C0,51, C0,53, C0,55, C0,57, C0,59, C0,5D, C0,5F, C0,61, C0,63, C0,7B, C0,7D, C0,7F, C0,81, C0,83, C0,87, C0,89, C0,8B, C0,8D, 16,B7, 16,B8, 16,B9, 16,BA, C0,2F, C0,2B, C0,27, C0,23, 00,A4, 00,A2, 00,A0, 00,9E, C0,AE, C0,AC, C0,A2, C0,9E, C0,A0, C0,9C, 00,67, 00,40, 00,3F, 00,3E, C0,76, C0,72, 00,BE, 00,BD, 00,BC, 00,BB, C0,31, C0,2D, C0,29, C0,25, C0,78, C0,74, 00,9C, 00,3C, 00,BA, C0,3C, C0,3E, C0,40, C0,42, C0,44, C0,48, C0,4A, C0,4C, C0,4E, C0,50, C0,52, C0,54, C0,56, C0,58, C0,5C, C0,5E, C0,60, C0,62, C0,7A, C0,7C, C0,7E, C0,80, C0,82'
      local overflow_cipher1='C0,86'
      local overflow_cipher2='C0,88'
+
+     # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it  won't be usable at all (e.g. LDAP)
+     [[ "$STARTTLS" =~ ldap ]] && return 0
+     [[ "$STARTTLS" =~ irc ]] && return 0
 
      debugme echo -n "${FUNCNAME[0]} starting at # of ciphers (excl. 00FF): "
      debugme 'echo  "$test_ciphers" | tr ' ' '\n' | wc -l'
