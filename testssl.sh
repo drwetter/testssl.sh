@@ -1891,6 +1891,14 @@ s_client_options() {
                fi
           fi
      fi
+
+     # OpenSSL's name for secp256r1 is prime256v1. So whenever we encounter this
+     # (e.g. client simulations) we replace it with the name which OpenSSL understands
+     # This shouldn't be needed. We have this here as a last resort
+     if [[ "$1" =~ " -curves " ]]; then
+          [[ "$1" =~ secp192r1 ]] && options="${options//secp192r1/prime192v1}"
+          [[ "$1" =~ secp256r1 ]] && options="${options//secp256r1/prime256v1}"
+     fi
      tm_out "$options"
 }
 
@@ -4496,6 +4504,11 @@ run_client_simulation() {
                               # "$OPENSSL s_client" will fail if the -curves option includes any unsupported curves.
                               supported_curves=""
                               for curve in $(colon_to_spaces "${curves[i]}"); do
+                                   # Attention! secp256r1 = prime256v1 and secp192r1 = prime192v1
+                                   # We need to map two curves here as otherwise handshakes will go wrong if "-curves" are supplied
+                                   # https://github.com/openssl/openssl/blob/master/apps/ecparam.c#L221 + ./ssl/t1_lib.c
+                                   [[ "$curve" =~ secp256r1 ]] && curve="${curve//secp256r1/prime256v1}"
+                                   [[ "$curve" =~ secp192r1 ]] && curve="${curve//secp192r1/prime192v1}"
                                    [[ "$OSSL_SUPPORTED_CURVES" =~ " $curve " ]] && supported_curves+=":$curve"
                               done
                               curves[i]=""
@@ -4541,6 +4554,15 @@ run_client_simulation() {
                          if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
                               # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                               for tls in ${tlsvers[i]}; do
+                                   # If the handshake data includes TLS 1.3 we need to remove it, otherwise the
+                                   # simulation will fail with # 'Oops: openssl s_client connect problem'
+                                   # before/after trying another protocol. We only print a warning it in debug mode
+                                   # as otherwise we would need e.g. handle the curves in a similar fashion -- not
+                                   # to speak about ciphers
+                                   if [[ $tls =~ 1_3 ]] && ! "$HAS_TLS13"; then
+                                        debugme pr_local_problem "TLS 1.3 not supported, "
+                                        continue
+                                   fi
                                    options="$(s_client_options "$tls -cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
                                    debugme echo "$OPENSSL s_client $options  </dev/null"
                                    $OPENSSL s_client $options  </dev/null >$TMPFILE 2>$ERRFILE
@@ -13990,7 +14012,7 @@ run_crime() {
                [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
           fi
      else
-          [[ "$OSSL_VER" == "0.9.8"* ]] && addcmd="-no_ssl2"
+          [[ "$OSSL_VER" == 0.9.8* ]] && addcmd="-no_ssl2"
           "$HAS_TLS13" && [[ -z "$OPTIMAL_PROTO" ]] && addcmd+=" -no_tls1_3"
           $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -comp $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null &>$TMPFILE
           sclient_connect_successful $? $TMPFILE
@@ -16668,6 +16690,11 @@ HAS_NO_SSL2: $HAS_NO_SSL2
 HAS_SPDY: $HAS_SPDY
 HAS_ALPN: $HAS_ALPN
 HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
+HAS_COMP: $HAS_COMP
+HAS_NO_COMP: $HAS_NO_COMP
+HAS_CIPHERSUITES: $HAS_CIPHERSUITES
+HAS_PKEY: $HAS_PKEY
+HAS_PKUTIL: $HAS_PKUTIL
 HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
 HAS_POSTGRES: $HAS_POSTGRES
@@ -16886,7 +16913,7 @@ ip_fatal() {
      return 0
 }
 
-# This gneric function outputs an error onto the screen and handles logging.
+# This generic function outputs an error onto the screen and handles logging.
 # arg1: string to print / to write to file, arg2 (optional): additional hint to write
 #
 generic_nonfatal() {
@@ -17947,6 +17974,7 @@ run_mx_all_ips() {
 # If run_mass_testing() is being used, then "$1" is "serial". If
 # run_mass_testing_parallel() is being used, then "$1" is "parallel XXXXXXXX"
 # where XXXXXXXX is the number of the test being run.
+#
 create_mass_testing_cmdline() {
      local testing_type="$1"
      local cmd test_number
@@ -18240,6 +18268,7 @@ run_mass_testing() {
 # appropriate, adds any JSON, CSV, and HTML output it has created to the
 # appropriate file. If the child process was stopped, then a message indicating
 # that is printed, but the incomplete results are not used.
+#
 get_next_message_testing_parallel_result() {
      draw_line "=" $((TERM_WIDTH / 2)); outln;
      outln "${PARALLEL_TESTING_CMDLINE[NEXT_PARALLEL_TEST_TO_FINISH]}"
