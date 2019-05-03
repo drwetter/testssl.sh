@@ -41,7 +41,7 @@ $tests++;
 $uri="pop.gmx.net:110";
 
 unlink "tmp.json";
-printf "\n%s\n", "STARTTLS POP3 unit tests via OpenSSL --> $uri ...";
+printf "\n%s\n", "STARTTLS POP3 unit tests via sockets --> $uri ...";
 $socketout = `./testssl.sh $check2run -t pop3 $uri`;
 # my $socket = json('tmp.json');
 unlike($socketout, qr/(e|E)rror|(f|F)atal/, "");
