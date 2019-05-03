@@ -105,6 +105,8 @@ $tests++;
 printf "\n%s\n", "STARTTLS FTP unit tests via OpenSSL --> $uri ...";
 $opensslout = `./testssl.sh --ssl-native $check2run -t ftp $uri`;
 # my $openssl = json('tmp.json');
+# OCSP stapling fails sometimes with: 'offered, error querying OCSP responder (ERROR: No Status found)'
+$opensslout =~ s/ error querying OCSP responder .*\n//g;
 unlike($opensslout, qr/(e|E)rror|(f|F)atal|Oops|s_client connect problem/, "");
 $tests++;
 
