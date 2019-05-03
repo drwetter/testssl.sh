@@ -5,6 +5,10 @@
 #    "id"           : "scanProblem"
 #    "finding"      : "Scan interrupted"
 
+# Catches:
+# - This unit test takes very long
+# - Hosts which match the regex patterns should be avoided
+
 use strict;
 use Test::More;
 use Data::Dumper;
@@ -59,13 +63,13 @@ $uri="imap.gmx.net:143";
 
 unlink "tmp.json";
 printf "\n%s\n", "STARTTLS IMAP unit tests via sockets --> $uri ...";
-my $socketout = `./testssl.sh $check2run -t imap $uri`;
+$socketout = `./testssl.sh $check2run -t imap $uri`;
 # my $socket = json('tmp.json');
 unlike($socketout, qr/(e|E)rror|(f|F)atal/, "");
 $tests++;
 
 printf "\n%s\n", "STARTTLS IMAP unit tests via OpenSSL --> $uri ...";
-my $opensslout = `./testssl.sh --ssl-native $check2run -t imap $uri`;
+$opensslout = `./testssl.sh --ssl-native $check2run -t imap $uri`;
 # my $openssl = json('tmp.json');
 unlike($opensslout, qr/(e|E)rror|(f|F)atal|Oops|s_client connect problem/, "");
 $tests++;
@@ -75,13 +79,13 @@ $uri="jabber.org:5222";
 
 unlink "tmp.json";
 printf "\n%s\n", "STARTTLS XMPP unit tests via sockets --> $uri ...";
-my $socketout = `./testssl.sh $check2run -t xmpp $uri`;
+$socketout = `./testssl.sh $check2run -t xmpp $uri`;
 # my $socket = json('tmp.json');
 unlike($socketout, qr/(e|E)rror|(f|F)atal/, "");
 $tests++;
 
 printf "\n%s\n", "STARTTLS XMPP unit tests via OpenSSL --> $uri ...";
-my $opensslout = `./testssl.sh --ssl-native $check2run -t xmpp $uri`;
+$opensslout = `./testssl.sh --ssl-native $check2run -t xmpp $uri`;
 # my $openssl = json('tmp.json');
 unlike($opensslout, qr/(e|E)rror|(f|F)atal|Oops|s_client connect problem/, "");
 $tests++;
@@ -91,13 +95,15 @@ $uri="ldap.uni-rostock.de:21";
 
 unlink "tmp.json";
 printf "\n%s\n", "STARTTLS FTP unit tests via sockets --> $uri ...";
-my $socketout = `./testssl.sh $check2run -t ftp $uri`;
+$socketout = `./testssl.sh $check2run -t ftp $uri`;
 # my $socket = json('tmp.json');
+# OCSP stapling fails sometimes with: 'offered, error querying OCSP responder (ERROR: No Status found)'
+$debughtml =~ s/ error querying OCSP responder .*\n//g;
 unlike($socketout, qr/(e|E)rror|(f|F)atal/, "");
 $tests++;
 
 printf "\n%s\n", "STARTTLS FTP unit tests via OpenSSL --> $uri ...";
-my $opensslout = `./testssl.sh --ssl-native $check2run -t ftp $uri`;
+$opensslout = `./testssl.sh --ssl-native $check2run -t ftp $uri`;
 # my $openssl = json('tmp.json');
 unlike($opensslout, qr/(e|E)rror|(f|F)atal|Oops|s_client connect problem/, "");
 $tests++;
@@ -107,7 +113,7 @@ $tests++;
 $uri="ldap.telesec.de:389";
 
 printf "\n%s\n", "STARTTLS LDAP unit tests via OpenSSL --> $uri ...";
-my $opensslout = `./testssl.sh --ssl-native $check2run -t ftp $uri`;
+$opensslout = `./testssl.sh --ssl-native $check2run -t ftp $uri`;
 # my $openssl = json('tmp.json');
 unlike($opensslout, qr/(e|E)rror|(f|F)atal|Oops|s_client connect problem/, "");
 $tests++;
@@ -117,13 +123,13 @@ $uri="news.newsguy.com:119";
 
 unlink "tmp.json";
 printf "\n%s\n", "STARTTLS NNTP unit tests via sockets --> $uri ...";
-my $socketout = `./testssl.sh $check2run -t nntp $uri`;
+$socketout = `./testssl.sh $check2run -t nntp $uri`;
 # my $socket = json('tmp.json');
 unlike($socketout, qr/(e|E)rror|(f|F)atal/, "");
 $tests++;
 
 printf "\n%s\n", "STARTTLS NNTP unit tests via OpenSSL --> $uri ...";
-my $opensslout = `./testssl.sh --ssl-native $check2run -t nntp $uri`;
+$opensslout = `./testssl.sh --ssl-native $check2run -t nntp $uri`;
 # my $openssl = json('tmp.json');
 unlike($opensslout, qr/(e|E)rror|(f|F)atal|Oops|s_client connect problem/, "");
 $tests++;
