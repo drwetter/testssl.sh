@@ -18705,8 +18705,8 @@ parse_cmd_line() {
                     STARTTLS_PROTOCOL="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
-                         ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres|mysql) ;;
-                         ftps|smtps|lmtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
+                         ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|irc|nntp|postgres|mysql) ;;
+                         ftps|smtps|lmtps|pop3s|imaps|xmpps|telnets|ldaps|ircs|nntps) ;;
                          *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
@@ -18739,7 +18739,7 @@ parse_cmd_line() {
                -c|--client-simulation)
                     do_client_simulation=true
                     ;;
-               -U|--vulnerable)
+               -U|--vulnerable|--vulnerabilities)
                     do_vulnerabilities=true
                     do_heartbleed="$OFFENSIVE"
                     do_ccs_injection="$OFFENSIVE"
