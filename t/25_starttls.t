@@ -98,7 +98,7 @@ printf "\n%s\n", "STARTTLS FTP unit tests via sockets --> $uri ...";
 $socketout = `./testssl.sh $check2run -t ftp $uri`;
 # my $socket = json('tmp.json');
 # OCSP stapling fails sometimes with: 'offered, error querying OCSP responder (ERROR: No Status found)'
-$debughtml =~ s/ error querying OCSP responder .*\n//g;
+$socketout =~ s/ error querying OCSP responder .*\n//g;
 unlike($socketout, qr/(e|E)rror|(f|F)atal/, "");
 $tests++;
 
