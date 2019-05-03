@@ -113,7 +113,7 @@ $tests++;
 $uri="ldap.telesec.de:389";
 
 printf "\n%s\n", "STARTTLS LDAP unit tests via OpenSSL --> $uri ...";
-$opensslout = `./testssl.sh --ssl-native $check2run -t ftp $uri`;
+$opensslout = `./testssl.sh --ssl-native $check2run -t ldap $uri`;
 # my $openssl = json('tmp.json');
 unlike($opensslout, qr/(e|E)rror|(f|F)atal|Oops|s_client connect problem/, "");
 $tests++;
