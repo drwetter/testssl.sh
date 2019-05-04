@@ -101,7 +101,7 @@ Please note that `fname` has to be in Unix format. DOS carriage returns won't be
 
 ### SPECIAL INVOCATIONS
 
-`-t <protocol>, --starttls <protocol>`    does a default run against a STARTTLS enabled `protocol`. `protocol` must be one of `ftp`, `smtp`,  `pop3`, `imap`, `xmpp`, `telnet`, `ldap`, `lmtp`, `nntp`, `postgres`, `mysql`. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection.
+`-t <protocol>, --starttls <protocol>`    does a default run against a STARTTLS enabled `protocol`. `protocol` must be one of `ftp`, `smtp`,  `pop3`, `imap`, `xmpp`, `telnet`, `ldap`, `irc`, `lmtp`, `nntp`, `postgres`, `mysql`. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, LDAP currently only works with `--ssl-native`. `telnet` and `irc` is WIP.
 
 `--xmpphost <jabber_domain>` is an additional option for STARTTLS enabled XMPP: It expects the jabber domain as a parameter. This is only needed if the domain is different from the URI supplied.
 
@@ -210,7 +210,7 @@ Also for multiple server certificates are being checked for as well as for the c
 
 ### VULNERABILITIES
 
-`-U, --vulnerable`              Just tests all (of the following) vulnerabilities. The environment variable `VULN_THRESHLD` determines after which value a separate headline for each vulnerability is being displayed. Default is `1` which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed -- in addition to the vulnerability and the result. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result. A vulnerability section is comprised of more than one check, e.g. the renegotiation vulnerability check has two checks, so has Logjam.
+`-U, --vulnerable, --vulnerabilities` Just tests all (of the following) vulnerabilities. The environment variable `VULN_THRESHLD` determines after which value a separate headline for each vulnerability is being displayed. Default is `1` which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed -- in addition to the vulnerability and the result. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result. A vulnerability section is comprised of more than one check, e.g. the renegotiation vulnerability check has two checks, so has Logjam.
 
 `-H, --heartbleed`              Checks for Heartbleed, a memory leakage in openssl. Unless the server side doesn't support the heartbeat extension it is likely that this check runs into a timeout. The seconds to wait for a reply can be adjusted with `HEARTBLEED_MAX_WAITSOCK`. 8 is the default.
 

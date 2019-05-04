@@ -180,7 +180,7 @@ host.example.com:631
 
 <h3 id="SPECIAL-INVOCATIONS">SPECIAL INVOCATIONS</h3>
 
-<p><code>-t &lt;protocol>, --starttls &lt;protocol></code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>telnet</code>, <code>ldap</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection.</p>
+<p><code>-t &lt;protocol>, --starttls &lt;protocol></code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection.  LDAP currently only works with `--ssl-native`. `telnet` and `irc` is WIP</p>
 
 <p><code>--xmpphost &lt;jabber_domain></code> is an additional option for STARTTLS enabled XMPP: It expects the jabber domain as a parameter. This is only needed if the domain is different from the URI supplied.</p>
 
@@ -297,7 +297,7 @@ Also for multiple server certificates are being checked for as well as for the c
 
 <h3 id="VULNERABILITIES">VULNERABILITIES</h3>
 
-<p><code>-U, --vulnerable</code>              Just tests all (of the following) vulnerabilities. The environment variable <code>VULN_THRESHLD</code> determines after which value a separate headline for each vulnerability is being displayed. Default is <code>1</code> which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed -- in addition to the vulnerability and the result. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result. A vulnerability section is comprised of more than one check, e.g. the renegotiation vulnerability check has two checks, so has Logjam.</p>
+<p><code>-U, --vulnerable, --vulnerabilities</code>              Just tests all (of the following) vulnerabilities. The environment variable <code>VULN_THRESHLD</code> determines after which value a separate headline for each vulnerability is being displayed. Default is <code>1</code> which means if you check for two vulnerabilities, only the general headline for vulnerabilities section is displayed -- in addition to the vulnerability and the result. Otherwise each vulnerability or vulnerability section gets its own headline in addition to the output of the name of the vulnerabilty and test result. A vulnerability section is comprised of more than one check, e.g. the renegotiation vulnerability check has two checks, so has Logjam.</p>
 
 <p><code>-H, --heartbleed</code>              Checks for Heartbleed, a memory leakage in openssl. Unless the server side doesn't support the heartbeat extension it is likely that this check runs into a timeout. The seconds to wait for a reply can be adjusted with <code>HEARTBLEED_MAX_WAITSOCK</code>. 8 is the default.</p>
 
