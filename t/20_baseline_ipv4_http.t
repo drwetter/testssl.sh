@@ -39,22 +39,6 @@ unlike($opensslout, qr/(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client 
 $tests++;
 
 
-$uri="testssl.net";
-
-unlink "tmp.json";
-printf "\n%s\n", "Baseline unit test IPv6 via sockets --> $uri ...";
-$socketout = `./testssl.sh $check2run -6 $uri 2>&1`;
-# my $socket = json('tmp.json');
-unlike($socketout, qr/(e|E)rror|\.\/testssl\.sh: line |(f|F)atal/, "");
-$tests++;
-
-unlink "tmp.json";
-printf "\n%s\n", "Baseline unit test IPv6 via OpenSSL --> $uri ...";
-$opensslout = `./testssl.sh --ssl-native $check2run -6 $uri 2>&1`;
-# my $openssl = json('tmp.json');
-$opensslout =~ s/testssl.*warning: command substitution: ignored null byte in input\n//g;
-unlike($opensslout, qr/(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem/, "");
-$tests++;
 
 done_testing($tests);
 unlink "tmp.json";
