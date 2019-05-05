@@ -1891,6 +1891,14 @@ s_client_options() {
                fi
           fi
      fi
+
+     # OpenSSL's name for secp256r1 is prime256v1. So whenever we encounter this
+     # (e.g. client simulations) we replace it with the name which OpenSSL understands
+     # This shouldn't be needed. We have this here as a last resort
+     if [[ "$1" =~ " -curves " ]]; then
+          [[ "$1" =~ secp192r1 ]] && options="${options//secp192r1/prime192v1}"
+          [[ "$1" =~ secp256r1 ]] && options="${options//secp256r1/prime256v1}"
+     fi
      tm_out "$options"
 }
 
@@ -4496,6 +4504,11 @@ run_client_simulation() {
                               # "$OPENSSL s_client" will fail if the -curves option includes any unsupported curves.
                               supported_curves=""
                               for curve in $(colon_to_spaces "${curves[i]}"); do
+                                   # Attention! secp256r1 = prime256v1 and secp192r1 = prime192v1
+                                   # We need to map two curves here as otherwise handshakes will go wrong if "-curves" are supplied
+                                   # https://github.com/openssl/openssl/blob/master/apps/ecparam.c#L221 + ./ssl/t1_lib.c
+                                   [[ "$curve" =~ secp256r1 ]] && curve="${curve//secp256r1/prime256v1}"
+                                   [[ "$curve" =~ secp192r1 ]] && curve="${curve//secp192r1/prime192v1}"
                                    [[ "$OSSL_SUPPORTED_CURVES" =~ " $curve " ]] && supported_curves+=":$curve"
                               done
                               curves[i]=""
@@ -4541,6 +4554,15 @@ run_client_simulation() {
                          if [[ "$proto" == TLSv1.2 ]] && ( ! "$using_sockets" || [[ -z "${handshakebytes[i]}" ]] ); then
                               # OpenSSL reports TLS1.2 even if the connection is TLS1.1 or TLS1.0. Need to figure out which one it is...
                               for tls in ${tlsvers[i]}; do
+                                   # If the handshake data includes TLS 1.3 we need to remove it, otherwise the
+                                   # simulation will fail with # 'Oops: openssl s_client connect problem'
+                                   # before/after trying another protocol. We only print a warning it in debug mode
+                                   # as otherwise we would need e.g. handle the curves in a similar fashion -- not
+                                   # to speak about ciphers
+                                   if [[ $tls =~ 1_3 ]] && ! "$HAS_TLS13"; then
+                                        debugme pr_local_problem "TLS 1.3 not supported, "
+                                        continue
+                                   fi
                                    options="$(s_client_options "$tls -cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
                                    debugme echo "$OPENSSL s_client $options  </dev/null"
                                    $OPENSSL s_client $options  </dev/null >$TMPFILE 2>$ERRFILE
@@ -6773,6 +6795,12 @@ tls_time() {
      local jsonID="TLS_timestamp"
 
      pr_bold " TLS clock skew" ; out "$spaces"
+
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
+
      TLS_DIFFTIME_SET=true                                       # this is a switch whether we want to measure the remote TLS_TIME
      tls_sockets "01" "$TLS_CIPHER"                              # try first TLS 1.0 (most frequently used protocol)
      [[ -z "$TLS_TIME" ]] && tls_sockets "03" "$TLS12_CIPHER"    #           TLS 1.2
@@ -7079,7 +7107,10 @@ get_server_certificate() {
                extract_stapled_ocsp
                success=$?
           else
-               if [[ "$1" =~ "tls1_3_RSA" ]]; then
+               # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
+               if ( [[ "$STARTTLS" =~ ldap ]] || [[ "$STARTTLS" =~ irc ]] ); then
+                    return 1
+               elif [[ "$1" =~ "tls1_3_RSA" ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
                elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
@@ -9105,7 +9136,7 @@ run_pfs() {
                     sigalg[nr_supported_ciphers]=""
                     ossl_supported[nr_supported_ciphers]="${TLS_CIPHER_OSSL_SUPPORTED[i]}"
                     hexcode[nr_supported_ciphers]="${hexc:2:2},${hexc:7:2}"
-                    if [[ "${hexc:2:2}" == "00" ]]; then
+                    if [[ "${hexc:2:2}" == 00 ]]; then
                          normalized_hexcode[nr_supported_ciphers]="x${hexc:7:2}"
                     else
                          normalized_hexcode[nr_supported_ciphers]="x${hexc:2:2}${hexc:7:2}"
@@ -9117,7 +9148,7 @@ run_pfs() {
      else
           while read -r hexc dash ciph[nr_supported_ciphers] sslvers kx[nr_supported_ciphers] auth enc[nr_supported_ciphers] mac export; do
                ciphers_found[nr_supported_ciphers]=false
-               if [[ "${hexc:2:2}" == "00" ]]; then
+               if [[ "${hexc:2:2}" == 00 ]]; then
                     normalized_hexcode[nr_supported_ciphers]="x${hexc:7:2}"
                else
                     normalized_hexcode[nr_supported_ciphers]="x${hexc:2:2}${hexc:7:2}"
@@ -9887,6 +9918,7 @@ starttls_mysql_dialog() {
 
 # arg1: fd for socket -- which we don't use as it is a hassle and it is not clear whether it works under every bash version
 # returns 6 if opening the socket caused a problem, 1 if STARTTLS handshake failed, 0: all ok
+#
 fd_socket() {
      local jabber=""
      local proyxline=""
@@ -9960,7 +9992,7 @@ fd_socket() {
                     fatal "FIXME: IRC+STARTTLS not yet supported" $ERR_NOSUPPORT
                     ;;
                ldap|ldaps) # LDAP, https://tools.ietf.org/html/rfc2830, https://tools.ietf.org/html/rfc4511
-                    fatal "FIXME: LDAP+STARTTLS over sockets not yet supported (try \"--ssl-native\")" $ERR_NOSUPPORT
+                    fatal "FIXME: LDAP+STARTTLS over sockets not supported yet (try \"--ssl-native\")" $ERR_NOSUPPORT
                     ;;
                acap|acaps) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
                     fatal "ACAP Easteregg: not implemented -- probably never will" $ERR_NOSUPPORT
@@ -13291,11 +13323,9 @@ tls_sockets() {
 }
 
 
-####### vulnerabilities follow #######
-
-# general overview which browser "supports" which vulnerability:
+####### Vulnerabilities follow #######
+# General overview which browser "supports" which vulnerability:
 # http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#Web_browsers
-
 
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 #
@@ -13312,6 +13342,11 @@ run_heartbleed(){
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for heartbleed vulnerability " && outln
      pr_bold " Heartbleed"; out " ($cve)                "
+
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
 
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
      if [[ ! "${TLS_EXTENSIONS}" =~ heartbeat ]]; then
@@ -13367,8 +13402,8 @@ run_heartbleed(){
                tmln_out
           fi
 
-          if [[ $lines_returned -gt 1 ]] && [[ "${tls_hello_ascii:0:4}" == "1803" ]]; then
-               if [[ "$STARTTLS_PROTOCOL" == "ftp" ]] || [[ "$STARTTLS_PROTOCOL" == "ftps" ]]; then
+          if [[ $lines_returned -gt 1 ]] && [[ "${tls_hello_ascii:0:4}" == 1803 ]]; then
+               if [[ "$STARTTLS_PROTOCOL" =~ ftp ]]; then
                     # check possibility of weird vsftpd reply, see #426, despite "1803" seems very unlikely...
                     if grep -q '500 OOPS' "$SOCK_REPLY_FILE" ; then
                          append=", successful weeded out vsftpd false positive"
@@ -13416,6 +13451,11 @@ run_ccs_injection(){
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CCS injection vulnerability " && outln
      pr_bold " CCS"; out " ($cve)                       "
+
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
 
      if [[ 0 -eq $(has_server_protocol tls1) ]]; then
           tls_hexcode="x03, x01"
@@ -13990,7 +14030,7 @@ run_crime() {
                [[ $sclient_success -eq 0 ]] && cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
           fi
      else
-          [[ "$OSSL_VER" == "0.9.8"* ]] && addcmd="-no_ssl2"
+          [[ "$OSSL_VER" == 0.9.8* ]] && addcmd="-no_ssl2"
           "$HAS_TLS13" && [[ -z "$OPTIMAL_PROTO" ]] && addcmd+=" -no_tls1_3"
           $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -comp $addcmd $STARTTLS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null &>$TMPFILE
           sclient_connect_successful $? $TMPFILE
@@ -14857,7 +14897,17 @@ run_drown() {
           cert_fingerprint_sha2=${cert_fingerprint_sha2/SHA256 /}
      fi
 
-     sslv2_sockets
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
+
+     if [[ $(has_server_protocol ssl2) -ne 1 ]]; then
+          sslv2_sockets
+     else
+          [[ aaa == bbb ]]    # provoke retrurn code=1
+     fi
+
      case $? in
           7) # strange reply, couldn't convert the cipher spec length to a hex number
                pr_fixme "strange v2 reply "
@@ -14869,6 +14919,7 @@ run_drown() {
           3)   # vulnerable, [[ -n "$cert_fingerprint_sha2" ]] test is not needed as we should have RSA certificate here
                lines=$(count_lines "$(hexdump -C "$TEMPDIR/$NODEIP.sslv2_sockets.dd" 2>/dev/null)")
                debugme tm_out "  ($lines lines)  "
+               add_tls_offered ssl2 yes
                if [[ "$lines" -gt 1 ]]; then
                     nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                     if [[ 0 -eq "$nr_ciphers_detected" ]]; then
@@ -15906,6 +15957,11 @@ run_robot() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability " && outln
      pr_bold " ROBOT                                     "
 
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
+     fi
+
      if [[ ! "$HAS_PKUTIL" ]]; then
           prln_local_problem "Your $OPENSSL does not support the pkeyutl utility."
           fileout "$jsonID" "WARN" "$OPENSSL does not support the pkeyutl utility." "$cve" "$cwe"
@@ -16668,6 +16724,11 @@ HAS_NO_SSL2: $HAS_NO_SSL2
 HAS_SPDY: $HAS_SPDY
 HAS_ALPN: $HAS_ALPN
 HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
+HAS_COMP: $HAS_COMP
+HAS_NO_COMP: $HAS_NO_COMP
+HAS_CIPHERSUITES: $HAS_CIPHERSUITES
+HAS_PKEY: $HAS_PKEY
+HAS_PKUTIL: $HAS_PKUTIL
 HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
 HAS_POSTGRES: $HAS_POSTGRES
@@ -16886,7 +16947,7 @@ ip_fatal() {
      return 0
 }
 
-# This gneric function outputs an error onto the screen and handles logging.
+# This generic function outputs an error onto the screen and handles logging.
 # arg1: string to print / to write to file, arg2 (optional): additional hint to write
 #
 generic_nonfatal() {
@@ -17750,6 +17811,10 @@ determine_sizelimitbug() {
      local overflow_cipher1='C0,86'
      local overflow_cipher2='C0,88'
 
+     # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it  won't be usable at all (e.g. LDAP)
+     [[ "$STARTTLS" =~ ldap ]] && return 0
+     [[ "$STARTTLS" =~ irc ]] && return 0
+
      debugme echo -n "${FUNCNAME[0]} starting at # of ciphers (excl. 00FF): "
      debugme 'echo  "$test_ciphers" | tr ' ' '\n' | wc -l'
      # Only with TLS 1.2 offered at the server side it is possible to hit this bug, in practise. Thus
@@ -17947,6 +18012,7 @@ run_mx_all_ips() {
 # If run_mass_testing() is being used, then "$1" is "serial". If
 # run_mass_testing_parallel() is being used, then "$1" is "parallel XXXXXXXX"
 # where XXXXXXXX is the number of the test being run.
+#
 create_mass_testing_cmdline() {
      local testing_type="$1"
      local cmd test_number
@@ -18240,6 +18306,7 @@ run_mass_testing() {
 # appropriate, adds any JSON, CSV, and HTML output it has created to the
 # appropriate file. If the child process was stopped, then a message indicating
 # that is printed, but the incomplete results are not used.
+#
 get_next_message_testing_parallel_result() {
      draw_line "=" $((TERM_WIDTH / 2)); outln;
      outln "${PARALLEL_TESTING_CMDLINE[NEXT_PARALLEL_TEST_TO_FINISH]}"
@@ -18638,8 +18705,8 @@ parse_cmd_line() {
                     STARTTLS_PROTOCOL="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
-                         ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres|mysql) ;;
-                         ftps|smtps|lmtps|pop3s|imaps|xmpps|telnets|ldaps|nntps) ;;
+                         ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|irc|nntp|postgres|mysql) ;;
+                         ftps|smtps|lmtps|pop3s|imaps|xmpps|telnets|ldaps|ircs|nntps) ;;
                          *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
@@ -18672,7 +18739,7 @@ parse_cmd_line() {
                -c|--client-simulation)
                     do_client_simulation=true
                     ;;
-               -U|--vulnerable)
+               -U|--vulnerable|--vulnerabilities)
                     do_vulnerabilities=true
                     do_heartbleed="$OFFENSIVE"
                     do_ccs_injection="$OFFENSIVE"
