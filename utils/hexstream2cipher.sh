@@ -16,7 +16,7 @@ for ((i=0; i<len ; i+=4)); do
 	echo -n ": ${hs:$i:4}"
 	grepstr="0x${hs:$i:2},0x${hs:$((i+2)):2}"
         echo -n " --> $grepstr --> "
-	cip=$(grep -i ${grepstr} $mapfile | awk '{ print $3 }')
+        cip=$(grep -i -E "^ *${grepstr}" $mapfile | awk '{ print $3 }')
 	echo $cip
 	if "$first"; then
 		ciphers="$cip"
