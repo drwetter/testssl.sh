@@ -1557,6 +1557,53 @@ http_get() {
      fi
 }
 
+# Outputs the headers when downloading any URL (arg1) via HTTP 1.1 GET from port 80.
+# Only works if curl or wget is available.
+# There the environment variable is used automatically
+# Currently it is being used by check_pwnedkeys() only.
+http_get_header() {
+     local proto z
+     local node="" query=""
+     local dl="$2"
+     local useragent="$UA_STD"
+     local jsonID="http_get_header"
+     local headers
+     local -i ret
+
+     "$SNEAKY" && useragent="$UA_SNEAKY"
+
+     if type -p curl &>/dev/null; then
+          if [[ -z "$PROXY" ]]; then
+               headers="$(curl --head -s  --noproxy '*' -A $''"$useragent"'' "$1")"
+          else
+               # for the sake of simplicity assume the proxy is using http
+               headers="$(curl --head -s -x $PROXYIP:$PROXYPORT -A $''"$useragent"'' "$1")"
+          fi
+          ret=$?
+          [[ $ret -eq 0 ]] && tm_out "$headers"
+          return $?
+     elif type -p wget &>/dev/null; then
+          # wget has no proxy command line. We need to use http_proxy instead. And for the sake of simplicity
+          # assume the GET protocol we query is using http -- http_proxy is the $ENV not for the connection TO
+          # the proxy, but for the protocol we query THROUGH the proxy
+          if [[ -z "$PROXY" ]]; then
+                headers="$(wget --no-proxy -q -S -U $''"$useragent"'' -O /dev/null "$1" 2>&1)"
+          else
+               if [[ -z "$http_proxy" ]]; then
+                    headers="$(http_proxy=http://$PROXYIP:$PROXYPORT wget -q -S  -U $''"$useragent"'' -O /dev/null "$1" 2>&1)"
+               else
+                    headers="$(wget -q -S -U $''"$useragent"'' -O /dev/null "$1" 2>&1)"
+               fi
+          fi
+          ret=$?
+          [[ $ret -eq 0 ]] && tm_out "$headers"
+          [[ $ret -eq 8 ]] && tm_out "$headers"
+          return $?
+     else
+          return 1
+     fi
+}
+
 ldap_get() {
      local ldif
      local -i success
@@ -1575,6 +1622,54 @@ ldap_get() {
           pr_litecyan " (for LDAP CRL check install \"curl\")"
           fileout "$jsonID" "INFO" "LDAP CRL revocation check needs \"curl\""
           return 2
+     fi
+}
+
+# checks whether the public key in arg1 appears in the https://pwnedkeys.com/ database.
+# arg1: file containing certificate
+# arg2: public key algorithm
+# arg3 key size
+# Responses are as follows:
+#     0 - not checked
+#     1 - key not found in database
+#     2 - key found in database
+check_pwnedkeys() {
+     local cert="$1"
+     local cert_key_algo="$2"
+     local -i cert_keysize="$3"
+     local pubkey curve response
+
+     "$PHONE_OUT" || return 0
+
+     # https://pwnedkeys.com only keeps records on 1024 bit and larger RSA keys,
+     # as well as elliptic-curve keys on the P-256, P-384, and P-521 curves.
+     if [[ "$cert_key_algo" =~ RSA ]] || [[ "$cert_key_algo" =~ rsa ]]; then
+          [[ $cert_keysize -ge 1024 ]] || return 0
+     elif [[ "$cert_key_algo" =~ ecdsa ]] || [[ "$cert_key_algo" == *ecPublicKey ]]; then
+          [[ $cert_keysize -eq 256 ]] || [[ $cert_keysize -eq 384 ]] || \
+               [[ $cert_keysize -eq 521 ]] || return 0
+     else
+          return 0
+     fi
+
+     pubkey="$($OPENSSL x509 -in "$cert" -pubkey -noout 2>/dev/null)"
+     # If it is an elliptic curve key, check that it is P-256, P-384, or P-521.
+     if [[ "$cert_key_algo" =~ ecdsa ]] || [[ "$cert_key_algo" == *ecPublicKey ]]; then
+          curve="$($OPENSSL ec -pubin -text <<< "$pubkey" 2>/dev/null)"
+          curve="${curve#*ASN1 OID: }"
+          [[ "$curve" == prime256v1* ]] || [[ "$curve" == secp384r1* ]] || \
+               [[ "$curve" == secp521r1* ]] || return 0
+     fi
+     fingerprint="$($OPENSSL pkey -pubin -outform DER <<< "$pubkey" 2>/dev/null | $OPENSSL dgst -sha256 -hex 2>/dev/null)"
+     fingerprint="${fingerprint#*= }"
+     response="$(http_get_header "https://v1.pwnedkeys.com/$fingerprint")"
+     [[ $? -eq 0 ]] || return 0
+     if [[ "$response" =~ "404 Not Found" ]]; then
+          return 1
+     elif [[ "$response" =~ "200 OK" ]]; then
+          return 2
+     else
+          return 0
      fi
 }
 
@@ -8491,6 +8586,16 @@ certificate_info() {
      else
           fileout "certs_list_ordering_problem${json_postfix}" "INFO" "no"
           outln
+     fi
+
+     if "$PHONE_OUT"; then
+          out "$indent"; pr_bold " https://pwnedkeys.com/       "
+          check_pwnedkeys "$HOSTCERT" "$cert_key_algo" "$cert_keysize"
+          case "$?" in
+               0) outln "not checked"; fileout "pwnedkeys${json_postfix}" "INFO" "not checked" ;;
+               1) outln "not in database"; fileout "pwnedkeys${json_postfix}" "INFO" "not in database" ;;
+               2) prln_svrty_critical "key appears in database"; fileout "pwnedkeys${json_postfix}" "CRITICAL" "not checked" ;;
+          esac
      fi
 
      out "$indent"; pr_bold " Certificate Revocation List  "
