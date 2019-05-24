@@ -1770,26 +1770,50 @@ asciihex_to_binary_file(){
      local -i len
      local -i i ip2 ip4 ip6 ip8 ip10 ip12 ip14
      local -i remainder
+     if [ $file == "/dev/stdout" ]; then
+          local stdout="1"
+     else
+          local stdout="0"
+     fi
+
 
      len=${#string}
      [[ $len%2 -ne 0 ]] && return 1
 
      for (( i=0; i <= len-16 ; i=i+16 )); do
           ip2=$i+2; ip4=$i+4; ip6=$i+6; ip8=$i+8; ip10=$i+10; ip12=$i+12; ip14=$i+14
-          printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}\x${string:ip14:2}" >> "$file"
+          if [ $stdout == "1" ]; then
+                printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}\x${string:ip14:2}"
+          else
+                printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}\x${string:ip14:2}" >> "$file"
+          fi
+
      done
 
      ip2=$i+2; ip4=$i+4; ip6=$i+6; ip8=$i+8; ip10=$i+10; ip12=$i+12; ip14=$i+14
      remainder=$len-$i
-     case $remainder in
-           2) printf -- "\x${string:i:2}" >> "$file" ;;
-           4) printf -- "\x${string:i:2}\x${string:ip2:2}" >> "$file" ;;
-           6) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}" >> "$file" ;;
-           8) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}" >> "$file" ;;
-          10) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}" >> "$file" ;;
-          12) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}" >> "$file" ;;
-          14) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}" >> "$file" ;;
-     esac
+     if [ $stdout == "1" ]; then
+          case $remainder in
+                2) printf -- "\x${string:i:2}" ;;
+                4) printf -- "\x${string:i:2}\x${string:ip2:2}"  ;;
+                6) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}"  ;;
+                8) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}"  ;;
+               10) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}"  ;;
+               12) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}"  ;;
+               14) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}"  ;;
+          esac
+     else
+          case $remainder in
+                2) printf -- "\x${string:i:2}" >> "$file" ;;
+                4) printf -- "\x${string:i:2}\x${string:ip2:2}" >> "$file" ;;
+                6) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}" >> "$file" ;;
+                8) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}" >> "$file" ;;
+               10) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}" >> "$file" ;;
+               12) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}" >> "$file" ;;
+               14) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}" >> "$file" ;;
+          esac
+     fi
+
      return 0
 }
 
@@ -14017,7 +14041,8 @@ run_crime() {
      pr_bold " CRIME, TLS " ; out "($cve)                "
 
      # first we need to test whether OpenSSL binary has zlib support
-     $OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib
+     # /dev/stdout doesn't work on all platforms; 2>&1 seems to work
+     $OPENSSL zlib -e -a -in /dev/stdin 2>&1 </dev/null | grep -q zlib
      if [[ $? -eq 0 ]]; then
           if "$SSL_NATIVE"; then
                prln_local_problem "$OPENSSL lacks zlib support"
@@ -16674,7 +16699,13 @@ EOF
 }
 
 maketempf() {
-     TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX) || exit $ERR_FCREATE
+     # GH Issue #1273 - /tmp might not be writable
+     if [ -w /tmp ]; then
+          TEMPPATH=/tmp
+     else
+	  TEMPPATH=`pwd`
+     fi
+     TEMPDIR=$(mktemp -d $TEMPPATH/testssl.XXXXXX) || exit $ERR_FCREATE
      TMPFILE=$TEMPDIR/tempfile.txt || exit $ERR_FCREATE
      if [[ "$DEBUG" -eq 0 ]]; then
           ERRFILE="/dev/null"
