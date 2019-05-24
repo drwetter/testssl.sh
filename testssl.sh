@@ -1770,7 +1770,7 @@ asciihex_to_binary_file(){
      local -i len
      local -i i ip2 ip4 ip6 ip8 ip10 ip12 ip14
      local -i remainder
-     if [ $file == "/dev/stdout" ]; then
+     if [[ $file == /dev/stdout ]]; then
           local stdout="1"
      else
           local stdout="0"
@@ -1782,7 +1782,7 @@ asciihex_to_binary_file(){
 
      for (( i=0; i <= len-16 ; i=i+16 )); do
           ip2=$i+2; ip4=$i+4; ip6=$i+6; ip8=$i+8; ip10=$i+10; ip12=$i+12; ip14=$i+14
-          if [ $stdout == "1" ]; then
+          if [[ $stdout == 1 ]]; then
                 printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}\x${string:ip14:2}"
           else
                 printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}\x${string:ip14:2}" >> "$file"
@@ -1792,7 +1792,7 @@ asciihex_to_binary_file(){
 
      ip2=$i+2; ip4=$i+4; ip6=$i+6; ip8=$i+8; ip10=$i+10; ip12=$i+12; ip14=$i+14
      remainder=$len-$i
-     if [ $stdout == "1" ]; then
+     if [[ $stdout == 1 ]]; then
           case $remainder in
                 2) printf -- "\x${string:i:2}" ;;
                 4) printf -- "\x${string:i:2}\x${string:ip2:2}"  ;;
@@ -16700,7 +16700,7 @@ EOF
 
 maketempf() {
      # GH Issue #1273 - /tmp might not be writable
-     if [ -w /tmp ]; then
+     if [[ -w /tmp ]]; then
           TEMPPATH=/tmp
      else
 	  TEMPPATH=`pwd`
