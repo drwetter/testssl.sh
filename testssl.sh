@@ -351,6 +351,7 @@ HAS_IRC=false
 HAS_CHACHA20=false
 HAS_AES128_GCM=false
 HAS_AES256_GCM=false
+HAS_ZLIB=false
 OSSL_CIPHERS_S=""
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
@@ -11587,6 +11588,7 @@ parse_tls_serverhello() {
                     16) tmln_out " (certificate_status)" ;;
                     17) tmln_out " (supplemental_data)" ;;
                     18) tmln_out " (key_update)" ;;
+                    19) tmln_out " (compressed_certificate)" ;;
                     FE) tmln_out " (message_hash)" ;;
                     *) tmln_out ;;
                esac
@@ -11646,6 +11648,36 @@ parse_tls_serverhello() {
                fi
                tls_certificate_status_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_certificate_status_ascii_len=$msg_len
+          elif [[ "$tls_msg_type" == 19 ]]; then
+               if [[ -n "$tls_certificate_ascii" ]]; then
+                    debugme tmln_warning "Response contained more than one Certificate handshake message."
+                    [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
+                    return 1
+               fi
+               if [[ $DEBUG -ge 3 ]]; then
+                    tm_out "          Certificate Compression Algorithm: ${tls_handshake_ascii:i:4}"
+                    case ${tls_handshake_ascii:i:4} in
+                         0001) tmln_out " (ZLIB)" ;;
+                         0002) tmln_out " (Brotli)" ;;
+                         0003) tmln_out " (Zstandard)" ;;
+                         *)    tmln_out ;;
+                    esac
+                    offset=$((i+4))
+                    tmln_out "          Uncompressed certificate length:   $(printf "%d" 0x${tls_handshake_ascii:offset:6})"
+                    tmln_out
+               fi
+               if [[ "$process_full" =~ all ]] && "$HAS_ZLIB" && [[ "${tls_handshake_ascii:i:4}" == 0001 ]]; then
+                    offset=$((i+4))
+                    tls_certificate_ascii_len=2*0x${tls_handshake_ascii:offset:6}
+                    offset=$((i+16))
+                    len1=$((msg_len-16))
+                    tls_certificate_ascii="$(asciihex_to_binary_file "${tls_handshake_ascii:offset:len1}" /dev/stdout | $OPENSSL zlib -d 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+                    tls_certificate_ascii="${tls_certificate_ascii%%[!0-9A-F]*}"
+                    if [[ ${#tls_certificate_ascii} -ne $tls_certificate_ascii_len ]]; then
+                         debugme tmln_warning "Length of uncompressed certificates did not match specified length."
+                         return 1
+                    fi
+               fi
           fi
      done
 
@@ -16555,6 +16587,8 @@ find_openssl_binary() {
 
      $OPENSSL enc -aes-256-gcm -K 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef -iv 0123456789abcdef01234567  > /dev/null 2> /dev/null <<< "test"
      [[ $? -eq 0 ]] && HAS_AES256_GCM=true
+
+     [[ "$(echo -e "\x78\x9C\xAB\xCA\xC9\x4C\xE2\x02\x00\x06\x20\x01\xBC" | $OPENSSL zlib -d 2>/dev/null)" == zlib ]] && HAS_ZLIB=true
 
      if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
           if type -p timeout >/dev/null 2>&1; then
