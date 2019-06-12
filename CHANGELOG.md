@@ -21,6 +21,7 @@
 * TLS Robustness check (GREASE)
 * Expect-CT Header Detection
 * `--phone-out` does certificate revocation checks via OCSP (LDAP+HTTP) and with CRL
+* `--phone-out` checks whether the private key has been compromised via https://pwnedkeys.com/
 * Fully OpenBSD and LibreSSL support
 * Missing SAN warning
 * Added support for private CAs
@@ -33,6 +34,7 @@
 * Better support for XMPP via STARTTLS & faster
 * Certificate check for to-name in stream of XMPP
 * Support for NNTP via STARTTLS
+* Support for SNI and STARTTLS
 * More robustness for any STARTTLS protocol (fall back to plaintext while in TLS)
 * Fixed TCP fragmentation
 * Added `--ids-friendly` switch
