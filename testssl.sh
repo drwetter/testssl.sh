@@ -299,6 +299,7 @@ ERRFILE=""
 CLIENT_AUTH=false
 TLS_TICKETS=false
 NO_SSL_SESSIONID=false
+CERT_COMPRESSION=false                  # secret flag to set in addition to --devel for certificate compression
 HOSTCERT=""                             # File with host certificate, without intermediate certificate
 HEADERFILE=""
 HEADERVALUE=""
@@ -1582,7 +1583,7 @@ http_get_header() {
           fi
           ret=$?
           [[ $ret -eq 0 ]] && tm_out "$headers"
-          return $?
+          return $ret
      elif type -p wget &>/dev/null; then
           # wget has no proxy command line. We need to use http_proxy instead. And for the sake of simplicity
           # assume the GET protocol we query is using http -- http_proxy is the $ENV not for the connection TO
@@ -1598,8 +1599,10 @@ http_get_header() {
           fi
           ret=$?
           [[ $ret -eq 0 ]] && tm_out "$headers"
-          [[ $ret -eq 8 ]] && tm_out "$headers"
-          return $?
+          # wget(1): "8: Server issued an error response.". Happens e.g. when 404 is returned. However also if the call wasn't correct (400)
+          # So we assume for now that everything is submitted correctly. We parse the error code too later
+          [[ $ret -eq 8 ]] && ret=0 && tm_out "$headers"
+          return $ret
      else
           return 1
      fi
@@ -1634,6 +1637,7 @@ ldap_get() {
 #     0 - not checked
 #     1 - key not found in database
 #     2 - key found in database
+#     7 - network/proxy failure
 check_pwnedkeys() {
      local cert="$1"
      local cert_key_algo="$2"
@@ -1664,7 +1668,12 @@ check_pwnedkeys() {
      fingerprint="$($OPENSSL pkey -pubin -outform DER <<< "$pubkey" 2>/dev/null | $OPENSSL dgst -sha256 -hex 2>/dev/null)"
      fingerprint="${fingerprint#*= }"
      response="$(http_get_header "https://v1.pwnedkeys.com/$fingerprint")"
-     [[ $? -eq 0 ]] || return 0
+     # Handle curl's/wget's connectivity exit codes
+     case $? in
+          4|5|7)     return 7 ;;
+          1|2|3|6)   return 0 ;;
+                     # unknown codes we just say "not checked"
+     esac
      if [[ "$response" =~ "404 Not Found" ]]; then
           return 1
      elif [[ "$response" =~ "200 OK" ]]; then
@@ -8590,12 +8599,13 @@ certificate_info() {
      fi
 
      if "$PHONE_OUT"; then
-          out "$indent"; pr_bold " https://pwnedkeys.com/       "
+          out "$indent"; pr_bold " In pwnedkeys.com DB          "
           check_pwnedkeys "$HOSTCERT" "$cert_key_algo" "$cert_keysize"
           case "$?" in
                0) outln "not checked"; fileout "pwnedkeys${json_postfix}" "INFO" "not checked" ;;
                1) outln "not in database"; fileout "pwnedkeys${json_postfix}" "INFO" "not in database" ;;
-               2) prln_svrty_critical "key appears in database"; fileout "pwnedkeys${json_postfix}" "CRITICAL" "not checked" ;;
+               2) pr_svrty_critical "NOT ok --"; outln " key appears in database"; fileout "pwnedkeys${json_postfix}" "CRITICAL" "private key is known" ;;
+               7) prln_warning "error querying https://v1.pwnedkeys.com"; fileout "pwnedkeys${json_postfix}" "WARN" "connection error" ;;
           esac
      fi
 
@@ -8623,7 +8633,7 @@ certificate_info() {
                          out "$spaces"
                     fi
                     out "$line"
-                    if [[ "$expfinding" != "expired" ]]; then
+                    if [[ "$expfinding" != expired ]]; then
                          check_revocation_crl "$line" "cert_crlRevoked${json_postfix}"
                          ret=$((ret +$?))
                     fi
@@ -17739,7 +17749,7 @@ determine_optimal_proto() {
                          *) ;;
                     esac
                     #FIXME: to be replaced / added by socket ( if "$using_sockets" ...)
-                    $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg -starttls $1") </dev/null >$TMPFILE 2>>$ERRFILE
+                    $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg -starttls $1" $SNI) </dev/null >$TMPFILE 2>>$ERRFILE
                     if sclient_auth $? $TMPFILE; then
                          all_failed=false
                          break
@@ -17879,7 +17889,6 @@ determine_service() {
           case "$protocol" in
                ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql|nntp)
                     STARTTLS="-starttls $protocol"
-                    SNI=""
                     if [[ "$protocol" == xmpp ]]; then
                          # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
                          NODEIP="$NODE"
@@ -19344,7 +19353,12 @@ lets_roll() {
                     sslv2_sockets "" "true"
                else
                     if [[ "$TLS_LOW_BYTE" == 04 ]]; then
-                         tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "ephemeralkey"
+                         if "$CERT_COMPRESSION"; then
+                              # See PR #1279
+                              tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all+" "00,1b, 00,03, 02, 00,01"
+                         else
+                              tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "ephemeralkey"
+                         fi
                     else
                          tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all"
                     fi
