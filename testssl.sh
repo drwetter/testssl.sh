@@ -299,8 +299,8 @@ ERRFILE=""
 CLIENT_AUTH=false
 TLS_TICKETS=false
 NO_SSL_SESSIONID=false
-CERT_COMPRESSION=false                  # secret flag to set in addition to --devel for certificate compression
-HOSTCERT=""                             # File with host certificate, without intermediate certificate
+CERT_COMPRESSION=${CERT_COMPRESSION:-false}  # secret flag to set in addition to --devel for certificate compression
+HOSTCERT=""                                  # File with host certificate, without intermediate certificate
 HEADERFILE=""
 HEADERVALUE=""
 HTTP_STATUS_CODE=""
@@ -14163,9 +14163,7 @@ run_crime() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CRIME vulnerability " && outln
      pr_bold " CRIME, TLS " ; out "($cve)                "
 
-     # first we need to test whether OpenSSL binary has zlib support
-     $OPENSSL zlib -e -a -in /dev/stdin &>/dev/stdout </dev/null | grep -q zlib
-     if [[ $? -eq 0 ]]; then
+     if ! "$HAS_ZLIB"; then
           if "$SSL_NATIVE"; then
                prln_local_problem "$OPENSSL lacks zlib support"
                fileout "CRIME_TLS" "WARN" "CRIME, TLS: Not tested. $OPENSSL lacks zlib support" "$cve" "$cwe"
@@ -17730,6 +17728,8 @@ determine_optimal_proto() {
      local tmp=""
      local using_sockets=true
 
+     "$do_tls_sockets" && return 0
+
      >$ERRFILE
      "$SSL_NATIVE" && using_sockets=false
 
@@ -18999,6 +18999,7 @@ parse_cmd_line() {
                     # arg2: list of cipher suites / hostname/ip
                     # arg3: hostname/ip
                     HEX_CIPHER="$TLS12_CIPHER"
+                    # DEBUG=3  ./testssl.sh --devel 04 "13,02, 13,01" google.com                               --> TLS 1.3
                     # DEBUG=3  ./testssl.sh --devel 03 "cc, 13, c0, 13" google.de                              --> TLS 1.2, old CHACHA/POLY
                     # DEBUG=3  ./testssl.sh --devel 03 "cc,a8, cc,a9, cc,aa, cc,ab, cc,ac" blog.cloudflare.com -->          new CHACHA/POLY
                     # DEBUG=3  ./testssl.sh --devel 01 yandex.ru                     --> TLS 1.0
@@ -19011,7 +19012,7 @@ parse_cmd_line() {
                     fi
                     shift
                     do_tls_sockets=true
-                    outln "\nTLS_LOW_BYTE/HEX_CIPHER: ${TLS_LOW_BYTE}/${HEX_CIPHER}"
+                    outln "\nTLS_LOW_BYTE, HEX_CIPHER: \"${TLS_LOW_BYTE}\", \"${HEX_CIPHER}\""
                     ;;
                --wide)
                     WIDE=true
@@ -19355,6 +19356,7 @@ lets_roll() {
                     if [[ "$TLS_LOW_BYTE" == 04 ]]; then
                          if "$CERT_COMPRESSION"; then
                               # See PR #1279
+                              [[ $DEBUG -eq 3 ]] && tmln_out "including TLS extension certificate compression"
                               tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "all+" "00,1b, 00,03, 02, 00,01"
                          else
                               tls_sockets "$TLS_LOW_BYTE" "$HEX_CIPHER" "ephemeralkey"
