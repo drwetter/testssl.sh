@@ -7630,7 +7630,7 @@ compare_server_name_to_cert() {
 
 # This function determines whether the certificate (arg3) contains "visibility
 # information" (see Section 4.3.3 of
-# https://www.etsi.org/deliver/etsi_ts/103500_103599/10352303/01.01.01_60/ts_10352303v010101p.pdf.
+# https://www.etsi.org/deliver/etsi_ts/103500_103599/10352303/01.01.01_60/ts_10352303v010101p.pdf .
 etsi_etls_visibility_info() {
      local jsonID="$1"
      local spaces="$2"
@@ -8505,10 +8505,13 @@ certificate_info() {
 #         https://certs.opera.com/03/ev-oids.xml
 #         see #967
 
-     out "$indent"; pr_bold " \"eTLS\""
-     out " (visibility info)     "
+     out "$indent"; pr_bold " ETS/\"eTLS\""
+     out ", visibility info  "
      jsonID="cert_eTLS"
      etsi_etls_visibility_info "$jsonID" "$spaces" "$HOSTCERT" "$cert_txt"
+     # *Currently* this is even listed as a vulnerability (CWE-310, CVE-2019-919), see
+     # https://nvd.nist.gov/vuln/detail/CVE-2019-9191, https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-9191
+     # For now we leave this here. We may want to change that later or add infos to other sections (PFS & vulnerability)
 
      out "$indent"; pr_bold " Certificate Validity (UTC)   "
 
