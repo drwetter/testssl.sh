@@ -2716,7 +2716,7 @@ emphasize_stuff_in_headers(){
           -e "s/system-wsgw-management-loopback/${yellow}system-wsgw-management-loopback${off}/g"
 
      if "$do_html"; then
-          if [[ $COLOR -eq 2 ]]; then
+          if [[ $COLOR -ge 2 ]]; then
                html_out "$(tm_out "$1" | sed -e 's/\&/\&amp;/g' \
                     -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g" \
                     -e "s/\([0-9]\)/${html_brown}\1${html_off}/g" \
