@@ -666,7 +666,6 @@ set_color_functions() {
      type -p tput &>/dev/null || return 0      # Hey wait, do we actually have tput / ncurses ?
      tput cols &>/dev/null || return 0         # tput under BSDs and GNUs doesn't work either (TERM undefined?)
      tput sgr0 &>/dev/null || ncurses_tput=false
-     tput sgr 0 1 &>/dev/null || ncurses_tput=false    # OpenBSD succeed the previous one but fails here
      if [[ "$COLOR" -ge 2 ]]; then
           if $ncurses_tput; then
                red=$(tput setaf 1)
