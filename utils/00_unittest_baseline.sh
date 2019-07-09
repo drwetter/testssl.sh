@@ -53,10 +53,10 @@ pid=$!
 rm $FILE 2>/dev/null
 echo "Running testssl.sh SSLv2 protocol check against localhost for SSLv2: "
 ./testssl.sh -p -q --warnings=off --jsonfile=$FILE localhost:4433
-check_result sslv2 CRITICAL "SSLv2 offered"
+check_result SSLv2 CRITICAL "vulnerable with 9 ciphers"
 [[ $? -eq 0 ]] && echo "SSLv2: PASSED" || echo "FAILED"
 echo
-kill $pid
+kill -9 $pid
 wait $pid 2>/dev/null
 
 ### 2) test NPN + ALPN
@@ -65,33 +65,32 @@ pid=$!
 rm $FILE
 echo "Running testssl.sh HTTP/2 protocol checks against localhost: "
 ./testssl.sh -q --jsonfile=$FILE --protocols localhost:4433
-if check_result spdy_npn "spdy/3,  http/1.1"; then
+if check_result NPN "spdy/3,  http/1.1"; then
      echo "SPDY/NPN:  PASSED"
 else
      echo "SPDY/NPN:  FAILED"
 fi
 
-if check_result https_alpn "h2"; then
+if check_result ALPN "h2"; then
      echo "HTTP2/ALPN: PASSED"
 else
      echo "HTTP2/ALPN: FAILED"
 fi
-kill $pid
+kill -9 $pid
 wait $pid 2>/dev/null
-
 rm $FILE
-exit 0
 
 ### 3) test almost all other stuff
 $OPENSSL s_server -cipher 'ALL:COMPLEMENTOFALL' -www -key /tmp/server.pem -cert /tmp/server.crt &>/dev/null &
 pid=$!
 rm $FILE
-echo "Running basline check with testssl.sh against localhost"
-./testssl.sh -q --jsonfile=$FILE --protocols --standard  --pfs --vulnerable --each-cipher --client-simulation localhost:4433
+echo "Running baseline check with testssl.sh against localhost"
+./testssl.sh -q --jsonfile=$FILE localhost:4433
 #check_result sslv2 CRITICAL "is offered"
 kill -9 $pid
 wait $pid 2>/dev/null
 
+rm $FILE
 
 
 ### test server defaults
