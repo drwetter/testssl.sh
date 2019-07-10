@@ -12,8 +12,8 @@ echo "#######  (contains some weak cryptography)    #######"
 echo "#####################################################"
 echo
 
-OPT11="enable-tls1_3 enable-tls13downgrade enable-ec_nistp_64_gcc_128 sctp enable-aria \
-enable-asan enable-rc5 enable-ssl3 enable-ssl3-method enable-dynamic-engine enable-ssl-trace \
+OPT11="enable-tls1_3 enable-ec_nistp_64_gcc_128 sctp enable-aria enable-asan enable-rc5 \
+enable-ssl3 enable-ssl3-method enable-dynamic-engine enable-ssl-trace \
 -DOPENSSL_TLS_SECURITY_LEVEL=0 "
 
 STDOPTIONS="--prefix=/usr/ --openssldir=/etc/ssl -DOPENSSL_USE_BUILD_DATE enable-zlib \
@@ -80,11 +80,8 @@ case $(uname -m) in
 			name2add=krb
 			./config $STDOPTIONS --with-krb5-flavor=MIT
 		else
-			#name2add=static
-			#./config $STDOPTIONS enable-ec_nistp_64_gcc_128 -static
-			echo \"$STDOPTIONS\"
-			sleep 3
-			./config $STDOPTIONS enable-ec_nistp_64_gcc_128
+			name2add=static
+			./config $STDOPTIONS -static
 		fi
 		[ $? -ne 0 ] && error "configuring"
 		makeall && copyfiles "$name2add"
