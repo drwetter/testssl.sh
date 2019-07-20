@@ -58,7 +58,7 @@ usage before taking the next step in the development of this project.</s>
 </s>
 
 Time has passed by, development evolved. It is not recommended to use 2.9.5 anymore. There are bugs in 2.9.5 which would require larger efforts to fix.
-As of 2019 it is recommended to switch to the 2.9dev branch -- 3.0 release is imminent, it's build on 2.9.5, has matured and has less known bugs.
+As of 2019 it is recommended to switch to the 3.0 branch -- 3.0 release is imminent, it's build on 2.9.5, has matured and has less known bugs.
 
 
 #### Features implemented in 2.9.5
