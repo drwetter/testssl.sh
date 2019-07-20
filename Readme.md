@@ -1,4 +1,17 @@
 
+#### Status
+
+In the 2.9dev branch we __were__ developing the 3.0 release. We're currently in the
+release candidate phase in the 3.0 branch. You should use 3.0 rather than 2.9dev. _In this
+branch there won't be any further commits._ 
+
+
+
+For the previous stable version please see release
+[2.9.5](https://github.com/drwetter/testssl.sh/tree/2.9.5) which is is the
+successor of 2.8 and stable for day-to-day work. Support for 2.9.5 will be 
+soon dropped. 2.8 is not supported anymore.
+
 ## Intro
 
 [![Build Status](https://travis-ci.org/drwetter/testssl.sh.svg?branch=master)](https://travis-ci.org/drwetter/testssl.sh)
@@ -47,16 +60,6 @@ man pages. Older sample runs are at https://testssl.sh/.
 
      docker run -ti drwetter/testssl.sh <your_cmd_line>
 
-#### Status
-
-In the 2.9dev branch we're developing the 3.0 release. We're currently in the
-release candidate phase. That means you can and should use it for production
-and let us know if you encounter any additional bugs.
-
-For the previous stable version please see release
-[2.9.5](https://github.com/drwetter/testssl.sh/tree/2.9.5) which is is the
-successor of 2.8 and stable for day-to-day work. Support for 2.9.5 will be 
-soon dropped. 2.8 is not supported anymore.
 
 #### Compatibility
 
