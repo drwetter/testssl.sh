@@ -10012,7 +10012,7 @@ starttls_postgres_dialog() {
      debugme echo "=== starting postgres STARTTLS dialog ==="
      local init_tls=",x00, x00 ,x00 ,x08 ,x04 ,xD2 ,x16 ,x2F"
      socksend "${init_tls}" 0                               && debugme echo "initiated STARTTLS" &&
-     starttls_io "" S 1                                     && debugme echo "received ack for STARTTLS"
+     starttls_io "" S 1                                     && debugme echo "received ack (="S") for STARTTLS"
      local ret=$?
      debugme echo "=== finished postgres STARTTLS dialog with ${ret} ==="
      return $ret
@@ -17971,7 +17971,7 @@ determine_sizelimitbug() {
      [[ "$STARTTLS" =~ irc ]] && return 0
 
      debugme echo -n "${FUNCNAME[0]} starting at # of ciphers (excl. 00FF): "
-     debugme 'echo  "$test_ciphers" | tr ' ' '\n' | wc -l'
+     debugme echo  "$test_ciphers" | tr ' ' '\n' | wc -l
      # Only with TLS 1.2 offered at the server side it is possible to hit this bug, in practise. Thus
      # we assume if TLS 1.2 is not supported, the server has no cipher size limit bug. It still may,
      # theoretically, but in a regular check with testssl.sh we won't hit this limit with lower protocols.
