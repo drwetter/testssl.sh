@@ -9821,8 +9821,13 @@ starttls_io() {
 
      [[ -n "$3" ]] && waitsleep=$3
      [[ -z "$2" ]] && echo "FIXME $((LINENO))"
-     debugme echo -en "C: \"$1\""
-     echo -en "$1" >&5
+
+     # If there's a sending part it's IO. Postgres sends via socket and replies via
+     # strings "S". So there's no I part of IO ;-)
+     if [[ -n "$1" ]]; then
+          debugme echo -en "C: \"$1\""
+          echo -en "$1" >&5
+     fi
 
      # This seems a bit dangerous but works. No blockings yet. "if=nonblock" doesn't work on BSDs
      buffer="$(dd bs=512 count=1 <&5 2>/dev/null)"
@@ -10005,9 +10010,9 @@ starttls_nntp_dialog() {
 
 starttls_postgres_dialog() {
      debugme echo "=== starting postgres STARTTLS dialog ==="
-     local init_tls="\x00\x00\x00\x08\x04\xD2\x16\x2F"
-     starttls_just_send "${init_tls}"                      && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '' '' 'S'                          && debugme echo "received ack for STARTTLS"
+     local init_tls=",x00, x00 ,x00 ,x08 ,x04 ,xD2 ,x16 ,x2F"
+     socksend "${init_tls}" 0                               && debugme echo "initiated STARTTLS" &&
+     starttls_io "" S 1                                     && debugme echo "received ack for STARTTLS"
      local ret=$?
      debugme echo "=== finished postgres STARTTLS dialog with ${ret} ==="
      return $ret
