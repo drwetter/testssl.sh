@@ -9821,8 +9821,13 @@ starttls_io() {
 
      [[ -n "$3" ]] && waitsleep=$3
      [[ -z "$2" ]] && echo "FIXME $((LINENO))"
-     debugme echo -en "C: \"$1\""
-     echo -en "$1" >&5
+
+     # If there's a sending part it's IO. Postgres sends via socket and replies via
+     # strings "S". So there's no I part of IO ;-)
+     if [[ -n "$1" ]]; then
+          debugme echo -en "C: \"$1\""
+          echo -en "$1" >&5
+     fi
 
      # This seems a bit dangerous but works. No blockings yet. "if=nonblock" doesn't work on BSDs
      buffer="$(dd bs=512 count=1 <&5 2>/dev/null)"
@@ -10005,9 +10010,9 @@ starttls_nntp_dialog() {
 
 starttls_postgres_dialog() {
      debugme echo "=== starting postgres STARTTLS dialog ==="
-     local init_tls="\x00\x00\x00\x08\x04\xD2\x16\x2F"
-     starttls_just_send "${init_tls}"                      && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '' '' 'S'                          && debugme echo "received ack for STARTTLS"
+     local init_tls=", x00, x00 ,x00 ,x08 ,x04 ,xD2 ,x16 ,x2F"
+     socksend "${init_tls}" 0                               && debugme echo "initiated STARTTLS" &&
+     starttls_io "" S 1                                     && debugme echo "received ack (="S") for STARTTLS"
      local ret=$?
      debugme echo "=== finished postgres STARTTLS dialog with ${ret} ==="
      return $ret
@@ -10016,17 +10021,20 @@ starttls_postgres_dialog() {
 starttls_mysql_dialog() {
      debugme echo "=== starting mysql STARTTLS dialog ==="
      local login_request="
-     , 20, 00, 00, 01,               # payload_length, sequence_id
-     85, ae, ff, 00,                 # capability flags, CLIENT_SSL always set
-     00, 00, 00, 01,                 # max-packet size
-     21,                             # character set
-     00, 00, 00, 00, 00, 00, 00, 00, # string[23] reserved (all [0])
-     00, 00, 00, 00, 00, 00, 00, 00,
-     00, 00, 00, 00, 00, 00, 00"
-     code2network "${login_request}"
-     # 1 is the timeout value which only MySQL needs
-     starttls_just_read 1                    && debugme echo -e "\nreceived server greeting" &&
-     starttls_just_send  "$NW_STR" "no-lf"   && debugme echo "initiated STARTTLS"
+     , x20, x00, x00, x01,                   # payload_length, sequence_id
+     x85, xae, xff, x00,                     # capability flags, CLIENT_SSL always set
+     x00, x00, x00, x01,                     # max-packet size
+     x21,                                    # character set
+     x00, x00, x00, x00, x00, x00, x00, x00, # string[23] reserved (all [0])
+     x00, x00, x00, x00, x00, x00, x00, x00,
+     x00, x00, x00, x00, x00, x00, x00"
+     socksend "${login_request}" 0
+     starttls_just_read 1                    && debugme echo "read succeeded"
+     # 1 is the timeout value which only MySQL needs. Note, there seems no response whether STARTTLS
+     # succeeded. We could try harder, see https://github.com/openssl/openssl/blob/master/apps/s_client.c
+     # but atm this seems sufficient as later we will fail if there's no STARTTLS.
+     # BUT: there seeem to be cases when the handshake fails (8S01Bad handshake --> 30 38 53 30 31 42 61 64 20 68 61 6e 64 73 68 61 6b 65).
+     #      also there's a banner in the reply "<version><somebytes>mysql_native_password"
      # TODO: We could detect if the server supports STARTTLS via the "Server Capabilities"
      # bit field, but we'd need to parse the binary stream, with greater precision than regex.
      local ret=$?
@@ -17938,7 +17946,7 @@ determine_service() {
 
                     out " Service set:$CORRECT_SPACES            STARTTLS via "
                     out "$(toupper "$protocol")"
-                    [[ "$protocol" == mysql ]] && out " -- attention, this is experimental"
+                    [[ "$protocol" == mysql ]] && out " (experimental)"
                     fileout "service" "INFO" "$protocol"
                     [[ -n "$XMPP_HOST" ]] && out " (XMPP domain=\'$XMPP_HOST\')"
                     outln
@@ -17961,12 +17969,13 @@ determine_sizelimitbug() {
      local overflow_cipher1='C0,86'
      local overflow_cipher2='C0,88'
 
-     # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it  won't be usable at all (e.g. LDAP)
+     # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
+     # Fixme: find out whether we can't skip this in general for STARTTLS
      [[ "$STARTTLS" =~ ldap ]] && return 0
      [[ "$STARTTLS" =~ irc ]] && return 0
 
      debugme echo -n "${FUNCNAME[0]} starting at # of ciphers (excl. 00FF): "
-     debugme 'echo  "$test_ciphers" | tr ' ' '\n' | wc -l'
+     debugme echo  "$(tr ' ' '\n' <<< "$test_ciphers" | wc -l)"
      # Only with TLS 1.2 offered at the server side it is possible to hit this bug, in practise. Thus
      # we assume if TLS 1.2 is not supported, the server has no cipher size limit bug. It still may,
      # theoretically, but in a regular check with testssl.sh we won't hit this limit with lower protocols.
@@ -18856,7 +18865,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
                          ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|irc|nntp|postgres|mysql) ;;
-                         ftps|smtps|lmtps|pop3s|imaps|xmpps|telnets|ldaps|ircs|nntps) ;;
+                         ftps|smtps|lmtps|pop3s|imaps|xmpps|telnets|ldaps|ircs|nntps|mysqls) ;;
                          *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
                     esac
