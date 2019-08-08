@@ -1,6 +1,4 @@
 language: perl
-perl:
-  - "5.22"
 addons:
   apt:
     packages:
