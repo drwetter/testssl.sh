@@ -1,6 +1,6 @@
 language: perl
 perl:
-  - "5.18"
+  - "5.22"
 addons:
   apt:
     packages:
