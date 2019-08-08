@@ -50,18 +50,18 @@ You can download testssl.sh by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
-Or help yourself downloading the ZIP archive [https://github.com/drwetter/testssl.sh/archive/3.0.zip](https://github.com/drwetter/testssl.sh/archive/3.0.zip). Just ``cd`` to the directory created (=INSTALLDIR) and run it off there. 
+Or help yourself downloading the ZIP archive [https://github.com/drwetter/testssl.sh/archive/3.0.zip](https://github.com/drwetter/testssl.sh/archive/3.0.zip). Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
 
-### Docker
+#### Docker
 
 Testssl.sh has minimal requirements. As stated you don't have to install or build anything.  You can just run it from the pulled/cloned directory. Still if you don't want to pull the github repo to your directory of choice you can pull a container from dockerhub and run it:
 ```
 docker run -ti drwetter/testssl.sh <your_cmd_line>
 ```
-Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and run 
+Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and run
 ```
 docker build .
-``` 
+```
 
 followed by ``docker exec -ti <ID> <your_cmd_line>`` where ``ID`` is the identifier in the last line from the build command like
 
@@ -73,7 +73,7 @@ Successfully built 889fa2f99933
 ### Status
 
 We're currently in the late release candidate phase. That means you can and should use it for production
-and let us know if you encounter any additional bugs. Features implemented in 3.0 are listed in the [Changelog](https://github.com/drwetter/testssl.sh/CHANGELOG.md).
+and let us know if you encounter any additional bugs. Features implemented in 3.0 are listed in the [Changelog](https://github.com/drwetter/testssl.sh/blob/3.0/CHANGELOG.md).
 
 Support for 2.9.5 has been dropped.
 
@@ -87,15 +87,14 @@ Support for 2.9.5 has been dropped.
 
 ### Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/CONTRIBUTING.md) for details.
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/blob/3.0/CONTRIBUTING.md) for details.
 
 ### Bug reports
 
-Also bug reports are important. It makes this project more robust.
+Bug reports are important. It makes this project more robust.
 
-Please file bugs in the issue tracker @ github. Do not forget to provide detailed information, see template. Further details @
-https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. Nobody can read your
-thoughts -- yet. And only agencies your screen ;-)
+Please file bugs in the issue tracker @ github. Do not forget to provide detailed information, see template for issue, and further details @
+https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. Nobody can read your thoughts -- yet. And only agencies your screen ;-)
 
 You can also debug yourself, see [here](https://github.com/drwetter/testssl.sh/wiki/Findings-and-HowTo-Fix-them).
 
