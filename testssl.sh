@@ -14050,35 +14050,37 @@ run_ticketbleed() {
      return $ret
 }
 
-
+# Overview @ http://www.exploresecurity.com/wp-content/uploads/custom/SSL_manual_cheatsheet.html
+#
 run_renego() {
-# no SNI here. Not needed as there won't be two different SSL stacks for one IP
      local legacycmd="" proto="$OPTIMAL_PROTO"
-     local insecure_renogo_str="Secure Renegotiation IS NOT"
      local sec_renego sec_client_renego
      local -i ret=0
-     local cve="CVE-2009-3555"
+     local cve=""
      local cwe="CWE-310"
      local hint=""
      local jsonID=""
+     # No SNI needed here as there won't be two different SSL stacks for one IP
 
      "$HAS_TLS13" && [[ -z "$proto" ]] && proto="-no_tls1_3"
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Renegotiation vulnerabilities " && outln
 
-     pr_bold " Secure Renegotiation "; out "($cve)      "    # and RFC 5746, OSVDB 59968-59974
-     jsonID="secure_renego"                                  # community.qualys.com/blogs/securitylabs/2009/11/05/ssl-and-tls-authentication-gap-vulnerability-discovered
-     $OPENSSL s_client $(s_client_options "$proto $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI $PROXY") 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
+     pr_bold " Secure Renegotiation (RFC 5746)           "
+     jsonID="secure_renego"
+     # first fingerprint for the Line "Secure Renegotiation IS NOT" or "Secure Renegotiation IS "
+     $OPENSSL s_client $(s_client_options "$proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
      if sclient_connect_successful $? $TMPFILE; then
-          grep -iaq "$insecure_renogo_str" $TMPFILE
+          grep -iaq "Secure Renegotiation IS NOT" $TMPFILE
           sec_renego=$?                                                    # 0= Secure Renegotiation IS NOT supported
-#FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
+          # grep -iaq "Secure Renegotiation IS supported"
+          #FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
           case $sec_renego in
-               0)   prln_svrty_critical "VULNERABLE (NOT ok)"
+               0)   prln_svrty_critical "Not supported / VULNERABLE (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                     ;;
-               1)   prln_svrty_best "not vulnerable (OK)"
-                    fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
+               1)   prln_svrty_best "supported (OK)"
+                    fileout "$jsonID" "OK" "supported" "$cve" "$cwe"
                     ;;
                *)   prln_warning "FIXME (bug): $sec_renego"
                     fileout "$jsonID" "WARN" "FIXME (bug) $sec_renego" "$cve" "$cwe"
@@ -14089,10 +14091,18 @@ run_renego() {
           fileout "$jsonID" "WARN" "OpenSSL handshake didn't succeed" "$cve" "$cwe"
      fi
 
-     # see: https://community.qualys.com/blogs/securitylabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
-     #      http://blog.ivanristic.com/2009/12/testing-for-ssl-renegotiation.html -- head/get doesn't seem to be needed though
-     pr_bold " Secure Client-Initiated Renegotiation     "  # RFC 5746
+     # FIXME: Basically this can be done with sockets and we might have that information already
+     # see https://tools.ietf.org/html/rfc5746#section-3.4: 'The client MUST include either an empty "renegotiation_info"
+     # extension, or the TLS_EMPTY_RENEGOTIATION_INFO_SCSV signaling cipher suite value in the ClientHello. [..]
+     # When a ServerHello is received, the client MUST check if it includes the "renegotiation_info" extension:
+     # If the extension is not present, the server does not support secure renegotiation'
+
+
+     pr_bold " Secure Client-Initiated Renegotiation     "
      jsonID="secure_client_renego"
+     # see: https://blog.qualys.com/ssllabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
+     #      http://blog.ivanristic.com/2009/12/testing-for-ssl-renegotiation.html -- head/get doesn't seem to be needed though
+     #      https://archive.fo/20130415224936/http://www.thc.org/thc-ssl-dos/, https://vincent.bernat.ch/en/blog/2011-ssl-dos-mitigation
      case "$OSSL_VER" in
           0.9.8*)             # we need this for Mac OSX unfortunately
                case "$OSSL_VER_APPENDIX" in
@@ -14112,6 +14122,7 @@ run_renego() {
                ;;   # all ok
      esac
 
+
      if "$CLIENT_AUTH"; then
           prln_warning "client x509-based authentication prevents this from being tested"
           fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
@@ -14119,7 +14130,7 @@ run_renego() {
      else
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
           # msg enables us to look deeper into it while debugging
-          echo R | $OPENSSL s_client $(s_client_options "$proto $BUGS $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $SNI $PROXY") >$TMPFILE 2>>$ERRFILE &
+          echo R | $OPENSSL s_client $(s_client_options "$proto $BUGS $legacycmd $STARTTLS -msg -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE &
           wait_kill $! $HEADER_MAXSLEEP
           if [[ $? -eq 3 ]]; then
                pr_svrty_good "likely not vulnerable (OK)"; outln ", timed out"        # it hung
@@ -14127,10 +14138,10 @@ run_renego() {
                sec_client_renego=1
           else
                # second try in the foreground as we are sure now it won't hang
-               echo R | $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $SNI $PROXY") >$TMPFILE 2>>$ERRFILE
+               echo R | $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case "$sec_client_renego" in
-                    0)   if [[ $SERVICE == "HTTP" ]]; then
+                    0)   if [[ $SERVICE == HTTP ]]; then
                               pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
                               fileout "$jsonID" "HIGH" "VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
                          else
@@ -14151,7 +14162,11 @@ run_renego() {
           fi
      fi
 
-     #FIXME Insecure Client-Initiated Renegotiation is missing ==> sockets
+     #pr_bold " Insecure Client-Initiated Renegotiation  "  # pre-RFC 5746, CVE-2009-3555
+     #jsonID="insecure_client_renego"
+     #
+     # https://www.openssl.org/news/vulnerabilities.html#y2009. It can only be tested with OpenSSL <=0.9.8k
+     # Insecure Client-Initiated Renegotiation is missing ==> sockets. When we complete the handshake ;-)
 
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
