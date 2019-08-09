@@ -14100,6 +14100,7 @@ run_renego() {
 
      pr_bold " Secure Client-Initiated Renegotiation     "
      jsonID="secure_client_renego"
+     cve="CVE-2011-1473"
      # see: https://blog.qualys.com/ssllabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
      #      http://blog.ivanristic.com/2009/12/testing-for-ssl-renegotiation.html -- head/get doesn't seem to be needed though
      #      https://archive.fo/20130415224936/http://www.thc.org/thc-ssl-dos/, https://vincent.bernat.ch/en/blog/2011-ssl-dos-mitigation
