@@ -2,63 +2,72 @@
 
 # This is more a PoC. Improvements welcome!
 #
-# Current catches:
-#     * JSON::Validator cannot swallow --json-pretty 
-#     * other validators "Test::JSON", "Test::JSON::More", "JSON::Schema", "JSON::Parse" had issues too
 
 use strict;
 use Test::More;
 use JSON;
-use JSON::Validator;
 
-my $jv = JSON::Validator->new;
-my (
-    $out,
-    $json,
-    $found,
-    $tests
-);
-$tests = 0;
+my $tests = 0;
+my $prg="./testssl.sh";
+my $check2run ="--ip=one -q -p --color 0";
+my $uri="";
+my $json="";
+my $out="";
+# Blacklists we use to trigger an error:
+my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal';
+my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem';
 
-my $hostn = "cloudflare.com";
-my $hostm = "smtp-relay.gmail.com:587";
-unlink 'tmp.json';
+die "Unable to open $prg" unless -f $prg;
+
+my $uri="cloudflare.com";
 
 #1
-pass("Running testssl.sh against $hostn with plain JSON output");
-$tests++;
-$out = `./testssl.sh --ssl-native --ip=one -q --jsonfile tmp.json --color 0 $hostn`;
+printf "\n%s\n", "Unit testing plain JSON output --> $uri ...";
+$out = `./testssl.sh $check2run --jsonfile tmp.json $uri`;
 $json = json('tmp.json');
 unlink 'tmp.json';
-
-#2
-my @errors = $jv->validate(@$json);
+my @errors=eval { decode_json($json) };
 is(@errors,0,"no errors");
 $tests++;
 
-#3
-# This testss.sh run deliberately does NOT work as travis-ci.org blocks port 25 egress. The idea
-# is to have a unit test for a failed connection. 
-pass("Running testssl.sh --mx against $hostn with plain JSON -- run will fail");
-$tests++;
-$out = `./testssl.sh --ssl-native --openssl-timeout=10 --ip=one --mx -q --jsonfile tmp.json --color 0 $hostn`;
+#2
+printf "\n%s\n", "Unit testing pretty JSON output --> $uri ...";
+$out = `./testssl.sh $check2run --jsonfile-pretty tmp.json $uri`;
 $json = json('tmp.json');
 unlink 'tmp.json';
+@errors=eval { decode_json($json) };
+is(@errors,0,"no errors");
+$tests++;
+
+
+#3
+# This testss.sh run deliberately does NOT work as travis-ci.org blocks port 25 egress.
+# but the output should be fine. The idea is to have a unit test for a failed connection.
+printf "\n%s\n", "Checking plain JSON output for a failed run '--mx $uri' ...";
+$out = `./testssl.sh --ssl-native --openssl-timeout=10 $check2run --jsonfile tmp.json --mx $uri`;
+$json = json('tmp.json');
+unlink 'tmp.json';
+@errors=eval { decode_json($json) };
+is(@errors,0,"no errors");
+$tests++;
 
 #4
-my @errors = $jv->validate(@$json);
+# Same as above but with pretty JSON
+printf "\n%s\n", "Checking pretty JSON output for a failed run '--mx $uri' ...";
+$out = `./testssl.sh --ssl-native --openssl-timeout=10 $check2run --jsonfile-pretty tmp.json --mx $uri`;
+$json = json('tmp.json');
+unlink 'tmp.json';
+@errors=eval { decode_json($json) };
 is(@errors,0,"no errors");
 $tests++;
 
 #5
-pass("Running testssl.sh against $hostm with plain JSON output");
-$out = `./testssl.sh  --jsonfile tmp.json --color 0  -t smtp  $hostm`;
-$tests++;
+my $uri = "smtp-relay.gmail.com:587";
+printf "\n%s\n", " Unit testing plain JSON output --> $uri ...";
+$out = `./testssl.sh  --jsonfile tmp.json $check2run -t smtp $uri`;
 $json = json('tmp.json');
 unlink 'tmp.json';
-
-#6
-my @errors = $jv->validate(@$json);
+@errors=eval { decode_json($json) };
 is(@errors,0,"no errors");
 $tests++;
 

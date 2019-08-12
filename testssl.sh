@@ -17880,7 +17880,7 @@ determine_service() {
      local ua
      local protocol
 
-     # check if we can connect to $NODEIP:$PORT
+     # Check if we can connect to $NODEIP:$PORT. Attention: This ALWAYS uses sockets. Thus timeouts for --ssl-=native do not apply
      if ! fd_socket 5; then
           if [[ -n "$PROXY" ]]; then
                fatal "You're sure $PROXYNODE:$PROXYPORT allows tunneling here? Can't connect to \"$NODEIP:$PORT\"" $ERR_CONNECT
