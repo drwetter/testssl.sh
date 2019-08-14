@@ -11,7 +11,13 @@ You can also supply command line options like:
 ``docker run -t mytestssl -p --header example.com``
 
 Please keep in mind that any output file (--log, --html, --json etc.) will be created
-in the container. Also if you don't provide a user, this docker container uses a non-root user.
+in the container. If you wish to have this created in your local directory you can mount a volume and change the output prefix e.g.:
+
+```
+docker run -t -v `pwd`:/data drwetter/testssl.sh --html --outprefix /data/ example.com
+```
+
+Also if you don't provide a user, this docker container uses a non-root user.
 
 
 You can also pull the image from dockerhub and run:
