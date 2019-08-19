@@ -9,7 +9,7 @@ use JSON;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $check2run ="--ip=one -q -p --color 0";
+my $check2run ="--ip=one -q --color 0";
 my $uri="";
 my $json="";
 my $out="";
