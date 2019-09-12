@@ -287,7 +287,9 @@ NR_HEADER_FAIL=0                        # .. for HTTP_GET
 PROTOS_OFFERED=""                       # This keeps which protocol is being offered. See has_server_protocol().
 CURVES_OFFERED=""                       # This keeps which curves have been detected. Just for error handling
 KNOWN_OSSL_PROB=false                   # We need OpenSSL a few times. This variable is an indicator if we can't connect. Eases handling
-DETECTED_TLS_VERSION=""
+DETECTED_TLS_VERSION=""                 # .. as hex string, e.g. 0300 or 0303
+TLS13_ONLY=false                        # Does the server support TLS 1.3 ONLY?
+OSSL_SHORTCUT=${OSSL_SHORTCUT:-false}   # Hack: if during the scan turns out the OpenSSL binary suports TLS 1.3 would be a better choice, this enables it.
 TLS_EXTENSIONS=""
 declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observed @ facebook and others, old ones like h2-17 omitted as they could not be found
@@ -2078,7 +2080,11 @@ service_detection() {
 #
 connectivity_problem() {
      if [[ $1 -lt $2 ]]; then
-          prln_warning " Oops: $3"
+          if "$TLS13_ONLY" && ! "$HAS_TLS13"; then
+               :
+          else
+               prln_warning " Oops: $3"
+          fi
           return 0
      fi
      if [[ $1 -ge $2 ]]; then
@@ -5437,6 +5443,34 @@ run_protocols() {
           ignore_no_or_lame "You should not proceed as no protocol was detected. If you still really really want to, say \"YES\"" "YES"
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
+
+     if [[ "$PROTOS_OFFERED" =~ tls1_3:yes ]]; then
+          if [[ ! "${PROTOS_OFFERED//tls1_3:yes /}" =~ yes ]]; then
+               TLS13_ONLY=true
+               if ! "$HAS_TLS13"; then
+                    pr_magenta " $NODE:$PORT appears to support TLS 1.3 ONLY. You better use --openssl=<path_to_openssl_supporting_TLS_1.3>"
+                    if [[ -x /usr/bin/openssl ]] && /usr/bin/openssl s_client -tls1_3 -connect x 2>&1 | grep -aq "unknown option"; then
+                         outln
+                         ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
+                         MAX_OSSL_FAIL=10
+                    else
+                         if "$OSSL_SHORTCUT"; then
+                              # dirty hack but an idea for the future to be implemented upfront: Now we know, we'll better off
+                              # with the OS supplied openssl binary. We need to inittialize variables / arrays again though.
+                              # And the service detection can't be made up for now
+                              outln ", proceeding with /usr/bin/openssl"
+                              OPENSSL=/usr/bin/openssl
+                              find_openssl_binary
+                              prepare_arrays
+                         else
+                              outln
+                              ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
+                              MAX_OSSL_FAIL=10
+                         fi
+                    fi
+               fi
+          fi
+     fi
      return $ret
 }
 
@@ -5966,24 +6000,24 @@ read_dhbits_from_file() {
           fi
           return 0
      fi
-     if [[ "$2" == "quiet" ]]; then
+     if [[ "$2" == quiet ]]; then
           tm_out "$bits"
           return 0
      fi
      [[ -z "$2" ]] && [[ -n "$bits" ]] && out ", "
-     if [[ $what_dh == "DH" ]] || [[ $what_dh == "EDH" ]]; then
+     if [[ $what_dh == DH ]] || [[ $what_dh == EDH ]]; then
           add="bit DH"
           [[ -n "$curve" ]] && add+=" ($curve)"
-          if [[ "$2" == "string" ]]; then
+          if [[ "$2" == string ]]; then
                tm_out ", $bits $add"
           else
                pr_dh_quality "$bits" "$bits $add"
           fi
      # https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography, http://www.keylength.com/en/compare/
-     elif [[ $what_dh == "ECDH" ]]; then
+     elif [[ $what_dh == ECDH ]]; then
           add="bit ECDH"
           [[ -n "$curve" ]] && add+=" ($curve)"
-          if [[ "$2" == "string" ]]; then
+          if [[ "$2" == string ]]; then
                tm_out ", $bits $add"
           else
                pr_ecdh_quality "$bits" "$bits $add"
@@ -6336,12 +6370,10 @@ run_server_preference() {
           [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
           pr_bold " Cipher order"
-
           while read proto_ossl proto_hex proto_txt; do
                cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets"
           done <<< "$(tm_out " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
           outln
-
           outln
      else
           pr_bold " Negotiated cipher per proto"; outln " $limitedsense"
@@ -9171,7 +9203,14 @@ run_server_defaults() {
           fi
      elif [[ $certs_found -eq 0 ]] && [[ -s "$HOSTCERT" ]]; then
           outln
-          generic_nonfatal "Client problem, shouldn't happen: Host certificate found but we can't continue with \"server defaults\""
+          generic_nonfatal "Client problem, shouldn't happen: Host certificate found but we can't continue with \"server defaults\"."
+     elif [[ $certs_found -eq 0 ]]; then
+          outln
+          if $TLS13_ONLY; then
+               generic_nonfatal "Client problem: We need openssl supporting TLS 1.3. We can't continue with \"server defaults\" as we cannot retrieve the certificate. "
+          else
+               generic_nonfatal "Client problem, No server cerificate could be retrieved. Thus we can't continue with \"server defaults\"."
+          fi
      fi
      [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
 
@@ -15616,8 +15655,8 @@ run_rc4() {
      done
 
      for proto in -no_ssl2 -tls1_1 -tls1 -ssl3; do
-          [[ "$proto" != "-no_ssl2" ]] && [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
-          ! "$HAS_SSL3" && [[ "$proto" == "-ssl3" ]] && continue
+          [[ "$proto" != -no_ssl2 ]] && [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
+          ! "$HAS_SSL3" && [[ "$proto" == -ssl3 ]] && continue
           while true; do
                ciphers_to_test=""
                for (( i=0; i < nr_ossl_ciphers; i++ )); do
