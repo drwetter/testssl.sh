@@ -4866,7 +4866,8 @@ run_protocols() {
      local lines nr_ciphers_detected
      local tls13_ciphers_to_test=""
      local i drafts_offered=""  drafts_offered_str="" supported_versions debug_recomm=""
-     local -i ret=0 subret=0
+     local -i ret=0 subret=0 ret_val_tls13=0
+     local offers_tls13=false
      local jsonID="SSLv2"
 
      outln; pr_headline " Testing protocols "
@@ -5170,6 +5171,39 @@ run_protocols() {
                ;;
      esac
 
+     # Now, we are doing a basic/pre test for TLS 1.3 in order not to penalize servers (medium)
+     # running TLS 1.3 only when TLS 1.2 is not offered.  0 and 5 are the return codes for
+     # TLS 1.3 support (kind of, including deprecated pre-versions of TLS 1.3)
+     if "$using_sockets"; then
+          # Need to ensure that at most 128 ciphers are included in ClientHello.
+          # If the TLSv1.2 test was successful, then use the 5 TLSv1.3 ciphers
+          # plus the cipher selected in the TLSv1.2 test. If the TLSv1.2 test was
+          # not successful, then just use the 5 TLSv1.3 ciphers plus the list of
+          # ciphers used in all of the previous tests ($TLS_CIPHER).
+          if [[ $subret -eq 0 ]] || [[ $subret -eq 2 ]]; then
+               tls13_ciphers_to_test="$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+               if [[ "$tls13_ciphers_to_test" == TLS_* ]] || [[ "$tls13_ciphers_to_test" == SSL_* ]]; then
+                    tls13_ciphers_to_test="$(rfc2hexcode "$tls13_ciphers_to_test")"
+               else
+                    tls13_ciphers_to_test="$(openssl2hexcode "$tls13_ciphers_to_test")"
+               fi
+          fi
+          if [[ ${#tls13_ciphers_to_test} -eq 9 ]]; then
+               tls13_ciphers_to_test="$TLS13_CIPHER, ${tls13_ciphers_to_test:2:2},${tls13_ciphers_to_test:7:2}, 00,ff"
+          else
+               tls13_ciphers_to_test="$TLS13_CIPHER,$TLS_CIPHER"
+          fi
+          tls_sockets "04" "$tls13_ciphers_to_test"
+     else
+          run_prototest_openssl "-tls1_3"
+     fi
+     ret_val_tls13=$?
+     if [[ $ret_val_tls13 -eq 0 ]] || [[ $ret_val_tls13 -eq 5 ]]; then
+          offers_tls13=true             # This variable comes in handy for further if statements below
+     fi
+     # Done with pretesting TLS 1.3. Normally we should/could reverse the order for the protocols -- or
+     # keep the order and mute the output, until we can make a final verdict
+
      pr_bold " TLS 1.2    ";
      jsonID="TLS1_2"
      if "$using_sockets"; then
@@ -5190,19 +5224,31 @@ run_protocols() {
                latest_supported="0303"
                latest_supported_string="TLSv1.2"
                add_tls_offered tls1_2 yes
-               ;;                                  # GCM cipher in TLS 1.2: very good!
-          1)   pr_svrty_medium "not offered"
-               add_tls_offered tls1_2 no
+               ;;                                                     # GCM cipher in TLS 1.2: very good!
+          1)   add_tls_offered tls1_2 no
+               if "$offers_tls13"; then
+                    out "not offered"
+               else
+                    pr_svrty_medium "not offered"
+               fi
                if ! "$using_sockets" || [[ -z $latest_supported ]]; then
                     outln
-                    fileout "$jsonID" "MEDIUM" "not offered" # no GCM, penalty
+                    if "$offers_tls13"; then
+                         fileout "$jsonID" "INFO" "not offered"
+                    else
+                         fileout "$jsonID" "MEDIUM" "not offered"     # TLS 1.3, no TLS 1.2 --> no GCM, penalty
+                    fi
                else
                     prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string"
                     fileout "$jsonID" "CRITICAL" "connection failed rather than downgrading to $latest_supported_string"
                fi
                ;;
-          2)   pr_svrty_medium "not offered"
-               add_tls_offered tls1_2 no
+          2)   add_tls_offered tls1_2 no
+               if "$offers_tls13"; then
+                    out "not offered"
+               else
+                    pr_svrty_medium "not offered"
+               fi
                if [[ "$DETECTED_TLS_VERSION" == 0300 ]]; then
                     detected_version_string="SSLv3"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
@@ -5229,7 +5275,7 @@ run_protocols() {
                fi
                ;;
            3)  out "not offered, "
-               fileout "$jsonID" "OK" "not offered"
+               fileout "$jsonID" "INFO" "not offered"
                add_tls_offered tls1_2 no
                pr_warning "TLS downgraded to STARTTLS plaintext"; outln
                fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
@@ -5260,30 +5306,7 @@ run_protocols() {
 
      pr_bold " TLS 1.3    ";
      jsonID="TLS1_3"
-     if "$using_sockets"; then
-          # Need to ensure that at most 128 ciphers are included in ClientHello.
-          # If the TLSv1.2 test was successful, then use the 5 TLSv1.3 ciphers
-          # plus the cipher selected in the TLSv1.2 test. If the TLSv1.2 test was
-          # not successful, then just use the 5 TLSv1.3 ciphers plus the list of
-          # ciphers used in all of the previous tests ($TLS_CIPHER).
-          if [[ $subret -eq 0 ]] || [[ $subret -eq 2 ]]; then
-               tls13_ciphers_to_test="$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
-               if [[ "$tls13_ciphers_to_test" == TLS_* ]] || [[ "$tls13_ciphers_to_test" == SSL_* ]]; then
-                    tls13_ciphers_to_test="$(rfc2hexcode "$tls13_ciphers_to_test")"
-               else
-                    tls13_ciphers_to_test="$(openssl2hexcode "$tls13_ciphers_to_test")"
-               fi
-          fi
-          if [[ ${#tls13_ciphers_to_test} -eq 9 ]]; then
-               tls13_ciphers_to_test="$TLS13_CIPHER, ${tls13_ciphers_to_test:2:2},${tls13_ciphers_to_test:7:2}, 00,ff"
-          else
-               tls13_ciphers_to_test="$TLS13_CIPHER,$TLS_CIPHER"
-          fi
-          tls_sockets "04" "$tls13_ciphers_to_test"
-     else
-          run_prototest_openssl "-tls1_3"
-     fi
-     case $? in
+     case $ret_val_tls13 in
           0)   if ! "$using_sockets"; then
                     prln_svrty_best "offered (OK)"
                     fileout "$jsonID" "OK" "offered"
