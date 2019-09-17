@@ -19342,7 +19342,7 @@ parse_cmd_line() {
      # left off here is the URI
           if [[ $1 = *[![:ascii:]]* ]]; then
               if [[ "$(command -v idn)" == "" ]]; then
-                  fatal "URI contains non-ASCII, IDN not available."
+                  fatal "URI contains non-ASCII characters, and IDN not available."
               else
                   URI="$(echo $1 | idn)"
               fi
