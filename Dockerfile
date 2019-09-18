@@ -1,7 +1,7 @@
 FROM alpine:3.9
 
 RUN apk update && apk upgrade
-RUN apk add bash procps drill git coreutils
+RUN apk add bash procps drill git coreutils libidn
 RUN apk add --no-cache curl
 
 RUN addgroup testssl
