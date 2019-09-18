@@ -3046,7 +3046,7 @@ run_security_headers() {
                fi
                pr_litecyan "$header"
                outln " $HEADERVALUE"     # shouldn't be that long
-               fileout "$header" "INFO" "$header: $HEADERVALUE"
+               fileout "$header" "INFO" "$HEADERVALUE"
           fi
      done
      #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall" or Access-Control-Allow-Origin: *
