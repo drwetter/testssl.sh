@@ -39,6 +39,7 @@
 * Fixed TCP fragmentation
 * Added `--ids-friendly` switch
 * Major update of client simulations with self-collected data
+* Add Internationalized Domain Name (IDN) / Emoji Domain support.
 
 
 ### Features implemented in 2.9.5
