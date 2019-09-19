@@ -17357,11 +17357,14 @@ filter_ip4_address() {
      done
 }
 
+# For security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
+# arg1 is the entry we want to look up in the host file
 get_local_aaaa() {
      local ip6=""
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
-     # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
+     [[ -z "$1" ]] && echo "" && return 1
+     # Also multiple records should work fine
      ip6=$(grep -wih "$1" $etchosts 2>/dev/null | grep ':' | grep -Ev '^#|\.local' | grep -Ei "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv6addr "$ip6"; then
           echo "$ip6"
@@ -17369,12 +17372,10 @@ get_local_aaaa() {
           echo ""
      fi
 }
-
 get_local_a() {
      local ip4=""
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
-     # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
      ip4=$(grep -wih "$1" $etchosts 2>/dev/null | grep -Ev ':|^#|\.local' | grep -Ei "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv4addr "$ip4"; then
           echo "$ip4"
@@ -17590,8 +17591,8 @@ determine_ip_addresses() {
      local ip4=""
      local ip6=""
 
-     ip4=$(get_a_record $NODE)
-     ip6=$(get_aaaa_record $NODE)
+     ip4="$(get_a_record "$NODE")"
+     ip6="$(get_aaaa_record "$NODE")"
      IP46ADDRs=$(newline_to_spaces "$ip4 $ip6")
 
      if [[ -n "$CMDLINE_IP" ]]; then
@@ -17616,16 +17617,16 @@ determine_ip_addresses() {
           ip4="$NODE"                        # only an IPv4 address was supplied as an argument, no hostname
           SNI=""                             # override Server Name Indication as we test the IP only
      else
-          ip4=$(get_local_a $NODE)           # is there a local host entry?
-          if [[ -z $ip4 ]]; then             # empty: no (LOCAL_A is predefined as false)
-               ip4=$(get_a_record $NODE)
+          ip4=$(get_local_a "$NODE")         # is there a local host entry?
+          if [[ -z "$ip4" ]]; then           # empty: no (LOCAL_A is predefined as false)
+               ip4=$(get_a_record "$NODE")
           else
                LOCAL_A=true                  # we have the ip4 from local host entry and need to signal this to testssl
           fi
           # same now for ipv6
-          ip6=$(get_local_aaaa $NODE)
-          if [[ -z $ip6 ]]; then
-               ip6=$(get_aaaa_record $NODE)
+          ip6=$(get_local_aaaa "$NODE")
+          if [[ -z "$ip6" ]]; then
+               ip6=$(get_aaaa_record "$NODE")
           else
                LOCAL_AAAA=true               # we have a local ipv6 entry and need to signal this to testssl
           fi
@@ -19364,13 +19365,27 @@ parse_cmd_line() {
      if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! "$do_display_only"; then
           fatal "URI missing" $ERR_CMDLINE
      else
-     # left off here is the URI
-          if [[ $1 = *[![:ascii:]]* ]]; then
-              if [[ "$(command -v idn)" == "" ]]; then
-                  fatal "URI contains non-ASCII characters, and IDN not available."
-              else
-                  URI="$(echo $1 | idn)"
-              fi
+     # What is left here is the URI. We check for non-ASCII chars first:
+          if [[ "$1" == *[![:ascii:]]* ]]; then
+               HAS_IDN=false
+               HAS_IDN2=false
+               type -p idn2 &>/dev/null && HAS_IDN=true
+               type -p idn2 &>/dev/null && HAS_IDN2=true
+               #ToDo: the user needs to know whether installing libidn(2) could help him here
+
+               if "$HAS_IDN2"; then
+                    URI="$(idn2 "$1" 2>/dev/null)"
+               fi
+               if "$HAS_IDN" && [[ -z "$URI" ]]; then
+                    URI="$(idn "$1" 2>/dev/null)"
+               fi
+               if [[ -z "$URI" ]]; then
+                    # fatal "URI contains non-ASCII characters, and IDN not available."
+                    pr_warning "URI contains non-ASCII characters, and IDN not available or conversion failed."
+                    outln " Trying to continue with not converted URI"
+                    #ToDo: fileout is missing
+                    URI="$1"
+               fi
           else
               URI="$1"
           fi
