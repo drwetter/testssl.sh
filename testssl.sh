@@ -19369,10 +19369,16 @@ parse_cmd_line() {
           if [[ "$1" == *[![:ascii:]]* ]]; then
                HAS_IDN=false
                HAS_IDN2=false
-               type -p idn2 &>/dev/null && HAS_IDN=true
+               HAS_NOIDNOUT=false
+               #PoC for maybe later use
+               if type -p dig &>/dev/null
+                    if dig +noidnout -t a 2>&1 | grep -Eqv 'Invalid option: \+noidnout|IDN support not enabled'; then
+                         HAS_NOIDNOUT=true
+                    fi
+               fi
+               type -p idn &>/dev/null && HAS_IDN=true
                type -p idn2 &>/dev/null && HAS_IDN2=true
                #ToDo: the user needs to know whether installing libidn(2) could help him here
-
                if "$HAS_IDN2"; then
                     URI="$(idn2 "$1" 2>/dev/null)"
                fi
