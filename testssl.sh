@@ -19371,7 +19371,7 @@ parse_cmd_line() {
                HAS_IDN2=false
                HAS_NOIDNOUT=false
                #PoC for maybe later use
-               if type -p dig &>/dev/null
+               if type -p dig &>/dev/null; then
                     if dig +noidnout -t a 2>&1 | grep -Eqv 'Invalid option: \+noidnout|IDN support not enabled'; then
                          HAS_NOIDNOUT=true
                     fi
