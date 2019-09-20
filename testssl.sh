@@ -17430,7 +17430,7 @@ get_local_a() {
 #
 check_resolver_bins() {
      type -p dig   &> /dev/null &&  HAS_DIG=true
-     type -p dig   &> /dev/null &&  HAS_HOST=true
+     type -p host  &> /dev/null &&  HAS_HOST=true
      type -p drill &> /dev/null &&  HAS_DRILL=true
      type -p nslookup &> /dev/null && HAS_NSLOOKUP=true
      type -p avahi-resolve &>/dev/null && HAS_AVAHIRESOLVE=true
