@@ -17556,7 +17556,7 @@ get_caa_rr_record() {
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
      if "$HAS_DIG"; then
-          raw_caa="$(dig +short +timeout=3 +tries=3 "$noidnout" $1 type257 | awk '{ print $1" "$2" "$3 }')"
+          raw_caa="$(dig +short +timeout=3 +tries=3 "$noidnout" type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
           # empty if no CAA record
      elif "$HAS_DRILL"; then
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
