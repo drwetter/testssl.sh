@@ -364,7 +364,7 @@ HAS_IDN2=false
 HAS_AVAHIRESOLVE=false
 HAS_DIG_NOIDNOUT=false
 
- OSSL_CIPHERS_S=""
+OSSL_CIPHERS_S=""
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
 NODEIP=""
