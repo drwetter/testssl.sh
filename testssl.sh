@@ -4866,6 +4866,7 @@ run_protocols() {
      local lines nr_ciphers_detected
      local tls13_ciphers_to_test=""
      local i drafts_offered=""  drafts_offered_str="" supported_versions debug_recomm=""
+     local tls12_detected_version
      local -i ret=0 ret_val_tls12=0 ret_val_tls13=0
      local offers_tls13=false
      local jsonID="SSLv2"
@@ -5182,6 +5183,7 @@ run_protocols() {
                [[ $? -eq 0 ]] && ret_val_tls12=0
                # see #807 and #806
           fi
+          tls12_detected_version="$DETECTED_TLS_VERSION"
           # Need to ensure that at most 128 ciphers are included in ClientHello.
           # If the TLSv1.2 test was successful, then use the 5 TLSv1.3 ciphers
           # plus the cipher selected in the TLSv1.2 test. If the TLSv1.2 test was
@@ -5240,33 +5242,28 @@ run_protocols() {
                fi
                ;;
           2)   add_tls_offered tls1_2 no
-               if "$offers_tls13"; then
-                    out "not offered"
-               else
-                    pr_svrty_medium "not offered"
-               fi
-               if [[ "$DETECTED_TLS_VERSION" == 0300 ]]; then
+               pr_svrty_medium "not offered and downgraded to a weaker protocol"
+               if [[ "$tls12_detected_version" == 0300 ]]; then
                     detected_version_string="SSLv3"
-               elif [[ "$DETECTED_TLS_VERSION" == 03* ]]; then
-                    detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
+               elif [[ "$tls12_detected_version" == 03* ]]; then
+                    detected_version_string="TLSv1.$((0x$tls12_detected_version-0x0301))"
                fi
-               if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
-                    [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
+               if [[ "$tls12_detected_version" == "$latest_supported" ]]; then
                     outln
                     fileout "$jsonID" "MEDIUM" "not offered and downgraded to a weaker protocol"
-               elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
+               elif [[ "$tls12_detected_version" == 03* ]] && [[ 0x$tls12_detected_version -lt 0x$latest_supported ]]; then
                     prln_svrty_critical " -- server supports $latest_supported_string, but downgraded to $detected_version_string"
                     fileout "$jsonID" "CRITICAL" "not offered, and downgraded to $detected_version_string rather than $latest_supported_string"
-               elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -gt 0x0303 ]]; then
+               elif [[ "$tls12_detected_version" == 03* ]] && [[ 0x$tls12_detected_version -gt 0x0303 ]]; then
                     prln_svrty_critical " -- server responded with higher version number ($detected_version_string) than requested by client"
                     fileout "$jsonID" "CRITICAL" "not offered, server responded with higher version number ($detected_version_string) than requested by client"
                else
-                    if [[ ${#DETECTED_TLS_VERSION} -eq 4 ]]; then
-                         prln_svrty_critical "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2} (NOT ok)"
-                         fileout "$jsonID" "CRITICAL" "server responded with version number ${DETECTED_TLS_VERSION:0:2}.${DETECTED_TLS_VERSION:2:2}"
+                    if [[ ${#tls12_detected_version} -eq 4 ]]; then
+                         prln_svrty_critical "server responded with version number ${tls12_detected_version:0:2}.${tls12_detected_version:2:2} (NOT ok)"
+                         fileout "$jsonID" "CRITICAL" "server responded with version number ${tls12_detected_version:0:2}.${tls12_detected_version:2:2}"
                     else
-                         prln_svrty_medium " -- strange, server ${DETECTED_TLS_VERSION}"
-                         fileout "$jsonID" "MEDIUM" "strange, server ${DETECTED_TLS_VERSION}"
+                         prln_svrty_medium " -- strange, server ${tls12_detected_version}"
+                         fileout "$jsonID" "MEDIUM" "strange, server ${tls12_detected_version}"
                     fi
                fi
                ;;
@@ -5410,7 +5407,6 @@ run_protocols() {
                     detected_version_string="TLSv1.$((0x$DETECTED_TLS_VERSION-0x0301))"
                fi
                if [[ "$DETECTED_TLS_VERSION" == "$latest_supported" ]]; then
-                    [[ $DEBUG -ge 1 ]] && tm_out " -- downgraded"
                     outln "not offered and downgraded to a weaker protocol"
                     fileout "$jsonID" "INFO" "not offered + downgraded to weaker protocol"
                elif [[ "$DETECTED_TLS_VERSION" == 03* ]] && [[ 0x$DETECTED_TLS_VERSION -lt 0x$latest_supported ]]; then
