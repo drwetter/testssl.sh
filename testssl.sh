@@ -1490,7 +1490,7 @@ tmpfile_handle() {
 
 # arg1: line with comment sign, tabs and so on
 filter_input() {
-     sed -e 's/#.*$//' -e '/^$/d' <<< "$1" | tr -d '\n' | tr -d '\t'
+     sed -e 's/#.*$//' -e '/^$/d' <<< "$1" | tr -d '\n' | tr -d '\t' | tr -d '\r'
 }
 
 # Dl's any URL (arg1) via HTTP 1.1 GET from port 80, arg2: file to store http body.
