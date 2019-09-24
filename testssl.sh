@@ -6229,14 +6229,15 @@ run_server_preference() {
           [[ $tls13_cipher1 == $tls13_cipher2 ]] && has_tls13_cipher_order=true
      fi
      # Check whether the server has a cipher order for SSLv3 - TLSv1.2
-     if [[ $(has_server_protocol "tls1_2") -eq 1 ]] && [[ $(has_server_protocol "tls1_1") -eq 1 ]] && \
-        [[ $(has_server_protocol "tls1") -eq 1 ]] && [[ $(has_server_protocol "ssl3") -eq 1 ]]; then
-          # It is known that SSLv3 - TLSv1.2 are not offered.
+     if [[ $(has_server_protocol "tls1_2") -ne 0 ]] && [[ $(has_server_protocol "tls1_1") -ne 0 ]] && \
+        [[ $(has_server_protocol "tls1") -ne 0 ]] && [[ $(has_server_protocol "ssl3") -ne 0 ]]; then
+          # Based on testing performed by determine_optimal_sockets_params(), it is believed that
+          # this server does not offer SSLv3 - TLSv1.2.
           has_cipher_order="$has_tls13_cipher_order"
      elif [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
           if [[ -n "$STARTTLS_OPTIMAL_PROTO" ]]; then
                [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$SNI"
-               [[ ! "$STARTTLS_OPTIMAL_PROTO" == -tls1_3 ]] && addcmd2+=" $STARTTLS_OPTIMAL_PROTO"
+               [[ "$STARTTLS_OPTIMAL_PROTO" != -tls1_3 ]] && addcmd2+=" $STARTTLS_OPTIMAL_PROTO"
           else
                addcmd2="-no_ssl2 $SNI"
           fi
