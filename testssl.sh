@@ -5465,6 +5465,7 @@ run_protocols() {
                     if [[ -x /usr/bin/openssl ]] && /usr/bin/openssl s_client -tls1_3 -connect x 2>&1 | grep -aq "unknown option"; then
                          outln
                          ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
+                         [[ $? -ne 0 ]] && exit $ERR_CLUELESS
                          MAX_OSSL_FAIL=10
                     else
                          if "$OSSL_SHORTCUT"; then
@@ -5478,6 +5479,7 @@ run_protocols() {
                          else
                               outln
                               ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
+                              [[ $? -ne 0 ]] && exit $ERR_CLUELESS
                               MAX_OSSL_FAIL=10
                          fi
                     fi
