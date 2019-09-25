@@ -121,7 +121,7 @@ $tests++;
 
 
 # https://ldapwiki.com/wiki/Public%20LDAP%20Servers
-$uri="ldap.telesec.de:389";
+$uri="db.debian.org:389";
 
 printf "\n%s\n", "STARTTLS LDAP unit tests via OpenSSL --> $uri ...";
 $openssl_out = `./testssl.sh --ssl-native $check2run -t ldap $uri 2>&1`;
