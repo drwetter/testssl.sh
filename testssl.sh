@@ -379,6 +379,7 @@ OPTIMAL_PROTO=""                        # Need this for IIS6 (sigh) + OpenSSL 1.
                                         # https://github.com/PeterMosmans/openssl/issues/19#issuecomment-100897892
 STARTTLS_OPTIMAL_PROTO=""               # Same for STARTTLS, see https://github.com/drwetter/testssl.sh/issues/188
 OPTIMAL_SOCKETS_PROTO=""                # Same for tls_sockets(). -- not yet used
+ALL_FAILED_SOCKETS=true                 # Set to true if all attempts to connect to server using tls_sockets/sslv2_sockets failed
 TLS_TIME=""                             # To keep the value of TLS server timestamp
 TLS_NOW=""                              # Similar
 TLS_DIFFTIME_SET=false                  # Tells TLS functions to measure the TLS difftime or not
@@ -17905,71 +17906,10 @@ determine_optimal_sockets_params() {
           sslv2_sockets
           [[ $? -eq 3 ]] && all_failed=false && add_tls_offered ssl2 yes
      fi
+     ALL_FAILED_SOCKETS="$all_failed"
      return 0
 }
 
-# This is a helper function for determine_optimal_proto() below. It sets the
-# the global STARTTLS_OPTIMAL_PROTO / OPTIMAL_PROTO accordingly and returns 1
-# if no protocol could be determined and 0 if this was possible.
-#
-determine_optimal_proto_sockets_helper() {
-     local all_failed=true
-     local proto=""
-     local optimal_proto=""
-     local starttls="$1"
-     local -i ret
-
-     for proto in 03 01 04 00 02 22; do
-          case $proto in
-               03) tls_sockets "$proto" "$TLS12_CIPHER"
-                    ret=$?
-                    if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
-                         case $DETECTED_TLS_VERSION in
-                              0303)  add_tls_offered tls1_2 yes; optimal_proto="-tls1_2" ;;
-                              0302)  add_tls_offered tls1_1 yes; optimal_proto="-tls1_1" ;;
-                              0301)  add_tls_offered tls1 yes; optimal_proto="-tls1" ;;
-                              0300)  add_tls_offered ssl3 yes; optimal_proto="-ssl3" ;;
-                         esac
-                         all_failed=false
-                         break
-                    fi ;;
-               04) tls_sockets "$proto" "$TLS13_CIPHER"
-                    if [[ $? -eq 0 ]]; then
-                         add_tls_offered tls1_3 yes; optimal_proto="-tls1_3"
-                         all_failed=false
-                         break
-                    fi ;;
-               01|00|02) tls_sockets "$proto" "$TLS_CIPHER" "" "" "true"
-                    ret=$?
-                    if [[ $ret -eq 0 ]] || [[ $ret -eq 2 ]]; then
-                         case $DETECTED_TLS_VERSION in
-                              0302)  add_tls_offered tls1_1 yes; optimal_proto="-tls1_1" ;;
-                              0301)  add_tls_offered tls1 yes; optimal_proto="-tls1" ;;
-                              0300)  add_tls_offered ssl3 yes; optimal_proto="-ssl3" ;;
-                         esac
-                         all_failed=false
-                         break
-                    fi ;;
-               22)  sslv2_sockets
-                    [[ $? -eq 3 ]] && all_failed=false && add_tls_offered ssl2 yes && optimal_proto="-ssl2"
-                    ;;
-          esac
-     done
-     [[ "$proto" != 22 ]] && cp $TEMPDIR/$NODEIP.parse_tls_serverhello.txt $TMPFILE
-     debugme echo "proto: $proto"
-
-     if [[ -n "$starttls" ]]; then
-          STARTTLS_OPTIMAL_PROTO="$optimal_proto"
-     else
-          OPTIMAL_PROTO="$optimal_proto"
-     fi
-
-     if "$all_failed"; then
-          return 1
-     else
-          return 0
-     fi
-}
 
 # This function determines (STARTTLS_)OPTIMAL_PROTO. It is basically a workaround function as under certain
 # circumstances a ClientHello without specifying a protocol will fail.
@@ -17982,91 +17922,101 @@ determine_optimal_proto_sockets_helper() {
 determine_optimal_proto() {
      local all_failed=true
      local tmp=""
-     local using_sockets=true
+     local proto optimal_proto
 
      "$do_tls_sockets" && return 0
 
      >$ERRFILE
-     "$SSL_NATIVE" && using_sockets=false
-
      if [[ -n "$1" ]]; then
-          # STARTTLS
-          if "$using_sockets"; then
-               determine_optimal_proto_sockets_helper "$1"
-               [[ $? -eq 1 ]] && all_failed=true || all_failed=false
-          else
-               # No sockets
-               # STARTTLS workaround needed see https://github.com/drwetter/testssl.sh/issues/188 -- kind of odd
-               for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -tls1_3 -ssl2; do
-                    case $STARTTLS_OPTIMAL_PROTO in
-                         -tls1_3) "$HAS_TLS13" || continue ;;
-                         -ssl3)   "$HAS_SSL3" || continue ;;
-                         -ssl2)   "$HAS_SSL2" || continue ;;
-                         *) ;;
-                    esac
-                    #FIXME: to be replaced / added by socket ( if "$using_sockets" ...)
-                    $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg -starttls $1" $SNI) </dev/null >$TMPFILE 2>>$ERRFILE
-                    if sclient_auth $? $TMPFILE; then
-                         all_failed=false
-                         break
-                    fi
-                    all_failed=true
-               done
-               "$all_failed" && STARTTLS_OPTIMAL_PROTO=""
-          fi
+          # STARTTLS workaround needed see https://github.com/drwetter/testssl.sh/issues/188 -- kind of odd
+          for STARTTLS_OPTIMAL_PROTO in -tls1_2 -tls1 -ssl3 -tls1_1 -tls1_3 -ssl2; do
+               case $STARTTLS_OPTIMAL_PROTO in
+                    -tls1_3) "$HAS_TLS13" || continue ;;
+                    -ssl3)   "$HAS_SSL3" || continue ;;
+                    -ssl2)   "$HAS_SSL2" || continue ;;
+                    *) ;;
+               esac
+               $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg -starttls $1" $SNI) </dev/null >$TMPFILE 2>>$ERRFILE
+               if sclient_auth $? $TMPFILE; then
+                    all_failed=false
+                    add_tls_offered "${proto/-/}" yes
+                    break
+               fi
+          done
+          "$all_failed" && STARTTLS_OPTIMAL_PROTO=""
+          optimal_proto="$STARTTLS_OPTIMAL_PROTO"
           debugme echo "STARTTLS_OPTIMAL_PROTO: $STARTTLS_OPTIMAL_PROTO"
      else
           # No STARTTLS
-          if "$using_sockets"; then
-               determine_optimal_proto_sockets_helper
-               [[ $? -eq 1 ]] && all_failed=true || all_failed=false
-          else
-               # no sockets
-               for OPTIMAL_PROTO in '' -tls1_2 -tls1 -tls1_3 -ssl3 -tls1_1 -ssl2; do
-                    case $OPTIMAL_PROTO in
-                         -tls1_3) "$HAS_TLS13" || continue ;;
-                         -ssl3)   "$HAS_SSL3" || continue ;;
-                         -ssl2)   "$HAS_SSL2" || continue ;;
-                         *) ;;
-                    esac
-                    $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
-                    if sclient_auth $? $TMPFILE; then
-                         # we use the successful handshake at least to get one valid protocol supported -- it saves us time later
-                         if [[ -z "$OPTIMAL_PROTO" ]]; then
-                              # convert to openssl terminology
-                              tmp=$(get_protocol $TMPFILE)
-                              tmp=${tmp/\./_}
-                              tmp=${tmp/v/}
-                              tmp="$(tolower $tmp)"
-                              add_tls_offered "${tmp}" yes
-                              case $tmp in
-                                   tls1)   OPTIMAL_PROTO="-tls1" ;;
-                                   tls1_1) OPTIMAL_PROTO="-tls1_1" ;;
-                                   tls1_2) OPTIMAL_PROTO="-tls1_2" ;;
-                                   tls1_3) OPTIMAL_PROTO="-tls1_3" ;;
-                                   ssl2)   OPTIMAL_PROTO="-ssl2" ;;
-                              esac
-                         else
-                              add_tls_offered "${OPTIMAL_PROTO/-/}" yes
-                         fi
+          for proto in '' -tls1_2 -tls1 -tls1_3 -ssl3 -tls1_1 -ssl2; do
+               case $proto in
+                    -tls1_3) "$HAS_TLS13" || continue ;;
+                    -ssl3)   "$HAS_SSL3" || continue ;;
+                    -ssl2)   "$HAS_SSL2" || continue ;;
+                    *) ;;
+               esac
+               $OPENSSL s_client $(s_client_options "$proto $BUGS -connect "$NODEIP:$PORT" -msg $PROXY $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
+               if sclient_auth $? $TMPFILE; then
+                    # we use the successful handshake at least to get one valid protocol supported -- it saves us time later
+                    if [[ -z "$proto" ]]; then
+                         # convert to openssl terminology
+                         tmp=$(get_protocol $TMPFILE)
+                         tmp=${tmp/\./_}
+                         tmp=${tmp/v/}
+                         tmp="$(tolower $tmp)"
+                         add_tls_offered "${tmp}" yes
                          debugme echo "one proto determined: $tmp"
-                         all_failed=false
-                         break
+                         OPTIMAL_PROTO=""
+                    else
+                         add_tls_offered "${proto/-/}" yes
+                         OPTIMAL_PROTO="$proto"
                     fi
-                    all_failed=true
-               done
-          fi
+                    all_failed=false
+                    break
+               fi
+          done
           "$all_failed" && OPTIMAL_PROTO=""
-          if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
-               prln_magenta "$NODEIP:$PORT appears to only support SSLv2."
-               ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
-               [[ $? -ne 0 ]] && exit $ERR_CLUELESS
-          fi
+          optimal_proto="$OPTIMAL_PROTO"
+
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
      fi
-     [[ "$OPTIMAL_PROTO" != -ssl2 ]]  && ! "$all_failed" && grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
+     [[ "$optimal_proto" != -ssl2 ]]  && ! "$all_failed" && grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
+     [[ "$(has_server_protocol "tls1_3")" -eq 0 ]] && [[ ! "${PROTOS_OFFERED//tls1_3:yes /}" =~ yes ]] && TLS13_ONLY=true
 
-     if "$all_failed"; then
+     if [[ "$optimal_proto" == -ssl2 ]]; then
+          prln_magenta "$NODEIP:$PORT appears to only support SSLv2."
+          ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
+          [[ $? -ne 0 ]] && exit $ERR_CLUELESS
+     elif "$all_failed" && ! "$ALL_FAILED_SOCKETS"; then
+          if ! "$HAS_TLS13" && "$TLS13_ONLY"; then
+               pr_magenta " $NODE:$PORT appears to support TLS 1.3 ONLY. You better use --openssl=<path_to_openssl_supporting_TLS_1.3>"
+               if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 -connect x 2>&1 | grep -aq "unknown option"; then
+                    outln
+                    ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
+                    [[ $? -ne 0 ]] && exit $ERR_CLUELESS
+                    MAX_OSSL_FAIL=10
+               else
+                    # dirty hack but an idea for the future to be implemented upfront: Now we know, we'll better off
+                    # with the OS supplied openssl binary. We need to inittialize variables / arrays again though.
+                    # And the service detection can't be made up for now
+                    outln ", proceeding with /usr/bin/openssl"
+                    OPENSSL=/usr/bin/openssl
+                    find_openssl_binary
+                    prepare_arrays
+               fi
+          elif ! "$HAS_SSL3" && [[ "$(has_server_protocol "ssl3")" -eq 0 ]] && [[ "$(has_server_protocol "tls1_3")" -ne 0 ]] && \
+               [[ "$(has_server_protocol "tls1_2")" -ne 0 ]] && [[ "$(has_server_protocol "tls1_1")" -ne 0 ]] &&
+               [[ "$(has_server_protocol "tls1")" -ne 0 ]]; then
+               prln_magenta " $NODE:$PORT appears to support SSLv3 ONLY. You better use --openssl=<path_to_openssl_supporting_SSL_3>"
+               ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
+               [[ $? -ne 0 ]] && exit $ERR_CLUELESS
+               MAX_OSSL_FAIL=10
+          else
+               prln_bold " Your $OPENSSL cannot connect to $NODEIP:$PORT"
+               ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
+               [[ $? -ne 0 ]] && exit $ERR_CLUELESS
+          fi
+     elif "$all_failed"; then
           outln
           if "$HAS_IPv6"; then
                pr_bold " Your $OPENSSL is not IPv6 aware, or $NODEIP:$PORT "
@@ -18076,6 +18026,14 @@ determine_optimal_proto() {
           tmpfile_handle ${FUNCNAME[0]}.txt
           prln_bold "doesn't seem to be a TLS/SSL enabled server";
           ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
+          [[ $? -ne 0 ]] && exit $ERR_CLUELESS
+     elif ! "$all_failed" && "$ALL_FAILED_SOCKETS"; then
+          # For some reason connecting with tls_sockets/sslv2_sockets didn't work, but connecting
+          # with $OPENSSL s_client did.
+          # FIXME: Should we include some sort of "please report" note here?
+          prln_magenta " Testing with $NODE:$PORT only worked using $OPENSSL."
+          "$SSL_NATIVE" || prln_magenta " Test results may be somewhat better if the --ssl-native option is used."
+          ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
 
@@ -19552,6 +19510,7 @@ reset_hostdepended_vars() {
      PROTOS_OFFERED=""
      CURVES_OFFERED=""
      OPTIMAL_PROTO=""
+     ALL_FAILED_SOCKETS=true
      SERVER_SIZE_LIMIT_BUG=false
 }
 
