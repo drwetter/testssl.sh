@@ -8889,7 +8889,7 @@ run_server_defaults() {
                     cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
                     >$ERRFILE
                     if [[ -z "$sessticket_lifetime_hint" ]]; then
-                         sessticket_lifetime_hint=$(awk '/session ticket life/' $TMPFILE)
+                         sessticket_lifetime_hint=$(awk '/session ticket life/ { if (!found) print; found=1 }' $TMPFILE)
                     fi
 
                     if [[ $n -le 7 ]]; then
@@ -9042,11 +9042,17 @@ run_server_defaults() {
      if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
           cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
           >$ERRFILE
-          [[ -z "$sessticket_lifetime_hint" ]] && sessticket_lifetime_hint=$(awk '/session ticket lifetime/' $TMPFILE)
+          [[ -z "$sessticket_lifetime_hint" ]] && sessticket_lifetime_hint=$(awk '/session ticket lifetime/ { if (!found) print; found=1 }' $TMPFILE)
      fi
-     if "$using_sockets" && [[ -z "$sessticket_lifetime_hint" ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS "$OPTIMAL_PROTO" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>$ERRFILE >$TMPFILE
-          sclient_connect_successful $? $TMPFILE && sessticket_lifetime_hint=$(awk '/session ticket lifetime/' $TMPFILE)
+     if "$using_sockets" && ! "$TLS13_ONLY" && [[ -z "$sessticket_lifetime_hint" ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
+          if "$HAS_TLS13" && ( [[ -z "$OPTIMAL_PROTO" ]] || [[ "$OPTIMAL_PROTO" == -tls1_3 ]] ) ; then
+               # If a session ticket were sent in response to a TLSv1.3 ClientHello, then a session ticket
+               # would have been found by get_server_certificate(). So, try again with a TLSv1.2 ClientHello.
+               $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -no_tls1_3 -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>$ERRFILE >$TMPFILE
+          else
+               $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS "$OPTIMAL_PROTO" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>$ERRFILE >$TMPFILE
+          fi
+          sclient_connect_successful $? $TMPFILE && sessticket_lifetime_hint=$(awk '/session ticket lifetime/ { if (!found) print; found=1 }' $TMPFILE)
      fi
      [[ -z "$sessticket_lifetime_hint" ]] && TLS_TICKETS=false || TLS_TICKETS=true
 
