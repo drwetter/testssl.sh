@@ -6068,10 +6068,21 @@ sub_session_resumption() {
           fi
      fi
      "$CLIENT_AUTH" && return 3
-     protocol=${protocol/\./_}
-     protocol=${protocol/v/}
-     protocol="-$(tolower $protocol)"
-     "$HAS_NO_SSL2" && addcmd+=" -no_ssl2" || addcmd+=" $protocol"
+     if "$HAS_NO_SSL2"; then
+          addcmd+=" -no_ssl2"
+     else
+          protocol=${protocol/\./_}
+          protocol=${protocol/v/}
+          protocol="-$(tolower $protocol)"
+          # In some cases a server will not support session tickets, but will support session resumption
+          # by ID. In such a case, it may be more likely to support session resumption with TLSv1.2 than
+          # with TLSv1.3. So, if testing a server that does not support session tickets and that supports
+          # both TLSv1.3 and TLSv1.2 for session resumption by ID, then use a TLSv1.2 ClientHello. (Note that
+          # the line below assumes that if $protocol is -tls1_3, then the server either supports TLSv1.2 or
+          # is TLSv1.3-only.
+          ! "$TLS_TICKETS" && "$byID" && [[ $(has_server_protocol "tls1_2") -eq 0 ]] && protocol="-tls1_2" 
+          addcmd+=" $protocol"
+     fi
 
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>/dev/null
      ret1=$?
