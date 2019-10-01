@@ -6055,8 +6055,9 @@ sub_session_resumption() {
      local sess_data=$(mktemp $TEMPDIR/sub_session_data_resumption.$NODEIP.XXXXXX)
      local -a rw_line
      local not_new_reused=false
+     local protocol="$1"
 
-     if [[ "$1" == ID ]]; then
+     if [[ "$2" == ID ]]; then
           local byID=true
           local addcmd="-no_ticket"
      else
@@ -6067,7 +6068,10 @@ sub_session_resumption() {
           fi
      fi
      "$CLIENT_AUTH" && return 3
-     "$HAS_NO_SSL2" && addcmd+=" -no_ssl2" || addcmd+=" $OPTIMAL_PROTO"
+     protocol=${protocol/\./_}
+     protocol=${protocol/v/}
+     protocol="-$(tolower $protocol)"
+     "$HAS_NO_SSL2" && addcmd+=" -no_ssl2" || addcmd+=" $protocol"
 
      $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI $addcmd -sess_out $sess_data") </dev/null &>/dev/null
      ret1=$?
@@ -8823,7 +8827,7 @@ certificate_info() {
 run_server_defaults() {
      local ciph newhostcert sni
      local match_found
-     local sessticket_lifetime_hint="" lifetime unit
+     local sessticket_lifetime_hint="" sessticket_proto="" lifetime unit
      local -i i n
      local -i certs_found=0
      local -i ret=0
@@ -8890,6 +8894,7 @@ run_server_defaults() {
                     >$ERRFILE
                     if [[ -z "$sessticket_lifetime_hint" ]]; then
                          sessticket_lifetime_hint=$(awk '/session ticket life/ { if (!found) print; found=1 }' $TMPFILE)
+                         sessticket_proto="$(get_protocol "$TMPFILE")"
                     fi
 
                     if [[ $n -le 7 ]]; then
@@ -9042,7 +9047,10 @@ run_server_defaults() {
      if [[ $? -eq 0 ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
           cp "$TEMPDIR/$NODEIP.determine_tls_extensions.txt" $TMPFILE
           >$ERRFILE
-          [[ -z "$sessticket_lifetime_hint" ]] && sessticket_lifetime_hint=$(awk '/session ticket lifetime/ { if (!found) print; found=1 }' $TMPFILE)
+          if [[ -z "$sessticket_lifetime_hint" ]]; then
+               sessticket_lifetime_hint=$(awk '/session ticket lifetime/ { if (!found) print; found=1 }' $TMPFILE)
+               sessticket_proto="$(get_protocol "$TMPFILE")"
+          fi
      fi
      if "$using_sockets" && ! "$TLS13_ONLY" && [[ -z "$sessticket_lifetime_hint" ]] && [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
           if "$HAS_TLS13" && ( [[ -z "$OPTIMAL_PROTO" ]] || [[ "$OPTIMAL_PROTO" == -tls1_3 ]] ) ; then
@@ -9052,7 +9060,10 @@ run_server_defaults() {
           else
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS "$OPTIMAL_PROTO" -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>$ERRFILE >$TMPFILE
           fi
-          sclient_connect_successful $? $TMPFILE && sessticket_lifetime_hint=$(awk '/session ticket lifetime/ { if (!found) print; found=1 }' $TMPFILE)
+          if sclient_connect_successful $? $TMPFILE; then
+               sessticket_lifetime_hint=$(awk '/session ticket lifetime/ { if (!found) print; found=1 }' $TMPFILE)
+               sessticket_proto="$(get_protocol "$TMPFILE")"
+          fi
      fi
      [[ -z "$sessticket_lifetime_hint" ]] && TLS_TICKETS=false || TLS_TICKETS=true
 
@@ -9122,7 +9133,7 @@ run_server_defaults() {
 
      pr_bold " Session Resumption           "
      jsonID="sessionresumption_ticket"
-     sub_session_resumption
+     sub_session_resumption "$sessticket_proto"
      case $? in
           0) SESS_RESUMPTION[2]="ticket=yes"
              out "Tickets: yes, "
@@ -9154,7 +9165,7 @@ run_server_defaults() {
           outln "ID: no"
           fileout "$jsonID" "INFO" "No Session ID, no resumption"
      else
-          sub_session_resumption ID
+          sub_session_resumption "$sessticket_proto" ID
           case $? in
                0) SESS_RESUMPTION[1]="ID=yes"
                   outln "ID: yes"
