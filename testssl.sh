@@ -16597,6 +16597,35 @@ find_openssl_binary() {
          OPENSSL_LOCATION="$openssl_location"
      fi
 
+     OSSL_CIPHERS_S=""
+     HAS_SSL2=false
+     HAS_SSL3=false
+     HAS_TLS13=false
+     HAS_X448=false
+     HAS_X25519=false
+     HAS_NO_SSL2=false
+     HAS_NOSERVERNAME=false
+     HAS_CIPHERSUITES=false
+     HAS_COMP=false
+     HAS_NO_COMP=false
+     OSSL_SUPPORTED_CURVES=""
+     HAS_PKEY=false
+     HAS_PKUTIL=false
+     HAS_ALPN=false
+     HAS_NPN=false
+     HAS_FALLBACK_SCSV=false
+     HAS_PROXY=false
+     HAS_XMPP=false
+     HAS_POSTGRES=false
+     HAS_MYSQL=false
+     HAS_LMTP=false
+     HAS_NNTP=false
+     HAS_IRC=false
+     HAS_CHACHA20=false
+     HAS_AES128_GCM=false
+     HAS_AES256_GCM=false
+     HAS_ZLIB=false
+     
      $OPENSSL ciphers -s 2>&1 | grep -aq "unknown option" || \
           OSSL_CIPHERS_S="-s"
 
