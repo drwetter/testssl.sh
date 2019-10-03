@@ -17981,7 +17981,11 @@ determine_optimal_proto() {
           debugme echo "OPTIMAL_PROTO: $OPTIMAL_PROTO"
      fi
      [[ "$optimal_proto" != -ssl2 ]]  && ! "$all_failed" && grep -q '^Server Temp Key' $TMPFILE && HAS_DH_BITS=true     # FIX #190
-     [[ "$(has_server_protocol "tls1_3")" -eq 0 ]] && [[ ! "${PROTOS_OFFERED//tls1_3:yes /}" =~ yes ]] && TLS13_ONLY=true
+     if [[ "$(has_server_protocol "tls1_3")" -eq 0 ]] && [[ "$(has_server_protocol "tls1_2")" -ne 0 ]] &&
+        [[ "$(has_server_protocol "tls1_1")" -ne 0 ]] && [[ "$(has_server_protocol "tls1")" -ne 0 ]] &&
+        [[ "$(has_server_protocol "ssl3")" -ne 0 ]]; then
+          TLS13_ONLY=true
+     fi
 
      if [[ "$optimal_proto" == -ssl2 ]]; then
           prln_magenta "$NODEIP:$PORT appears to only support SSLv2."
