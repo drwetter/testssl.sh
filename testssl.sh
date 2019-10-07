@@ -17905,6 +17905,9 @@ determine_optimal_sockets_params() {
           sslv2_sockets
           [[ $? -eq 3 ]] && all_failed=false && add_tls_offered ssl2 yes
      fi
+     if [[ -n "$OPTIMAL_SOCKETS_PROTO" ]]; then
+          prln_warning " $NODEIP:$PORT doesn't seem to handle version negotiation correctly. This may lead to some false positives and/or false negatives."
+     fi
      return 0
 }
 
