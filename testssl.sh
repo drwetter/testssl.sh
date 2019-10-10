@@ -10173,7 +10173,7 @@ fd_socket() {
                     break
                fi
           done
-     elif ! timeout $CONNECT_TIMEOUT bash -c "exec 3<>/dev/tcp/$nodeip/$PORT" || \
+     elif ! timeout "$CONNECT_TIMEOUT" bash -c "exec 3<>/dev/tcp/$nodeip/$PORT" || \
           ! exec 5<>/dev/tcp/$nodeip/$PORT; then  #  2>/dev/null would remove an error message, but disables debugging
           ((NR_SOCKET_FAIL++))
           connectivity_problem $NR_SOCKET_FAIL $MAX_SOCKET_FAIL "TCP connect problem" "repeated TCP connect problems, giving up"
