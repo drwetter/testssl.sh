@@ -5468,34 +5468,6 @@ run_protocols() {
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
 
-     if [[ "$(has_server_protocol "tls1_3")" -eq 0 ]]; then
-         if [[ "$(has_server_protocol "tls1_2")" -ne 0 ]] && [[ "$(has_server_protocol "tls1_1")" -ne 0 ]] && 
-            [[ "$(has_server_protocol "tls1")" -ne 0 ]] && [[ "$(has_server_protocol "ssl3")" -ne 0 ]]; then
-               TLS13_ONLY=true
-               if ! "$HAS_TLS13"; then
-                    pr_magenta " $NODE:$PORT appears to support TLS 1.3 ONLY. You better use --openssl=<path_to_openssl_supporting_TLS_1.3>"
-                    if [[ -x /usr/bin/openssl ]] && /usr/bin/openssl s_client -tls1_3 -connect x 2>&1 | grep -aq "unknown option"; then
-                         outln
-                         ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
-                         MAX_OSSL_FAIL=10
-                    else
-                         if "$OSSL_SHORTCUT"; then
-                              # dirty hack but an idea for the future to be implemented upfront: Now we know, we'll better off
-                              # with the OS supplied openssl binary. We need to inittialize variables / arrays again though.
-                              # And the service detection can't be made up for now
-                              outln ", proceeding with /usr/bin/openssl"
-                              OPENSSL=/usr/bin/openssl
-                              find_openssl_binary
-                              prepare_arrays
-                         else
-                              outln
-                              ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
-                              MAX_OSSL_FAIL=10
-                         fi
-                    fi
-               fi
-          fi
-     fi
      return $ret
 }
 
@@ -18041,7 +18013,7 @@ determine_optimal_proto() {
                     # dirty hack but an idea for the future to be implemented upfront: Now we know, we'll better off
                     # with the OS supplied openssl binary. We need to inittialize variables / arrays again though.
                     # And the service detection can't be made up for now
-                    outln ", proceeding with /usr/bin/openssl"
+                    outln ", \n proceeding with /usr/bin/openssl"
                     OPENSSL=/usr/bin/openssl
                     find_openssl_binary
                     prepare_arrays
