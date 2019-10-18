@@ -285,6 +285,7 @@ NR_SOCKET_FAIL=0                        # Counter for socket failures
 NR_OSSL_FAIL=0                          # .. for OpenSSL connects
 NR_HEADER_FAIL=0                        # .. for HTTP_GET
 PROTOS_OFFERED=""                       # This keeps which protocol is being offered. See has_server_protocol().
+TLS12_CIPHER_OFFERED=""                 # This contains the hexcode of a cipher known to be supported by the server with TLS 1.2
 CURVES_OFFERED=""                       # This keeps which curves have been detected. Just for error handling
 KNOWN_OSSL_PROB=false                   # We need OpenSSL a few times. This variable is an indicator if we can't connect. Eases handling
 DETECTED_TLS_VERSION=""                 # .. as hex string, e.g. 0300 or 0303
@@ -4869,7 +4870,7 @@ run_protocols() {
      local tls13_ciphers_to_test=""
      local i drafts_offered=""  drafts_offered_str="" supported_versions debug_recomm=""
      local tls12_detected_version
-     local -i ret=0 ret_val_tls12=0 ret_val_tls13=0
+     local -i ret=0 ret_val_ssl3 ret_val_tls1 ret_val_tls11 ret_val_tls12=0 ret_val_tls13=0
      local offers_tls13=false
      local jsonID="SSLv2"
 
@@ -4963,12 +4964,16 @@ run_protocols() {
 
      pr_bold " SSLv3      ";
      jsonID="SSLv3"
-     if "$using_sockets"; then
+     if [[ $(has_server_protocol ssl3) -eq 0 ]]; then
+          ret_val_ssl3=0
+     elif "$using_sockets"; then
           tls_sockets "00" "$TLS_CIPHER"
+          ret_val_ssl3=$?
      else
           run_prototest_openssl "-ssl3"
+          ret_val_ssl3=$?
      fi
-     case $? in
+     case $ret_val_ssl3 in
           0)   prln_svrty_high "offered (NOT ok)"
                fileout "$jsonID" "HIGH" "offered"
                latest_supported="0300"
@@ -5025,12 +5030,16 @@ run_protocols() {
 
      pr_bold " TLS 1      ";
      jsonID="TLS1"
-     if "$using_sockets"; then
+     if [[ $(has_server_protocol tls1) -eq 0 ]]; then
+          ret_val_tls1=0
+     elif "$using_sockets"; then
           tls_sockets "01" "$TLS_CIPHER"
+          ret_val_tls1=$?
      else
           run_prototest_openssl "-tls1"
+          ret_val_tls1=$?
      fi
-     case $? in
+     case $ret_val_tls1 in
           0)   pr_svrty_low "offered" ; outln " (deprecated)"
                fileout "$jsonID" "LOW" "offered (deprecated)"
                latest_supported="0301"
@@ -5099,12 +5108,16 @@ run_protocols() {
 
      pr_bold " TLS 1.1    ";
      jsonID="TLS1_1"
-     if "$using_sockets"; then
+     if [[ $(has_server_protocol tls1_1) -eq 0 ]]; then
+          ret_val_tls11=0
+     elif "$using_sockets"; then
           tls_sockets "02" "$TLS_CIPHER"
+          ret_val_tls11=$?
      else
           run_prototest_openssl "-tls1_1"
+          ret_val_tls11=$?
      fi
-     case $? in
+     case $ret_val_tls11 in
           0)   pr_svrty_low "offered" ; outln " (deprecated)"
                fileout "$jsonID" "LOW" "offered (deprecated)"
                latest_supported="0302"
@@ -5177,35 +5190,36 @@ run_protocols() {
      # Now, we are doing a basic/pre test for TLS 1.2 and 1.3 in order not to penalize servers (medium)
      # running TLS 1.3 only when TLS 1.2 is not offered.  0 and 5 are the return codes for
      # TLS 1.3 support (kind of, including deprecated pre-versions of TLS 1.3)
-     if "$using_sockets"; then
+     if [[ $(has_server_protocol tls1_2) -eq 0 ]]; then
+          ret_val_tls12=0
+     elif "$using_sockets"; then
           tls_sockets "03" "$TLS12_CIPHER"
           ret_val_tls12=$?
           tls12_detected_version="$DETECTED_TLS_VERSION"
+     else
+          run_prototest_openssl "-tls1_2"
+          ret_val_tls12=$?
+     fi
+
+     if [[ $(has_server_protocol tls1_3) -eq 0 ]]; then
+          ret_val_tls13=0
+     elif "$using_sockets"; then
           # Need to ensure that at most 128 ciphers are included in ClientHello.
-          # If the TLSv1.2 test was successful, then use the 5 TLSv1.3 ciphers
-          # plus the cipher selected in the TLSv1.2 test. If the TLSv1.2 test was
-          # not successful, then just use the 5 TLSv1.3 ciphers plus the list of
-          # ciphers used in all of the previous tests ($TLS_CIPHER).
-          if [[ $ret_val_tls12 -eq 0 ]] || [[ $ret_val_tls12 -eq 2 ]]; then
-               tls13_ciphers_to_test="$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
-               if [[ "$tls13_ciphers_to_test" == TLS_* ]] || [[ "$tls13_ciphers_to_test" == SSL_* ]]; then
-                    tls13_ciphers_to_test="$(rfc2hexcode "$tls13_ciphers_to_test")"
-               else
-                    tls13_ciphers_to_test="$(openssl2hexcode "$tls13_ciphers_to_test")"
-               fi
-          fi
-          if [[ ${#tls13_ciphers_to_test} -eq 9 ]]; then
-               tls13_ciphers_to_test="$TLS13_CIPHER, ${tls13_ciphers_to_test:2:2},${tls13_ciphers_to_test:7:2}, 00,ff"
+          # If the TLSv1.2 test in determine_optimal_sockets_params()  was successful,
+          # then use the 5 TLSv1.3 ciphers plus the cipher selected in the TLSv1.2 test.
+          # If the TLSv1.2 test was not successful, then just use the 5 TLSv1.3 ciphers
+          # plus the list of ciphers used in all of the previous tests ($TLS_CIPHER).
+          if [[ -n "$TLS12_CIPHER_OFFERED" ]]; then
+               tls13_ciphers_to_test="$TLS13_CIPHER, $TLS12_CIPHER_OFFERED, 00,ff"
           else
                tls13_ciphers_to_test="$TLS13_CIPHER,$TLS_CIPHER"
           fi
           tls_sockets "04" "$tls13_ciphers_to_test"
+          ret_val_tls13=$?
      else
-          run_prototest_openssl "-tls1_2"
-          ret_val_tls12=$?
           run_prototest_openssl "-tls1_3"
+          ret_val_tls13=$?
      fi
-     ret_val_tls13=$?
      if [[ $ret_val_tls13 -eq 0 ]] || [[ $ret_val_tls13 -eq 5 ]]; then
           offers_tls13=true             # This variable comes in handy for further if statements below
      fi
@@ -5301,17 +5315,13 @@ run_protocols() {
                     prln_svrty_best "offered (OK)"
                     fileout "$jsonID" "OK" "offered"
                else
-                    # Determine which version of TLS 1.3 was offered. For drafts 18-21 the
-                    # version appears in the ProtocolVersion field of the ServerHello. For
-                    # drafts 22-28 and the final TLS 1.3 the ProtocolVersion field contains
-                    # 0303 and the actual version appears in the supported_versions extension.
-                    if [[ "${TLS_SERVER_HELLO:8:3}" == 7F1 ]]; then
-                         drafts_offered+=" ${TLS_SERVER_HELLO:8:4} "
-                    elif [[ "$TLS_SERVER_HELLO" =~ 002B00020304 ]]; then
+                    # If TLS 1.3 is offered, then its support was detected
+                    # by determine_optimal_sockets_params().
+                    if [[ $(has_server_protocol tls1_3_rfc8446) -eq 0 ]]; then
                          drafts_offered+=" 0304 "
                     else
                          for i in 1C 1B 1A 19 18 17 16 15 14 13 12; do
-                              if [[ "$TLS_SERVER_HELLO" =~ 002B00027F$i ]]; then
+                              if [[ $(has_server_protocol tls1_3_draft$(hex2dec "$i")) -eq 0 ]]; then
                                    drafts_offered+=" 7F$i "
                                    break
                               fi
@@ -5458,8 +5468,9 @@ run_protocols() {
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
 
-     if [[ "$PROTOS_OFFERED" =~ tls1_3:yes ]]; then
-          if [[ ! "${PROTOS_OFFERED//tls1_3:yes /}" =~ yes ]]; then
+     if [[ "$(has_server_protocol "tls1_3")" -eq 0 ]]; then
+         if [[ "$(has_server_protocol "tls1_2")" -ne 0 ]] && [[ "$(has_server_protocol "tls1_1")" -ne 0 ]] && 
+            [[ "$(has_server_protocol "tls1")" -ne 0 ]] && [[ "$(has_server_protocol "ssl3")" -ne 0 ]]; then
                TLS13_ONLY=true
                if ! "$HAS_TLS13"; then
                     pr_magenta " $NODE:$PORT appears to support TLS 1.3 ONLY. You better use --openssl=<path_to_openssl_supporting_TLS_1.3>"
@@ -17805,8 +17816,8 @@ sclient_auth() {
 # This information can be used by determine_optimal_proto() to help distinguish between a server
 # that is not TLS/SSL enabled and one that is not compatible with the version of OpenSSL being used.
 determine_optimal_sockets_params() {
-     local -i ret1 ret2
-     local proto
+     local -i ret1=1 ret2=1
+     local i proto cipher_offered
      local all_failed=true
 
      # If a STARTTLS protocol is specified and $SSL_NATIVE is true, then skip this test, since 
@@ -17831,6 +17842,24 @@ determine_optimal_sockets_params() {
           else
                add_tls_offered tls1_3 no
                KEY_SHARE_EXTN_NR="33"
+          fi
+     fi
+     if ! "$all_failed"; then
+          # Determine which version of TLS 1.3 was offered. For drafts 18-21 the
+          # version appears in the ProtocolVersion field of the ServerHello. For
+          # drafts 22-28 and the final TLS 1.3 the ProtocolVersion field contains
+          # 0303 and the actual version appears in the supported_versions extension.
+          if [[ "${TLS_SERVER_HELLO:8:3}" == 7F1 ]]; then
+               add_tls_offered tls1_3_draft$(hex2dec "${TLS_SERVER_HELLO:10:2}") yes
+          elif [[ "$TLS_SERVER_HELLO" =~ 002B00020304 ]]; then
+               add_tls_offered tls1_3_rfc8446 yes
+          else
+               for i in 1C 1B 1A 19 18 17 16 15 14 13 12; do
+                    if [[ "$TLS_SERVER_HELLO" =~ 002B00027F$i ]]; then
+                         add_tls_offered tls1_3_draft$(hex2dec "$i") yes
+                         break
+                    fi
+               done
           fi
      fi
 
@@ -17873,6 +17902,15 @@ determine_optimal_sockets_params() {
                [[ $ret1 -ne 2 ]] && TLS12_CIPHER="$TLS12_CIPHER_2ND_TRY"
                all_failed=false
           fi
+     fi
+     if [[ $ret1 -eq 0 ]] || [[ $ret2 -eq 0 ]]; then
+          cipher_offered="$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+          if [[ "$cipher_offered" == TLS_* ]] || [[ "$cipher_offered" == SSL_* ]]; then
+               cipher_offered="$(rfc2hexcode "$cipher_offered")"
+          else
+               cipher_offered="$(openssl2hexcode "$cipher_offered")"
+          fi
+          [[ ${#cipher_offered} -eq 9 ]] && TLS12_CIPHER_OFFERED="${cipher_offered:2:2},${cipher_offered:7:2}"
      fi
 
      if "$all_failed"; then
@@ -18155,68 +18193,39 @@ determine_service() {
 # Return value is 0 unless we have a problem executing
 #
 determine_sizelimitbug() {
-     local test_ciphers='CC,14, CC,13, CC,15, C0,30, C0,2C, C0,28, C0,24, 00,A5, 00,A3, 00,A1, 00,9F, CC,A9, CC,A8, CC,AA, C0,AF, C0,AD, C0,A3, C0,9F, 00,6B, 00,6A, 00,69, 00,68, C0,77, C0,73, 00,C4, 00,C3, 00,C2, 00,C1, C0,32, C0,2E, C0,2A, C0,26, C0,79, C0,75, 00,9D, C0,A1, C0,9D, 00,3D, 00,C0, C0,3D, C0,3F, C0,41, C0,43, C0,45, C0,49, C0,4B, C0,4D, C0,4F, C0,51, C0,53, C0,55, C0,57, C0,59, C0,5D, C0,5F, C0,61, C0,63, C0,7B, C0,7D, C0,7F, C0,81, C0,83, C0,87, C0,89, C0,8B, C0,8D, 16,B7, 16,B8, 16,B9, 16,BA, C0,2F, C0,2B, C0,27, C0,23, 00,A4, 00,A2, 00,A0, 00,9E, C0,AE, C0,AC, C0,A2, C0,9E, C0,A0, C0,9C, 00,67, 00,40, 00,3F, 00,3E, C0,76, C0,72, 00,BE, 00,BD, 00,BC, 00,BB, C0,31, C0,2D, C0,29, C0,25, C0,78, C0,74, 00,9C, 00,3C, 00,BA, C0,3C, C0,3E, C0,40, C0,42, C0,44, C0,48, C0,4A, C0,4C, C0,4E, C0,50, C0,52, C0,54, C0,56, C0,58, C0,5C, C0,5E, C0,60, C0,62, C0,7A, C0,7C, C0,7E, C0,80, C0,82'
-     local overflow_cipher1='C0,86'
-     local overflow_cipher2='C0,88'
+     # overflow_cipher must be some cipher that does not appear in TLS12_CIPHER.
+     local overflow_cipher='C0,86'
+     local -i nr_ciphers
 
      # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
      # Fixme: find out whether we can't skip this in general for STARTTLS
      [[ "$STARTTLS" =~ ldap ]] && return 0
      [[ "$STARTTLS" =~ irc ]] && return 0
 
-     debugme echo -n "${FUNCNAME[0]} starting at # of ciphers (excl. 00FF): "
-     debugme echo  "$(tr ' ' '\n' <<< "$test_ciphers" | wc -l)"
      # Only with TLS 1.2 offered at the server side it is possible to hit this bug, in practise. Thus
      # we assume if TLS 1.2 is not supported, the server has no cipher size limit bug. It still may,
      # theoretically, but in a regular check with testssl.sh we won't hit this limit with lower protocols.
-     # Upon calling this function we may know already whether TLS 1.2 is supported. If not we just
-     # check for it (and add it to the known protocols to be supported).
-     # Then we send 127 ciphers, check whether they work, and increase it by one and check again. The
-     # limit bug should occur @ 128 ciphers. To be sure we test until 129 ciphers.
+     # Upon calling this function we already know whether TLS 1.2 is supported. If TLS 1.2 is supported, we
+     # send 129 ciphers (including 00FF) and check whether it works.
 
      if [[ 1 -eq $(has_server_protocol 03) ]]; then
           SERVER_SIZE_LIMIT_BUG=false
-     elif [[ 0 -eq $(has_server_protocol 03) ]]; then
-          debugme echo "Sending 127 ciphers"
-          tls_sockets 03 "${test_ciphers}, 00,FF"
-          if [[ $? -eq 0 ]]; then
-               debugme echo "Sending 128 ciphers"
-               tls_sockets 03 "${test_ciphers}, ${overflow_cipher1}, 00,FF"
-               if [[ $? -ne 0 ]]; then
-                    SERVER_SIZE_LIMIT_BUG=true
+     else
+          if [[ "$DEBUG" -ge 1 ]]; then
+               nr_ciphers="$(tr ' ' '\n' <<< "${overflow_cipher}, $TLS12_CIPHER" | sed -e '/^$/d' | wc -l)"
+               if [[ $nr_ciphers -ne 129 ]]; then
+                    prln_warning "FIXME line $LINENO, ${FUNCNAME[0]} sending $nr_ciphers ciphers rather than 129."
                else
-                    debugme echo "Sending 129 ciphers"
-                    tls_sockets 03 "${test_ciphers}, ${overflow_cipher1}, ${overflow_cipher2}, 00,FF"
-                    if [[ $? -ne 0 ]]; then
-                         SERVER_SIZE_LIMIT_BUG=true
-                    else
-                         SERVER_SIZE_LIMIT_BUG=false
-                    fi
+                    debugme echo "${FUNCNAME[0]} sending $nr_ciphers ciphers"
                fi
-               debugme echo -e "\nSERVER_SIZE_LIMIT_BUG: $SERVER_SIZE_LIMIT_BUG"
-          else
-               pr_warning "FIXME line $LINENO, TLS 1.2 handshake in ${FUNCNAME[0]} failed"
-               return 1
           fi
-     elif [[ 2 -eq $(has_server_protocol 03) ]]; then
-          tls_sockets 03 "${test_ciphers}, 00,FF"
+          tls_sockets 03 "${overflow_cipher}, ${TLS12_CIPHER}"
           if [[ $? -eq 0 ]]; then
-               add_tls_offered tls1_2 yes
-               tls_sockets 03 "${test_ciphers}, ${overflow_cipher1}, 00,FF"
-               if [[ $? -ne 0 ]]; then
-                    SERVER_SIZE_LIMIT_BUG=true
-                else
-                    tls_sockets 03 "${test_ciphers}, ${overflow_cipher1}, ${overflow_cipher2}, 00,FF"
-                    if [[ $? -ne 0 ]]; then
-                         SERVER_SIZE_LIMIT_BUG=true
-                    else
-                         SERVER_SIZE_LIMIT_BUG=false
-                    fi
-               fi
-               debugme echo -e "\nSERVER_SIZE_LIMIT_BUG: $SERVER_SIZE_LIMIT_BUG"
+               SERVER_SIZE_LIMIT_BUG=false
           else
-               debugme echo -e "\nNo TLS 1.2 in ${FUNCNAME[0]} found"
+               SERVER_SIZE_LIMIT_BUG=true
           fi
+          debugme echo -e "\nSERVER_SIZE_LIMIT_BUG: $SERVER_SIZE_LIMIT_BUG"
      fi
      if "$SERVER_SIZE_LIMIT_BUG"; then
           out " Pre-test: "
