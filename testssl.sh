@@ -18041,12 +18041,12 @@ determine_optimal_proto() {
           prln_bold "doesn't seem to be a TLS/SSL enabled server";
           ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
-     elif ! "$all_failed" && "$ALL_FAILED_SOCKETS"; then
+     elif ! "$all_failed" && "$ALL_FAILED_SOCKETS" && ! "$SSL_NATIVE"; then
           # For some reason connecting with tls_sockets/sslv2_sockets didn't work, but connecting
           # with $OPENSSL s_client did.
           # FIXME: Should we include some sort of "please report" note here?
           prln_magenta " Testing with $NODE:$PORT only worked using $OPENSSL."
-          "$SSL_NATIVE" || prln_magenta " Test results may be somewhat better if the --ssl-native option is used."
+          prln_magenta " Test results may be somewhat better if the --ssl-native option is used."
           ignore_no_or_lame " Type \"yes\" to proceed and accept false negatives or positives" "yes"
           [[ $? -ne 0 ]] && exit $ERR_CLUELESS
      fi
