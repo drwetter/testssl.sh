@@ -2175,10 +2175,8 @@ run_http_header() {
      # Populate vars for HTTP time
      debugme echo "$NOW_TIME: $HTTP_TIME"
 
-     # delete from pattern til the end. We ignore any leading spaces (e.g. www.amazon.de)
-     sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' \
-         -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<?xml/,$d' $HEADERFILE >$HEADERFILE.tmp
-         # ^^^ Attention: filtering is for html body only as of now, doesn't work for other content yet
+     # Quit on first empty line
+     sed -e '/^$/q' $HEADERFILE >$HEADERFILE.tmp
      mv $HEADERFILE.tmp $HEADERFILE
 
      HTTP_STATUS_CODE=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
