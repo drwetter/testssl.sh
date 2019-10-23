@@ -4303,7 +4303,7 @@ modify_clienthello() {
      offset+=4
      for (( 1; offset < tls_handshake_ascii_len; 1 )); do
           extension_type="${tls_handshake_ascii:$offset:4}"
-          offset+=+4
+          offset+=4
           len_extension=2*$(hex2dec "${tls_handshake_ascii:$offset:4}")
 
           if [[ "$extension_type" == 0000 ]] && [[ -z "$new_key_share" ]]; then
@@ -4320,8 +4320,8 @@ modify_clienthello() {
                     len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
                     len_sni_ext=$(printf "%02x\n" $((len_servername+5)))
                     tls_extensions+="000000${len_sni_ext}00${len_sni_listlen}0000${len_servername_hex}${servername_hexstr}"
-                    offset+=$len_extension+4
                fi
+               offset+=$len_extension+4
           elif [[ "$extension_type" != 00$KEY_SHARE_EXTN_NR ]] || [[ -z "$new_key_share" ]]; then
                # If this is in response to a HelloRetryRequest, then do
                # not copy over the old key_share extension, but
