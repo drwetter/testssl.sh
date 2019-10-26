@@ -2175,15 +2175,13 @@ run_http_header() {
      # Populate vars for HTTP time
      debugme echo "$NOW_TIME: $HTTP_TIME"
 
-     # Quit on first empty line to catch 98% of the cases. Next patterns is there because the SEDs tested
+     # Quit on first empty line to catch 98% of the cases. Next pattern is there because the SEDs tested
      # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usal case.
      # So we also trigger also on any sign on a single line which is not alphanumeric (plus _)
      sed -e '/^$/q' -e '/^[^a-zA-Z_0-9]$/q' $HEADERFILE >$HEADERFILE.tmp
-     # Now to be more sure we delete from ~html patterns until the end. We ignore any leading spaces (e.g. www.amazon.de)
-     sed -e '/<HTML>/,$d' -e '/<html>/,$d' -e '/<\!DOCTYPE/,$d' -e '/<\!doctype/,$d' \
-         -e '/<XML/,$d' -e '/<xml/,$d' -e '/<\?XML/,$d' -e '/<?xml/,$d' $HEADERFILE.tmp >$HEADERFILE
-         # ^^^ Attention: filtering is for ~html body only as of now
-         # FIXME: look into -e '/^ *<.*$/d' -e '/^ *{.*$/d'
+     # Now to be more sure we delete from '<' or '{' maybe with a leading blank until the end
+     sed -e '/^ *<.*$/d' -e '/^ *{.*$/d'' $HEADERFILE.tmp >$HEADERFILE
+     debugme echo -e "---\n $(< $HEADERFILE) \n---"
 
      HTTP_STATUS_CODE=$(awk '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)
      msg_thereafter=$(awk -F"$HTTP_STATUS_CODE" '/^HTTP\// { print $2 }' $HEADERFILE 2>>$ERRFILE)   # dirty trick to use the status code as a
