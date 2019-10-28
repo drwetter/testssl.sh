@@ -15180,16 +15180,16 @@ run_drown() {
                fi
                ;;
           *)   prln_svrty_best "not vulnerable on this host and port (OK)"
-               fileout "$jsonID" "OK" "not vulnerable to DROWN on this host and port" "$cve" "$cwe"
+               fileout "$jsonID" "OK" "not vulnerable on this host and port" "$cve" "$cwe"
                if [[ -n "$cert_fingerprint_sha2" ]]; then
                     outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
                     out "$spaces "
                     pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
                     outln " could help you to find out"
-                    fileout "$jsonID" "INFO" "Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe"
+                    fileout "${jsonID}_hint" "INFO" "Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe"
                else
                     outln "$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
-                    fileout "$jsonID" "INFO" "no RSA certificate, can't be used with SSLv2 elsewhere" "$cve" "$cwe"
+                    fileout "${jsonID}_hint" "INFO" "no RSA certificate, can't be used with SSLv2 elsewhere" "$cve" "$cwe"
                fi
                ;;
      esac
