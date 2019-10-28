@@ -16,8 +16,6 @@ else
 	docker exec -ti $ID sed -i -e 's/listen \[::\]:443 ssl default_server;/&\n\tssl_protocols           TLSv1\.2 TLSv1\.3;\n\tssl_ecdh_curve          X448:X25519;/' /etc/nginx/sites-available/default
 fi
 
-s/listen \[::\]:443 ssl default_server;/&\n\tssl_protocols              TLSv1.2 TLSv1.3;/\n\tssl_ecdh_curve X448:X25519;' /etc/nginx/sites-available/default
-
 docker exec -ti $ID nginx -V
 docker exec -ti $ID service nginx start
 docker exec -ti $ID service nginx status
