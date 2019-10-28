@@ -6264,8 +6264,14 @@ run_server_preference() {
 
           [[ $cipher1 == $cipher2 ]] && has_cipher_order=true
      fi
+     debugme echo "has_cipher_order: $has_cipher_order"
+     debugme echo "has_tls13_cipher_order: $has_tls13_cipher_order"
 
-     if ! "$has_cipher_order" && ! "$has_tls13_cipher_order"; then
+     if "$TLS13_ONLY" && ! "$has_tls13_cipher_order"; then
+          out "nope"
+          limitedsense=" (limited sense as client will pick)"
+          fileout "$jsonID" "INFO" "NOT a cipher order configured"
+     elif ! "$has_cipher_order" && ! "$has_tls13_cipher_order"; then
           # server used the different ends (ciphers) from the client hello
           pr_svrty_high "nope (NOT ok)"
           limitedsense=" (limited sense as client will pick)"
@@ -6274,10 +6280,11 @@ run_server_preference() {
           pr_svrty_good "yes (OK)"; out " -- only for < TLS 1.3"
           fileout "$jsonID" "OK" "server -- TLS 1.3 client determined"
      elif ! "$has_cipher_order" && "$has_tls13_cipher_order"; then
-          pr_svrty_good "yes (OK)"; out " -- only for TLS 1.3"
-          fileout "$jsonID" "OK" "server -- < TLS 1.3 client determined"
+          pr_svrty_high "nope (NOT ok)"; out " -- only for TLS 1.3"
+          fileout "$jsonID" "HIGH" "server -- < TLS 1.3 client determined"
      else
           pr_svrty_best "yes (OK)"
+          "$has_tls13_cipher_order" && out " -- TLS 1.3 and below"
           fileout "$jsonID" "OK" "server"
      fi
      outln
