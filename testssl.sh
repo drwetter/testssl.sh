@@ -11527,7 +11527,7 @@ parse_tls_serverhello() {
                else
                     # This could just be a result of the server's response being
                     # split across two or more packets.
-                    continue
+                    break
                fi
           fi
           tls_content_type="${tls_hello_ascii:i:2}"
