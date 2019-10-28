@@ -15180,7 +15180,7 @@ run_drown() {
                fi
                ;;
           *)   prln_svrty_best "not vulnerable on this host and port (OK)"
-               fileout "DROWN" "OK" "not vulnerable to DROWN on this host and port" "$cve" "$cwe"
+               fileout "$jsonID" "OK" "not vulnerable to DROWN on this host and port" "$cve" "$cwe"
                if [[ -n "$cert_fingerprint_sha2" ]]; then
                     outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
                     out "$spaces "
