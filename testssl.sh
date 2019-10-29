@@ -6280,7 +6280,7 @@ run_server_preference() {
           pr_svrty_good "yes (OK)"; out " -- only for < TLS 1.3"
           fileout "$jsonID" "OK" "server -- TLS 1.3 client determined"
      elif ! "$has_cipher_order" && "$has_tls13_cipher_order"; then
-          pr_svrty_high "nope (NOT ok)"; out " -- only for TLS 1.3"
+          pr_svrty_high "no (NOT ok)"; out " -- only for TLS 1.3"
           fileout "$jsonID" "HIGH" "server -- < TLS 1.3 client determined"
      else
           if "$has_tls13_cipher_order"; then
