@@ -6292,6 +6292,10 @@ run_server_preference() {
                     out " -- TLS 1.3 and below"
                     fileout "$jsonID" "OK" "server"
                fi
+          else
+               # we don't have TLS 1.3 at all
+               pr_svrty_best "yes (OK)"
+               fileout "$jsonID" "OK" "server"
           fi
      fi
      outln
