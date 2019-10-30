@@ -6140,13 +6140,11 @@ run_server_preference() {
      local -i ret=0 j sclient_success str_len
      local list_fwd="DHE-RSA-SEED-SHA:SEED-SHA:DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-SHA256:ADH-AES256-GCM-SHA384:AECDH-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-AES128-SHA"
      local list_reverse="ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:AECDH-AES128-SHA:ADH-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-GCM-SHA256:AES128-GCM-SHA256:AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-DES-CBC3-SHA:AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA:SEED-SHA:DHE-RSA-SEED-SHA"
-     tls13_list_fwd="TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256"
-     tls13_list_reverse="TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384"
      tls_list_fwd="c0,2c, c0,30, 00,9f, cc,a9, cc,a8, cc,aa, c0,2b, c0,2f, 00,9e, c0,24, c0,28, 00,6b, c0,23, c0,27, 00,67, c0,0a, 00,04, 00,05, 00,09, 00,0a, 00,9a, 00,96,
                    c0,14, 00,39, c0,09, c0,13, 00,33, 00,9d, 00,9c, 13,01, 13,02, 13,03, 13,04, 13,05, 00,3d, 00,3c, 00,35, 00,2f, 00,ff"
      tls_list_rev="00,2f, 00,35, 00,3c, 00,3d, 13,05, 13,04, 13,03, 13,02, 13,01, 00,9c, 00,9d, 00,33, c0,13, c0,09, 00,39, c0,14, 00,96, 00,9a, 00,0a, 00,09, 00,05, 00,04,
                    c0,0a, 00,67, c0,27, c0,23, 00,6b, c0,28, c0,24, 00,9e, c0,2f, c0,2b, cc,aa, cc,a8, cc,a9, 00,9f, c0,30, c0,2c, 00,ff"
-     local has_cipher_order=false
+     local has_cipher_order=false has_tls13_cipher_order=false
      local addcmd="" addcmd2=""
      local using_sockets=true
      local jsonID="cipher_order"
@@ -6180,7 +6178,17 @@ run_server_preference() {
                        13,03, 13,01, 13,04, 13,05, 00,3d, 00,3c, 00,35, 00,2f, 00,ff" \
                       "ephemeralkey"
           sclient_success=$?
-          [[ $sclient_success -eq 2 ]] && sclient_success=0           # 2: downgraded
+          if [[ $sclient_success -eq 0 ]]; then
+               add_tls_offered tls1_3 yes
+          elif [[ $sclient_success -eq 2 ]]; then
+               sclient_success=0           # 2: downgraded
+               case $DETECTED_TLS_VERSION in
+                    0303) add_tls_offered tls1_2 yes ;;
+                    0302) add_tls_offered tls1_1 yes ;;
+                    0301) add_tls_offered tls1 yes ;;
+                    0300) add_tls_offered ssl3 yes ;;
+               esac
+          fi
           if [[ $sclient_success -eq 0 ]] ; then
                cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
                cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"
@@ -6217,67 +6225,78 @@ run_server_preference() {
           cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
           tls13_cipher2=$(get_cipher $TMPFILE)
           debugme tm_out "TLS 1.3: --> $tls13_cipher2\n"
+
+          [[ $tls13_cipher1 == $tls13_cipher2 ]] && has_tls13_cipher_order=true
+     fi
+     # Check whether the server has a cipher order for SSLv3 - TLSv1.2
+     if [[ $(has_server_protocol "tls1_2") -ne 0 ]] && [[ $(has_server_protocol "tls1_1") -ne 0 ]] && \
+        [[ $(has_server_protocol "tls1") -ne 0 ]] && [[ $(has_server_protocol "ssl3") -ne 0 ]]; then
+          # Based on testing performed by determine_optimal_sockets_params(), it is believed that
+          # this server does not offer SSLv3 - TLSv1.2.
+          has_cipher_order="$has_tls13_cipher_order"
      elif [[ "$OPTIMAL_PROTO" != -ssl2 ]]; then
-          [[ $DEBUG -ge 4 ]] && echo -e "\n Forward: ${list_fwd}\n ${tls13_list_fwd}"
-          $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd") </dev/null 2>$ERRFILE >$TMPFILE
-          if ! sclient_connect_successful $? $TMPFILE && [[ -z "$STARTTLS_PROTOCOL" ]]; then
-               list_fwd="$(actually_supported_ciphers $list_fwd $tls13_list_fwd '-tls1')"
+          if [[ -n "$STARTTLS_OPTIMAL_PROTO" ]]; then
+               [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$SNI"
+               [[ "$STARTTLS_OPTIMAL_PROTO" != -tls1_3 ]] && addcmd2+=" $STARTTLS_OPTIMAL_PROTO"
+          else
+               addcmd2="-no_ssl2 $SNI"
+          fi
+          [[ $DEBUG -ge 4 ]] && echo -e "\n Forward: ${list_fwd}"
+          $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>$ERRFILE >$TMPFILE
+          if ! sclient_connect_successful $? $TMPFILE; then
+               list_fwd="$(actually_supported_ciphers $list_fwd '' '-tls1')"
                pr_warning "no matching cipher in this list found (pls report this): "
                outln "$list_fwd  . "
                fileout "$jsonID" "WARN" "Could not determine server cipher order, no matching cipher in list found (pls report this): $list_fwd"
                tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
                # we assume the problem is with testing here but it could be also the server side
-          elif [[ -n "$STARTTLS_PROTOCOL" ]]; then
-               # now it still could be that we hit this bug: https://github.com/drwetter/testssl.sh/issues/188
-               # workaround is to connect with a protocol
-               [[ ! "$STARTTLS_OPTIMAL_PROTO" =~ ssl ]] && addcmd2="$SNI"
-               $OPENSSL s_client $(s_client_options "$STARTTLS $STARTTLS_OPTIMAL_PROTO -cipher $list_fwd -ciphersuites $tls13_list_fwd $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>$ERRFILE >$TMPFILE
-               if ! sclient_connect_successful $? $TMPFILE; then
-                    list_fwd="$(actually_supported_ciphers $list_fwd $tls13_list_fwd '-tls1')"
-                    pr_warning "no matching cipher in this list found (pls report this): "
-                    outln "$list_fwd  . "
-                    fileout "$jsonID" "WARN" "Could not determine cipher order, no matching cipher in list found (pls report this): $list_fwd"
-                    tmpfile_handle ${FUNCNAME[0]}.txt
-                    return 1
-               fi
           fi
           cipher1=$(get_cipher $TMPFILE)               # cipher1 from 1st serverhello
           debugme tm_out "1 --> $cipher1\n"
 
-          if [[ -n "$STARTTLS_OPTIMAL_PROTO" ]]; then
-               addcmd2="$STARTTLS_OPTIMAL_PROTO $SNI"
-          else
-               if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
-                    addcmd2="$OPTIMAL_PROTO"
-               else
-                    addcmd2="-no_ssl2 $SNI"
-               fi
-          fi
-
           # second client hello with reverse list
-          [[ $DEBUG -ge 4 ]] && echo -e "\n Reverse: ${list_reverse}\n ${tls13_list_reverse}"
-          $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_reverse -ciphersuites $tls13_list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>>$ERRFILE >$TMPFILE
+          [[ $DEBUG -ge 4 ]] && echo -e "\n Reverse: ${list_reverse}"
+          $OPENSSL s_client $(s_client_options "$STARTTLS -cipher $list_reverse $BUGS -connect $NODEIP:$PORT $PROXY $addcmd2") </dev/null 2>>$ERRFILE >$TMPFILE
           # first handshake worked above so no error handling here
           cipher2=$(get_cipher $TMPFILE)               # cipher2 from 2nd serverhello
           debugme tm_out "2 --> $cipher2\n"
-     fi
 
-     if [[ "$default_proto" == TLSv1.3 ]] && [[ $tls13_cipher1 != $tls13_cipher2 ]]; then
-          pr_svrty_good "yes (OK)"; out " -- only for < TLS 1.3"
-          has_cipher_order=true
-          fileout "$jsonID" "OK" "server -- TLS 1.3 client determined"
-          cipher1="$tls13_cipher1"
-          cipher2="$tls13_cipher2"
-     elif [[ "$OPTIMAL_PROTO" == -ssl2 ]] || [[ "$cipher1" != $cipher2 ]]; then
+          [[ $cipher1 == $cipher2 ]] && has_cipher_order=true
+     fi
+     debugme echo "has_cipher_order: $has_cipher_order"
+     debugme echo "has_tls13_cipher_order: $has_tls13_cipher_order"
+
+     if "$TLS13_ONLY" && ! "$has_tls13_cipher_order"; then
+          out "no (TLS 1.3 only)"
+          limitedsense=" (limited sense as client will pick)"
+          fileout "$jsonID" "INFO" "not a cipher order for TLS 1.3 configured"
+     elif ! "$has_cipher_order" && ! "$has_tls13_cipher_order"; then
           # server used the different ends (ciphers) from the client hello
-          pr_svrty_high "nope (NOT ok)"
+          pr_svrty_high "no (NOT ok)"
           limitedsense=" (limited sense as client will pick)"
           fileout "$jsonID" "HIGH" "NOT a cipher order configured"
+     elif "$has_cipher_order" && ! "$has_tls13_cipher_order" && [[ "$default_proto" == TLSv1.3 ]]; then
+          pr_svrty_good "yes (OK)"; out " -- only for < TLS 1.3"
+          fileout "$jsonID" "OK" "server -- TLS 1.3 client determined"
+     elif ! "$has_cipher_order" && "$has_tls13_cipher_order"; then
+          pr_svrty_high "no (NOT ok)"; out " -- only for TLS 1.3"
+          fileout "$jsonID" "HIGH" "server -- < TLS 1.3 client determined"
      else
-          pr_svrty_best "yes (OK)"
-          has_cipher_order=true
-          fileout "$jsonID" "OK" "server"
+          if "$has_tls13_cipher_order"; then
+               if "$TLS13_ONLY"; then
+                    out "yes (TLS 1.3 only)"
+                    fileout "$jsonID" "INFO" "server (TLS 1.3)"
+               else
+                    pr_svrty_best "yes (OK)"
+                    out " -- TLS 1.3 and below"
+                    fileout "$jsonID" "OK" "server"
+               fi
+          else
+               # we don't have TLS 1.3 at all
+               pr_svrty_best "yes (OK)"
+               fileout "$jsonID" "OK" "server"
+          fi
      fi
      outln
 
@@ -6385,6 +6404,7 @@ run_server_preference() {
 
           pr_bold " Cipher order"
           while read proto_ossl proto_hex proto_txt; do
+               [[ "$proto_ossl" == tls1_3 ]] && ! "$has_tls13_cipher_order" && continue
                cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets"
           done <<< "$(tm_out " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
           outln
