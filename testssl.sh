@@ -1367,7 +1367,7 @@ f5_ip_oldstyle() {
      local a b c d
 
      tmp="${1/%.*}"                     # until first dot
-     tmp="$(printf "%x8" "$tmp")"       # convert the whole thing to hex, now back to ip (reversed notation:
+     tmp="$(printf "%08x" "$tmp")"       # convert the whole thing to hex, now back to ip (reversed notation:
      tmp="$(f5_hex2ip $tmp)"               # transform to ip with reversed notation
      IFS="." read -r a b c d <<< "$tmp" # reverse it
      echo $d.$c.$b.$a
