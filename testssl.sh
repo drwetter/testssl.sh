@@ -356,6 +356,15 @@ HAS_CHACHA20=false
 HAS_AES128_GCM=false
 HAS_AES256_GCM=false
 HAS_ZLIB=false
+HAS_DIG=false
+HAS_HOST=false
+HAS_DRILL=false
+HAS_NSLOOKUP=false
+HAS_IDN=false
+HAS_IDN2=false
+HAS_AVAHIRESOLVE=false
+HAS_DIG_NOIDNOUT=false
+
 OSSL_CIPHERS_S=""
 PORT=443                                # unless otherwise auto-determined, see below
 NODE=""
@@ -17031,6 +17040,15 @@ HAS_LMTP: $HAS_LMTP
 HAS_NNTP: $HAS_NNTP
 HAS_IRC: $HAS_IRC
 
+HAS_DIG: $HAS_DIG
+HAS_HOST: $HAS_HOST
+HAS_DRILL: $HAS_DRILL
+HAS_NSLOOKUP: $HAS_NSLOOKUP
+HAS_IDN: $HAS_IDN
+HAS_IDN2: $HAS_IDN2
+HAS_AVAHIRESOLVE: $HAS_AVAHIRESOLVE
+HAS_DIG_NOIDNOUT: $HAS_DIG_NOIDNOUT
+
 PATH: $PATH
 PROG_NAME: $PROG_NAME
 TESTSSL_INSTALL_DIR: $TESTSSL_INSTALL_DIR
@@ -17336,13 +17354,12 @@ ignore_no_or_lame() {
 # arg1: URI
 parse_hn_port() {
      local tmp_port
+     local node_tmp=""
 
      NODE="$1"
      NODE="${NODE/https\:\/\//}"        # strip "https"
      NODE="${NODE%%/*}"                 # strip trailing urlpath
      NODE="${NODE%%.}"                  # strip trailing "." if supplied
-
-     # if there's a trailing ':' probably a starttls/application protocol was specified
      if grep -q ':$' <<< "$NODE"; then
           if grep -wq http <<< "$NODE"; then
                fatal "\"http\" is not what you meant probably" $ERR_CMDLINE
@@ -17350,8 +17367,7 @@ parse_hn_port() {
                fatal "\"$1\" is not a valid URI" $ERR_CMDLINE
           fi
      fi
-
-     # was the address supplied like [AA:BB:CC::]:port ?
+     # Was an IPv6 address supplied like [AA:BB:CC::]:port ?
      if grep -q ']' <<< "$NODE"; then
           tmp_port=$(printf "$NODE" | sed 's/\[.*\]//' | sed 's/://')
           # determine v6 port, supposed it was supplied additionally
@@ -17365,9 +17381,34 @@ parse_hn_port() {
           grep -q ':' <<< "$NODE" && \
                PORT=$(sed 's/^.*\://' <<< "$NODE") && NODE=$(sed 's/\:.*$//' <<< "$NODE")
      fi
+
+     # We check for non-ASCII chars now. If there are some we'll try to convert it if IDN/IDN2 is installed
+     # If not, we'll continue. Hoping later that dig can use it. If not the error handler will tell
+     # Honestly we don't care whether it's IDN2008 or IDN2003 or Emoji domains as long as it works.
+     # So we try to resolve anything supplied. If it can't  our resolver error handler takes care
+     if [[ "$NODE" == *[![:ascii:]]* ]]; then
+          if ! "$HAS_IDN2" && ! "$HAS_IDN"; then
+               prln_warning " URI contains non-ASCII characters and libidn/libidn2 not available."
+               outln " Trying to feed the resolver without converted \"$NODE\" ...\n"
+               #ToDo: fileout is missing
+               node_tmp="$NODE"
+          elif "$HAS_IDN2"; then
+               node_tmp="$(idn2 "$NODE" 2>/dev/null)"
+          fi
+          if "$HAS_IDN" && [[ -z "$node_tmp" ]]; then
+               node_tmp="$(idn "$NODE" 2>/dev/null)"
+          fi
+          if [[ -z "$node_tmp" ]]; then
+               prln_warning " URI contains non-ASCII characters and IDN conversion failed."
+               outln " Trying to feed the resolver without converted \"$NODE\" ...\n"
+               #ToDo: fileout is missing
+               node_tmp="$NODE"
+          fi
+          NODE="$node_tmp"
+     fi
+
      debugme echo $NODE:$PORT
      SNI="-servername $NODE"
-
      URL_PATH=$(sed 's/https:\/\///' <<< "$1" | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
      URL_PATH=$(sed 's/\/\//\//g' <<< "$URL_PATH")          # we rather want // -> /
      [[ -z "$URL_PATH" ]] && URL_PATH="/"
@@ -17407,11 +17448,14 @@ filter_ip4_address() {
      done
 }
 
+# For security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
+# arg1 is the entry we want to look up in the host file
 get_local_aaaa() {
      local ip6=""
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
-     # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
+     [[ -z "$1" ]] && echo "" && return 1
+     # Also multiple records should work fine
      ip6=$(grep -wih "$1" $etchosts 2>/dev/null | grep ':' | grep -Ev '^#|\.local' | grep -Ei "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv6addr "$ip6"; then
           echo "$ip6"
@@ -17419,12 +17463,10 @@ get_local_aaaa() {
           echo ""
      fi
 }
-
 get_local_a() {
      local ip4=""
      local etchosts="/etc/hosts /c/Windows/System32/drivers/etc/hosts"
 
-     # for security testing sometimes we have local entries. Getent is BS under Linux for localhost: No network, no resolution
      ip4=$(grep -wih "$1" $etchosts 2>/dev/null | grep -Ev ':|^#|\.local' | grep -Ei "[[:space:]]$1" | awk '{ print $1 }')
      if is_ipv4addr "$ip4"; then
           echo "$ip4"
@@ -17433,10 +17475,25 @@ get_local_a() {
      fi
 }
 
-# does a hard exit if no lookup binary is provided
+# Does a hard exit if no lookup binary is provided
+# Checks for IDN capabilities also
+#
 check_resolver_bins() {
-     if ! type -p dig &> /dev/null && ! type -p host &> /dev/null && ! type -p drill &> /dev/null && ! type -p nslookup &>/dev/null; then
+     type -p dig   &> /dev/null &&  HAS_DIG=true
+     type -p host  &> /dev/null &&  HAS_HOST=true
+     type -p drill &> /dev/null &&  HAS_DRILL=true
+     type -p nslookup &> /dev/null && HAS_NSLOOKUP=true
+     type -p avahi-resolve &>/dev/null && HAS_AVAHIRESOLVE=true
+     type -p idn  &>/dev/null && HAS_IDN=true
+     type -p idn2 &>/dev/null && HAS_IDN2=true
+
+     if ! "$HAS_DIG" && ! "$HAS_HOST" && "$HAS_DRILL" && ! "$HAS_NSLOOKUP"; then
           fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" $ERR_DNSBIN
+     fi
+     if "$HAS_DIG"; then
+          if dig +noidnout -t a 2>&1 | grep -Eqv 'Invalid option: \+noidnout|IDN support not enabled'; then
+               HAS_DIG_NOIDNOUT=true
+          fi
      fi
      return 0
 }
@@ -17446,7 +17503,9 @@ check_resolver_bins() {
 get_a_record() {
      local ip4=""
      local saved_openssl_conf="$OPENSSL_CONF"
+     local noidnout=""
 
+     [[ "$HAS_DIG_NOIDNOUT" ]] && noidnout="+noidnout"
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      if [[ "$1" == localhost ]]; then
           # This is a bit ugly but prevents from doing DNS lookups which could fail
@@ -17459,33 +17518,26 @@ get_a_record() {
           return 0
      fi
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
-     check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
-          if type -p avahi-resolve &>/dev/null; then
+          if "$HAS_AVAHIRESOLVE"; then
                ip4=$(filter_ip4_address $(avahi-resolve -4 -n "$1" 2>/dev/null | awk '{ print $2 }'))
-          elif type -p dig &>/dev/null; then
+          elif "$HAS_DIG"; then
                ip4=$(filter_ip4_address $(dig @224.0.0.251 -p 5353 +short -t a +notcp "$1" 2>/dev/null | sed '/^;;/d'))
           else
                fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
           fi
      fi
-     if [[ -z "$ip4" ]]; then
-          if type -p dig &> /dev/null ; then
-               ip4=$(filter_ip4_address $(dig +timeout=2 +tries=2 +short -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
-          fi
+     if [[ -z "$ip4" ]] && "$HAS_DIG"; then
+          ip4=$(filter_ip4_address $(dig +short +timeout=2 +tries=2 "$noidnout" -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
      fi
-     if [[ -z "$ip4" ]]; then
-          type -p host &> /dev/null && \
-               ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | awk '/address/ { print $NF }'))
+     if [[ -z "$ip4" ]] && "$HAS_HOST"; then
+          ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | awk '/address/ { print $NF }'))
      fi
-     if [[ -z "$ip4" ]]; then
-          type -p drill &> /dev/null && \
-               ip4=$(filter_ip4_address $(drill a "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
+     if [[ -z "$ip4" ]] && "$HAS_DRILL"; then
+          ip4=$(filter_ip4_address $(drill a "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
      fi
-     if [[ -z "$ip4" ]]; then
-          if type -p nslookup &>/dev/null; then
-               ip4=$(filter_ip4_address $(strip_lf "$(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/ { getline; print $NF }')"))
-          fi
+     if [[ -z "$ip4" ]] && "$HAS_NSLOOKUP"; then
+          ip4=$(filter_ip4_address $(strip_lf "$(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/ { getline; print $NF }')"))
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
      echo "$ip4"
@@ -17496,7 +17548,9 @@ get_a_record() {
 get_aaaa_record() {
      local ip6=""
      local saved_openssl_conf="$OPENSSL_CONF"
+     local noidnout=""
 
+     [[ "$HAS_DIG_NOIDNOUT" ]] && noidnout="+noidnout"
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if is_ipv6addr "$1"; then
@@ -17507,23 +17561,22 @@ get_aaaa_record() {
           # we need also this here as get_aaaa_record is always called after get_a_record and we want to handle this at a low level
           return 0
      fi
-     check_resolver_bins
      if [[ -z "$ip6" ]]; then
           if [[ "$NODE" == *.local ]]; then
-               if type -p avahi-resolve &>/dev/null; then
+               if "$HAS_AVAHIRESOLVE"; then
                     ip6=$(filter_ip6_address $(avahi-resolve -6 -n "$1" 2>/dev/null | awk '{ print $2 }'))
-               elif type -p dig &>/dev/null; then
+               elif "$HAS_DIG"; then
                     ip6=$(filter_ip6_address $(dig @ff02::fb -p 5353 -t aaaa +short +notcp "$NODE"))
                else
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
                fi
-          elif type -p dig &> /dev/null; then
-               ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
-          elif type -p host &> /dev/null ; then
+          elif "$HAS_DIG"; then
+               ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 "$noidnout" -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
+          elif "$HAS_HOST"; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
-          elif type -p drill &> /dev/null; then
+          elif "$HAS_DRILL"; then
                ip6=$(filter_ip6_address $(drill aaaa "$1" | awk '/ANSWER SECTION/,/AUTHORITY SECTION/ { print $NF }' | awk '/^[0-9]/'))
-          elif type -p nslookup &>/dev/null; then
+          elif "$HAS_NSLOOKUP"; then
                ip6=$(filter_ip6_address $(strip_lf "$(nslookup -type=aaaa "$1" 2>/dev/null | awk '/'"^${a}"'.*AAAA/ { print $NF }')"))
           fi
      fi
@@ -17540,6 +17593,9 @@ get_caa_rr_record() {
      local caa_property_value
      local saved_openssl_conf="$OPENSSL_CONF"
      local all_caa=""
+     local noidnout=""
+
+     [[ "$HAS_DIG_NOIDNOUT" ]] && noidnout="+noidnout"
 
      [[ -n "$NODNS" ]] && return 0           # if minimum DNS lookup was instructed, leave here
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
@@ -17549,18 +17605,17 @@ get_caa_rr_record() {
      # for dig +short the output always starts with '0 issue [..]' or '\# 19 [..]' so we normalize thereto to keep caa_flag, caa_property
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
-     check_resolver_bins
-     if type -p dig &> /dev/null; then
-          raw_caa="$(dig +timeout=3 +tries=3 $1 type257 +short | awk '{ print $1" "$2" "$3 }')"
+     if "$HAS_DIG"; then
+          raw_caa="$(dig +short +timeout=3 +tries=3 "$noidnout" type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
           # empty if no CAA record
-     elif type -p drill &> /dev/null; then
+     elif "$HAS_DRILL"; then
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
-     elif type -p host &> /dev/null; then
+     elif "$HAS_HOST"; then
           raw_caa="$(host -t type257 $1)"
           if grep -Ewvq "has no CAA|has no TYPE257" <<< "$raw_caa"; then
                raw_caa="$(sed -e 's/^.*has CAA record //' -e 's/^.*has TYPE257 record //' <<< "$raw_caa")"
           fi
-     elif type -p nslookup &> /dev/null; then
+     elif "$HAS_NSLOOKUP"; then
           raw_caa="$(strip_lf "$(nslookup -type=type257 $1 | grep -w rdata_257)")"
           if [[ -n "$raw_caa" ]]; then
                raw_caa="$(sed 's/^.*rdata_257 = //' <<< "$raw_caa")"
@@ -17614,19 +17669,21 @@ get_caa_rr_record() {
 get_mx_record() {
      local mx=""
      local saved_openssl_conf="$OPENSSL_CONF"
+     local noidnout=""
 
+     [[ "$HAS_DIG_NOIDNOUT" ]] && noidnout="+noidnout"
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
-     check_resolver_bins
      # we need the last two columns here
-     if type -p host &> /dev/null; then
+     if "$HAS_HOST"; then
           mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
-     elif type -p dig &> /dev/null; then
-          mxs="$(dig +short -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
-     elif type -p drill &> /dev/null; then
+     elif "$HAS_DIG"; then
+          mxs="$(dig +short "$noidnout" -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
+     elif "$HAS_DRILL"; then
           mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
-     elif type -p nslookup &> /dev/null; then
+     elif "$HAS_NSLOOKUP"; then
           mxs="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')")"
      else
+          # shouldn't reach this, as we checked in the top
           fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
      fi
      OPENSSL_CONF="$saved_openssl_conf"
@@ -17640,8 +17697,8 @@ determine_ip_addresses() {
      local ip4=""
      local ip6=""
 
-     ip4=$(get_a_record $NODE)
-     ip6=$(get_aaaa_record $NODE)
+     ip4="$(get_a_record "$NODE")"
+     ip6="$(get_aaaa_record "$NODE")"
      IP46ADDRs=$(newline_to_spaces "$ip4 $ip6")
 
      if [[ -n "$CMDLINE_IP" ]]; then
@@ -17666,16 +17723,16 @@ determine_ip_addresses() {
           ip4="$NODE"                        # only an IPv4 address was supplied as an argument, no hostname
           SNI=""                             # override Server Name Indication as we test the IP only
      else
-          ip4=$(get_local_a $NODE)           # is there a local host entry?
-          if [[ -z $ip4 ]]; then             # empty: no (LOCAL_A is predefined as false)
-               ip4=$(get_a_record $NODE)
+          ip4=$(get_local_a "$NODE")         # is there a local host entry?
+          if [[ -z "$ip4" ]]; then           # empty: no (LOCAL_A is predefined as false)
+               ip4=$(get_a_record "$NODE")
           else
                LOCAL_A=true                  # we have the ip4 from local host entry and need to signal this to testssl
           fi
           # same now for ipv6
-          ip6=$(get_local_aaaa $NODE)
-          if [[ -z $ip6 ]]; then
-               ip6=$(get_aaaa_record $NODE)
+          ip6=$(get_local_aaaa "$NODE")
+          if [[ -z "$ip6" ]]; then
+               ip6=$(get_aaaa_record "$NODE")
           else
                LOCAL_AAAA=true               # we have a local ipv6 entry and need to signal this to testssl
           fi
@@ -17715,21 +17772,20 @@ determine_rdns() {
      [[ -n "$NODNS" ]] && rDNS="(instructed to minimize DNS queries)" && return 0   # PTR records were not asked for
      local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
      OPENSSL_CONF=""                              # see https://github.com/drwetter/testssl.sh/issues/134
-     check_resolver_bins
      if [[ "$NODE" == *.local ]]; then
-          if type -p avahi-resolve &>/dev/null; then
+          if "$HAS_AVAHIRESOLVE"; then
                rDNS=$(avahi-resolve -a $nodeip 2>/dev/null | awk '{ print $2 }')
-          elif type -p dig &>/dev/null; then
+          elif "$HAS_DIG"; then
                rDNS=$(dig -x $nodeip @224.0.0.251 -p 5353 +notcp +noall +answer +short | awk '{ print $1 }')
           fi
-     elif type -p dig &> /dev/null; then
+     elif "$HAS_DIG"; then
           # 1+2 should suffice. It's a compromise for if e.g. network is down but we have a docker/localhost server
           rDNS=$(dig -x $nodeip +timeout=1 +tries=2 +noall +answer +short | awk '{ print $1 }')    # +short returns also CNAME, e.g. openssl.org
-     elif type -p host &> /dev/null; then
+     elif "$HAS_HOST"; then
           rDNS=$(host -t PTR $nodeip 2>/dev/null | awk '/pointer/ { print $NF }')
-     elif type -p drill &> /dev/null; then
+     elif "$HAS_DRILL"; then
           rDNS=$(drill -x ptr $nodeip 2>/dev/null | awk '/ANSWER SECTION/ { getline; print $NF }')
-     elif type -p nslookup &> /dev/null; then
+     elif "$HAS_NSLOOKUP"; then
           rDNS=$(strip_lf "$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')")
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
@@ -19470,17 +19526,8 @@ parse_cmd_line() {
      if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! "$do_display_only"; then
           fatal "URI missing" $ERR_CMDLINE
      else
-     # left off here is the URI
-          if [[ $1 = *[![:ascii:]]* ]]; then
-              if [[ "$(command -v idn)" == "" ]]; then
-                  fatal "URI contains non-ASCII characters, and IDN not available."
-              else
-                  URI="$(echo $1 | idn)"
-              fi
-          else
-              URI="$1"
-          fi
-          # parameter after URI supplied:
+     # What is left here should be the URI.
+          URI="$1"
           [[ -n "$2" ]] && fatal "URI comes last" $ERR_CMDLINE
      fi
      [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal "\"--ip=one\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
@@ -19713,6 +19760,7 @@ lets_roll() {
      check_proxy
      check4openssl_oldfarts
      check_bsd_mount
+     check_resolver_bins
 
      if "$do_display_only"; then
           prettyprint_local "$PATTERN2SHOW"
