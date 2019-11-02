@@ -5753,7 +5753,7 @@ run_cipherlists() {
      ret=$((ret + $?))
      sub_cipherlists "$ossl_tdes_ciphers"      "" " Triple DES Ciphers / IDEA                 "    -1 "3DES_IDEA" "$tdes_ciphers"    "$sslv2_tdes_ciphers"   "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_average_ciphers"   "" " Average: SEED + 128+256 Bit CBC ciphers   "     0 "AVERAGE"   "$average_ciphers"  ""                     "$using_sockets" "$cve" "$cwe2"
+     sub_cipherlists "$ossl_average_ciphers"   "" " Obsolete: SEED + 128+256 Bit CBC ciphers   "     0 "AVERAGE"   "$average_ciphers"  ""                     "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
      sub_cipherlists "$ossl_strong_ciphers" 'ALL' " Strong encryption (AEAD ciphers)          "     2 "STRONG"    "$strong_ciphers"   ""                     "$using_sockets" ""      ""
      ret=$((ret + $?))
