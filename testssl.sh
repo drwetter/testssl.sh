@@ -18495,6 +18495,7 @@ create_mass_testing_cmdline() {
                               MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_${test_number}.json"
                               # next is the jsonfile itself, as no '=' was supplied
                               [[ "$cmd" == --jsonfile ]] && skip_next=true
+                              [[ "$cmd" == -oj ]] && skip_next=true
                          else
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
@@ -18503,6 +18504,7 @@ create_mass_testing_cmdline() {
                          if "$JSONHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_${test_number}.json"
                               [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
+                              [[ "$cmd" == -oJ ]] && skip_next=true
                          else
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
@@ -18511,6 +18513,7 @@ create_mass_testing_cmdline() {
                          if "$CSVHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--csvfile=$TEMPDIR/csvfile_${test_number}.csv"
                               [[ "$cmd" == --csvfile ]] && skip_next=true
+                              [[ "$cmd" == -oC ]] && skip_next=true
                          else
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
@@ -18519,6 +18522,7 @@ create_mass_testing_cmdline() {
                          if "$HTMLHEADER"; then
                               MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile=$TEMPDIR/htmlfile_${test_number}.html"
                               [[ "$cmd" == --htmlfile ]] && skip_next=true
+                              [[ "$cmd" == -oH ]] && skip_next=true
                          else
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
