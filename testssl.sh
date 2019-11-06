@@ -4899,7 +4899,7 @@ run_protocols() {
           fi
      fi
      outln
-     [[ "$DEBUG" -le 1 ]] && debug_recomm=", rerun w DEBUG>=2 or --ssl-native"
+     [[ "$DEBUG" -le 1 ]] && debug_recomm=", rerun with DEBUG>=2 or --ssl-native"
 
      pr_bold " SSLv2      ";
      if ! "$SSL_NATIVE"; then
