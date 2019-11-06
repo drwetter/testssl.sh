@@ -4796,7 +4796,8 @@ locally_supported() {
 run_prototest_openssl() {
      local -i ret=0
 
-     ! locally_supported "$1" && return 7
+     # check whether the protocol being tested is supported by $OPENSSL
+     $OPENSSL s_client "$1" -connect x 2>&1 | grep -aq "unknown option" && return 7
      $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
@@ -4967,7 +4968,8 @@ run_protocols() {
                     fileout "$jsonID" "HIGH" "offered, no cipher" "CVE-2015-3197" "CWE-310"
                     add_tls_offered ssl2 yes
                     ;;
-               7)   fileout "$jsonID" "INFO" "not tested due to lack of local support"
+               7)   prln_local_problem "$OPENSSL doesn't support \"s_client -ssl2\""
+                    fileout "$jsonID" "INFO" "not tested due to lack of local support"
                     ((ret++))
                     ;;
           esac
@@ -5030,7 +5032,7 @@ run_protocols() {
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with SSLv3"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -ssl3\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ;;
@@ -5107,7 +5109,7 @@ run_protocols() {
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.0"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -tls1\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ((ret++))
@@ -5188,7 +5190,7 @@ run_protocols() {
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.1"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_1\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ((ret++))
@@ -5309,7 +5311,7 @@ run_protocols() {
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.2"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_2\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ((ret++))
@@ -5462,7 +5464,7 @@ run_protocols() {
                     # can only happen in debug mode
                     prln_warning "strange reply, maybe a client side problem with TLS 1.3"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ((ret++))
