@@ -4802,12 +4802,18 @@ run_prototest_openssl() {
      sclient_connect_successful $? $TMPFILE
      ret=$?
      debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
-     # try again without $PROXY
-     $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI") >$TMPFILE 2>&1 </dev/null
-     sclient_connect_successful $? $TMPFILE
-     ret=$?
-     debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
-     grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
+     if [[ $ret -ne 0 ]]; then
+          if grep -aq "no cipher list" $TMPFILE; then
+               ret=5       # <--- important indicator for SSL2 (maybe others, too)
+          else
+               # try again without $PROXY
+               $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI") >$TMPFILE 2>&1 </dev/null
+               sclient_connect_successful $? $TMPFILE
+               ret=$?
+               debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
+               grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
+          fi
+     fi
      tmpfile_handle ${FUNCNAME[0]}$1.txt
      return $ret
 
