@@ -4964,7 +4964,7 @@ run_protocols() {
                     fileout "$jsonID" "OK" "not offered"
                     add_tls_offered ssl2 no
                     ;;
-               5)   pr_svrty_high "CVE-2015-3197: $supported_no_ciph2";
+               5)   prln_svrty_high "CVE-2015-3197: $supported_no_ciph2";
                     fileout "$jsonID" "HIGH" "offered, no cipher" "CVE-2015-3197" "CWE-310"
                     add_tls_offered ssl2 yes
                     ;;
