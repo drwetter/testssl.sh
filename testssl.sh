@@ -4784,8 +4784,8 @@ locally_supported() {
 }
 
 
-# The protocol check in run_protocols needs to be redone. The using_socket part there kind of sucks.
-# 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this agai
+# The protocol check in run_protocols needs to be redone. The using_sockets part there kind of sucks.
+# 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this again
 #   --> we have that but certain information like "downgraded" are not being passed. That's not ok for run_protocols()/
 #   for all other functions we can use it
 # 2) the code is old and one can do that way better
