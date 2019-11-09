@@ -4784,8 +4784,8 @@ locally_supported() {
 }
 
 
-# The protocol check in run_protocols needs to be redone. The using_socket part there kind of sucks.
-# 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this agai
+# The protocol check in run_protocols needs to be redone. The using_sockets part there kind of sucks.
+# 1) we need to have a variable where the results are being stored so that every other test doesn't have to do this again
 #   --> we have that but certain information like "downgraded" are not being passed. That's not ok for run_protocols()/
 #   for all other functions we can use it
 # 2) the code is old and one can do that way better
@@ -4796,17 +4796,24 @@ locally_supported() {
 run_prototest_openssl() {
      local -i ret=0
 
-     ! locally_supported "$1" && return 7
-     $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+     # check whether the protocol being tested is supported by $OPENSSL
+     $OPENSSL s_client "$1" -connect x 2>&1 | grep -aq "unknown option" && return 7
+     $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>&1 </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
      debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
-     # try again without $PROXY
-     $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI") >$TMPFILE 2>$ERRFILE </dev/null
-     sclient_connect_successful $? $TMPFILE
-     ret=$?
-     debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
-     grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
+     if [[ $ret -ne 0 ]]; then
+          if grep -aq "no cipher list" $TMPFILE; then
+               ret=5       # <--- important indicator for SSL2 (maybe others, too)
+          else
+               # try again without $PROXY
+               $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI") >$TMPFILE 2>&1 </dev/null
+               sclient_connect_successful $? $TMPFILE
+               ret=$?
+               debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
+               grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
+          fi
+     fi
      tmpfile_handle ${FUNCNAME[0]}$1.txt
      return $ret
 
@@ -4963,11 +4970,12 @@ run_protocols() {
                     fileout "$jsonID" "OK" "not offered"
                     add_tls_offered ssl2 no
                     ;;
-               5)   pr_svrty_high "CVE-2015-3197: $supported_no_ciph2";
+               5)   prln_svrty_high "CVE-2015-3197: $supported_no_ciph2";
                     fileout "$jsonID" "HIGH" "offered, no cipher" "CVE-2015-3197" "CWE-310"
                     add_tls_offered ssl2 yes
                     ;;
-               7)   fileout "$jsonID" "INFO" "not tested due to lack of local support"
+               7)   prln_local_problem "$OPENSSL doesn't support \"s_client -ssl2\""
+                    fileout "$jsonID" "INFO" "not tested due to lack of local support"
                     ((ret++))
                     ;;
           esac
@@ -5030,7 +5038,7 @@ run_protocols() {
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with SSLv3"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -ssl3\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ;;
@@ -5107,7 +5115,7 @@ run_protocols() {
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.0"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -tls1\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ((ret++))
@@ -5188,7 +5196,7 @@ run_protocols() {
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.1"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_1\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ((ret++))
@@ -5309,7 +5317,7 @@ run_protocols() {
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.2"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_2\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ((ret++))
@@ -5462,7 +5470,7 @@ run_protocols() {
                     # can only happen in debug mode
                     prln_warning "strange reply, maybe a client side problem with TLS 1.3"; outln "$debug_recomm"
                else
-                    # warning on screen came already from locally_supported()
+                    prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\""
                     fileout "$jsonID" "WARN" "not tested due to lack of local support"
                fi
                ((ret++))
