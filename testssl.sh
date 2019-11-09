@@ -19760,11 +19760,12 @@ lets_roll() {
      choose_printf
      prepare_debug  ; stopwatch parse
      prepare_arrays ; stopwatch prepare_arrays
+     check_resolver_bins
      mybanner
      check_proxy
      check4openssl_oldfarts
      check_bsd_mount
-     check_resolver_bins
+     
 
      if "$do_display_only"; then
           prettyprint_local "$PATTERN2SHOW"
