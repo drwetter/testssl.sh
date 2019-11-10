@@ -7464,7 +7464,7 @@ get_cn_from_cert() {
      # for e.g. russian sites -esc_msb,utf8 works in an UTF8 terminal -- any way to check platform independent?
      # see x509(1ssl):
      subject="$($OPENSSL x509 -in $1 -noout -subject -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
-     echo "$(awk -F'=' '/CN=/ { print $2 }' <<< "$subject")"
+     echo "$(awk -F'=' '/CN=/ { print $2 }' <<< "$subject" | tr '\n' ' ')"
      return $?
 }
 
@@ -16963,7 +16963,7 @@ file output options (can also be preset via environment variables)
      --csvfile|-oC <csvfile>       additional output as CSV to the specified file or directory, similar to --logfile
      --html                        additional output as HTML to file '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.html'
      --htmlfile|-oH <htmlfile>     additional output as HTML to the specified file or directory, similar to --logfile
-     --out(f,F)ile|-oa/-oA <fname> log to a LOG,JSON,CSV,HTML file (see nmap). -oA/-oa: pretty/flat JSON. 
+     --out(f,F)ile|-oa/-oA <fname> log to a LOG,JSON,CSV,HTML file (see nmap). -oA/-oa: pretty/flat JSON.
                                    "auto" uses '\${NODE}-p\${port}\${YYYYMMDD-HHMM}'. If fname if a dir uses 'dir/\${NODE}-p\${port}\${YYYYMMDD-HHMM}'
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
@@ -19766,14 +19766,14 @@ lets_roll() {
      maketempf
      find_openssl_binary
      choose_printf
+     check_resolver_bins
      prepare_debug  ; stopwatch parse
      prepare_arrays ; stopwatch prepare_arrays
-     check_resolver_bins
      mybanner
      check_proxy
      check4openssl_oldfarts
      check_bsd_mount
-     
+
 
      if "$do_display_only"; then
           prettyprint_local "$PATTERN2SHOW"
