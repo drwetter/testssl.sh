@@ -17495,7 +17495,7 @@ check_resolver_bins() {
      type -p idn  &>/dev/null && HAS_IDN=true
      type -p idn2 &>/dev/null && HAS_IDN2=true
 
-     if ! "$HAS_DIG" && ! "$HAS_HOST" && "$HAS_DRILL" && ! "$HAS_NSLOOKUP"; then
+     if ! "$HAS_DIG" && ! "$HAS_HOST" && ! "$HAS_DRILL" && ! "$HAS_NSLOOKUP"; then
           fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" $ERR_DNSBIN
      fi
      if "$HAS_DIG"; then
