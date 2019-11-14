@@ -4083,14 +4083,16 @@ ciphers_by_strength() {
           fi
      else # no SSLv2
           nr_ossl_ciphers=0
-          for (( i=0; i < nr_ciphers; i++ )); do
-               if "${ossl_supported[i]}"; then
-                    ciphers_found2[nr_ossl_ciphers]=false
-                    ciph2[nr_ossl_ciphers]="${ciph[i]}"
-                    index[nr_ossl_ciphers]=$i
-                    nr_ossl_ciphers+=1
-               fi
-          done
+          if ( "$HAS_SSL3" || [[ $proto != -ssl3 ]] ) && ( "$HAS_TLS13" || [[ $proto != -tls1_3 ]] ); then
+               for (( i=0; i < nr_ciphers; i++ )); do
+                    if "${ossl_supported[i]}"; then
+                         ciphers_found2[nr_ossl_ciphers]=false
+                         ciph2[nr_ossl_ciphers]="${ciph[i]}"
+                         index[nr_ossl_ciphers]=$i
+                         nr_ossl_ciphers+=1
+                    fi
+               done
+          fi
           if [[ $nr_ossl_ciphers -eq 0 ]]; then
                num_bundles=0
           else
@@ -14785,6 +14787,7 @@ run_tls_fallback_scsv() {
                high_proto="$p"
                break
           fi
+          [[ "$p" == ssl3 ]] && ! "$HAS_SSL3" && continue
           $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           if sclient_connect_successful $? $TMPFILE; then
                high_proto="$p"
@@ -14806,13 +14809,42 @@ run_tls_fallback_scsv() {
                fileout "$jsonID" "HIGH" "only SSLv3 supported"
                return 0
                ;;
-          *)   prln_svrty_good "No fallback possible, TLS 1.3 is the only protocol (OK)"
-               fileout "$jsonID" "OK" "only TLS 1.3 supported"
+          *)   if [[ $(has_server_protocol tls1_3) -eq 0 ]]; then
+                    # If the server supports TLS 1.3, and does not support TLS 1.2, TLS 1.1,
+                    # or TLS 1, then assume it does not support SSLv3, even if SSLv3 cannot
+                    # be tested.
+                    prln_svrty_good "No fallback possible, TLS 1.3 is the only protocol (OK)"
+                    fileout "$jsonID" "OK" "only TLS 1.3 supported"
+               elif [[ $(has_server_protocol tls1_3) -eq 1 ]] && \
+                    ( [[ $(has_server_protocol ssl3) -eq 1 ]] || "$HAS_SSL3" ); then
+                    # TLS 1.3, TLS 1.2, TLS 1.1, TLS 1, and SSLv3 are all not supported.
+                    # This may be an SSLv2-only server, if $OPENSSL does not support SSLv2.
+                    prln_warning "test failed (couldn't connect)"
+                    fileout "$jsonID" "WARN" "Check failed. (couldn't connect)"
+               elif [[ $(has_server_protocol tls1_3) -eq 1 ]]; then
+                    # If the server does not support TLS 1.3, TLS 1.2, TLS 1.1, or TLS 1, and
+                    # support for SSLv3 cannot be tested, then treat it as HIGH severity, since
+                    # it is very likely that SSLv3 is the only supported protocol.
+                    prln_svrty_high "No fallback possible, TLS 1.2, TLS 1.1, and TLS 1 not supported (OK)"
+                    fileout "$jsonID" "HIGH" "TLS 1.2, TLS 1.1, and TLS 1 not supported"
+               else
+                    # TLS 1.2, TLS 1.1, and TLS 1 are not supported, but can't tell whether TLS 1.3 is supported.
+                    # This could be a TLS 1.3 only server, an SSLv3 only server (if SSLv3 support cannot be tested),
+                    # or a server that does not support SSLv3 or any TLS protocol. So, don't report a severity,
+                    # since this could either be good or bad.
+                    outln "No fallback possible, TLS 1.2, TLS 1.1, and TLS 1 not supported (OK)"
+                    fileout "$jsonID" "INFO" "TLS 1.2, TLS 1.1, and TLS 1 not supported"
+               fi
                return 0
      esac
 
      # Next find a second protocol that the server supports.
      for p in $protos_to_try; do
+          if [[ "$p" == ssl3 ]] && ! "$HAS_SSL3"; then
+               prln_local_problem "Can't test: $OPENSSL does not support SSLv3"
+               fileout "$jsonID" "WARN" "Can't test: $OPENSSL does not support SSLv3"
+               return 1
+          fi
           [[ $(has_server_protocol "$p") -eq 1 ]] && continue
           if [[ $(has_server_protocol "$p") -eq 0 ]]; then
                low_proto="$p"
