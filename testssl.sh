@@ -1797,7 +1797,10 @@ check_revocation_ocsp() {
      else
           host_header=${uri##http://}
           host_header=${host_header%%/*}
-          if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.1"* ]]; then
+          if [[ "$OSSL_NAME" =~ LibreSSL ]]; then
+               host_header="-header Host ${host_header}"
+          elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.0* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]] || \
+               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]]; then
                host_header="-header Host=${host_header}"
           else
                host_header="-header Host ${host_header}"
@@ -3454,7 +3457,7 @@ run_cipher_match(){
                          ossl_supported[nr_ciphers]=true
                          nr_ciphers+=1
                     fi
-               done < <(actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "$ossl_ciphers_proto -V")
+               done < <(actually_supported_ciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V")
           fi
 
           # Test the SSLv2 ciphers, if any.
@@ -4016,8 +4019,11 @@ ciphers_by_strength() {
           done
      else # no sockets, openssl!
           # The OpenSSL ciphers function, prior to version 1.1.0, could only understand -ssl2, -ssl3, and -tls1.
-          if [[ "$proto" == "-ssl2" ]] || [[ "$proto" == -ssl3 ]] || \
-               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.0* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]]; then
+          if [[ "$OSSL_NAME" =~ LibreSSL ]]; then
+               ossl_ciphers_proto=""
+          elif [[ "$proto" == -ssl2 ]] || [[ "$proto" == -ssl3 ]] || \
+               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.0* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]] || \
+               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]]; then
                ossl_ciphers_proto="$proto"
           else
                ossl_ciphers_proto="-tls1"
@@ -6093,7 +6099,9 @@ sub_session_resumption() {
           debugme echo -n "Couldn't connect #1  "
           return 7
      fi
-     if "$byID" && [[ $OSSL_VER_MINOR == 1.1 ]] && [[ $OSSL_VER_MAJOR == 1 ]] && [[ ! -s "$sess_data" ]]; then
+     if "$byID" && [[ ! "$OSSL_NAME" =~ LibreSSL ]] && \
+        ( [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]] ) && \
+        [[ ! -s "$sess_data" ]]; then
           # it seems OpenSSL indicates no Session ID resumption by just not generating output
           debugme echo -n "No session resumption byID (empty file)"
           ret=2
@@ -6879,7 +6887,7 @@ determine_trust() {
      [[ -n $json_postfix ]] && spaces="                                "
 
      case $OSSL_VER_MAJOR.$OSSL_VER_MINOR in
-          1.0.2|1.1.0|1.1.1|2.[1-9].*)                # 2.x is LibreSSL. 2.1.1 was tested to work, below is not sure
+          1.0.2|1.1.0|1.1.1|2.[1-9].*|3.*)           # 2.x is LibreSSL. 2.1.1 was tested to work, below is not sure
               :
           ;;
           *)   addtl_warning="Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust"
@@ -10714,9 +10722,15 @@ hmac() {
      local key="$2" text="$3" output
      local -i ret
 
-     output="$(asciihex_to_binary_file "$text" "/dev/stdout" | $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
-     ret=$?
-     tm_out "$(awk  '/=/ { print $2 }' <<< "$output")"
+     if [[ ! "$OSSL_NAME" =~ LibreSSL ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]]; then
+          output="$(asciihex_to_binary_file "$text" "/dev/stdout" | $OPENSSL mac -macopt digest:"${hash_fn/-/}" -macopt hexkey:"$key" HMAC 2>/dev/null)"
+          ret=$?
+          tm_out "$(strip_lf "$output")"
+     else
+          output="$(asciihex_to_binary_file "$text" "/dev/stdout" | $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
+          ret=$?
+          tm_out "$(awk  '/=/ { print $2 }' <<< "$output")"
+     fi
      return $ret
 }
 
@@ -12749,18 +12763,26 @@ generate_key_share_extension() {
           # with X25519 keys, so don't include the X25519 key share
           # if the server's response needs to be decrypted and an
           # older version of OpenSSL is being used.
-          [[ $i -gt 12 ]] && [[ $group -eq 29 ]] && [[ "$2" == "all" ]] && \
-               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.0"* ]] && \
-               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1"* ]] && \
-               continue
+          if [[ $i -gt 12 ]] && [[ $group -eq 29 ]] && [[ "$2" == all ]]; then
+               [[ "$OSSL_NAME" =~ LibreSSL ]] && continue
+               if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 1.1.0* ]] && \
+                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 1.1.1* ]] && \
+                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 3.0.0* ]]; then
+                    continue
+               fi
+          fi
 
           # Versions of OpenSSL prior to 1.1.1 cannot perform operations
           # with X448 keys, so don't include the X448 key share
           # if the server's response needs to be decrypted and an
           # older version of OpenSSL is being used.
-          [[ $i -gt 12 ]] && [[ $group -eq 30 ]] && [[ "$2" == "all" ]] && \
-               [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != "1.1.1"* ]] && \
-               continue
+          if [[ $i -gt 12 ]] && [[ $group -eq 30 ]] && [[ "$2" == all ]]; then
+               [[ "$OSSL_NAME" =~ LibreSSL ]] && continue
+               if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 1.1.1* ]] && \
+                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 3.0.0* ]]; then
+                    continue
+               fi
+          fi
 
           # NOTE: The public keys could be extracted from the private keys
           # (TLS13_KEY_SHARES) using $OPENSSL, but only OpenSSL 1.1.0 and newer can
@@ -12922,8 +12944,9 @@ prepare_tls_clienthello() {
                00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
           elif [[ 0x$tls_low_byte -gt 0x03 ]]; then
                # Supported Groups Extension
-               if [[ ! "$process_full" =~ all ]] || \
-                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]]; then
+               if [[ ! "$process_full" =~ all ]] || ( [[ ! "$OSSL_NAME" =~ LibreSSL ]] && \
+                  ( [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]] || \
+                    [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]] ) ); then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,10, 00,0e,               # lengths
@@ -16618,7 +16641,7 @@ find_openssl_binary() {
 
      # see #190, reverting logic: unless otherwise proved openssl has no dh bits
      case "$OSSL_VER_MAJOR.$OSSL_VER_MINOR" in
-          1.0.2|1.1.0|1.1.1) HAS_DH_BITS=true ;;
+          1.0.2|1.1.0|1.1.1|3.0.0) HAS_DH_BITS=true ;;
      esac
      if [[ "$OSSL_NAME" =~ LibreSSL ]]; then
           [[ ${OSSL_VER//./} -ge 210 ]] && HAS_DH_BITS=true
