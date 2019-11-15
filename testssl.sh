@@ -14840,16 +14840,12 @@ run_tls_fallback_scsv() {
 
      # Next find a second protocol that the server supports.
      for p in $protos_to_try; do
-          if [[ "$p" == ssl3 ]] && ! "$HAS_SSL3"; then
-               prln_local_problem "Can't test: $OPENSSL does not support SSLv3"
-               fileout "$jsonID" "WARN" "Can't test: $OPENSSL does not support SSLv3"
-               return 1
-          fi
           [[ $(has_server_protocol "$p") -eq 1 ]] && continue
           if [[ $(has_server_protocol "$p") -eq 0 ]]; then
                low_proto="$p"
                break
           fi
+          [[ "$p" == ssl3 ]] && ! "$HAS_SSL3" && continue
           $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           if sclient_connect_successful $? $TMPFILE; then
                low_proto="$p"
@@ -14857,6 +14853,22 @@ run_tls_fallback_scsv() {
           fi
      done
 
+     if ! "$HAS_SSL3" && \
+         ( [[ "$low_proto" == ssl3 ]] || \
+           ( [[ "$high_proto" == tls1 ]] && [[ $(has_server_protocol "$p") -eq 2 ]] ) ); then
+          # If the protocol that the server would fall back to is SSLv3, but $OPENSSL does
+          # not support SSLv3, then the test cannot be performed. So, if $OPENSSL does not
+          # support SSLv3 and it is known that SSLv3 is the fallback protocol ($low_proto), then
+          # the test cannot be performed. Similarly, if SSLv3 could be the fallback protocol, but
+          # support for SSLv3 is unknown, then the test cannot be performed.
+          # NOTE: This check assumes that any server that suppports SSLv3 and either TLS 1.2 or
+          # TLS 1.1 would also support TLS 1. So, if $high_proto is not TLS 1, then it is assumed
+          # that either (1) $low_proto has already been set (to TLS1.1 or TLS 1) or (2) no protocol
+          # lower than $high_proto is offered.
+          prln_local_problem "Can't test: $OPENSSL does not support SSLv3"
+          fileout "$jsonID" "WARN" "Can't test: $OPENSSL does not support SSLv3"
+          return 1
+     fi
      if [[ -z "$low_proto" ]]; then
           case "$high_proto" in
                "tls1_2")
