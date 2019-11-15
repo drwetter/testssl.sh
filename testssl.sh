@@ -4801,10 +4801,19 @@ locally_supported() {
 #
 run_prototest_openssl() {
      local -i ret=0
+     local protos proto
 
      # check whether the protocol being tested is supported by $OPENSSL
      $OPENSSL s_client "$1" -connect x 2>&1 | grep -aq "unknown option" && return 7
-     $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>&1 </dev/null
+     case "$1" in
+          -ssl2) protos="-ssl2" ;;
+          -ssl3) protos="-ssl3" ;;
+          -tls1) protos="-no_tls1_2 -no_tls1_1 -no_ssl2"; "$HAS_TLS13" && protos+=" -no_tls1_3" ;;
+          -tls1_1) protos="-no_tls1_2 -no_ssl2"; "$HAS_TLS13" && protos+=" -no_tls1_3" ;;
+          -tls1_2) protos="-no_ssl2"; "$HAS_TLS13" && protos+=" -no_tls1_3" ;;
+          -tls1_3) protos="" ;;
+     esac
+     $OPENSSL s_client $(s_client_options "-state $protos $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>&1 </dev/null
      sclient_connect_successful $? $TMPFILE
      ret=$?
      debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
@@ -4813,18 +4822,33 @@ run_prototest_openssl() {
                ret=5       # <--- important indicator for SSL2 (maybe others, too)
           else
                # try again without $PROXY
-               $OPENSSL s_client $(s_client_options "-state $1 $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI") >$TMPFILE 2>&1 </dev/null
+               $OPENSSL s_client $(s_client_options "-state $protos $STARTTLS $BUGS -connect $NODEIP:$PORT $SNI") >$TMPFILE 2>&1 </dev/null
                sclient_connect_successful $? $TMPFILE
                ret=$?
                debugme grep -E "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
                grep -aq "no cipher list" $TMPFILE && ret=5       # <--- important indicator for SSL2 (maybe others, too)
           fi
      fi
+     if [[ $ret -eq 0 ]]; then
+          proto="$(get_protocol "$TMPFILE")"
+          proto=${proto/\./_}
+          proto=${proto/v/}
+          proto="-$(tolower $proto)"
+          [[ "$proto" != $1 ]] && ret=2
+          case "$proto" in
+               -ssl3) DETECTED_TLS_VERSION="0300" ;;
+               -tls1) DETECTED_TLS_VERSION="0301" ;;
+               -tls1_1) DETECTED_TLS_VERSION="0302" ;;
+               -tls1_2) DETECTED_TLS_VERSION="0303" ;;
+               -tls1_3) DETECTED_TLS_VERSION="0304" ;;
+          esac
+     fi
      tmpfile_handle ${FUNCNAME[0]}$1.txt
      return $ret
 
      # 0: offered
      # 1: not offered
+     # 2: downgraded
      # 5: protocol ok, but no cipher
      # 7: no local support
 }
@@ -5001,8 +5025,10 @@ run_protocols() {
      case $ret_val_ssl3 in
           0)   prln_svrty_high "offered (NOT ok)"
                fileout "$jsonID" "HIGH" "offered"
-               latest_supported="0300"
-               latest_supported_string="SSLv3"
+               if "$using_sockets" || "$HAS_SSL3"; then
+                    latest_supported="0300"
+                    latest_supported_string="SSLv3"
+               fi
                add_tls_offered ssl3 yes
                ;;
           1)   prln_svrty_best "not offered (OK)"
@@ -5073,7 +5099,7 @@ run_protocols() {
                ;;                                                # nothing wrong with it -- per se
           1)   out "not offered"
                add_tls_offered tls1 no
-               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
+               if [[ -z $latest_supported ]]; then
                     outln
                     fileout "$jsonID" "INFO" "not offered"       # neither good or bad
                else
@@ -5151,7 +5177,7 @@ run_protocols() {
                ;;                                                # nothing wrong with it
           1)   out "not offered"
                add_tls_offered tls1_1 no
-               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
+               if [[ -z $latest_supported ]]; then
                     outln
                     fileout "$jsonID" "INFO" "is not offered"    # neither good or bad
                else
@@ -5224,6 +5250,7 @@ run_protocols() {
      else
           run_prototest_openssl "-tls1_2"
           ret_val_tls12=$?
+          tls12_detected_version="$DETECTED_TLS_VERSION"
      fi
 
      if [[ $(has_server_protocol tls1_3) -eq 0 ]]; then
@@ -5265,7 +5292,7 @@ run_protocols() {
                else
                     pr_svrty_medium "not offered"
                fi
-               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
+               if [[ -z $latest_supported ]]; then
                     outln
                     if "$offers_tls13"; then
                          fileout "$jsonID" "INFO" "not offered"
@@ -5424,7 +5451,7 @@ run_protocols() {
                add_tls_offered tls1_3 yes
                ;;
           1)   pr_svrty_low "not offered"
-               if ! "$using_sockets" || [[ -z $latest_supported ]]; then
+               if [[ -z $latest_supported ]]; then
                     outln
                     fileout "$jsonID" "LOW" "not offered"
                else
