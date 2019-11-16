@@ -1,58 +1,74 @@
 #!/usr/bin/env perl
 
+# Checking whether the HTML output is somehow valid
+# This could be amended by using HTML::Tidy or HTML::Valid
+
 use strict;
 use Test::More;
 use Data::Dumper;
 
 my $tests = 0;
-unlink 'tmp.html';
+my $prg="./testssl.sh";
+my $uri="badssl.com";
+my $out="";
+my $html="";
+my $debughtml="";
+my $edited_html="";
+my $check2run="--color 0 --htmlfile tmp.html";
 
-pass("Running testssl.sh against badssl.com to create HTML and terminal outputs (may take 2~3 minutes)"); $tests++;
+die "Unable to open $prg" unless -f $prg;
+
+#1
+printf "\n%s\n", "Running $prg against $uri to create HTML and terminal outputs (may take 2~3 minutes) ...";
 # specify a TERM_WIDTH so that the two calls to testssl.sh don't create HTML files with different values of TERM_WIDTH
-my $okout = `TERM_WIDTH=120 ./testssl.sh --color 0 --htmlfile tmp.html badssl.com`;
-my $okhtml = `cat tmp.html`;
-# $modedhtml will contain the HTML with formatting information removed in order to compare against terminal output
+$out = `TERM_WIDTH=120 $prg $check2run $uri`;
+$html = `cat tmp.html`;
+# $edited_html will contain the HTML with formatting information removed in order to compare against terminal output
 # Start by removing the HTML header.
-my $modedhtml = `tail -n +11 tmp.html`;
+$edited_html = `tail -n +11 tmp.html`;
 unlink 'tmp.html';
 
 # Remove the HTML footer
-$modedhtml =~ s/\n\<\/pre\>\n\<\/body\>\n\<\/html\>//;
+$edited_html =~ s/\n\<\/pre\>\n\<\/body\>\n\<\/html\>//;
 # Remove any hypertext links for URLs
-$modedhtml =~ s/<a href=[0-9A-Za-z ";:=\/\.\?\-]*>//g;
-$modedhtml =~ s/<\/a>//g;
+$edited_html =~ s/<a href=[0-9A-Za-z ";:=\/\.\?\-]*>//g;
+$edited_html =~ s/<\/a>//g;
 
 # Replace escaped characters with their original text
-$modedhtml =~ s/&amp;/&/g;
-$modedhtml =~ s/&lt;/</g;
-$modedhtml =~ s/&gt;/>/g;
-$modedhtml =~ s/&quot;/"/g;
-$modedhtml =~ s/&apos;/'/g;
+$edited_html =~ s/&amp;/&/g;
+$edited_html =~ s/&lt;/</g;
+$edited_html =~ s/&gt;/>/g;
+$edited_html =~ s/&quot;/"/g;
+$edited_html =~ s/&apos;/'/g;
 
-pass("Comparing HTML and terminal outputs"); $tests++;
-cmp_ok($modedhtml, "eq", $okout, "HTML file matches terminal output"); $tests++;
+printf "\n%s\n", "Comparing HTML and terminal outputs";
+cmp_ok($edited_html, "eq", $out, "HTML file matches terminal output");
+$tests++;
 
-pass("Running testssl.sh against badssl.com with --debug 4 to create HTML output (may take 2~3 minutes)"); $tests++;
+#2
+printf "\n%s\n", "Running $prg against $uri with --debug 4 to create HTML output (may take 2~3 minutes)";
 # Redirect stderr to /dev/null in order to avoid some unexplained "date: invalid date" error messages
-my $debugout = `TERM_WIDTH=120 ./testssl.sh --color 0 --debug 4 --htmlfile tmp.html badssl.com 2> /dev/null`;
-my $debughtml = `cat tmp.html`;
+$out = `TERM_WIDTH=120 $prg $check2run --debug 4 $uri 2> /dev/null`;
+$debughtml = `cat tmp.html`;
 unlink 'tmp.html';
 
 # Remove date information from the Start and Done banners in the two HTML files, since they were created at different times
-$okhtml =~ s/Start 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9]/Start XXXX-XX-XX XX:XX:XX/;
+$html =~ s/Start 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9]/Start XXXX-XX-XX XX:XX:XX/;
 $debughtml =~ s/Start 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9]/Start XXXX-XX-XX XX:XX:XX/;
 
-$okhtml =~ s/Done 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9] \[ *[0-9]*s\]/Done XXXX-XX-XX XX:XX:XX [   Xs]/;
+$html =~ s/Done 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9] \[ *[0-9]*s\]/Done XXXX-XX-XX XX:XX:XX [   Xs]/;
 $debughtml =~ s/Done 2[0-9][0-9][0-9]-[0-3][0-9]-[0-3][0-9] [0-2][0-9]:[0-5][0-9]:[0-5][0-9] \[ *[0-9]*s\]/Done XXXX-XX-XX XX:XX:XX [   Xs]/;
 
 # Remove time difference from "HTTP clock skew" line
-$okhtml =~ s/HTTP clock skew              \+?-?[0-9]* /HTTP clock skew              X /;
+$html =~ s/HTTP clock skew              \+?-?[0-9]* /HTTP clock skew              X /;
 $debughtml =~ s/HTTP clock skew              \+?-?[0-9]* /HTTP clock skew              X /;
 
 $debughtml =~ s/ Pre-test: .*\n//g;
 $debughtml =~ s/.*OK: below 5 years.*\n//g;
 
-pass("Checking that using the --debug option doesn't affect the HTML file"); $tests++;
-cmp_ok($debughtml, "eq", $okhtml, "HTML file created with --debug 4 matches HTML file created without --debug"); $tests++;
+printf "\n%s\n", "Checking that using the --debug option doesn't affect the HTML file";
+cmp_ok($debughtml, "eq", $html, "HTML file created with --debug 4 matches HTML file created without --debug");
+$tests++;
+printf "\n%s\n";
 
 done_testing($tests);
