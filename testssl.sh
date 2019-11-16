@@ -4505,12 +4505,7 @@ client_simulation_sockets() {
           save=$?
 
           if [[ $save -eq 0 ]]; then
-               debugme echo "sending close_notify..."
-               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
-                    socksend ",x15, x03, x00, x00, x02, x02, x00" 0
-               else
-                    socksend ",x15, x03, x01, x00, x02, x02, x00" 0
-               fi
+               send_close_notify "$DETECTED_TLS_VERSION"
           fi
 
           if [[ $DEBUG -ge 2 ]]; then
@@ -10293,6 +10288,16 @@ close_socket(){
      return 0
 }
 
+send_close_notify() {
+     local detected_tlsversion="$1"
+
+     debugme echo "sending close_notify..."
+     if [[ $detected_tlsversion == 0300 ]]; then
+          socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+     else
+          socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+     fi
+}
 
 # Format string properly for socket
 # ARG1: any commented sequence of two bytes hex, separated by commas. It can contain comments, new lines, tabs and white spaces
@@ -13593,14 +13598,8 @@ tls_sockets() {
 
           parse_tls_serverhello "$tls_hello_ascii" "$process_full" "$cipher_list_2send"
           save=$?
-
           if "$close_connection" && [[ $save == 0 ]]; then
-               debugme echo "sending close_notify..."
-               if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
-                    socksend ",x15, x03, x00, x00, x02, x02, x00" 0
-               else
-                    socksend ",x15, x03, x01, x00, x02, x02, x00" 0
-               fi
+               send_close_notify "$DETECTED_TLS_VERSION"
           fi
 
           if [[ $DEBUG -ge 2 ]]; then
@@ -14131,17 +14130,21 @@ run_ticketbleed() {
                echo "============================="
           fi
 
-          if [[ "${tls_hello_ascii:0:2}" == "15" ]]; then
+          if [[ "${tls_hello_ascii:0:2}" == 15 ]]; then
                debugme echo -n "TLS Alert ${tls_hello_ascii:10:4} (TLS version: ${tls_hello_ascii:2:4}) -- "
                pr_svrty_best "not vulnerable (OK)"
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
+               send_close_notify "${tls_hello_ascii:18:4}"
+               close_socket
                break
           elif [[ -z "${tls_hello_ascii:0:2}" ]]; then
                pr_svrty_best "not vulnerable (OK)"
                out ", reply empty"
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
+               send_close_notify "${tls_hello_ascii:18:4}"
+               close_socket
                break
-          elif [[ "${tls_hello_ascii:0:2}" == "16" ]]; then
+          elif [[ "${tls_hello_ascii:0:2}" == 16 ]]; then
                early_exit=false
                debugme echo -n "Handshake (TLS version: ${tls_hello_ascii:2:4}), "
                if [[ "${tls_hello_ascii:10:6}" == 020000 ]]; then
@@ -14166,14 +14169,11 @@ run_ticketbleed() {
                pr_warning "test failed"
                out " around line $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})"
                fileout "$jsonID" "DEBUG" "test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
+               send_close_notify "${tls_hello_ascii:18:4}"
+               close_socket
                break
           fi
-          debugme echo "sending close_notify..."
-          if [[ ${tls_hello_ascii:18:4} == "0300" ]]; then
-               socksend ",x15, x03, x00, x00, x02, x02, x00" 0
-          else
-               socksend ",x15, x03, x01, x00, x02, x02, x00" 0
-          fi
+          send_close_notify "${tls_hello_ascii:18:4}"
           close_socket
      done
 
