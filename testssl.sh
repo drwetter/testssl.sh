@@ -2027,7 +2027,7 @@ s_client_options() {
           [[ "$1" =~ secp192r1 ]] && options="${options//secp192r1/prime192v1}"
           [[ "$1" =~ secp256r1 ]] && options="${options//secp256r1/prime256v1}"
      fi
-     tm_out "$options"
+     tm_out "$options $keyopts"
 }
 
 ###### check code starts here ######
