@@ -302,7 +302,7 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 
 `--csvfile <csvfile>` or `-oC <csvfile>` Similar to  the aforementioned `--jsonfile` or `--logfile` it logs the output in CSV format (see `--cvs`) additionally into a file or a directory. For further explanation see `--jsonfile` or `--logfile`.
 
---html  Logs additionally to an HTML file `${NODE}-p${port}${YYYYMMDD-HHMM}.html` in the current working directory of the shell. It contains a 1:1 output of the console. In former versions there was a non-native option to use "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like `testssl.sh [options] <URI> | aha >output.html`. This is not necessary anymore.
+`--html` Logs additionally to an HTML file `${NODE}-p${port}${YYYYMMDD-HHMM}.html` in the current working directory of the shell. It contains a 1:1 output of the console. In former versions there was a non-native option to use "aha" (Ansi HTML Adapter: github.com/theZiz/aha) like `testssl.sh [options] <URI> | aha >output.html`. This is not necessary anymore.
 
 `--htmlfile <htmlfile>` or `-oH <htmlfile>`         Similar to  the aforementioned `--jsonfile` or `--logfile` it logs the output in HTML format (see `--html`) additionally into a file or a directory. For further explanation see `--jsonfile` or `--logfile`.
 
