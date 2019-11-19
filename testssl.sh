@@ -3048,7 +3048,7 @@ run_security_headers() {
                     first=false
                fi
                pr_svrty_good "$header"
-               outln " $(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
+               outln " $(out_row_aligned_max_width "$HEADERVALUE" "$(echo -n $header|sed 's/./ /g') $spaces" $TERM_WIDTH)"
                fileout "$header" "OK" "$HEADERVALUE"
           fi
      done
