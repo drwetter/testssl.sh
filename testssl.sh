@@ -6098,7 +6098,7 @@ sub_session_resumption() {
                return 1
           fi
      fi
-     "$CLIENT_AUTH" && return 3
+     "$CLIENT_AUTH" && return 6
      if "$HAS_NO_SSL2"; then
           addcmd+=" -no_ssl2"
      else
