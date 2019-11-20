@@ -6111,7 +6111,7 @@ sub_session_resumption() {
           # both TLSv1.3 and TLSv1.2 for session resumption by ID, then use a TLSv1.2 ClientHello. (Note that
           # the line below assumes that if $protocol is -tls1_3, then the server either supports TLSv1.2 or
           # is TLSv1.3-only.
-          ! "$TLS_TICKETS" && "$byID" && [[ $(has_server_protocol "tls1_2") -eq 0 ]] && protocol="-tls1_2" 
+          ! "$TLS_TICKETS" && "$byID" && [[ $(has_server_protocol "tls1_2") -eq 0 ]] && protocol="-tls1_2"
           addcmd+=" $protocol"
      fi
 
@@ -6157,7 +6157,7 @@ sub_session_resumption() {
                new_sid2=false
           fi
           debugme echo "${rw_line[0]}, ${rw_line[1]}"
- 
+
           if "$new_sid2" && "$new_sid"; then
                debugme echo -n "No session resumption "
                ret=1
@@ -9245,8 +9245,8 @@ run_server_defaults() {
                   ((ret++))
                   ;;
                6) SESS_RESUMPTION[1]="ID=clientauth"
-                  [[ ${SESS_RESUMPTION[2]} =~ clientauth ]] || pr_warning "Client Auth: "
-                  prln_warning "ID resumption resumption test not supported"
+                  # [[ ${SESS_RESUMPTION[2]} =~ clientauth ]] || pr_warning "Client Auth: "
+                  prln_warning "Client Auth: ID resumption test not supported"
                   fileout "$jsonID" "WARN" "check couldn't be performed because of client authentication"
                   ;;
                7) SESS_RESUMPTION[1]="ID=unsuccessful"
