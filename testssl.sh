@@ -444,35 +444,35 @@ CRITICAL=4
 SEVERITY_LEVEL=0
 
 set_severity_level() {
-   local severity=$1
+     local severity=$1
 
-   if [[ "$severity" == LOW ]]; then
-           SEVERITY_LEVEL=$LOW
-   elif [[ "$severity" == MEDIUM ]]; then
-           SEVERITY_LEVEL=$MEDIUM
-   elif [[ "$severity" == HIGH ]]; then
-           SEVERITY_LEVEL=$HIGH
-   elif [[ "$severity" == CRITICAL ]]; then
-           SEVERITY_LEVEL=$CRITICAL
-   else
-        # WARN and FATAL will always be logged as the represent scanning problems
-        echo "Supported severity levels are LOW, MEDIUM, HIGH, CRITICAL!"
-        help 1
-   fi
+     if [[ "$severity" == LOW ]]; then
+          SEVERITY_LEVEL=$LOW
+     elif [[ "$severity" == MEDIUM ]]; then
+          SEVERITY_LEVEL=$MEDIUM
+     elif [[ "$severity" == HIGH ]]; then
+          SEVERITY_LEVEL=$HIGH
+     elif [[ "$severity" == CRITICAL ]]; then
+          SEVERITY_LEVEL=$CRITICAL
+     else
+          # WARN and FATAL will always be logged as the represent scanning problems
+          echo "Supported severity levels are LOW, MEDIUM, HIGH, CRITICAL!"
+          help 1
+     fi
 }
 
 show_finding() {
-   local severity=$1
+     local severity=$1
 
-   ( [[ "$severity" == DEBUG ]] ) ||
-   ( [[ "$severity" == INFO ]] && [[ $SEVERITY_LEVEL -le $INFO ]] ) ||
-   ( [[ "$severity" == OK ]] && [[ $SEVERITY_LEVEL -le $OK ]] ) ||
-   ( [[ "$severity" == LOW ]] && [[ $SEVERITY_LEVEL -le $LOW ]] ) ||
-   ( [[ "$severity" == MEDIUM ]] && [[ $SEVERITY_LEVEL -le $MEDIUM ]] ) ||
-   ( [[ "$severity" == HIGH ]] && [[ $SEVERITY_LEVEL -le $HIGH ]] ) ||
-   ( [[ "$severity" == CRITICAL ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] ) ||
-   ( [[ "$severity" == WARN ]] ) ||
-   ( [[ "$severity" == FATAL ]] )
+     ( [[ "$severity" == DEBUG ]] ) ||
+     ( [[ "$severity" == INFO ]] && [[ $SEVERITY_LEVEL -le $INFO ]] ) ||
+     ( [[ "$severity" == OK ]] && [[ $SEVERITY_LEVEL -le $OK ]] ) ||
+     ( [[ "$severity" == LOW ]] && [[ $SEVERITY_LEVEL -le $LOW ]] ) ||
+     ( [[ "$severity" == MEDIUM ]] && [[ $SEVERITY_LEVEL -le $MEDIUM ]] ) ||
+     ( [[ "$severity" == HIGH ]] && [[ $SEVERITY_LEVEL -le $HIGH ]] ) ||
+     ( [[ "$severity" == CRITICAL ]] && [[ $SEVERITY_LEVEL -le $CRITICAL ]] ) ||
+     ( [[ "$severity" == WARN ]] ) ||
+     ( [[ "$severity" == FATAL ]] )
 }
 
 ########### Output functions
@@ -771,10 +771,10 @@ fileout_json_section() {
 }
 
 fileout_section_header() {
-    local str=""
-    "$2" && str="$(fileout_section_footer false)"
-    "$do_pretty_json" && FIRST_FINDING=true && (printf "%s%s\n" "$str" "$(fileout_json_section "$1")") >> "$JSONFILE"
-    SECTION_FOOTER_NEEDED=true
+     local str=""
+     "$2" && str="$(fileout_section_footer false)"
+     "$do_pretty_json" && FIRST_FINDING=true && (printf "%s%s\n" "$str" "$(fileout_json_section "$1")") >> "$JSONFILE"
+     SECTION_FOOTER_NEEDED=true
 }
 
 # arg1: whether to end object too
@@ -792,8 +792,8 @@ fileout_json_print_parameter() {
      local spaces=""
 
      "$do_json" && \
-         spaces="              " || \
-         spaces="                                "
+          spaces="              " || \
+          spaces="                                "
      if [[ -n "$value" ]] || [[ "$parameter" == finding ]]; then
           printf "%s%s%s%s" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
           "$not_last" && printf ",\n" >> "$JSONFILE"
@@ -819,33 +819,33 @@ fileout_json_finding() {
           "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
           fileout_json_print_parameter "finding" "      " "$finding" false
           echo -e "\n          }" >> "$JSONFILE"
-    fi
-    if "$do_pretty_json"; then
-        if [[ "$1" == service ]]; then
-            if [[ $SERVER_COUNTER -gt 1 ]]; then
-                echo "          ," >> "$JSONFILE"
-            fi
-            target="$NODE"
-            $do_mx_all_ips && target="$URI"
-            echo -e "          {
+     fi
+     if "$do_pretty_json"; then
+          if [[ "$1" == service ]]; then
+               if [[ $SERVER_COUNTER -gt 1 ]]; then
+                    echo "          ," >> "$JSONFILE"
+               fi
+               target="$NODE"
+               $do_mx_all_ips && target="$URI"
+               echo -e "          {
                     \"targetHost\"      : \"$target\",
                     \"ip\"              : \"$NODEIP\",
                     \"port\"            : \"$PORT\",
                     \"rDNS\"            : \"$rDNS\",
                     \"service\"         : \"$finding\"," >> "$JSONFILE"
-            $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
-         else
-             ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
-             echo -e -n "\n"  >> "$JSONFILE"
-             fileout_json_print_parameter "id" "           " "$1" true
-             fileout_json_print_parameter "severity" "     " "$2" true
-             fileout_json_print_parameter "cve" "          " "$cve" true
-             fileout_json_print_parameter "cwe" "          " "$cwe" true
-             "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
-             fileout_json_print_parameter "finding" "      " "$finding" false
-             echo -e -n "\n                           }" >> "$JSONFILE"
-         fi
-    fi
+               $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
+          else
+               ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
+               echo -e -n "\n"  >> "$JSONFILE"
+               fileout_json_print_parameter "id" "           " "$1" true
+               fileout_json_print_parameter "severity" "     " "$2" true
+               fileout_json_print_parameter "cve" "          " "$cve" true
+               fileout_json_print_parameter "cwe" "          " "$cwe" true
+               "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
+               fileout_json_print_parameter "finding" "      " "$finding" false
+               echo -e -n "\n                           }" >> "$JSONFILE"
+          fi
+     fi
 }
 
 ##################### FILE FORMATTING #########################
@@ -854,10 +854,10 @@ fileout_pretty_json_banner() {
      local target
 
      if ! "$do_mass_testing"; then
-        [[ -z "$NODE" ]] && parse_hn_port "${URI}"
-        # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
-        target="$NODE"
-        $do_mx_all_ips && target="$URI"
+          [[ -z "$NODE" ]] && parse_hn_port "${URI}"
+          # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
+          target="$NODE"
+          $do_mx_all_ips && target="$URI"
      fi
 
      echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
@@ -937,11 +937,11 @@ fileout() {
      local hint="$6"
 
      if ( "$do_pretty_json" && [[ "$1" == service ]] ) || show_finding "$severity"; then
-         local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")           # additional quotes will mess up screen output
-         [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
-         "$do_csv" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && \
+          local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")           # additional quotes will mess up screen output
+          [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
+          "$do_csv" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && \
                fileout_csv_finding "$1" "$NODE/$NODEIP" "$PORT" "$severity" "$finding" "$cve" "$cwe" "$hint"
-     "$FIRST_FINDING" && FIRST_FINDING=false
+          "$FIRST_FINDING" && FIRST_FINDING=false
      fi
 }
 
@@ -1465,13 +1465,13 @@ out_row_aligned_max_width_by_entry() {
 
      resp="$(out_row_aligned_max_width "$text" "$spaces" "$max_width")"
      while read -d " " entry; do
-        if [[ -n "$entry" ]]; then
-             $print_function "$entry"
-        elif [[ -n "$prev_entry" ]]; then
-             outln; out " "
-        fi
-        out " "
-        prev_entry="$entry"
+          if [[ -n "$entry" ]]; then
+               $print_function "$entry"
+          elif [[ -n "$prev_entry" ]]; then
+               outln; out " "
+          fi
+          out " "
+          prev_entry="$entry"
     done <<< "$resp"
 }
 
@@ -1609,7 +1609,7 @@ http_get_header() {
           # assume the GET protocol we query is using http -- http_proxy is the $ENV not for the connection TO
           # the proxy, but for the protocol we query THROUGH the proxy
           if [[ -z "$PROXY" ]]; then
-                headers="$(wget --no-proxy -q -S -U $''"$useragent"'' -O /dev/null "$1" 2>&1)"
+               headers="$(wget --no-proxy -q -S -U $''"$useragent"'' -O /dev/null "$1" 2>&1)"
           else
                if [[ -z "$http_proxy" ]]; then
                     headers="$(http_proxy=http://$PROXYIP:$PROXYPORT wget -q -S  -U $''"$useragent"'' -O /dev/null "$1" 2>&1)"
@@ -3636,7 +3636,7 @@ run_cipher_match(){
                               kx[i]="${kx[i]} $dhlen"
                          fi
                          "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
-                               sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
+                              sigalg[i]="$(read_sigalg_from_file "$HOSTCERT")"
                     done
                done
           done
@@ -4860,7 +4860,7 @@ add_tls_offered() {
           # the ":" is mandatory here (and @ other places), otherwise e.g. tls1 will match tls1_2
           :
      else
-           PROTOS_OFFERED+="${1}:$2 "
+          PROTOS_OFFERED+="${1}:$2 "
      fi
 }
 
@@ -5325,23 +5325,23 @@ run_protocols() {
                     fi
                fi
                ;;
-           3)  out "not offered, "
+          3)   out "not offered, "
                fileout "$jsonID" "INFO" "not offered"
                add_tls_offered tls1_2 no
                pr_warning "TLS downgraded to STARTTLS plaintext"; outln
                fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
                ;;
-           4)  out "likely "; pr_svrty_medium "not offered, "
+          4)   out "likely "; pr_svrty_medium "not offered, "
                fileout "$jsonID" "MEDIUM" "not offered"
                add_tls_offered tls1_2 no
                pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                ;;
-           5)  outln "$supported_no_ciph1"                  # protocol detected, but no cipher --> comes from run_prototest_openssl
+          5)   outln "$supported_no_ciph1"                  # protocol detected, but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1_2 yes
                ;;
-           7)  if "$using_sockets" ; then
+          7)   if "$using_sockets" ; then
                     # can only happen in debug mode
                     pr_warning "strange reply, maybe a client side problem with TLS 1.2"; outln "$debug_recomm"
                else
@@ -6537,7 +6537,7 @@ run_server_preference() {
 
           for i in 1 2 3 4 5 6; do
                if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
-                     if [[ -z "$prev_cipher" ]] || [[ "$prev_cipher" != "${cipher[i]}" ]]; then
+                    if [[ -z "$prev_cipher" ]] || [[ "$prev_cipher" != "${cipher[i]}" ]]; then
                          [[ -n "$prev_cipher" ]] && outln
                          str_len=${#cipher[i]}
                          out "     "
@@ -6633,11 +6633,11 @@ check_tls12_pref() {
                fi
           done
           if "$FAST" && [[ $nr_ciphers_found_r2 -ne 1 ]]; then
-                prln_fixme "something weird happened around line $((LINENO - 14))"
-                return 1
+               prln_fixme "something weird happened around line $((LINENO - 14))"
+               return 1
           elif ! "$FAST" && [[ $nr_ciphers_found_r2 -ne $nr_ciphers_found_r1 ]]; then
-                prln_fixme "something weird happened around line $((LINENO - 16))"
-                return 1
+               prln_fixme "something weird happened around line $((LINENO - 16))"
+               return 1
           fi
      fi
      tm_out "$order"
@@ -6855,8 +6855,8 @@ get_host_cert() {
           return 0
      else
           if [[ -z "$1" ]]; then
-                prln_warning "could not retrieve host certificate!"
-                fileout "host_certificate_Problem" "WARN" "Could not retrieve host certificate!"
+               prln_warning "could not retrieve host certificate!"
+               fileout "host_certificate_Problem" "WARN" "Could not retrieve host certificate!"
           fi
           return 1
      fi
@@ -6910,7 +6910,7 @@ determine_trust() {
 
      case $OSSL_VER_MAJOR.$OSSL_VER_MINOR in
           1.0.2|1.1.0|1.1.1|2.[1-9].*|3.*)           # 2.x is LibreSSL. 2.1.1 was tested to work, below is not sure
-              :
+               :
           ;;
           *)   addtl_warning="Your $OPENSSL <= 1.0.2 might be too unreliable to determine trust"
                fileout "${jsonID}${json_postfix}" "WARN" "$addtl_warning"
@@ -7201,42 +7201,42 @@ extract_certificates() {
      fi
      [[ -s level0.crt ]] && nrsaved=$(count_words "$(echo level?.crt 2>/dev/null)")
      if [[ $nrsaved -eq 0 ]]; then
-         success=1
+          success=1
      else
-         success=0
-         CERTIFICATE_LIST_ORDERING_PROBLEM=false
-         mv level0.crt $HOSTCERT
-         if [[ $nrsaved -eq 1 ]]; then
-             echo "" > $TEMPDIR/intermediatecerts.pem
-         else
-             cat level?.crt > $TEMPDIR/intermediatecerts.pem
-             issuerDN="$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>/dev/null)"
-             issuerDN="${issuerDN:8}"
-             previssuerDN="$issuerDN"
-             # The second certificate (level1.crt) SHOULD be issued to the CA
-             # that issued the server's certificate. But, according to RFC 8446
-             # clients SHOULD be prepared to handle cases in which the server
-             # does not order the certificates correctly.
-             for (( i=1; i < nrsaved; i++ )); do
-                  CAsubjectDN="$($OPENSSL x509 -in "level$i.crt" -noout -subject  2>/dev/null)"
-                  if [[ "${CAsubjectDN:9}" == "$issuerDN" ]]; then
-                       cp "level$i.crt" $TEMPDIR/hostcert_issuer.pem
-                       issuerDN="" # set to empty to prevent further matches
-                  fi
-                  [[ "${CAsubjectDN:9}" != "$previssuerDN" ]] && CERTIFICATE_LIST_ORDERING_PROBLEM=true
-                  "$CERTIFICATE_LIST_ORDERING_PROBLEM" && [[ -z "$issuerDN" ]] && break
-                  previssuerDN="$($OPENSSL x509 -in "level$i.crt" -noout -issuer  2>/dev/null)"
-                  previssuerDN="${previssuerDN:8}"
-             done
-             # This should never happen, but if more than one certificate was
-             # provided and none of them belong to the CA that issued the
-             # server's certificate, then the extra certificates should just
-             # be deleted. There is code elsewhere that assumes that if
-             # $TEMPDIR/intermediatecerts.pem is non-empty, then
-             # $TEMPDIR/hostcert_issuer.pem is also present.
-             [[ -n "$issuerDN" ]] && echo "" > $TEMPDIR/intermediatecerts.pem
-             rm level?.crt
-         fi
+          success=0
+          CERTIFICATE_LIST_ORDERING_PROBLEM=false
+          mv level0.crt $HOSTCERT
+          if [[ $nrsaved -eq 1 ]]; then
+               echo "" > $TEMPDIR/intermediatecerts.pem
+          else
+               cat level?.crt > $TEMPDIR/intermediatecerts.pem
+               issuerDN="$($OPENSSL x509 -in $HOSTCERT -noout -issuer 2>/dev/null)"
+               issuerDN="${issuerDN:8}"
+               previssuerDN="$issuerDN"
+               # The second certificate (level1.crt) SHOULD be issued to the CA
+               # that issued the server's certificate. But, according to RFC 8446
+               # clients SHOULD be prepared to handle cases in which the server
+               # does not order the certificates correctly.
+               for (( i=1; i < nrsaved; i++ )); do
+                    CAsubjectDN="$($OPENSSL x509 -in "level$i.crt" -noout -subject  2>/dev/null)"
+                    if [[ "${CAsubjectDN:9}" == "$issuerDN" ]]; then
+                         cp "level$i.crt" $TEMPDIR/hostcert_issuer.pem
+                         issuerDN="" # set to empty to prevent further matches
+                    fi
+                    [[ "${CAsubjectDN:9}" != "$previssuerDN" ]] && CERTIFICATE_LIST_ORDERING_PROBLEM=true
+                    "$CERTIFICATE_LIST_ORDERING_PROBLEM" && [[ -z "$issuerDN" ]] && break
+                    previssuerDN="$($OPENSSL x509 -in "level$i.crt" -noout -issuer  2>/dev/null)"
+                    previssuerDN="${previssuerDN:8}"
+               done
+               # This should never happen, but if more than one certificate was
+               # provided and none of them belong to the CA that issued the
+               # server's certificate, then the extra certificates should just
+               # be deleted. There is code elsewhere that assumes that if
+               # $TEMPDIR/intermediatecerts.pem is non-empty, then
+               # $TEMPDIR/hostcert_issuer.pem is also present.
+               [[ -n "$issuerDN" ]] && echo "" > $TEMPDIR/intermediatecerts.pem
+               rm level?.crt
+          fi
      fi
      cd "$savedir"
      return $success
@@ -7265,15 +7265,15 @@ extract_stapled_ocsp() {
           ocsp="$(strip_spaces "$(newline_to_spaces "$ocsp")")"
           ocsp="${ocsp:8}"
      elif [[ "$response" =~ "TLS server extension \"status request\" (id=5), len=" ]]; then
-            # This is OpenSSL 1.1.1 and the response is TLS 1.3.
-            ocsp="${response##*TLS server extension \"status request\" (id=5), len=}"
-            ocsp="${ocsp%%<<<*}"
-            tmp="${ocsp%%[!0-9]*}"
-            ocsp="${ocsp#$tmp}"
-            ocsp_len=2*$tmp
-            ocsp="$(awk ' { print $3 $4 $5 $6 $7 $8 $9 $10 $11 $12 $13 $14 $15 $16 $17 } ' <<< "$ocsp" | sed 's/-//')"
-            ocsp="$(strip_spaces "$(newline_to_spaces "$ocsp")")"
-            ocsp="${ocsp:0:ocsp_len}"
+          # This is OpenSSL 1.1.1 and the response is TLS 1.3.
+          ocsp="${response##*TLS server extension \"status request\" (id=5), len=}"
+          ocsp="${ocsp%%<<<*}"
+          tmp="${ocsp%%[!0-9]*}"
+          ocsp="${ocsp#$tmp}"
+          ocsp_len=2*$tmp
+          ocsp="$(awk ' { print $3 $4 $5 $6 $7 $8 $9 $10 $11 $12 $13 $14 $15 $16 $17 } ' <<< "$ocsp" | sed 's/-//')"
+          ocsp="$(strip_spaces "$(newline_to_spaces "$ocsp")")"
+          ocsp="${ocsp:0:ocsp_len}"
      else
           return 0
      fi
@@ -7354,9 +7354,9 @@ get_server_certificate() {
      "$HAS_NPN" && [[ -z "$STARTTLS" ]] && npn_params="-nextprotoneg \"$NPN_PROTOs\""
 
      if [[ -n "$2" ]]; then
-         protocols_to_try="$2"
+          protocols_to_try="$2"
      else
-         protocols_to_try="tls1_2 tls1_1 tls1 ssl3"
+          protocols_to_try="tls1_2 tls1_1 tls1 ssl3"
      fi
 
      # throwing 1st every cipher/protocol at the server to know what works
@@ -7405,7 +7405,7 @@ get_server_certificate() {
                [[ $ret -eq 2 ]] && success=0
                if [[ $success -eq 7 ]]; then
                     if [ -z "$1" ]; then
-                        prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+                         prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
                     fi
                     tmpfile_handle ${FUNCNAME[0]}.txt
                     return 7  # this is ugly, I know
@@ -7455,7 +7455,7 @@ get_server_certificate() {
                $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $ciphers_to_test -showcerts -connect $NODEIP:$PORT $PROXY $SNI -$proto -tlsextdebug") </dev/null 2>>$ERRFILE >$TMPFILE
                if ! sclient_connect_successful $? $TMPFILE; then
                     if [ -z "$1" ]; then
-                        prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
+                         prln_warning "Strange, no SSL/TLS protocol seems to be supported (error around line $((LINENO - 6)))"
                     fi
                     tmpfile_handle ${FUNCNAME[0]}.txt
                     return 7  # this is ugly, I know
@@ -7832,7 +7832,7 @@ etsi_etls_visibility_info() {
                                    j+=1
                                    j+=2*0x${dercert:j:1}+1
                               else
-                                  j+=2
+                                   j+=2
                               fi
                               # The value for this otherName is encoded as a SEQUENCE (30):
                               #    VisibilityInformation ::= SEQUENCE {
@@ -8659,8 +8659,8 @@ certificate_info() {
           # we adjust the thresholds by %50 for LE certificates, relaxing those warnings
           # . instead of \' because it does not break syntax highlighting in vim
           if [[ "$issuer_CN" =~ ^Let.s\ Encrypt\ Authority ]] ; then
-                 days2warn2=$((days2warn2 / 2))
-                 days2warn1=$((days2warn1 / 2))
+               days2warn2=$((days2warn2 / 2))
+               days2warn1=$((days2warn1 / 2))
           fi
           diffseconds=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(parse_date "$startdate" "+%s" $'%F %H:%M') ))
      fi
@@ -10265,7 +10265,7 @@ fd_socket() {
                     ;;
                xmpp|xmpps) # XMPP, see https://tools.ietf.org/html/rfc6120
                     starttls_xmpp_dialog
-                   # IM observatory: https://xmpp.net , XMPP server directory: https://xmpp.net/directory.php
+                    # IM observatory: https://xmpp.net , XMPP server directory: https://xmpp.net/directory.php
                     ;;
                postgres) # Postgres SQL, see http://www.postgresql.org/docs/devel/static/protocol-message-formats.html
                     starttls_postgres_dialog
@@ -10404,23 +10404,23 @@ get_pub_key_size() {
                case $len1 in
                     129) len="0x${pubkey:i:2}" ;;
                     130) len="0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*$len+"0x${pubkey:i:2}"
-                        ;;
+                         i=$i+2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         ;;
                     131) len="0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*$len+"0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*$len+"0x${pubkey:i:2}"
-                        ;;
+                         i=$i+2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         i=$i+2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         ;;
                     132) len="0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*$len+"0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*$len+"0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*$len+"0x${pubkey:i:2}"
-                        ;;
+                         i=$i+2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         i=$i+2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         i=$i+2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         ;;
                esac
                i=$i+2+2*$len
           fi
@@ -10445,23 +10445,23 @@ get_pub_key_size() {
                case $len1 in
                     129) len="0x${pubkey:i:2}" ;;
                     130) len="0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*$len+"0x${pubkey:i:2}"
-                        ;;
+                         i=$i+2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         ;;
                     131) len="0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*$len+"0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*$len+"0x${pubkey:i:2}"
-                        ;;
+                         i=$i+2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         i=$i+2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         ;;
                     132) len="0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*"0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*"0x${pubkey:i:2}"
-                        i=$i+2
-                        len=256*"0x${pubkey:i:2}"
-                        ;;
+                         i=$i+2
+                         len=256*"0x${pubkey:i:2}"
+                         i=$i+2
+                         len=256*"0x${pubkey:i:2}"
+                         i=$i+2
+                         len=256*"0x${pubkey:i:2}"
+                         ;;
                esac
           fi
           len=8*$len # convert from bytes to bits
@@ -12212,7 +12212,7 @@ parse_tls_serverhello() {
                          # create a new $tls_certificate_ascii that only contains a list of certificates.
                          if [[ -n "$tls_certificate_ascii" ]]; then
                               if [[ "${tls_certificate_ascii:0:2}" != "00" ]]; then
-                                  debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
+                                   debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
                                    tmpfile_handle ${FUNCNAME[0]}.txt
                                    return 1
                               fi
@@ -13340,7 +13340,7 @@ resend_if_hello_retry_request() {
                cipher_suite="${tls_hello_ascii:22:2},${tls_hello_ascii:24:2}"
                extns_offset=26
           else
-              extns_offset=22
+               extns_offset=22
           fi
      else
           sid_len=2*$(hex2dec "${tls_hello_ascii:86:2}")
@@ -13439,9 +13439,9 @@ resend_if_hello_retry_request() {
      fi
 
      if [[ "$server_version" == 0304 ]] || [[ 0x$server_version -ge 0x7f16 ]]; then
-         # Send a dummy change cipher spec for middlebox compatibility.
-         debugme echo -en "\nsending dummy change cipher spec... "
-         socksend ", x14, x03, x03 ,x00, x01, x01" 0
+          # Send a dummy change cipher spec for middlebox compatibility.
+          debugme echo -en "\nsending dummy change cipher spec... "
+          socksend ", x14, x03, x03 ,x00, x01, x01" 0
      fi
      debugme echo -en "\nsending second client hello... "
      second_clienthello="$(modify_clienthello "$original_clienthello" "$new_key_share" "$cookie")"
@@ -14731,8 +14731,8 @@ run_tls_fallback_scsv() {
      for p in tls1_2 tls1_1 tls1 ssl3; do
           [[ $(has_server_protocol "$p") -eq 1 ]] && continue
           if [[ $(has_server_protocol "$p") -eq 0 ]]; then
-                high_proto="$p"
-                break
+               high_proto="$p"
+               break
           fi
           $OPENSSL s_client $(s_client_options "-$p $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           if sclient_connect_successful $? $TMPFILE; then
@@ -15893,19 +15893,19 @@ run_rc4() {
 
 
 run_youknowwho() {
-    local cve="CVE-2013-2566"
-    local cwe="CWE-310"
-    # NOT FIXME as there's no code: http://www.isg.rhul.ac.uk/tls/
-    # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
-    return 0
-    # in a nutshell: don't use RC4, really not!
+     local cve="CVE-2013-2566"
+     local cwe="CWE-310"
+     # NOT FIXME as there's no code: http://www.isg.rhul.ac.uk/tls/
+     # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
+     return 0
+     # in a nutshell: don't use RC4, really not!
 }
 
-    # https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
-    # https://secure-resumption.com/tlsauth.pdf
+     # https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
+     # https://secure-resumption.com/tlsauth.pdf
 run_tls_truncation() {
-    #FIXME: difficult to test, is there any test available: pls let me know
-        :
+     #FIXME: difficult to test, is there any test available: pls let me know
+     :
 }
 
 # Test for various server implementation errors that aren't tested for elsewhere.
@@ -15995,17 +15995,17 @@ run_grease() {
           fileout "$jsonID" "MEDIUM" "Server responded with a ServerHello rather than an alert even though it doesn't support any of the client-offered cipher suites."
           bug_found=true
      else
-           # Send a list of non-existent ciphers such that for each cipher that
-           # is defined, there is one in the list that matches in the second byte
-           # (but make sure list contains at more 127 ciphers).
-           debugme echo -e "\nSending ClientHello with non-existent ciphers, but that match existing ciphers in second byte."
-           tls_sockets "$proto" "de,01, de,02, de,03, de,04, de,05, de,06, de,07, de,08, de,09, de,0a, de,0b, de,0c, de,0d, de,0e, de,0f, de,10, de,11, de,12, de,13, de,14, de,15, de,16, de,17, de,18, de,19, de,1a, de,1b, de,23, de,24, de,25, de,26, de,27, de,28, de,29, de,2a, de,2b, de,2c, de,2d, de,2e, de,2f, de,30, de,31, de,32, de,33, de,34, de,35, de,36, de,37, de,38, de,39, de,3a, de,3b, de,3c, de,3d, de,3e, de,3f, de,40, de,41, de,42, de,43, de,44, de,45, de,46, de,60, de,61, de,62, de,63, de,64, de,65, de,66, de,67, de,68, de,69, de,6a, de,6b, de,6c, de,6d, de,72, de,73, de,74, de,75, de,76, de,77, de,78, de,79, de,84, de,85, de,86, de,87, de,88, de,89, de,96, de,97, de,98, de,99, de,9a, de,9b, de,9c, de,9d, de,9e, de,9f, de,a0, de,a1, de,a2, de,a3, de,a4, de,a5, de,a6, de,a7, de,ba, de,bb, de,bc, de,bd, de,be, de,bf, de,c0, de,c1, de,c2, de,c3, de,c4, de,c5, 00,ff"
-           success=$?
-           if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
-                prln_svrty_medium " Server claims to support non-existent cipher suite."
-                fileout "$jsonID" "MEDIUM" "Server claims to support non-existent cipher suite."
-                bug_found=true
-           elif grep -q " The ServerHello specifies a cipher suite that wasn't included in the ClientHello" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ; then
+          # Send a list of non-existent ciphers such that for each cipher that
+          # is defined, there is one in the list that matches in the second byte
+          # (but make sure list contains at more 127 ciphers).
+          debugme echo -e "\nSending ClientHello with non-existent ciphers, but that match existing ciphers in second byte."
+          tls_sockets "$proto" "de,01, de,02, de,03, de,04, de,05, de,06, de,07, de,08, de,09, de,0a, de,0b, de,0c, de,0d, de,0e, de,0f, de,10, de,11, de,12, de,13, de,14, de,15, de,16, de,17, de,18, de,19, de,1a, de,1b, de,23, de,24, de,25, de,26, de,27, de,28, de,29, de,2a, de,2b, de,2c, de,2d, de,2e, de,2f, de,30, de,31, de,32, de,33, de,34, de,35, de,36, de,37, de,38, de,39, de,3a, de,3b, de,3c, de,3d, de,3e, de,3f, de,40, de,41, de,42, de,43, de,44, de,45, de,46, de,60, de,61, de,62, de,63, de,64, de,65, de,66, de,67, de,68, de,69, de,6a, de,6b, de,6c, de,6d, de,72, de,73, de,74, de,75, de,76, de,77, de,78, de,79, de,84, de,85, de,86, de,87, de,88, de,89, de,96, de,97, de,98, de,99, de,9a, de,9b, de,9c, de,9d, de,9e, de,9f, de,a0, de,a1, de,a2, de,a3, de,a4, de,a5, de,a6, de,a7, de,ba, de,bb, de,bc, de,bd, de,be, de,bf, de,c0, de,c1, de,c2, de,c3, de,c4, de,c5, 00,ff"
+          success=$?
+          if [[ $success -eq 0 ]] || [[ $success -eq 2 ]]; then
+               prln_svrty_medium " Server claims to support non-existent cipher suite."
+               fileout "$jsonID" "MEDIUM" "Server claims to support non-existent cipher suite."
+               bug_found=true
+          elif grep -q " The ServerHello specifies a cipher suite that wasn't included in the ClientHello" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" ; then
                prln_svrty_medium " Server only compares against second byte in each cipher suite in ClientHello."
                fileout "$jsonID" "MEDIUM" "Server only compares against second byte in each cipher suite in ClientHello."
                bug_found=true
@@ -16421,7 +16421,7 @@ run_robot() {
                len=${#encrypted_pms}
                client_key_exchange=""
                for (( i=0; i<len; i=i+2 )); do
-                   client_key_exchange+=", x${encrypted_pms:i:2}"
+                    client_key_exchange+=", x${encrypted_pms:i:2}"
                done
 
                # The contents of change cipher spec are fixed.
@@ -16570,10 +16570,10 @@ get_install_dir() {
 
      # still no cipher mapping file (and realpath is not present):
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]] && type -p readlink &>/dev/null ; then
-         readlink -f ls &>/dev/null && \
-              TESTSSL_INSTALL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || \
-              TESTSSL_INSTALL_DIR="$(dirname "$(readlink "${BASH_SOURCE[0]}")")"
-              # not sure whether Darwin has -f
+          readlink -f ls &>/dev/null && \
+               TESTSSL_INSTALL_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" || \
+               TESTSSL_INSTALL_DIR="$(dirname "$(readlink "${BASH_SOURCE[0]}")")"
+               # not sure whether Darwin has -f
           CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/etc/cipher-mapping.txt"
           [[ -r "$TESTSSL_INSTALL_DIR/cipher-mapping.txt" ]] && CIPHERS_BY_STRENGTH_FILE="$TESTSSL_INSTALL_DIR/cipher-mapping.txt"
      fi
@@ -16689,7 +16689,7 @@ find_openssl_binary() {
      elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
           OPENSSL_LOCATION="${openssl_location%%$cwd}"
      else
-         OPENSSL_LOCATION="$openssl_location"
+          OPENSSL_LOCATION="$openssl_location"
      fi
 
      OSSL_CIPHERS_S=""
@@ -16720,7 +16720,7 @@ find_openssl_binary() {
      HAS_AES128_GCM=false
      HAS_AES256_GCM=false
      HAS_ZLIB=false
-     
+
      $OPENSSL ciphers -s 2>&1 | grep -aq "unknown option" || \
           OSSL_CIPHERS_S="-s"
 
@@ -17348,8 +17348,8 @@ initialize_engine(){
           # to suppress the warning (confuses users), see #1119
           # https://github.com/openssl/openssl/commit/b524b808a1d1ba204dbdcbb42de4e3bddb3472ac
           if ! grep -q 'using the .include directive' /etc/ssl/openssl.cnf; then
-                 outln
-                 pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
+               outln
+               pr_warning "No engine or GOST support via engine with your $OPENSSL"; outln
           fi
           fileout_insert_warning "engine_problem" "WARN" "No engine or GOST support via engine with your $OPENSSL"
           # Avoid clashes of OpenSSL 1.1.1 config file with our openssl 1.0.2. This is for Debian 10
@@ -17928,7 +17928,7 @@ determine_optimal_sockets_params() {
      local i proto cipher_offered
      local all_failed=true
 
-     # If a STARTTLS protocol is specified and $SSL_NATIVE is true, then skip this test, since 
+     # If a STARTTLS protocol is specified and $SSL_NATIVE is true, then skip this test, since
      # $SSL_NATIVE may have been set to true as a result of tls_sockets() not supporting the STARTTLS
      # protocol.
      [[ -n "$STARTTLS_PROTOCOL" ]] && "$SSL_NATIVE" && return 0
@@ -19124,7 +19124,7 @@ parse_cmd_line() {
                     prepare_debug
                     mybanner
                     exit $ALLOK
-                   ;;
+                    ;;
                --mx)
                     do_mx_all_ips=true
                     PORT=25
@@ -19773,7 +19773,7 @@ lets_roll() {
                fileout_section_header $section_number true && ((section_number++))
                "$do_client_simulation" && { run_client_simulation; ret=$(($? + ret)); stopwatch run_client_simulation; }
           fi
-         fileout_section_footer true
+          fileout_section_footer true
      fi
 
      outln
