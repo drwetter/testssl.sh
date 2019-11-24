@@ -17537,6 +17537,8 @@ get_local_a() {
 # Checks for IDN capabilities also
 #
 check_resolver_bins() {
+     local saved_openssl_conf="$OPENSSL_CONF"
+
      type -p dig   &> /dev/null &&  HAS_DIG=true
      type -p host  &> /dev/null &&  HAS_HOST=true
      type -p drill &> /dev/null &&  HAS_DRILL=true
@@ -17545,14 +17547,18 @@ check_resolver_bins() {
      type -p idn  &>/dev/null && HAS_IDN=true
      type -p idn2 &>/dev/null && HAS_IDN2=true
 
+     OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if ! "$HAS_DIG" && ! "$HAS_HOST" && ! "$HAS_DRILL" && ! "$HAS_NSLOOKUP"; then
           fatal "Neither \"dig\", \"host\", \"drill\" or \"nslookup\" is present" $ERR_DNSBIN
      fi
      if "$HAS_DIG"; then
-          if dig +noidnout -t a 2>&1 | grep -Eqv 'Invalid option: \+noidnout|IDN support not enabled'; then
+          if dig +noidnout -t a 2>&1 | grep -Eq 'Invalid option: \+noidnout|IDN support not enabled'; then
+               :
+          else
                HAS_DIG_NOIDNOUT=true
           fi
      fi
+     OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
      return 0
 }
 
@@ -17563,7 +17569,7 @@ get_a_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     [[ "$HAS_DIG_NOIDNOUT" ]] && noidnout="+noidnout"
+     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      if [[ "$1" == localhost ]]; then
           # This is a bit ugly but prevents from doing DNS lookups which could fail
@@ -17586,7 +17592,7 @@ get_a_record() {
           fi
      fi
      if [[ -z "$ip4" ]] && "$HAS_DIG"; then
-          ip4=$(filter_ip4_address $(dig +short +timeout=2 +tries=2 "$noidnout" -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
+          ip4=$(filter_ip4_address $(dig +short +timeout=2 +tries=2 $noidnout -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
      fi
      if [[ -z "$ip4" ]] && "$HAS_HOST"; then
           ip4=$(filter_ip4_address $(host -t a "$1" 2>/dev/null | awk '/address/ { print $NF }'))
@@ -17608,7 +17614,7 @@ get_aaaa_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     [[ "$HAS_DIG_NOIDNOUT" ]] && noidnout="+noidnout"
+     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if is_ipv6addr "$1"; then
@@ -17629,7 +17635,7 @@ get_aaaa_record() {
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
                fi
           elif "$HAS_DIG"; then
-               ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 "$noidnout" -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
+               ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           elif "$HAS_HOST"; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
           elif "$HAS_DRILL"; then
@@ -17653,7 +17659,7 @@ get_caa_rr_record() {
      local all_caa=""
      local noidnout=""
 
-     [[ "$HAS_DIG_NOIDNOUT" ]] && noidnout="+noidnout"
+     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
 
      [[ -n "$NODNS" ]] && return 0           # if minimum DNS lookup was instructed, leave here
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
@@ -17664,7 +17670,7 @@ get_caa_rr_record() {
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
      if "$HAS_DIG"; then
-          raw_caa="$(dig +short +timeout=3 +tries=3 "$noidnout" type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
+          raw_caa="$(dig +short +timeout=3 +tries=3 $noidnout type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
           # empty if no CAA record
      elif "$HAS_DRILL"; then
           raw_caa="$(drill $1 type257 | awk '/'"^${1}"'.*CAA/ { print $5,$6,$7 }')"
@@ -17729,13 +17735,13 @@ get_mx_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     [[ "$HAS_DIG_NOIDNOUT" ]] && noidnout="+noidnout"
+     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      # we need the last two columns here
      if "$HAS_HOST"; then
           mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif "$HAS_DIG"; then
-          mxs="$(dig +short "$noidnout" -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
+          mxs="$(dig +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
      elif "$HAS_DRILL"; then
           mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
      elif "$HAS_NSLOOKUP"; then
