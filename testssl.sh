@@ -18650,7 +18650,7 @@ ports2starttls() {
           389)      echo "-t ldap ";;
           3306)     echo "-t mysql " ;;
           5222)     echo "-t xmpp " ;;   # domain of jabber server maybe needed
-          5432)     echo "-t postgres" ;;
+          5432)     echo "-t postgres " ;;
           563)                ;;  # NNTPS
           636)                ;;  # LDAP
           1443|8443|443|981)  ;;  # HTTPS
