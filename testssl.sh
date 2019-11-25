@@ -734,6 +734,9 @@ strip_quote() {
 #################### JSON FILE FORMATTING ####################
 
 fileout_json_footer() {
+     if [[ ! -s "$JSONFILE" ]] || [[ -d "$JSONFILE" ]]; then
+          return 0
+     fi
      if "$do_json"; then
           if [[ "$SCAN_TIME" -eq 0 ]]; then
                fileout_json_finding "scanTime" "WARN" "Scan interrupted" "" "" ""
