@@ -5639,7 +5639,7 @@ sub_cipherlists() {
           else
                # Otherwise the error means the server doesn't support that cipher list.
                case $4 in
-                    2)  if [[ $sclient_success -eq 0 ]]; then
+                    7)   if [[ $sclient_success -eq 0 ]]; then
                               # Strong is excellent to offer
                               pr_svrty_best "offered (OK)"
                               fileout "$jsonID" "OK" "offered" "$cve" "$cwe"
@@ -5648,7 +5648,7 @@ sub_cipherlists() {
                               fileout "$jsonID" "MEDIUM" "not offered" "$cve" "$cwe"
                          fi
                          ;;
-                    1)  if [[ $sclient_success -eq 0 ]]; then
+                    6)   if [[ $sclient_success -eq 0 ]]; then
                               # High is good to offer
                               pr_svrty_good "offered (OK)"
                               fileout "$jsonID" "OK" "offered" "$cve" "$cwe"
@@ -5658,7 +5658,16 @@ sub_cipherlists() {
                               fileout "$jsonID" "MEDIUM" "not offered" "$cve" "$cwe"
                          fi
                          ;;
-                    0)   if [[ $sclient_success -eq 0 ]]; then
+                    5)   if [[ $sclient_success -eq 0 ]]; then
+                              # Neither good nor bad to offer
+                              out "offered (OK)"
+                              fileout "$jsonID" "INFO" "offered" "$cve" "$cwe"
+                         else
+                              out "not offered"
+                              fileout "$jsonID" "INFO" "not offered" "$cve" "$cwe"
+                         fi
+                         ;;
+                    4)   if [[ $sclient_success -eq 0 ]]; then
                               # medium is not that bad
                               pr_svrty_low "offered"
                               fileout "$jsonID" "LOW" "offered" "$cve" "$cwe"
@@ -5667,7 +5676,15 @@ sub_cipherlists() {
                               fileout "$jsonID" "INFO" "not offered" "$cve" "$cwe"
                          fi
                          ;;
-                    -1)  if [[ $sclient_success -eq 0 ]]; then
+                    3)   if [[ $sclient_success -eq 0 ]]; then
+                              pr_svrty_medium "offered"
+                              fileout "$jsonID" "MEDIUM" "offered" "$cve" "$cwe"
+                         else
+                              out "not offered"
+                              fileout "$jsonID" "INFO" "not offered" "$cve" "$cwe"
+                         fi
+                         ;;
+                    2)   if [[ $sclient_success -eq 0 ]]; then
                               # bad but there is worse
                               pr_svrty_high "offered (NOT ok)"
                               fileout "$jsonID" "HIGH" "offered" "$cve" "$cwe"
@@ -5677,7 +5694,7 @@ sub_cipherlists() {
                               fileout "$jsonID" "OK" "not offered" "$cve" "$cwe"
                          fi
                          ;;
-                    -2)  if [[ $sclient_success -eq 0 ]]; then
+                    1)   if [[ $sclient_success -eq 0 ]]; then
                               # the ugly ones
                               pr_svrty_critical "offered (NOT ok)"
                               fileout "$jsonID" "CRITICAL" "offered" "$cve" "$cwe"
@@ -5686,7 +5703,7 @@ sub_cipherlists() {
                               fileout "$jsonID" "OK" "not offered" "$cve" "$cwe"
                          fi
                          ;;
-                    *) # we shouldn't reach this
+                    *)   # we shouldn't reach this
                          pr_warning "?: $4 (please report this)"
                          fileout "$jsonID" "WARN" "return condition $4 unclear" "$cve" "$cwe"
                          ((ret++))
@@ -5779,19 +5796,19 @@ run_cipherlists() {
      # argv[9]: CVE
      # argv[10]: CWE
 
-     sub_cipherlists "$ossl_null_ciphers"      "" " NULL ciphers (no encryption)              "    -2 "NULL"      "$null_ciphers"    "$sslv2_null_ciphers"   "$using_sockets" "$cve" "$cwe"
+     sub_cipherlists "$ossl_null_ciphers"      "" " NULL ciphers (no encryption)              "     1 "NULL"      "$null_ciphers"    "$sslv2_null_ciphers"   "$using_sockets" "$cve" "$cwe"
      ret=$?
-     sub_cipherlists "$ossl_anon_ciphers"      "" " Anonymous NULL Ciphers (no authentication)"    -2 "aNULL"     "$anon_ciphers"    "$sslv2_anon_ciphers"   "$using_sockets" "$cve" "$cwe"
+     sub_cipherlists "$ossl_anon_ciphers"      "" " Anonymous NULL Ciphers (no authentication)"     1 "aNULL"     "$anon_ciphers"    "$sslv2_anon_ciphers"   "$using_sockets" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_exp_ciphers"       "" " Export ciphers (w/o ADH+NULL)             "    -2 "EXPORT"    "$exp_ciphers"     "$sslv2_exp_ciphers"    "$using_sockets" "$cve" "$cwe"
+     sub_cipherlists "$ossl_exp_ciphers"       "" " Export ciphers (w/o ADH+NULL)             "     1 "EXPORT"    "$exp_ciphers"     "$sslv2_exp_ciphers"    "$using_sockets" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_low_ciphers"       "" " LOW: 64 Bit + DES, RC[2,4] (w/o export)   "    -2 "LOW"       "$low_ciphers"     "$sslv2_low_ciphers"    "$using_sockets" "$cve" "$cwe"
+     sub_cipherlists "$ossl_low_ciphers"       "" " LOW: 64 Bit + DES, RC[2,4] (w/o export)   "     1 "LOW"       "$low_ciphers"     "$sslv2_low_ciphers"    "$using_sockets" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_tdes_ciphers"      "" " Triple DES Ciphers / IDEA                 "    -1 "3DES_IDEA" "$tdes_ciphers"    "$sslv2_tdes_ciphers"   "$using_sockets" "$cve" "$cwe2"
+     sub_cipherlists "$ossl_tdes_ciphers"      "" " Triple DES Ciphers / IDEA                 "     2 "3DES_IDEA" "$tdes_ciphers"    "$sslv2_tdes_ciphers"   "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_average_ciphers"   "" " Obsolete: SEED + 128+256 Bit CBC cipher   "     0 "AVERAGE"   "$average_ciphers"  ""                     "$using_sockets" "$cve" "$cwe2"
+     sub_cipherlists "$ossl_average_ciphers"   "" " Obsolete: SEED + 128+256 Bit CBC cipher   "     4 "AVERAGE"   "$average_ciphers"  ""                     "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_strong_ciphers" 'ALL' " Strong encryption (AEAD ciphers)          "     2 "STRONG"    "$strong_ciphers"   ""                     "$using_sockets" ""      ""
+     sub_cipherlists "$ossl_strong_ciphers" 'ALL' " Strong encryption (AEAD ciphers)          "     7 "STRONG"    "$strong_ciphers"   ""                     "$using_sockets" ""      ""
      ret=$((ret + $?))
 
      outln
