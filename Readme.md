@@ -56,7 +56,7 @@ Or help yourself downloading the ZIP archive [https://github.com/drwetter/testss
 
 Testssl.sh has minimal requirements. As stated you don't have to install or build anything.  You can just run it from the pulled/cloned directory. Still if you don't want to pull the github repo to your directory of choice you can pull a container from dockerhub and run it:
 ```
-docker run -ti drwetter/testssl.sh <your_cmd_line>
+docker run --rm -ti drwetter/testssl.sh <your_cmd_line>
 ```
 Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and run
 ```
