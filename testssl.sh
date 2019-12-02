@@ -19448,6 +19448,9 @@ parse_cmd_line() {
                --json)
                     "$do_pretty_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     "$do_json" && fatal "--json and --jsonfile are mutually exclusive" $ERR_CMDLINE
+                    if [[ "$2" =~ \.(json|JSON)$ ]]; then
+                         fatal "No file name allowed after \"--json\" (use \"--jsonfile\" instead)" $ERR_CMDLINE
+                    fi
                     do_json=true
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but additionally we can specify a log location
@@ -19461,6 +19464,9 @@ parse_cmd_line() {
                --json-pretty)
                     "$do_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     "$do_pretty_json" && fatal "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
+                    if [[ "$2" =~ \.(json|JSON)$ ]]; then
+                         fatal "No file name allowed after \"--json\" (use \"--jsonfile-pretty\" instead)" $ERR_CMDLINE
+                    fi
                     do_pretty_json=true
                     ;;
                --jsonfile-pretty|--jsonfile-pretty=*|-oJ|-oJ=*)
@@ -19479,6 +19485,9 @@ parse_cmd_line() {
                     ;;
                --csv)
                     "$do_csv" && fatal "two --csv* arguments" $ERR_CMDLINE
+                    if [[ "$2" =~ \.(csv|CSV)$ ]]; then
+                         fatal "No file name allowed after \"--csv\" (use \"--csvfile\" instead)" $ERR_CMDLINE
+                    fi
                     do_csv=true
                     ;;   # DEFINITION of CSVFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but additionally we can specify a log location
@@ -19490,6 +19499,9 @@ parse_cmd_line() {
                     ;;
                --html)
                     "$do_html" && fatal "two --html* arguments" $ERR_CMDLINE
+                    if [[ "$2" =~ \.(htm|html|HTM|HTML)$ ]]; then
+                         fatal "No file name allowed after \"--html\" (use \"--htmlfile\" instead)" $ERR_CMDLINE
+                    fi
                     do_html=true
                     ;;  # DEFINITION of HTMLFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but additionally we can specify a file location
