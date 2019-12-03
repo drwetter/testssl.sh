@@ -3050,8 +3050,8 @@ run_security_headers() {
                # Include $header when determining where to insert line breaks, but print $header
                # separately.
                pr_svrty_good "$header"
-               header_output="$(out_row_aligned_max_width "$header $HEADERVALUE" "$spaces" $TERM_WIDTH)"
-               outln "${header_output#$header}"
+               header_output="$(out_row_aligned_max_width "${header:2} $HEADERVALUE" "$spaces  " $TERM_WIDTH)"
+               outln "${header_output#${header:2}}"
                fileout "$header" "OK" "$HEADERVALUE"
           fi
      done
