@@ -3029,7 +3029,7 @@ run_cookie_flags() {     # ARG1: Path
 run_security_headers() {
      local good_header="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
      local other_header="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible"
-     local header
+     local header header_output
      local first=true
      local spaces="                              "
      local have_header=false
@@ -3047,8 +3047,11 @@ run_security_headers() {
                if "$first"; then
                     first=false
                fi
+               # Include $header when determining where to insert line breaks, but print $header
+               # separately.
                pr_svrty_good "$header"
-               outln " $(out_row_aligned_max_width "$HEADERVALUE" "$spaces" $TERM_WIDTH)"
+               header_output="$(out_row_aligned_max_width "$header $HEADERVALUE" "$spaces" $TERM_WIDTH)"
+               outln "${header_output#$header}"
                fileout "$header" "OK" "$HEADERVALUE"
           fi
      done
