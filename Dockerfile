@@ -1,6 +1,6 @@
-FROM alpine:3.9
+FROM alpine:3.10
 
-RUN apk update && apk upgrade && apk add --no-cache curl bash procps drill git coreutils libidn curl
+RUN apk update && apk upgrade && apk add --no-cache bash procps drill git coreutils libidn curl
 
 RUN addgroup testssl
 RUN adduser -G testssl -g "testssl user"  -s /bin/bash -D testssl
