@@ -404,6 +404,7 @@ SERVER_COUNTER=0                        # Counter for multiple servers
 
 TLS_LOW_BYTE=""                         # For "secret" development stuff, see -q below
 HEX_CIPHER=""                           # "
+CONNECT_TIMEOUT=180
 
 
 ########### Global variables for parallel mass testing
@@ -10245,7 +10246,8 @@ fd_socket() {
                     break
                fi
           done
-     elif ! exec 5<>/dev/tcp/$nodeip/$PORT; then  #  2>/dev/null would remove an error message, but disables debugging
+     elif ! timeout "$CONNECT_TIMEOUT" bash -c "exec 3<>/dev/tcp/$nodeip/$PORT" || \
+          ! exec 5<>/dev/tcp/$nodeip/$PORT; then  #  2>/dev/null would remove an error message, but disables debugging
           ((NR_SOCKET_FAIL++))
           connectivity_problem $NR_SOCKET_FAIL $MAX_SOCKET_FAIL "TCP connect problem" "repeated TCP connect problems, giving up"
           outln
@@ -17010,6 +17012,7 @@ tuning / connect options (most also can be preset via environment variables):
 
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't ask for a confirmation, "off" or "false" skips connection warnings
+     --connect-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait for the TCP handshake to complete
      --openssl-timeout <seconds>   useful to avoid hangers. <seconds> to wait before openssl connect will be terminated
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
@@ -19579,6 +19582,10 @@ parse_cmd_line() {
                     ;;
                --openssl-timeout|--openssl-timeout=*)
                     OPENSSL_TIMEOUT="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    ;;
+               --connect-timeout|--connect-timeout=*)
+                    CONNECT_TIMEOUT="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     ;;
                --mapping|--mapping=*)

@@ -377,6 +377,9 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, Expect\-CT,\.\.\. , CSP
 \fB\-\-warnings <batch|off|false>\fR The warnings parameter determines how testssl\.sh will deal with situations where user input normally will be necessary\. There are a couple of options here\. \fBbatch\fR doesn\'t wait for a confirming keypress\. This is automatically being chosen for mass testing (\fB\-\-file\fR)\. \fB\-false\fR just skips the warning AND the confirmation\. Please note that there are conflicts where testssl\.sh will still ask for confirmation which are the ones which otherwise would have a drastic impact on the results\. Almost any other decision will be made as a best guess by testssl\.sh\. The same can be achieved by setting the environment variable \fBWARNINGS\fR\.
 .
 .P
+\fB\-\-connect\-timeout <seconds>\fR This is useful for direct TCP connections to a node\. If the node does not complete a TCP handshake (e\.g\. because it is down or behind a firewall) testssl\.sh may hang for ~2 minutes\. This parameter instructs testssl\.sh to wait at most \fBseconds\fR for the handshake to complete. This option only works if your OS has a \fBtimeout\fR binary installed\.
+.
+.P
 \fB\-\-openssl\-timeout <seconds>\fR This is especially useful for all connects using openssl and practically useful for mass testing\. It avoids the openssl connect to hang for ~2 minutes\. The expected parameter \fBseconds\fR instructs testssl\.sh to wait before the openssl connect will be terminated\. The option is only available if your OS has a timeout binary installed\. As there are different implementations of \fBtimeout\fR: It automatically calls the binary with the right parameters\. OPENSSL_TIMEOUT is the equivalent environment variable\.
 .
 .P
