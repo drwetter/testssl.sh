@@ -190,7 +190,9 @@ TERM_CURRPOS=0                                              # custom line wrappi
 ########### Defining (and presetting) variables which can be changed
 #
 # Following variables make use of $ENV and can be used like "OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <URI>"
-declare -x OPENSSL OPENSSL_TIMEOUT
+declare -x OPENSSL
+OPENSSL_TIMEOUT=${OPENSSL_TIMEOUT:-""}  # Default connect timeout with openssl before we call the server side unreachable
+CONNECT_TIMEOUT=${CONNECT_TIMEOUT:-""}  # Default connect timeout with sockets before we call the server side unreachable
 PHONE_OUT=${PHONE_OUT:-false}           # Whether testssl can retrieve CRLs and OCSP
 FAST_SOCKET=${FAST_SOCKET:-false}       # EXPERIMENTAL feature to accelerate sockets -- DO NOT USE it for production
 COLOR=${COLOR:-2}                       # 3: Extra color (ciphers, curves), 2: Full color, 1: B/W only 0: No ESC at all
@@ -280,6 +282,7 @@ GIVE_HINTS=false                        # give an additional info to findings
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
 MULTIPLE_CHECKS=false                   # need to know whether an MX record or a hostname resolves to multiple IPs to check
 CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
+TIMEOUT_CMD=""
 HAD_SLEPT=0
 NR_SOCKET_FAIL=0                        # Counter for socket failures
 NR_OSSL_FAIL=0                          # .. for OpenSSL connects
@@ -404,7 +407,6 @@ SERVER_COUNTER=0                        # Counter for multiple servers
 
 TLS_LOW_BYTE=""                         # For "secret" development stuff, see -q below
 HEX_CIPHER=""                           # "
-CONNECT_TIMEOUT=180
 
 
 ########### Global variables for parallel mass testing
@@ -10246,13 +10248,13 @@ fd_socket() {
                     break
                fi
           done
-     elif ! timeout "$CONNECT_TIMEOUT" bash -c "exec 3<>/dev/tcp/$nodeip/$PORT" || \
-          ! exec 5<>/dev/tcp/$nodeip/$PORT; then  #  2>/dev/null would remove an error message, but disables debugging
+     #  For the following execs: 2>/dev/null would remove a potential error message, but disables debugging
+     elif ! $TIMEOUT_CMD $CONNECT_TIMEOUT bash -c "exec 5<>/dev/tcp/$nodeip/$PORT" || \
+          ! exec 5<>/dev/tcp/$nodeip/$PORT; then
           ((NR_SOCKET_FAIL++))
           connectivity_problem $NR_SOCKET_FAIL $MAX_SOCKET_FAIL "TCP connect problem" "repeated TCP connect problems, giving up"
           outln
           pr_warning "Unable to open a socket to $NODEIP:$PORT. "
-          # It can last ~2 minutes but for for those rare occasions we don't do a timeout handler here, KISS
           return 6
      fi
 
@@ -16301,7 +16303,7 @@ run_robot() {
      local -a response
      local -i i subret len iteration testnum pubkeybits pubkeybytes
      local vulnerable=false send_ccs_finished=true
-     local -i start_time end_time timeout=$MAX_WAITSOCK
+     local -i start_time end_time robottimeout=$MAX_WAITSOCK
      local cve="CVE-2017-17382 CVE-2017-17427 CVE-2017-17428 CVE-2017-13098 CVE-2017-1000385 CVE-2017-13099 CVE-2016-6883 CVE-2012-5081 CVE-2017-6168"
      local cwe="CWE-203"
      local jsonID="ROBOT"
@@ -16466,7 +16468,7 @@ run_robot() {
                fi
                debugme echo "reading server error response..."
                start_time=$(LC_ALL=C date "+%s")
-               sockread_serverhello 32768 $timeout
+               sockread_serverhello 32768 $robottimeout
                subret=$?
                if [[ $subret -eq 0 ]]; then
                     end_time=$(LC_ALL=C date "+%s")
@@ -16476,9 +16478,9 @@ run_robot() {
                     # exchange message, measure the amount of time it took to
                     # receive a response and set the timeout value for future
                     # tests to 2 seconds longer than it took to receive a response.
-                    [[ $iteration -ne 2 ]] && [[ $timeout -eq $MAX_WAITSOCK ]] && \
+                    [[ $iteration -ne 2 ]] && [[ $robottimeout -eq $MAX_WAITSOCK ]] && \
                          [[ $((end_time-start_time)) -lt $((MAX_WAITSOCK-2)) ]] && \
-                         timeout=$((end_time-start_time+2))
+                         robottimeout=$((end_time-start_time+2))
                else
                     response[testnum]="Timeout waiting for alert"
                fi
@@ -16517,14 +16519,14 @@ run_robot() {
                # If the test was run with a short timeout and was found to be
                # potentially vulnerable due to some tests timing out, then
                # verify the results by rerunning with a longer timeout.
-               if [[ $timeout -eq $MAX_WAITSOCK ]]; then
+               if [[ $robottimeout -eq $MAX_WAITSOCK ]]; then
                     break
                elif [[ "${response[0]}" == "Timeout waiting for alert" ]] || \
                     [[ "${response[1]}" == "Timeout waiting for alert" ]] || \
                     [[ "${response[2]}" == "Timeout waiting for alert" ]] || \
                     [[ "${response[3]}" == "Timeout waiting for alert" ]] || \
                     [[ "${response[4]}" == "Timeout waiting for alert" ]]; then
-                    timeout=10
+                    robottimeout=10
                else
                     break
                fi
@@ -16834,25 +16836,38 @@ find_openssl_binary() {
 
      [[ "$(echo -e "\x78\x9C\xAB\xCA\xC9\x4C\xE2\x02\x00\x06\x20\x01\xBC" | $OPENSSL zlib -d 2>/dev/null)" == zlib ]] && HAS_ZLIB=true
 
-     if [[ "$OPENSSL_TIMEOUT" != "" ]]; then
+     if [[ -n "$CONNECT_TIMEOUT" ]] || [[ -n "$OPENSSL_TIMEOUT" ]]; then
+          # We don't set a general timeout as other OS might not have "timeout" installed
+          # and we only do what is instructed. Thus we check first what the command line params were,
+          # then we proceed
           if type -p timeout >/dev/null 2>&1; then
-               if ! "$do_mass_testing"; then
-                    # there are different "timeout". Check whether --preserve-status is supported
-                    if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
-                         OPENSSL="timeout --preserve-status $OPENSSL_TIMEOUT $OPENSSL"
-                    else
-                         OPENSSL="timeout $OPENSSL_TIMEOUT $OPENSSL"
-                    fi
+               # There are different versions of "timeout". Check whether --preserve-status is supported
+               if timeout --help 2>/dev/null | grep -q 'preserve-status'; then
+                    TIMEOUT_CMD="timeout --preserve-status"
+               else
+                    TIMEOUT_CMD="timeout"
                fi
-               MAX_OSSL_FAIL+=2
           else
+# FIXME: BSD / no timeout. There's a general error using testssl (. It does an exec which fails:
+# bash -c 'exec 5<>/dev/tcp/172.17.0.2/443;
+               TIMEOUT_CMD=""
                outln
                prln_warning " Necessary binary \"timeout\" not found."
                ignore_no_or_lame " Continue without timeout? " "yes"
+# FIXME: ERR message
                [[ $? -ne 0 ]] && exit $ERR_OSSLBIN
-               unset OPENSSL_TIMEOUT
+          fi
+# FIXME: santity check for OPENSSL_TIMEOUT
+          # OPENSSL_TIMEOUT="$TIMEOUT_CMD"
+     fi
+
+     if ! "$do_mass_testing"; then
+          if [[ -n $OPENSSL_TIMEOUT ]]; then
+               OPENSSL="$TIMEOUT_CMD $OPENSSL_TIMEOUT $OPENSSL"
           fi
      fi
+
+# FIXME: manpage
 
      return 0
 }
@@ -17012,7 +17027,7 @@ tuning / connect options (most also can be preset via environment variables):
 
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't ask for a confirmation, "off" or "false" skips connection warnings
-     --connect-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait for the TCP handshake to complete
+     --connect-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait for the socket to return (60 is default)
      --openssl-timeout <seconds>   useful to avoid hangers. <seconds> to wait before openssl connect will be terminated
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
