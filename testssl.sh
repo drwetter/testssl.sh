@@ -10248,9 +10248,18 @@ fd_socket() {
                     break
                fi
           done
-     #  For the following execs: 2>/dev/null would remove a potential error message, but disables debugging
-     elif ! $TIMEOUT_CMD $CONNECT_TIMEOUT bash -c "exec 5<>/dev/tcp/$nodeip/$PORT" || \
-          ! exec 5<>/dev/tcp/$nodeip/$PORT; then
+     # For the following execs: 2>/dev/null would remove a potential error message, but disables debugging.
+     # First we check whether a socket connect timeout was specified
+     elif [[ -n "$CONNECT_TIMEOUT" ]]; then
+          if ! $TIMEOUT_CMD $CONNECT_TIMEOUT bash -c "exec 5<>/dev/tcp/$nodeip/$PORT"; then
+               ((NR_SOCKET_FAIL++))
+               connectivity_problem $NR_SOCKET_FAIL $MAX_SOCKET_FAIL "TCP connect problem" "repeated TCP connect problems (connect timeout), giving up"
+               outln
+               pr_warning "Unable to open a socket to $NODEIP:$PORT. "
+               return 6
+          fi
+     # Now comes the the usual case
+     elif ! exec 5<>/dev/tcp/$nodeip/$PORT; then
           ((NR_SOCKET_FAIL++))
           connectivity_problem $NR_SOCKET_FAIL $MAX_SOCKET_FAIL "TCP connect problem" "repeated TCP connect problems, giving up"
           outln
@@ -16848,14 +16857,9 @@ find_openssl_binary() {
                     TIMEOUT_CMD="timeout"
                fi
           else
-# FIXME: BSD / no timeout. There's a general error using testssl (. It does an exec which fails:
-# bash -c 'exec 5<>/dev/tcp/172.17.0.2/443;
                TIMEOUT_CMD=""
                outln
-               prln_warning " Necessary binary \"timeout\" not found."
-               ignore_no_or_lame " Continue without timeout? " "yes"
-# FIXME: ERR message
-               [[ $? -ne 0 ]] && exit $ERR_OSSLBIN
+               fatal "You specified a connect or openssl timeout but the binary \"timeout\" couldn't be found " $ERR_RESOURCE
           fi
 # FIXME: santity check for OPENSSL_TIMEOUT
           # OPENSSL_TIMEOUT="$TIMEOUT_CMD"
@@ -17027,7 +17031,7 @@ tuning / connect options (most also can be preset via environment variables):
 
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't ask for a confirmation, "off" or "false" skips connection warnings
-     --connect-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait for the socket to return (60 is default)
+     --connect-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait for the TCP socket connect to return
      --openssl-timeout <seconds>   useful to avoid hangers. <seconds> to wait before openssl connect will be terminated
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
