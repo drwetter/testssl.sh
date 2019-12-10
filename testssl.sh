@@ -16846,8 +16846,8 @@ find_openssl_binary() {
      [[ "$(echo -e "\x78\x9C\xAB\xCA\xC9\x4C\xE2\x02\x00\x06\x20\x01\xBC" | $OPENSSL zlib -d 2>/dev/null)" == zlib ]] && HAS_ZLIB=true
 
      if [[ -n "$CONNECT_TIMEOUT" ]] || [[ -n "$OPENSSL_TIMEOUT" ]]; then
-          # We don't set a general timeout as other OS might not have "timeout" installed
-          # and we only do what is instructed. Thus we check first what the command line params were,
+          # We don't set a general timeout as we might not have "timeout" installed and we only
+          # do what is instructed. Thus we check first what the command line params were,
           # then we proceed
           if type -p timeout >/dev/null 2>&1; then
                # There are different versions of "timeout". Check whether --preserve-status is supported
@@ -16861,8 +16861,6 @@ find_openssl_binary() {
                outln
                fatal "You specified a connect or openssl timeout but the binary \"timeout\" couldn't be found " $ERR_RESOURCE
           fi
-# FIXME: santity check for OPENSSL_TIMEOUT
-          # OPENSSL_TIMEOUT="$TIMEOUT_CMD"
      fi
 
      if ! "$do_mass_testing"; then
@@ -16870,8 +16868,6 @@ find_openssl_binary() {
                OPENSSL="$TIMEOUT_CMD $OPENSSL_TIMEOUT $OPENSSL"
           fi
      fi
-
-# FIXME: manpage
 
      return 0
 }
@@ -17032,7 +17028,7 @@ tuning / connect options (most also can be preset via environment variables):
 output options (can also be preset via environment variables):
      --warnings <batch|off|false>  "batch" doesn't ask for a confirmation, "off" or "false" skips connection warnings
      --connect-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait for the TCP socket connect to return
-     --openssl-timeout <seconds>   useful to avoid hangers. <seconds> to wait before openssl connect will be terminated
+     --openssl-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait before openssl connect will be terminated
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
@@ -18210,7 +18206,7 @@ determine_optimal_proto() {
                [[ $? -ne 0 ]] && exit $ERR_CLUELESS
                MAX_OSSL_FAIL=10
           else
-               prln_bold " Your $OPENSSL cannot connect to $NODEIP:$PORT"
+               prln_bold " Your OpenSSL cannot connect to $NODEIP:$PORT"
                ignore_no_or_lame " The results might look ok but they could be nonsense. Really proceed ? (\"yes\" to continue)" "yes"
                [[ $? -ne 0 ]] && exit $ERR_CLUELESS
           fi
