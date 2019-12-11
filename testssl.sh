@@ -3463,7 +3463,7 @@ run_cipher_match(){
                          ossl_supported[nr_ciphers]=true
                          nr_ciphers+=1
                     fi
-                    done < <(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V")no sockets, openssl
+                    done < <(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V")
           fi
 
           # Test the SSLv2 ciphers, if any.
