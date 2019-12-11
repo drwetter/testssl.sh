@@ -165,7 +165,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
 
 * Available TLS extensions,
 * TLS ticket + session ID information/capabilities,
-* session resumption capabilities, 
+* session resumption capabilities,
 * Time skew relative to localhost (most server implementations return random values).
 * Several certificate information
     - signature algorithm,
@@ -179,7 +179,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
     - validity: start + end time, how many days to go (warning for certificate lifetime >=5 years)
     - revocation info (CRL, OCSP, OCSP stapling + must staple). When `--phone-out` supplied it checks against the certificate issuer whether the host certificate has been revoked (plain OCSP, CRL).
     - displaying DNS Certification Authority Authorization resource record
-    - Certificate Transparency info (if provided by server).  
+    - Certificate Transparency info (if provided by server).
 
 For the trust chain check 5 certificate stores are provided. If the test against one of the trust stores failed, the one is being identified and the reason for the failure is displayed - in addition the ones which succeeded are displayed too.
 You can configure your own CA via ADDITIONAL_CA_FILES, see section `FILES` below.  If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be indicated as this is deprecated.
@@ -247,8 +247,10 @@ Also for multiple server certificates are being checked for as well as for the c
 
 ### OUTPUT OPTIONS
 
-`--warnings <batch|off|false>`     The warnings parameter determines how testssl.sh will deal with situations where user input normally will be necessary. There are a couple of options here.  `batch` doesn't wait for a confirming keypress. This is automatically being chosen for mass testing (`--file`). `-false` just skips the warning AND the confirmation. Please note that there are conflicts where testssl.sh will still ask for confirmation which are the ones which otherwise would have a drastic impact on the results. Almost any other decision will be made as a best guess by testssl.sh.
+`--warnings <batch|off|false>`     The warnings parameter determines how testssl.sh will deal with situations where user input normally will be necessary. There are a couple of options here. `batch` doesn't wait for a confirming keypress. This is automatically being chosen for mass testing (`--file`). `-false` just skips the warning AND the confirmation. Please note that there are conflicts where testssl.sh will still ask for confirmation which are the ones which otherwise would have a drastic impact on the results. Almost any other decision will be made as a best guess by testssl.sh.
 The same can be achieved by setting the environment variable `WARNINGS`.
+
+`--connect-timeout <seconds>`  This is useful for socket TCP connections to a node. If the node does not complete a TCP handshake (e.g. because it is down or behind a firewall or there's an IDS or a tarpit) testssl.sh may ususally hang for around 2 minutes or even much more. This parameter instructs testssl.sh to wait at most `seconds` for the handshake to complete before giving up. This option only works if your OS has a timeout binary installed. CONNECT_TIMEOUT is the corresponding enviroment variable.
 
 `--openssl-timeout <seconds>` This is especially useful for all connects using openssl and practically useful for mass testing. It avoids the openssl connect to hang for ~2 minutes. The expected parameter `seconds` instructs testssl.sh to wait before the openssl connect will be terminated. The option is only available if your OS has a timeout binary installed. As there are different implementations of `timeout`: It automatically calls the binary with the right parameters. OPENSSL_TIMEOUT is the equivalent environment variable.
 
