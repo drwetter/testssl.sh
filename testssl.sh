@@ -14833,7 +14833,7 @@ run_tls_fallback_scsv() {
                     # This could be a TLS 1.3 only server, an SSLv3 only server (if SSLv3 support cannot be tested),
                     # or a server that does not support SSLv3 or any TLS protocol. So, don't report a severity,
                     # since this could either be good or bad.
-                    outln "No fallback possible, TLS 1.2, TLS 1.1, and TLS 1 not supported (OK)"
+                    outln "No fallback possible, TLS 1.2, TLS 1.1, and TLS 1 not supported"
                     fileout "$jsonID" "INFO" "TLS 1.2, TLS 1.1, and TLS 1 not supported"
                fi
                return 0
