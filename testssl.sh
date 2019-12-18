@@ -14826,8 +14826,8 @@ run_tls_fallback_scsv() {
                     # If the server does not support TLS 1.3, TLS 1.2, TLS 1.1, or TLS 1, and
                     # support for SSLv3 cannot be tested, then treat it as HIGH severity, since
                     # it is very likely that SSLv3 is the only supported protocol.
-                    prln_svrty_high "No fallback possible, TLS 1.2, TLS 1.1, and TLS 1 not supported"
-                    fileout "$jsonID" "HIGH" "TLS 1.2, TLS 1.1, and TLS 1 not supported"
+                    prln_svrty_high "No fallback possible, TLS 1.3, TLS 1.2, TLS 1.1, and TLS 1 not supported"
+                    fileout "$jsonID" "HIGH" "TLS 1.3, TLS 1.2, TLS 1.1, and TLS 1 not supported"
                else
                     # TLS 1.2, TLS 1.1, and TLS 1 are not supported, but can't tell whether TLS 1.3 is supported.
                     # This could be a TLS 1.3 only server, an SSLv3 only server (if SSLv3 support cannot be tested),
