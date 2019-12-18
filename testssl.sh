@@ -14821,11 +14821,12 @@ run_tls_fallback_scsv() {
                     # This may be an SSLv2-only server, if $OPENSSL does not support SSLv2.
                     prln_warning "test failed (couldn't connect)"
                     fileout "$jsonID" "WARN" "Check failed. (couldn't connect)"
+                    return 1
                elif [[ $(has_server_protocol tls1_3) -eq 1 ]]; then
                     # If the server does not support TLS 1.3, TLS 1.2, TLS 1.1, or TLS 1, and
                     # support for SSLv3 cannot be tested, then treat it as HIGH severity, since
                     # it is very likely that SSLv3 is the only supported protocol.
-                    prln_svrty_high "No fallback possible, TLS 1.2, TLS 1.1, and TLS 1 not supported (OK)"
+                    prln_svrty_high "No fallback possible, TLS 1.2, TLS 1.1, and TLS 1 not supported"
                     fileout "$jsonID" "HIGH" "TLS 1.2, TLS 1.1, and TLS 1 not supported"
                else
                     # TLS 1.2, TLS 1.1, and TLS 1 are not supported, but can't tell whether TLS 1.3 is supported.
@@ -14855,7 +14856,7 @@ run_tls_fallback_scsv() {
 
      if ! "$HAS_SSL3" && \
          ( [[ "$low_proto" == ssl3 ]] || \
-           ( [[ "$high_proto" == tls1 ]] && [[ $(has_server_protocol "$p") -eq 2 ]] ) ); then
+           ( [[ "$high_proto" == tls1 ]] && [[ $(has_server_protocol "ssl3") -eq 2 ]] ) ); then
           # If the protocol that the server would fall back to is SSLv3, but $OPENSSL does
           # not support SSLv3, then the test cannot be performed. So, if $OPENSSL does not
           # support SSLv3 and it is known that SSLv3 is the fallback protocol ($low_proto), then
