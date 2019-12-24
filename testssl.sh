@@ -13479,6 +13479,7 @@ resend_if_hello_retry_request() {
      fi
      debugme echo -en "\nsending second client hello... "
      second_clienthello="$(modify_clienthello "$original_clienthello" "$new_key_share" "$cookie")"
+     TLS_CLIENT_HELLO="${second_clienthello:10}"
      msg_len=${#second_clienthello}
      for (( i=0; i < msg_len; i=i+2 )); do
           data+=", ${second_clienthello:i:2}"
@@ -13542,6 +13543,7 @@ tls_sockets() {
 
           tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
           tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
+          tls_hello_ascii="${tls_hello_ascii%%140303000101}"
 
           # Check if the response is a HelloRetryRequest.
           original_clienthello="160301$(printf "%04x" "${#clienthello1}")$clienthello1"
