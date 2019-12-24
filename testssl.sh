@@ -5808,9 +5808,9 @@ run_cipherlists() {
      ret=$((ret + $?))
      sub_cipherlists "$ossl_exp_ciphers"       "" " Export ciphers (w/o ADH+NULL)             "     1 "EXPORT"    "$exp_ciphers"     "$sslv2_exp_ciphers"    "$using_sockets" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_low_ciphers"       "" " LOW: 64 Bit + DES, RC[2,4] (w/o export)   "     1 "LOW"       "$low_ciphers"     "$sslv2_low_ciphers"    "$using_sockets" "$cve" "$cwe"
+     sub_cipherlists "$ossl_low_ciphers"       "" " LOW: 64 Bit + DES, RC[2,4] (w/o export)   "     2 "LOW"       "$low_ciphers"     "$sslv2_low_ciphers"    "$using_sockets" "$cve" "$cwe"
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_tdes_ciphers"      "" " Triple DES Ciphers / IDEA                 "     2 "3DES_IDEA" "$tdes_ciphers"    "$sslv2_tdes_ciphers"   "$using_sockets" "$cve" "$cwe2"
+     sub_cipherlists "$ossl_tdes_ciphers"      "" " Triple DES Ciphers / IDEA                 "     3 "3DES_IDEA" "$tdes_ciphers"    "$sslv2_tdes_ciphers"   "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
      sub_cipherlists "$ossl_average_ciphers"   "" " Obsolete: SEED + 128+256 Bit CBC cipher   "     4 "AVERAGE"   "$average_ciphers"  ""                     "$using_sockets" "$cve" "$cwe2"
      ret=$((ret + $?))
@@ -5919,13 +5919,17 @@ pr_ecdh_curve_quality() {
      pr_ecdh_quality "$bits" "$curve"
 }
 
-# Print $2 based on the quality of the cipher in $1. If $2 is empty, print $1.
+# Print $2 based on the quality of the cipher in $1. If $2 is empty, just print $1.
 # The return value is an indicator of the quality of the cipher in $1:
 #   0 = $1 is empty
 #   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
 #   5 = neither good nor bad, 6 = pr_svrty_good, 7 = pr_svrty_best
 #
 # Please note this section isn't particular spot on. It needs to be reconsidered/redone
+# SHA1, SSLv3 ciphers are some points which need to be considered.
+# Hint: find out by "grep <pattern> etc/cipher-mapping.txt" but it' might be be easier
+# to look out Enc= and Au= or Mac=
+#
 pr_cipher_quality() {
      local cipher="$1"
      local text="$2"
@@ -5934,15 +5938,17 @@ pr_cipher_quality() {
      [[ -z "$text" ]] && text="$cipher"
 
      if [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
-          # This must be the OpenSSL name for a cipher
+          # This must be the OpenSSL name for a cipher or for TLS 1.3 ($TLS13_OSSL_CIPHERS)
+          # We can ignore them however as the OpenSSL and RFC names currently match
           if [[ $TLS_NR_CIPHERS -eq 0 ]]; then
-               # We have an OpenSSL name and can't convert it to the RFC name
+               # We have an OpenSSL name and can't convert it to the RFC name which is rarely
+               # the case, see "prepare_arrays()" and "./etc/cipher-mapping.txt"
                case "$cipher" in
-                    *NULL*|*EXP*|ADH*)
+                    *NULL*|EXP*|ADH*)
                          pr_svrty_critical "$text"
                          return 1
                          ;;
-                    *RC4*|*RC2*)
+                    *RC4*|*RC2*|*MD5|*M1)
                          pr_svrty_high "$text"
                          return 2
                          ;;
@@ -5955,14 +5961,14 @@ pr_cipher_quality() {
                          pr_svrty_best "$text"
                          return 7
                          ;; #best ones
+                    *CBC3*|*SEED*|*3DES*|*IDEA*)
+                         pr_svrty_medium "$text"
+                         return 3
+                         ;;
                     ECDHE*AES*|DHE*AES*SHA*|*CAMELLIA*SHA)
                          pr_svrty_low "$text"
                          return 4
-                         ;; # it's CBC. --> lucky13
-                    *CBC*)
-                         pr_svrty_medium "$text"
-                         return 3
-                         ;; # FIXME BEAST: We miss some CBC ciphers here, need to work w/ a list
+                         ;;
                     *)
                          out "$text"
                          return 5
@@ -5972,14 +5978,27 @@ pr_cipher_quality() {
           cipher="$(openssl2rfc "$cipher")"
      fi
 
+     # Now we look at the RFC cipher names. The sequence matters - as above.
      case "$cipher" in
-          *NULL*|*EXP*|*RC2*|*_DES_*|*_DES40_*|*anon*)
+          *NULL*|*EXP*|*_DES40_*|*anon*)
                pr_svrty_critical "$text"
                return 1
                ;;
-          *RC4*|*RC2*)
+          *RC4*|*RC2*|*MD5|*MD5_1)
                pr_svrty_high "$text"
                return 2
+               ;;
+          *_DES_*)
+               if [[ "$cipher" =~ EDE3 ]]; then
+                    pr_svrty_medium "$text"  # 3DES
+                    return 3
+               fi
+               pr_svrty_high "$text"
+               return 2
+               ;;
+          *CBC3*|*SEED*|*3DES*|*IDEA*)
+               pr_svrty_medium "$text"
+               return 3
                ;;
           TLS_RSA_*)
                if [[ "$cipher" =~ CBC ]]; then
@@ -5998,10 +6017,6 @@ pr_cipher_quality() {
           *ECDHE*AES*CBC*|*DHE*AES*SHA*|*RSA*AES*SHA*|*CAMELLIA*SHA*)
                pr_svrty_low "$text"
                return 4
-               ;;
-          *CBC*)
-               pr_svrty_medium "$text"
-               return 3
                ;;
           *)
                out "$text"
@@ -6047,7 +6062,7 @@ read_dhbits_from_file() {
      bits="${bits/bits/}"
      bits="${bits// /}"
 
-     if [[ "$what_dh" == "X25519" ]] || [[ "$what_dh" == "X448" ]]; then
+     if [[ "$what_dh" == X25519 ]] || [[ "$what_dh" == X448 ]]; then
           curve="$what_dh"
           what_dh="ECDH"
      fi
