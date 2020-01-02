@@ -4783,7 +4783,7 @@ run_client_simulation() {
 #
 locally_supported() {
      [[ -n "$2" ]] && out "$2 "
-     if $OPENSSL s_client "$1" -connect x 2>&1 | grep -aq "unknown option"; then
+     if $OPENSSL s_client "$1" -connect invalid. 2>&1 | grep -aq "unknown option"; then
           prln_local_problem "$OPENSSL doesn't support \"s_client $1\""
           return 7
      fi
@@ -4805,7 +4805,7 @@ run_prototest_openssl() {
      local protos proto
 
      # check whether the protocol being tested is supported by $OPENSSL
-     $OPENSSL s_client "$1" -connect x 2>&1 | grep -aq "unknown option" && return 7
+     $OPENSSL s_client "$1" -connect invalid. 2>&1 | grep -aq "unknown option" && return 7
      case "$1" in
           -ssl2) protos="-ssl2" ;;
           -ssl3) protos="-ssl3" ;;
@@ -9817,7 +9817,13 @@ run_pfs() {
                     # this global will get the name of the group either here or in run_logjam()
                     key_bitstring="$(awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' $TEMPDIR/$NODEIP.parse_tls_serverhello.txt)"
                     get_common_prime "$jsonID" "$key_bitstring" ""
-                    [[ $? -eq 0 ]] && curves_offered="$DH_GROUP_OFFERED" && len_dh_p=$DH_GROUP_LEN_P
+                    case $? in
+                         0) curves_offered="$DH_GROUP_OFFERED"
+                              len_dh_p=$DH_GROUP_LEN_P ;;
+                         2) pr_bold " DH or FF group offered :     "
+                              prln_local_problem "Your $OPENSSL does not support the pkey utility."
+                              fileout "$jsonID" "WARN" "$OPENSSL does not support the pkey utility."
+                         esac
                else
                     curves_offered="$DH_GROUP_OFFERED"
                     len_dh_p=$DH_GROUP_LEN_P
@@ -14996,7 +15002,7 @@ run_freak() {
 # Sets the global DH_GROUP_OFFERED, start value: "", after this function:
 #    DH_GROUP_OFFERED=""
 #    DH_GROUP_OFFERED="<name of group>"
-#    return:  1: common primes file problem, 0: went w/o error
+#    return:  1: common primes file problem, 2: no pkey support, 0: went w/o error
 get_common_prime() {
      local jsonID2="$1"
      local key_bitstring="$2"
@@ -15006,6 +15012,7 @@ get_common_prime() {
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local -i lineno_matched=0
 
+     "$HAS_PKEY" || return 2
      dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:/,/generator:/' | grep -Ev "prime|generator")"
      dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
      [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
@@ -16776,13 +16783,15 @@ find_openssl_binary() {
      $OPENSSL ciphers -s 2>&1 | grep -aq "unknown option" || \
           OSSL_CIPHERS_S="-s"
 
-     $OPENSSL s_client -ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
+     # This and all other occurences we do a little trick using "invalid." to avoid plain and
+     # link level DNS lookups. See issue #1418 and https://tools.ietf.org/html/rfc6761#section-6.4
+     $OPENSSL s_client -ssl2 -connect invalid. 2>&1 | grep -aq "unknown option" || \
           HAS_SSL2=true
 
-     $OPENSSL s_client -ssl3 -connect x 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -ssl3 -connect invalid. 2>&1 | grep -aq "unknown option" || \
           HAS_SSL3=true
 
-     $OPENSSL s_client -tls1_3 -connect x 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -tls1_3 -connect invalid. 2>&1 | grep -aq "unknown option" || \
           HAS_TLS13=true
 
      $OPENSSL genpkey -algorithm X448 -out - 2>&1 | grep -aq "not found" || \
@@ -16791,25 +16800,25 @@ find_openssl_binary() {
      $OPENSSL genpkey -algorithm X25519 -out - 2>&1 | grep -aq "not found" || \
           HAS_X25519=true
 
-     $OPENSSL s_client -no_ssl2 -connect x 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -no_ssl2 -connect invalid. 2>&1 | grep -aq "unknown option" || \
           HAS_NO_SSL2=true
 
-     $OPENSSL s_client -noservername -connect x 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -noservername -connect invalid. 2>&1 | grep -aq "unknown option" || \
           HAS_NOSERVERNAME=true
 
-     $OPENSSL s_client -ciphersuites -connect x 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -ciphersuites -connect invalid. 2>&1 | grep -aq "unknown option" || \
           HAS_CIPHERSUITES=true
 
-     $OPENSSL s_client -comp -connect x 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -comp -connect invalid. 2>&1 | grep -aq "unknown option" || \
           HAS_COMP=true
 
-     $OPENSSL s_client -no_comp -connect x 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -no_comp -connect invalid. 2>&1 | grep -aq "unknown option" || \
           HAS_NO_COMP=true
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
      for curve in "${curves_ossl[@]}"; do
-          $OPENSSL s_client -curves $curve -connect x 2>&1 | grep -Eiaq "Error with command|unknown option"
+          $OPENSSL s_client -curves $curve -connect invalid. 2>&1 | grep -Eiaq "Error with command|unknown option"
           [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
      done
 
@@ -16819,6 +16828,8 @@ find_openssl_binary() {
      $OPENSSL pkeyutl 2>&1 | grep -q Error || \
           HAS_PKUTIL=true
 
+     # For the following we feel safe enough to query the s_client help functions.
+     # That was not good enough for the previous lookups
      $OPENSSL s_client -help 2>$s_client_has
 
      $OPENSSL s_client -starttls foo 2>$s_client_starttls_has
@@ -16853,7 +16864,7 @@ find_openssl_binary() {
      grep -q 'irc' $s_client_starttls_has && \
           HAS_IRC=true
 
-     $OPENSSL enc -chacha20 -K "12345678901234567890123456789012" -iv "01000000123456789012345678901234" > /dev/null 2> /dev/null <<< "test"
+     $OPENSSL enc -chacha20 -K 12345678901234567890123456789012 -iv 01000000123456789012345678901234 > /dev/null 2> /dev/null <<< "test"
      [[ $? -eq 0 ]] && HAS_CHACHA20=true
 
      $OPENSSL enc -aes-128-gcm -K 0123456789abcdef0123456789abcdef -iv 0123456789abcdef01234567  > /dev/null 2> /dev/null <<< "test"
@@ -18203,7 +18214,7 @@ determine_optimal_proto() {
      elif "$all_failed" && ! "$ALL_FAILED_SOCKETS"; then
           if ! "$HAS_TLS13" && "$TLS13_ONLY"; then
                pr_magenta " $NODE:$PORT appears to support TLS 1.3 ONLY. You better use --openssl=<path_to_openssl_supporting_TLS_1.3>"
-               if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 -connect x 2>&1 | grep -aq "unknown option"; then
+               if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 -connect invalid. 2>&1 | grep -aq "unknown option"; then
                     outln
                     ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
                     [[ $? -ne 0 ]] && exit $ERR_CLUELESS
