@@ -8740,14 +8740,14 @@ certificate_info() {
           # certificate is valid >= 10 years
           out "$spaces"
           prln_svrty_high ">= 10 years is way too long"
-          fileout "cert_validityPeriod${json_postfix}" "HIGH" "$((diffseconds / 3600 * 24 )) days"
+          fileout "cert_validityPeriod${json_postfix}" "HIGH" "$((diffseconds / (3600 * 24) )) days"
      elif [[ $diffseconds -ge $((3600 * 24 * 365 * 5)) ]]; then
           out "$spaces"
           prln_svrty_medium ">= 5 years is too long"
-          fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / 3600 * 24 )) days"
+          fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) days"
      else
           [[ "$DEBUG" -ge 1 ]] && outln "${spaces}OK: below 5 years certificate life time"
-          fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / 3600 * 24 )) days"
+          fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) days"
      fi
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
