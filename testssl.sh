@@ -8736,8 +8736,11 @@ certificate_info() {
      fileout "cert_notBefore${json_postfix}" "INFO" "$startdate"      # we assume that the certificate has no start time in the future
      fileout "cert_notAfter${json_postfix}" "$expok" "$enddate"       # They are in UTC
 
+     # Internal certificates or from appliances often have a too high validity periods with
+     # either 5 or 10 days. Also "official" certificates issued from March 1st, 2018 aren't
+     # supposed to be valid longer than 825 days which is 1517353200 in epoch seconds
+     # (GNUish: date --date='01/31/2018 00:00:00' +"%s")
      if [[ $diffseconds -ge $((3600 * 24 * 365 * 10)) ]]; then
-          # certificate is valid >= 10 years
           out "$spaces"
           prln_svrty_high ">= 10 years is way too long"
           fileout "cert_validityPeriod${json_postfix}" "HIGH" "$((diffseconds / (3600 * 24) )) days"
@@ -8745,8 +8748,13 @@ certificate_info() {
           out "$spaces"
           prln_svrty_medium ">= 5 years is too long"
           fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) days"
+     elif [[ $diffseconds -ge $((3600 * 24 * 825)) ]] && [[  $(parse_date "$startdate" "+%s" $'%F %H:%M') -ge 1517353200 ]]; then
+          out "$spaces"
+          prln_svrty_medium ">= 825 days and issue >= 2018/03/01 is too long"
+          fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) >= 825 days"
      else
-          [[ "$DEBUG" -ge 1 ]] && outln "${spaces}OK: below 5 years certificate life time"
+          # We ignore for now certificates < 2018/03/01. It's only debug info
+          [[ "$DEBUG" -ge 1 ]] && outln "${spaces}OK: below 825 days certificate life time"
           fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) days"
      fi
 
