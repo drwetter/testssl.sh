@@ -150,7 +150,7 @@ declare -r -a CMDLINE_ARRAY=("$@")                # When performing mass testing
 declare -a MASS_TESTING_CMDLINE                   # command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
 
 
-########### Some predefinitions: date, sed (we always use test and not try to determine
+########### Some predefinitions: date, sed (we always use test and NOT try to determine
 #   capabilities by querying the OS)
 #
 HAS_GNUDATE=false
@@ -158,13 +158,14 @@ HAS_FREEBSDDATE=false
 HAS_OPENBSDDATE=false
 if date -d @735275209 >/dev/null 2>&1; then
      if date -r @735275209  >/dev/null 2>&1; then
-          # it can't do any conversion from a plain date output
+          # It can't do any conversion from a plain date output.
           HAS_OPENBSDDATE=true
      else
           HAS_GNUDATE=true
      fi
 fi
 # FreeBSD and OS X date(1) accept "-f inputformat"
+# so newer OpenBSD versions >~ 6.6.
 date -j -f '%s' 1234567 >/dev/null 2>&1 && \
      HAS_FREEBSDDATE=true
 
@@ -1873,18 +1874,28 @@ wait_kill(){
 }
 
 # parse_date date format input-format
-if "$HAS_GNUDATE"; then  # Linux and NetBSD
+if "$HAS_GNUDATE"; then            # Linux and NetBSD
      parse_date() {
           LC_ALL=C date -d "$1" "$2"
      }
-elif "$HAS_FREEBSDDATE"; then # FreeBSD and OS X
+elif "$HAS_FREEBSDDATE"; then      # FreeBSD, OS X and newer (~6.6) OpenBSD versions
      parse_date() {
           LC_ALL=C date -j -f "$3" "$2" "$1"
      }
 elif "$HAS_OPENBSDDATE"; then
+# We bascially echo it as a conversion as we want it is too difficult. Approach for that would be:
+#  printf '%s\n' "$1" | awk '{ printf "%04d%02d%02d\n", $4, $2, (index("JanFebMarAprMayJunJulAugSepOctNovDec",$1)+2)/3}'
+# 4: year, 1: month, 2: day, $3: time  (e.g. "Dec 8 10:16:13 2016")
+# This way we *could* also convert args to epoch but as newer OpenBSDs "date" behave like FreeBSD
+# we leave this like it is --> a legacy crutch
      parse_date() {
-          # we just echo it as a conversion as we want it is not possible
-          echo "$1"
+          local tmp=""
+          if [[ $2 == +%s* ]]; then
+               echo "${1// GMT}"
+          else
+               tmp="$(printf '%s\n' "$1" | awk '{ printf "%04d%02d%02d %08s\n", $4, (index("JanFebMarAprMayJunJulAugSepOctNovDec",$1)+2)/3, $2, $3 }')"
+               echo "${tmp//:/}"         # remove colons in h:m:s. Result: 20161208 101613
+          fi
      }
 else
      parse_date() {
@@ -8119,7 +8130,7 @@ certificate_info() {
      local provides_stapling=false
      local caa_node="" all_caa="" caa_property_name="" caa_property_value=""
      local response=""
-     local a b c yearstart yearend
+     local yearstart yearend clockstart clockend
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -8674,37 +8685,44 @@ certificate_info() {
      # For now we leave this here. We may want to change that later or add infos to other sections (PFS & vulnerability)
 
      out "$indent"; pr_bold " Certificate Validity (UTC)   "
-
      # FreeBSD + OSX can't swallow the leading blank:
-     enddate="${cert_txt#*Validity*Not Before: *Not After : }"
-     enddate="${enddate%%GMT*}GMT"
      startdate="${cert_txt#*Validity*Not Before: }"
      startdate="${startdate%%GMT*}GMT"
-     # Now we have a normalized enddate and startdate like "Feb 27 10:03:20 2017 GMT" -- also for OpenBSD
+     enddate="${cert_txt#*Validity*Not Before: *Not After : }"
+     enddate="${enddate%%GMT*}GMT"
      debugme echo "$enddate - $startdate"
-     # In all OS except OpenBSD it'll be reduced to "2017-02-27 11:03"
-     enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
-     startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
+     # Now we have a normalized enddate and startdate like "Feb 27 10:03:20 2017 GMT" -- also for OpenBSD
 
      if "$HAS_OPENBSDDATE"; then
-          # best we are able to do under OpenBSD
-          days2expire=""
-          read a b c yearstart tz  <<< "$startdate"
-          read a b c yearend tz  <<< "$enddate"
-          # we only take the year here as OpenBSD's date is not for conversion
-          diffseconds=$((yearend - yearstart))
-          diffseconds=$((diffseconds * 3600 * 24 * 365))
+          # Best we want to do under old versions of OpenBSD, first just remove the GMT and keep start/endate for later output
+          startdate="$(parse_date "$startdate" "+%s")"
+          enddate="$(parse_date "$enddate" "+%s")"
+          # Now we extract a date block and a time block
+          read yearstart clockstart <<< "$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          read yearend clockend <<< "$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          debugme echo "$yearstart, $clockstart"
+          debugme echo "$yearend, $clockend"
+          y=$(( ${yearend:0:4} - ${yearstart:0:4} ))
+          m=$(( ${yearend:4:1} - ${yearstart:4:1} + ${yearend:5:1} - ${yearstart:5:1} ))
+          d=$(( ${yearend:6:2} - ${yearstart:6:2} ))
+          # We only take the year here as old OpenBSD's date is too difficult for conversion, see comment in parse_date()
+          # We estimate the days left, length of month/year:
+          days2expire=$(( d + ((m*30)) + ((y*365)) ))
+          diffseconds=$((days2expire * 3600 * 24))
      else
+          startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
           days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
           days2expire=$((days2expire  / 3600 / 24 ))
-          # we adjust the thresholds by %50 for LE certificates, relaxing those warnings
-          # . instead of \' because it does not break syntax highlighting in vim
-          if [[ "$issuer_CN" =~ ^Let.s\ Encrypt\ Authority ]] ; then
-               days2warn2=$((days2warn2 / 2))
-               days2warn1=$((days2warn1 / 2))
-          fi
           diffseconds=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(parse_date "$startdate" "+%s" $'%F %H:%M') ))
      fi
+     # We adjust the thresholds by %50 for LE certificates, relaxing those warnings
+     # . instead of \' because it does not break syntax highlighting in vim
+     if [[ "$issuer_CN" =~ ^Let.s\ Encrypt\ Authority ]] ; then
+          days2warn2=$((days2warn2 / 2))
+          days2warn1=$((days2warn1 / 2))
+     fi
+
      debugme echo -n "diffseconds: $diffseconds"
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! grep -qw not <<< "$expire" ; then
@@ -8748,9 +8766,11 @@ certificate_info() {
           out "$spaces"
           prln_svrty_medium ">= 5 years is too long"
           fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) days"
+     elif "$HAS_OPENBSDDATE"; then
+          :
      elif [[ $diffseconds -ge $((3600 * 24 * 825)) ]] && [[ $(parse_date "$startdate" "+%s" $'%F %H:%M') -ge 1517353200 ]]; then
           out "$spaces"
-          prln_svrty_medium ">= 825 days and issue >= 2018/03/01 is too long"
+          prln_svrty_medium ">= 825 days issued after 2018/03/01 is too long"
           fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) >= 825 days"
      else
           # We ignore for now certificates < 2018/03/01. It's only debug info
