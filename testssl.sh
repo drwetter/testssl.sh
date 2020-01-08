@@ -17049,10 +17049,13 @@ help() {
      --xmpphost <to_domain>        For STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
      --file/-iL <fname>            Mass testing option: Reads one testssl.sh command line per line from <fname>.
-                                   Implicitly turns on "--warnings batch". Can be combined with --serial or --parallel
+                                   Can be combined with --serial or --parallel. Implicitly turns on "--warnings batch".
                                    Text format 1: Comments via # allowed, EOF signals end of <fname>
                                    Text format 2: nmap output in greppable format (-oG), 1 port per line allowed
      --mode <serial|parallel>      Mass testing to be done serial (default) or parallel (--parallel is shortcut for the latter)
+     --warnings <batch|off>        "batch" doesn't continue when a testing error is encountered, off continues and skips warnings
+     --connect-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait for the TCP socket connect to return
+     --openssl-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait before openssl connect will be terminated
 
 single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
@@ -17104,9 +17107,6 @@ tuning / connect options (most also can be preset via environment variables):
      --add-ca <cafile>             path to <cafile> or a comma separated list of CA files enables test against additional CAs.
 
 output options (can also be preset via environment variables):
-     --warnings <batch|off|false>  "batch" doesn't ask for a confirmation, "off" or "false" skips connection warnings
-     --connect-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait for the TCP socket connect to return
-     --openssl-timeout <seconds>   useful to avoid hangers. Max <seconds> to wait before openssl connect will be terminated
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
      --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
