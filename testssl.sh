@@ -10434,8 +10434,10 @@ get_pub_key_size() {
      "$HAS_PKEY" || return 1
 
      # OpenSSL displays the number of bits for RSA and ECC
-     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE | grep -aw "Public-Key:" | sed -e 's/.*(//' -e 's/)//')
+     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE | awk -F'(' '/Public-Key/ { print $2 }')
      if [[ -n $pubkeybits ]]; then
+          # remainder e.g. "256 bit)"
+          pubkeybits="${pubkeybits//\)/}"
           echo "Server public key is $pubkeybits" >> $TMPFILE
      else
           # This extracts the public key for DSA, DH, and GOST
@@ -16381,7 +16383,8 @@ run_robot() {
      local rnd_pms="aa112233445566778899112233445566778899112233445566778899112233445566778899112233445566778899"
      local change_cipher_spec finished resp
      local -a response
-     local -i i subret len iteration testnum pubkeybits pubkeybytes
+     local -i i subret len iteration testnum pubkeybytes
+     local pubkeybits
      local vulnerable=false send_ccs_finished=true
      local -i start_time end_time robottimeout=$MAX_WAITSOCK
      local cve="CVE-2017-17382 CVE-2017-17427 CVE-2017-17428 CVE-2017-13098 CVE-2017-1000385 CVE-2017-13099 CVE-2016-6883 CVE-2012-5081 CVE-2017-6168"
@@ -16479,8 +16482,8 @@ run_robot() {
                # <random> should be a length that makes total length of $padded_pms
                # the same as the length of the public key. <random> should contain no 00 bytes.
                pubkeybits="$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | \
-                             $OPENSSL pkey -pubin -text 2>>$ERRFILE | grep -aw "Public-Key:" | \
-                             sed -e 's/.*(//' -e 's/ bit)//')"
+                             $OPENSSL pkey -pubin -text 2>>$ERRFILE | awk -F'(' '/Public-Key/ { print $2 }')"
+               pubkeybits="${pubkeybits%%bit*}"
                pubkeybytes=$pubkeybits/8
                [[ $((pubkeybits%8)) -ne 0 ]] && pubkeybytes+=1
                rnd_pad=""
