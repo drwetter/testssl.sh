@@ -98,6 +98,14 @@ Please note that `fname` has to be in Unix format. DOS carriage returns won't be
 
 `--mode <serial|parallel>`. Mass testing to be done serial (default) or parallel (`--parallel` is shortcut for the latter, `--serial` is the opposite option). Per default mass testing is being run in serial mode, i.e. one line after the other is processed and invoked. The variable `MASS_TESTING_MODE` can be defined to be either equal `serial` or `parallel`.
 
+`--warnings <batch|off>`.  The warnings parameter determines how testssl.sh will deal with situations where user input normally will be necessary. There are two options. `batch` doesn't wait for a confirming keypress when a client- or server-side probem is encountered. As of 3.0 it just then terminates the particular scan.  This is automatically chosen for mass testing (`--file`). `off` just skips the warning, the confirmation but continues the scan, independent whether it makes sense or not. Please note that there are conflicts where testssl.sh will still ask for confirmation which are the ones which otherwise would have a drastic impact on the results. Almost any other decision will be made in the future as a best guess by testssl.sh.
+The same can be achieved by setting the environment variable `WARNINGS`.
+
+`--connect-timeout <seconds>`  This is useful for socket TCP connections to a node. If the node does not complete a TCP handshake (e.g. because it is down or behind a firewall or there's an IDS or a tarpit) testssl.sh may ususally hang for around 2 minutes or even much more. This parameter instructs testssl.sh to wait at most `seconds` for the handshake to complete before giving up. This option only works if your OS has a timeout binary installed. CONNECT_TIMEOUT is the corresponding enviroment variable.
+
+`--openssl-timeout <seconds>` This is especially useful for all connects using openssl and practically useful for mass testing. It avoids the openssl connect to hang for ~2 minutes. The expected parameter `seconds` instructs testssl.sh to wait before the openssl connect will be terminated. The option is only available if your OS has a timeout binary installed. As there are different implementations of `timeout`: It automatically calls the binary with the right parameters. OPENSSL_TIMEOUT is the equivalent environment variable.
+
+
 
 ### SPECIAL INVOCATIONS
 
@@ -109,7 +117,7 @@ Please note that `fname` has to be in Unix format. DOS carriage returns won't be
 
 `--ip <ip>` tests either the supplied IPv4 or IPv6 address instead of resolving host(s) in `<URI>`. IPv6 addresses need to be supplied in square brackets. `--ip=one` means: just test the first A record DNS returns (useful for multiple IPs). If `-6` and  `--ip=one` was supplied an AAAA record will be picked if available. The ``--ip`` option might be also useful if you want to resolve the supplied hostname to a different IP, similar as if you would edit `/etc/hosts` or `/c/Windows/System32/drivers/etc/hosts`. `--ip=proxy` tries a DNS resolution via proxy.
 
-`--proxy <host>:<port>`  does ANY check via the specified proxy. `--proxy=auto` inherits the proxy setting from the environment. The hostname supplied will be resolved to the first A record. In addition if you want lookups via proxy you can specify `DNS_VIA_PROXY=true`. OCSP revocation checking (`-S --phone-out`) is not supported by OpenSSL via proxy. As supplying a proxy is an indicator for port 80 and 443 outgoing being blocked in your network an OCSP revocation check won't be performed. However if `IGN_OCSP_PROXY=true` has been supplied it will be tried directly. Authentication to the proxy is not supported. Proxying via IPv6 addresses is not possible, no HTTPS or SOCKS proxy is supported. 
+`--proxy <host>:<port>`  does ANY check via the specified proxy. `--proxy=auto` inherits the proxy setting from the environment. The hostname supplied will be resolved to the first A record. In addition if you want lookups via proxy you can specify `DNS_VIA_PROXY=true`. OCSP revocation checking (`-S --phone-out`) is not supported by OpenSSL via proxy. As supplying a proxy is an indicator for port 80 and 443 outgoing being blocked in your network an OCSP revocation check won't be performed. However if `IGN_OCSP_PROXY=true` has been supplied it will be tried directly. Authentication to the proxy is not supported. Proxying via IPv6 addresses is not possible, no HTTPS or SOCKS proxy is supported.
 
 `-6` does (also) IPv6 checks. Please note that testssl.sh doesn't perform checks on an IPv6 address automatically, because of two reasons: testssl.sh does no connectivity checks for IPv6 and it cannot determine reliably whether the OpenSSL binary you're using has IPv6 s_client support. `-6` assumes both is the case. If both conditions are met and you in general prefer to test for IPv6 branches as well you can add `HAS_IPv6` to your shell environment. Besides the OpenSSL binary supplied IPv6 is known to work with vanilla OpenSSL >= 1.1.0 and older versions >=1.0.2 in RHEL/CentOS/FC and Gentoo.
 
@@ -246,13 +254,6 @@ Also for multiple server certificates are being checked for as well as for the c
 
 
 ### OUTPUT OPTIONS
-
-`--warnings <batch|off|false>`     The warnings parameter determines how testssl.sh will deal with situations where user input normally will be necessary. There are a couple of options here. `batch` doesn't wait for a confirming keypress. This is automatically being chosen for mass testing (`--file`). `-false` just skips the warning AND the confirmation. Please note that there are conflicts where testssl.sh will still ask for confirmation which are the ones which otherwise would have a drastic impact on the results. Almost any other decision will be made as a best guess by testssl.sh.
-The same can be achieved by setting the environment variable `WARNINGS`.
-
-`--connect-timeout <seconds>`  This is useful for socket TCP connections to a node. If the node does not complete a TCP handshake (e.g. because it is down or behind a firewall or there's an IDS or a tarpit) testssl.sh may ususally hang for around 2 minutes or even much more. This parameter instructs testssl.sh to wait at most `seconds` for the handshake to complete before giving up. This option only works if your OS has a timeout binary installed. CONNECT_TIMEOUT is the corresponding enviroment variable.
-
-`--openssl-timeout <seconds>` This is especially useful for all connects using openssl and practically useful for mass testing. It avoids the openssl connect to hang for ~2 minutes. The expected parameter `seconds` instructs testssl.sh to wait before the openssl connect will be terminated. The option is only available if your OS has a timeout binary installed. As there are different implementations of `timeout`: It automatically calls the binary with the right parameters. OPENSSL_TIMEOUT is the equivalent environment variable.
 
 `-q, --quiet`  Normally testssl.sh displays a banner on stdout with several version information, usage rights and a warning. This option suppresses it. Please note that by choosing this option you acknowledge usage terms and the warning normally appearing in the banner.
 
