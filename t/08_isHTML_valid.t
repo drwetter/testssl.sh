@@ -64,7 +64,7 @@ $html =~ s/HTTP clock skew              \+?-?[0-9]* /HTTP clock skew            
 $debughtml =~ s/HTTP clock skew              \+?-?[0-9]* /HTTP clock skew              X /;
 
 $debughtml =~ s/ Pre-test: .*\n//g;
-$debughtml =~ s/.*OK: below 5 years.*\n//g;
+$debughtml =~ s/.*OK: below 825 days.*\n//g;
 
 printf "\n%s\n", "Checking that using the --debug option doesn't affect the HTML file";
 cmp_ok($debughtml, "eq", $html, "HTML file created with --debug 4 matches HTML file created without --debug");

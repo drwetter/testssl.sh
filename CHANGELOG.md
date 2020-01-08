@@ -4,9 +4,11 @@
 ### Features implemented in 3.0
 
 * Full support of TLS 1.3, shows also drafts supported
+* Extended protocol downgrade checks
 * ROBOT check
 * Better TLS extension support
-* Better OpenSSL 1.1.1 and higher versions support
+* Better OpenSSL 1.1.1 and higher versions support as well as LibreSSL >3
+* More robustness for OpenBSD
 * DNS over Proxy and other proxy improvements
 * Decoding of unencrypted BIG IP cookies
 * Initial client certificate support
@@ -27,7 +29,7 @@
 * TLS Robustness check (GREASE)
 * Server preference distinguishes between TLS 1.3 and lower protocols
 * Mark TLS 1.0 and TLS 1.1 as deprecated
-* Does a few startup checks which make later tests easier and faster (determine_optimal_\*() )
+* Does a few startup checks which make later tests easier and faster (``determine_optimal_\*()``)
 * Expect-CT Header Detection
 * `--phone-out` does certificate revocation checks via OCSP (LDAP+HTTP) and with CRL
 * `--phone-out` checks whether the private key has been compromised via https://pwnedkeys.com/

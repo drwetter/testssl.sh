@@ -150,7 +150,7 @@ declare -r -a CMDLINE_ARRAY=("$@")                # When performing mass testing
 declare -a MASS_TESTING_CMDLINE                   # command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
 
 
-########### Some predefinitions: date, sed (we always use test and not try to determine
+########### Some predefinitions: date, sed (we always use test and NOT try to determine
 #   capabilities by querying the OS)
 #
 HAS_GNUDATE=false
@@ -158,13 +158,14 @@ HAS_FREEBSDDATE=false
 HAS_OPENBSDDATE=false
 if date -d @735275209 >/dev/null 2>&1; then
      if date -r @735275209  >/dev/null 2>&1; then
-          # it can't do any conversion from a plain date output
+          # It can't do any conversion from a plain date output.
           HAS_OPENBSDDATE=true
      else
           HAS_GNUDATE=true
      fi
 fi
 # FreeBSD and OS X date(1) accept "-f inputformat"
+# so newer OpenBSD versions >~ 6.6.
 date -j -f '%s' 1234567 >/dev/null 2>&1 && \
      HAS_FREEBSDDATE=true
 
@@ -1873,18 +1874,27 @@ wait_kill(){
 }
 
 # parse_date date format input-format
-if "$HAS_GNUDATE"; then  # Linux and NetBSD
+if "$HAS_GNUDATE"; then            # Linux and NetBSD
      parse_date() {
           LC_ALL=C date -d "$1" "$2"
      }
-elif "$HAS_FREEBSDDATE"; then # FreeBSD and OS X
+elif "$HAS_FREEBSDDATE"; then      # FreeBSD, OS X and newer (~6.6) OpenBSD versions
      parse_date() {
           LC_ALL=C date -j -f "$3" "$2" "$1"
      }
 elif "$HAS_OPENBSDDATE"; then
+# We bascially echo it as a conversion as we want it is too difficult. Approach for that would be:
+#  printf '%s\n' "$1" | awk '{ printf "%04d%02d%02d\n", $4, $2, (index("JanFebMarAprMayJunJulAugSepOctNovDec",$1)+2)/3}'
+# 4: year, 1: month, 2: day, $3: time  (e.g. "Dec 8 10:16:13 2016")
+# This way we could also kind of convert args to epoch but as newer OpenBSDs "date" behave like FreeBSD
      parse_date() {
-          # we just echo it as a conversion as we want it is not possible
-          echo "$1"
+          local tmp=""
+          if [[ $2 == +%s* ]]; then
+               echo "${1// GMT}"
+          else
+               tmp="$(printf '%s\n' "$1" | awk '{ printf "%04d-%02d-%02d %08s\n", $4, (index("JanFebMarAprMayJunJulAugSepOctNovDec",$1)+2)/3, $2, $3 }')"
+               echo "${tmp%:*}"         # remove seconds, result now is in line with GNU date 2016-12-08 10:16
+          fi
      }
 else
      parse_date() {
@@ -8119,7 +8129,8 @@ certificate_info() {
      local provides_stapling=false
      local caa_node="" all_caa="" caa_property_name="" caa_property_value=""
      local response=""
-     local a b c yearstart yearend
+     local yearstart yearend clockstart clockend y m d
+     local gt_825=false gt_825warn=false
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -8674,37 +8685,51 @@ certificate_info() {
      # For now we leave this here. We may want to change that later or add infos to other sections (PFS & vulnerability)
 
      out "$indent"; pr_bold " Certificate Validity (UTC)   "
-
      # FreeBSD + OSX can't swallow the leading blank:
-     enddate="${cert_txt#*Validity*Not Before: *Not After : }"
-     enddate="${enddate%%GMT*}GMT"
      startdate="${cert_txt#*Validity*Not Before: }"
      startdate="${startdate%%GMT*}GMT"
-     # Now we have a normalized enddate and startdate like "Feb 27 10:03:20 2017 GMT" -- also for OpenBSD
+     enddate="${cert_txt#*Validity*Not Before: *Not After : }"
+     enddate="${enddate%%GMT*}GMT"
      debugme echo "$enddate - $startdate"
-     # In all OS except OpenBSD it'll be reduced to "2017-02-27 11:03"
-     enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
-     startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
-
+     # Now we have a normalized enddate and startdate like "Feb 27 10:03:20 2017 GMT" -- also for OpenBSD
      if "$HAS_OPENBSDDATE"; then
-          # best we are able to do under OpenBSD
-          days2expire=""
-          read a b c yearstart tz  <<< "$startdate"
-          read a b c yearend tz  <<< "$enddate"
-          # we only take the year here as OpenBSD's date is not for conversion
-          diffseconds=$((yearend - yearstart))
-          diffseconds=$((diffseconds * 3600 * 24 * 365))
+          # Best we want to do under old versions of OpenBSD, first just remove the GMT and keep start/endate for later output
+          startdate="$(parse_date "$startdate" "+%s")"
+          enddate="$(parse_date "$enddate" "+%s")"
+          # Now we extract a date block and a time block which we need for later output
+          startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          read yearstart clockstart <<< "$startdate"
+          read yearend clockend <<< "$enddate"
+          debugme echo "$yearstart, $clockstart"
+          debugme echo "$yearend, $clockend"
+          y=$(( ${yearend:0:4} - ${yearstart:0:4} ))
+          m=$(( ${yearend:5:1} - ${yearstart:5:1} + ${yearend:6:1} - ${yearstart:6:1} ))
+          d=$(( ${yearend:8:2} - ${yearstart:8:2} ))
+          # We take the year, month, days here as old OpenBSD's date is too difficult for real conversion
+          # see comment in parse_date(). In diffseconds then we have the estimated absolute validity period
+          diffseconds=$(( d + ((m*30)) + ((y*365)) ))
+          diffseconds=$((diffseconds * 3600 * 24))
+          # Now we estimate the days left plus length of month/year:
+          yearnow="$(date -juz GMT "+%Y-%m-%d %H:%M")"
+          y=$(( ${yearend:0:4} - ${yearnow:0:4} ))
+          m=$(( ${yearend:5:1} - ${yearnow:5:1} + ${yearend:6:1} - ${yearnow:6:1} ))
+          d=$(( ${yearend:8:2} - ${yearnow:8:2} ))
+          days2expire=$(( d + ((m*30)) + ((y*365)) ))
      else
+          startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
           days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
           days2expire=$((days2expire  / 3600 / 24 ))
-          # we adjust the thresholds by %50 for LE certificates, relaxing those warnings
-          # . instead of \' because it does not break syntax highlighting in vim
-          if [[ "$issuer_CN" =~ ^Let.s\ Encrypt\ Authority ]] ; then
-               days2warn2=$((days2warn2 / 2))
-               days2warn1=$((days2warn1 / 2))
-          fi
           diffseconds=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(parse_date "$startdate" "+%s" $'%F %H:%M') ))
      fi
+     # We adjust the thresholds by %50 for LE certificates, relaxing warnings for those certificates.
+     # . instead of \' because it does not break syntax highlighting in vim
+     if [[ "$issuer_CN" =~ ^Let.s\ Encrypt\ Authority ]] ; then
+          days2warn2=$((days2warn2 / 2))
+          days2warn1=$((days2warn1 / 2))
+     fi
+
      debugme echo -n "diffseconds: $diffseconds"
      expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
      if ! grep -qw not <<< "$expire" ; then
@@ -8736,8 +8761,9 @@ certificate_info() {
      fileout "cert_notBefore${json_postfix}" "INFO" "$startdate"      # we assume that the certificate has no start time in the future
      fileout "cert_notAfter${json_postfix}" "$expok" "$enddate"       # They are in UTC
 
+     # Internal certificates or those from appliances often have too high validity periods.
+     # We check for ~10 years and >~ 5 years
      if [[ $diffseconds -ge $((3600 * 24 * 365 * 10)) ]]; then
-          # certificate is valid >= 10 years
           out "$spaces"
           prln_svrty_high ">= 10 years is way too long"
           fileout "cert_validityPeriod${json_postfix}" "HIGH" "$((diffseconds / (3600 * 24) )) days"
@@ -8745,9 +8771,32 @@ certificate_info() {
           out "$spaces"
           prln_svrty_medium ">= 5 years is too long"
           fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) days"
+     elif [[ $diffseconds -ge $((3600 * 24 * 825)) ]]; then
+     # Also "official" certificates issued from March 1st, 2018 aren't supposed
+     # to be valid longer than 825 days which is 1517353200 in epoch seconds
+     # (GNUish: date --date='01/31/2018 00:00:00' +"%s")
+          gt_825=true
+          if "$HAS_OPENBSDDATE"; then
+               if [[ 20180301 -le ${yearstart//-/} ]]; then
+                    gt_825warn=true
+               fi
+          elif [[ $(parse_date "$startdate" "+%s" $'%F %H:%M') -ge 1517353200 ]]; then
+               gt_825warn=true
+          fi
+          # Now, the verdict, depending on the issuing date
+          out "$spaces"
+          if "$gt_825warn" && "$gt_825"; then
+               prln_svrty_medium ">= 825 days issued after 2018/03/01 is too long"
+               fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) >= 825 days"
+          elif "$gt_825"; then
+               outln ">= 825 days certificate life time but issued before 2018/03/01"
+               fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) < 825 days"
+          fi
      else
-          [[ "$DEBUG" -ge 1 ]] && outln "${spaces}OK: below 5 years certificate life time"
-          fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) days"
+          # All is fine with valididy period
+          # We ignore for now certificates < 2018/03/01. On the screen we only show debug info
+          [[ "$DEBUG" -ge 1 ]] && outln "${spaces}DEBUG: all is fine with certificate life time"
+          fileout "cert_validityPeriod${json_postfix}" "INFO" "No finding"
      fi
 
      certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
