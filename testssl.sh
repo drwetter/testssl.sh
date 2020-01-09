@@ -164,8 +164,7 @@ if date -d @735275209 >/dev/null 2>&1; then
           HAS_GNUDATE=true
      fi
 fi
-# FreeBSD and OS X date(1) accept "-f inputformat"
-# so newer OpenBSD versions >~ 6.6.
+# FreeBSD and OS X date(1) accept "-f inputformat", so do newer OpenBSD versions >~ 6.6.
 date -j -f '%s' 1234567 >/dev/null 2>&1 && \
      HAS_FREEBSDDATE=true
 
@@ -2147,32 +2146,27 @@ run_http_header() {
 
      pr_bold " HTTP Status Code           "
      [[ -z "$1" ]] && url="/" || url="$1"
-     if [[ "$SOCKETHEADER" == true ]]; then
-          :
-          #FIXME: would be great to complete the handshake and then e.g. tunnel HTTP over it
+     printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
+     wait_kill $! $HEADER_MAXSLEEP
+     if [[ $? -eq 0 ]]; then
+          # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
+          # Doing it again in the foreground to get an accurate header time
+          printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
+          NOW_TIME=$(date "+%s")
+          HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
+          HAD_SLEPT=0
      else
-          printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
-          wait_kill $! $HEADER_MAXSLEEP
-          if [[ $? -eq 0 ]]; then
-               # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
-               # Doing it again in the foreground to get an accurate header time
-               printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
-               NOW_TIME=$(date "+%s")
+          # 1st GET request hung and needed to be killed. Check whether it succeeded anyway:
+          if grep -Eiaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
+               # correct by seconds we slept, HAD_SLEPT comes from wait_kill()
+               NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
-               HAD_SLEPT=0
           else
-               # 1st GET request hung and needed to be killed. Check whether it succeeded anyway:
-               if grep -Eiaq "XML|HTML|DOCTYPE|HTTP|Connection" $HEADERFILE; then
-                    # correct by seconds we slept, HAD_SLEPT comes from wait_kill()
-                    NOW_TIME=$(($(date "+%s") - HAD_SLEPT))
-                    HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
-               else
-                    prln_warning " likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE | awk '{ print $1 }'))"
-                    [[ "$DEBUG" -lt 1 ]] & outln "Rerun with DEBUG>=1 and inspect $HEADERFILE\n"
-                    fileout "HTTP_status_code" "WARN" "HTTP header request failed"
-                    debugme cat $HEADERFILE
-                    ((NR_HEADER_FAIL++))
-               fi
+               prln_warning " likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE | awk '{ print $1 }'))"
+               [[ "$DEBUG" -lt 1 ]] & outln "Rerun with DEBUG>=1 and inspect $HEADERFILE\n"
+               fileout "HTTP_status_code" "WARN" "HTTP header request failed"
+               debugme cat $HEADERFILE
+               ((NR_HEADER_FAIL++))
           fi
      fi
      if [[ ! -s $HEADERFILE ]]; then
@@ -2319,7 +2313,7 @@ run_http_date() {
      if [[ -n "$HTTP_TIME" ]]; then
           HTTP_TIME="$(strip_lf "$HTTP_TIME")"
           if "$HAS_OPENBSDDATE"; then
-               # we can't normalize the date under OpenBSD thus no subtraction is possible
+               # We won't normalize the date under an OpenBSD thus no subtraction is feasible
                outln "remote: $HTTP_TIME"
                out "${spaces}local:  $(LC_ALL=C TZ=GMT date "+%a, %d %b %Y %T %Z")"
                fileout "$jsonID" "INFO" "$HTTP_TIME - $(TZ=GMT date "+%a, %d %b %Y %T %Z")"
@@ -2358,12 +2352,12 @@ match_httpheader_key() {
      local first=$4
      local -i nr=0
 
-     nr=$(grep -Eaicw "^ *$key:" $HEADERFILE)
+     nr=$(grep -Eaic "^ *$key:" $HEADERFILE)
      if [[ $nr -eq 0 ]]; then
           HEADERVALUE=""
           return 0
      elif [[ $nr -eq 1 ]]; then
-          HEADERVALUE="$(grep -Eiaw "^ *$key:" $HEADERFILE)"
+          HEADERVALUE="$(grep -Eia "^ *$key:" $HEADERFILE)"
           HEADERVALUE="${HEADERVALUE#*:}"                        # remove leading part=key to colon
           HEADERVALUE="$(strip_lf "$HEADERVALUE")"
           HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
@@ -2376,7 +2370,7 @@ match_httpheader_key() {
           pr_svrty_medium " ${nr}x"
           outln " -- checking first one only"
           out "$spaces"
-          HEADERVALUE="$(fgrep -Faiw "$key:" $HEADERFILE | head -1)"
+          HEADERVALUE="$(fgrep -Fai "$key:" $HEADERFILE | head -1)"
           HEADERVALUE="${HEADERVALUE#*:}"
           HEADERVALUE="$(strip_lf "$HEADERVALUE")"
           HEADERVALUE="$(strip_leading_space "$HEADERVALUE")"
@@ -2483,27 +2477,27 @@ run_hpkp() {
      pr_bold " Public Key Pinning           "
      grep -aiw '^Public-Key-Pins' $HEADERFILE >$TMPFILE                    # TMPFILE includes report-only
      if [[ $? -eq 0 ]]; then
-          if [[ $(grep -aciw '^Public-Key-Pins:' $TMPFILE) -gt 1 ]]; then
+          if [[ $(grep -aci '^Public-Key-Pins:' $TMPFILE) -gt 1 ]]; then
                pr_svrty_medium "Misconfiguration, multiple Public-Key-Pins headers"
                outln ", taking first line"
                fileout "HPKP_error" "MEDIUM" "multiple Public-Key-Pins in header"
-               first_hpkp_header="$(grep -aiw '^Public-Key-Pins:' $TMPFILE | head -1)"
+               first_hpkp_header="$(grep -ai '^Public-Key-Pins:' $TMPFILE | head -1)"
                # we only evaluate the keys here, unless they a not present
                out "$spaces "
-          elif [[ $(grep -aciw '^Public-Key-Pins-Report-Only:' $TMPFILE) -gt 1 ]]; then
+          elif [[ $(grep -aci '^Public-Key-Pins-Report-Only:' $TMPFILE) -gt 1 ]]; then
                outln "Multiple HPKP headers (Report-Only), taking first line"
                fileout "HPKP_notice" "INFO" "multiple Public-Key-Pins-Report-Only in header"
-               first_hpkp_header="$(grep -aiw '^Public-Key-Pins-Report-Only:' $TMPFILE | head -1)"
+               first_hpkp_header="$(grep -ai '^Public-Key-Pins-Report-Only:' $TMPFILE | head -1)"
                out "$spaces "
-          elif [[ $(grep -Eaciw '^Public-Key-Pins:|^Public-Key-Pins-Report-Only:' $TMPFILE) -eq 2 ]]; then
+          elif [[ $(grep -Eaci '^Public-Key-Pins:|^Public-Key-Pins-Report-Only:' $TMPFILE) -eq 2 ]]; then
                outln "Public-Key-Pins + Public-Key-Pins-Report-Only detected. Continue with first one"
-               first_hpkp_header="$(grep -aiw '^Public-Key-Pins:' $TMPFILE)"
+               first_hpkp_header="$(grep -ai '^Public-Key-Pins:' $TMPFILE)"
                out "$spaces "
-          elif [[ $(grep -aciw '^Public-Key-Pins:' $TMPFILE) -eq 1 ]]; then
-               first_hpkp_header="$(grep -aiw '^Public-Key-Pins:' $TMPFILE)"
+          elif [[ $(grep -aci '^Public-Key-Pins:' $TMPFILE) -eq 1 ]]; then
+               first_hpkp_header="$(grep -ai '^Public-Key-Pins:' $TMPFILE)"
           else
                outln "Public-Key-Pins-Only detected"
-               first_hpkp_header="$(grep -aiw '^Public-Key-Pins-Report-Only:' $TMPFILE)"
+               first_hpkp_header="$(grep -ai '^Public-Key-Pins-Report-Only:' $TMPFILE)"
                out "$spaces "
                fileout "HPKP_SPKIs" "INFO" "Only Public-Key-Pins-Report-Only"
           fi
