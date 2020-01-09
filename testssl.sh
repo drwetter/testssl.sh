@@ -1879,7 +1879,7 @@ if "$HAS_GNUDATE"; then            # Linux and NetBSD
      }
 elif "$HAS_FREEBSDDATE"; then      # FreeBSD, OS X and newer (~6.6) OpenBSD versions
      parse_date() {
-          LC_ALL=C date -j -f "$3" "$2" "$1"
+          LC_ALL=C TZ=GMT date -j -f "$3" "$2" "$1"
      }
 elif "$HAS_OPENBSDDATE"; then
 # We bascially echo it as a conversion as we want it is too difficult. Approach for that would be:
@@ -2192,7 +2192,7 @@ run_http_header() {
      fi
 
      # Populate vars for HTTP time
-     debugme echo "$NOW_TIME: $HTTP_TIME"
+     debugme echo "NOW_TIME: $NOW_TIME | HTTP_TIME: $HTTP_TIME"
 
      # Quit on first empty line to catch 98% of the cases. Next pattern is there because the SEDs tested
      # so far seem not to be fine with header containing x0d x0a (CRLF) which is the usal case.
@@ -2273,7 +2273,8 @@ match_ipv4_httpheader() {
           run_http_header "$1" || return 1
      fi
 
-     # Whitelist some headers as they are mistakenly identified as ipv4 address. Issues #158, #323. Also facebook has a CSP rule for 127.0.0.1
+     # Whitelist some headers as they are mistakenly identified as ipv4 address. Issues #158, #323.
+     # Also facebook used to have a CSP rule for 127.0.0.1
      if grep -Evai "$whitelisted_header" $HEADERFILE | grep -Eiq "$ipv4address"; then
           pr_bold " IPv4 address in header       "
           count=0
@@ -2302,7 +2303,7 @@ run_http_date() {
      local spaces="                              "
      jsonID="HTTP_clock_skew"
 
-     if [[ $SERVICE != "HTTP" ]] || "$CLIENT_AUTH"; then
+     if [[ $SERVICE != HTTP ]] || "$CLIENT_AUTH"; then
           return 0
      fi
      if [[ ! -s $HEADERFILE ]]; then
@@ -2314,8 +2315,8 @@ run_http_date() {
           if "$HAS_OPENBSDDATE"; then
                # We won't normalize the date under an OpenBSD thus no subtraction is feasible
                outln "remote: $HTTP_TIME"
-               out "${spaces}local:  $(date -z GMT)"
-               fileout "$jsonID" "INFO" "$HTTP_TIME - $(date -z GMT)"
+               out "${spaces}local:  $(LC_ALL=C TZ=GMT date "+%a, %d %b %Y %T %Z")"
+               fileout "$jsonID" "INFO" "$HTTP_TIME - $(TZ=GMT date "+%a, %d %b %Y %T %Z")"
           else
                HTTP_TIME="$(parse_date "$HTTP_TIME" "+%s" "%a, %d %b %Y %T %Z" 2>>$ERRFILE)"
                difftime=$((HTTP_TIME - NOW_TIME))
@@ -2329,7 +2330,7 @@ run_http_date() {
           out "Got no HTTP time, maybe try different URL?";
           fileout "$jsonID" "INFO" "Got no HTTP time, maybe try different URL?"
      fi
-     debugme tm_out ", epoch: $HTTP_TIME"
+     debugme tm_out ", HTTP_TIME in epoch: $HTTP_TIME"
      outln
      match_ipv4_httpheader "$1"
      return 0
