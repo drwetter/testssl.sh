@@ -5,7 +5,7 @@ The certificate trust stores were retrieved from
 
 * **Linux:** Copied from an up-to-date Debian Linux machine
 * **Mozilla:** https://curl.haxx.se/docs/caextract.html
-* **Java:** JRE keystore pulled + extracted with keytool from a Linux machine from  $JAVA_HOME/jre/lib/security/cacerts
+* **Java:** extracted (``keytool -list -rfc -keystore <file> | grep -E -v '^$|^\*\*\*\*\*|^Entry |^Creation |^Alias '``) from a JRE 8 from https://jdk.java.net/ (previously JRE keystore extracted from $JAVA_HOME/jre/lib/security/cacerts using Linux)
 * **Microsoft:** Following command pulls all certificates from Windows Update services: ``CertUtil -syncWithWU -f -f . `` (see also http://aka.ms/RootCertDownload, https://technet.microsoft.com/en-us/library/dn265983(v=ws.11).aspx#BKMK_CertUtilOptions).
 * **Apple:**
     1. __System:__ from Apple OS X keychain app.  Open Keychain Access utility, i.e.
