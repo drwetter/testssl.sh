@@ -17,7 +17,7 @@ my $error_regexp5='(syntax error|unexpected token)';
 # my $good_regexp='free software.*USAGE w/o ANY WARRANTY.*OWN RISK.*Using.*ciphers.*built(.*)platform';
 my $good_regexp='free software([\s\S]*)USAGE w/o ANY WARRANTY([\s\S]*)OWN RISK([\s\S]*)Using([\s\S]*)ciphers([\s\S]*)built([\s\S]*)platform';
 
-printf "\n%s\n", "Testing whether just calling \"./testssl.sh\" produces no error ...";
+printf "\n%s\n", "Testing whether just calling \"./testssl.sh --banner\" produces no error ...";
 $fileout = `timeout 10 bash ./testssl.sh --banner 2>&1`;
 my $retval=$?;
 
