@@ -6293,6 +6293,7 @@ run_server_preference() {
           if sclient_connect_successful $? $TMPFILE; then
                cipher0=$(get_cipher $TMPFILE)
                debugme tm_out "0 --> $cipher0\n"
+               cp $TMPFILE "$TEMPDIR/$NODEIP.parse_tls13_serverhello.txt"
           else
                # 2 second try with $OPTIMAL_PROTO especially for intolerant IIS6 servers:
                $OPENSSL s_client $(s_client_options "$STARTTLS $OPTIMAL_PROTO $BUGS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
@@ -6309,12 +6310,12 @@ run_server_preference() {
      # Some servers don't have a TLS 1.3 cipher order, see #1163
      if [[ "$default_proto" == TLSv1.3 ]]; then
           tls_sockets "04" "13,05, 13,04, 13,03, 13,02, 13,01, 00,ff"
-          [[ $sclient_success -ne 0 ]] && ret=1 && prln_fixme "something weird happened around line $((LINENO - 1))"
+          [[ $? -ne 0 ]] && ret=1 && prln_fixme "something weird happened around line $((LINENO - 1))"
           cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
           tls13_cipher1=$(get_cipher $TMPFILE)
           debugme tm_out "TLS 1.3: --> $tls13_cipher1\n"
           tls_sockets "04" "13,01, 13,02, 13,03, 13,04, 13,05, 00,ff"
-          [[ $sclient_success -ne 0 ]] && ret=1 && prln_fixme "something weird happened around line $((LINENO - 1))"
+          [[ $? -ne 0 ]] && ret=1 && prln_fixme "something weird happened around line $((LINENO - 1))"
           cp "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" $TMPFILE
           tls13_cipher2=$(get_cipher $TMPFILE)
           debugme tm_out "TLS 1.3: --> $tls13_cipher2\n"
