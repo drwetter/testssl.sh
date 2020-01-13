@@ -1,15 +1,12 @@
 #!/usr/bin/env perl
 
-# Just a functional test, whether there are any problems on the client side
-# Probably we could also inspect the JSON for any problems for
-#    "id"           : "scanProblem"
-#    "finding"      : "Scan interrupted"
+# Just a functional test, whether ~/etc/client-simulation.txt
+# doesn't have any synatx errors
 
 use strict;
 use Test::More;
 
 my $tests = 0;
-my $check2run ="--client-simulation -q --ip=one --color 0";
 my $fileout="";
 # Blacklists we use to trigger an error:
 my $error_regexp1='(syntax|parse) (e|E)rror';
