@@ -3,28 +3,7 @@
 # comes from the SSLlabs client API via update_client_sim_data.pl
 # The whole process is done manually.
 #
-# Instructions how to add a client simulation:
-# * Start wireshark at the client / router. Best is during capture to filter for the target you want to contribute.
-# * Make sure you create a bit of encrypted traffic to a target of your choice 1) .
-# * Make sure the client traffic is specific: For just "Android" do not use a browser!
-# * Stop the recording.
-# * If needed sort for ClientHello.
-# * Look for the ClientHello which matches the source IP + destination you had in mind. Check the destination hostname in the SNI extension so that you can be sure, it's the right traffic.
-# * Retrieve "handshakebytes" by marking the Record Layer --> Copy --> As a hex stream.
-# * Figure out "protos" and "tlsvers" by looking at the supported_versions TLS extension (43=0x002b). May work only on modern clients. Be careful as some do not list all TLS versions here (OpenSSL 1.1.1 lists only TLS 1.2/1.3 here)
-# * Adjust "lowest_protocol" and "highest_protocol" accordingly.
-# * Get "curves" from at the supported groups TLS extension 10 = 0x00a. Omit any GREASE.
-# * Retrieve "alpn" by looking at the alpn TLS extension 16 (=0x0010). 
-# * Review TLS extension 13 (=0x000d) whether any SHA1 signature algorithm is listed. If not "requiresSha2" is true
-# * Leave "maxDhBits"/"minDhBits" and "minRsaBits"/"maxRsaBits" at -1, unless you know for sure what the client can handle
-# * For "ciphers" mark the Cipher Suites --> Copy --> As a hex stream, remove any leading GREASE ciphers (?a?a) and supply it to ~/utils/hexstream2cipher.sh
-# * "ciphersutes" are TLS 1.3 ciphersuites. You can identify them as they currently are like 0x130?. Retrieve them from above see ~/utils/hexstream2cipher.sh
-# * Figure out the services by applying a good piece of logic
-# * Before submitting a PR: test it yourself! You can also watch it again via wireshark
-#
-# 
-# 1) Attention, privacy: if you want to contribute it contains the target hostname (SNI)
-
+# Instructions how to add a client simulation see file "client-simulation.wiresharked.md".
 
      names+=("Android 8.1 (native)")
      short+=("android_81")
@@ -273,6 +252,28 @@
      sni+=("$SNI")
      warning+=("")
      handshakebytes+=("1603010200010001fc03039f5f6a4903cf739091fca37e8f43e6d173ffeb64905977b2dede05e061f3a24c20f958c20b0edd50e0716d108e1d6046178a8974d868c138eac8a6ab8becdf81cd001c130113031302c02bc02fcca9cca8c02cc030c013c014002f0035000a0100019700000013001100000e696d61702e676d61696c2e636f6d00170000ff01000100000a000e000c001d00170018001901000101000b00020100002300000005000501000000000033006b0069001d00200ff08104aea54116caac222c2b7661e05d852847fcfd6860a0ec2f09804bd5330017004104d7afd4ac669de5312ff866d84381723c1d5ff549d409658f9300644d76e33b5c953499a89bdb1fc8930587645bf3452a47fbe6e3f00a59e232c39c269791d871002b0009080304030303020301000d0018001604030503060308040805080604010501060102030201002d00020101001c00024001001500aa0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
+     protos+=("-no_ssl3 -no_ssl2")
+     tlsvers+=("-tls1_3 -tls1_2 -tls1_1 -tls1")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0304")
+     alpn+=("h2,http/1.1")
+     service+=("HTTP,SMTP,POP,IMAP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     curves+=("X25519:secp256r1:secp384r1:secp521r1:ffdhe2048:ffdhe3072")
+     requiresSha2+=(false)
+     current+=(false)
+
+     names+=("Thunderbird ("68.3")
+     short+=("thunderbird_68_3_1")
+     ciphers+=("TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:AES128-SHA:AES256-SHA:DES-CBC3-SHA")
+     ciphersuites+=("TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_256_GCM_SHA384")
+     sni+=("$SNI")
+     warning+=("")
+     handshakebytes+=("1603010200010001fc030342ffc6c8b96ea60586a63fe7d97ec8d5c962b55ccfe02177cd94c8ea42f7333e209c9b6129e250f6fb8127664d26a46c410a6c217d4c2c4dc49125edd7191043810024130113031302c02bc02fcca9cca8c02cc030c00ac009c013c01400330039002f0035000a0100018f00000013001100000e696d61702e676d61696c2e636f6d00170000ff01000100000a000e000c001d00170018001901000101000b00020100002300000005000501000000000033006b0069001d0020fb48d75e98e9e9c7a7aa32106b8856384f9af1e50f9bd45f2ae3dc349858741b00170041047138476a2fbfd6dc6fa4b351b99248abc20bf27ccb962445161036ec3df7bf7566e048374b72d4cbcf4526475a8a13bbaea75e5925514d6db1a4ae60f6a961fd002b0009080304030303020301000d0018001604030503060308040805080604010501060102030201002d00020101001c00024001001500a2000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
      protos+=("-no_ssl3 -no_ssl2")
      tlsvers+=("-tls1_3 -tls1_2 -tls1_1 -tls1")
      lowest_protocol+=("0x0301")
