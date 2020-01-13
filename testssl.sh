@@ -146,6 +146,7 @@ HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
 
 declare CMDLINE
+CMDLINE_PARSED=""                                 # This makes sure we don't let early fatal() write into files when files aren't created yet
 declare -r -a CMDLINE_ARRAY=("$@")                # When performing mass testing, the child processes need to be sent the
 declare -a MASS_TESTING_CMDLINE                   # command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
 
@@ -17434,9 +17435,12 @@ cleanup() {
           [[ -d "$TEMPDIR" ]] && rm -rf "$TEMPDIR";
      fi
      outln
-     "$SECTION_FOOTER_NEEDED" && fileout_section_footer true
-     html_footer
-     fileout_footer
+     # No shorthand expression to avoid errors when $CMDLINE_PARSED haven't been filled yet.
+     if [[ $CMDLINE_PARSED == true ]]; then
+          "$SECTION_FOOTER_NEEDED" && fileout_section_footer true
+          html_footer
+          fileout_footer
+     fi
      # debugging off, see above
      grep -q xtrace <<< "$SHELLOPTS" && ! "$DEBUG_ALLINONE" && exec 2>&42 42>&-
 }
@@ -17460,7 +17464,9 @@ fatal() {
           outln "$3" >&2
           [[ -n "$LOGFILE" ]] && outln "$3" >>$LOGFILE
      fi
-     fileout "scanProblem" "FATAL" "$1"
+     # Make sure we don't try to write into files when not created yet.
+     # No shorthand expression to avoid errors when $CMDLINE_PARSED haven't been filled yet.
+     [[ $CMDLINE_PARSED == true ]] && fileout "scanProblem" "FATAL" "$1"
      exit $2
 }
 
@@ -19272,6 +19278,7 @@ parse_cmd_line() {
      local -i subret=0
 
      CMDLINE="$(create_cmd_line_string "${CMDLINE_ARRAY[@]}")"
+     CMDLINE_PARSED=false
 
      # Show usage if no options were specified
      [[ -z "$1" ]] && help 0
@@ -19774,9 +19781,12 @@ parse_cmd_line() {
           URI="$1"
           [[ -n "$2" ]] && fatal "URI comes last" $ERR_CMDLINE
      fi
+
+     # Now spot some incompatibilities in cmdlines
      [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal "\"--ip=one\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
      [[ $CMDLINE_IP == one ]] && ( is_ipv4addr "$URI" || is_ipv6addr "$URI" )  && fatal "\"--ip=one\" plus supplying an IP address doesn't work" $ERR_CMDLINE
      "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
+     [[ -n "$CONNECT_TIMEOUT" ]] && [[ "$MASS_TESTING_MODE" == parallel ]] && fatal "Parallel mass scanning and specifying connect timeouts currently don't work together" $ERR_CMDLINE
 
      ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES//,/ }"
      for fname in $ADDITIONAL_CA_FILES; do
@@ -19787,6 +19797,7 @@ parse_cmd_line() {
      [[ "$DEBUG" -ge 5 ]] && debug_globals
      # if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
      query_globals && set_scanning_defaults
+     CMDLINE_PARSED=true
 }
 
 
@@ -19985,6 +19996,8 @@ lets_roll() {
      initialize_globals
      check_base_requirements            # needs to come after $do_html is defined
      parse_cmd_line "$@"
+     # CMDLINE_PARSED has been set now. Don't put a now function after this which calls fatal(). Rather
+     # put it after csv_header below
      # html_header() needs to be called early! Otherwise if html_out() is called before html_header() and the
      # command line contains --htmlfile <htmlfile> or --html, it'll make problems with html output, see #692.
      # json_header and csv_header could be called later but for context reasons we'll leave it here
