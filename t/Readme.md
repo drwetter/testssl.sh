@@ -1,6 +1,7 @@
 ### Naming scheme
 
-* 00-09:  Does the reporting work at all?
+* 00-05:  Does the bare testssl.sh work at all?
+* 06-09:  Does the reporting work at all?
 * 20-39:  Do scans work fine (client side)?
 * 50-69:  Are the results what I expect (server side)?
 
