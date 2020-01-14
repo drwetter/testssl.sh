@@ -17197,8 +17197,11 @@ maketempf() {
      TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX)
      if [[ $? -ne 0 ]]; then
           # for e.g. devices where we can't write to /tmp:
-          TEMPPATH=$PWD
-          TEMPDIR=$(mktemp -d $PWD/testssl.XXXXXX) || exit $ERR_FCREATE
+          if [[ $PWD =~ \  ]]; then
+               # We can't allow this as we haven't quoted all strings depending on it, see #1445
+               fatal "\$PWD contains a blank: \"$PWD\"" $ERR_FCREATE
+          fi
+          TEMPDIR=$(mktemp -d "PWD/testssl.XXXXXX") || exit $ERR_FCREATE
      fi
      TMPFILE=$TEMPDIR/tempfile.txt || exit $ERR_FCREATE
      if [[ "$DEBUG" -eq 0 ]]; then
