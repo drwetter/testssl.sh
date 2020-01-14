@@ -17,7 +17,11 @@ for ((i=0; i<len ; i+=4)); do
 	grepstr="0x${hs:$i:2},0x${hs:$((i+2)):2}"
         echo -n " --> $grepstr --> "
         cip=$(grep -i -E "^ *${grepstr}" $mapfile | awk '{ print $3 }')
-	echo $cip
+	if [[ $grepstr == 0x00,0xff ]]; then
+		echo TLS_EMPTY_RENEGOTIATION_INFO_SCSV
+	else
+		echo $cip
+	fi
 	if "$first"; then
 		ciphers="$cip"
 		first=false
@@ -27,4 +31,4 @@ for ((i=0; i<len ; i+=4)); do
 done
 
 echo
-echo $ciphers
+echo ${ciphers%:}
