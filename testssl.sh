@@ -17198,10 +17198,10 @@ maketempf() {
      if [[ $? -ne 0 ]]; then
           # For e.g. devices where we can't write to /tmp we chose $PWD but we can't
           # allow every char as we haven't quoted all strings depending on it, see #1445
-          if [[ $PWD =~ ^[A-Za-z0-9\.,-/_]+$ ]]; then
-               fatal "\$PWD contains illegal chars: \"$PWD\"" $ERR_FCREATE
+          if [[ $PWD =~ [^A-Za-z0-9\.,/_-] ]]; then
+               fatal "\$PWD contains illegal chars: \"$BASH_REMATCH\"" $ERR_FCREATE
           fi
-          TEMPDIR=$(mktemp -d "PWD/testssl.XXXXXX") || exit $ERR_FCREATE
+          TEMPDIR=$(mktemp -d "$PWD/testssl.XXXXXX") || exit $ERR_FCREATE
      fi
      TMPFILE=$TEMPDIR/tempfile.txt || exit $ERR_FCREATE
      if [[ "$DEBUG" -eq 0 ]]; then
@@ -20002,8 +20002,8 @@ lets_roll() {
      initialize_globals
      check_base_requirements            # needs to come after $do_html is defined
      parse_cmd_line "$@"
-     # CMDLINE_PARSED has been set now. Don't put a now function after this which calls fatal(). Rather
-     # put it after csv_header below
+     # CMDLINE_PARSED has been set now. Don't put a function immediately after this which calls fatal().
+     # Rather put it after csv_header below.
      # html_header() needs to be called early! Otherwise if html_out() is called before html_header() and the
      # command line contains --htmlfile <htmlfile> or --html, it'll make problems with html output, see #692.
      # json_header and csv_header could be called later but for context reasons we'll leave it here
