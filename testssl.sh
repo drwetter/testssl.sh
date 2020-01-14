@@ -11054,6 +11054,7 @@ derive-handshake-traffic-keys() {
      local -i retcode
      local hash_fn
      local pub_file priv_file tmpfile
+     local derived_secret server_write_key server_write_iv
 
      if [[ "$cipher" == *SHA256 ]]; then
           hash_fn="-sha256"
