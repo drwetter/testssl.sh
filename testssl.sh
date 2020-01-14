@@ -17194,7 +17194,12 @@ EOF
 }
 
 maketempf() {
-     TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX) || exit $ERR_FCREATE
+     TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX)
+     if [[ $? -ne 0 ]]; then
+          # for e.g. devices where we can't write to /tmp:
+          TEMPPATH=$PWD
+          TEMPDIR=$(mktemp -d $PWD/testssl.XXXXXX) || exit $ERR_FCREATE
+     fi
      TMPFILE=$TEMPDIR/tempfile.txt || exit $ERR_FCREATE
      if [[ "$DEBUG" -eq 0 ]]; then
           ERRFILE="/dev/null"
