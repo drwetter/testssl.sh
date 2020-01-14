@@ -18,24 +18,25 @@ printf "\n%s\n", "Testing whether just calling \"./testssl.sh\" produces no erro
 $fileout = `timeout 10 bash ./testssl.sh 2>&1`;
 my $retval=$?;
 
-unlike($fileout, qr/$error_regexp1/, "");
+unlike($fileout, qr/$error_regexp1/, "regex 1");
 $tests++;
 
-unlike($fileout, qr/$error_regexp2/, "");
+unlike($fileout, qr/$error_regexp2/, "regex 2");
 $tests++;
 
-unlike($fileout, qr/$error_regexp3/, "");
+unlike($fileout, qr/$error_regexp3/, "regex 3");
 $tests++;
 
-unlike($fileout, qr/$error_regexp4/, "");
+unlike($fileout, qr/$error_regexp4/, "regex 4");
 $tests++;
 
-unlike($fileout, qr/$error_regexp5/, "");
+unlike($fileout, qr/$error_regexp5/, "regex 5");
 $tests++;
 
 is($retval, 0, "return value should be equal zero: \"$retval\"");
 $tests++;
 
+printf "\n";
 done_testing($tests);
 
 

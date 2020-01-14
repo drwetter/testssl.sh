@@ -15,8 +15,11 @@ my (
 
 $tests = 0;
 
+
+printf "\n%s\n", "Doing severity level checks";
+
 #1
-pass("Running testssl.sh against badssl.com to create a JSON report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
+pass(" .. running testssl.sh against badssl.com to create a JSON report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
 $out = `./testssl.sh -S -e -U --jsonfile tmp.json --severity LOW --color 0 badssl.com`;
 $json = json('tmp.json');
 unlink 'tmp.json';
@@ -31,7 +34,7 @@ foreach my $f ( @$json ) {
 is($found,0,"We should not have any finding with INFO level"); $tests++;
 
 #2
-pass("Running testssl.sh against badssl.com to create a JSON-PRETTY report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
+pass(" .. running testssl.sh against badssl.com to create a JSON-PRETTY report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
 $out = `./testssl.sh -S -e -U --jsonfile-pretty tmp.json --severity LOW --color 0 badssl.com`;
 $json_pretty = json('tmp.json');
 unlink 'tmp.json';
@@ -45,6 +48,7 @@ foreach my $f ( @$vulnerabilities ) {
 }
 is($found,0,"We should not have any finding with INFO level"); $tests++;
 
+printf "\n";
 done_testing($tests);
 
 sub json($) {
