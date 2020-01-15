@@ -17164,6 +17164,7 @@ tuning / connect options (most also can be preset via environment variables):
      --ids-friendly                skips a few vulnerability checks which may cause IDSs to block the scanning IP
      --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
      --add-ca <cafile>             path to <cafile> or a comma separated list of CA files enables test against additional CAs.
+     --basicauth <user:pass>       provide HTTP basic auth information.
 
 output options (can also be preset via environment variables):
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
@@ -18412,10 +18413,14 @@ determine_service() {
           # no STARTTLS.
           determine_optimal_sockets_params
           determine_optimal_proto
+          BASIC_AUTH_HEADER=""
           $SNEAKY && \
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
-          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
+          if [[ ! -z "$BASICAUTH" ]]; then
+               BASIC_AUTH_HEADER="Authorization: Basic `echo $BASICAUTH | basenc --base64` \r\n"
+          fi
+          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n$BASIC_AUTH_HEADER Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
           # returns always 0:
           service_detection $OPTIMAL_PROTO
      else # STARTTLS
@@ -19783,6 +19788,9 @@ parse_cmd_line() {
                --ssl_native|--ssl-native)
                     SSL_NATIVE=true
                     ;;
+               --basicauth|--basicauth=*)
+                   BASICAUTH="$(parse_opt_equal_sign "$1" "$2")"
+                   ;;
                (--) shift
                     break
                     ;;
