@@ -13924,10 +13924,8 @@ run_renego() {
                fileout "$jsonID" "OK" "likely not vulnerable (timed out)" "$cve" "$cwe"
                sec_client_renego=1
           else
-               # Second try in the foreground as we are sure now it won't hang.
-               # Probe for a max renegotiation limit to avoid false positives. Some servers (e.g. Node.js)
-               # mitigate the DoS threat by restricting the number of allowed client renegotiations.
-               (for i in $(seq 4); do echo R; sleep 1; done) | $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $SNI $PROXY") >$TMPFILE 2>>$ERRFILE
+               # second try in the foreground as we are sure now it won't hang
+               echo R | $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $SNI $PROXY") >$TMPFILE 2>>$ERRFILE
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case "$sec_client_renego" in
                     0)   if [[ $SERVICE == "HTTP" ]]; then
