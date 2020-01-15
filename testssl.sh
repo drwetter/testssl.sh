@@ -14407,12 +14407,28 @@ run_renego() {
                echo R | $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case "$sec_client_renego" in
-                    0)   if [[ $SERVICE == HTTP ]]; then
-                              pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
-                              fileout "$jsonID" "HIGH" "VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
-                         else
+                    0)   # We try again if server is HTTP. This could be either a node.js server or something else.
+                         # node.js has a mitigation which allows 3x R and then blocks. So we test 4x
+                         # This way we save a couple seconds as we weeded out the ones which are more robust
+                         if [[ $SERVICE != HTTP ]]; then
                               pr_svrty_medium "VULNERABLE (NOT ok)"; outln ", potential DoS threat"
                               fileout "$jsonID" "MEDIUM" "VULNERABLE, potential DoS threat" "$cve" "$cwe" "$hint"
+                         else
+                              (for i in {1..4}; do echo R; sleep 1; done) | \
+                                   $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
+                              case $? in
+                                   0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
+                                      fileout "$jsonID" "HIGH" "VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
+                                      ;;
+                                   1) pr_svrty_good "not vulnerable (OK)"
+                                      outln " -- mitigated"
+                                      fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
+                                      ;;
+                                   *) prln_warning "FIXME (bug): $sec_client_renego (4 tries)"
+                                      fileout "$jsonID" "DEBUG" "FIXME (bug 4 tries) $sec_client_renego" "$cve" "$cwe"
+                                      ret=1
+                                      ;;
+                              esac
                          fi
                          ;;
                     1)
