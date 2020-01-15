@@ -8765,10 +8765,9 @@ certificate_info() {
           out "$spaces"
           prln_svrty_medium ">= 5 years is too long"
           fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) days"
-     elif [[ $diffseconds -ge $((3600 * 24 * 825)) ]]; then
-     # Also "official" certificates issued from March 1st, 2018 aren't supposed
+     elif [[ $diffseconds -ge $((3600 * 24 * 825 + 1)) ]]; then
+     # Also "official" certificates issued from March 1st, 2018 (1517353200) aren't supposed
      # to be valid longer than 825 days which is 1517353200 in epoch seconds
-     # (GNUish: date --date='01/31/2018 00:00:00' +"%s")
           gt_825=true
           if "$HAS_OPENBSDDATE"; then
                if [[ 20180301 -le ${yearstart//-/} ]]; then
@@ -8780,11 +8779,11 @@ certificate_info() {
           # Now, the verdict, depending on the issuing date
           out "$spaces"
           if "$gt_825warn" && "$gt_825"; then
-               prln_svrty_medium ">= 825 days issued after 2018/03/01 is too long"
-               fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) >= 825 days"
+               prln_svrty_medium "> 825 days issued after 2018/03/01 is too long"
+               fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) > 825 days"
           elif "$gt_825"; then
                outln ">= 825 days certificate life time but issued before 2018/03/01"
-               fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) < 825 days"
+               fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) =< 825 days"
           fi
      else
           # All is fine with valididy period
