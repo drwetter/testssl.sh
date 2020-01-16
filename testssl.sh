@@ -204,6 +204,7 @@ SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave 
 QUIET=${QUIET:-false}                   # don't output the banner. By doing this you acknowledge usage term appearing in the banner
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
 ASSUME_HTTP=${ASSUME_HTTP:-false}       # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
+BASICAUTH=${BASICAUTH:-""}              # HTTP basic auth credentials can be set here like user:pass
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
 WARNINGS=${WARNINGS:-""}                # can be either off or batch
 DEBUG=${DEBUG:-0}                       # 1: normal output the files in /tmp/ are kept for further debugging purposes
@@ -17164,6 +17165,7 @@ tuning / connect options (most also can be preset via environment variables):
      --ids-friendly                skips a few vulnerability checks which may cause IDSs to block the scanning IP
      --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
      --add-ca <cafile>             path to <cafile> or a comma separated list of CA files enables test against additional CAs.
+     --basicauth <user:pass>       provide HTTP basic auth information.
 
 output options (can also be preset via environment variables):
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
@@ -17309,6 +17311,7 @@ HAS_SED_E: $HAS_SED_E
 SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
 ASSUME_HTTP $ASSUME_HTTP
+BASICAUTH: $BASICAUTH
 SNEAKY: $SNEAKY
 OFFENSIVE: $OFFENSIVE
 PHONE_OUT: $PHONE_OUT
@@ -18391,6 +18394,7 @@ determine_optimal_proto() {
 determine_service() {
      local ua
      local protocol
+     local basicauth_header=""
 
      # Check if we can connect to $NODEIP:$PORT. Attention: This ALWAYS uses sockets. Thus timeouts for --ssl-=native do not apply
      if ! fd_socket 5; then
@@ -18415,7 +18419,10 @@ determine_service() {
           $SNEAKY && \
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
-          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
+          if [[ ! -z "$BASICAUTH" ]]; then
+               basicauth_header="Authorization: Basic $(echo $BASICAUTH | openssl base64) \r\n"
+          fi
+          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n$basicauth_header Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
           # returns always 0:
           service_detection $OPTIMAL_PROTO
      else # STARTTLS
@@ -19783,6 +19790,10 @@ parse_cmd_line() {
                --ssl_native|--ssl-native)
                     SSL_NATIVE=true
                     ;;
+               --basicauth|--basicauth=*)
+                   BASICAUTH="$(parse_opt_equal_sign "$1" "$2")"
+                   [[ $? -eq 0 ]] && shift
+                   ;;
                (--) shift
                     break
                     ;;
