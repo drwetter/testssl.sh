@@ -18392,6 +18392,7 @@ determine_optimal_proto() {
 determine_service() {
      local ua
      local protocol
+     local basicauth_header=""
 
      # Check if we can connect to $NODEIP:$PORT. Attention: This ALWAYS uses sockets. Thus timeouts for --ssl-=native do not apply
      if ! fd_socket 5; then
@@ -18413,14 +18414,13 @@ determine_service() {
           # no STARTTLS.
           determine_optimal_sockets_params
           determine_optimal_proto
-          BASIC_AUTH_HEADER=""
           $SNEAKY && \
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
           if [[ ! -z "$BASICAUTH" ]]; then
-               BASIC_AUTH_HEADER="Authorization: Basic `echo $BASICAUTH | basenc --base64` \r\n"
+               basicauth_header="Authorization: Basic $(echo $BASICAUTH | openssl base64) \r\n"
           fi
-          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n$BASIC_AUTH_HEADER Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
+          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n$basicauth_header Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
           # returns always 0:
           service_detection $OPTIMAL_PROTO
      else # STARTTLS
