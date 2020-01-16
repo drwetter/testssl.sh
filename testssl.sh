@@ -204,6 +204,7 @@ SNEAKY=${SNEAKY:-false}                 # is the referer and useragent we leave 
 QUIET=${QUIET:-false}                   # don't output the banner. By doing this you acknowledge usage term appearing in the banner
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
 ASSUME_HTTP=${ASSUME_HTTP:-false}       # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
+BASICAUTH=${BASICAUTH:-""}              # HTTP basic auth credentials can be set here like user:pass
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
 WARNINGS=${WARNINGS:-""}                # can be either off or batch
 DEBUG=${DEBUG:-0}                       # 1: normal output the files in /tmp/ are kept for further debugging purposes
@@ -17310,6 +17311,7 @@ HAS_SED_E: $HAS_SED_E
 SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
 ASSUME_HTTP $ASSUME_HTTP
+BASICAUTH: $BASICAUTH
 SNEAKY: $SNEAKY
 OFFENSIVE: $OFFENSIVE
 PHONE_OUT: $PHONE_OUT
@@ -19790,6 +19792,7 @@ parse_cmd_line() {
                     ;;
                --basicauth|--basicauth=*)
                    BASICAUTH="$(parse_opt_equal_sign "$1" "$2")"
+                   [[ $? -eq 0 ]] && shift
                    ;;
                (--) shift
                     break
