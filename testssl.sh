@@ -18420,7 +18420,7 @@ determine_service() {
                ua="$UA_SNEAKY" || \
                ua="$UA_STD"
           if [[ ! -z "$BASICAUTH" ]]; then
-               basicauth_header="Authorization: Basic $(echo $BASICAUTH | openssl base64) \r\n"
+               basicauth_header="Authorization: Basic $(openssl base64 <<< $BASICAUTH) \r\n"
           fi
           GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n$basicauth_header Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
           # returns always 0:

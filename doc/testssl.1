@@ -130,6 +130,9 @@ Please note that \fBfname\fR has to be in Unix format\. DOS carriage returns won
 .P
 \fB\-\-openssl\-timeout <seconds>\fR This is especially useful for all connects using openssl and practically useful for mass testing\. It avoids the openssl connect to hang for ~2 minutes\. The expected parameter \fBseconds\fR instructs testssl\.sh to wait before the openssl connect will be terminated\. The option is only available if your OS has a timeout binary installed\. As there are different implementations of \fBtimeout\fR: It automatically calls the binary with the right parameters\. OPENSSL_TIMEOUT is the equivalent environment variable\.
 .
+.P
+\fB\-\-basicauth <user:pass>\fR This can be set to provide HTTP basic auth credentials which are used during checks for security headers\. BASICAUTH is the ENV variable you can use instead\.
+.
 .SS "SPECIAL INVOCATIONS"
 \fB\-t <protocol>, \-\-starttls <protocol>\fR does a default run against a STARTTLS enabled \fBprotocol\fR\. \fBprotocol\fR must be one of \fBftp\fR, \fBsmtp\fR, \fBpop3\fR, \fBimap\fR, \fBxmpp\fR, \fBtelnet\fR, \fBldap\fR, \fBirc\fR, \fBlmtp\fR, \fBnntp\fR, \fBpostgres\fR, \fBmysql\fR\. For the latter four you need e\.g\. the supplied OpenSSL or OpenSSL version 1\.1\.1\. Please note: MongoDB doesn\'t offer a STARTTLS connection, LDAP currently only works with \fB\-\-ssl\-native\fR\. \fBtelnet\fR and \fBirc\fR is WIP\.
 .
