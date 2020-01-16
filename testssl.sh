@@ -3034,7 +3034,7 @@ run_cookie_flags() {     # ARG1: Path
 
 run_security_headers() {
      local good_header="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
-     local other_header="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible"
+     local other_header="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible Cache-Control"
      local header header_output
      local first=true
      local spaces="                              "
