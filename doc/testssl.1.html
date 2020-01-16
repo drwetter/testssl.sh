@@ -185,6 +185,8 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--openssl-timeout &lt;seconds></code> This is especially useful for all connects using openssl and practically useful for mass testing. It avoids the openssl connect to hang for ~2 minutes. The expected parameter <code>seconds</code> instructs testssl.sh to wait before the openssl connect will be terminated. The option is only available if your OS has a timeout binary installed. As there are different implementations of <code>timeout</code>: It automatically calls the binary with the right parameters. OPENSSL_TIMEOUT is the equivalent environment variable.</p>
 
+<p><code>--basicauth &lt;user:pass></code> This can be set to provide HTTP basic auth credentials which are used during checks for security headers. BASICAUTH is the ENV variable you can use instead.</p>
+
 <h3 id="SPECIAL-INVOCATIONS">SPECIAL INVOCATIONS</h3>
 
 <p><code>-t &lt;protocol>, --starttls &lt;protocol></code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, LDAP currently only works with <code>--ssl-native</code>. <code>telnet</code> and <code>irc</code> is WIP.</p>

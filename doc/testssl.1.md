@@ -105,7 +105,7 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--openssl-timeout <seconds>` This is especially useful for all connects using openssl and practically useful for mass testing. It avoids the openssl connect to hang for ~2 minutes. The expected parameter `seconds` instructs testssl.sh to wait before the openssl connect will be terminated. The option is only available if your OS has a timeout binary installed. As there are different implementations of `timeout`: It automatically calls the binary with the right parameters. OPENSSL_TIMEOUT is the equivalent environment variable.
 
-`--basicauth <user:pass>` This can be set to provide HTTP basic auth credentials which are used during checks for security headers. 
+`--basicauth <user:pass>` This can be set to provide HTTP basic auth credentials which are used during checks for security headers. BASICAUTH is the ENV variable you can use instead.
 
 
 ### SPECIAL INVOCATIONS
