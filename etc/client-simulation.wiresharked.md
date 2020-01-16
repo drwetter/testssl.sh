@@ -1,13 +1,13 @@
 This file contains client handshake data manually created from Wireshark.
 The content needs to be added to client-simulation.txt which other part
-comes from the SSLlabs client API via update_client_sim_data.pl
+comes from the SSLlabs client API via ``update_client_sim_data.pl``
 The whole process is done manually.
 
 ## Instructions how to add a client simulation:
 
 * Start wireshark at a client or router. Best is during capture to filter for the target of your choice.
 * Make sure you create a bit of encrypted traffic to your target. Attention, privacy: if you want to contribute, be aware that the ClientHello contains the target hostname (SNI).
-* Make sure the client traffic is specific: For just "Android" do not use a browser! Use the play store app e.g..
+* Make sure the client traffic is specific: For just "Android" do not use a browser! Be also careful with Google Apps, especially on older devices as they might has an own TLS stack
 * Stop recording.
 * If needed sort for ClientHello.
 * Look for the ClientHello which matches the source IP + destination you had in mind. Check the destination hostname in the SNI extension so that you can be sure, it's the right traffic.
