@@ -6,7 +6,7 @@ ID=$(docker run -d -ti $image)
 
 echo $ID
 
-[[ "$ID" ]] && echo "container couldn't be retrieved" >&2 && exit 1
+[[ -z "$ID" ]] && echo "container couldn't be retrieved" >&2 && exit 1
 
 docker exec -ti $ID nginx -V
 docker exec -ti $ID mkdir /etc/nginx/ssl
