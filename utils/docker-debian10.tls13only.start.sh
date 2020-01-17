@@ -5,7 +5,7 @@ image=${1:-"debian:buster"}
 docker pull "$image"
 ID=$(docker run -d -ti $image)
 
-[[ "$ID" ]] && echo "container couldn't be retrieved" >&2 && exit 1
+[[ -z "$ID" ]] && echo "container couldn't be retrieved" >&2 && exit 1
 
 docker exec -ti $ID apt-get update
 docker exec -ti $ID apt-get install -y ssl-cert dialog
