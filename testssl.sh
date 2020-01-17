@@ -12480,7 +12480,7 @@ parse_tls_serverhello() {
 
      # If the ClientHello included a supported_versions extension, then check that the
      # $DETECTED_TLS_VERSION appeared in the list offered in the ClientHello.
-     if [[ "${TLS_CLIENT_HELLO:0:2}" == "01" ]]; then
+     if [[ "${TLS_CLIENT_HELLO:0:2}" == 01 ]]; then
           # get position of cipher lists (just after session id)
           offset=78+2*$(hex2dec "${TLS_CLIENT_HELLO:76:2}")
           # get position of compression methods
@@ -12496,7 +12496,7 @@ parse_tls_serverhello() {
                     offset+=6
                     tls_protocol2="$(tolower "$tls_protocol2")"
                     for (( j=0; j < extension_len-2; j=j+4 )); do
-                         [[ "${TLS_CLIENT_HELLO:offset:4}" == "$tls_protocol2" ]] && break
+                         [[ "${TLS_CLIENT_HELLO:offset:4}" == $tls_protocol2 ]] && break
                          offset+=4
                     done
                     if [[ $j -eq $extension_len-2 ]]; then
@@ -14333,27 +14333,34 @@ run_renego() {
 
      pr_bold " Secure Renegotiation (RFC 5746)           "
      jsonID="secure_renego"
-     # first fingerprint for the Line "Secure Renegotiation IS NOT" or "Secure Renegotiation IS "
-     $OPENSSL s_client $(s_client_options "$proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
-     if sclient_connect_successful $? $TMPFILE; then
-          grep -iaq "Secure Renegotiation IS NOT" $TMPFILE
-          sec_renego=$?                                                    # 0= Secure Renegotiation IS NOT supported
-          # grep -iaq "Secure Renegotiation IS supported"
-          #FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
-          case $sec_renego in
-               0)   prln_svrty_critical "Not supported / VULNERABLE (NOT ok)"
-                    fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
-                    ;;
-               1)   prln_svrty_best "supported (OK)"
-                    fileout "$jsonID" "OK" "supported" "$cve" "$cwe"
-                    ;;
-               *)   prln_warning "FIXME (bug): $sec_renego"
-                    fileout "$jsonID" "WARN" "FIXME (bug) $sec_renego" "$cve" "$cwe"
-                    ;;
-          esac
+
+     if "$TLS13_ONLY" && [[ "$proto" == -no_tls1_3 ]]; then
+          # https://www.openssl.org/blog/blog/2018/02/08/tlsv1.3/
+          prln_svrty_best "no support in TLS 1.3 only servers (OK)"
+          fileout "$jsonID" "OK" "TLS 1.3 only server" "$cve" "$cwe"
      else
-          prln_warning "OpenSSL handshake didn't succeed"
-          fileout "$jsonID" "WARN" "OpenSSL handshake didn't succeed" "$cve" "$cwe"
+          # first fingerprint for the Line "Secure Renegotiation IS NOT" or "Secure Renegotiation IS "
+          $OPENSSL s_client $(s_client_options "$proto $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") 2>&1 </dev/null >$TMPFILE 2>$ERRFILE
+          if sclient_connect_successful $? $TMPFILE; then
+               grep -iaq "Secure Renegotiation IS NOT" $TMPFILE
+               sec_renego=$?                                                    # 0= Secure Renegotiation IS NOT supported
+               # grep -iaq "Secure Renegotiation IS supported"
+               #FIXME: didn't occur to me yet but why not also to check on "Secure Renegotiation IS supported"
+               case $sec_renego in
+                    0)   prln_svrty_critical "Not supported / VULNERABLE (NOT ok)"
+                         fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
+                         ;;
+                    1)   prln_svrty_best "supported (OK)"
+                         fileout "$jsonID" "OK" "supported" "$cve" "$cwe"
+                         ;;
+                    *)   prln_warning "FIXME (bug): $sec_renego"
+                         fileout "$jsonID" "WARN" "FIXME (bug) $sec_renego" "$cve" "$cwe"
+                         ;;
+               esac
+          else
+               prln_warning "OpenSSL handshake didn't succeed"
+               fileout "$jsonID" "WARN" "OpenSSL handshake didn't succeed" "$cve" "$cwe"
+          fi
      fi
 
      # FIXME: Basically this can be done with sockets and we might have that information already
@@ -14393,6 +14400,9 @@ run_renego() {
           prln_warning "client x509-based authentication prevents this from being tested"
           fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
           sec_client_renego=1
+     elif "$TLS13_ONLY" && [[ "$proto" == -no_tls1_3 ]]; then
+          pr_svrty_best "not vulnerable (OK)"; outln " (TLS 1.3 only server)"
+          fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
      else
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
           # msg enables us to look deeper into it while debugging
@@ -14404,7 +14414,7 @@ run_renego() {
                sec_client_renego=1
           else
                # second try in the foreground as we are sure now it won't hang
-               echo R | $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
+               echo R | $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
                sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
                case "$sec_client_renego" in
                     0)   # We try again if server is HTTP. This could be either a node.js server or something else.
@@ -14415,7 +14425,7 @@ run_renego() {
                               fileout "$jsonID" "MEDIUM" "VULNERABLE, potential DoS threat" "$cve" "$cwe" "$hint"
                          else
                               (for i in {1..4}; do echo R; sleep 1; done) | \
-                                   $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -msg -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
+                                   $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
                               case $? in
                                    0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
                                       fileout "$jsonID" "HIGH" "VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
@@ -14488,20 +14498,21 @@ run_crime() {
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
      fi
+
      if [[ $sclient_success -ne 0 ]]; then
           pr_warning "test failed (couldn't connect)"
           fileout "CRIME_TLS" "WARN" "Check failed, couldn't connect" "$cve" "$cwe"
           ret=1
      elif grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
           pr_svrty_good "not vulnerable (OK)"
-          if [[ $SERVICE != "HTTP" ]] && ! "$CLIENT_AUTH";  then
+          if [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH";  then
                out " (not using HTTP anyway)"
                fileout "CRIME_TLS" "OK" "not vulnerable (not using HTTP anyway)" "$cve" "$cwe"
           else
                fileout "CRIME_TLS" "OK" "not vulnerable" "$cve" "$cwe"
           fi
      else
-          if [[ $SERVICE == "HTTP" ]] || "$CLIENT_AUTH"; then
+          if [[ $SERVICE == HTTP ]] || "$CLIENT_AUTH"; then
                pr_svrty_high "VULNERABLE (NOT ok)"
                fileout "CRIME_TLS" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
           else
