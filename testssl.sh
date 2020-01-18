@@ -14334,9 +14334,9 @@ run_renego() {
      pr_bold " Secure Renegotiation (RFC 5746)           "
      jsonID="secure_renego"
 
-     if "$TLS13_ONLY" && [[ "$proto" == -no_tls1_3 ]]; then
+     if "$TLS13_ONLY"; then
           # https://www.openssl.org/blog/blog/2018/02/08/tlsv1.3/
-          prln_svrty_best "no support in TLS 1.3 only servers (OK)"
+          pr_svrty_best "not vulnerable (OK)"; outln ", no renegotiation support in TLS 1.3 only servers"
           fileout "$jsonID" "OK" "TLS 1.3 only server" "$cve" "$cwe"
      else
           # first fingerprint for the Line "Secure Renegotiation IS NOT" or "Secure Renegotiation IS "
@@ -14396,13 +14396,13 @@ run_renego() {
      esac
 
 
-     if "$CLIENT_AUTH"; then
+     if "$TLS13_ONLY"; then
+          pr_svrty_best "not vulnerable (OK)"; outln ", no renegotiation support in TLS 1.3 only servers"
+          fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
+     elif "$CLIENT_AUTH"; then
           prln_warning "client x509-based authentication prevents this from being tested"
           fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
           sec_client_renego=1
-     elif "$TLS13_ONLY" && [[ "$proto" == -no_tls1_3 ]]; then
-          pr_svrty_best "not vulnerable (OK)"; outln " (TLS 1.3 only server)"
-          fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
      else
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
           # msg enables us to look deeper into it while debugging
@@ -14471,14 +14471,20 @@ run_crime() {
      local cwe="CWE-310"
      local hint=""
 
-     # in a nutshell: don't offer TLS/SPDY compression on the server side
-     # This tests for CRIME Vulnerability (www.ekoparty.org/2012/juliano-rizzo.php) on HTTPS, not SPDY (yet)
-     # Please note that it is an attack where you need client side control, so in regular situations this
-     # means anyway "game over", w/wo CRIME
-     # www.h-online.com/security/news/item/Vulnerability-in-SSL-encryption-is-barely-exploitable-1708604.html
+     # In a nutshell: don't offer TLS/SPDY compression. This tests for CRIME Vulnerability on HTTPS only,
+     # not SPDY or ALPN (yet). Please note that it is an attack where you need client side control, so in
+     # regular situations this # means anyway "game over", with or without CRIME.
+     #
+     # https://blog.qualys.com/ssllabs/2012/09/14/crime-information-leakage-attack-against-ssltls
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for CRIME vulnerability " && outln
      pr_bold " CRIME, TLS " ; out "($cve)                "
+
+     if "$TLS13_ONLY"; then
+          pr_svrty_best "not vulnerable (OK)"; outln ", no compression in TLS 1.3 only servers"
+          fileout "$jsonID" "OK" "TLS 1.3 only server" "$cve" "$cwe"
+          return 0
+     fi
 
      if ! "$HAS_ZLIB"; then
           if "$SSL_NATIVE"; then
