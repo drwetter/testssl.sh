@@ -22,6 +22,7 @@ die "Unable to open $prg" unless -f $prg;
 my $uri="cloudflare.com";
 
 printf "\n%s\n", "Unit testing JSON output ...";
+unlink 'tmp.json';
 
 #1
 printf "%s\n", ".. plain JSON --> $uri ";

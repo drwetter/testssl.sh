@@ -19,6 +19,7 @@ my $check2run="--color 0 --htmlfile tmp.html";
 die "Unable to open $prg" unless -f $prg;
 
 printf "\n%s\n", "Doing HTML output checks";
+unlink 'tmp.html';
 
 #1
 printf "%s\n", " .. running $prg against $uri to create HTML and terminal outputs (may take 2~3 minutes)";

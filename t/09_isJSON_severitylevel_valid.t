@@ -17,6 +17,7 @@ $tests = 0;
 
 
 printf "\n%s\n", "Doing severity level checks";
+unlink 'tmp.json';
 
 #1
 pass(" .. running testssl.sh against badssl.com to create a JSON report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
