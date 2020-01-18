@@ -18,8 +18,8 @@ my $retval=$?;
 unlike($fileout, qr/$error_regexp/, "just ran help");
 $tests++;
 
-$fileout = `./testssl.sh --ssl-native --color=0 --fast google.com 2>&1`;
-unlike($fileout, qr/$error_regexp/, "ran --ssl-native --color=0 --fast google.com");
+$fileout = `./testssl.sh --ssl-native --color=0 --fast --ip=one google.com 2>&1`;
+unlike($fileout, qr/$error_regexp/, "ran --ssl-native --color=0 --fast --ip=one google.com");
 $tests++;
 
 printf "\n";
