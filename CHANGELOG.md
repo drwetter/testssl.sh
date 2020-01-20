@@ -1,7 +1,7 @@
 
 ## Change Log
 
-### Features implemented in 3.0
+### Features implemented / improvements in 3.0
 
 * Full support of TLS 1.3, shows also drafts supported
 * Extended protocol downgrade checks
@@ -40,22 +40,24 @@
 * Exit codes better: 0 for running without error, 1+n for small errors, >240 for major errors.
 * Better error msg suppression (not fully installed OpenSSL)
 * Better parsing of HTTP headers & better output of longer HTTP headers
+* Display more HTTP security headers
 * HTTP Basic Auth support for HTTP header
-* "eTLS" detection
+* experimental "eTLS" detection
 * Dockerfile and repo @ docker hub with that file (see above)
 * Java Root CA store added
 * Better support for XMPP via STARTTLS & faster
 * Certificate check for to-name in stream of XMPP
 * Support for NNTP and LMTP via STARTTLS, fixes for MySQL and PostgresQL
 * Support for SNI and STARTTLS
-* More robustness for any STARTTLS protocol (fall back to plaintext while in TLS)
+* More robustness for any STARTTLS protocol (fall back to plaintext while in TLS caused problems)
+* Renegotiation checks improved, also no false potive for Node.js anymore
 * Major update of client simulations with self-collected up-to-date data
 * Update of CA certificate stores
 * Lots of bug fixes
 * More travis/CI checks -- still place for improvements
 * Man page reviewed
 
-### Features implemented in 2.9.5
+### Features implemented / improvements in 2.9.5
 
 * Way better coverage of ciphers as most checks are done via bash sockets where ever possible
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
