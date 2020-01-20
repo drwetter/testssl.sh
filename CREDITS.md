@@ -1,14 +1,12 @@
 
 Full contribution, see git log.
 
-
-* Dirk Wetter (founder, maintainer and main contributor)
+* Dirk Wetter (creator, maintainer and main contributor)
   - Everything what's not mentioned below and is included in testssl.sh's git log
     minus what I probably forgot to mention
   (too much other things to do at the moment and to list it would be a tough job)
 
 * David Cooper (main contributor)
-
   - Major extensions to socket support for all protocols
   - extended parsing of TLS ServerHello messages
   - TLS 1.3 support (final and pre-final)
@@ -35,6 +33,9 @@ Full contribution, see git log.
 
 ##### Further credits (in alphabetical order)
 
+* a666
+  - Bugfix
+
 * Christoph Badura
   - NetBSD fixes
 
@@ -52,6 +53,9 @@ Full contribution, see git log.
 * Christian Dresen
    - Dockerfile
 
+* csett86
+   - some MacOSX and Java client handshake data
+
 * Mark Felder
   - lots of cleanups
   - Shellcheck static analysis
@@ -64,6 +68,12 @@ Full contribution, see git log.
 
 * Maciej Grela
   - colorless handling
+
+* Jac2NL
+  - initial support for skipping offensive vulnerability tests
+
+* Scott Johnson
+  - Bugfix F5
 
 * Hubert Kario
   - helped with avoiding accidental TCP fragmentation
@@ -117,6 +127,9 @@ Full contribution, see git log.
 * Jeroen Wiert Pluimers
   - Darwin binaries support
 
+* Joao Poupino
+  - Minimize false positive detection for Renegotiation checks against Node.js etc.
+
 * Rechi
   - initial MX stuff
   - fixes
@@ -135,6 +148,9 @@ Full contribution, see git log.
 
 * Julien Vehent
   - supplied 1st Darwin binary
+
+* Thomas Ward
+  - add initial IDN support
 
 * @typingArtist
   - improved BEAST detection
