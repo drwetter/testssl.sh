@@ -9,12 +9,12 @@ use Data::Dumper;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $uri="testssl.net";
+my $uri="dev.testssl.sh";
 my $out="";
 my $html="";
 my $debughtml="";
 my $edited_html="";
-my $check2run="--ip=one --color 0 --htmlfile tmp.html";
+my $check2run="--ip=one  --color 0 --htmlfile tmp.html";
 
 die "Unable to open $prg" unless -f $prg;
 
