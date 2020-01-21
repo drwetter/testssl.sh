@@ -8789,7 +8789,7 @@ certificate_info() {
      else
           # All is fine with valididy period
           # We ignore for now certificates < 2018/03/01. On the screen we only show debug info
-          [[ "$DEBUG" -ge 1 ]] && outln "${spaces}DEBUG: all is fine with certificate life time"
+          [[ "$DEBUG" -ge 1 ]] && outln "${spaces}DEBUG: all is fine with total certificate life time"
           fileout "cert_validityPeriod${json_postfix}" "INFO" "No finding"
      fi
 
