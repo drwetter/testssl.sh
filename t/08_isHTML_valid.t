@@ -9,12 +9,12 @@ use Data::Dumper;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $uri="badssl.com";
+my $uri="heise.de";
 my $out="";
 my $html="";
 my $debughtml="";
 my $edited_html="";
-my $check2run="--color 0 --htmlfile tmp.html";
+my $check2run="--ip=one --color 0 --htmlfile tmp.html";
 
 die "Unable to open $prg" unless -f $prg;
 
@@ -22,7 +22,7 @@ printf "\n%s\n", "Doing HTML output checks";
 unlink 'tmp.html';
 
 #1
-printf "%s\n", " .. running $prg against $uri to create HTML and terminal outputs (may take 2~3 minutes)";
+printf "%s\n", " .. running $prg against \"$uri\" to create HTML and terminal outputs (may take ~2 minutes)";
 # specify a TERM_WIDTH so that the two calls to testssl.sh don't create HTML files with different values of TERM_WIDTH
 $out = `TERM_WIDTH=120 $prg $check2run $uri`;
 $html = `cat tmp.html`;
@@ -44,12 +44,11 @@ $edited_html =~ s/&gt;/>/g;
 $edited_html =~ s/&quot;/"/g;
 $edited_html =~ s/&apos;/'/g;
 
-printf "\n%s\n", " .. comparing HTML and terminal outputs";
 cmp_ok($edited_html, "eq", $out, "HTML file matches terminal output");
 $tests++;
 
 #2
-printf "\n%s\n", " .. running $prg against $uri with --debug 4 to create HTML output (may take another 2~3 minutes)";
+printf "\n%s\n", " .. running again $prg against \"$uri\", now with --debug 4 to create HTML output (may take another ~2 minutes)";
 # Redirect stderr to /dev/null in order to avoid some unexplained "date: invalid date" error messages
 $out = `TERM_WIDTH=120 $prg $check2run --debug 4 $uri 2> /dev/null`;
 $debughtml = `cat tmp.html`;
@@ -68,8 +67,8 @@ $debughtml =~ s/HTTP clock skew              \+?-?[0-9]* /HTTP clock skew       
 
 $debughtml =~ s/ Pre-test: .*\n//g;
 $debughtml =~ s/.*OK: below 825 days.*\n//g;
+$debughtml =~ s/.*DEBUG:.*\n//g;
 
-printf "\n%s\n", " .. checking that using the --debug option doesn't affect the HTML file";
 cmp_ok($debughtml, "eq", $html, "HTML file created with --debug 4 matches HTML file created without --debug");
 $tests++;
 
