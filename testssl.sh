@@ -10208,13 +10208,13 @@ starttls_imap_dialog() {
 }
 
 starttls_xmpp_dialog() {
-     debugme echo "=== starting imap XMPP dialog ==="
+     debugme echo "=== starting xmpp STARTTLS dialog ==="
      [[ -z $XMPP_HOST ]] && XMPP_HOST="$NODE"
 
      starttls_io "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>"  'starttls(.*)features'  1 &&
      starttls_io "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>"  '<proceed'  1
      local ret=$?
-     debugme echo "=== finished XMPP STARTTLS dialog with ${ret} ==="
+     debugme echo "=== finished xmpp STARTTLS dialog with ${ret} ==="
      return $ret
 }
 
@@ -18334,7 +18334,7 @@ determine_optimal_proto() {
                     -ssl2)   "$HAS_SSL2" || continue ;;
                     *) ;;
                esac
-               $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg -starttls $1" $SNI) </dev/null >$TMPFILE 2>>$ERRFILE
+               $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg $STARTTLS $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
                     all_failed=false
                     add_tls_offered "${proto/-/}" yes
