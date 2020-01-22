@@ -18349,7 +18349,7 @@ determine_optimal_proto() {
                     -ssl2)   "$HAS_SSL2" || continue ;;
                     *) ;;
                esac
-               $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg $STARTTLS" $SNI) </dev/null >$TMPFILE 2>>$ERRFILE
+               $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg $STARTTLS $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
                     all_failed=false
                     add_tls_offered "${proto/-/}" yes
