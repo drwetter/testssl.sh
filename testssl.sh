@@ -14798,7 +14798,7 @@ run_ssl_poodle() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SSLv3 POODLE (Padding Oracle On Downgraded Legacy Encryption) " && outln
      pr_bold " POODLE, SSL"; out " ($cve)               "
 
-     if "$TLS13_ONLY" || [[ $(has_server_protocol ssl3) -ne 0 ]]; then
+     if "$TLS13_ONLY" || [[ $(has_server_protocol ssl3) -eq 1 ]]; then
           # one condition should normally suffice but we don't know when run_poddle() was called
           pr_svrty_best "not vulnerable (OK)"
           outln ", no SSLv3 support"
