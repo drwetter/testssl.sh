@@ -15624,8 +15624,6 @@ run_beast(){
                          prln_svrty_good "no TLS1 (OK)"
                          fileout "$jsonID" "OK" "not vulnerable, no TLS1" "$cve" "$cwe"
                     fi
-set +x
-exit 0
                     return 0
                else                # protocol not succeeded but it's the first time
                     continued=true
