@@ -14801,9 +14801,8 @@ run_ssl_poodle() {
      if "$TLS13_ONLY" || [[ $(has_server_protocol ssl3) -ne 0 ]]; then
           # one condition should normally suffice but we don't know when run_poddle() was called
           pr_svrty_best "not vulnerable (OK)"
-          [[ $DEBUG -ge 1 ]] && out ", no SSLv3 support"
-          outln
-          fileout "$jsonID" "OK" "not vulnerable, no SSLv3 support" "$cve" "$cwe"
+          outln ", no SSLv3 support"
+          fileout "$jsonID" "OK" "not vulnerable, no SSLv3" "$cve" "$cwe"
           return 0
      fi
 
@@ -15530,8 +15529,7 @@ run_beast(){
 
      if "$TLS13_ONLY" || ( [[ $(has_server_protocol ssl3) -eq 1 ]] && [[ $(has_server_protocol tls1) -eq 1 ]] ); then
           pr_svrty_good "not vulnerable (OK)"
-          [[ $DEBUG -ge 1 ]] && out ", no SSL3 or TLS1"
-          outln
+          outln ", no SSL3 or TLS1"
           fileout "$jsonID" "OK" "not vulnerable, no SSL3 or TLS1" "$cve" "$cwe"
           return 0
      fi
