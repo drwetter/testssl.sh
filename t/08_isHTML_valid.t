@@ -9,12 +9,12 @@ use Data::Dumper;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $uri="dev.testssl.sh";
+my $uri="heise.de";
 my $out="";
 my $html="";
 my $debughtml="";
 my $edited_html="";
-my $check2run="--ip=one  --color 0 --htmlfile tmp.html";
+my $check2run="--ip=one --color 0 --htmlfile tmp.html";
 
 die "Unable to open $prg" unless -f $prg;
 
@@ -44,7 +44,6 @@ $edited_html =~ s/&gt;/>/g;
 $edited_html =~ s/&quot;/"/g;
 $edited_html =~ s/&apos;/'/g;
 
-printf "\n%s\n", " .. comparing HTML and terminal outputs";
 cmp_ok($edited_html, "eq", $out, "HTML file matches terminal output");
 $tests++;
 
@@ -70,7 +69,6 @@ $debughtml =~ s/ Pre-test: .*\n//g;
 $debughtml =~ s/.*OK: below 825 days.*\n//g;
 $debughtml =~ s/.*DEBUG:.*\n//g;
 
-printf "\n%s\n", " .. checking that using the --debug option doesn't affect the HTML file";
 cmp_ok($debughtml, "eq", $html, "HTML file created with --debug 4 matches HTML file created without --debug");
 $tests++;
 
