@@ -5398,13 +5398,8 @@ run_protocols() {
                          [[ $? -eq 0 ]] || break
                          if [[ "${TLS_SERVER_HELLO:8:3}" == 7F1 ]]; then
                               drafts_offered+=" ${TLS_SERVER_HELLO:8:4} "
-                         else
-                              for i in 16 15 14 13 12; do
-                                   if [[ "$TLS_SERVER_HELLO" =~ 002B00027F$i ]]; then
-                                        drafts_offered+=" 7F$i "
-                                        break
-                                   fi
-                              done
+                         elif [[ "$TLS_SERVER_HELLO" =~ 002B00027F1[2-6] ]]; then
+                              drafts_offered+=" ${BASH_REMATCH:8:4} "
                          fi
                     done
                     KEY_SHARE_EXTN_NR="33"
@@ -5420,13 +5415,8 @@ run_protocols() {
                          [[ $? -eq 0 ]] || break
                          if [[ "$TLS_SERVER_HELLO" =~ 002B00020304 ]]; then
                               drafts_offered+=" 0304 "
-                         else
-                              for i in 1C 1B 1A 19 18 17; do
-                                   if [[ "$TLS_SERVER_HELLO" =~ 002B00027F$i ]]; then
-                                        drafts_offered+=" 7F$i "
-                                        break
-                                   fi
-                              done
+                         elif [[ "$TLS_SERVER_HELLO" =~ 002B00027F1[7-9A-C] ]]; then
+                              drafts_offered+=" ${BASH_REMATCH:8:4} "
                          fi
                     done
                     KEY_SHARE_EXTN_NR="$key_share_extn_nr"
@@ -18228,13 +18218,8 @@ determine_optimal_sockets_params() {
                add_tls_offered tls1_3_draft$(hex2dec "${TLS_SERVER_HELLO:10:2}") yes
           elif [[ "$TLS_SERVER_HELLO" =~ 002B00020304 ]]; then
                add_tls_offered tls1_3_rfc8446 yes
-          else
-               for i in 1C 1B 1A 19 18 17 16 15 14 13 12; do
-                    if [[ "$TLS_SERVER_HELLO" =~ 002B00027F$i ]]; then
-                         add_tls_offered tls1_3_draft$(hex2dec "$i") yes
-                         break
-                    fi
-               done
+          elif [[ "$TLS_SERVER_HELLO" =~ 002B00027F1[2-9A-C] ]]; then
+               add_tls_offered tls1_3_draft$(hex2dec "${BASH_REMATCH:10:2}") yes
           fi
      fi
 
