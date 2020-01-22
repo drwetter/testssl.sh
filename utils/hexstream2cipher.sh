@@ -31,4 +31,6 @@ for ((i=0; i<len ; i+=4)); do
 done
 
 echo
-echo ${ciphers%:}
+# remove leading : because of GREASE, and trailing because of TLS_EMPTY_RENEGOTIATION_INFO_SCSV
+ciphers="${ciphers%:}"
+echo ${ciphers#:}
