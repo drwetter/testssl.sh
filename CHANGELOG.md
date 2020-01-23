@@ -1,7 +1,7 @@
 
 ## Change Log
 
-### Features implemented in 3.0
+### Features implemented / improvements in 3.0
 
 * Full support of TLS 1.3, shows also drafts supported
 * Extended protocol downgrade checks
@@ -12,12 +12,11 @@
 * DNS over Proxy and other proxy improvements
 * Decoding of unencrypted BIG IP cookies
 * Initial client certificate support
+* Warning of 825 day limit for certificates issued after 2018/3/1
 * Socket timeouts (``--connect-timeout``)
-* IDN/IDN2 servername support
-* pwnedkeys.com support
-* Initial client certificate support
+* IDN/IDN2 servername/URI + emoji support, supposed libidn/idn2 is installed and DNS resolver is recent) support
 * Initial support for certificate compression
-* Better JSON output: renamed IDs and findings shorter/better parsable
+* Better JSON output: renamed IDs and findings shorter/better parsable, also includes certficate
 * JSON output now valid also for non-responding servers
 * Testing now per default 370 ciphers
 * Further improving the robustness of TLS sockets (sending and parsing)
@@ -26,34 +25,39 @@
 * LOGJAM: now checking also for DH  and FFDHE groups (TLS 1.2)
 * PFS: Display of elliptical curves supported, DH and FFDHE groups (TLS 1.2 + TLS 1.3)
 * Check for session resumption (Ticket, ID)
-* TLS Robustness check (GREASE)
+* TLS Robustness check GREASE and more
 * Server preference distinguishes between TLS 1.3 and lower protocols
 * Mark TLS 1.0 and TLS 1.1 as deprecated
 * Does a few startup checks which make later tests easier and faster (``determine_optimal_\*()``)
 * Expect-CT Header Detection
 * `--phone-out` does certificate revocation checks via OCSP (LDAP+HTTP) and with CRL
 * `--phone-out` checks whether the private key has been compromised via https://pwnedkeys.com/
-* Fully OpenBSD and LibreSSL support
 * Missing SAN warning
 * Added support for private CAs
-* Way better handling of connectivity problems
+* Way better handling of connectivity problems (counting those, if threshold exceeded -> bye)
 * Fixed TCP fragmentation
 * Added `--ids-friendly` switch
 * Exit codes better: 0 for running without error, 1+n for small errors, >240 for major errors.
 * Better error msg suppression (not fully installed OpenSSL)
 * Better parsing of HTTP headers & better output of longer HTTP headers
+* Display more HTTP security headers
+* HTTP Basic Auth support for HTTP header
+* experimental "eTLS" detection
 * Dockerfile and repo @ docker hub with that file (see above)
 * Java Root CA store added
 * Better support for XMPP via STARTTLS & faster
 * Certificate check for to-name in stream of XMPP
-* Support for NNTP via STARTTLS, fixes for MySQL and PostgresQL
+* Support for NNTP and LMTP via STARTTLS, fixes for MySQL and PostgresQL
 * Support for SNI and STARTTLS
-* More robustness for any STARTTLS protocol (fall back to plaintext while in TLS)
-* Major update of client simulations with self-collected data
-* IDN/IDN2 and emoji URI support (supposed libidn/idn2 is installed and DNS resolver is recent)
+* More robustness for any STARTTLS protocol (fall back to plaintext while in TLS caused problems)
+* Renegotiation checks improved, also no false potive for Node.js anymore
+* Major update of client simulations with self-collected up-to-date data
+* Update of CA certificate stores
+* Lots of bug fixes
+* More travis/CI checks -- still place for improvements
 * Man page reviewed
 
-### Features implemented in 2.9.5
+### Features implemented / improvements in 2.9.5
 
 * Way better coverage of ciphers as most checks are done via bash sockets where ever possible
 * Further tests via TLS sockets and improvements (handshake parsing, completeness, robustness)
