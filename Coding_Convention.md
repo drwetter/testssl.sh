@@ -20,16 +20,17 @@ Some people really read that ! New features would need to be documented in the a
 
 #### Shell / bash
 
-Bash is actually quite powerful -- not only with respect to sockets. It's not as mighty as perl or python, but there are a lot of neat features. Here's how you make use of them.
+Bash is actually quite powerful -- not only with respect to sockets. It's not as mighty as perl or python, but there are a lot of neat features. Here's how you make use of them. Besides those short hints here there's a wealth of information of there. One good resource is the [bash hackers wiki](https://wiki.bash-hackers.org/start).
 
 * Don't use backticks anymore, use `$(..)` instead
-* Use double square `[[]]` instead of single square `[]` brackets
+* Use double square `[[]]` brackets (_conditional expressions)_ instead of single square `[]` brackets
+* In double square brackets avoid quoting at the right hand side if not necessary, see [bash hackers wiki](https://wiki.bash-hackers.org/syntax/ccmd/conditional_expression). For regex matching (`=~`) you shouldn't quote at all.
 * The [BashPitfalls](http://mywiki.wooledge.org/BashPitfalls) is a good read!
 * Whenever possible try to avoid `tr` `sed` `awk` and use bash internal functions instead, see e.g. [bash shell parameter substitution](http://www.cyberciti.biz/tips/bash-shell-parameter-substitution-2.html). It slower as it forks, fopens and pipes back the result.
 * `read` often can replace `awk`: `IFS=, read -ra a b c <<< "$line_with_comma"`
 * Bash can also deal perfectly with regular expressions, see e.g. [here](https://www.networkworld.com/article/2693361/unix-tip-using-bash-s-regular-expressions.html) and [here](https://unix.stackexchange.com/questions/421460/bash-regex-and-https-regex101-com). You can as well have a look @ `is_ipv4addr()` or `is_ipv6addr()`.
 * If you still need to use any of `tr`, `sed` and `awk`: try to avoid a mix of several external binaries e.g. if you can achieve the same with e.g. `awk`.
-* Be careful with very advanced bash features. Mac OS X is still using bash version 3 ([http://tldp.org/LDP/abs/html/bashver4.html](differences))
+* Be careful with very advanced bash features. Mac OS X is still using bash version 3 ([differences](http://tldp.org/LDP/abs/html/bashver4.html), see also [bash hackers wiki](https://wiki.bash-hackers.org/scripting/bashchanges)).
 * Always use a return value for a function/method. 0 means all is fine.
 * Make use of [shellcheck](https://github.com/koalaman/shellcheck) if possible
 
