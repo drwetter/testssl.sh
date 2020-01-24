@@ -11097,63 +11097,7 @@ derive-handshake-traffic-keys() {
      return 0
 }
 
-generate-ccm-gcm-keystream() {
-     local icb="$1" icb_msb icb_lsb1
-     local -i i icb_lsb n="$2"
-
-     icb_msb="${icb:0:24}"
-     icb_lsb=0x${icb:24:8}
-
-     for (( i=0; i < n; i=i+1 )); do
-          icb_lsb1="$(printf "%08X" $icb_lsb)"
-          printf "\x${icb_msb:0:2}\x${icb_msb:2:2}\x${icb_msb:4:2}\x${icb_msb:6:2}\x${icb_msb:8:2}\x${icb_msb:10:2}\x${icb_msb:12:2}\x${icb_msb:14:2}\x${icb_msb:16:2}\x${icb_msb:18:2}\x${icb_msb:20:2}\x${icb_msb:22:2}\x${icb_lsb1:0:2}\x${icb_lsb1:2:2}\x${icb_lsb1:4:2}\x${icb_lsb1:6:2}"
-          icb_lsb+=1
-     done
-     return 0
-}
-
-# arg1: an OpenSSL ecb cipher (e.g., -aes-128-ecb)
-# arg2: key
-# arg3: initial counter value (must be 128 bits)
-# arg4: ciphertext
-# See Sections 6.5 and 7.2 of SP 800-38D and Section 6.2 and Appendix A of SP 800-38C
-ccm-gcm-decrypt() {
-     local cipher="$1"
-     local key="$2"
-     local icb="$3"
-     local ciphertext="$4"
-     local -i i i1 i2 i3 i4
-     local -i ciphertext_len n mod_check
-     local y plaintext=""
-
-     [[ ${#icb} -ne 32 ]] && return 7
-
-     ciphertext_len=${#ciphertext}
-     n=$ciphertext_len/32
-     mod_check=$ciphertext_len%32
-     [[ $mod_check -ne 0 ]] && n+=1
-     y="$(generate-ccm-gcm-keystream "$icb" "$n" | $OPENSSL enc "$cipher" -K "$key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
-
-     # XOR the ciphertext with the keystream ($y). For efficiency, work in blocks of 16 bytes at a time (but with each XOR operation working on
-     # 32 bits.
-     [[ $mod_check -ne 0 ]] && n=$n-1
-     for (( i=0; i < n; i++ )); do
-          i1=32*$i; i2=$i1+8; i3=$i1+16; i4=$i1+24
-          plaintext+="$(printf "%08X%08X%08X%08X" "$((0x${ciphertext:i1:8} ^ 0x${y:i1:8}))" "$((0x${ciphertext:i2:8} ^ 0x${y:i2:8}))" "$((0x${ciphertext:i3:8} ^ 0x${y:i3:8}))" "$((0x${ciphertext:i4:8} ^ 0x${y:i4:8}))")"
-     done
-     # If the length of the ciphertext is not an even multiple of 16 bytes, then handle the final incomplete block.
-     if [[ $mod_check -ne 0 ]]; then
-          i1=32*$n
-          for (( i=0; i < mod_check; i=i+2 )); do
-               plaintext+="$(printf "%02X" "$((0x${ciphertext:i1:2} ^ 0x${y:i1:2}))")"
-               i1+=2
-          done
-     fi
-     tm_out "$plaintext"
-     return 0
-}
-
-# See RFC 7539, Section 2.1
+# See RFC 8439, Section 2.1
 chacha20_Qround() {
      local -i a="0x$1"
      local -i b="0x$2"
@@ -11197,11 +11141,11 @@ chacha20_Qround() {
      y=$((y << 7))
      b=$((x | y))
 
-     tm_out "$(printf "%x" $a) $(printf "%x" $b) $(printf "%x" $c) $(printf "%x" $d)"
+     tm_out "$(printf "%X" $a) $(printf "%X" $b) $(printf "%X" $c) $(printf "%X" $d)"
      return 0
 }
 
-# See RFC 7539, Section 2.3.1
+# See RFC 8439, Section 2.3.1
 chacha20_inner_block() {
      local s0="$1" s1="$2" s2="$3" s3="$4"
      local s4="$5" s5="$6" s6="$7" s7="$8"
@@ -11230,7 +11174,7 @@ chacha20_inner_block() {
      return 0
 }
 
-# See RFC 7539, Sections 2.3 and 2.3.1
+# See RFC 8439, Sections 2.3 and 2.3.1
 chacha20_block() {
      local key="$1"
      local counter="$2"
@@ -11305,7 +11249,7 @@ chacha20_block() {
      return 0
 }
 
-# See RFC 7539, Section 2.4
+# See RFC 8439, Section 2.4
 chacha20() {
      local key="$1"
      local -i counter=1
@@ -11315,12 +11259,19 @@ chacha20() {
      local -i i1 i2 i3 i4 i5 i6 i7 i8 i9 i10 i11 i12 i13 i14 i15 i16
      local keystream plaintext=""
 
+     if "$HAS_CHACHA20"; then
+          plaintext="$(asciihex_to_binary "$ciphertext" | \
+                       $OPENSSL enc -chacha20 -K "$key" -iv "01000000$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+          tm_out "$(strip_spaces "$plaintext")"
+          return 0
+     fi
+
      ciphertext_len=${#ciphertext}
      num_blocks=$ciphertext_len/128
 
      for (( i=0; i < num_blocks; i++)); do
-          i1=128*$i; i2=$i1+8; i3=$i1+16; i4=$i1+24; i5=$i1+32; i6=$i1+40; i7=$i1+48; i8=$i1+56
-          i9=$i1+64; i10=$i1+72; i11=$i1+80; i12=$i1+88; i13=$i1+96; i14=$i1+104; i15=$i1+112; i16=$i1+120
+          i1=$((128*i)); i2=$((i1+8)); i3=$((i1+16)); i4=$((i1+24)); i5=$((i1+32)); i6=$((i1+40)); i7=$((i1+48)); i8=$((i1+56))
+          i9=$((i1+64)); i10=$((i1+72)); i11=$((i1+80)); i12=$((i1+88)); i13=$((i1+96)); i14=$((i1+104)); i15=$((i1+112)); i16=$((i1+120))
           keystream="$(chacha20_block "$key" "$(printf "%08X" $counter)" "$nonce")"
           plaintext+="$(printf "%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X%08X" \
                "$((0x${ciphertext:i1:8} ^ 0x${keystream:0:8}))" \
@@ -11345,7 +11296,7 @@ chacha20() {
      mod_check=$ciphertext_len%128
      if [[ $mod_check -ne 0 ]]; then
           keystream="$(chacha20_block "$key" "$(printf "%08X" $counter)" "$nonce")"
-          i1=128*$num_blocks
+          i1=$((128*num_blocks))
           for (( i=0; i < mod_check; i=i+2 )); do
                plaintext+="$(printf "%02X" "$((0x${ciphertext:i1:2} ^ 0x${keystream:i:2}))")"
                i1+=2
@@ -11355,17 +11306,737 @@ chacha20() {
      return 0
 }
 
+# Implement U8to32 from https://github.com/floodyberry/poly1305-donna/blob/master/poly1305-donna-32.h
+# Used to decode value encoded as 32-bit little-endian integer
+u8to32() {
+     local p="$1"
+     
+     tm_out "0x${p:6:2}${p:4:2}${p:2:2}${p:0:2}"
+     return 0
+}
+
+# Implement U32to8 from https://github.com/floodyberry/poly1305-donna/blob/master/poly1305-donna-32.h
+# Used to encode value as 32-bit little-endian integer
+u32to8() {
+     local -i v="$1"
+     local p
+
+     v=$((v & 0xffffffff))
+     p="$(printf "%08X" $v)"
+     tm_out "${p:6:2}${p:4:2}${p:2:2}${p:0:2}"
+     return 0
+}
+
+# Used to encode value as 64-bit little-endian integer
+u64to8() {
+     local -i v="$1"
+     local p
+
+     p="$(printf "%016X" $v)"
+     tm_out "${p:14:2}${p:12:2}${p:10:2}${p:8:2}${p:6:2}${p:4:2}${p:2:2}${p:0:2}"
+     return 0
+}
+
+
+# arg1: 32-byte key
+# arg2: message to be authenticated
+# See RFC 8439, Section 2.5
+# Implementation based on https://github.com/floodyberry/poly1305-donna
+poly1305_mac() {
+     local key="$1" nonce="$2" ciphertext="$3" aad="$4"
+     local mac_key msg
+     local -i ciphertext_len aad_len
+     local -i bytes
+     local -i r0 r1 r2 r3 r4
+     local -i h0=0 h1=0 h2=0 h3=0 h4=0
+     local -i pad0 pad1 pad2 pad3
+     local -i s1 s2 s3 s4
+     local -i d0 d1 d2 d3 d4
+     local -i g0 g1 g2 g3 g4
+     local -i i c f blocksize hibit
+
+     # poly1305_key_gen - RFC 8439, Section 2.6
+     # The MAC key is actually just the first 64 characters (32 bytes) of the
+     # output of the chacha20_block function. However, there is no need to
+     # truncate the key, since the code below will ignore all but the first
+     # 64 characters.
+     mac_key="$(chacha20_block "$key" "00000000" "$nonce")"
+
+     # Construct message to be authenticated. RFC 8439, Section 2.8
+     msg="$aad"
+     aad_len=$((${#aad}/2))
+     bytes=$(( aad_len % 16 ))
+     if [[ $bytes -ne 0 ]]; then
+          for (( i=bytes; i < 16; i++ )); do
+               msg+="00"
+          done
+     fi
+     msg+="$ciphertext"
+     ciphertext_len=$((${#ciphertext}/2))
+     bytes=$(( ciphertext_len % 16 ))
+     if [[ $bytes -ne 0 ]]; then
+          for (( i=bytes; i < 16; i++ )); do
+               msg+="00"
+          done
+     fi
+     msg+="$(u64to8 $aad_len)$(u64to8 $ciphertext_len)"
+     bytes="${#msg}"
+
+     # poly1305_init
+     r0=$(( $(u8to32 "${mac_key:0:8}") & 0x3ffffff ))
+     r1=$(( ($(u8to32 "${mac_key:6:8}") >> 2) & 0x3ffff03 ))
+     r2=$(( ($(u8to32 "${mac_key:12:8}") >> 4) & 0x3ffc0ff ))
+     r3=$(( ($(u8to32 "${mac_key:18:8}") >> 6) & 0x3f03fff ))
+     r4=$(( ($(u8to32 "${mac_key:24:8}") >> 8) & 0x00fffff ))
+
+     s1=$((r1*5))
+     s2=$((r2*5))
+     s3=$((r3*5))
+     s4=$((r4*5))
+     
+     pad0=$(u8to32 "${mac_key:32:8}")
+     pad1=$(u8to32 "${mac_key:40:8}")
+     pad2=$(u8to32 "${mac_key:48:8}")
+     pad3=$(u8to32 "${mac_key:56:8}")
+     
+     # poly1305_update
+     for (( 1 ; bytes > 0; bytes=bytes-blocksize )); do
+          if [[ $bytes -ge 32 ]]; then
+               blocksize=32
+               hibit=0x1000000
+          else
+               blocksize=$bytes
+               hibit=0
+               msg+="01"
+               for (( i=bytes+2; i < 32; i+=2 )); do
+                    msg+="00"
+               done
+          fi
+          h0+=$(( $(u8to32 "${msg:0:8}") & 0x3ffffff ))
+          h1+=$(( ($(u8to32 "${msg:6:8}") >> 2) & 0x3ffffff ))
+          h2+=$(( ($(u8to32 "${msg:12:8}") >> 4) & 0x3ffffff ))
+          h3+=$(( ($(u8to32 "${msg:18:8}") >> 6) & 0x3ffffff ))
+          h4+=$(( (($(u8to32 "${msg:24:8}") >> 8) & 0xffffff) | hibit ))
+
+          d0=$(( h0*r0 + h1*s4 + h2*s3 + h3*s2 + h4*s1 ))
+          d1=$(( h0*r1 + h1*r0 + h2*s4 + h3*s3 + h4*s2 ))
+          d2=$(( h0*r2 + h1*r1 + h2*r0 + h3*s4 + h4*s3 ))
+          d3=$(( h0*r3 + h1*r2 + h2*r1 + h3*r0 + h4*s4 ))
+          d4=$(( h0*r4 + h1*r3 + h2*r2 + h3*r1 + h4*r0 ))
+
+          c=$(( (d0 >> 26) & 0x3fffffffff )); h0=$(( d0 & 0x3ffffff ))
+          d1+=$c; c=$(( (d1 >> 26) & 0x3fffffffff )); h1=$(( d1 & 0x3ffffff ))
+          d2+=$c; c=$(( (d2 >> 26) & 0x3fffffffff )); h2=$(( d2 & 0x3ffffff ))
+          d3+=$c; c=$(( (d3 >> 26) & 0x3fffffffff )); h3=$(( d3 & 0x3ffffff ))
+          d4+=$c; c=$(( (d4 >> 26) & 0x3fffffffff )); h4=$(( d4 & 0x3ffffff ))
+          h0+=$((c*5)); c=$(( (h0 >> 26) & 0x3fffffffff )); h0=$(( h0 & 0x3ffffff ))
+          h1+=$c
+
+          msg="${msg:32}"
+     done
+
+     # poly1305_finish
+     c=$(( (h0 >> 26) & 0x3f )); h1=$(( h1 & 0x3ffffff ))
+     h2+=$c; c=$(( (h2 >> 26) & 0x3f )); h2=$(( h2 & 0x3ffffff ))
+     h3+=$c; c=$(( (h3 >> 26) & 0x3f )); h3=$(( h3 & 0x3ffffff ))
+     h4+=$c; c=$(( (h4 >> 26) & 0x3f )); h4=$(( h4 & 0x3ffffff ))
+     h0+=$((c*5)); c=$(( (h0 >> 26) & 0x3f )); h0=$(( h0 & 0x3ffffff ))
+     h1+=$c
+
+     g0=$((h0+5)); c=$(( (g0 >> 26) & 0x3f )); g0=$(( g0 & 0x3ffffff ))
+     g1=$((h1+c)); c=$(( (g1 >> 26) & 0x3f )); g1=$(( g1 & 0x3ffffff ))
+     g2=$((h2+c)); c=$(( (g2 >> 26) & 0x3f )); g2=$(( g2 & 0x3ffffff ))
+     g3=$((h3+c)); c=$(( (g3 >> 26) & 0x3f )); g3=$(( g3 & 0x3ffffff ))
+     g4=$((h4+c-0x4000000))
+
+     if [[ $((g4 & 0x8000000000000000)) -eq 0 ]]; then
+          h0=$g0; h1=$g1; h2=$g2; h3=$g3; h4=$g4
+     fi
+     h0=$(( ( h0 | (h1 << 26)) & 0xffffffff))
+     h1=$(( ((h1 >> 6) | (h2 << 20)) & 0xffffffff))
+     h2=$(( ((h2 >> 12) | (h3 << 14)) & 0xffffffff))
+     h3=$(( ((h3 >> 18) | (h4 <<  8)) & 0xffffffff))
+
+     f=$(( h0+pad0 )); h0=$f
+     f=$(( h1+pad1+(f>>32) )); h1=$f
+     f=$(( h2+pad2+(f>>32) )); h2=$f
+     f=$(( h3+pad3+(f>>32) )); h3=$f
+
+     tm_out "$(u32to8 $h0)$(u32to8 $h1)$(u32to8 $h2)$(u32to8 $h3)"
+     return 0
+}
+
+# arg1: key
+# arg2: nonce (must be 96 bits in length)
+# arg3: ciphertext
+# arg4: additional authenticated data
+# arg5: expected tag
+# arg6: true if authentication tag should be checked. false otherwise.
+chacha20_aead_decrypt() {
+     local key="$1" nonce="$2" ciphertext="$3" aad="$4" expected_tag="$(toupper "$5")"
+     local compute_tag="$6"
+     local plaintext computed_tag
+
+     plaintext="$(chacha20 "$key" "$nonce" "$ciphertext")"
+     [[ $? -ne 0 ]] && return 7
+
+     if "$compute_tag"; then
+          computed_tag="$(poly1305_mac "$key" "$nonce" "$ciphertext" "$aad")"
+          [[ $? -ne 0 ]] && return 7
+          [[ "$computed_tag" == $expected_tag ]] || return 7
+     fi
+
+     tm_out "$plaintext"
+     return 0
+}
+
+# arg1: key
+# arg2: nonce (must be 96 bits in length)
+# arg3: plaintext
+# arg4: additional authenticated data
+chacha20_aead_encrypt() {
+     local key="$1" nonce="$2" plaintext="$3" aad="$4"
+     local ciphertext computed_tag
+
+     ciphertext="$(chacha20 "$key" "$nonce" "$plaintext")"
+     [[ $? -ne 0 ]] && return 7
+
+     computed_tag="$(poly1305_mac "$key" "$nonce" "$ciphertext" "$aad")"
+     [[ $? -ne 0 ]] && return 7
+
+     tm_out "$ciphertext $computed_tag"
+     return 0
+}
+
+# arg1: nonce (must be 96 bits)
+# arg2: number of blocks needed for plaintext/ciphertext
+# Generate the sequence of counter blocks, which are to be encrypted and then
+# XORed with either the plaintext or the ciphertext.
+# See Section 6.1, Section 6.2, and Appendix A.3 of NIST SP 800-38C and
+# Section 5.3 of RFC 5116.
+generate-ccm-counter-blocks() {
+     local ctr="02${1}000000" ctr_msb ctr_lsb1
+     local -i i ctr_lsb n="$2"
+
+     ctr_msb="${ctr:0:24}"
+     ctr_lsb=0x${ctr:24:8}
+
+     for (( i=0; i <= n; i=i+1 )); do
+          ctr_lsb1="$(printf "%08X" "$ctr_lsb")"
+          printf "\x${ctr_msb:0:2}\x${ctr_msb:2:2}\x${ctr_msb:4:2}\x${ctr_msb:6:2}\x${ctr_msb:8:2}\x${ctr_msb:10:2}\x${ctr_msb:12:2}\x${ctr_msb:14:2}\x${ctr_msb:16:2}\x${ctr_msb:18:2}\x${ctr_msb:20:2}\x${ctr_msb:22:2}\x${ctr_lsb1:0:2}\x${ctr_lsb1:2:2}\x${ctr_lsb1:4:2}\x${ctr_lsb1:6:2}"
+          ctr_lsb+=1
+     done
+     return 0
+}
+
+# arg1: an OpenSSL ecb cipher (e.g., -aes-128-ecb)
+# arg2: key
+# arg3: iv (must be 96 bits in length)
+# arg4: additional authenticated data
+# arg5: plaintext
+# arg6: tag length (must be 16 or 32)
+# Compute the CCM authentication tag
+ccm-compute-tag() {
+     local cipher="$1" key="$2" iv="$3" aad="$4" plaintext="$5"
+     local -i tag_len="$6"
+     local b tag
+     local -i i aad_len plaintext_len final_block_len nr_blocks
+
+     aad_len=$((${#aad}/2))
+     plaintext_len=$((${#plaintext}/2))
+
+     # Apply the formatting function to create b=B0B1B2... as in
+     # Appendix A.2 of NIST SP 800-38C.
+
+     # The first block consists of the flags, nonce, and length of plaintext
+     # See Section 5.3 of RFC 5116 for value of q.
+     if [[ $aad_len -ne 0 ]]; then
+          if [[ $tag_len -eq 16 ]]; then
+               b="5A${iv}$(printf "%06X" $plaintext_len)"
+          else
+               b="7A${iv}$(printf "%06X" $plaintext_len)"
+          fi
+     elif [[ $tag_len -eq 16 ]]; then
+          b="1A${iv}$(printf "%06X" $plaintext_len)"
+     else
+          b="3A${iv}$(printf "%06X" $plaintext_len)"
+     fi
+
+     # Next comes any additional authenticated data
+     if [[ $aad_len -ne 0 ]]; then
+          if [[ $aad_len -lt 0xFF00 ]]; then
+               b+="$(printf "%04X" $aad_len)$aad"
+               final_block_len=$(( (aad_len+2) % 16 ))
+          elif [[ $aad_len -lt 0x100000000 ]]; then
+               b+="FFFE$(printf "%08X" $aad_len)$aad"
+               final_block_len=$(( (aad_len+6) % 16 ))
+          else
+               # AES-CCM supports lengths up to 2^64, but there doesn't
+               # seem to be any reason to try to support such lengths.
+               return 7
+          fi
+          # Add padding to complete block
+          if [[ $final_block_len -ne 0 ]]; then
+               for (( i=final_block_len; i < 16; i++ )); do
+                    b+="00"
+               done
+          fi
+     fi
+
+     # Finally add the plaintext and any padding needed to complete block
+     b+="$plaintext"
+     final_block_len=$((plaintext_len % 16))
+     if [[ $final_block_len -ne 0 ]]; then
+          for (( i=final_block_len; i < 16; i++ )); do
+               b+="00"
+          done
+     fi
+
+     # Compute the authentication tag as described in
+     # Sections 6.1 and 6.2 of NIST SP 800-38C.
+     nr_blocks=$((${#b}/32))
+     tag="${b:0:32}"
+     for (( i=0; i < nr_blocks; i++ )); do
+          # XOR current block with previous block and then encrypt
+          [[ $i -ne 0 ]] &&
+               tag="$(printf "%08X%08X%08X%08X" "$((0x${b:0:8} ^ 0x${tag:0:8}))" "$((0x${b:8:8} ^ 0x${tag:8:8}))" "$((0x${b:16:8} ^ 0x${tag:16:8}))" "$((0x${b:24:8} ^ 0x${tag:24:8}))")"
+
+          tag="$(printf "\x${tag:0:2}\x${tag:2:2}\x${tag:4:2}\x${tag:6:2}\x${tag:8:2}\x${tag:10:2}\x${tag:12:2}\x${tag:14:2}\x${tag:16:2}\x${tag:18:2}\x${tag:20:2}\x${tag:22:2}\x${tag:24:2}\x${tag:26:2}\x${tag:28:2}\x${tag:30:2}" | $OPENSSL enc "$cipher" -K "$key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+
+          b="${b:32}"
+     done
+
+     tm_out "${tag:0:tag_len}"
+     return 0
+}
+
+# arg1: AES-CCM TLS cipher
+# arg2: key
+# arg3: nonce (must be 96 bits in length)
+# arg4: ciphertext
+# arg5: additional authenticated data
+# arg6: expected tag (must be 16 or 32 characters)
+# arg7: true if authentication tag should be checked. false otherwise.
+# See Section 6.2 of NIST SP 800-38C
+ccm-decrypt() {
+     local cipher="$1" key="$2" nonce="$3" ciphertext="$4" aad="$5" enciphered_expected_tag="$6"
+     local compute_tag="$7"
+     local plaintext="" expected_tag computed_tag
+     local -i i i1 i2 i3 i4 tag_len
+     local -i ciphertext_len n mod_check
+     local s s0
+
+     [[ ${#nonce} -ne 24 ]] && return 7
+
+     case "$cipher" in
+          *AES_128*) cipher="-aes-128-ecb" ;;
+          *AES_256*) cipher="-aes-256-ecb" ;;
+          *) return 7
+     esac
+
+     ciphertext_len=${#ciphertext}
+     n=$((ciphertext_len/32))
+     mod_check=$((ciphertext_len%32))
+     [[ $mod_check -ne 0 ]] && n+=1
+
+     # generate keystream
+     s="$(generate-ccm-counter-blocks "$nonce" "$n" | $OPENSSL enc "$cipher" -K "$key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+
+     # The first 16-bytes of the keystream ($s) are used to decrypt the
+     # authentication tag and the remaining bytes are used to decrypt the
+     # ciphertext.
+     s0="${s:0:32}"
+     s="${s:32}"
+
+     # XOR the ciphertext with the keystream ($s). For efficiency, work in blocks
+     # of 16 bytes at a time (but with each XOR operation working on 32 bits.
+     [[ $mod_check -ne 0 ]] && n=$((n-1))
+     for (( i=0; i < n; i++ )); do
+          i1=$((32*i)); i2=$((i1+8)); i3=$((i1+16)); i4=$((i1+24))
+          plaintext+="$(printf "%08X%08X%08X%08X" "$((0x${ciphertext:i1:8} ^ 0x${s:i1:8}))" "$((0x${ciphertext:i2:8} ^ 0x${s:i2:8}))" "$((0x${ciphertext:i3:8} ^ 0x${s:i3:8}))" "$((0x${ciphertext:i4:8} ^ 0x${s:i4:8}))")"
+     done
+
+     # If the length of the ciphertext is not an even multiple of 16 bytes, then handle the final incomplete block.
+     if [[ $mod_check -ne 0 ]]; then
+          i1=$((32*n))
+          for (( i=0; i < mod_check; i=i+2 )); do
+               plaintext+="$(printf "%02X" "$((0x${ciphertext:i1:2} ^ 0x${s:i1:2}))")"
+               i1+=2
+          done
+     fi
+
+     if "$compute_tag"; then
+          tag_len=${#enciphered_expected_tag}
+
+          # Decrypt the authentication tag that was provided with the message
+          if [[ $tag_len -eq 16 ]]; then
+               expected_tag="$(printf "%08X%08X" "$((0x${enciphered_expected_tag:0:8} ^ 0x${s0:0:8}))" "$((0x${enciphered_expected_tag:8:8} ^ 0x${s0:8:8}))")"
+          elif [[ $tag_len -eq 32 ]]; then
+               expected_tag="$(printf "%08X%08X%08X%08X" "$((0x${enciphered_expected_tag:0:8} ^ 0x${s0:0:8}))" "$((0x${enciphered_expected_tag:8:8} ^ 0x${s0:8:8}))" "$((0x${enciphered_expected_tag:16:8} ^ 0x${s0:16:8}))" "$((0x${enciphered_expected_tag:24:8} ^ 0x${s0:24:8}))")"
+          else
+               return 7
+          fi
+
+          # obtain the actual authentication tag for the decrypted message
+          computed_tag="$(ccm-compute-tag "$cipher" "$key" "$nonce" "$aad" "$plaintext" "$tag_len")"
+          [[ $? -ne 0 ]] && return 7
+     fi
+
+     if ! "$compute_tag" || [[ "$computed_tag" == $expected_tag ]]; then
+          tm_out "$plaintext"
+          return 0
+     else
+          return 7
+     fi
+}
+
+# arg1: AES-CCM TLS cipher
+# arg2: key
+# arg3: nonce (must be 96 bits in length)
+# arg4: plaintext
+# arg5: additional authenticated data
+# See Section 6.1 of NIST SP 800-38C
+ccm-encrypt() {
+     local cipher="$1" key="$2" nonce="$3" plaintext="$4" aad="$5"
+     local -i tag_len
+     local ossl_cipher="-aes-128-ecb"
+     local ciphertext="" tag encrypted_tag
+     local -i i i1 i2 i3 i4
+     local -i plaintext_len n mod_check
+     local s s0
+
+     [[ ${#nonce} -ne 24 ]] && return 7
+
+     case "$cipher" in
+          TLS_AES_128_CCM_SHA256) tag_len=32 ;;
+          TLS_AES_128_CCM_8_SHA256) tag_len=16 ;;
+          *) return 7
+     esac
+
+     # compute the authentication tag
+     tag="$(ccm-compute-tag "$ossl_cipher" "$key" "$nonce" "$aad" "$plaintext" "$tag_len")"
+     [[ $? -ne 0 ]] && return 7
+
+     plaintext_len=${#plaintext}
+     n=$((plaintext_len/32))
+     mod_check=$((plaintext_len%32))
+     [[ $mod_check -ne 0 ]] && n+=1
+
+     # generate keystream
+     s="$(generate-ccm-counter-blocks "$nonce" "$n" | $OPENSSL enc "$ossl_cipher" -K "$key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+
+     # encrypt the authentication tag using the first 16 bytes of the keystrem ($s)
+     if [[ $tag_len -eq 16 ]]; then
+          encrypted_tag="$(printf "%08X%08X" "$((0x${tag:0:8} ^ 0x${s:0:8}))" "$((0x${tag:8:8} ^ 0x${s:8:8}))")"
+     elif [[ $tag_len -eq 32 ]]; then
+          encrypted_tag="$(printf "%08X%08X%08X%08X" "$((0x${tag:0:8} ^ 0x${s:0:8}))" "$((0x${tag:8:8} ^ 0x${s:8:8}))" "$((0x${tag:16:8} ^ 0x${s:16:8}))" "$((0x${tag:24:8} ^ 0x${s:24:8}))")"
+     else
+          return 7
+     fi
+
+     # XOR the plaintext with the keystream ($s). For efficiency, work in blocks
+     # of 16 bytes at a time (but with each XOR operation working on 32 bits.
+     s="${s:32}"
+     [[ $mod_check -ne 0 ]] && n=$((n-1))
+     for (( i=0; i < n; i++ )); do
+          i1=$((32*i)); i2=$((i1+8)); i3=$((i1+16)); i4=$((i1+24))
+          ciphertext+="$(printf "%08X%08X%08X%08X" "$((0x${plaintext:i1:8} ^ 0x${s:i1:8}))" "$((0x${plaintext:i2:8} ^ 0x${s:i2:8}))" "$((0x${plaintext:i3:8} ^ 0x${s:i3:8}))" "$((0x${plaintext:i4:8} ^ 0x${s:i4:8}))")"
+     done
+     # If the length of the plaintext is not an even multiple of 16 bytes, then handle the final incomplete block.
+     if [[ $mod_check -ne 0 ]]; then
+          i1=$((32*n))
+          for (( i=0; i < mod_check; i=i+2 )); do
+               ciphertext+="$(printf "%02X" "$((0x${plaintext:i1:2} ^ 0x${s:i1:2}))")"
+               i1+=2
+          done
+     fi
+     tm_out "$ciphertext$encrypted_tag"
+     return 0
+}
+
+# This function is based on gcm_mult in https://github.com/mko-x/SharedAES-GCM
+# args 1-16:  HL from gcm_ctx
+# args 17-32: HH from gcm_ctx
+# args 33-48: x - the input vector
+gcm_mult() {
+     local -a gcm_ctx_hl=( "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" "${11}" "${12}" "${13}" "${14}" "${15}" "${16}" )
+     local -a gcm_ctx_hh=( "${17}" "${18}" "${19}" "${20}" "${21}" "${22}" "${23}" "${24}" "${25}" "${26}" "${27}" "${28}" "${29}" "${30}" "${31}" "${32}" )
+     local -a x=( "${33}" "${34}" "${35}" "${36}" "${37}" "${38}" "${39}" "${40}" "${41}" "${42}" "${43}" "${44}" "${45}" "${46}" "${47}" "${48}" )
+     local output
+     local -i i lo hi rem zh zl
+     local -r -a -i last4=(0x0000 0x1c20 0x3840 0x2460 0x7080 0x6ca0 0x48c0 0x54e0 0xe100 0xfd20 0xd940 0xc560 0x9180 0x8da0 0xa9c0 0xb5e0)
+
+     lo=$((0x${x[15]} & 0x0F))
+     hi=$((0x${x[15]} >> 4))
+     zh=0x${gcm_ctx_hh[$lo]}
+     zl=0x${gcm_ctx_hl[$lo]}
+
+     for (( i=15; i >=0; i=i-1 )); do
+          lo=$((0x${x[i]} & 0x0F))
+          hi=$((0x${x[i]} >> 4))
+          if [[ $i -ne 15 ]]; then
+               rem=$((zl & 0x0F))
+               zl=$(((zl >> 4) & 0x0fffffffffffffff))
+               zl=$(((zh << 60) | zl))
+               zh=$(((zh >> 4) & 0x0fffffffffffffff))
+               zh=$((zh^(last4[rem] << 48)))
+               zh=$((zh^0x${gcm_ctx_hh[$lo]}))
+               zl=$((zl^0x${gcm_ctx_hl[$lo]}))
+          fi
+          rem=$((zl & 0x0F))
+          zl=$(((zl >> 4) & 0x0fffffffffffffff))
+          zl=$(((zh << 60) | zl))
+          zh=$(((zh >> 4) & 0x0fffffffffffffff))
+          zh=$((zh^(last4[rem] << 48)))
+          zh=$((zh^0x${gcm_ctx_hh[$hi]}))
+          zl=$((zl^0x${gcm_ctx_hl[$hi]}))
+     done
+     output="$(printf "%016X" $zh)$(printf "%016X" $zl)"
+     tm_out "${output:0:2} ${output:2:2} ${output:4:2} ${output:6:2} ${output:8:2} ${output:10:2} ${output:12:2} ${output:14:2} ${output:16:2} ${output:18:2} ${output:20:2} ${output:22:2} ${output:24:2} ${output:26:2} ${output:28:2} ${output:30:2}"
+     return 0
+}
+
+# arg1: a hexadecimal string that is at least 8 bytes in length
+# See Section 6.2 of NIST SP 800-38D
+inc32() {
+     local -i i len
+     local x="$1"
+     local msb
+     local -i lsb
+
+     len=${#x}
+     [[ $len -lt 8 ]] && return 7
+     i=$len-8
+     msb="${x:0:i}"
+     lsb="0x${x:i:8}"
+     if [[ "$lsb" -eq "0xffffffff" ]]; then
+         lsb=0
+     else
+         lsb+=1
+     fi
+     tm_out "${msb}$(printf "%08X" "$lsb")"
+     return 0
+}
+
+# arg1: an OpenSSL ecb cipher (e.g., -aes-128-ecb)
+# arg2: key
+# arg3: nonce (must be 96 bits in length)
+# arg4: ciphertext
+# arg5: aad
+# arg6: mode
+# arg7: true if authentication tag should be computed. false otherwise.
+# This function is based on gcm_setkey, gcm_start, gcm_update, and gcm_finish
+# in https://github.com/mko-x/SharedAES-GCM
+gcm() {
+     local cipher="$1" aes_key="$2" y="${3}00000001" input="$4" aad="$5" mode="$6"
+     local compute_tag="$7"
+     local -a -i gcm_ctx_hl=(0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
+     local -a -i gcm_ctx_hh=(0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
+     local -a -i tag
+     local -a gcm_ctx_buf=("00" "00" "00" "00" "00" "00" "00" "00" "00" "00" "00" "00" "00" "00" "00" "00" )
+     local -i i j hi lo vl vh t length
+     local h hl="" hh="" buf ectr base_ectr tmp
+     local -i input_len="$((${#input}/2))" aad_len="$((${#aad}/2))" use_len
+
+     if "$compute_tag"; then
+          # gcm_setkey - populate HL and HH from gcm_ctx
+          h+=$(printf "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"| \
+               $OPENSSL enc "$cipher" -K "$aes_key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')
+          hi=0x${h:0:8}
+          lo=0x${h:8:8}
+          vh=$(((hi << 32) | lo))
+
+          hi=0x${h:16:8}
+          lo=0x${h:24:8}
+          vl=$(((hi << 32) | lo))
+
+          gcm_ctx_hl[8]=$vl
+          gcm_ctx_hh[8]=$vh
+          gcm_ctx_hh[0]=0
+          gcm_ctx_hl[0]=0
+
+          for (( i=4; i > 0; i=i>>1 )); do
+               t=$(((vl & 1) * 0xe1000000))
+               vl=$(((vl >> 1) & 0x7fffffffffffffff))
+               vl=$(((vh << 63) | vl))
+               vh=$(((vh >> 1) & 0x7fffffffffffffff))
+               vh=$((vh ^ (t << 32)))
+               gcm_ctx_hl[i]=$vl
+               gcm_ctx_hh[i]=$vh
+          done
+
+          for (( i=2; i < 16; i=i<<1 )); do
+               vh=${gcm_ctx_hh[i]}
+               vl=${gcm_ctx_hl[i]}
+               for (( j=1; j < i; j++ )); do
+                    gcm_ctx_hh[$((i+j))]=$((vh ^ gcm_ctx_hh[j]))
+                    gcm_ctx_hl[$((i+j))]=$((vl ^ gcm_ctx_hl[j]))
+               done
+          done
+
+          # place HL and HH in strings so that can be passed to gcm_mult
+          for (( i=0; i < 16; i++ )); do
+               hl+="$(printf "%016X" ${gcm_ctx_hl[i]}) "
+               hh+="$(printf "%016X" ${gcm_ctx_hh[i]}) "
+          done
+
+          # gcm_start
+          # compute the encrypted counter for later use in computing the authentication tag
+          base_ectr="$(printf "\x${y:0:2}\x${y:2:2}\x${y:4:2}\x${y:6:2}\x${y:8:2}\x${y:10:2}\x${y:12:2}\x${y:14:2}\x${y:16:2}\x${y:18:2}\x${y:20:2}\x${y:22:2}\x${y:24:2}\x${y:26:2}\x${y:28:2}\x${y:30:2}" | $OPENSSL enc "$cipher" -K "$aes_key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+
+          # Feed any additional authenticated data into the computation for the authentication tag.
+          for (( i=0; i < aad_len; i+=use_len )); do
+               [[ $((aad_len-i)) -lt 16 ]] && use_len=$((aad_len-i)) || use_len=16
+               for (( j=0; j < use_len; j++ )); do
+                    gcm_ctx_buf[j]="$(printf "%02X" $((0x${gcm_ctx_buf[j]} ^ 0x${aad:$((2*i+2*j)):2})))"
+               done
+
+               buf="$(gcm_mult $hl $hh ${gcm_ctx_buf[0]} ${gcm_ctx_buf[1]} ${gcm_ctx_buf[2]} ${gcm_ctx_buf[3]} ${gcm_ctx_buf[4]} ${gcm_ctx_buf[5]} ${gcm_ctx_buf[6]} ${gcm_ctx_buf[7]} ${gcm_ctx_buf[8]} ${gcm_ctx_buf[9]} ${gcm_ctx_buf[10]} ${gcm_ctx_buf[11]} ${gcm_ctx_buf[12]} ${gcm_ctx_buf[13]} ${gcm_ctx_buf[14]} ${gcm_ctx_buf[15]})"
+               read -r gcm_ctx_buf[0] gcm_ctx_buf[1] gcm_ctx_buf[2] gcm_ctx_buf[3] gcm_ctx_buf[4] gcm_ctx_buf[5] gcm_ctx_buf[6] gcm_ctx_buf[7] gcm_ctx_buf[8] gcm_ctx_buf[9] gcm_ctx_buf[10] gcm_ctx_buf[11] gcm_ctx_buf[12] gcm_ctx_buf[13] gcm_ctx_buf[14] gcm_ctx_buf[15] <<< "$buf"
+          done
+     fi
+
+     # gcm_update
+     # Encrypt or decrypt the input and feed the ciphertext into the computation for the authentication tag.
+     for (( length=input_len; length > 0; length=length-use_len )); do
+          [[ $length -lt 16 ]] && use_len=$length || use_len=16
+
+          y="$(inc32 "$y")"
+          ectr="$(printf "\x${y:0:2}\x${y:2:2}\x${y:4:2}\x${y:6:2}\x${y:8:2}\x${y:10:2}\x${y:12:2}\x${y:14:2}\x${y:16:2}\x${y:18:2}\x${y:20:2}\x${y:22:2}\x${y:24:2}\x${y:26:2}\x${y:28:2}\x${y:30:2}" | $OPENSSL enc "$cipher" -K "$aes_key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+
+          for (( i=0; i < use_len; i++ )); do
+               tmp="$(printf "%02X" $((0x${ectr:$((2*i)):2} ^ 0x${input:$((2*i)):2})))"
+               output+="$tmp"
+               if "$compute_tag"; then
+                    if [[ $mode == encrypt ]]; then
+                         gcm_ctx_buf[i]="$(printf "%02X" $((0x${gcm_ctx_buf[i]} ^ 0x$tmp)))"
+                    else
+                         gcm_ctx_buf[i]="$(printf "%02X" $((0x${gcm_ctx_buf[i]} ^ 0x${input:$((2*i)):2})))"
+                    fi
+               fi
+          done
+
+          if "$compute_tag"; then
+               tmp="$(gcm_mult $hl $hh ${gcm_ctx_buf[0]} ${gcm_ctx_buf[1]} ${gcm_ctx_buf[2]} ${gcm_ctx_buf[3]} ${gcm_ctx_buf[4]} ${gcm_ctx_buf[5]} ${gcm_ctx_buf[6]} ${gcm_ctx_buf[7]} ${gcm_ctx_buf[8]} ${gcm_ctx_buf[9]} ${gcm_ctx_buf[10]} ${gcm_ctx_buf[11]} ${gcm_ctx_buf[12]} ${gcm_ctx_buf[13]} ${gcm_ctx_buf[14]} ${gcm_ctx_buf[15]})"
+               read -r gcm_ctx_buf[0] gcm_ctx_buf[1] gcm_ctx_buf[2] gcm_ctx_buf[3] gcm_ctx_buf[4] gcm_ctx_buf[5] gcm_ctx_buf[6] gcm_ctx_buf[7] gcm_ctx_buf[8] gcm_ctx_buf[9] gcm_ctx_buf[10] gcm_ctx_buf[11] gcm_ctx_buf[12] gcm_ctx_buf[13] gcm_ctx_buf[14] gcm_ctx_buf[15] <<< "$tmp"
+          fi
+
+          input="${input:$((2*use_len))}"
+     done
+
+     if "$compute_tag"; then
+          # gcm_finish - feed the lengths of the ciphertext and additional authenticated data
+          # into the computation for the authentication tag.
+          input_len=$((8*input_len))
+          aad_len=$((8*aad_len))
+          output+=" "
+          for (( i=0; i < 16; i++ )); do
+               tag[i]=0x${base_ectr:$((2*i)):2}
+          done
+
+          if ( [[ $input_len -ne 0 ]] || [[ $aad_len -ne 0 ]] ); then
+               buf="$(printf "%016X" $aad_len)$(printf "%016X" $input_len)"
+               for (( i=0; i < 16; i++ )); do
+                    gcm_ctx_buf[i]="$(printf "%02X" $((0x${gcm_ctx_buf[i]} ^ 0x${buf:$((2*i)):2})))"
+               done
+
+               buf="$(gcm_mult $hl $hh ${gcm_ctx_buf[0]} ${gcm_ctx_buf[1]} ${gcm_ctx_buf[2]} ${gcm_ctx_buf[3]} ${gcm_ctx_buf[4]} ${gcm_ctx_buf[5]} ${gcm_ctx_buf[6]} ${gcm_ctx_buf[7]} ${gcm_ctx_buf[8]} ${gcm_ctx_buf[9]} ${gcm_ctx_buf[10]} ${gcm_ctx_buf[11]} ${gcm_ctx_buf[12]} ${gcm_ctx_buf[13]} ${gcm_ctx_buf[14]} ${gcm_ctx_buf[15]})"
+               read -r gcm_ctx_buf[0] gcm_ctx_buf[1] gcm_ctx_buf[2] gcm_ctx_buf[3] gcm_ctx_buf[4] gcm_ctx_buf[5] gcm_ctx_buf[6] gcm_ctx_buf[7] gcm_ctx_buf[8] gcm_ctx_buf[9] gcm_ctx_buf[10] gcm_ctx_buf[11] gcm_ctx_buf[12] gcm_ctx_buf[13] gcm_ctx_buf[14] gcm_ctx_buf[15] <<< "$buf"
+               for (( i=0; i < 16; i++ )); do
+                    tag[i]=$((tag[i] ^ 0x${gcm_ctx_buf[i]}))
+               done
+          fi
+          for (( i=0; i < 16; i++ )); do
+               output+="$(printf "%02X" ${tag[i]})"
+          done
+     fi
+     tm_out "$output"
+     return 0
+}
+
+# arg1: AES-GCM TLS cipher
+# arg2: key
+# arg3: nonce (must be 96 bits in length)
+# arg4: ciphertext
+# arg5: aad
+# arg6: expected tag
+# arg7: true if authentication tag should be checked. false otherwise.
+gcm-decrypt() {
+     local cipher="$1" key="$2" nonce="$3" ciphertext="$4" aad="$5" expected_tag="$(toupper "$6")"
+     local compute_tag="$7"
+     local plaintext computed_tag tmp
+
+     [[ ${#nonce} -ne 24 ]] && return 7
+
+     if [[ "$cipher" == TLS_AES_128_GCM_SHA256 ]] && "$HAS_AES128_GCM" && ! "$compute_tag"; then
+          plaintext="$(asciihex_to_binary "$ciphertext" | \
+                       $OPENSSL enc -aes-128-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+          tm_out "$(strip_spaces "$plaintext")"
+          return 0
+     elif [[ "$cipher" == TLS_AES_256_GCM_SHA384 ]] && "$HAS_AES256_GCM" && ! "$compute_tag"; then
+          plaintext="$(asciihex_to_binary "$ciphertext" | \
+                       $OPENSSL enc -aes-256-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+          tm_out "$(strip_spaces "$plaintext")"
+          return 0
+     fi
+
+     case "$cipher" in
+          *AES_128*) cipher="-aes-128-ecb" ;;
+          *AES_256*) cipher="-aes-256-ecb" ;;
+          *) return 7
+     esac
+
+     tmp="$(gcm "$cipher" "$key" "$nonce" "$ciphertext" "$aad" "decrypt" "$compute_tag")"
+     [[ $? -ne 0 ]] && return 7
+     computed_tag="${tmp##* }"
+     plaintext="${tmp% $computed_tag}"
+
+     if ! "$compute_tag" || [[ "$computed_tag" == $expected_tag ]]; then
+          tm_out "$plaintext"
+          return 0
+     else
+          return 7
+     fi
+}
+
+# arg1: AES-GCM TLS cipher
+# arg2: key
+# arg3: nonce (must be 96 bits in length)
+# arg4: plaintext
+# arg5: aad
+# See Section 7.2 of SP 800-38D
+gcm-encrypt() {
+     local cipher
+
+     case "$1" in
+          *AES_128*) cipher="-aes-128-ecb" ;;
+          *AES_256*) cipher="-aes-256-ecb" ;;
+          *) return 7
+     esac
+     [[ ${#3} -ne 24 ]] && return 7
+
+     tm_out "$(gcm "$cipher" "$2" "$3" "$4" "$5" "encrypt" true)"
+     return $?
+}
+
 # arg1: TLS cipher
 # arg2: key
 # arg3: nonce (must be 96 bits in length)
 # arg4: ciphertext
+# arg5: additional authenticated data
 sym-decrypt() {
      local cipher="$1"
      local key="$2" nonce="$3"
      local ciphertext="$4"
-     local ossl_cipher
+     local additional_data="$5"
      local plaintext
      local -i ciphertext_len tag_len
+     local compute_tag=false
+
+     # In general there is no need to verify that the authentication tag is correct
+     # when decrypting, and performing the check is time consuming when the
+     # computations are performed in Bash.
+     [[ $DEBUG -ge 1 ]] && compute_tag=true
 
      case "$cipher" in
           *CCM_8*)
@@ -11379,41 +12050,43 @@ sym-decrypt() {
      # The final $tag_len characters of the ciphertext are the authentication tag
      ciphertext_len=${#ciphertext}
      [[ $ciphertext_len -lt $tag_len ]] && return 7
-     ciphertext_len=$ciphertext_len-$tag_len
+     ciphertext_len=$((ciphertext_len-tag_len))
 
      if [[ "$cipher" =~ CHACHA20_POLY1305 ]]; then
-          if "$HAS_CHACHA20"; then
-               plaintext="$(asciihex_to_binary "${ciphertext:0:ciphertext_len}" | \
-                            $OPENSSL enc -chacha20 -K "$key" -iv "01000000$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
-               plaintext="$(strip_spaces "$plaintext")"
-          else
-               plaintext="$(chacha20 "$key" "$nonce" "${ciphertext:0:ciphertext_len}")"
-          fi
-     elif [[ "$cipher" == TLS_AES_128_GCM_SHA256 ]] && "$HAS_AES128_GCM"; then
-          plaintext="$(asciihex_to_binary "${ciphertext:0:ciphertext_len}" | \
-                       $OPENSSL enc -aes-128-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
-          plaintext="$(strip_spaces "$plaintext")"
-     elif [[ "$cipher" == TLS_AES_256_GCM_SHA384 ]] && "$HAS_AES256_GCM"; then
-          plaintext="$(asciihex_to_binary "${ciphertext:0:ciphertext_len}" | \
-                       $OPENSSL enc -aes-256-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
-          plaintext="$(strip_spaces "$plaintext")"
-     else
-          if [[ "$cipher" =~ AES_128 ]]; then
-               ossl_cipher="-aes-128-ecb"
-          elif [[ "$cipher" =~ AES_256 ]]; then
-               ossl_cipher="-aes-256-ecb"
-          else
-               return 7
-          fi
-          if [[ "$cipher" =~ CCM ]]; then
-               plaintext="$(ccm-gcm-decrypt "$ossl_cipher" "$key" "02${nonce}000001" "${ciphertext:0:ciphertext_len}")"
-          else # GCM
-               plaintext="$(ccm-gcm-decrypt "$ossl_cipher" "$key" "${nonce}00000002" "${ciphertext:0:ciphertext_len}")"
-          fi
+          plaintext="$(chacha20_aead_decrypt "$key" "$nonce" "${ciphertext:0:ciphertext_len}" "$additional_data" "${ciphertext:ciphertext_len:tag_len}" "$compute_tag")"
+     elif [[ "$cipher" =~ CCM ]]; then
+          plaintext=$(ccm-decrypt "$cipher" "$key" "$nonce" "${ciphertext:0:ciphertext_len}" "$additional_data" "${ciphertext:ciphertext_len:tag_len}" "$compute_tag")
+     else # GCM
+          plaintext=$(gcm-decrypt "$cipher" "$key" "$nonce" "${ciphertext:0:ciphertext_len}" "$additional_data" "${ciphertext:ciphertext_len:tag_len}" "$compute_tag")
      fi
      [[ $? -ne 0 ]] && return 7
 
      tm_out "$plaintext"
+     return 0
+}
+
+# arg1: TLS cipher
+# arg2: key
+# arg3: nonce (must be 96 bits in length)
+# arg4: plaintext
+# arg5: additional authenticated data
+sym-encrypt() {
+     local cipher="$1" key="$2" nonce="$3" plaintext="$4" additional_data="$5"
+     local ciphertext=""
+
+
+     if [[ "$cipher" =~ CCM ]]; then
+          ciphertext=$(ccm-encrypt "$cipher" "$key" "$nonce" "$plaintext" "$additional_data")
+     elif [[ "$cipher" =~ GCM ]]; then
+          ciphertext=$(gcm-encrypt "$cipher" "$key" "$nonce" "$plaintext" "$additional_data")
+     elif [[ "$cipher" =~ CHACHA20_POLY1305 ]]; then
+          ciphertext="$(chacha20_aead_encrypt "$key" "$nonce" "$plaintext" "$additional_data")"
+     else
+          return 7
+     fi
+     [[ $? -ne 0 ]] && return 7
+
+     tm_out "$(strip_spaces "$ciphertext")"
      return 0
 }
 
@@ -11460,7 +12133,8 @@ check_tls_serverhellodone() {
      local tls_err_level
      local key iv
      local -i seq_num=0 plaintext_len
-     local plaintext decrypted_response=""
+     local plaintext decrypted_response="" additional_data
+     local include_headers=true
 
      DETECTED_TLS_VERSION=""
 
@@ -11483,6 +12157,7 @@ check_tls_serverhellodone() {
           [[ -z "$DETECTED_TLS_VERSION" ]] && DETECTED_TLS_VERSION="$tls_protocol"
           [[ "${tls_protocol:0:2}" != 03 ]] && return 2
           i=$i+4
+          additional_data="$tls_content_type$tls_protocol${tls_hello_ascii:i:4}"
           msg_len=2*$(hex2dec "${tls_hello_ascii:i:4}")
           i=$i+4
           remaining=$tls_hello_ascii_len-$i
@@ -11525,7 +12200,10 @@ check_tls_serverhellodone() {
                          fi
                     fi
                     # A version of {0x7F, xx} represents an implementation of a draft version of TLS 1.3
-                    [[ "${DETECTED_TLS_VERSION:0:2}" == 7F ]] && DETECTED_TLS_VERSION=0304
+                    if [[ "${DETECTED_TLS_VERSION:0:2}" == 7F ]]; then
+                         [[ 0x${DETECTED_TLS_VERSION:2:2} -lt 25 ]] && include_headers=false
+                         DETECTED_TLS_VERSION=0304
+                    fi
                     if [[ 0x$DETECTED_TLS_VERSION -ge 0x0304 ]] && [[ "$process_full" == ephemeralkey ]]; then
                          tls_serverhello_ascii_len=2*$(hex2dec "${tls_handshake_ascii:2:6}")
                          if [[ $tls_handshake_ascii_len -ge $tls_serverhello_ascii_len+8 ]]; then
@@ -11538,9 +12216,11 @@ check_tls_serverhellodone() {
                tls_alert_ascii+="${tls_hello_ascii:i:msg_len}"
                decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $((msg_len/2)))${tls_hello_ascii:i:msg_len}"
           elif [[ "$tls_content_type" == 17 ]] && [[ -n "$key_and_iv" ]]; then # encrypted data
+               # The header information was added to additional data in TLSv1.3 draft 25.
+               "$include_headers" || additional_data=""
                nonce="$(get-nonce "$iv" "$seq_num")"
                [[ $? -ne 0 ]] && return 2
-               plaintext="$(sym-decrypt "$cipher" "$key" "$nonce" "${tls_hello_ascii:i:msg_len}")"
+               plaintext="$(sym-decrypt "$cipher" "$key" "$nonce" "${tls_hello_ascii:i:msg_len}" "$additional_data")"
                [[ $? -ne 0 ]] && return 2
                seq_num+=1
 
