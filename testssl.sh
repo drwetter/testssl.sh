@@ -51,6 +51,8 @@
 # cool and unique -- they are -- but probably you can achieve e.g. the same result with my favorite
 # interactive shell: zsh (zmodload zsh/net/socket -- checkout zsh/net/tcp) too! Oh, and btw.
 # ksh93 has socket support too.
+# Also bash is quite powerful if you use it appropriately: It can operate on patterns, process lines
+# and deal perfectly with regular expressions -- without external binaries.
 # /bin/bash though is way more often used within Linux and it's perfect for cross platform support.
 # MacOS X has it and also under Windows the MSYS2 extension or Cygwin as well as Bash on Windows (WSL)
 # has /bin/bash.
@@ -135,62 +137,17 @@ declare -r PROG_NAME="$(basename "$0")"
 declare -r RUN_DIR="$(dirname "$0")"
 declare -r SYSTEM="$(uname -s)"
 declare -r SYSTEMREV="$(uname -r)"
-SYSTEM2=""                                        # currently only being used for WSL = bash on windows
-TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # If you run testssl.sh and it doesn't find it necessary file automagically set TESTSSL_INSTALL_DIR
-CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # You can have your stores some place else
-ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES:-""}"  # single file with a CA in PEM format or comma separated lists of them
-CIPHERS_BY_STRENGTH_FILE=""
-TLS_DATA_FILE=""                                  # mandatory file for socket-based handshakes
-OPENSSL_LOCATION=""
 HNAME="$(hostname)"
 HNAME="${HNAME%%.*}"
-
 declare CMDLINE
 CMDLINE_PARSED=""                                 # This makes sure we don't let early fatal() write into files when files aren't created yet
 declare -r -a CMDLINE_ARRAY=("$@")                # When performing mass testing, the child processes need to be sent the
 declare -a MASS_TESTING_CMDLINE                   # command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
 
 
-########### Some predefinitions: date, sed (we always use test and NOT try to determine
-#   capabilities by querying the OS)
-#
-HAS_GNUDATE=false
-HAS_FREEBSDDATE=false
-HAS_OPENBSDDATE=false
-if date -d @735275209 >/dev/null 2>&1; then
-     if date -r @735275209  >/dev/null 2>&1; then
-          # It can't do any conversion from a plain date output.
-          HAS_OPENBSDDATE=true
-     else
-          HAS_GNUDATE=true
-     fi
-fi
-# FreeBSD and OS X date(1) accept "-f inputformat", so do newer OpenBSD versions >~ 6.6.
-date -j -f '%s' 1234567 >/dev/null 2>&1 && \
-     HAS_FREEBSDDATE=true
-
-echo A | sed -E 's/A//' >/dev/null 2>&1 && \
-     declare -r HAS_SED_E=true || \
-     declare -r HAS_SED_E=false
-
-########### Terminal defintions
-tty -s && \
-     declare -r INTERACTIVE=true || \
-     declare -r INTERACTIVE=false
-
-if [[ -z $TERM_WIDTH ]]; then                               # no batch file and no otherwise predefined TERM_WIDTH
-     if ! tput cols &>/dev/null || ! "$INTERACTIVE";then    # Prevent tput errors if running non interactive
-          export TERM_WIDTH=${COLUMNS:-80}
-     else
-          export TERM_WIDTH=${COLUMNS:-$(tput cols)}        # for custom line wrapping and dashes
-     fi
-fi
-TERM_CURRPOS=0                                              # custom line wrapping needs alter the current horizontal cursor pos
-
-
 ########### Defining (and presetting) variables which can be changed
 #
-# Following variables make use of $ENV and can be used like "OPENSSL=<myprivate_path_to_openssl> ./testssl.sh <URI>"
+# Following variables make use of $ENV and can also be used like "<VAR>=<value> ./testssl.sh <URI>"
 declare -x OPENSSL
 OPENSSL_TIMEOUT=${OPENSSL_TIMEOUT:-""}  # Default connect timeout with openssl before we call the server side unreachable
 CONNECT_TIMEOUT=${CONNECT_TIMEOUT:-""}  # Default connect timeout with sockets before we call the server side unreachable
@@ -227,9 +184,12 @@ APPEND=${APPEND:-false}                 # append to csv/json file instead of ove
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
 OFFENSIVE=${OFFENSIVE:-true}            # do you want to include offensive vulnerability tests which may cause blocking by an IDS?
+ADDTL_CA_FILES="${ADDTL_CA_FILES:-""}"  # single file with a CA in PEM format or comma separated lists of them
 
 ########### Tuning vars which cannot be set by a cmd line switch. Use instead e.g "HEADER_MAXSLEEP=10 ./testssl.sh <your_args_here>"
 #
+TESTSSL_INSTALL_DIR="${TESTSSL_INSTALL_DIR:-""}"  # If you run testssl.sh and it doesn't find it necessary file automagically set TESTSSL_INSTALL_DIR
+CA_BUNDLES_PATH="${CA_BUNDLES_PATH:-""}"          # You can have your CA stores some place else
 EXPERIMENTAL=${EXPERIMENTAL:-false}     # a development hook which allows us to disable code
 PROXY_WAIT=${PROXY_WAIT:-20}            # waiting at max 20 seconds for socket reply through proxy
 DNS_VIA_PROXY=${DNS_VIA_PROXY:-true}    # do DNS lookups via proxy. --ip=proxy reverses this
@@ -273,7 +233,11 @@ declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Fi
 
 ########### Initialization part, further global vars just being declared here
 #
+SYSTEM2=""                              # currently only being used for WSL = bash on windows
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
+CIPHERS_BY_STRENGTH_FILE=""
+TLS_DATA_FILE=""                        # mandatory file for socket-based handshakes
+OPENSSL_LOCATION=""
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
 JSONHEADER=true                         # include JSON headers and footers in HTML file, if one is being created
@@ -437,6 +401,44 @@ declare TLS_CIPHER_ENC=()
 declare TLS_CIPHER_EXPORT=()
 declare TLS_CIPHER_OSSL_SUPPORTED=()
 declare TLS13_OSSL_CIPHERS="TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_CCM_SHA256:TLS_AES_128_CCM_8_SHA256"
+
+
+########### Some predefinitions: date, sed (we always use tests for binaries and NOT try to determine
+#   capabilities by querying the OS)
+#
+HAS_GNUDATE=false
+HAS_FREEBSDDATE=false
+HAS_OPENBSDDATE=false
+if date -d @735275209 >/dev/null 2>&1; then
+     if date -r @735275209  >/dev/null 2>&1; then
+          # It can't do any conversion from a plain date output.
+          HAS_OPENBSDDATE=true
+     else
+          HAS_GNUDATE=true
+     fi
+fi
+# FreeBSD and OS X date(1) accept "-f inputformat", so do newer OpenBSD versions >~ 6.6.
+date -j -f '%s' 1234567 >/dev/null 2>&1 && \
+     HAS_FREEBSDDATE=true
+
+echo A | sed -E 's/A//' >/dev/null 2>&1 && \
+     declare -r HAS_SED_E=true || \
+     declare -r HAS_SED_E=false
+
+########### Terminal defintions
+tty -s && \
+     declare -r INTERACTIVE=true || \
+     declare -r INTERACTIVE=false
+
+if [[ -z $TERM_WIDTH ]]; then                               # No batch file and no otherwise predefined TERM_WIDTH
+     if ! tput cols &>/dev/null || ! "$INTERACTIVE";then    # Prevent tput errors if running non interactive
+          export TERM_WIDTH=${COLUMNS:-80}
+     else
+          export TERM_WIDTH=${COLUMNS:-$(tput cols)}        # For custom line wrapping and dashes
+     fi
+fi
+TERM_CURRPOS=0                                              # Custom line wrapping needs alter the current horizontal cursor pos
+
 
 ########### Severity functions and globals
 #
@@ -725,6 +727,94 @@ set_color_functions() {
      # FreeBSD 10 understands ESC codes like 'echo -e "\e[3mfoobar\e[23m"', but also no tput for italics
 }
 
+###### START universal helper function definitions ######
+
+if [[ "${BASH_VERSINFO[0]}" == 3 ]]; then
+     # older bash can do this only (MacOS X), even SLES 11, see #697
+     toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
+     tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
+else
+     toupper() { echo -n "${1^^}"; }
+     tolower() { echo -n "${1,,}"; }
+fi
+
+get_last_char() {
+     echo "${1:~0}"      # "${string: -1}" would work too (both also in bash 3.2)
+}
+                         # Checking for last char. If already a separator supplied, we don't need an additional one
+debugme() {
+     [[ "$DEBUG" -ge 2 ]] && "$@"
+     return 0
+}
+
+hex2dec() {
+     echo $((16#$1))
+}
+
+# convert 414243 into ABC
+hex2ascii() {
+          for (( i=0; i<${#1}; i+=2 )); do
+               # 2>/dev/null added because 'warning: command substitution: ignored null byte in input'
+               # --> didn't help though
+               printf "\x${1:$i:2}" 2>/dev/null
+          done
+}
+
+# convert decimal number < 256 to hex
+dec02hex() {
+     printf "x%02x" "$1"
+}
+
+# convert decimal number between 256 and < 256*256 to hex
+dec04hex() {
+     local a=$(printf "%04x" "$1")
+     printf "x%02s, x%02s" "${a:0:2}" "${a:2:2}"
+}
+
+
+# trim spaces for BSD and old sed
+count_lines() {
+     echo $(wc -l <<< "$1")
+}
+
+count_words() {
+     echo $(wc -w <<< "$1")
+}
+
+count_ciphers() {
+     echo $(wc -w <<< "${1//:/ }")
+}
+
+newline_to_spaces() {
+     tr '\n' ' ' <<< "$1" | sed 's/ $//'
+}
+
+colon_to_spaces() {
+     echo "${1//:/ }"
+}
+
+strip_lf() {
+     tr -d '\n' <<< "$1" | tr -d '\r'
+}
+
+strip_spaces() {
+     echo "${1// /}"
+}
+
+# https://web.archive.org/web/20121022051228/http://codesnippets.joyent.com/posts/show/1816
+strip_leading_space() {
+     printf "%s" "${1#"${1%%[![:space:]]*}"}"
+}
+strip_trailing_space() {
+     printf "%s" "${1%"${1##*[![:space:]]}"}"
+}
+
+is_number() {
+     [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
+          return 0 || \
+          return 1
+}
+
 strip_quote() {
      # remove color codes (see http://www.commandlinefu.com/commands/view/3584/remove-color-codes-special-characters-with-sed)
      #  \', leading and all trailing spaces
@@ -736,7 +826,171 @@ strip_quote() {
 
 # " deconfuse vim\'s syntax highlighting ;-)
 
-#################### JSON FILE FORMATTING ####################
+
+is_ipv4addr() {
+     local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
+     local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
+
+     [[ -z "$1" ]] && return 1
+     # more than numbers, important for hosts like AAA.BBB.CCC.DDD.in-addr.arpa.DOMAIN.TLS
+     [[ -n $(tr -d '0-9\.' <<< "$1") ]] && return 1
+
+     grep -Eq "$ipv4address" <<< "$1" && \
+          return 0 || \
+          return 1
+}
+
+# a bit easier
+is_ipv6addr() {
+     [[ -z "$1" ]] && return 1
+     # less than 2x ":"
+     [[ $(count_lines "$(tr ':' '\n' <<< "$1")") -le 1 ]] && \
+          return 1
+     # check which chars allowed:
+     [[ -n "$(tr -d '0-9:a-fA-F ' <<< "$1" | sed -e '/^$/d')" ]] && \
+          return 1
+     return 0
+}
+
+###### END universal helper function definitions ######
+
+###### START ServerHello/OpenSSL/F5 function definitions ######
+
+#arg1: TLS 1.2 and below ciphers
+#arg2: TLS 1.3 ciphers
+#arg3: options (e.g., -V)
+actually_supported_osslciphers() {
+     local tls13_ciphers="$TLS13_OSSL_CIPHERS"
+
+     [[ "$2" != ALL ]] && tls13_ciphers="$2"
+     if "$HAS_CIPHERSUITES"; then
+          $OPENSSL ciphers $3 $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$1" 2>/dev/null || echo ""
+     elif [[ -n "$tls13_ciphers" ]]; then
+          $OPENSSL ciphers $3 $OSSL_CIPHERS_S "$tls13_ciphers:$1" 2>/dev/null || echo ""
+     else
+          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$1" 2>/dev/null || echo ""
+     fi
+}
+
+# Given a protocol (arg1) and a list of ciphers (arg2) that is formatted as
+# ", xx,xx, xx,xx, xx,xx, xx,xx" remove any TLSv1.3 ciphers if the protocol
+# is less than 04 and remove any TLSv1.2-only ciphers if the protocol is less
+# than 03.
+strip_inconsistent_ciphers() {
+     local -i proto=0x$1
+     local cipherlist="$2"
+
+     [[ $proto -lt 4 ]] && cipherlist="${cipherlist//, 13,0[0-9a-fA-F]/}"
+     if [[ $proto -lt 3 ]]; then
+          cipherlist="${cipherlist//, 00,3[b-fB-F]/}"
+          cipherlist="${cipherlist//, 00,40/}"
+          cipherlist="${cipherlist//, 00,6[7-9a-dA-D]/}"
+          cipherlist="${cipherlist//, 00,9[c-fC-F]/}"
+          cipherlist="${cipherlist//, 00,[abAB][0-9a-fA-F]/}"
+          cipherlist="${cipherlist//, 00,[cC][0-5]/}"
+          cipherlist="${cipherlist//, 16,[bB][7-9aA]/}"
+          cipherlist="${cipherlist//, [cC]0,2[3-9a-fA-F]/}"
+          cipherlist="${cipherlist//, [cC]0,3[01278a-fA-F]/}"
+          cipherlist="${cipherlist//, [cC]0,[4-9aA][0-9a-fA-F]/}"
+          cipherlist="${cipherlist//, [cC][cC],1[345]/}"
+          cipherlist="${cipherlist//, [cC][cC],[aA][89a-eA-E]/}"
+     fi
+     echo "$cipherlist"
+     return 0
+}
+
+# retrieve cipher from ServerHello (via openssl)
+get_cipher() {
+     local cipher=""
+     local server_hello="$(cat -v "$1")"
+     # This and two other following instances are not best practice and normally a useless use of "cat", see
+     # https://web.archive.org/web/20160711205930/http://porkmail.org/era/unix/award.html#uucaletter
+     # However there seem to be cases where the preferred  $(< "$1")  logic has a problem.
+     # Esepcially with bash 3.2 (Mac OS X) and when on the server side binary chars
+     # are returned, see https://stackoverflow.com/questions/7427262/how-to-read-a-file-into-a-variable-in-shell#22607352
+     # and https://github.com/drwetter/testssl.sh/issues/1292
+     # Performance measurements showed no to barely measureable penalty (1s displayed in 9 tries).
+
+     if [[ "$server_hello" =~ Cipher\ *:\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]]; then
+          cipher="${BASH_REMATCH##* }"
+     elif [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]]; then
+          cipher="${BASH_REMATCH##* }"
+     fi
+     tm_out "$cipher"
+}
+
+# retrieve protocol from ServerHello (via openssl)
+get_protocol() {
+     local protocol=""
+     local server_hello="$(cat -v "$1")"
+
+     if [[ "$server_hello" =~ Protocol\ *:\ (SSLv[23]|TLSv1(\.[0-3])?) ]]; then
+          protocol="${BASH_REMATCH##* }"
+     elif [[ "$server_hello" =~ (New|Reused)", TLSv1.3, Cipher is "TLS_[A-Z0-9_]+ ]]; then
+          # Note: When OpenSSL prints "New, <protocol>, Cipher is <cipher>", <cipher> is the
+          # negotiated cipher, but <protocol> is not the negotiated protocol. Instead, it is
+          # the SSL/TLS protocol that first defined <cipher>. Since the ciphers that were
+          # first defined for TLSv1.3 may only be used with TLSv1.3, this line may be used
+          # to determine whether TLSv1.3 was negotiated, but if another protocol is specified
+          # on this line, then this line does not indicate the actual protocol negotiated. Also,
+          # only TLSv1.3 cipher suites have names that begin with TLS_, which provides additional
+          # assurance that the above match will only succeed if TLSv1.3 was negotiated.
+          protocol="TLSv1.3"
+     fi
+     tm_out "$protocol"
+}
+
+# now some function for the integrated BIGIP F5 Cookie detector (see https://github.com/drwetter/F5-BIGIP-Decoder)
+
+f5_hex2ip() {
+     debugme echo "$1"
+     echo $((16#${1:0:2})).$((16#${1:2:2})).$((16#${1:4:2})).$((16#${1:6:2}))
+}
+f5_hex2ip6() {
+     debugme echo "$1"
+     echo "[${1:0:4}:${1:4:4}:${1:8:4}:${1:12:4}.${1:16:4}:${1:20:4}:${1:24:4}:${1:28:4}]"
+}
+
+f5_determine_routeddomain() {
+     local tmp
+     tmp="${1%%o*}"
+     echo "${tmp/rd/}"
+}
+
+f5_ip_oldstyle() {
+     local tmp
+     local a b c d
+
+     tmp="${1/%.*}"                     # until first dot
+     tmp="$(printf "%08x" "$tmp")"      # convert the whole thing to hex, now back to ip (reversed notation:
+     tmp="$(f5_hex2ip $tmp)"            # transform to ip with reversed notation
+     IFS="." read -r a b c d <<< "$tmp" # reverse it
+     echo $d.$c.$b.$a
+}
+
+f5_port_decode() {
+     local tmp
+
+     tmp="$(strip_lf "$1")"             # remove lf if there is one
+     tmp="${tmp/.0000/}"                # to be sure remove trailing zeros with a dot
+     tmp="${tmp#*.}"                    # get the port
+     tmp="$(printf "%04x" "${tmp}")"    # to hex
+     if [[ ${#tmp} -eq 4 ]]; then
+          :
+     elif [[ ${#tmp} -eq 3 ]]; then     # fill it up with leading zeros if needed
+          tmp=0${tmp}
+     elif [[ ${#tmp} -eq 2 ]]; then
+          tmp=00${tmp}
+     fi
+     echo $((16#${tmp:2:2}${tmp:0:2}))  # reverse order and convert it from hex to dec
+}
+
+###### START ServerHello/OpenSSL/F5 function definitions ######
+###### END helper function definitions ######
+
+
+##################### START output file formatting functions #########################
+#################### START JSON file functions ####################
 
 fileout_json_footer() {
      if "$do_json"; then
@@ -852,8 +1106,6 @@ fileout_json_finding() {
           fi
      fi
 }
-
-##################### FILE FORMATTING #########################
 
 fileout_pretty_json_banner() {
      local target
@@ -1040,7 +1292,7 @@ csv_header() {
 }
 
 
-################# JSON FILE FORMATTING END. HTML START ####################
+################# END JSON file functions. START HTML functions ####################
 
 html_header() {
      local fname_prefix
@@ -1111,7 +1363,7 @@ html_footer() {
      return 0
 }
 
-################# HTML FILE FORMATTING END ####################
+################# END HTML file functions ####################
 
 prepare_logging() {
      # arg1: for testing mx records name we put a name of logfile in here, otherwise we get strange file names
@@ -1146,258 +1398,7 @@ prepare_logging() {
      exec > >(tee -a -i "$LOGFILE")
 }
 
-################### FILE FORMATTING END #########################
-
-###### START helper function definitions ######
-
-if [[ "${BASH_VERSINFO[0]}" == 3 ]]; then
-     # older bash can do this only (MacOS X), even SLES 11, see #697
-     toupper() { tr 'a-z' 'A-Z' <<< "$1"; }
-     tolower() { tr 'A-Z' 'a-z' <<< "$1"; }
-else
-     toupper() { echo -n "${1^^}"; }
-     tolower() { echo -n "${1,,}"; }
-fi
-
-get_last_char() {
-     echo "${1:~0}"      # "${string: -1}" would work too (both also in bash 3.2)
-}
-                         # Checking for last char. If already a separator supplied, we don't need an additional one
-debugme() {
-     [[ "$DEBUG" -ge 2 ]] && "$@"
-     return 0
-}
-
-hex2dec() {
-     echo $((16#$1))
-}
-
-# convert 414243 into ABC
-hex2ascii() {
-          for (( i=0; i<${#1}; i+=2 )); do
-               # 2>/dev/null added because 'warning: command substitution: ignored null byte in input'
-               # --> didn't help though
-               printf "\x${1:$i:2}" 2>/dev/null
-          done
-}
-
-# convert decimal number < 256 to hex
-dec02hex() {
-     printf "x%02x" "$1"
-}
-
-# convert decimal number between 256 and < 256*256 to hex
-dec04hex() {
-     local a=$(printf "%04x" "$1")
-     printf "x%02s, x%02s" "${a:0:2}" "${a:2:2}"
-}
-
-
-# trim spaces for BSD and old sed
-count_lines() {
-     #echo "${$(wc -l <<< "$1")// /}"
-     # ^^ bad substitution under bash, zsh ok. For some reason this does the trick:
-     echo $(wc -l <<< "$1")
-}
-
-count_words() {
-     #echo "${$(wc -w <<< "$1")// /}"
-     # ^^ bad substitution under bash, zsh ok. For some reason this does the trick:
-     echo $(wc -w <<< "$1")
-}
-
-count_ciphers() {
-     echo $(wc -w <<< "${1//:/ }")
-}
-
-#arg1: TLS 1.2 and below ciphers
-#arg2: TLS 1.3 ciphers
-#arg3: options (e.g., -V)
-actually_supported_osslciphers() {
-     local tls13_ciphers="$TLS13_OSSL_CIPHERS"
-
-     [[ "$2" != ALL ]] && tls13_ciphers="$2"
-     if "$HAS_CIPHERSUITES"; then
-          $OPENSSL ciphers $3 $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$1" 2>/dev/null || echo ""
-     elif [[ -n "$tls13_ciphers" ]]; then
-          $OPENSSL ciphers $3 $OSSL_CIPHERS_S "$tls13_ciphers:$1" 2>/dev/null || echo ""
-     else
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$1" 2>/dev/null || echo ""
-     fi
-}
-
-# Given a protocol (arg1) and a list of ciphers (arg2) that is formatted as
-# ", xx,xx, xx,xx, xx,xx, xx,xx" remove any TLSv1.3 ciphers if the protocol
-# is less than 04 and remove any TLSv1.2-only ciphers if the protocol is less
-# than 03.
-strip_inconsistent_ciphers() {
-     local -i proto=0x$1
-     local cipherlist="$2"
-
-     [[ $proto -lt 4 ]] && cipherlist="${cipherlist//, 13,0[0-9a-fA-F]/}"
-     if [[ $proto -lt 3 ]]; then
-          cipherlist="${cipherlist//, 00,3[b-fB-F]/}"
-          cipherlist="${cipherlist//, 00,40/}"
-          cipherlist="${cipherlist//, 00,6[7-9a-dA-D]/}"
-          cipherlist="${cipherlist//, 00,9[c-fC-F]/}"
-          cipherlist="${cipherlist//, 00,[abAB][0-9a-fA-F]/}"
-          cipherlist="${cipherlist//, 00,[cC][0-5]/}"
-          cipherlist="${cipherlist//, 16,[bB][7-9aA]/}"
-          cipherlist="${cipherlist//, [cC]0,2[3-9a-fA-F]/}"
-          cipherlist="${cipherlist//, [cC]0,3[01278a-fA-F]/}"
-          cipherlist="${cipherlist//, [cC]0,[4-9aA][0-9a-fA-F]/}"
-          cipherlist="${cipherlist//, [cC][cC],1[345]/}"
-          cipherlist="${cipherlist//, [cC][cC],[aA][89a-eA-E]/}"
-     fi
-     echo "$cipherlist"
-     return 0
-}
-
-newline_to_spaces() {
-     tr '\n' ' ' <<< "$1" | sed 's/ $//'
-}
-
-colon_to_spaces() {
-     echo "${1//:/ }"
-}
-
-strip_lf() {
-     tr -d '\n' <<< "$1" | tr -d '\r'
-}
-
-strip_spaces() {
-     echo "${1// /}"
-}
-
-# https://web.archive.org/web/20121022051228/http://codesnippets.joyent.com/posts/show/1816
-strip_leading_space() {
-     printf "%s" "${1#"${1%%[![:space:]]*}"}"
-}
-strip_trailing_space() {
-     printf "%s" "${1%"${1##*[![:space:]]}"}"
-}
-
-
-# retrieve cipher from ServerHello (via openssl)
-get_cipher() {
-     local cipher=""
-     local server_hello="$(cat -v "$1")"
-     # This and two other following instances are not best practice and normally a useless use of "cat", see
-     # https://web.archive.org/web/20160711205930/http://porkmail.org/era/unix/award.html#uucaletter
-     # However there seem to be cases where the preferred  $(< "$1")  logic has a problem.
-     # Esepcially with bash 3.2 (Mac OS X) and when on the server side binary chars
-     # are returned, see https://stackoverflow.com/questions/7427262/how-to-read-a-file-into-a-variable-in-shell#22607352
-     # and https://github.com/drwetter/testssl.sh/issues/1292
-     # Performance measurements showed no to barely measureable penalty (1s displayed in 9 tries).
-
-     if [[ "$server_hello" =~ Cipher\ *:\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]]; then
-          cipher="${BASH_REMATCH##* }"
-     elif [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]]; then
-          cipher="${BASH_REMATCH##* }"
-     fi
-     tm_out "$cipher"
-}
-
-# retrieve protocol from ServerHello (via openssl)
-get_protocol() {
-     local protocol=""
-     local server_hello="$(cat -v "$1")"
-
-     if [[ "$server_hello" =~ Protocol\ *:\ (SSLv[23]|TLSv1(\.[0-3])?) ]]; then
-          protocol="${BASH_REMATCH##* }"
-     elif [[ "$server_hello" =~ (New|Reused)", TLSv1.3, Cipher is "TLS_[A-Z0-9_]+ ]]; then
-          # Note: When OpenSSL prints "New, <protocol>, Cipher is <cipher>", <cipher> is the
-          # negotiated cipher, but <protocol> is not the negotiated protocol. Instead, it is
-          # the SSL/TLS protocol that first defined <cipher>. Since the ciphers that were
-          # first defined for TLSv1.3 may only be used with TLSv1.3, this line may be used
-          # to determine whether TLSv1.3 was negotiated, but if another protocol is specified
-          # on this line, then this line does not indicate the actual protocol negotiated. Also,
-          # only TLSv1.3 cipher suites have names that begin with TLS_, which provides additional
-          # assurance that the above match will only succeed if TLSv1.3 was negotiated.
-          protocol="TLSv1.3"
-     fi
-     tm_out "$protocol"
-}
-
-is_number() {
-     [[ "$1" =~ ^[1-9][0-9]*$ ]] && \
-          return 0 || \
-          return 1
-}
-
-is_ipv4addr() {
-     local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
-     local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
-
-     [[ -z "$1" ]] && return 1
-     # more than numbers, important for hosts like AAA.BBB.CCC.DDD.in-addr.arpa.DOMAIN.TLS
-     [[ -n $(tr -d '0-9\.' <<< "$1") ]] && return 1
-
-     grep -Eq "$ipv4address" <<< "$1" && \
-          return 0 || \
-          return 1
-}
-
-# a bit easier
-is_ipv6addr() {
-     [[ -z "$1" ]] && return 1
-     # less than 2x ":"
-     [[ $(count_lines "$(tr ':' '\n' <<< "$1")") -le 1 ]] && \
-          return 1
-     #check on chars allowed:
-     [[ -n "$(tr -d '0-9:a-fA-F ' <<< "$1" | sed -e '/^$/d')" ]] && \
-          return 1
-     return 0
-}
-
-# now some function for the integrated BIGIP F5 Cookie detector (see https://github.com/drwetter/F5-BIGIP-Decoder)
-
-f5_hex2ip() {
-     debugme echo "$1"
-     echo $((16#${1:0:2})).$((16#${1:2:2})).$((16#${1:4:2})).$((16#${1:6:2}))
-}
-f5_hex2ip6() {
-     debugme echo "$1"
-     echo "[${1:0:4}:${1:4:4}:${1:8:4}:${1:12:4}.${1:16:4}:${1:20:4}:${1:24:4}:${1:28:4}]"
-}
-
-f5_determine_routeddomain() {
-     local tmp
-     tmp="${1%%o*}"
-     echo "${tmp/rd/}"
-}
-
-f5_ip_oldstyle() {
-     local tmp
-     local a b c d
-
-     tmp="${1/%.*}"                     # until first dot
-     tmp="$(printf "%08x" "$tmp")"       # convert the whole thing to hex, now back to ip (reversed notation:
-     tmp="$(f5_hex2ip $tmp)"               # transform to ip with reversed notation
-     IFS="." read -r a b c d <<< "$tmp" # reverse it
-     echo $d.$c.$b.$a
-}
-
-f5_port_decode() {
-     local tmp
-
-     tmp="$(strip_lf "$1")"             # remove lf if there is one
-     tmp="${tmp/.0000/}"                # to be sure remove trailing zeros with a dot
-     tmp="${tmp#*.}"                    # get the port
-     tmp="$(printf "%04x" "${tmp}")"    # to hex
-     if [[ ${#tmp} -eq 4 ]]; then
-          :
-     elif [[ ${#tmp} -eq 3 ]]; then          # fill it up with leading zeros if needed
-          tmp=0${tmp}
-     elif [[ ${#tmp} -eq 2 ]]; then
-          tmp=00${tmp}
-     fi
-     echo $((16#${tmp:2:2}${tmp:0:2}))  # reverse order and convert it from hex to dec
-}
-
-
-
-###### END helper function definitions ######
+################### END all file output functions #########################
 
 # prints out multiple lines in $1, left aligned by spaces in $2
 out_row_aligned() {
@@ -1744,9 +1745,9 @@ check_revocation_crl() {
           return 1
      fi
      if grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem; then
-          $OPENSSL verify -crl_check -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT &> "${tmpfile%%.crl}.err"
+          $OPENSSL verify -crl_check -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT &> "${tmpfile%%.crl}.err"
      else
-          $OPENSSL verify -crl_check -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") $HOSTCERT &> "${tmpfile%%.crl}.err"
+          $OPENSSL verify -crl_check -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE" "${tmpfile%%.crl}.pem") $HOSTCERT &> "${tmpfile%%.crl}.err"
      fi
      if [[ $? -eq 0 ]]; then
           out ", "
@@ -1797,7 +1798,7 @@ check_revocation_ocsp() {
           asciihex_to_binary "$stapled_response" > "$TEMPDIR/stapled_ocsp_response.dd"
           $OPENSSL ocsp -no_nonce -respin "$TEMPDIR/stapled_ocsp_response.dd" \
                -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
-               -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
+               -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
      else
           host_header=${uri##http://}
           host_header=${host_header%%/*}
@@ -1811,7 +1812,7 @@ check_revocation_ocsp() {
           fi
           $OPENSSL ocsp -no_nonce ${host_header} -url "$uri" \
                -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
-               -CAfile <(cat $ADDITIONAL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
+               -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
      fi
      if [[ $? -eq 0 ]] && grep -Fq "Response verify OK" "$tmpfile"; then
           response="$(grep -F "$HOSTCERT: " "$tmpfile")"
@@ -6971,9 +6972,9 @@ determine_trust() {
           # in a subshell because that should be valid here only
           (export SSL_CERT_DIR="/dev/null"; export SSL_CERT_FILE="/dev/null"
           if [[ $certificates_provided -ge 2 ]]; then
-               $OPENSSL verify -purpose sslserver -CAfile <(cat $ADDITIONAL_CA_FILES "$bundle_fname") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+               $OPENSSL verify -purpose sslserver -CAfile <(cat $ADDTL_CA_FILES "$bundle_fname") -untrusted $TEMPDIR/intermediatecerts.pem $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
           else
-               $OPENSSL verify -purpose sslserver -CAfile <(cat $ADDITIONAL_CA_FILES "$bundle_fname") $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
+               $OPENSSL verify -purpose sslserver -CAfile <(cat $ADDTL_CA_FILES "$bundle_fname") $HOSTCERT >$TEMPDIR/${certificate_file[i]}.1 2>$TEMPDIR/${certificate_file[i]}.2
           fi)
           verify_retcode[i]=$(awk '/error [1-9][0-9]? at [0-9]+ depth lookup:/ { if (!found) {print $2; found=1} }' $TEMPDIR/${certificate_file[i]}.1 $TEMPDIR/${certificate_file[i]}.2)
           [[ -z "${verify_retcode[i]}" ]] && verify_retcode[i]=0
@@ -19570,7 +19571,7 @@ parse_cmd_line() {
                     do_grease=true
                     ;;
                --add-ca|--add-CA|--add-ca=*|--add-CA=*)
-                    ADDITIONAL_CA_FILES="$(parse_opt_equal_sign "$1" "$2")"
+                    ADDTL_CA_FILES="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     ;;
                --devel) ### this development feature will soon disappear
@@ -19876,8 +19877,8 @@ parse_cmd_line() {
      "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
      [[ -n "$CONNECT_TIMEOUT" ]] && [[ "$MASS_TESTING_MODE" == parallel ]] && fatal "Parallel mass scanning and specifying connect timeouts currently don't work together" $ERR_CMDLINE
 
-     ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES//,/ }"
-     for fname in $ADDITIONAL_CA_FILES; do
+     ADDTL_CA_FILES="${ADDTL_CA_FILES//,/ }"
+     for fname in $ADDTL_CA_FILES; do
           [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" $ERR_RESOURCE
           grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
