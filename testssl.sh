@@ -17953,7 +17953,7 @@ EOF
 }
 
 maketempf() {
-     TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX)
+     TEMPDIR=$(mktemp -d /tmp/testssl.XXXXXX 2>/dev/null)
      if [[ $? -ne 0 ]]; then
           # For e.g. devices where we can't write to /tmp we chose $PWD but we can't
           # allow every char as we haven't quoted all strings depending on it, see #1445
