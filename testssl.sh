@@ -10951,18 +10951,87 @@ derive-secret() {
 }
 
 # arg1: hash function
-# arg2: private key file
-# arg3: file containing server's ephemeral public key
-# arg4: ASCII-HEX of messages (ClientHello...ServerHello)
-# See key derivation schedule diagram in Section 7.1 of RFC 8446
-derive-handshake-traffic-secret() {
+# arg2: secret
+# arg3: purpose ("key" or "iv")
+# arg4: length of the key
+# See RFC 8446, Section 7.3
+derive-traffic-key() {
      local hash_fn="$1"
-     local priv_file="$2" pub_file="$3"
-     local messages="$4"
-     local -i i ret
+     local secret="$2" purpose="$3"
+     local -i key_length="$4"
+     local key
+
+     key="$(hkdf-expand-label "$hash_fn" "$secret" "$purpose" "" "$key_length")"
+     [[ $? -ne 0 ]] && return 7
+     tm_out "$key"
+     return 0
+}
+
+#arg1: TLS cipher
+#arg2: First ClientHello, if response was a HelloRetryRequest
+#arg3: HelloRetryRequest, if one was sent
+#arg4: Final (or only) ClientHello
+#arg5: ServerHello
+create-initial-transcript() {
+     local cipher="$1"
+     local clienthello1="$2" hrr="$3" clienthello2="$4" serverhello="$5"
+     local hash_clienthello1 msg_transcript
+
+     if [[ -n "$hrr" ]] && [[ "${serverhello:8:4}" == "7F12" ]]; then
+          msg_transcript="$clienthello1$hrr$clienthello2$serverhello"
+     elif [[ -n "$hrr" ]]; then
+          if [[ "$cipher" == *SHA256 ]]; then
+               hash_fn="-sha256"
+               hash_len=32
+          elif [[ "$cipher" == *SHA384 ]]; then
+               hash_fn="-sha384"
+               hash_len=48
+          else
+               return 1
+          fi
+          hash_clienthello1="$(asciihex_to_binary "$clienthello1" | $OPENSSL dgst "$hash_fn" 2>/dev/null | awk  '/=/ { print $2 }')"
+          msg_transcript="FE0000$(printf "%02x" $((${#hash_clienthello1}/2)))$hash_clienthello1$hrr$clienthello2$serverhello"
+     else
+          msg_transcript="$clienthello2$serverhello"
+     fi
+     tm_out "$msg_transcript"
+     return 0
+}
+
+#arg1: TLS cipher
+#arg2: file containing cipher name, public key, and private key
+derive-handshake-secret() {
+     local cipher="$1"
+     local tmpfile="$2"
+     local -i retcode
+     local hash_fn
+     local pub_file priv_file tmpfile
      local early_secret derived_secret shared_secret handshake_secret
 
      "$HAS_PKUTIL" || return 1
+
+     if [[ "$cipher" == *SHA256 ]]; then
+          hash_fn="-sha256"
+     elif [[ "$cipher" == *SHA384 ]]; then
+          hash_fn="-sha384"
+     else
+          return 1
+     fi
+
+     pub_file="$(mktemp "$TEMPDIR/pubkey.XXXXXX")" || return 7
+     awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' \
+          "$tmpfile" > "$pub_file"
+     [[ ! -s "$pub_file" ]] && return 1
+
+     priv_file="$(mktemp "$TEMPDIR/privkey.XXXXXX")" || return 7
+     if grep -q "\-\-\-\-\-BEGIN EC PARAMETERS" "$tmpfile"; then
+          awk '/-----BEGIN EC PARAMETERS/,/-----END EC PRIVATE KEY/ { print $0 }' \
+               "$tmpfile" > "$priv_file"
+     else
+          awk '/-----BEGIN PRIVATE KEY/,/-----END PRIVATE KEY/ { print $0 }' \
+               "$tmpfile" > "$priv_file"
+     fi
+     [[ ! -s "$priv_file" ]] && return 1
 
      # early_secret="$(hmac "$hash_fn" "000...000" "000...000")"
      case "$hash_fn" in
@@ -10988,10 +11057,10 @@ derive-handshake-traffic-secret() {
                           derived_secret="1591dac5cbbf0330a4a84de9c753330e92d01f0a88214b4464972fd668049e93e52f2b16fad922fdc0584478428f282b"
                      fi
                      ;;
-          *) return 7
      esac
 
      shared_secret="$($OPENSSL pkeyutl -derive -inkey "$priv_file" -peerkey "$pub_file" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+     rm $pub_file $priv_file
 
      # For draft 18 use $early_secret rather than $derived_secret.
      if [[ "${TLS_SERVER_HELLO:8:4}" == "7F12" ]]; then
@@ -11001,56 +11070,27 @@ derive-handshake-traffic-secret() {
      fi
      [[ $? -ne 0 ]] && return 7
 
-     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
-          # "7365727665722068616e647368616b65207472616666696320736563726574" = "server handshake traffic secret"
-          derived_secret="$(derive-secret "$hash_fn" "$handshake_secret" "7365727665722068616e647368616b65207472616666696320736563726574" "$messages")"
-     else
-          # "732068732074726166666963" = "s hs traffic"
-          derived_secret="$(derive-secret "$hash_fn" "$handshake_secret" "732068732074726166666963" "$messages")"
-     fi
-     [[ $? -ne 0 ]] && return 7
-     tm_out "$derived_secret"
+     tm_out "$handshake_secret"
      return 0
 }
 
-# arg1: hash function
-# arg2: secret (created by derive-handshake-traffic-secret)
-# arg3: purpose ("key" or "iv")
-# arg4: length of the key
-# See RFC 8446, Section 7.3
-derive-traffic-key() {
-     local hash_fn="$1"
-     local secret="$2" purpose="$3"
-     local -i key_length="$4"
-     local key
-
-     key="$(hkdf-expand-label "$hash_fn" "$secret" "$purpose" "" "$key_length")"
-     [[ $? -ne 0 ]] && return 7
-     tm_out "$key"
-     return 0
-}
-
-#arg1: TLS cipher
-#arg2: file containing cipher name, public key, and private key
-#arg3: First ClientHello, if response was a HelloRetryRequest
-#arg4: HelloRetryRequest, if one was sent
-#arg5: Final (or only) ClientHello
-#arg6: ServerHello
+# arg1: TLS cipher
+# arg2: handshake secret
+# arg3: transcipt
+# arg4: "client" or "server"
 derive-handshake-traffic-keys() {
-     local cipher="$1"
-     local tmpfile="$2"
-     local clienthello1="$3" hrr="$4" clienthello2="$5" serverhello="$6"
-     local hash_clienthello1
-     local -i key_len
-     local -i retcode
+     local cipher="$1" handshake_secret="$2" transcript="$3"
+     local sender="$4"
      local hash_fn
-     local pub_file priv_file tmpfile
-     local derived_secret server_write_key server_write_iv
+     local -i hash_len key_len
+     local handshake_traffic_secret label key iv
 
      if [[ "$cipher" == *SHA256 ]]; then
           hash_fn="-sha256"
+          hash_len=32
      elif [[ "$cipher" == *SHA384 ]]; then
           hash_fn="-sha384"
+          hash_len=48
      else
           return 1
      fi
@@ -11061,40 +11101,32 @@ derive-handshake-traffic-keys() {
      else
           return 1
      fi
-     pub_file="$(mktemp "$TEMPDIR/pubkey.XXXXXX")" || return 7
-     awk '/-----BEGIN PUBLIC KEY/,/-----END PUBLIC KEY/ { print $0 }' \
-          "$tmpfile" > "$pub_file"
-     [[ ! -s "$pub_file" ]] && return 1
 
-     priv_file="$(mktemp "$TEMPDIR/privkey.XXXXXX")" || return 7
-     if grep -q "\-\-\-\-\-BEGIN EC PARAMETERS" "$tmpfile"; then
-          awk '/-----BEGIN EC PARAMETERS/,/-----END EC PRIVATE KEY/ { print $0 }' \
-               "$tmpfile" > "$priv_file"
+     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+          if [[ "$sender" == server ]]; then
+               # "7365727665722068616e647368616b65207472616666696320736563726574" = "server handshake traffic secret"
+               label="7365727665722068616e647368616b65207472616666696320736563726574"
+          else
+               # "636c69656e742068616e647368616b65207472616666696320736563726574" = "client handshake traffic secret"
+               label="636c69656e742068616e647368616b65207472616666696320736563726574"
+          fi
+     elif [[ "$sender" == server ]]; then
+          # "732068732074726166666963" = "s hs traffic"
+          label="732068732074726166666963"
      else
-          awk '/-----BEGIN PRIVATE KEY/,/-----END PRIVATE KEY/ { print $0 }' \
-               "$tmpfile" > "$priv_file"
+          # "632068732074726166666963" = "c hs traffic"
+          label="632068732074726166666963" 
      fi
-     [[ ! -s "$priv_file" ]] && return 1
+     handshake_traffic_secret="$(derive-secret "$hash_fn" "$handshake_secret" "$label" "$transcript")"
+     [[ $? -ne 0 ]] && return 7
 
-     if [[ -n "$hrr" ]] && [[ "${serverhello:8:4}" == "7F12" ]]; then
-          derived_secret="$(derive-handshake-traffic-secret "$hash_fn" "$priv_file" "$pub_file" "$clienthello1$hrr$clienthello2$serverhello")"
-     elif [[ -n "$hrr" ]]; then
-          hash_clienthello1="$(asciihex_to_binary "$clienthello1" | $OPENSSL dgst "$hash_fn" 2>/dev/null | awk  '/=/ { print $2 }')"
-          derived_secret="$(derive-handshake-traffic-secret "$hash_fn" "$priv_file" "$pub_file" "FE0000$(printf "%02x" $((${#hash_clienthello1}/2)))$hash_clienthello1$hrr$clienthello2$serverhello")"
-     else
-          derived_secret="$(derive-handshake-traffic-secret "$hash_fn" "$priv_file" "$pub_file" "$clienthello2$serverhello")"
-     fi
-     retcode=$?
-     rm $pub_file $priv_file
-     [[ $retcode -ne 0 ]] && return 1
      # "6b6579" = "key"
-     server_write_key="$(derive-traffic-key "$hash_fn" "$derived_secret" "6b6579" "$key_len")"
+     key="$(derive-traffic-key "$hash_fn" "$handshake_traffic_secret" "6b6579" "$key_len")"
      [[ $? -ne 0 ]] && return 1
      # "6976" = "iv"
-     server_write_iv="$(derive-traffic-key "$hash_fn" "$derived_secret" "6976" "12")"
+     iv="$(derive-traffic-key "$hash_fn" "$handshake_traffic_secret" "6976" "12")"
      [[ $? -ne 0 ]] && return 1
-     tm_out "$server_write_key $server_write_iv"
-     return 0
+     tm_out "$key $iv"
 }
 
 # See RFC 8439, Section 2.1
@@ -12119,26 +12151,31 @@ get-nonce() {
 # arg1: ASCII-HEX encoded reply
 # arg2: whether to process the full request ("all") or just the basic request plus the ephemeral key if any ("ephemeralkey").
 # arg3: TLS cipher for decrypting TLSv1.3 response
-# arg4: key and IV for decrypting TLSv1.3 response
+# arg4: handshake secret
+# arg5: message transcript (up through ServerHello)
 check_tls_serverhellodone() {
      local tls_hello_ascii="$1"
      local process_full="$2"
      local cipher="$3"
-     local key_and_iv="$4"
+     local handshake_secret="$4"
+     local msg_transcript="$5"
      local tls_handshake_ascii="" tls_alert_ascii=""
      local -i i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len
      local -i msg_len remaining tls_serverhello_ascii_len sid_len
      local -i j offset tls_extensions_len extension_len
      local tls_content_type tls_protocol tls_handshake_type tls_msg_type extension_type
      local tls_err_level
-     local key iv
+     local hash_fn handshake_traffic_keys key="" iv=""
      local -i seq_num=0 plaintext_len
      local plaintext decrypted_response="" additional_data
      local include_headers=true
 
      DETECTED_TLS_VERSION=""
 
-     [[ -n "$key_and_iv" ]] && read -r key iv <<< "$key_and_iv"
+     if [[ -n "$handshake_secret" ]]; then
+          handshake_traffic_keys="$(derive-handshake-traffic-keys "$cipher" "$handshake_secret" "$msg_transcript" "server")"
+          read -r key iv <<< "$handshake_traffic_keys"
+     fi
 
      if [[ -z "$tls_hello_ascii" ]]; then
           return 0              # no server hello received
@@ -12215,7 +12252,7 @@ check_tls_serverhellodone() {
           elif [[ "$tls_content_type" == 15 ]]; then   # TLS ALERT
                tls_alert_ascii+="${tls_hello_ascii:i:msg_len}"
                decrypted_response+="$tls_content_type$tls_protocol$(printf "%04X" $((msg_len/2)))${tls_hello_ascii:i:msg_len}"
-          elif [[ "$tls_content_type" == 17 ]] && [[ -n "$key_and_iv" ]]; then # encrypted data
+          elif [[ "$tls_content_type" == 17 ]] && [[ -n "$key" ]]; then # encrypted data
                # The header information was added to additional data in TLSv1.3 draft 25.
                "$include_headers" || additional_data=""
                nonce="$(get-nonce "$iv" "$seq_num")"
@@ -12262,16 +12299,21 @@ check_tls_serverhellodone() {
           remaining=$tls_handshake_ascii_len-$i
           [[ $msg_len -gt $remaining ]] && return 1
 
+          # The ServerHello has already been added to $msg_transcript,
+          # but all other handshake messages need to be added.
+          if [[ -n "$key" ]] && [[ "$tls_msg_type" != 02 ]]; then
+               msg_transcript+="$tls_msg_type${tls_handshake_ascii:$((i-6)):6}${tls_handshake_ascii:i:msg_len}"
+          fi
           # For SSLv3 - TLS1.2 look for a ServerHelloDone message.
           # For TLS 1.3 look for a Finished message.
           [[ $tls_msg_type == 0E ]] && tm_out "" && return 0
-          [[ $tls_msg_type == 14 ]] && tm_out "$decrypted_response" && return 0
+          [[ $tls_msg_type == 14 ]] && tm_out "$msg_transcript $decrypted_response" && return 0
      done
      # If the response is TLSv1.3 and the full response is to be processed, but the
      # key and IV have not been provided to decrypt the response, then return 3 if
      # the entire ServerHello has been received.
      if [[ "$DETECTED_TLS_VERSION" == 0304 ]] && [[ "$process_full" =~ all ]] && \
-        [[ -z "$key_and_iv" ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
+        [[ -z "$handshake_secret" ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
           return 3
      fi
      # If we haven't encountered a fatal alert or a server hello done,
@@ -14254,7 +14296,8 @@ tls_sockets() {
      local process_full="$3" offer_compression=false skip=false
      local close_connection=true
      local -i hello_done=0
-     local cipher="" key_and_iv="" decrypted_response
+     local cipher="" handshake_secret="" res
+     local initial_msg_transcript msg_transcript
 
      [[ "$5" == true ]] && offer_compression=true
      [[ "$6" == false ]] && close_connection=false
@@ -14343,9 +14386,12 @@ tls_sockets() {
                fi
                skip=false
                if [[ $hello_done -eq 1 ]]; then
-                    decrypted_response="$(check_tls_serverhellodone "$tls_hello_ascii" "$process_full" "$cipher" "$key_and_iv")"
+                    res="$(check_tls_serverhellodone "$tls_hello_ascii" "$process_full" "$cipher" "$handshake_secret" "$initial_msg_transcript")"
                     hello_done=$?
-                    [[ "$hello_done" -eq 0 ]] && [[ -n "$decrypted_response" ]] && tls_hello_ascii="$(toupper "$decrypted_response")"
+                    if [[ "$hello_done" -eq 0 ]] && [[ -n "$res" ]]; then
+                         read -r msg_transcript tls_hello_ascii <<< "$res"
+                         tls_hello_ascii="$(toupper "$tls_hello_ascii")"
+                    fi
                     if [[ "$hello_done" -eq 3 ]]; then
                          hello_done=1; skip=true
                          debugme echo "reading server hello..."
@@ -14354,10 +14400,11 @@ tls_sockets() {
                          if [[ "$ret" -eq 0 ]] || [[ "$ret" -eq 2 ]]; then
                               cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                               if [[ -n "$hrr" ]]; then
-                                   key_and_iv="$(derive-handshake-traffic-keys "$cipher" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" "$clienthello1" "$hrr" "$TLS_CLIENT_HELLO" "$TLS_SERVER_HELLO")"
+                                   initial_msg_transcript="$(create-initial-transcript "$cipher" "$clienthello1" "$hrr" "$TLS_CLIENT_HELLO" "$TLS_SERVER_HELLO")"
                               else
-                                   key_and_iv="$(derive-handshake-traffic-keys "$cipher" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" "" "" "$TLS_CLIENT_HELLO" "$TLS_SERVER_HELLO")"
+                                   initial_msg_transcript="$(create-initial-transcript "$cipher" "" "" "$TLS_CLIENT_HELLO" "$TLS_SERVER_HELLO")"
                               fi
+                              handshake_secret="$(derive-handshake-secret "$cipher" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
                               [[ $? -ne 0 ]] && hello_done=2
                          else
                               hello_done=2
