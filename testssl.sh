@@ -10860,6 +10860,31 @@ hmac() {
 }
 
 # arg1: hash function
+# arg2: key
+# arg3: transcript
+# Compute the HMAC of the hash of the transcript
+hmac-transcript() {
+     local hash_fn="$1"
+     local key="$2" transcript="$3" output
+     local -i ret
+
+     if [[ ! "$OSSL_NAME" =~ LibreSSL ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]]; then
+          output="$(asciihex_to_binary "$transcript" | \
+                    $OPENSSL dgst "$hash_fn" -binary 2>/dev/null | \
+                    $OPENSSL mac -macopt digest:"${hash_fn/-/}" -macopt hexkey:"$key" HMAC 2>/dev/null)"
+          ret=$?
+          tm_out "$(toupper "$(strip_lf "$output")")"
+     else
+          output="$(asciihex_to_binary "$transcript" | \
+                    $OPENSSL dgst "$hash_fn" -binary 2>/dev/null | \
+                    $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
+          ret=$?
+          tm_out "$(toupper "$(awk  '/=/ { print $2 }' <<< "$output")")"
+     fi
+     return $ret
+}
+
+# arg1: hash function
 # arg2: pseudorandom key (PRK)
 # arg2: info
 # arg3: length of output keying material in octets
@@ -10890,7 +10915,7 @@ hkdf-expand() {
           output+="$ti"
           tim1="$ti"
      done
-     out_len=2*$out_len
+     out_len=$((2*out_len))
      tm_out "${output:0:out_len}"
      return 0
 }
@@ -10910,8 +10935,8 @@ hkdf-expand-label() {
      local hkdflabel_length
      local -i len
 
-     hkdflabel_length="$(printf "%04X\n" $length)"
-     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+     hkdflabel_length="$(printf "%04X\n" "$length")"
+     if [[ "${TLS_SERVER_HELLO:8:2}" == 7F ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
           # "544c5320312e332c20" = "TLS 1.3, "
           hkdflabel_label="544c5320312e332c20$label"
      else
@@ -10919,9 +10944,9 @@ hkdf-expand-label() {
           hkdflabel_label="746c73313320$label"
      fi
      len=${#hkdflabel_label}/2
-     hkdflabel_label="$(printf "%02X\n" $len)$hkdflabel_label"
+     hkdflabel_label="$(printf "%02X\n" "$len")$hkdflabel_label"
      len=${#context}/2
-     hkdflabel_context="$(printf "%02X\n" $len)$context"
+     hkdflabel_context="$(printf "%02X\n" "$len")$context"
      hkdflabel="$hkdflabel_length$hkdflabel_label$hkdflabel_context"
 
      hkdf-expand "$hash_fn" "$secret" "$hkdflabel" "$length"
@@ -10977,7 +11002,7 @@ create-initial-transcript() {
      local clienthello1="$2" hrr="$3" clienthello2="$4" serverhello="$5"
      local hash_clienthello1 msg_transcript
 
-     if [[ -n "$hrr" ]] && [[ "${serverhello:8:4}" == "7F12" ]]; then
+     if [[ -n "$hrr" ]] && [[ "${serverhello:8:4}" == 7F12 ]]; then
           msg_transcript="$clienthello1$hrr$clienthello2$serverhello"
      elif [[ -n "$hrr" ]]; then
           if [[ "$cipher" == *SHA256 ]]; then
@@ -11036,7 +11061,7 @@ derive-handshake-secret() {
      # early_secret="$(hmac "$hash_fn" "000...000" "000...000")"
      case "$hash_fn" in
           "-sha256") early_secret="33ad0a1c607ec03b09e6cd9893680ce210adf300aa1f2660e1b22e10f170f92a"
-                     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+                     if [[ "${TLS_SERVER_HELLO:8:2}" == 7F ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
                           # "6465726976656420736563726574" = "derived secret"
                           # derived_secret="$(derive-secret "$hash_fn" "$early_secret" "6465726976656420736563726574" "")"
                           derived_secret="c1c0c36bf8fb1d1afa949fbd360e71af69a6244a4c2eaef5bbbb6442a7277d2c"
@@ -11047,7 +11072,7 @@ derive-handshake-secret() {
                      fi
                      ;;
           "-sha384") early_secret="7ee8206f5570023e6dc7519eb1073bc4e791ad37b5c382aa10ba18e2357e716971f9362f2c2fe2a76bfd78dfec4ea9b5"
-                     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+                     if [[ "${TLS_SERVER_HELLO:8:2}" == 7F ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
                            # "6465726976656420736563726574" = "derived secret"
                            # derived_secret="$(derive-secret "$hash_fn" "$early_secret" "6465726976656420736563726574" "")"
                           derived_secret="54c80fa05ee9e0532ce3db8ddeca37a0365683bcd3b27bdc88d2b9fdc115ca4ebc8edc1f0b72a6a0861e803fc34761ef"
@@ -11060,7 +11085,7 @@ derive-handshake-secret() {
      esac
 
      shared_secret="$($OPENSSL pkeyutl -derive -inkey "$priv_file" -peerkey "$pub_file" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
-     rm $pub_file $priv_file
+     rm "$pub_file" "$priv_file"
 
      # For draft 18 use $early_secret rather than $derived_secret.
      if [[ "${TLS_SERVER_HELLO:8:4}" == "7F12" ]]; then
@@ -11083,7 +11108,7 @@ derive-handshake-traffic-keys() {
      local sender="$4"
      local hash_fn
      local -i hash_len key_len
-     local handshake_traffic_secret label key iv
+     local handshake_traffic_secret label key iv finished="0000"
 
      if [[ "$cipher" == *SHA256 ]]; then
           hash_fn="-sha256"
@@ -11102,7 +11127,7 @@ derive-handshake-traffic-keys() {
           return 1
      fi
 
-     if [[ "${TLS_SERVER_HELLO:8:2}" == "7F" ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+     if [[ "${TLS_SERVER_HELLO:8:2}" == 7F ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
           if [[ "$sender" == server ]]; then
                # "7365727665722068616e647368616b65207472616666696320736563726574" = "server handshake traffic secret"
                label="7365727665722068616e647368616b65207472616666696320736563726574"
@@ -11126,7 +11151,12 @@ derive-handshake-traffic-keys() {
      # "6976" = "iv"
      iv="$(derive-traffic-key "$hash_fn" "$handshake_traffic_secret" "6976" "12")"
      [[ $? -ne 0 ]] && return 1
-     tm_out "$key $iv"
+     if [[ $DEBUG -ge 1 ]] || [[ "$sender" == client ]]; then
+          # "66696e6973686564" = "finished"
+          finished="$(derive-traffic-key "$hash_fn" "$handshake_traffic_secret" "66696e6973686564" "$hash_len")"
+          [[ $? -ne 0 ]] && return 1
+     fi
+     tm_out "$key $iv $finished"
 }
 
 # See RFC 8439, Section 2.1
@@ -11364,7 +11394,7 @@ u64to8() {
      local -i v="$1"
      local p
 
-     p="$(printf "%016X" $v)"
+     p="$(printf "%016X" "$v")"
      tm_out "${p:14:2}${p:12:2}${p:10:2}${p:8:2}${p:6:2}${p:4:2}${p:2:2}${p:0:2}"
      return 0
 }
@@ -12163,9 +12193,9 @@ check_tls_serverhellodone() {
      local -i i tls_hello_ascii_len tls_handshake_ascii_len tls_alert_ascii_len
      local -i msg_len remaining tls_serverhello_ascii_len sid_len
      local -i j offset tls_extensions_len extension_len
-     local tls_content_type tls_protocol tls_handshake_type tls_msg_type extension_type
+     local tls_content_type tls_protocol tls_msg_type extension_type
      local tls_err_level
-     local hash_fn handshake_traffic_keys key="" iv=""
+     local hash_fn handshake_traffic_keys key="" iv="" finished_key=""
      local -i seq_num=0 plaintext_len
      local plaintext decrypted_response="" additional_data
      local include_headers=true
@@ -12174,7 +12204,7 @@ check_tls_serverhellodone() {
 
      if [[ -n "$handshake_secret" ]]; then
           handshake_traffic_keys="$(derive-handshake-traffic-keys "$cipher" "$handshake_secret" "$msg_transcript" "server")"
-          read -r key iv <<< "$handshake_traffic_keys"
+          read -r key iv finished_key <<< "$handshake_traffic_keys"
      fi
 
      if [[ -z "$tls_hello_ascii" ]]; then
@@ -12302,6 +12332,20 @@ check_tls_serverhellodone() {
           # The ServerHello has already been added to $msg_transcript,
           # but all other handshake messages need to be added.
           if [[ -n "$key" ]] && [[ "$tls_msg_type" != 02 ]]; then
+               if [[ $DEBUG -ge 1 ]] && [[ "$tls_msg_type" == 14 ]]; then
+                    # Check the Finished message
+                    if [[ "$cipher" == *SHA256 ]]; then
+                         hash_fn="-sha256"
+                         [[ $msg_len -eq 64 ]] || return 2
+                    elif [[ "$cipher" == *SHA384 ]]; then
+                         hash_fn="-sha384"
+                         [[ $msg_len -eq 96 ]] || return 2
+                    else
+                         return 2
+                    fi
+                    [[ "${tls_handshake_ascii:i:msg_len}" != $(hmac-transcript "$hash_fn" "$finished_key" "$msg_transcript") ]] && \
+                         return 2
+               fi
                msg_transcript+="$tls_msg_type${tls_handshake_ascii:$((i-6)):6}${tls_handshake_ascii:i:msg_len}"
           fi
           # For SSLv3 - TLS1.2 look for a ServerHelloDone message.
@@ -14294,10 +14338,11 @@ tls_sockets() {
      local tls_hello_ascii next_packet
      local clienthello1 original_clienthello hrr=""
      local process_full="$3" offer_compression=false skip=false
-     local close_connection=true
-     local -i hello_done=0
-     local cipher="" handshake_secret="" res
-     local initial_msg_transcript msg_transcript
+     local close_connection=true include_headers=true
+     local -i i len tag_len hello_done=0 plaintext_len
+     local cipher="" tls_version handshake_secret="" res plaintext
+     local initial_msg_transcript msg_transcript finished_msg aad="" data=""
+     local handshake_traffic_keys key iv finished_key
 
      [[ "$5" == true ]] && offer_compression=true
      [[ "$6" == false ]] && close_connection=false
@@ -14429,6 +14474,42 @@ tls_sockets() {
                # see https://secure.wand.net.nz/trac/libprotoident/wiki/SSL
                lines=$(count_lines "$(hexdump -C "$SOCK_REPLY_FILE" 2>$ERRFILE)")
                tm_out "  ($lines lines returned)  "
+          fi
+
+          if ! "$close_connection" && [[ $save == 0 ]] && \
+             [[ -n "$handshake_secret" ]] && [[ "$process_full" == all+ ]]; then
+               tls_version="$DETECTED_TLS_VERSION"
+               if [[ "${TLS_SERVER_HELLO:8:3}" == 7F1 ]]; then
+                    tls_version="${TLS_SERVER_HELLO:8:4}"
+               elif [[ "$TLS_SERVER_HELLO" =~ 002B00027F1[0-9A-F] ]]; then
+                    tls_version="${BASH_REMATCH:8:4}"
+               fi
+               [[ "${tls_version:0:2}" == 7F ]] && [[ 0x${tls_version:2:2} -lt 25 ]] && include_headers=false
+
+               handshake_traffic_keys="$(derive-handshake-traffic-keys "$cipher" "$handshake_secret" "$initial_msg_transcript" "client")"
+               read -r key iv finished_key <<< "$handshake_traffic_keys"
+               if [[ "$cipher" == *SHA256 ]]; then
+                    finished_msg="14000020$(hmac-transcript "-sha256" "$finished_key" "$msg_transcript")"
+               else
+                    finished_msg="14000030$(hmac-transcript "-sha384" "$finished_key" "$msg_transcript")"
+               fi
+               [[ "$cipher" =~ CCM_8 ]] && tag_len=8 || tag_len=16
+               aad="170303$(printf "%04X" "$(( ${#finished_msg}/2 + tag_len + 1 ))")"
+               if "$include_headers"; then
+                    # The header information was added to additional data in TLSv1.3 draft 25.
+                    finished_msg="$(sym-encrypt "$cipher" "$key" "$(get-nonce "$iv" 0)" "${finished_msg}16" "$aad")"
+               else
+                    finished_msg="$(sym-encrypt "$cipher" "$key" "$(get-nonce "$iv" 0)" "${finished_msg}16" "")"
+               fi
+               finished_msg="$aad$finished_msg"
+               
+               len=${#finished_msg}
+               for (( i=0; i < len; i=i+2 )); do
+                    data+=", ${finished_msg:i:2}"
+               done
+               debugme echo -e "\nsending finished..."
+               socksend_clienthello "${data}"
+               sleep $USLEEP_SND
           fi
 
           # determine the return value for higher level, so that they can tell what the result is
