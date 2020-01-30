@@ -258,6 +258,7 @@ TLS12_CIPHER_OFFERED=""                 # This contains the hexcode of a cipher 
 CURVES_OFFERED=""                       # This keeps which curves have been detected. Just for error handling
 KNOWN_OSSL_PROB=false                   # We need OpenSSL a few times. This variable is an indicator if we can't connect. Eases handling
 DETECTED_TLS_VERSION=""                 # .. as hex string, e.g. 0300 or 0303
+APP_TRAF_KEY_INFO=""                    # Information about the application traffic keys for a TLS 1.3 connection.
 TLS13_ONLY=false                        # Does the server support TLS 1.3 ONLY?
 OSSL_SHORTCUT=${OSSL_SHORTCUT:-false}   # Hack: if during the scan turns out the OpenSSL binary suports TLS 1.3 would be a better choice, this enables it.
 TLS_EXTENSIONS=""
@@ -2050,10 +2051,31 @@ service_detection() {
      local -i was_killed
 
      if ! "$CLIENT_AUTH"; then
-          # SNI is not standardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
-          printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE &
-          wait_kill $! $HEADER_MAXSLEEP
-          was_killed=$?
+          if ! "$HAS_TLS13" && "$TLS13_ONLY"; then
+               # Using sockets is a lot slower than using OpenSSL, and it is
+               # not as reliable, but if OpenSSL can't connect to the server,
+               # trying with sockets is better than not even trying.
+               tls_sockets "04" "$TLS13_CIPHER" "all+" "" "" false
+               if [[ $? -eq 0 ]]; then
+                    plaintext="$(printf "$GET_REQ11" | hexdump -v -e '16/1 "%02X"')"
+                    plaintext="${plaintext%%[!0-9A-F]*}"
+                    send_app_data "$plaintext"
+                    if [[ $? -eq 0 ]]; then
+                         receive_app_data true
+                         [[ $? -eq 0 ]] || > "$TMPFILE"
+                    else
+                         > "$TMPFILE"
+                    fi
+                    send_close_notify "$DETECTED_TLS_VERSION"
+               else
+                    > "$TMPFILE"
+               fi
+          else
+               # SNI is not standardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
+               printf "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE &
+               wait_kill $! $HEADER_MAXSLEEP
+               was_killed=$?
+          fi
           head $TMPFILE | grep -aq '^HTTP\/' && SERVICE=HTTP
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -waq "SMTP|ESMTP|Exim|IdeaSmtpServer|Kerio Connect|Postfix" && SERVICE=SMTP   # I know some overlap here
           [[ -z "$SERVICE" ]] && head $TMPFILE | grep -Ewaq "POP|Gpop|MailEnable POP3 Server|OK Dovecot|Cyrus POP3" && SERVICE=POP  # I know some overlap here
@@ -11159,6 +11181,92 @@ derive-handshake-traffic-keys() {
      tm_out "$key $iv $finished"
 }
 
+#arg1: TLS cipher
+#arg2: handshake secret
+derive-master-secret() {
+     local cipher="$1"
+     local handshake_secret="$2"
+     local -i retcode
+     local hash_fn
+     local derived_secret zeros master_secret
+
+     if [[ "$cipher" == *SHA256 ]]; then
+          hash_fn="-sha256"
+          zeros="0000000000000000000000000000000000000000000000000000000000000000"
+     elif [[ "$cipher" == *SHA384 ]]; then
+          hash_fn="-sha384"
+          zeros="000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+     else
+          return 1
+     fi
+
+     if [[ "${TLS_SERVER_HELLO:8:4}" == 7F12 ]]; then
+          derived_secret="$handshake_secret"
+     elif [[ "${TLS_SERVER_HELLO:8:2}" == 7F ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+          derived_secret="$(derive-secret "$hash_fn" "$handshake_secret" "6465726976656420736563726574" "")"
+     else
+          derived_secret="$(derive-secret "$hash_fn" "$handshake_secret" "64657269766564" "")"
+     fi
+     master_secret="$(hmac "$hash_fn" "$derived_secret" "$zeros")"
+     [[ $? -ne 0 ]] && return 7
+
+     tm_out "$master_secret"
+     return 0
+}
+
+# arg1: TLS cipher
+# arg2: master secret
+# arg3: transcipt
+# arg4: "client" or "server"
+derive-application-traffic-keys() {
+     local cipher="$1" master_secret="$2" transcript="$3"
+     local sender="$4"
+     local hash_fn
+     local -i key_len
+     local application_traffic_secret_0 label key iv
+
+     if [[ "$cipher" == *SHA256 ]]; then
+          hash_fn="-sha256"
+     elif [[ "$cipher" == *SHA384 ]]; then
+          hash_fn="-sha384"
+     else
+          return 1
+     fi
+     if [[ "$cipher" == *AES_128* ]]; then
+          key_len=16
+     elif ( [[ "$cipher" == *AES_256* ]] || [[ "$cipher" == *CHACHA20_POLY1305* ]] ); then
+          key_len=32
+     else
+          return 1
+     fi
+
+     if [[ "${TLS_SERVER_HELLO:8:2}" == 7F ]] && [[ 0x${TLS_SERVER_HELLO:10:2} -lt 0x14 ]]; then
+          if [[ "$sender" == server ]]; then
+               # "736572766572206170706c69636174696f6e207472616666696320736563726574" = "server application traffic secret"
+               label="736572766572206170706c69636174696f6e207472616666696320736563726574"
+          else
+               # "636c69656e74206170706c69636174696f6e207472616666696320736563726574" = "client application traffic secret"
+               label="636c69656e74206170706c69636174696f6e207472616666696320736563726574"
+          fi
+     elif [[ "$sender" == server ]]; then
+          # "732061702074726166666963" = "s hs traffic"
+          label="732061702074726166666963"
+     else
+          # "632061702074726166666963" = "c hs traffic"
+          label="632061702074726166666963" 
+     fi
+     application_traffic_secret_0="$(derive-secret "$hash_fn" "$master_secret" "$label" "$transcript")"
+     [[ $? -ne 0 ]] && return 7
+
+     # "6b6579" = "key"
+     key="$(derive-traffic-key "$hash_fn" "$application_traffic_secret_0" "6b6579" "$key_len")"
+     [[ $? -ne 0 ]] && return 1
+     # "6976" = "iv"
+     iv="$(derive-traffic-key "$hash_fn" "$application_traffic_secret_0" "6976" "12")"
+     [[ $? -ne 0 ]] && return 1
+     tm_out "$key $iv"
+}
+
 # See RFC 8439, Section 2.1
 chacha20_Qround() {
      local -i a="0x$1"
@@ -12095,11 +12203,6 @@ sym-decrypt() {
      local -i ciphertext_len tag_len
      local compute_tag=false
 
-     # In general there is no need to verify that the authentication tag is correct
-     # when decrypting, and performing the check is time consuming when the
-     # computations are performed in Bash.
-     [[ $DEBUG -ge 1 ]] && compute_tag=true
-
      case "$cipher" in
           *CCM_8*)
                tag_len=16 ;;
@@ -12113,6 +12216,13 @@ sym-decrypt() {
      ciphertext_len=${#ciphertext}
      [[ $ciphertext_len -lt $tag_len ]] && return 7
      ciphertext_len=$((ciphertext_len-tag_len))
+
+     # In general there is no need to verify that the authentication tag is correct
+     # when decrypting, and performing the check is time consuming when the
+     # computations are performed in Bash. If the ciphertext is very long (e.g.,
+     # some application data), then trying to compute the authentication tag is
+     # too time consuming even for debug mode.
+     [[ $DEBUG -ge 1 ]] && [[ $ciphertext_len -le 1024 ]] && compute_tag=true
 
      if [[ "$cipher" =~ CHACHA20_POLY1305 ]]; then
           plaintext="$(chacha20_aead_decrypt "$key" "$nonce" "${ciphertext:0:ciphertext_len}" "$additional_data" "${ciphertext:ciphertext_len:tag_len}" "$compute_tag")"
@@ -13528,6 +13638,56 @@ parse_tls_serverhello() {
      return 0
 }
 
+# ASCII-HEX encoded session ticket
+parse_tls13_new_session_ticket() {
+    local tls_version="$1"
+    local new_session_ticket="$2"
+    local -i len ticket_lifetime ticket_age_add min_len remainder
+    local ticket_nonce ticket extensions
+    local has_nonce=true
+
+    [[ "${new_session_ticket:0:2}" == 04 ]] || return 7
+    # Prior to draft 21 the NewSessionTicket did not include a ticket_nonce.
+    [[ "${tls_version:0:2}" == 7F ]] && [[ 0x${tls_version:2:2} -le 20 ]] && has_nonce=false
+
+    # Set min_len to the minimum length that a session ticket can be.
+    min_len=28
+    "$has_nonce" || min_len=$((min_len-2))
+
+    remainder=$((2*0x${new_session_ticket:2:6}))
+    [[ $remainder -ge $min_len ]] || return 7
+    [[ ${#new_session_ticket} -ge $((remainder + 8)) ]] || return 7
+
+    ticket_lifetime=0x${new_session_ticket:8:8}
+    ticket_age_add=0x${new_session_ticket:16:8}
+    new_session_ticket="${new_session_ticket:24}"
+    remainder=$((remainder-16))
+
+    if "$has_nonce"; then
+         len=$((2*0x${new_session_ticket:0:2}))
+         new_session_ticket="${new_session_ticket:2}"
+         [[ $remainder -ge $((len + 12)) ]] || return 7
+         ticket_nonce="${new_session_ticket:0:len}"
+         new_session_ticket="${new_session_ticket:len}"
+         remainder=$((remainder-len-2))
+    fi
+
+    len=$((2*0x${new_session_ticket:0:4}))
+    new_session_ticket="${new_session_ticket:4}"
+    [[ $remainder -ge $((len + 8)) ]] || return 7
+    ticket="${new_session_ticket:0:len}"
+    new_session_ticket="${new_session_ticket:len}"
+    remainder=$((remainder-len-4))
+
+    len=$((2*0x${new_session_ticket:0:4}))
+    new_session_ticket="${new_session_ticket:4}"
+    [[ $remainder -eq $((len + 4)) ]] || return 7
+    extensions="${new_session_ticket:0:len}"
+
+    echo "    TLS session ticket lifetime hint: $ticket_lifetime (seconds)" > $TMPFILE
+    tmpfile_handle ${FUNCNAME[0]}.txt $TMPFILE
+    return 0
+}
 
 #arg1 (optional): list of ciphers suites or empty
 #arg2 (optional): "true" if full server response should be parsed.
@@ -14339,10 +14499,11 @@ tls_sockets() {
      local clienthello1 original_clienthello hrr=""
      local process_full="$3" offer_compression=false skip=false
      local close_connection=true include_headers=true
-     local -i i len tag_len hello_done=0 plaintext_len
-     local cipher="" tls_version handshake_secret="" res plaintext
+     local -i i len tag_len hello_done=0
+     local cipher="" tls_version handshake_secret="" res
      local initial_msg_transcript msg_transcript finished_msg aad="" data=""
      local handshake_traffic_keys key iv finished_key
+     local master_secret master_traffic_keys
 
      [[ "$5" == true ]] && offer_compression=true
      [[ "$6" == false ]] && close_connection=false
@@ -14510,6 +14671,23 @@ tls_sockets() {
                debugme echo -e "\nsending finished..."
                socksend_clienthello "${data}"
                sleep $USLEEP_SND
+               
+               # Compute application traffic keys and IVs.
+               master_secret="$(derive-master-secret "$cipher" "$handshake_secret")"
+               master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" server)"
+               APP_TRAF_KEY_INFO="$tls_version $cipher $master_traffic_keys 0 "
+               master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" client)"
+               APP_TRAF_KEY_INFO+="$master_traffic_keys 0"
+
+               # Some servers send new session tickets as soon as the handshake is complete.
+               [[ -s "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt" ]] && \
+                    rm "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt"
+               receive_app_data
+               if [[ $? -eq 0 ]] && [[ $DEBUG -ge 2 ]]; then
+                    [[ -s "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt" ]] && \
+                         echo -n "Ticket: " && cat "$TEMPDIR/$NODEIP.parse_tls13_new_session_ticket.txt"
+                    [[ -s $TMPFILE ]] && echo -n "Unexpected response: " && cat "$TMPFILE"
+               fi
           fi
 
           # determine the return value for higher level, so that they can tell what the result is
@@ -14540,6 +14718,102 @@ tls_sockets() {
      "$close_connection" && close_socket
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      return $ret
+}
+
+# Send application data over a TLS 1.3 channel that has already been created.
+send_app_data() {
+     local plaintext="$1"
+     local tls_version cipher client_key client_iv server_key server_iv
+     local aad res data
+     local -i i client_seq server_seq tag_len len
+     local include_headers=true
+
+     read -r tls_version cipher server_key server_iv server_seq client_key client_iv client_seq <<< "$APP_TRAF_KEY_INFO"
+     [[ "${tls_version:0:2}" == 7F ]] && [[ 0x${tls_version:2:2} -lt 25 ]] && include_headers=false
+     [[ "$cipher" =~ CCM_8 ]] && tag_len=8 || tag_len=16
+
+     aad="170303$(printf "%04X" "$(( ${#plaintext}/2 + tag_len + 1 ))")"
+     if "$include_headers"; then
+          res="$(sym-encrypt "$cipher" "$client_key" "$(get-nonce "$client_iv" $client_seq)" "${plaintext}17" "$aad")"
+     else
+          res="$(sym-encrypt "$cipher" "$client_key" "$(get-nonce "$client_iv" $client_seq)" "${plaintext}17" "")"
+     fi
+     [[ $? -eq 0 ]] || return 1
+     client_seq+=1
+     APP_TRAF_KEY_INFO="$tls_version $cipher $server_key $server_iv $server_seq $client_key $client_iv $client_seq"
+
+     res="$aad$res"
+     len=${#res}
+     data=""
+     for (( i=0; i < len; i=i+2 )); do
+          data+=",x${res:i:2}"
+     done
+     socksend "$data" $USLEEP_SND
+}
+
+# Receive application data from a TLS 1.3 channel that has already been created.
+# arg1: true if only the first block of application data should be decrypted.
+#       This can save a lot of time if the server sends a lot a data (e.g., a
+#       big home page), but only the first part of the data is needed. However,
+#       no further data may be received over this connection as the message
+#       sequence number will not be correct.
+receive_app_data() {
+     local plaintext=""
+     local tls_version cipher client_key client_iv server_key server_iv
+     local aad ciphertext="" res="" data
+     local -i client_seq server_seq len msg_len
+     local include_headers=true
+     local first_block_only=false
+
+     [[ "$1" == true ]] && first_block_only=true
+
+     read -r tls_version cipher server_key server_iv server_seq client_key client_iv client_seq <<< "$APP_TRAF_KEY_INFO"
+     [[ "${tls_version:0:2}" == 7F ]] && [[ 0x${tls_version:2:2} -lt 25 ]] && include_headers=false
+     
+     sleep $USLEEP_REC
+     while true; do
+          len=${#ciphertext}
+          if [[ $len -ge 10 ]]; then
+               [[ "${ciphertext:0:5}" == 17030 ]] || break
+               msg_len=$((2*0x${ciphertext:6:4}))
+          fi
+          if [[ $len -lt 10 ]] || [[ $len -lt $((msg_len+10)) ]]; then
+               if "$FAST_SOCKET"; then
+                    res="$(sockread_fast 32768)"
+               else
+                    sockread_serverhello 32768
+                    res="$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")"
+               fi
+               res="${res%%[!0-9A-F]*}"
+               [[ -z "$res" ]] && break
+               ciphertext+="$res"
+               continue
+          fi
+          "$include_headers" && aad="${ciphertext:0:10}" || aad=""
+          data="$(sym-decrypt "$cipher" "$server_key" "$(get-nonce "$server_iv" "$server_seq")" "${ciphertext:10:msg_len}" "$aad")"
+          [[ $? -eq 0 ]] || return 1
+
+          len=${#data}-2
+          while [[ "${data:len:2}" == 00 ]]; do
+               len=$((len-2))
+          done
+          content_type="${data:len:2}"
+
+          if [[ "$content_type" == 16 ]] && [[ "${data:0:2}" == 04 ]]; then
+               # This is a new_session_ticket
+               parse_tls13_new_session_ticket "$tls_version" "${data:0:len}"
+          elif [[ "$content_type" == 17 ]]; then
+               # This really is application data.
+               plaintext+="${data:0:len}"
+               "$first_block_only" && break
+          fi
+          ciphertext=${ciphertext:$((msg_len+10))}
+          server_seq+=1
+          [[ -z "$ciphertext" ]] && break
+     done
+     APP_TRAF_KEY_INFO="$tls_version $cipher $server_key $server_iv $server_seq $client_key $client_iv $client_seq"
+     asciihex_to_binary "$plaintext" > "$TMPFILE"
+     return 0
 }
 
 
