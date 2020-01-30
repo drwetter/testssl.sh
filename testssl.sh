@@ -19280,7 +19280,7 @@ set_scanning_defaults() {
 }
 
 # returns number of $do variables set = number of run_funcs() to perform
-query_globals() {
+count_do_variables() {
      local gbl
      local true_nr=0
 
@@ -19379,7 +19379,7 @@ parse_cmd_line() {
      esac
 
      # initializing
-     set_scanning_defaults
+     initialize_globals
 
      while [[ $# -gt 0 ]]; do
           case $1 in
@@ -19884,8 +19884,9 @@ parse_cmd_line() {
      done
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
-     set_scanning_defaults
-     query_globals
+
+     count_do_variables
+     [[ $? -eq 0 ]] && set_scanning_defaults
      CMDLINE_PARSED=true
 }
 
@@ -20128,9 +20129,10 @@ lets_roll() {
 
      #TODO: there shouldn't be the need for a special case for --mx, only the ip addresses we would need upfront and the do-parser
      if "$do_mx_all_ips"; then
-          query_globals                                # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
+          #FIXME: do we need this really here?
+          count_do_variables                           # if we have just 1x "do_*" --> we do a standard run -- otherwise just the one specified
           [[ $? -eq 1 ]] && set_scanning_defaults
-          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to the stuff necessary as ~15 lines later we have similar code
+          run_mx_all_ips "${URI}" $PORT                # we should reduce run_mx_all_ips to what's necessary as below we have similar code
           exit $?
      fi
 
