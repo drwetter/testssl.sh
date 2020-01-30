@@ -11828,25 +11828,21 @@ gcm_mult() {
      return 0
 }
 
-# arg1: a hexadecimal string that is at least 8 bytes in length
-# See Section 6.2 of NIST SP 800-38D
-inc32() {
-     local -i i len
-     local x="$1"
-     local msb
-     local -i lsb
+# arg1: nonce (must be 96 bits)
+# arg2: number of blocks needed for plaintext/ciphertext
+# Generate the sequence of counter blocks, which are to be encrypted and then
+# XORed with either the plaintext or the ciphertext. The first block that is
+# encrypted is used in computing the authentication tag.
+generate_gcm_ctr() {
+     local -i nr_blocks="$1"
+     local nonce="$2"
+     local i
+     local lsb ctr=""
 
-     len=${#x}
-     [[ $len -lt 8 ]] && return 7
-     i=$len-8
-     msb="${x:0:i}"
-     lsb="0x${x:i:8}"
-     if [[ "$lsb" -eq "0xffffffff" ]]; then
-         lsb=0
-     else
-         lsb+=1
-     fi
-     tm_out "${msb}$(printf "%08X" "$lsb")"
+     for (( i=1; i <= nr_blocks; i++ )); do
+          lsb="$(printf "%08X" "$i")"
+          printf "\x${nonce:0:2}\x${nonce:2:2}\x${nonce:4:2}\x${nonce:6:2}\x${nonce:8:2}\x${nonce:10:2}\x${nonce:12:2}\x${nonce:14:2}\x${nonce:16:2}\x${nonce:18:2}\x${nonce:20:2}\x${nonce:22:2}\x${lsb:0:2}\x${lsb:2:2}\x${lsb:4:2}\x${lsb:6:2}"
+     done
      return 0
 }
 
@@ -11860,7 +11856,7 @@ inc32() {
 # This function is based on gcm_setkey, gcm_start, gcm_update, and gcm_finish
 # in https://github.com/mko-x/SharedAES-GCM
 gcm() {
-     local cipher="$1" aes_key="$2" y="${3}00000001" input="$4" aad="$5" mode="$6"
+     local cipher="$1" aes_key="$2" nonce="$3" input="$4" aad="$5" mode="$6"
      local compute_tag="$7"
      local -a -i gcm_ctx_hl=(0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
      local -a -i gcm_ctx_hh=(0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)
@@ -11912,10 +11908,6 @@ gcm() {
                hh+="$(printf "%016X" ${gcm_ctx_hh[i]}) "
           done
 
-          # gcm_start
-          # compute the encrypted counter for later use in computing the authentication tag
-          base_ectr="$(printf "\x${y:0:2}\x${y:2:2}\x${y:4:2}\x${y:6:2}\x${y:8:2}\x${y:10:2}\x${y:12:2}\x${y:14:2}\x${y:16:2}\x${y:18:2}\x${y:20:2}\x${y:22:2}\x${y:24:2}\x${y:26:2}\x${y:28:2}\x${y:30:2}" | $OPENSSL enc "$cipher" -K "$aes_key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
-
           # Feed any additional authenticated data into the computation for the authentication tag.
           for (( i=0; i < aad_len; i+=use_len )); do
                [[ $((aad_len-i)) -lt 16 ]] && use_len=$((aad_len-i)) || use_len=16
@@ -11928,25 +11920,33 @@ gcm() {
           done
      fi
 
+     j=$((1 + input_len/16))
+     [[ $((input_len%16)) -ne 0 ]] && j+=1
+     ectr="$(generate_gcm_ctr "$j" "$nonce" | $OPENSSL enc "$cipher" -K "$aes_key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+     base_ectr="${ectr:0:32}"
+     ectr="${ectr:32}"
+
      # gcm_update
      # Encrypt or decrypt the input and feed the ciphertext into the computation for the authentication tag.
      for (( length=input_len; length > 0; length=length-use_len )); do
           [[ $length -lt 16 ]] && use_len=$length || use_len=16
 
-          y="$(inc32 "$y")"
-          ectr="$(printf "\x${y:0:2}\x${y:2:2}\x${y:4:2}\x${y:6:2}\x${y:8:2}\x${y:10:2}\x${y:12:2}\x${y:14:2}\x${y:16:2}\x${y:18:2}\x${y:20:2}\x${y:22:2}\x${y:24:2}\x${y:26:2}\x${y:28:2}\x${y:30:2}" | $OPENSSL enc "$cipher" -K "$aes_key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
-
-          for (( i=0; i < use_len; i++ )); do
-               tmp="$(printf "%02X" $((0x${ectr:$((2*i)):2} ^ 0x${input:$((2*i)):2})))"
-               output+="$tmp"
-               if "$compute_tag"; then
-                    if [[ $mode == encrypt ]]; then
-                         gcm_ctx_buf[i]="$(printf "%02X" $((0x${gcm_ctx_buf[i]} ^ 0x$tmp)))"
-                    else
-                         gcm_ctx_buf[i]="$(printf "%02X" $((0x${gcm_ctx_buf[i]} ^ 0x${input:$((2*i)):2})))"
-                    fi
-               fi
-          done
+          if [[ $use_len -eq 16 ]]; then
+               tmp="$(printf "%08X%08X%08X%08X" "$((0x${ectr:0:8} ^ 0x${input:0:8}))" "$((0x${ectr:8:8} ^ 0x${input:8:8}))" "$((0x${ectr:16:8} ^ 0x${input:16:8}))" "$((0x${ectr:24:8} ^ 0x${input:24:8}))")"
+          else
+               tmp=""
+               for (( i=0; i < use_len; i++ )); do
+                    tmp+="$(printf "%02X" $((0x${ectr:$((2*i)):2} ^ 0x${input:$((2*i)):2})))"
+               done
+          fi
+          output+="$tmp"
+          if "$compute_tag"; then
+               [[ $mode == decrypt ]] && tmp="${input:0:32}"
+               for (( i=0; i < use_len; i++ )); do
+                    gcm_ctx_buf[i]="$(printf "%02X" $((0x${gcm_ctx_buf[i]} ^ 0x${tmp:$((2*i)):2})))"
+               done
+          fi
+          ectr="${ectr:32}"
 
           if "$compute_tag"; then
                tmp="$(gcm_mult $hl $hh ${gcm_ctx_buf[0]} ${gcm_ctx_buf[1]} ${gcm_ctx_buf[2]} ${gcm_ctx_buf[3]} ${gcm_ctx_buf[4]} ${gcm_ctx_buf[5]} ${gcm_ctx_buf[6]} ${gcm_ctx_buf[7]} ${gcm_ctx_buf[8]} ${gcm_ctx_buf[9]} ${gcm_ctx_buf[10]} ${gcm_ctx_buf[11]} ${gcm_ctx_buf[12]} ${gcm_ctx_buf[13]} ${gcm_ctx_buf[14]} ${gcm_ctx_buf[15]})"
