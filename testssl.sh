@@ -4548,10 +4548,10 @@ run_client_simulation() {
      local names=()
      local short=()
      local protos=()
-     local ciphers=()
+     local ch_ciphers=()
      local ciphersuites=()
      local tlsvers=()
-     local sni=()
+     local ch_sni=()
      local warning=()
      local handshakebytes=()
      local lowest_protocol=()
@@ -4659,7 +4659,7 @@ run_client_simulation() {
                               curves[i]=""
                               [[ -n "$supported_curves" ]] && curves[i]="-curves ${supported_curves:1}"
                          fi
-                         options="$(s_client_options "-cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
+                         options="$(s_client_options "-cipher ${ch_ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} ${protos[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${ch_sni[i]}")"
                          debugme echo "$OPENSSL s_client $options  </dev/null"
                          $OPENSSL s_client $options </dev/null >$TMPFILE 2>$ERRFILE
                          sclient_connect_successful $? $TMPFILE
@@ -4708,7 +4708,7 @@ run_client_simulation() {
                                         debugme pr_local_problem "TLS 1.3 not supported, "
                                         continue
                                    fi
-                                   options="$(s_client_options "$tls -cipher ${ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${sni[i]}")"
+                                   options="$(s_client_options "$tls -cipher ${ch_ciphers[i]} -ciphersuites "\'${ciphersuites[i]}\'" ${curves[i]} $STARTTLS $BUGS $PROXY -connect $NODEIP:$PORT ${ch_sni[i]}")"
                                    debugme echo "$OPENSSL s_client $options  </dev/null"
                                    $OPENSSL s_client $options  </dev/null >$TMPFILE 2>$ERRFILE
                                    sclient_connect_successful $? $TMPFILE
@@ -6217,7 +6217,7 @@ run_server_preference() {
      local cipher1="" cipher2="" tls13_cipher1="" tls13_cipher2="" default_proto=""
      local prev_cipher="" default_cipher=""
      local limitedsense="" supported_sslv2_ciphers
-     local -a cipher proto
+     local -a offered_cipher offered_proto
      local proto_ossl proto_txt proto_hex cipherlist i
      local -i ret=0 j sclient_success str_len
      local list_fwd="DHE-RSA-SEED-SHA:SEED-SHA:DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-SHA256:ADH-AES256-GCM-SHA384:AECDH-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-AES128-SHA"
@@ -6504,7 +6504,7 @@ run_server_preference() {
                          sslv2_sockets "" "true"
                          if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
                               # Just arbitrarily pick the first cipher in the cipher-mapping.txt list.
-                              proto[i]="SSLv2"
+                              offered_proto[i]="SSLv2"
                               supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
                               for (( j=0; j < TLS_NR_CIPHERS; j++ )); do
                                    if [[ "${TLS_CIPHER_SSLVERS[j]}" == "SSLv2" ]]; then
@@ -6512,18 +6512,18 @@ run_server_preference() {
                                         cipher1="$(tolower "x${cipher1:2:2}${cipher1:7:2}${cipher1:12:2}")"
                                         if [[ "$supported_sslv2_ciphers" =~ $cipher1 ]]; then
                                              if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${TLS_CIPHER_OSSL_NAME[j]}" != "-" ]] ) || [[ "${TLS_CIPHER_RFC_NAME[j]}" == "-" ]]; then
-                                                  cipher[i]="${TLS_CIPHER_OSSL_NAME[j]}"
+                                                  offered_cipher[i]="${TLS_CIPHER_OSSL_NAME[j]}"
                                              else
-                                                  cipher[i]="${TLS_CIPHER_RFC_NAME[j]}"
+                                                  offered_cipher[i]="${TLS_CIPHER_RFC_NAME[j]}"
                                              fi
                                              break
                                         fi
                                    fi
                               done
-                              [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
+                              [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${offered_proto[i]}: ${offered_cipher[i]}"
                          else
-                              proto[i]=""
-                              cipher[i]=""
+                              offered_proto[i]=""
+                              offered_cipher[i]=""
                          fi
                     fi
                elif ( [[ $proto_ossl == ssl3 ]] && ! "$HAS_SSL3" ) || ( [[ $proto_ossl == tls1_3 ]] && ! "$HAS_TLS13" ); then
@@ -6538,49 +6538,49 @@ run_server_preference() {
                     else
                          tls_sockets "$proto_hex" "$cipherlist"
                          if [[ $? -eq 0 ]]; then
-                              proto[i]="$proto_txt"
+                              offered_proto[i]="$proto_txt"
                               cipher1=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
-                              cipher[i]="$cipher1"
+                              offered_cipher[i]="$cipher1"
                               if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
-                                   cipher[i]="$(rfc2openssl "$cipher1")"
-                                   [[ -z "${cipher[i]}" ]] && cipher[i]="$cipher1"
+                                   offered_cipher[i]="$(rfc2openssl "$cipher1")"
+                                   [[ -z "${offered_cipher[i]}" ]] && offered_cipher[i]="$cipher1"
                               fi
-                              [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
+                              [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${offered_proto[i]}: ${offered_cipher[i]}"
                          else
-                              proto[i]=""
-                              cipher[i]=""
+                              offered_proto[i]=""
+                              offered_cipher[i]=""
                          fi
                     fi
                else
                     $OPENSSL s_client $(s_client_options "$STARTTLS -"$proto_ossl" $BUGS -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
                     if sclient_connect_successful $? $TMPFILE; then
-                         proto[i]=$(get_protocol $TMPFILE)
-                         cipher[i]=$(get_cipher $TMPFILE)
-                         [[ ${cipher[i]} == "0000" ]] && cipher[i]=""                     # Hack!
-                         if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ -n "${cipher[i]}" ]]; then
-                              cipher[i]="$(openssl2rfc "${cipher[i]}")"
-                              [[ -z "${cipher[i]}" ]] && cipher[i]=$(get_cipher $TMPFILE)
+                         offered_proto[i]=$(get_protocol $TMPFILE)
+                         offered_cipher[i]=$(get_cipher $TMPFILE)
+                         [[ ${offered_cipher[i]} == "0000" ]] && offered_cipher[i]=""                     # Hack!
+                         if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]] && [[ -n "${offered_cipher[i]}" ]]; then
+                              offered_cipher[i]="$(openssl2rfc "${offered_cipher[i]}")"
+                              [[ -z "${offered_cipher[i]}" ]] && offered_cipher[i]=$(get_cipher $TMPFILE)
                          fi
-                         [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${proto[i]}: ${cipher[i]}"
+                         [[ $DEBUG -ge 2 ]] && tmln_out "Default cipher for ${offered_proto[i]}: ${offered_cipher[i]}"
                     else
-                         proto[i]=""
-                         cipher[i]=""
+                         offered_proto[i]=""
+                         offered_cipher[i]=""
                     fi
                fi
-               [[ -n "${cipher[i]}" ]] && add_tls_offered "$proto_ossl" yes
+               [[ -n "${offered_cipher[i]}" ]] && add_tls_offered "$proto_ossl" yes
                i=$((i + 1))
           done
 
           for i in 1 2 3 4 5 6; do
-               if [[ -n "${cipher[i]}" ]]; then                                      # cipher not empty
-                    if [[ -z "$prev_cipher" ]] || [[ "$prev_cipher" != "${cipher[i]}" ]]; then
+               if [[ -n "${offered_cipher[i]}" ]]; then                                      # cipher not empty
+                    if [[ -z "$prev_cipher" ]] || [[ "$prev_cipher" != "${offered_cipher[i]}" ]]; then
                          [[ -n "$prev_cipher" ]] && outln
-                         str_len=${#cipher[i]}
+                         str_len=${#offered_cipher[i]}
                          out "     "
                          if [[ "$COLOR" -le 2 ]]; then
-                              out "${cipher[i]}"
+                              out "${offered_cipher[i]}"
                          else
-                              pr_cipher_quality "${cipher[i]}"
+                              pr_cipher_quality "${offered_cipher[i]}"
                          fi
                          out ":"
                          if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
@@ -6595,10 +6595,10 @@ run_server_preference() {
                     else
                          out ", "           # same cipher --> only print out protocol behind it
                     fi
-                    out "${proto[i]}"
-                    prev_cipher="${cipher[i]}"
+                    out "${offered_proto[i]}"
+                    prev_cipher="${offered_cipher[i]}"
                fi
-               fileout "cipher_order_${proto[i]}" "INFO" "${cipher[i]} at ${proto[i]} $limitedsense"
+               fileout "cipher_order_${offered_proto[i]}" "INFO" "${offered_cipher[i]} at ${offered_proto[i]} $limitedsense"
           done
           outln "\n No further cipher order check has been done as order is determined by the client"
           outln
@@ -8971,7 +8971,7 @@ run_server_defaults() {
      local -i certs_found=0
      local -i ret=0
      local -a previous_hostcert previous_hostcert_txt previous_hostcert_type
-     local -a previous_hostcert_issuer previous_intermediates previous_ordering_problem keysize cipher
+     local -a previous_hostcert_issuer previous_intermediates previous_ordering_problem keysize tested_cipher
      local -a ocsp_response_binary ocsp_response ocsp_response_status sni_used tls_version ct
      local -a ciphers_to_test certificate_type
      local -a -i success
@@ -9148,7 +9148,7 @@ run_server_defaults() {
                     fi
                     if ! "$match_found"; then
                          certs_found=$(( certs_found + 1))
-                         cipher[certs_found]=${ciphers_to_test[n]}
+                         tested_cipher[certs_found]=${ciphers_to_test[n]}
                          keysize[certs_found]=$(awk '/Server public key/ { print $(NF-1) }' $TMPFILE)
                          # If an OCSP response was sent, then get the full
                          # response so that certificate_info() can determine
@@ -9210,7 +9210,7 @@ run_server_defaults() {
      # Now that all of the server's certificates have been found, determine for
      # each certificate whether certificate transparency information is provided.
      for (( i=1; i <= certs_found; i++ )); do
-          ct[i]="$(certificate_transparency "${previous_hostcert_txt[i]}" "${ocsp_response[i]}" "$certs_found" "${cipher[i]}" "${sni_used[i]}" "${tls_version[i]}")"
+          ct[i]="$(certificate_transparency "${previous_hostcert_txt[i]}" "${ocsp_response[i]}" "$certs_found" "${tested_cipher[i]}" "${sni_used[i]}" "${tls_version[i]}")"
           # If certificate_transparency() called tls_sockets() and found a "signed certificate timestamps" extension,
           # then add it to $TLS_EXTENSIONS, since it may not have been found by determine_tls_extensions().
           [[ $certs_found -gt 1 ]] && [[ "${ct[i]}" == TLS\ extension ]] && extract_new_tls_extensions "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt"
@@ -9389,7 +9389,7 @@ run_server_defaults() {
           echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
           echo "${previous_hostcert_issuer[i]}" > $TEMPDIR/hostcert_issuer.pem
           certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" \
-               "${cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" \
+               "${tested_cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" \
                "${ocsp_response_binary[i]}" "${ocsp_response[i]}" \
                "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}" \
                "${previous_ordering_problem[i]}"
@@ -19548,7 +19548,7 @@ create_mass_testing_cmdline() {
      local testing_type="$1"
      local cmd test_number
      local outfile_arg
-     local -i nr_cmds=0 index=0
+     local -i nr_cmds=0 i=0
      local skip_next=false
 
      MASS_TESTING_CMDLINE=()
@@ -19560,7 +19560,7 @@ create_mass_testing_cmdline() {
      # uses '=' for supplying a value we just skip next parameter (we don't use 'parse_opt_equal_sign' here)
      debugme echo "${CMDLINE_ARRAY[@]}"
      for cmd in "${CMDLINE_ARRAY[@]}"; do
-          "$skip_next" && skip_next=false && index+=1 && continue
+          "$skip_next" && skip_next=false && i+=1 && continue
           if [[ "$cmd" =~ --file ]] || [[ "$cmd" =~ -iL ]]; then
                # Don't include the "--file[=...] or -iL argument in the child's command
                # line, but do include "--warnings=batch".
@@ -19583,7 +19583,7 @@ create_mass_testing_cmdline() {
                     [[ "$cmd" == --jsonfile ]] && skip_next=true
                     [[ "$cmd" == -oj ]] && skip_next=true
                elif "$JSONHEADER" && ( [[ "$cmd" =~ --outFile ]] || [[ "$cmd" =~ -oA ]] ); then
-                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[index+1]}")"
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
                     >"$TEMPDIR/jsonfile_child.json"
                     MASS_TESTING_CMDLINE[nr_cmds]="-oJ=$TEMPDIR/jsonfile_child.json"
                     nr_cmds+=1
@@ -19594,7 +19594,7 @@ create_mass_testing_cmdline() {
                     [[ "$cmd" == --outFile ]] && skip_next=true
                     [[ "$cmd" == -oA ]] && skip_next=true
                elif "$JSONHEADER" && ( [[ "$cmd" =~ --outfile ]] || [[ "$cmd" =~ -oa ]] ); then
-                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[index+1]}")"
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
                     >"$TEMPDIR/jsonfile_child.json"
                     MASS_TESTING_CMDLINE[nr_cmds]="-oj=$TEMPDIR/jsonfile_child.json"
                     nr_cmds+=1
@@ -19684,7 +19684,7 @@ create_mass_testing_cmdline() {
                esac
                nr_cmds+=1
           fi
-          index+=1
+          i+=1
      done
 
      # Now add the command line arguments for the specific test to the command line.
