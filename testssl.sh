@@ -12217,8 +12217,10 @@ check_tls_serverhellodone() {
           [[ $remaining -lt 10 ]] && return 1
 
           tls_content_type="${tls_hello_ascii:i:2}"
-          [[ "$tls_content_type" != 14 ]] && [[ "$tls_content_type" != 15 ]] && \
-               [[ "$tls_content_type" != 16 ]] && [[ "$tls_content_type" != 17 ]] && return 2
+          case "$tls_content_type" in
+               14|15|16|17) ;;
+               *) return 2 ;;
+          esac
           i=$i+2
           tls_protocol="${tls_hello_ascii:i:4}"
           [[ -z "$DETECTED_TLS_VERSION" ]] && DETECTED_TLS_VERSION="$tls_protocol"
@@ -12298,13 +12300,11 @@ check_tls_serverhellodone() {
                done
                tls_content_type="${plaintext:plaintext_len:2}"
                decrypted_response+="${tls_content_type}0301$(printf "%04X" $((plaintext_len/2)))${plaintext:0:plaintext_len}"
-               if [[ "$tls_content_type" == 16 ]]; then
-                    tls_handshake_ascii+="${plaintext:0:plaintext_len}"
-               elif [[ "$tls_content_type" == 15 ]]; then
-                    tls_alert_ascii+="${plaintext:0:plaintext_len}"
-               else
-                    return 2
-               fi
+               case "$tls_content_type" in
+                    15) tls_alert_ascii+="${plaintext:0:plaintext_len}" ;;
+                    16) tls_handshake_ascii+="${plaintext:0:plaintext_len}" ;;
+                    *) return 2 ;;
+               esac
           fi
      done
 
@@ -12529,11 +12529,10 @@ parse_tls_serverhello() {
                fi
           fi
 
-          if [[ $tls_content_type == 16 ]]; then
-               tls_handshake_ascii="$tls_handshake_ascii${tls_hello_ascii:i:msg_len}"
-          elif [[ $tls_content_type == 15 ]]; then   # TLS ALERT
-               tls_alert_ascii="$tls_alert_ascii${tls_hello_ascii:i:msg_len}"
-          fi
+          case "$tls_content_type" in
+               15) tls_alert_ascii="$tls_alert_ascii${tls_hello_ascii:i:msg_len}" ;;
+               16) tls_handshake_ascii="$tls_handshake_ascii${tls_hello_ascii:i:msg_len}" ;;
+          esac
      done
 
      # Now check the alert messages.
