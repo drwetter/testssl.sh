@@ -19364,24 +19364,25 @@ parse_cmd_line() {
      CMDLINE="$(create_cmd_line_string "${CMDLINE_ARRAY[@]}")"
      CMDLINE_PARSED=false
 
-     # Show usage if no options were specified
-     [[ -z "$1" ]] && help 0
-     # Set defaults if only an URI was specified, maybe ToDo: use "="-option, then: ${i#*=} i.e. substring removal
-     [[ "$#" -eq 1 ]] && set_scanning_defaults
+     case $1 in
+          --help|"")
+               help 0
+               ;;
+          -b|--banner|-v|--version)
+               maketempf
+               get_install_dir
+               find_openssl_binary
+               prepare_debug
+               mybanner
+               exit $ALLOK
+               ;;
+     esac
+
+     # initializing
+     set_scanning_defaults
 
      while [[ $# -gt 0 ]]; do
           case $1 in
-               --help)
-                    help 0
-                    ;;
-               -b|--banner|-v|--version)
-                    maketempf
-                    get_install_dir
-                    find_openssl_binary
-                    prepare_debug
-                    mybanner
-                    exit $ALLOK
-                    ;;
                --mx)
                     do_mx_all_ips=true
                     PORT=25
@@ -19883,8 +19884,8 @@ parse_cmd_line() {
      done
 
      [[ "$DEBUG" -ge 5 ]] && debug_globals
-     # if we have no "do_*" set here --> query_globals: we do a standard run -- otherwise just the one specified
-     query_globals && set_scanning_defaults
+     set_scanning_defaults
+     query_globals
      CMDLINE_PARSED=true
 }
 
