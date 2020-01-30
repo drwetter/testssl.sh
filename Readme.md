@@ -11,10 +11,9 @@ cryptographic flaws.
 ### Key features
 
 * Clear output: you can tell easily whether anything is good or bad.
-* Machine readable output.
-* No installation needed: Linux, OSX/Darwin, FreeBSD, NetBSD, MSYS2/Cygwin,
-  WSL work out of the box. Only OpenBSD needs bash. No need to install
-  or to configure something.  No gems, CPAN, pip or the like.
+* Machine readable output (CSV, two JSON formats)
+* No need to install or to configure something.  No gems, CPAN, pip or the like.
+* Works out of the box: Linux, OSX/Darwin, FreeBSD, NetBSD, MSYS2/Cygwin, WSL (bash on Windows). Only OpenBSD needs bash.
 * A Dockerfile is provided, there's also an offical container @ dockerhub.
 * Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not
   only web servers at port 443.
@@ -72,10 +71,9 @@ Successfully built 889fa2f99933
 
 ### Status
 
-We're currently in the late release candidate phase. That means you can and should use it for production
-and let us know if you encounter any additional bugs. Features implemented in 3.0 are listed in the [Changelog](https://github.com/drwetter/testssl.sh/blob/3.0/CHANGELOG.md).
+We're currently in the developement pase of 3.1dev. That means **occasionally** things can break. But we plan to keep it usable, think more of a rolling development. For missing critical purposes or when you don't like changes you should wait a bit until we're in the release phase. As soon as we reach that or the "dev" disappears in the branch you should rather use this version.
 
-Support for 2.9.5 has been dropped.
+Support for 2.9.5 has been dropped. Supported is 3.0 only.
 
 
 ### Documentation
