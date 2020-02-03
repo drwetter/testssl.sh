@@ -495,7 +495,7 @@ html_reserved(){
      output="${output//>/&gt;}"
      output="${output//\"/&quot;}"
      output="${output//\'/&apos;}"
-     tm_out "$output"
+     printf -- "%s" "$output"
      return 0
 }
 
