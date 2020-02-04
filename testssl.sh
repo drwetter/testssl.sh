@@ -17720,8 +17720,9 @@ parse_hn_port() {
      SNI="-servername $NODE"
      URL_PATH=$(sed 's/https:\/\///' <<< "$1" | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
      URL_PATH=$(sed 's/\/\//\//g' <<< "$URL_PATH")          # we rather want // -> /
+     URL_PATH=${URL_PATH%%.}                                # strip trailing "." so that it is not interpreted as URL
      [[ -z "$URL_PATH" ]] && URL_PATH="/"
-     debugme echo $URL_PATH
+     debugme echo "URL_PATH: $URL_PATH"
      return 0                                               # NODE, URL_PATH, PORT is set now
 }
 
