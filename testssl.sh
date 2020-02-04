@@ -10503,83 +10503,83 @@ get_pub_key_size() {
           i=2
           len1="0x${pubkey:i:2}"
           if [[ $len1 -lt 0x80 ]]; then
-               i=$i+2
+               i+=2
           else
-               len1=$len1-0x80
-               i=$i+2*$len1+2
+               len1=$((len1-0x80))
+               i+=$((2*len1+2))
           fi
 
           # Skip over algorithm field
-          i=$i+2
+          i+=2
           len1="0x${pubkey:i:2}"
-          i=$i+2
+          i+=2
           if [[ $len1 -lt 0x80 ]]; then
-               i=$i+2*$len1
+               i+=$((2*len1))
           else
                case $len1 in
                     129) len="0x${pubkey:i:2}" ;;
                     130) len="0x${pubkey:i:2}"
-                         i=$i+2
+                         i+=2
                          len=256*$len+"0x${pubkey:i:2}"
                          ;;
                     131) len="0x${pubkey:i:2}"
-                         i=$i+2
+                         i+=2
                          len=256*$len+"0x${pubkey:i:2}"
-                         i=$i+2
+                         i+=2
                          len=256*$len+"0x${pubkey:i:2}"
                          ;;
                     132) len="0x${pubkey:i:2}"
-                         i=$i+2
+                         i+=2
                          len=256*$len+"0x${pubkey:i:2}"
-                         i=$i+2
+                         i+=2
                          len=256*$len+"0x${pubkey:i:2}"
-                         i=$i+2
+                         i+=2
                          len=256*$len+"0x${pubkey:i:2}"
                          ;;
                esac
-               i=$i+2+2*$len
+               i+=$((2+2*len))
           fi
 
           # Next is the public key BIT STRING. Skip over tag, length, and number of unused bits.
-          i=$i+2
+          i+=2
           len1="0x${pubkey:i:2}"
           if [[ $len1 -lt 0x80 ]]; then
-               i=$i+4
+               i+=4
           else
-               len1=$len1-0x80
-               i=$i+2*$len1+4
+               len1=$((len1-0x80))
+               i+=$((2*len1+4))
           fi
 
           # Now get the length of the public key
-          i=$i+2
+          i+=2
           len1="0x${pubkey:i:2}"
-          i=$i+2
+          i+=2
           if [[ $len1 -lt 0x80 ]]; then
                len=$len1
           else
                case $len1 in
                     129) len="0x${pubkey:i:2}" ;;
                     130) len="0x${pubkey:i:2}"
-                         i=$i+2
+                         i+=2
                          len=256*$len+"0x${pubkey:i:2}"
                          ;;
                     131) len="0x${pubkey:i:2}"
-                         i=$i+2
+                         i+=2
                          len=256*$len+"0x${pubkey:i:2}"
-                         i=$i+2
+                         i+=2
                          len=256*$len+"0x${pubkey:i:2}"
                          ;;
                     132) len="0x${pubkey:i:2}"
-                         i=$i+2
-                         len=256*"0x${pubkey:i:2}"
-                         i=$i+2
-                         len=256*"0x${pubkey:i:2}"
-                         i=$i+2
-                         len=256*"0x${pubkey:i:2}"
+                         i+=2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         i+=2
+                         len=256*$len+"0x${pubkey:i:2}"
+                         i+=2
+                         len=256*$len+"0x${pubkey:i:2}"
                          ;;
                esac
           fi
-          len=8*$len # convert from bytes to bits
+          len=$((8*len)) # convert from bytes to bits
           pubkeybits="$(printf "%d" $len)"
           echo "Server public key is $pubkeybits bit" >> $TMPFILE
      fi
