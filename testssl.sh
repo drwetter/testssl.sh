@@ -2185,7 +2185,7 @@ run_http_header() {
                HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           else
                prln_warning " likely HTTP header requests failed (#lines: $(wc -l $HEADERFILE | awk '{ print $1 }'))"
-               [[ "$DEBUG" -lt 1 ]] & outln "Rerun with DEBUG>=1 and inspect $HEADERFILE\n"
+               [[ "$DEBUG" -lt 1 ]] && outln "Rerun with DEBUG>=1 and inspect $HEADERFILE\n"
                fileout "HTTP_status_code" "WARN" "HTTP header request failed"
                debugme cat $HEADERFILE
                ((NR_HEADER_FAIL++))
@@ -16609,7 +16609,7 @@ run_beast(){
      "$SSL_NATIVE" && using_sockets=false
      # $cbc_ciphers_hex has 126 ciphers, we omitted SRP-AES-256-CBC-SHA bc the trailing 00,ff below will pose
      # a problem for ACE loadbalancers otherwise. So in case we know this is not true, we'll re-add it
-     ! "$SERVER_SIZE_LIMIT_BUG" & "$using_sockets" && cbc_ciphers_hex="$cbc_ciphers_hex, C0,20"
+     ! "$SERVER_SIZE_LIMIT_BUG" && "$using_sockets" && cbc_ciphers_hex="$cbc_ciphers_hex, C0,20"
 
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
      if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
