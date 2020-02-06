@@ -3145,7 +3145,7 @@ prettyprint_local() {
      if [[ -z "$1" ]]; then
           actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V" | while read -r hexcode dash ciph sslvers kx auth enc mac export ; do       # -V doesn't work with openssl < 1.0
                hexc="$(normalize_ciphercode $hexcode)"
-               outln "$(neat_list "$hexc" "$ciph" "$kx" "$enc")"
+               outln "$(neat_list "$hexc" "$ciph" "$kx" "$enc" "$export")"
           done
      else
           #for arg in $(echo $@ | sed 's/,/ /g'); do
@@ -3154,8 +3154,8 @@ prettyprint_local() {
                     hexc="$(normalize_ciphercode $hexcode)"
                     # for numbers we don't do word matching:
                     [[ $arg =~ $re ]] && \
-                         line="$(neat_list "$hexc" "$ciph" "$kx" "$enc" | grep -ai "$arg")" || \
-                         line="$(neat_list "$hexc" "$ciph" "$kx" "$enc" | grep -wai "$arg")"
+                         line="$(neat_list "$hexc" "$ciph" "$kx" "$enc" "$export" | grep -ai "$arg")" || \
+                         line="$(neat_list "$hexc" "$ciph" "$kx" "$enc" "$export" | grep -wai "$arg")"
                     [[ -n "$line" ]] && outln "$line"
                done
           done
@@ -3306,12 +3306,13 @@ neat_header(){
 # arg2: cipher in openssl notation
 # arg3: keyexchange
 # arg4: encryption (maybe included "export")
-# arg5: "true" if the cipher's "quality" should be highlighted
+# arg5: "export" if the cipher is an export-quality cipher, empty otherwise.
+# arg6: "true" if the cipher's "quality" should be highlighted
 #       "false" if the line should be printed in light grey
 #       empty if line should be returned as a string
 neat_list(){
      local hexcode="$1"
-     local ossl_cipher="$2" tls_cipher=""
+     local ossl_cipher="$2" export="$5" tls_cipher=""
      local kx enc strength line what_dh bits
      local -i i len
 
@@ -3333,7 +3334,7 @@ neat_list(){
 
      [[ "$DISPLAY_CIPHERNAMES" != openssl-only ]] && tls_cipher="$(show_rfc_style "$hexcode")"
 
-     if [[ "$5" != true ]]; then
+     if [[ "$6" != true ]]; then
           if [[ "$DISPLAY_CIPHERNAMES" =~ rfc ]]; then
                line="$(printf -- " %-7s %-49s %-10s %-12s%-8s" "$hexcode" "$tls_cipher" "$kx" "$enc" "$strength")"
                [[ "$DISPLAY_CIPHERNAMES" != rfc-only ]] && line+="$(printf -- " %-33s${SHOW_EACH_C:+  %-0s}" "$ossl_cipher")"
@@ -3341,7 +3342,7 @@ neat_list(){
                line="$(printf -- " %-7s %-33s %-10s %-12s%-8s" "$hexcode" "$ossl_cipher" "$kx" "$enc" "$strength")"
                [[ "$DISPLAY_CIPHERNAMES" != openssl-only ]] && line+="$(printf -- " %-49s${SHOW_EACH_C:+  %-0s}" "$tls_cipher")"
           fi
-          if [[ -z "$5" ]]; then
+          if [[ -z "$6" ]]; then
                tm_out "$line"
           else
                pr_deemphasize "$line"
@@ -3399,7 +3400,7 @@ neat_list(){
 }
 
 run_cipher_match(){
-     local hexc n auth export ciphers_to_test tls13_ciphers_to_test supported_sslv2_ciphers s
+     local hexc n auth ciphers_to_test tls13_ciphers_to_test supported_sslv2_ciphers s
      local -a hexcode normalized_hexcode ciph sslvers kx enc export2 sigalg
      local -a ciphers_found ciphers_found2 ciph2 rfc_ciph rfc_ciph2 ossl_supported
      local -a -i index
@@ -3452,9 +3453,9 @@ run_cipher_match(){
                          normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}${hexc:12:2}"
                     fi
                     if [[ $arg =~ $re ]]; then
-                         neat_list "${normalized_hexcode[nr_ciphers]}" "${TLS_CIPHER_OSSL_NAME[i]}" "${TLS_CIPHER_KX[i]}" "${TLS_CIPHER_ENC[i]}" | grep -qai "$arg"
+                         neat_list "${normalized_hexcode[nr_ciphers]}" "${TLS_CIPHER_OSSL_NAME[i]}" "${TLS_CIPHER_KX[i]}" "${TLS_CIPHER_ENC[i]}" "${TLS_CIPHER_EXPORT[i]}" | grep -qai "$arg"
                     else
-                         neat_list "${normalized_hexcode[nr_ciphers]}" "${TLS_CIPHER_OSSL_NAME[i]}" "${TLS_CIPHER_KX[i]}" "${TLS_CIPHER_ENC[i]}" | grep -qwai "$arg"
+                         neat_list "${normalized_hexcode[nr_ciphers]}" "${TLS_CIPHER_OSSL_NAME[i]}" "${TLS_CIPHER_KX[i]}" "${TLS_CIPHER_ENC[i]}" "${TLS_CIPHER_EXPORT[i]}" | grep -qwai "$arg"
                     fi
                     if [[ $? -eq 0 ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then    # string matches, so we can ssl to it:
                          normalized_hexcode[nr_ciphers]="$(tolower "${normalized_hexcode[nr_ciphers]}")"
@@ -3479,9 +3480,9 @@ run_cipher_match(){
                     hexc="$(normalize_ciphercode $hexc)"
                     # is argument a number?
                     if [[ $arg =~ $re ]]; then
-                         neat_list "$hexc" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" | grep -qai "$arg"
+                         neat_list "$hexc" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" "${export2[nr_ciphers]}" | grep -qai "$arg"
                     else
-                         neat_list "$hexc" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" | grep -qwai "$arg"
+                         neat_list "$hexc" "${ciph[nr_ciphers]}" "${kx[nr_ciphers]}" "${enc[nr_ciphers]}" "${export2[nr_ciphers]}" | grep -qwai "$arg"
                     fi
                     if [[ $? -eq 0 ]]; then    # string matches, so we can ssl to it:
                          ciphers_found[nr_ciphers]=false
@@ -3676,8 +3677,7 @@ run_cipher_match(){
 
           for (( i=0; i < nr_ciphers; i++ )); do
                "${ciphers_found[i]}" || "$SHOW_EACH_C" || continue
-               export="${export2[i]}"
-               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
+               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}" "${ciphers_found[i]}"
                available=""
                if "$SHOW_EACH_C"; then
                     if "${ciphers_found[i]}"; then
@@ -3689,7 +3689,7 @@ run_cipher_match(){
                     fi
                fi
                outln "${sigalg[i]}"
-               fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
+               fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}") $available"
           done
           "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
           tmpfile_handle ${FUNCNAME[0]}.txt
@@ -3705,7 +3705,7 @@ run_cipher_match(){
 # test for all ciphers locally configured (w/o distinguishing whether they are good or bad)
 run_allciphers() {
      local -i nr_ciphers_tested=0 nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 sclient_success=0
-     local n auth mac export hexc sslv2_ciphers="" s
+     local n auth mac hexc sslv2_ciphers="" s
      local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
      local -i i end_of_bundle bundle bundle_size num_bundles mod_check
      local -a ciphers_found ciphers_found2 hexcode2 ciph2 rfc_ciph2
@@ -3955,8 +3955,7 @@ run_allciphers() {
 
      for (( i=0 ; i<nr_ciphers; i++ )); do
           if "${ciphers_found[i]}" || ( "$SHOW_EACH_C" && ( "$using_sockets" || "${ossl_supported[i]}" ) ); then
-               export=${export2[i]}
-               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
+               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}" "${ciphers_found[i]}"
                available=""
                if "$SHOW_EACH_C"; then
                     if ${ciphers_found[i]}; then
@@ -3968,7 +3967,7 @@ run_allciphers() {
                     fi
                fi
                outln "${sigalg[i]}"
-               fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
+               fileout "cipher_${normalized_hexcode[i]}" "INFO" "$(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}") $available"
           fi
      done
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
@@ -3986,7 +3985,7 @@ ciphers_by_strength() {
      local using_sockets="$4"
      local ossl_ciphers_proto
      local -i nr_ciphers nr_ossl_ciphers nr_nonossl_ciphers success
-     local n sslvers auth mac export hexc sslv2_ciphers="" cipher
+     local n sslvers auth mac hexc sslv2_ciphers="" cipher
      local -a hexcode normalized_hexcode ciph rfc_ciph kx enc export2
      local -a hexcode2 ciph2 rfc_ciph2
      local -i i bundle end_of_bundle bundle_size num_bundles mod_check
@@ -4240,9 +4239,8 @@ ciphers_by_strength() {
 
      for (( i=0 ; i<nr_ciphers; i++ )); do
           if "${ciphers_found[i]}" || "$SHOW_EACH_C"; then
-               export=${export2[i]}
                normalized_hexcode[i]="$(tolower "${normalized_hexcode[i]}")"
-               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
+               neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}" "${ciphers_found[i]}"
                available=""
                if "$SHOW_EACH_C"; then
                     if "${ciphers_found[i]}"; then
@@ -4256,7 +4254,7 @@ ciphers_by_strength() {
                outln "${sigalg[i]}"
                id="cipher$proto"
                id+="_${normalized_hexcode[i]}"
-               fileout "$id" "INFO" "$proto_text  $(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}") $available"
+               fileout "$id" "INFO" "$proto_text  $(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}") $available"
           fi
      done
 
@@ -9513,7 +9511,6 @@ run_pfs() {
                nr_supported_ciphers+=1
           done < <(actually_supported_osslciphers "$pfs_cipher_list" "ALL" "-V")
      fi
-     export=""
 
      if [[ $(has_server_protocol "tls1_3") -eq 0 ]]; then
           # All TLSv1.3 cipher suites offer robust PFS.
@@ -9660,7 +9657,7 @@ run_pfs() {
                     fi
                fi
                if "$WIDE"; then
-                    neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
+                    neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "" "${ciphers_found[i]}"
                     if "$SHOW_EACH_C"; then
                          if "${ciphers_found[i]}"; then
                               pr_cipher_quality "${rfc_ciph[i]}" "available"
@@ -16572,7 +16569,7 @@ run_drown() {
 
 # Browser Exploit Against SSL/TLS: don't use CBC Ciphers in SSLv3 TLSv1.0
 run_beast(){
-     local hexc dash cbc_cipher sslvers auth mac export
+     local hexc dash cbc_cipher sslvers auth mac
      local -a ciph hexcode normalized_hexcode kx enc export2
      local proto proto_hex
      local -i i subret nr_ciphers=0 sclient_success=0
@@ -16791,8 +16788,7 @@ run_beast(){
                first=false
                for (( i=0; i < nr_ciphers; i++ )); do
                     if "${ciphers_found[i]}" || "$SHOW_EACH_C"; then
-                         export="${export2[i]}"
-                         neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
+                         neat_list "$(tolower "${normalized_hexcode[i]}")" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}" "${ciphers_found[i]}"
                          if "$SHOW_EACH_C"; then
                               if "${ciphers_found[i]}"; then
                                    if [[ -n "$higher_proto_supported" ]]; then
@@ -16951,7 +16947,7 @@ run_lucky13() {
 run_rc4() {
      local -i rc4_offered=0
      local -i nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 sclient_success=0
-     local n auth mac export hexc sslv2_ciphers_hex="" sslv2_ciphers_ossl="" s
+     local n auth mac hexc sslv2_ciphers_hex="" sslv2_ciphers_ossl="" s
      local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
      local -i i
      local -a ciphers_found ciphers_found2 hexcode2 ciph2 rfc_ciph2
@@ -17160,9 +17156,7 @@ run_rc4() {
                     continue                 # no successful connect AND not verbose displaying each cipher
                fi
                if "$WIDE"; then
-                    #FIXME: JSON+CSV in wide mode is missing
-                    export="${export2[i]}"
-                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${ciphers_found[i]}"
+                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}" "${ciphers_found[i]}"
                     if "$SHOW_EACH_C"; then
                          if "${ciphers_found[i]}"; then
                               pr_svrty_high "available"
