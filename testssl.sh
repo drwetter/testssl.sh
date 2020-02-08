@@ -1455,7 +1455,7 @@ out_row_aligned_max_width() {
           tm_out "${text:0:i}"
           [[ $i -eq $len ]] && break
           len=$len-$i-1
-          i=$i+1
+          i+=1
           text="${text:i:len}"
           first=false
           [[ $len -eq 0 ]] && break
@@ -1915,7 +1915,7 @@ asciihex_to_binary() {
      len=${#string}
      [[ $len%2 -ne 0 ]] && return 1
 
-     for (( i=0; i <= len-16 ; i=i+16 )); do
+     for (( i=0; i <= len-16 ; i+=16 )); do
           ip2=$((i+2)); ip4=$((i+4)); ip6=$((i+6)); ip8=$((i+8)); ip10=$((i+10)); ip12=$((i+12)); ip14=$((i+14))
           printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}\x${string:ip14:2}"
      done
@@ -3405,7 +3405,7 @@ run_cipher_match(){
      local -a ciphers_found ciphers_found2 ciph2 rfc_ciph rfc_ciph2 ossl_supported
      local -a -i index
      local -i nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0
-     local -i num_bundles mod_check bundle_size bundle end_of_bundle
+     local -i num_bundles bundle_size bundle end_of_bundle
      local dhlen has_dh_bits="$HAS_DH_BITS"
      local cipher proto protos_to_try
      local available
@@ -3552,12 +3552,10 @@ run_cipher_match(){
                # Some servers can't handle a handshake with >= 128 ciphers. So,
                # test cipher suites in bundles of 128 or less.
                num_bundles=$nr_ossl_ciphers/128
-               mod_check=$nr_ossl_ciphers%128
-               [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+               [[ $((nr_ossl_ciphers%128)) -ne 0 ]] && num_bundles+=1
 
                bundle_size=$nr_ossl_ciphers/$num_bundles
-               mod_check=$nr_ossl_ciphers%$num_bundles
-               [[ $mod_check -ne 0 ]] && bundle_size+=1
+               [[ $((nr_ossl_ciphers%num_bundles)) -ne 0 ]] && bundle_size+=1
           fi
 
           if "$HAS_TLS13"; then
@@ -3573,7 +3571,7 @@ run_cipher_match(){
                     bundle_size=$nr_ossl_ciphers
                fi
                for (( bundle=0; bundle < num_bundles; bundle++ )); do
-                    end_of_bundle=$bundle*$bundle_size+$bundle_size
+                    end_of_bundle=$(( (bundle+1)*bundle_size ))
                     [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
                     while true; do
                          ciphers_to_test=""
@@ -3629,17 +3627,15 @@ run_cipher_match(){
                # Some servers can't handle a handshake with >= 128 ciphers. So,
                # test cipher suites in bundles of 128 or less.
                num_bundles=$nr_nonossl_ciphers/128
-               mod_check=$nr_nonossl_ciphers%128
-               [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+               [[ $((nr_nonossl_ciphers%128)) -ne 0 ]] && num_bundles+=1
 
                bundle_size=$nr_nonossl_ciphers/$num_bundles
-               mod_check=$nr_nonossl_ciphers%$num_bundles
-               [[ $mod_check -ne 0 ]] && bundle_size+=1
+               [[ $((nr_nonossl_ciphers%num_bundles)) -ne 0 ]] && bundle_size+=1
           fi
 
           for proto in 04 03 02 01 00; do
                for (( bundle=0; bundle < num_bundles; bundle++ )); do
-                    end_of_bundle=$bundle*$bundle_size+$bundle_size
+                    end_of_bundle=$(( (bundle+1)*bundle_size ))
                     [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
                     while true; do
                          ciphers_to_test=""
@@ -3707,7 +3703,7 @@ run_allciphers() {
      local -i nr_ciphers_tested=0 nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 sclient_success=0
      local n auth mac hexc sslv2_ciphers="" s
      local -a normalized_hexcode hexcode ciph sslvers kx enc export2 sigalg ossl_supported
-     local -i i end_of_bundle bundle bundle_size num_bundles mod_check
+     local -i i end_of_bundle bundle bundle_size num_bundles
      local -a ciphers_found ciphers_found2 hexcode2 ciph2 rfc_ciph2
      local -i -a index
      local proto protos_to_try
@@ -3828,12 +3824,10 @@ run_allciphers() {
           # Some servers can't handle a handshake with >= 128 ciphers. So,
           # test cipher suites in bundles of 128 or less.
           num_bundles=$nr_ossl_ciphers/128
-          mod_check=$nr_ossl_ciphers%128
-          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+          [[ $((nr_ossl_ciphers%128)) -ne 0 ]] && num_bundles+=1
 
           bundle_size=$nr_ossl_ciphers/$num_bundles
-          mod_check=$nr_ossl_ciphers%$num_bundles
-          [[ $mod_check -ne 0 ]] && bundle_size+=1
+          [[ $((nr_ossl_ciphers%num_bundles)) -ne 0 ]] && bundle_size+=1
      fi
 
      if "$HAS_TLS13"; then
@@ -3851,7 +3845,7 @@ run_allciphers() {
 
           [[ "$proto" != "-no_ssl2" ]] && [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && continue
           for (( bundle=0; bundle < num_bundles; bundle++ )); do
-               end_of_bundle=$bundle*$bundle_size+$bundle_size
+               end_of_bundle=$(( (bundle+1)*bundle_size ))
                [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
                while true; do
                     ciphers_to_test=""
@@ -3908,17 +3902,15 @@ run_allciphers() {
           # Some servers can't handle a handshake with >= 128 ciphers. So,
           # test cipher suites in bundles of 128 or less.
           num_bundles=$nr_nonossl_ciphers/128
-          mod_check=$nr_nonossl_ciphers%128
-          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+          [[ $((nr_nonossl_ciphers%128)) -ne 0 ]] && num_bundles+=1
 
           bundle_size=$nr_nonossl_ciphers/$num_bundles
-          mod_check=$nr_nonossl_ciphers%$num_bundles
-          [[ $mod_check -ne 0 ]] && bundle_size+=1
+          [[ $((nr_nonossl_ciphers%num_bundles)) -ne 0 ]] && bundle_size+=1
      fi
 
      for proto in 04 03 02 01 00; do
           for (( bundle=0; bundle < num_bundles; bundle++ )); do
-               end_of_bundle=$bundle*$bundle_size+$bundle_size
+               end_of_bundle=$(( (bundle+1)*bundle_size ))
                [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
                while true; do
                     ciphers_to_test=""
@@ -3988,7 +3980,7 @@ ciphers_by_strength() {
      local n sslvers auth mac hexc sslv2_ciphers="" cipher
      local -a hexcode normalized_hexcode ciph rfc_ciph kx enc export2
      local -a hexcode2 ciph2 rfc_ciph2
-     local -i i bundle end_of_bundle bundle_size num_bundles mod_check
+     local -i i bundle end_of_bundle bundle_size num_bundles
      local -a ciphers_found ciphers_found2 sigalg ossl_supported index
      local dhlen supported_sslv2_ciphers ciphers_to_test tls13_ciphers_to_test addcmd temp
      local available
@@ -4125,16 +4117,14 @@ ciphers_by_strength() {
                # Some servers can't handle a handshake with >= 128 ciphers. So,
                # test cipher suites in bundles of 128 or less.
                num_bundles=$nr_ossl_ciphers/128
-               mod_check=$nr_ossl_ciphers%128
-               [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+               [[ $((nr_ossl_ciphers%128)) -ne 0 ]] && num_bundles+=1
 
                bundle_size=$nr_ossl_ciphers/$num_bundles
-               mod_check=$nr_ossl_ciphers%$num_bundles
-               [[ $mod_check -ne 0 ]] && bundle_size+=1
+               [[ $((nr_ossl_ciphers%num_bundles)) -ne 0 ]] && bundle_size+=1
           fi
 
           for (( bundle=0; bundle < num_bundles; bundle++ )); do
-               end_of_bundle=$bundle*$bundle_size+$bundle_size
+               end_of_bundle=$(( (bundle+1)*bundle_size ))
                [[ $end_of_bundle -gt $nr_ossl_ciphers ]] && end_of_bundle=$nr_ossl_ciphers
                for (( success=0; success==0 ; 1 )); do
                     ciphers_to_test=""
@@ -4193,16 +4183,14 @@ ciphers_by_strength() {
                # Some servers can't handle a handshake with >= 128 ciphers. So,
                # test cipher suites in bundles of 128 or less.
                num_bundles=$nr_nonossl_ciphers/128
-               mod_check=$nr_nonossl_ciphers%128
-               [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+               [[ $((nr_nonossl_ciphers%128)) -ne 0 ]] && num_bundles+=1
 
                bundle_size=$nr_nonossl_ciphers/$num_bundles
-               mod_check=$nr_nonossl_ciphers%$num_bundles
-               [[ $mod_check -ne 0 ]] && bundle_size+=1
+               [[ $((nr_nonossl_ciphers%num_bundles)) -ne 0 ]] && bundle_size+=1
           fi
 
           for (( bundle=0; bundle < num_bundles; bundle++ )); do
-               end_of_bundle=$bundle*$bundle_size+$bundle_size
+               end_of_bundle=$(( (bundle+1)*bundle_size ))
                [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
                for (( success=0; success==0 ; 1 )); do
                     ciphers_to_test=""
@@ -4431,7 +4419,7 @@ client_simulation_sockets() {
           TLS_CLIENT_HELLO=""
      fi
      len=${#clienthello}
-     for (( i=0; i < len; i=i+2 )); do
+     for (( i=0; i < len; i+=2 )); do
           data+=", ${clienthello:i:2}"
      done
      # same as above. If a CIPHER_SUITES string was provided, then check that it is in the ServerHello
@@ -4449,7 +4437,7 @@ client_simulation_sockets() {
      else
           # Extact list of cipher suites from SSLv2 ClientHello
           len=2*$(hex2dec "${clienthello:12:2}")
-          for (( i=22; i < 22+len; i=i+6 )); do
+          for (( i=22; i < 22+len; i+=6 )); do
                offset1=$i+2
                offset2=$i+4
                [[ "${clienthello:i:2}" == 00 ]] && cipher_list_2send+=", ${clienthello:offset1:2},${clienthello:offset2:2}"
@@ -5643,7 +5631,7 @@ sub_cipherlists() {
                          sslv2_cipherlist="$(strip_spaces "${6//,/}")"
                          len=${#sslv2_cipherlist}
                          detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
-                         for (( i=0; i<len; i=i+6 )); do
+                         for (( i=0; i<len; i+=6 )); do
                               [[ "$detected_ssl2_ciphers" =~ "x${sslv2_cipherlist:i:6}" ]] && sclient_success=0 && break
                          done
                     fi
@@ -6708,7 +6696,7 @@ cipher_pref_check() {
      local using_sockets="$4"
      local tested_cipher cipher order rfc_cipher rfc_order
      local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
-     local -i i nr_ciphers nr_nonossl_ciphers num_bundles mod_check bundle_size bundle end_of_bundle success
+     local -i i nr_ciphers nr_nonossl_ciphers num_bundles bundle_size bundle end_of_bundle success
      local hexc ciphers_to_test
      local -a rfc_ciph hexcode ciphers_found ciphers_found2
      local -a -i index
@@ -6789,16 +6777,14 @@ cipher_pref_check() {
           bundle_size=$nr_nonossl_ciphers
      else
           num_bundles=$nr_nonossl_ciphers/128
-          mod_check=$nr_nonossl_ciphers%128
-          [[ $mod_check -ne 0 ]] && num_bundles=$num_bundles+1
+          [[ $((nr_nonossl_ciphers%128)) -ne 0 ]] && num_bundles+=1
 
           bundle_size=$nr_nonossl_ciphers/$num_bundles
-          mod_check=$nr_nonossl_ciphers%$num_bundles
-          [[ $mod_check -ne 0 ]] && bundle_size+=1
+          [[ $((nr_nonossl_ciphers%num_bundles)) -ne 0 ]] && bundle_size+=1
      fi
 
      for (( bundle=0; bundle < num_bundles; bundle++ )); do
-          end_of_bundle=$bundle*$bundle_size+$bundle_size
+          end_of_bundle=$(( (bundle+1)*bundle_size ))
           [[ $end_of_bundle -gt $nr_nonossl_ciphers ]] && end_of_bundle=$nr_nonossl_ciphers
           while true; do
                ciphers_to_test=""
@@ -7705,7 +7691,7 @@ compare_server_name_to_cert() {
                fi
                if [[ $len -ne 0 ]] && [[ $len -lt ${#dercert} ]]; then
                     # loop through all the names and extract the SRV-ID and XmppAddr identifiers
-                    for (( i=0; i < len; i=i+len_name )); do
+                    for (( i=0; i < len; i+=len_name )); do
                          tag="${dercert:i:2}"
                          i+=2
                          if [[ "${dercert:i:1}" == "8" ]]; then
@@ -7861,7 +7847,7 @@ etsi_etls_visibility_info() {
                     fi
                     if [[ $len -ne 0 ]] && [[ $len -lt ${#dercert} ]]; then
                          # loop through all the names and extract the visibility information
-                         for (( i=0; i < len; i=i+len_name )); do
+                         for (( i=0; i < len; i+=len_name )); do
                               tag="${dercert:i:2}"
                               i+=2
                               if [[ "${dercert:i:1}" == 8 ]]; then
@@ -10601,7 +10587,7 @@ get_dh_ephemeralkey() {
      fi
 
      # Subtract any leading 0 bytes
-     for (( i=4; i < offset; i=i+2 )); do
+     for (( i=4; i < offset; i+=2 )); do
           [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
           dh_p_len=$dh_p_len-2
      done
@@ -10619,7 +10605,7 @@ get_dh_ephemeralkey() {
           return 1
      fi
      # Subtract any leading 0 bytes
-     for (( 1; i < offset; i=i+2 )); do
+     for (( 1; i < offset; i+=2 )); do
           [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
           dh_g_len=$dh_g_len-2
      done
@@ -10637,7 +10623,7 @@ get_dh_ephemeralkey() {
           return 1
      fi
      # Subtract any leading 0 bytes
-     for (( 1; i < offset; i=i+2 )); do
+     for (( 1; i < offset; i+=2 )); do
           [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
           dh_y_len=$dh_y_len-2
      done
@@ -10912,7 +10898,7 @@ hkdf-expand() {
      local hash_fn="$1"
      local prk="$2" info="$3" output=""
      local -i out_len="$4"
-     local -i i n mod_check hash_len ret
+     local -i i n hash_len ret
      local counter
      local ti tim1 # T(i) and T(i-1)
 
@@ -10923,8 +10909,7 @@ hkdf-expand() {
      esac
 
      n=$out_len/$hash_len
-     mod_check=$out_len%$hash_len
-     [[ $mod_check -ne 0 ]] && n+=1
+     [[ $((out_len%hash_len)) -ne 0 ]] && n+=1
 
      tim1=""
      for (( i=1; i <= n; i++ )); do
@@ -11464,7 +11449,7 @@ chacha20() {
      if [[ $mod_check -ne 0 ]]; then
           keystream="$(chacha20_block "$key" "$(printf "%08X" $counter)" "$nonce")"
           i1=$((128*num_blocks))
-          for (( i=0; i < mod_check; i=i+2 )); do
+          for (( i=0; i < mod_check; i+=2 )); do
                plaintext+="$(printf "%02X" "$((0x${ciphertext:i1:2} ^ 0x${keystream:i:2}))")"
                i1+=2
           done
@@ -11688,7 +11673,7 @@ generate-ccm-counter-blocks() {
      ctr_msb="${ctr:0:24}"
      ctr_lsb=0x${ctr:24:8}
 
-     for (( i=0; i <= n; i=i+1 )); do
+     for (( i=0; i <= n; i+=1 )); do
           ctr_lsb1="$(printf "%08X" "$ctr_lsb")"
           printf "\x${ctr_msb:0:2}\x${ctr_msb:2:2}\x${ctr_msb:4:2}\x${ctr_msb:6:2}\x${ctr_msb:8:2}\x${ctr_msb:10:2}\x${ctr_msb:12:2}\x${ctr_msb:14:2}\x${ctr_msb:16:2}\x${ctr_msb:18:2}\x${ctr_msb:20:2}\x${ctr_msb:22:2}\x${ctr_lsb1:0:2}\x${ctr_lsb1:2:2}\x${ctr_lsb1:4:2}\x${ctr_lsb1:6:2}"
           ctr_lsb+=1
@@ -11826,7 +11811,7 @@ ccm-decrypt() {
      # If the length of the ciphertext is not an even multiple of 16 bytes, then handle the final incomplete block.
      if [[ $mod_check -ne 0 ]]; then
           i1=$((32*n))
-          for (( i=0; i < mod_check; i=i+2 )); do
+          for (( i=0; i < mod_check; i+=2 )); do
                plaintext+="$(printf "%02X" "$((0x${ciphertext:i1:2} ^ 0x${s:i1:2}))")"
                i1+=2
           done
@@ -11912,7 +11897,7 @@ ccm-encrypt() {
      # If the length of the plaintext is not an even multiple of 16 bytes, then handle the final incomplete block.
      if [[ $mod_check -ne 0 ]]; then
           i1=$((32*n))
-          for (( i=0; i < mod_check; i=i+2 )); do
+          for (( i=0; i < mod_check; i+=2 )); do
                ciphertext+="$(printf "%02X" "$((0x${plaintext:i1:2} ^ 0x${s:i1:2}))")"
                i1+=2
           done
@@ -12319,7 +12304,7 @@ check_tls_serverhellodone() {
      fi
 
      tls_hello_ascii_len=${#tls_hello_ascii}
-     for (( i=0; i<tls_hello_ascii_len; i=i+msg_len )); do
+     for (( i=0; i<tls_hello_ascii_len; i+=msg_len )); do
           remaining=$tls_hello_ascii_len-$i
           [[ $remaining -lt 10 ]] && return 1
 
@@ -12328,14 +12313,14 @@ check_tls_serverhellodone() {
                14|15|16|17) ;;
                *) return 2 ;;
           esac
-          i=$i+2
+          i+=2
           tls_protocol="${tls_hello_ascii:i:4}"
           [[ -z "$DETECTED_TLS_VERSION" ]] && DETECTED_TLS_VERSION="$tls_protocol"
           [[ "${tls_protocol:0:2}" != 03 ]] && return 2
-          i=$i+4
+          i+=4
           additional_data="$tls_content_type$tls_protocol${tls_hello_ascii:i:4}"
           msg_len=2*$(hex2dec "${tls_hello_ascii:i:4}")
-          i=$i+4
+          i+=4
           remaining=$tls_hello_ascii_len-$i
           [[ $msg_len -gt $remaining ]] && return 1
 
@@ -12360,7 +12345,7 @@ check_tls_serverhellodone() {
                               offset=84+$sid_len
                               tls_extensions_len=2*$(hex2dec "${tls_handshake_ascii:offset:4}")
                               [[ $tls_extensions_len -ne $tls_serverhello_ascii_len-$sid_len-80 ]] && return 2
-                              for (( j=0; j<tls_extensions_len; j=j+8+extension_len )); do
+                              for (( j=0; j<tls_extensions_len; j+=8+extension_len )); do
                                    [[ $tls_extensions_len-$j -lt 8 ]] && return 2
                                    offset=88+$sid_len+$j
                                    extension_type="${tls_handshake_ascii:offset:4}"
@@ -12417,7 +12402,7 @@ check_tls_serverhellodone() {
 
      # If there is a fatal alert, then we are done.
      tls_alert_ascii_len=${#tls_alert_ascii}
-     for (( i=0; i<tls_alert_ascii_len; i=i+4 )); do
+     for (( i=0; i<tls_alert_ascii_len; i+=4 )); do
           remaining=$tls_alert_ascii_len-$i
           [[ $remaining -lt 4 ]] && return 1
           tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
@@ -12426,13 +12411,13 @@ check_tls_serverhellodone() {
 
      # If there is a serverHelloDone or Finished, then we are done.
      tls_handshake_ascii_len=${#tls_handshake_ascii}
-     for (( i=0; i<tls_handshake_ascii_len; i=i+msg_len )); do
+     for (( i=0; i<tls_handshake_ascii_len; i+=msg_len )); do
           remaining=$tls_handshake_ascii_len-$i
           [[ $remaining -lt 8 ]] && return 1
           tls_msg_type="${tls_handshake_ascii:i:2}"
-          i=$i+2
+          i+=2
           msg_len=2*$(hex2dec "${tls_handshake_ascii:i:6}")
-          i=$i+6
+          i+=6
           remaining=$tls_handshake_ascii_len-$i
           [[ $msg_len -gt $remaining ]] && return 1
 
@@ -12567,7 +12552,7 @@ parse_tls_serverhello() {
      if [[ $DEBUG -ge 3 ]] && [[ $tls_hello_ascii_len -gt 0 ]]; then
           echo "TLS message fragments:"
      fi
-     for (( i=0; i<tls_hello_ascii_len; i=i+msg_len )); do
+     for (( i=0; i<tls_hello_ascii_len; i+=msg_len )); do
           if [[ $tls_hello_ascii_len-$i -lt 10 ]]; then
                if [[ "$process_full" =~ all ]]; then
                     # The entire server response should have been retrieved.
@@ -12581,11 +12566,11 @@ parse_tls_serverhello() {
                fi
           fi
           tls_content_type="${tls_hello_ascii:i:2}"
-          i=$i+2
+          i+=2
           tls_protocol="${tls_hello_ascii:i:4}"
-          i=$i+4
+          i+=4
           msg_len=2*$(hex2dec "${tls_hello_ascii:i:4}")
-          i=$i+4
+          i+=4
 
           if [[ $DEBUG -ge 3 ]]; then
                echo  "     protocol (rec. layer):  0x$tls_protocol"
@@ -12652,7 +12637,7 @@ parse_tls_serverhello() {
 
      if [[ $tls_alert_ascii_len -gt 0 ]]; then
           debugme echo "TLS alert messages:"
-          for (( i=0; i+3 < tls_alert_ascii_len; i=i+4 )); do
+          for (( i=0; i+3 < tls_alert_ascii_len; i+=4 )); do
                tls_err_level=${tls_alert_ascii:i:2}    # 1: warning, 2: fatal
                j=$i+2
                tls_err_descr_no=${tls_alert_ascii:j:2}
@@ -12691,7 +12676,7 @@ parse_tls_serverhello() {
      if [[ $DEBUG -ge 3 ]] && [[ $tls_handshake_ascii_len -gt 0 ]]; then
           echo "TLS handshake messages:"
      fi
-     for (( i=0; i<tls_handshake_ascii_len; i=i+msg_len )); do
+     for (( i=0; i<tls_handshake_ascii_len; i+=msg_len )); do
           if [[ $tls_handshake_ascii_len-$i -lt 8 ]]; then
                if [[ "$process_full" =~ all ]]; then
                     # The entire server response should have been retrieved.
@@ -12705,9 +12690,9 @@ parse_tls_serverhello() {
                fi
           fi
           tls_msg_type="${tls_handshake_ascii:i:2}"
-          i=$i+2
+          i+=2
           msg_len=2*$(hex2dec "${tls_handshake_ascii:i:6}")
-          i=$i+6
+          i+=6
           if [[ $DEBUG -ge 3 ]]; then
                tm_out  "     handshake type:         0x${tls_msg_type}"
                case $tls_msg_type in
@@ -12902,7 +12887,7 @@ parse_tls_serverhello() {
                [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
-          for (( i=0; i<tls_extensions_len; i=i+8+extension_len )); do
+          for (( i=0; i<tls_extensions_len; i+=8+extension_len )); do
                if [[  $tls_extensions_len-$i -lt 8 ]]; then
                     debugme echo "Malformed response"
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -12952,7 +12937,7 @@ parse_tls_serverhello() {
                                     return 1
                                fi
                                offset=$((offset+4))
-                               for (( j=0; j < len1; j=j+4 )); do
+                               for (( j=0; j < len1; j+=4 )); do
                                     [[ $j -ne 0 ]] && echo -n ", " >> $TMPFILE
                                     case "${tls_serverhello_ascii:offset:4}" in
                                          "0017") echo -n "secp256r1" >> $TMPFILE ;;
@@ -13130,7 +13115,7 @@ parse_tls_serverhello() {
                                local -i protocol_len
                                echo -n "Protocols advertised by server: " >> $TMPFILE
                                offset=$((extns_offset+12+i))
-                               for (( j=0; j<extension_len; j=j+protocol_len+2 )); do
+                               for (( j=0; j<extension_len; j+=protocol_len+2 )); do
                                     if [[ $extension_len -lt $j+2 ]]; then
                                          debugme echo "Malformed next protocol extension."
                                          [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
@@ -13193,7 +13178,7 @@ parse_tls_serverhello() {
                                    tmpfile_handle ${FUNCNAME[0]}.txt
                                    return 1
                               fi
-                              for (( j=8; j < tls_certificate_ascii_len; j=j+extn_len )); do
+                              for (( j=8; j < tls_certificate_ascii_len; j+=extn_len )); do
                                    if [[ $tls_certificate_ascii_len-$j -lt 6 ]]; then
                                         debugme tmln_warning "Malformed Certificate Handshake message in ServerHello."
                                         tmpfile_handle ${FUNCNAME[0]}.txt
@@ -13329,7 +13314,7 @@ parse_tls_serverhello() {
           tls_cipher_suite="$(tolower "$tls_cipher_suite")"
           tls_cipher_suite="${tls_cipher_suite:0:2}\\x${tls_cipher_suite:2:2}"
           cipherlist_len=${#cipherlist}
-          for (( i=0; i < cipherlist_len; i=i+8 )); do
+          for (( i=0; i < cipherlist_len; i+=8 )); do
                # At the right hand side we need the quotes here!
                [[ "${cipherlist:i:6}" == "$tls_cipher_suite" ]] && break
           done
@@ -13351,14 +13336,14 @@ parse_tls_serverhello() {
           # get position of extensions
           extns_offset=$offset+6+2*$(hex2dec "${TLS_CLIENT_HELLO:offset:2}")
           len1=${#TLS_CLIENT_HELLO}
-          for (( i=extns_offset; i < len1; i=i+8+extension_len )); do
+          for (( i=extns_offset; i < len1; i+=8+extension_len )); do
                extension_type="${TLS_CLIENT_HELLO:i:4}"
                offset=4+$i
                extension_len=2*$(hex2dec "${TLS_CLIENT_HELLO:offset:4}")
                if [[ "$extension_type" == 002b ]]; then
                     offset+=6
                     tls_protocol2="$(tolower "$tls_protocol2")"
-                    for (( j=0; j < extension_len-2; j=j+4 )); do
+                    for (( j=0; j < extension_len-2; j+=4 )); do
                          [[ "${TLS_CLIENT_HELLO:offset:4}" == $tls_protocol2 ]] && break
                          offset+=4
                     done
@@ -13421,7 +13406,7 @@ parse_tls_serverhello() {
           # Place any additional certificates in $TEMPDIR/intermediatecerts.pem
           CERTIFICATE_LIST_ORDERING_PROBLEM=false
           CAissuerDN="$issuerDN"
-          for (( i=12+certificate_len; i<tls_certificate_ascii_len; i=i+certificate_len )); do
+          for (( i=12+certificate_len; i<tls_certificate_ascii_len; i+=certificate_len )); do
                if [[ $tls_certificate_ascii_len-$i -lt 6 ]]; then
                     debugme echo "Malformed Certificate Handshake message in ServerHello."
                     tmpfile_handle ${FUNCNAME[0]}.txt
@@ -13587,7 +13572,7 @@ parse_tls_serverhello() {
                fi
 
                # Subtract any leading 0 bytes
-               for (( i=4; i < offset; i=i+2 )); do
+               for (( i=4; i < offset; i+=2 )); do
                     [[ "${tls_serverkeyexchange_ascii:i:2}" != "00" ]] && break
                     dh_p_len=$dh_p_len-2
                done
@@ -13801,7 +13786,7 @@ generate_key_share_extension() {
      len=2*$(hex2dec "${supported_groups:8:4}")
      [[ $len+12 -ne $supported_groups_len ]] && return 1
 
-     for (( i=12; i<supported_groups_len; i=i+4 )); do
+     for (( i=12; i<supported_groups_len; i+=4 )); do
           group=$(hex2dec "${supported_groups:i:4}")
           # If the Supported groups extensions lists more than one group,
           # then don't include the larger key shares in the extension.
@@ -13905,7 +13890,7 @@ prepare_tls_clienthello() {
           # Check to see if any ECC cipher suites are included in cipher_suites
           # (not needed for TLSv1.3)
           if [[ "0x$tls_low_byte" -le "0x03" ]]; then
-               for (( i=0; i<len_ciph_suites_byte; i=i+8 )); do
+               for (( i=0; i<len_ciph_suites_byte; i+=8 )); do
                     j=$i+4
                     part1="0x${cipher_suites:$i:2}"
                     part2="0x${cipher_suites:$j:2}"
@@ -14051,7 +14036,7 @@ prepare_tls_clienthello() {
           extra_extensions="$(tolower "$4")"
           code2network "$extra_extensions"
           len_all=${#NW_STR}
-          for (( i=0; i < len_all; i=i+16+4*0x$len_extension_hex )); do
+          for (( i=0; i < len_all; i+=16+4*0x$len_extension_hex )); do
                part2=$i+4
                extn_type="${NW_STR:i:2}${NW_STR:part2:2}"
                extra_extensions_list+=" $extn_type "
@@ -14374,7 +14359,7 @@ resend_if_hello_retry_request() {
      fi
 
      # Parse HelloRetryRequest extensions
-     for (( i=extns_offset+4; i < tls_hello_ascii_len; i=i+8+len_extn )); do
+     for (( i=extns_offset+4; i < tls_hello_ascii_len; i+=8+len_extn )); do
           extn_type="${tls_hello_ascii:i:4}"
           j=$i+4
           len_extn=2*$(hex2dec "${tls_hello_ascii:j:4}")
@@ -14463,7 +14448,7 @@ resend_if_hello_retry_request() {
      second_clienthello="$(modify_clienthello "$original_clienthello" "$new_key_share" "$cookie")"
      TLS_CLIENT_HELLO="${second_clienthello:10}"
      msg_len=${#second_clienthello}
-     for (( i=0; i < msg_len; i=i+2 )); do
+     for (( i=0; i < msg_len; i+=2 )); do
           data+=", ${second_clienthello:i:2}"
      done
      debugme echo -n "sending client hello... "
@@ -14661,7 +14646,7 @@ tls_sockets() {
                finished_msg="$aad$finished_msg"
                
                len=${#finished_msg}
-               for (( i=0; i < len; i=i+2 )); do
+               for (( i=0; i < len; i+=2 )); do
                     data+=", ${finished_msg:i:2}"
                done
                debugme echo -e "\nsending finished..."
@@ -14741,7 +14726,7 @@ send_app_data() {
      res="$aad$res"
      len=${#res}
      data=""
-     for (( i=0; i < len; i=i+2 )); do
+     for (( i=0; i < len; i+=2 )); do
           data+=",x${res:i:2}"
      done
      socksend "$data" $USLEEP_SND
@@ -16172,7 +16157,7 @@ run_freak() {
                     exportrsa_ssl2_cipher_list_hex="$(strip_spaces "${exportrsa_ssl2_cipher_list_hex//,/}")"
                     len=${#exportrsa_ssl2_cipher_list_hex}
                     detected_ssl2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
-                    for (( i=0; i<len; i=i+6 )); do
+                    for (( i=0; i<len; i+=6 )); do
                          [[ "$detected_ssl2_ciphers" =~ x${exportrsa_ssl2_cipher_list_hex:i:6} ]] && sclient_success=0 && break
                     done
                fi
@@ -17335,7 +17320,7 @@ run_grease() {
                fi
                extn_len_hex=$(printf "%04x" $extn_len)
                extn+=",${extn_len_hex:0:2},${extn_len_hex:2:2}"
-               for (( j=0; j <= extn_len-2; j=j+2 )); do
+               for (( j=0; j <= extn_len-2; j+=2 )); do
                     rnd_bytes="$(printf "%04x" $RANDOM)"
                     extn+=",${rnd_bytes:0:2},${rnd_bytes:2:2}"
                done
@@ -17683,7 +17668,7 @@ run_robot() {
                pubkeybytes=$pubkeybits/8
                [[ $((pubkeybits%8)) -ne 0 ]] && pubkeybytes+=1
                rnd_pad=""
-               for (( len=0; len < pubkeybytes-52; len=len+2 )); do
+               for (( len=0; len < pubkeybytes-52; len+=2 )); do
                     rnd_pad+="abcd"
                done
                [[ $len -eq $pubkeybytes-52 ]] && rnd_pad+="ab"
@@ -17723,7 +17708,7 @@ run_robot() {
                encrypted_pms="$cke_prefix$encrypted_pms"
                len=${#encrypted_pms}
                client_key_exchange=""
-               for (( i=0; i<len; i=i+2 )); do
+               for (( i=0; i<len; i+=2 )); do
                     client_key_exchange+=", x${encrypted_pms:i:2}"
                done
 
