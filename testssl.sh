@@ -6494,8 +6494,10 @@ run_server_preference() {
           [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
           pr_bold " Cipher order"
+          "$WIDE" && outln && neat_header
           while read proto_ossl proto_hex proto_txt; do
                [[ "$proto_ossl" == tls1_3 ]] && ! "$has_tls13_cipher_order" && continue
+               "$WIDE" && pr_underline "$proto_txt"
                cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets"
           done <<< "$(tm_out " ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
           outln
@@ -6614,7 +6616,9 @@ run_server_preference() {
      return $ret
 }
 
+# arg1: true if the list that is returned does not need to be ordered by preference.
 check_tls12_pref() {
+     local unordered_list_ok="$1"
      local batchremoved="-CAMELLIA:-IDEA:-KRB5:-PSK:-SRP:-aNULL:-eNULL"
      local batchremoved_success=false
      local tested_cipher="" cipher ciphers_to_test
@@ -6654,7 +6658,7 @@ check_tls12_pref() {
           fi
      done
 
-     if "$batchremoved_success"; then
+     if "$batchremoved_success" && ! "$unordered_list_ok"; then
           # now we combine the two cipher sets from both while loops
           combined_ciphers="$order"
           order="" ; tested_cipher=""
@@ -6697,8 +6701,10 @@ cipher_pref_check() {
      local tested_cipher cipher order rfc_cipher rfc_order
      local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
      local -i i nr_ciphers nr_nonossl_ciphers num_bundles bundle_size bundle end_of_bundle success
+     local -i nr_ciphers_found
      local hexc ciphers_to_test
-     local -a rfc_ciph hexcode ciphers_found ciphers_found2
+     local -a normalized_hexcode ciph kx enc export2 sigalg
+     local -a rfc_ciph hexcode ciphers_found="" ciphers_found2
      local -a -i index
      local ciphers_found_with_sockets
 
@@ -6716,16 +6722,28 @@ cipher_pref_check() {
 
      if ( [[ $p != tls1_3 ]] || "$HAS_TLS13" ) && ( [[ $p != ssl3 ]] || "$HAS_SSL3" ); then
           if [[ $p == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
-               order="$(check_tls12_pref)"
-          else
-               tested_cipher=""
+               order="$(check_tls12_pref "$WIDE")"
+               [[ "${order:0:1}" == \  ]] && order="${order:1}"
+               ciphers_found="$order"
+          fi
+          if "$WIDE" || [[ -z "$order" ]]; then
+               tested_cipher=""; order=""; nr_ciphers_found=0 
                while true; do
                     if [[ $p != tls1_3 ]]; then
-                         ciphers_to_test="-cipher ALL:COMPLEMENTOFALL${tested_cipher}"
+                         if [[ -n "$ciphers_found" ]]; then
+                                  ciphers_to_test=""
+                                  for cipher in $ciphers_found; do
+                                       [[ ! "$tested_cipher:" =~ :-$cipher: ]] && ciphers_to_test+=":$cipher"
+                                  done
+                                  [[ -z "$ciphers_to_test" ]] && break
+                                  ciphers_to_test="-cipher ${ciphers_to_test:1}"
+                         else
+                              ciphers_to_test="-cipher ALL:COMPLEMENTOFALL${tested_cipher}"
+                         fi
                     else
                          ciphers_to_test=""
                          for cipher in $(colon_to_spaces "$TLS13_OSSL_CIPHERS"); do
-                              [[ ! "$tested_cipher" =~ ":-"$cipher ]] && ciphers_to_test+=":$cipher"
+                              [[ ! "$tested_cipher:" =~ :-$cipher: ]] && ciphers_to_test+=":$cipher"
                          done
                          [[ -z "$ciphers_to_test" ]] && break
                          ciphers_to_test="-ciphersuites ${ciphers_to_test:1}"
@@ -6737,6 +6755,25 @@ cipher_pref_check() {
                     order+="$cipher "
                     tested_cipher+=":-"$cipher
                     "$FAST" && break
+                    if "$WIDE"; then
+                         for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+                              [[ "$cipher" == ${TLS_CIPHER_OSSL_NAME[i]} ]] && break
+                         done
+                         [[ $i -eq $TLS_NR_CIPHERS ]] && continue
+                         normalized_hexcode[nr_ciphers_found]="$(normalize_ciphercode "${TLS_CIPHER_HEXCODE[i]}")"
+                         ciph[nr_ciphers_found]="${TLS_CIPHER_OSSL_NAME[i]}"
+                         kx[nr_ciphers_found]="${TLS_CIPHER_KX[i]}"
+                         [[ "$p" == tls1_3 ]] && kx[nr_ciphers_found]="$(read_dhtype_from_file $TMPFILE)"
+                         if ( [[ ${kx[nr_ciphers_found]} == Kx=ECDH ]] || [[ ${kx[nr_ciphers_found]} == Kx=DH ]] || [[ ${kx[nr_ciphers_found]} == Kx=EDH ]] ); then
+                              kx[nr_ciphers_found]+=" $(read_dhbits_from_file "$TMPFILE" quiet)"
+                         fi
+                         enc[nr_ciphers_found]="${TLS_CIPHER_ENC[i]}"
+                         export2[nr_ciphers_found]="${TLS_CIPHER_EXPORT[i]}"
+                         sigalg[nr_ciphers_found]=""
+                         "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
+                              sigalg[nr_ciphers_found]="$(read_sigalg_from_file "$TMPFILE")"
+                         nr_ciphers_found+=1
+                    fi
                done
           fi
      fi
@@ -6817,8 +6854,7 @@ cipher_pref_check() {
      # If there is a SERVER_SIZE_LIMIT_BUG, then use sockets to find the cipher
      # order, but starting with the list of ciphers supported by the server.
      if "$ciphers_found_with_sockets"; then
-          order=""
-          nr_ciphers=0
+          order=""; nr_ciphers=0; nr_ciphers_found=0
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                hexc="${TLS_CIPHER_HEXCODE[i]}"
                if "${ciphers_found[i]}" && [[ ${#hexc} -eq 9 ]]; then
@@ -6849,6 +6885,25 @@ cipher_pref_check() {
                for (( i=0; i < nr_ciphers; i++ )); do
                     [[ "$cipher" == ${rfc_ciph[i]} ]] && ciphers_found2[i]=true && break
                done
+               if "$WIDE"; then
+                    for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
+                         [[ "$cipher" == ${TLS_CIPHER_RFC_NAME[i]} ]] && break
+                    done
+                    [[ $i -eq $TLS_NR_CIPHERS ]] && continue
+                    normalized_hexcode[nr_ciphers_found]="$(normalize_ciphercode "${TLS_CIPHER_HEXCODE[i]}")"
+                    ciph[nr_ciphers_found]="${TLS_CIPHER_OSSL_NAME[i]}"
+                    kx[nr_ciphers_found]="${TLS_CIPHER_KX[i]}"
+                    [[ "$p" == tls1_3 ]] && kx[nr_ciphers_found]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+                    if ( [[ ${kx[nr_ciphers_found]} == Kx=ECDH ]] || [[ ${kx[nr_ciphers_found]} == Kx=DH ]] || [[ ${kx[nr_ciphers_found]} == Kx=EDH ]] ); then
+                         kx[nr_ciphers_found]+=" $(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)"
+                    fi
+                    enc[nr_ciphers_found]="${TLS_CIPHER_ENC[i]}"
+                    export2[nr_ciphers_found]="${TLS_CIPHER_EXPORT[i]}"
+                    sigalg[nr_ciphers_found]=""
+                    "$SHOW_SIGALGO" && [[ -r "$HOSTCERT" ]] && \
+                         sigalg[nr_ciphers_found]="$(read_sigalg_from_file "$HOSTCERT")"
+                    nr_ciphers_found+=1
+               fi
                if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ $TLS_NR_CIPHERS -ne 0 ]]; then
                     cipher="$(rfc2openssl "$cipher")"
                     # If there is no OpenSSL name for the cipher, then use the RFC name
@@ -6869,14 +6924,24 @@ cipher_pref_check() {
           order="$rfc_order"
      fi
 
+     "$WIDE" && outln
      if [[ -n "$order" ]]; then
           add_tls_offered "$p" yes
-          outln
-          out "$(printf "    %-10s " "$proto: ")"
-          if [[ "$COLOR" -le 2 ]]; then
-               out "$(out_row_aligned_max_width "$order" "               " $TERM_WIDTH)"
+          if "$WIDE"; then
+               for (( i=0 ; i<nr_ciphers_found; i++ )); do
+                    neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}" "true"
+                    outln "${sigalg[i]}"
+                    id="cipher-${p}_${normalized_hexcode[i]}"
+                    fileout "$id" "INFO" "$proto  $(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}")"
+               done
           else
-               out_row_aligned_max_width_by_entry "$order" "               " $TERM_WIDTH pr_cipher_quality
+               outln
+               out "$(printf "    %-10s " "$proto: ")"
+               if [[ "$COLOR" -le 2 ]]; then
+                    out "$(out_row_aligned_max_width "$order" "               " $TERM_WIDTH)"
+               else
+                    out_row_aligned_max_width_by_entry "$order" "               " $TERM_WIDTH pr_cipher_quality
+               fi
           fi
           fileout "cipherorder_${proto//./_}" "INFO" "$order"
      fi
