@@ -1092,7 +1092,7 @@ fileout_json_finding() {
                     \"ip\"              : \"$NODEIP\",
                     \"port\"            : \"$PORT\",
                     \"rDNS\"            : \"$rDNS\",
-                    \"service\"         : \"$finding\"," >> "$JSONFILE"
+                    \"service\"         : \"$finding\"," | tr -dc '[:print:]' >> "$JSONFILE"
                $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
           else
                ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
