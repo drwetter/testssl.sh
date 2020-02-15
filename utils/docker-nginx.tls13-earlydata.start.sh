@@ -48,10 +48,8 @@ docker cp $HN.crt $ID:/etc/nginx/ssl
 docker exec -ti $ID nginx -s reload
 # docker start $ID
 
-# P Q
-docker inspect $ID | jq -r '.[].NetworkSettings.IPAddress'
+echo
+echo "You may now run \"testssl.sh $(docker inspect $ID --format '{{.NetworkSettings.IPAddress}}')\""
 
 exit 0
-
-EOF
 
