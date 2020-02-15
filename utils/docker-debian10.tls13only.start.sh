@@ -23,7 +23,8 @@ docker exec -ti $ID service nginx start
 docker exec -ti $ID service nginx status
 # P Q
 
-docker inspect $ID | jq -r '.[].NetworkSettings.IPAddress'
+echo
+echo "You may now run \"testssl.sh $(docker inspect $ID --format '{{.NetworkSettings.IPAddress}}')\""
 
 exit 0
 
