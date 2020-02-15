@@ -18083,7 +18083,7 @@ determine_ip_addresses() {
 
 determine_rdns() {
      local saved_openssl_conf="$OPENSSL_CONF"
-     local nodeip=""
+     local nodeip="" rdns="" line=""
 
      [[ -n "$NODNS" ]] && rDNS="(instructed to minimize DNS queries)" && return 0   # PTR records were not asked for
      local nodeip="$(tr -d '[]' <<< $NODEIP)"     # for DNS we do not need the square brackets of IPv6 addresses
@@ -18105,10 +18105,15 @@ determine_rdns() {
           rDNS=$(strip_lf "$(nslookup -type=PTR $nodeip 2>/dev/null | grep -v 'canonical name =' | grep 'name = ' | awk '{ print $NF }' | sed 's/\.$//')")
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     rDNS="$(echo $rDNS)"
-     # remove chars which under weird circumstances can show up here
-     rDNS=${rDNS// /}
-     rDNS=${rDNS//;/}
+     # First, rDNS can contain > 1 line due to multiple PTR DNS records, though this is not recommended.
+     # So we use a loop to check for each FQDN returned. There we remove chars which under weird
+     # circumstances (see #1506) can show up here. The blacklist is taken from RFC 1912 ("Allowable characters in a
+     # label for a host name are only ASCII, letters, digits, and the `-' character")
+     while read -r line; do
+          line="$(tr -dc '[a-zA-Z0-9-_.]' <<< "$line")"
+          [[ -z "$rdns" ]] && rdns="$line" || rdns="$rdns $line"
+     done <<< "$rDNS"
+     rDNS="$rdns"
      [[ -z "$rDNS" ]] && rDNS="--"
      return 0
 }
