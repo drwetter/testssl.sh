@@ -2443,8 +2443,8 @@ run_hsts() {
                hsts_age_days=-1
           fi
           if [[ $hsts_age_days -eq -1 ]]; then
-               pr_svrty_medium "misconfiguration: HSTS max-age (recommended > 15552000 seconds = 180 days ) is required but missing"
-               fileout "${jsonID}_time" "MEDIUM" "misconfiguration, parameter max-age (recommended > 15552000 seconds = 180 days) missing"
+               pr_svrty_medium "misconfiguration: HSTS max-age (recommended > $HSTS_MIN seconds = $((HSTS_MIN/86400)) days ) is required but missing"
+               fileout "${jsonID}_time" "MEDIUM" "misconfiguration, parameter max-age (recommended > $HSTS_MIN seconds = $((HSTS_MIN/86400)) days) missing"
           elif [[ $hsts_age_sec -eq 0 ]]; then
                pr_svrty_low "HSTS max-age is set to 0. HSTS is disabled"
                fileout "${jsonID}_time" "LOW" "0. HSTS is disabled"
@@ -2452,8 +2452,8 @@ run_hsts() {
                pr_svrty_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "${jsonID}_time" "OK" "$hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN seconds"
           else
-               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >=$HSTS_MIN seconds recommended)"
-               fileout "${jsonID}_time" "MEDIUM" "max-age too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN seconds"
+               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( > $HSTS_MIN seconds recommended)"
+               fileout "${jsonID}_time" "MEDIUM" "max-age too short. $hsts_age_days days (=$hsts_age_sec seconds) <= $HSTS_MIN seconds"
           fi
           if includeSubDomains "$TMPFILE"; then
                fileout "${jsonID}_subdomains" "OK" "includes subdomains"
