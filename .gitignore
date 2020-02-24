@@ -1,8 +1,17 @@
 .DS_Store
 tmp.json
+tmp.html
 *.bak
 *.json
 *.csv
 *.log
 *.xml
 *.iml
+*.swp
+*.swo
+*.orig
+*.org
+.directory
+.patch
+.diff
+thumbs.db
