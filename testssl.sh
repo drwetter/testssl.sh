@@ -113,7 +113,8 @@ fi
 
 ########### Traps! Make sure that temporary files are cleaned up after use in ANY case
 #
-trap "cleanup" QUIT EXIT
+trap "cleanup" EXIT
+trap "sig_cleanup" INT QUIT TERM
 trap "child_error" USR1
 
 
@@ -3142,21 +3143,21 @@ prettyprint_local() {
      neat_header
 
      if [[ -z "$1" ]]; then
-          actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V" | while read -r hexcode dash ciph sslvers kx auth enc mac export ; do       # -V doesn't work with openssl < 1.0
+          while read -r hexcode dash ciph sslvers kx auth enc mac export ; do
                hexc="$(normalize_ciphercode $hexcode)"
                outln "$(neat_list "$hexc" "$ciph" "$kx" "$enc" "$export")"
-          done
+          done < <(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V")  # -V doesn't work with openssl < 1.0
      else
           #for arg in $(echo $@ | sed 's/,/ /g'); do
           for arg in ${*//,/ /}; do
-               actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V" | while read -r hexcode dash ciph sslvers kx auth enc mac export ; do # -V doesn't work with openssl < 1.0
+               while read -r hexcode dash ciph sslvers kx auth enc mac export ; do
                     hexc="$(normalize_ciphercode $hexcode)"
                     # for numbers we don't do word matching:
                     [[ $arg =~ $re ]] && \
                          line="$(neat_list "$hexc" "$ciph" "$kx" "$enc" "$export" | grep -ai "$arg")" || \
                          line="$(neat_list "$hexc" "$ciph" "$kx" "$enc" "$export" | grep -wai "$arg")"
                     [[ -n "$line" ]] && outln "$line"
-               done
+               done < <(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "-V") # -V doesn't work with openssl < 1.0
           done
      fi
      outln
@@ -4274,9 +4275,9 @@ run_cipher_per_proto() {
      fi
      outln
      neat_header
-     echo -e " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2\n -tls1_3 04 TLS 1.3" | while read proto proto_hex proto_text; do
+     while read proto proto_hex proto_text; do
           ciphers_by_strength "$proto" "$proto_hex" "$proto_text" "$using_sockets"
-     done
+     done <<< "$(tm_out " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2\n -tls1_3 04 TLS 1.3")"
      return 0
 #FIXME: no error condition
 }
@@ -18672,6 +18673,13 @@ cleanup() {
      fi
      # debugging off, see above
      grep -q xtrace <<< "$SHELLOPTS" && ! "$DEBUG_ALLINONE" && exec 2>&42 42>&-
+}
+
+# see https://unix.stackexchange.com/questions/57940/trap-int-term-exit-really-necessary
+sig_cleanup() {
+     trap '' EXIT
+     cleanup
+     exit 0
 }
 
 child_error() {
