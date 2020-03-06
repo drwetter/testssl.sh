@@ -498,17 +498,16 @@ html_reserved(){
 
 html_out() {
      "$do_html" || return 0
-     [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "${1//%/%%}" >> "$HTMLFILE"
-     # here and other printf's: a little bit of sanitizing with bash internal search&replace -- otherwise printf will hiccup at '%'. '--' and %b do the rest.
+     [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && printf -- "%b" "$1" >> "$HTMLFILE"
 }
 
 # This is intentionally the same.
-safe_echo()  { printf -- "%b" "${1//%/%%}"; }
-tm_out()     { printf -- "%b" "${1//%/%%}"; }
-tmln_out()   { printf -- "%b" "${1//%/%%}\n"; }
+safe_echo()  { printf -- "%b" "$1"; }
+tm_out()     { printf -- "%b" "$1"; }
+tmln_out()   { printf -- "%b" "$1\n"; }
 
-out()   { printf -- "%b" "${1//%/%%}"; html_out "$(html_reserved "$1")"; }
-outln() { printf -- "%b" "${1//%/%%}\n"; html_out "$(html_reserved "$1")\n"; }
+out()   { printf -- "%b" "$1"; html_out "$(html_reserved "$1")"; }
+outln() { printf -- "%b" "$1\n"; html_out "$(html_reserved "$1")\n"; }
 
 
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
