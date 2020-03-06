@@ -15608,7 +15608,7 @@ run_beast(){
           if [[ $sclient_success -ne 0 ]]; then                  # protocol supported?
                if "$continued"; then                             # second round: we hit TLS1
                     if "$HAS_SSL3" || "$using_sockets"; then
-                         pr_svrty_good "not vulnerable (OK)" ; out ", no SSL3 or TLS1"
+                         pr_svrty_good "not vulnerable (OK)" ; outln ", no SSL3 or TLS1"
                          fileout "$jsonID" "OK" "not vulnerable, no SSL3 or TLS1" "$cve" "$cwe"
                     else
                          prln_svrty_good "no TLS1 (OK)"
