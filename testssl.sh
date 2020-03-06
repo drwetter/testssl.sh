@@ -10462,8 +10462,18 @@ send_close_notify() {
 # Format string properly for socket
 # ARG1: any commented sequence of two bytes hex, separated by commas. It can contain comments, new lines, tabs and white spaces
 # NW_STR holds the global with the string prepared for printf, like '\x16\x03\x03\'
+# As opposed to socksend() below this is the function where the hexbytes are NOT preceeded by x (mainly they are @ heartbleed,
+# ccs and # ticketbleed).  Best would be to settle on one function and remove the need for NW_STR, i.e. do everything in one shot.
 code2network() {
-     NW_STR=$(sed -e 's/,/\\\x/g' <<< "$1" | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
+     local temp="" line=""
+
+     NW_STR=$(while read -r line; do
+          [[ -z "$line" ]] && continue  # blank line
+          temp="${line%%\#*}"           # remove comments
+          temp="${temp//,/\\\x}"        # comma to \x
+          temp="${temp//[\t ]/}"        # blank and tabs
+          printf "%s" "$temp"
+     done <<< "$1")
 }
 
 # sockets inspired by http://blog.chris007.de/?p=238
@@ -14708,7 +14718,7 @@ tls_sockets() {
                     finished_msg="$(sym-encrypt "$cipher" "$key" "$(get-nonce "$iv" 0)" "${finished_msg}16" "")"
                fi
                finished_msg="$aad$finished_msg"
-               
+
                len=${#finished_msg}
                for (( i=0; i < len; i+=2 )); do
                     data+=", ${finished_msg:i:2}"
@@ -14716,7 +14726,7 @@ tls_sockets() {
                debugme echo -e "\nsending finished..."
                socksend_clienthello "${data}"
                sleep $USLEEP_SND
-               
+
                # Compute application traffic keys and IVs.
                master_secret="$(derive-master-secret "$cipher" "$handshake_secret")"
                master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" server)"
