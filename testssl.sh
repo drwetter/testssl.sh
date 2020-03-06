@@ -7222,7 +7222,7 @@ extract_certificates() {
 
      # Place the server's certificate in $HOSTCERT and any intermediate
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
-     savedir=$(pwd); cd $TEMPDIR
+     savedir="$PWD"; cd $TEMPDIR
      # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
      if [[ "$version" == ssl2 ]]; then
           awk -v n=-1 '/Server certificate/ {start=1}
@@ -16910,9 +16910,9 @@ find_openssl_binary() {
 
      openssl_location="$(type -p $OPENSSL)"
      [[ -n "$GIT_REL" ]] && \
-          cwd="$(/bin/pwd)" || \
+          cwd="$PWD" || \
           cwd="$RUN_DIR"
-     if [[ "$openssl_location" =~ $(/bin/pwd)/bin ]]; then
+     if [[ "$openssl_location" == ${PWD}/bin ]]; then
           OPENSSL_LOCATION="\$PWD/bin/$(basename "$openssl_location")"
      elif [[ "$openssl_location" =~ $cwd ]] && [[ "$cwd" != '.' ]]; then
           OPENSSL_LOCATION="${openssl_location%%$cwd}"
