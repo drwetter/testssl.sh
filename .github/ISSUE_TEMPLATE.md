@@ -1,5 +1,7 @@
 Please make sure that you provide enough information so that we understand what your issue is about.
 
+0. Did you check the documentation in ~/doc/ or, if it is a different problem: Did you google for it?
+
 1. uname -a
    
 2. testssl version from the banner: testssl.sh -b 2>/dev/null | head -4 | tail -2
