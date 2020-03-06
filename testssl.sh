@@ -10300,8 +10300,8 @@ starttls_nntp_dialog() {
 
 starttls_postgres_dialog() {
      debugme echo "=== starting postgres STARTTLS dialog ==="
-     local init_tls=", x00, x00 ,x00 ,x08 ,x04 ,xD2 ,x16 ,x2F"
-     socksend "${init_tls}" 0                               && debugme echo "initiated STARTTLS" &&
+     local init_tls=", 00, 00 ,00 ,08 ,04 ,D2 ,16 ,2F"
+     socksend_clienthello "${init_tls}" 0                   && debugme echo "initiated STARTTLS" &&
      starttls_io "" S 1                                     && debugme echo "received ack (="S") for STARTTLS"
      local ret=$?
      debugme echo "=== finished postgres STARTTLS dialog with ${ret} ==="
@@ -10311,14 +10311,14 @@ starttls_postgres_dialog() {
 starttls_mysql_dialog() {
      debugme echo "=== starting mysql STARTTLS dialog ==="
      local login_request="
-     , x20, x00, x00, x01,                   # payload_length, sequence_id
-     x85, xae, xff, x00,                     # capability flags, CLIENT_SSL always set
-     x00, x00, x00, x01,                     # max-packet size
-     x21,                                    # character set
-     x00, x00, x00, x00, x00, x00, x00, x00, # string[23] reserved (all [0])
-     x00, x00, x00, x00, x00, x00, x00, x00,
-     x00, x00, x00, x00, x00, x00, x00"
-     socksend "${login_request}" 0
+     , 20, 00, 00, 01,                   # payload_length, sequence_id
+     85, ae, ff, 00,                     # capability flags, CLIENT_SSL always set
+     00, 00, 00, 01,                     # max-packet size
+     21,                                 # character set
+     00, 00, 00, 00, 00, 00, 00, 00,     # string[23] reserved (all [0])
+     00, 00, 00, 00, 00, 00, 00, 00,
+     00, 00, 00, 00, 00, 00, 00"
+     socksend_clienthello "${login_request}" 0
      starttls_just_read 1                    && debugme echo "read succeeded"
      # 1 is the timeout value which only MySQL needs. Note, there seems no response whether STARTTLS
      # succeeded. We could try harder, see https://github.com/openssl/openssl/blob/master/apps/s_client.c
@@ -10453,9 +10453,9 @@ send_close_notify() {
 
      debugme echo "sending close_notify..."
      if [[ $detected_tlsversion == 0300 ]]; then
-          socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+          socksend_clienthello ",15, 03, 00, 00, 02, 02, 00" 0
      else
-          socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+          socksend_clienthello ",15, 03, 01, 00, 02, 02, 00" 0
      fi
 }
 
@@ -10467,13 +10467,13 @@ send_close_notify() {
 code2network() {
      local temp="" line=""
 
-     NW_STR=$(while read -r line; do
+     NW_STR="$(while read -r line; do
           [[ -z "$line" ]] && continue  # blank line
           temp="${line%%\#*}"           # remove comments
           temp="${temp//,/\\\x}"        # comma to \x
           temp="${temp//[\t ]/}"        # blank and tabs
           printf "%s" "$temp"
-     done <<< "$1")
+     done <<< "$1")"
 }
 
 # sockets inspired by http://blog.chris007.de/?p=238
@@ -10497,6 +10497,7 @@ socksend_clienthello() {
 
 # ARG1: hexbytes -- preceeded by x -- separated by commas, with a leading comma
 # ARG2: seconds to sleep
+#FIXME: use socksend_clienthello instead. This will be removed soon!!
 socksend() {
      local data line
 
@@ -14516,7 +14517,7 @@ resend_if_hello_retry_request() {
      if [[ "$server_version" == 0304 ]] || [[ 0x$server_version -ge 0x7f16 ]]; then
           # Send a dummy change cipher spec for middlebox compatibility.
           debugme echo -en "\nsending dummy change cipher spec... "
-          socksend ", x14, x03, x03 ,x00, x01, x01" 0
+          socksend_clienthello ", 14, 03, 03 ,00, 01, 01" 0
      fi
      debugme echo -en "\nsending second client hello... "
      second_clienthello="$(modify_clienthello "$original_clienthello" "$new_key_share" "$cookie")"
@@ -14824,7 +14825,7 @@ receive_app_data() {
 
      read -r tls_version cipher server_key server_iv server_seq client_key client_iv client_seq <<< "$APP_TRAF_KEY_INFO"
      [[ "${tls_version:0:2}" == 7F ]] && [[ 0x${tls_version:2:2} -lt 25 ]] && include_headers=false
-     
+
      sleep $USLEEP_REC
      while true; do
           len=${#ciphertext}
@@ -14906,29 +14907,30 @@ run_heartbleed(){
      fi
 
      if [[ 0 -eq $(has_server_protocol tls1) ]]; then
-          tls_hexcode="x03, x01"
+          tls_hexcode="03,01"
      elif [[ 0 -eq $(has_server_protocol tls1_1) ]]; then
-          tls_hexcode="x03, x02"
+          tls_hexcode="03,02"
      elif [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
-          tls_hexcode="x03, x03"
+          tls_hexcode="03,03"
      elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
-          tls_hexcode="x03, x00"
+          tls_hexcode="03,00"
      else # no protocol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
-               *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
-               *1.1)  tls_hexcode="x03, x02" ; add_tls_offered tls1_1 yes ;;
-               TLSv1) tls_hexcode="x03, x01" ; add_tls_offered tls1 yes ;;
-               SSLv3) tls_hexcode="x03, x00" ; add_tls_offered ssl3 yes ;;
+               *1.2)  tls_hexcode="03,03" ; add_tls_offered tls1_2 yes ;;
+               *1.1)  tls_hexcode="03,02" ; add_tls_offered tls1_1 yes ;;
+               TLSv1) tls_hexcode="03,01" ; add_tls_offered tls1 yes ;;
+               SSLv3) tls_hexcode="03,00" ; add_tls_offered ssl3 yes ;;
           esac
      fi
      debugme echo "using protocol $tls_hexcode"
 
-     heartbleed_payload=", x18, $tls_hexcode, x00, x03, x01, x40, x00"
-     tls_sockets "${tls_hexcode:6:2}" "" "ephemeralkey" "" "" "false"
+     # attention, this is dangerous as it relies on spaces etc. above
+     tls_sockets "${tls_hexcode:4:2}" "" "ephemeralkey" "" "" "false"
 
      [[ $DEBUG -ge 4 ]] && tmln_out "\nsending payload with TLS version $tls_hexcode:"
-     socksend "$heartbleed_payload" 1
+     heartbleed_payload=", 18, $tls_hexcode, 00, 03, 01, 40,00"
+     socksend_clienthello "$heartbleed_payload" 1
      sockread_serverhello 16384 $HEARTBLEED_MAX_WAITSOCK
      if [[ $? -eq 3 ]]; then
           append=", timed out"
@@ -15007,62 +15009,61 @@ run_ccs_injection(){
      fi
 
      if [[ 0 -eq $(has_server_protocol tls1) ]]; then
-          tls_hexcode="x03, x01"
+          tls_hexcode="03,01"
      elif [[ 0 -eq $(has_server_protocol tls1_1) ]]; then
-          tls_hexcode="x03, x02"
+          tls_hexcode="03,02"
      elif [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
-          tls_hexcode="x03, x03"
+          tls_hexcode="03,03"
      elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
-          tls_hexcode="x03, x00"
+          tls_hexcode="03,00"
      else # no protocol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
-               *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
-               *1.1)  tls_hexcode="x03, x02" ; add_tls_offered tls1_1 yes ;;
-               TLSv1) tls_hexcode="x03, x01" ; add_tls_offered tls1 yes ;;
-               SSLv3) tls_hexcode="x03, x00" ; add_tls_offered ssl3 yes ;;
+               *1.2)  tls_hexcode="03,03" ; add_tls_offered tls1_2 yes ;;
+               *1.1)  tls_hexcode="03,02" ; add_tls_offered tls1_1 yes ;;
+               TLSv1) tls_hexcode="03,01" ; add_tls_offered tls1 yes ;;
+               SSLv3) tls_hexcode="03,00" ; add_tls_offered ssl3 yes ;;
           esac
      fi
      debugme echo "using protocol $tls_hexcode"
 
-     ccs_message=", x14, $tls_hexcode ,x00, x01, x01"
+     ccs_message=", 14, $tls_hexcode ,00,01,01"
 
      client_hello="
      # TLS header (5 bytes)
-     ,x16,                         # content type (x16 for handshake)
-     x03, x01,                     # TLS version in record layer is always TLS 1.0 (except SSLv3)
-     x00, x93,                     # length
+     ,16,                        # content type (x16 for handshake)
+     03, 01,                     # TLS version in record layer is always TLS 1.0 (except SSLv3)
+     00, 93,                     # length
      # Handshake header
-     x01,                          # type (x01 for ClientHello)
-     x00, x00, x8f,                # length
-     $tls_hexcode,                 # TLS version
+     01,                         # type (x01 for ClientHello)
+     00, 00, 8f,                 # length
+     $tls_hexcode,               # TLS version
      # Random (32 byte)
-     x53, x43, x5b, x90, x9d, x9b, x72, x0b,
-     xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
-     xcf, xbd, x39, x04, xcc, x16, x0b, x85,
-     x03, x90, x9f, x77, x04, x33, xd4, xde,
-     x00,                # session ID length
-     x00, x68,           # cipher suites length
+     53, 43, 5b, 90, 9d, 9b, 72, 0b,
+     bc, 0c, bc, 2b, 92, a8, 48, 97,
+     cf, bd, 39, 04, cc, 16, 0b, 85,
+     03, 90, 9f, 77, 04, 33, d4, de,
+     00,                         # session ID length
+     00, 68,                     # cipher suites length
      # Cipher suites (51 suites)
-     xc0, x13, xc0, x12, xc0, x11, xc0, x10,
-     xc0, x0f, xc0, x0e, xc0, x0d, xc0, x0c,
-     xc0, x0b, xc0, x0a, xc0, x09, xc0, x08,
-     xc0, x07, xc0, x06, xc0, x05, xc0, x04,
-     xc0, x03, xc0, x02, xc0, x01, x00, x39,
-     x00, x38, x00, x37, x00, x36, x00, x35, x00, x34,
-     x00, x33, x00, x32, x00, x31, x00, x30,
-     x00, x2f, x00, x16, x00, x15, x00, x14,
-     x00, x13, x00, x12, x00, x11, x00, x10,
-     x00, x0f, x00, x0e, x00, x0d, x00, x0c,
-     x00, x0b, x00, x0a, x00, x09, x00, x08,
-     x00, x07, x00, x06, x00, x05, x00, x04,
-     x00, x03, x00, x02, x00, x01, x01, x00"
+     c0, 13, c0, 12, c0, 11, c0, 10,
+     c0, 0f, c0, 0e, c0, 0d, c0, 0c,
+     c0, 0b, c0, 0a, c0, 09, c0, 08,
+     c0, 07, c0, 06, c0, 05, c0, 04,
+     c0, 03, c0, 02, c0, 01, 00, 39,
+     00, 38, 00, 37, 00, 36, 00, 35, 00, 34,
+     00, 33, 00, 32, 00, 31, 00, 30,
+     00, 2f, 00, 16, 00, 15, 00, 14,
+     00, 13, 00, 12, 00, 11, 00, 10,
+     00, 0f, 00, 0e, 00, 0d, 00, 0c,
+     00, 0b, 00, 0a, 00, 09, 00, 08,
+     00, 07, 00, 06, 00, 05, 00, 04,
+     00, 03, 00, 02, 00, 01, 01, 00"
 
      fd_socket 5 || return 1
 
-# we now make a standard handshake ...
      debugme echo -n "sending client hello... "
-     socksend "$client_hello" 1
+     socksend_clienthello "$client_hello" 1
 
      debugme echo "reading server hello... "
      sockread_serverhello 32768
@@ -15072,8 +15073,8 @@ run_ccs_injection(){
           tm_out "\nsending payload #1 with TLS version $tls_hexcode:  "
      fi
      rm "$SOCK_REPLY_FILE"
-# ... and then send the a change cipher spec message
-     socksend "$ccs_message" 1 || ok_ids
+
+     socksend_clienthello "$ccs_message" 1 || ok_ids
      sockread_serverhello 4096 $CCS_MAX_WAITSOCK
      if [[ $DEBUG -ge 3 ]]; then
           tmln_out "\n1st reply: "
@@ -15083,7 +15084,7 @@ run_ccs_injection(){
      fi
      rm "$SOCK_REPLY_FILE"
 
-     socksend "$ccs_message" 2 || ok_ids
+     socksend_clienthello "$ccs_message" 2 || ok_ids
      sockread_serverhello 4096 $CCS_MAX_WAITSOCK
      retval=$?
 
@@ -15115,23 +15116,23 @@ run_ccs_injection(){
           else
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           fi
-     elif [[ "${tls_hello_ascii:0:4}" == "1503" ]]; then
+     elif [[ "${tls_hello_ascii:0:4}" == 1503 ]]; then
           if [[ ! "${tls_hello_ascii:5:2}" =~ [03|02|01|00] ]]; then
                pr_warning "test failed "
                out "no proper TLS repy (debug info: protocol sent: 1503${tls_hexcode#x03, x}, reply: ${tls_hello_ascii:0:14}"
                fileout "$jsonID" "DEBUG" "test failed, around line $LINENO, debug info (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
                ret=1
-          elif [[ "$byte6" == "15" ]]; then
+          elif [[ "$byte6" == 15 ]]; then
                # decryption failed received
                pr_svrty_critical "VULNERABLE (NOT ok)"
                fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
-          elif [[ "$byte6" == "0A" ]] || [[ "$byte6" == "28" ]]; then
+          elif [[ "$byte6" == 0A ]] || [[ "$byte6" == 28 ]]; then
                # Unexpected message / Handshake failure  received
                pr_warning "likely "
                out "not vulnerable (OK)"
                out " - alert description type: $byte6"
                fileout "$jsonID" "WARN" "probably not vulnerable but received 0x${byte6} instead of 0x15" "$cve" "$cwe" "$hint"
-          elif [[ "$byte6" == "14" ]]; then
+          elif [[ "$byte6" == 14 ]]; then
                # bad_record_mac -- this is not "not vulnerable"
                out "likely "
                pr_svrty_critical "VULNERABLE (NOT ok)"
@@ -15144,13 +15145,13 @@ run_ccs_injection(){
                out ", suspicious error code \"$byte6\" returned. Please report"
                fileout "$jsonID" "CRITICAL" "likely VULNERABLE with $byte6" "$cve" "$cwe" "$hint"
           fi
-     elif [[ $STARTTLS_PROTOCOL == "mysql" ]] && [[ "${tls_hello_ascii:14:12}" == "233038533031" ]]; then
+     elif [[ $STARTTLS_PROTOCOL == mysql ]] && [[ "${tls_hello_ascii:14:12}" == 233038533031 ]]; then
           # MySQL community edition (yaSSL) returns a MySQL error instead of a TLS Alert
           # Error: #08S01 Bad handshake
           pr_svrty_best "not vulnerable (OK)"
           out ", looks like MySQL community edition (yaSSL)"
           fileout "$jsonID" "OK" "not vulnerable (MySQL community edition (yaSSL) detected)" "$cve" "$cwe"
-     elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != "03" ]]; then
+     elif [[ "$byte6" == [0-9a-f][0-9a-f] ]] && [[ "${tls_hello_ascii:2:2}" != 03 ]]; then
           pr_warning "test failed"
           out ", probably read buffer too small (${tls_hello_ascii:0:14})"
           fileout "$jsonID" "DEBUG" "test failed, probably read buffer too small (${tls_hello_ascii:0:14})" "$cve" "$cwe" "$hint"
@@ -17765,10 +17766,10 @@ run_robot() {
                     $OPENSSL pkeyutl -encrypt -certin -inkey $HOSTCERT -pkeyopt rsa_padding_mode:none 2>/dev/null | \
                     hexdump -v -e '16/1 "%02x"')"
                if [[ -z "$encrypted_pms" ]]; then
-                    if [[ "$DETECTED_TLS_VERSION" == "0300" ]]; then
-                         socksend ",x15, x03, x00, x00, x02, x02, x00" 0
+                    if [[ "$DETECTED_TLS_VERSION" == 0300 ]]; then
+                         socksend_clienthello ",15, 03, 00, 00, 02, 02, 00" 0
                     else
-                         socksend ",x15, x03, x01, x00, x02, x02, x00" 0
+                         socksend_clienthello ",15, 03, 01, 00, 02, 02, 00" 0
                     fi
                     close_socket
                     prln_fixme "Conversion of public key failed around line $((LINENO - 9))"
