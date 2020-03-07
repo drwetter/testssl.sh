@@ -747,8 +747,9 @@ debugme() {
      return 0
 }
 
-hex2dec() {
-     echo $((16#$1))
+debugme1() {
+     [[ "$DEBUG" -ge 1 ]] && "$@"
+     return 0
 }
 
 # convert 414243 into ABC
@@ -760,15 +761,20 @@ hex2ascii() {
           done
 }
 
+hex2dec() {
+     echo $((16#$1))
+}
+
+
 # convert decimal number < 256 to hex
 dec02hex() {
-     printf "x%02x" "$1"
+     printf "%02x" "$1"
 }
 
 # convert decimal number between 256 and < 256*256 to hex
 dec04hex() {
      local a=$(printf "%04x" "$1")
-     printf "x%02s, x%02s" "${a:0:2}" "${a:2:2}"
+     printf "%02s, %02s" "${a:0:2}" "${a:2:2}"
 }
 
 
@@ -10476,6 +10482,34 @@ code2network() {
      done <<< "$1")"
 }
 
+# arg1: formatted bytesstream to be send
+# arg2: caller function
+check_bytestream() {
+     local line=""
+     local -i i=0
+
+     # We do a search and replace so that \xaa\x29 becomes
+     # _xaa
+     # _x29
+     #
+     # "echo -e" helps us to get a multiline string
+     while read -r line; do
+          if [[ $i -eq 0 ]]; then
+               # first line is empty because this is a LF
+               :
+          elif [[ ${#line} -ne 4 ]] && [[ $i != 0 ]]; then
+               echo "length of byte $i called from $2 is not ok"
+          elif [[ ${line:0:1} != _ ]]; then
+               echo "char $i called from $2 doesn't start with a \"\\\""
+          elif [[ ${line:1:1} != x ]]; then
+               echo "char $i called from $2 doesn't have an x in second position"
+          elif [[ ${line:2:2} != [0-9a-fA-F][0-9a-fA-F] ]]; then
+               echo "byte $i called from $2 is not hex"
+          fi
+          i+=1
+     done < <( echo -e ${1//\\/\\n_})
+}
+
 # sockets inspired by http://blog.chris007.de/?p=238
 # ARG1: hexbytes separated by commas, with a leading comma
 # ARG2: seconds to sleep
@@ -10484,7 +10518,10 @@ socksend_clienthello() {
 
      code2network "$1"
      data="$NW_STR"
-     [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
+     if [[ "$DEBUG" -ge 1 ]]; then
+          check_bytestream "$data" "${FUNCNAME[1]}"
+          [[ "$DEBUG" -ge 4 ]] && echo && echo "\"$data\""
+     fi
      if [[ -z "$PRINTF" ]] ;then
           # We could also use "dd ibs=1M obs=1M" here but is seems to be at max 3% slower
           printf -- "$data" | cat >&5 2>/dev/null &
@@ -10501,7 +10538,6 @@ socksend_clienthello() {
 socksend() {
      local data line
 
-     # read line per line and strip comments (bash internal func can't handle multiline statements
      data="$(while read line; do
           printf "${line%%\#*}"
      done <<< "$1" )"
@@ -14880,7 +14916,7 @@ receive_app_data() {
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 #
 run_heartbleed(){
-     local tls_hexcode
+     local tls_hexcode tls_proto
      local heartbleed_payload
      local -i n lines_returned
      local append=""
@@ -14925,8 +14961,8 @@ run_heartbleed(){
      fi
      debugme echo "using protocol $tls_hexcode"
 
-     # attention, this is dangerous as it relies on spaces etc. above
-     tls_sockets "${tls_hexcode:4:2}" "" "ephemeralkey" "" "" "false"
+     tls_proto="${tls_hexcode:4:2}"
+     tls_sockets "${tls_proto}" "" "ephemeralkey" "" "" "false"
 
      [[ $DEBUG -ge 4 ]] && tmln_out "\nsending payload with TLS version $tls_hexcode:"
      heartbleed_payload=", 18, $tls_hexcode, 00, 03, 01, 40,00"
@@ -15187,8 +15223,8 @@ sub_session_ticket_tls() {
 run_ticketbleed() {
      local session_tckt_tls=""
      local -i len_ch=300                            # fixed len of prepared clienthello below
-     local sid="x00,x0B,xAD,xC0,xDE,x00,"           # some abitratry bytes
-     local len_sid="$(( ${#sid} / 4))"
+     local sid="00,0B,AD,C0,DE,00,"                 # some abitratry bytes
+     local len_sid="$(( ${#sid} / 3))"
      local xlen_sid="$(dec02hex $len_sid)"
      local -i len_tckt_tls=0 nr_sid_detected=0
      local xlen_tckt_tls="" xlen_handshake_record_layer="" xlen_handshake_ssl_layer=""
@@ -15214,7 +15250,7 @@ run_ticketbleed() {
 
      # highly unlikely that it is NOT supported. We may loose time here but it's more solid
      [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
-     if [[ ! "${TLS_EXTENSIONS}" =~ "session ticket" ]]; then
+     if [[ ! "${TLS_EXTENSIONS}" =~ session\ ticket ]]; then
           pr_svrty_best "not vulnerable (OK)"
           outln ", no session ticket extension"
           fileout "$jsonID" "OK" "no session ticket extension" "$cve" "$cwe"
@@ -15222,26 +15258,26 @@ run_ticketbleed() {
      fi
 
      if [[ 0 -eq $(has_server_protocol tls1) ]]; then
-          tls_hexcode="x03, x01"
+          tls_hexcode="03,01"
      elif [[ 0 -eq $(has_server_protocol tls1_1) ]]; then
-          tls_hexcode="x03, x02"
+          tls_hexcode="03,02"
      elif [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
-          tls_hexcode="x03, x03"
+          tls_hexcode="03,03"
      elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
-          tls_hexcode="x03, x00"
+          tls_hexcode="03,00"
      else # no protocol for some reason defined, determine TLS versions offered with a new handshake
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
-               *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
-               *1.1)  tls_hexcode="x03, x02" ; add_tls_offered tls1_1 yes ;;
-               TLSv1) tls_hexcode="x03, x01" ; add_tls_offered tls1 yes ;;
-               SSLv3) tls_hexcode="x03, x00" ; add_tls_offered ssl3 yes ;;
+               *1.2)  tls_hexcode="03,03" ; add_tls_offered tls1_2 yes ;;
+               *1.1)  tls_hexcode="03,02" ; add_tls_offered tls1_1 yes ;;
+               TLSv1) tls_hexcode="03,01" ; add_tls_offered tls1 yes ;;
+               SSLv3) tls_hexcode="03,00" ; add_tls_offered ssl3 yes ;;
           esac
      fi
      debugme echo "using protocol $tls_hexcode"
 
      session_tckt_tls="$(sub_session_ticket_tls)"
-     if [[ "$session_tckt_tls" == "," ]]; then
+     if [[ "$session_tckt_tls" == , ]]; then
           pr_svrty_best "not vulnerable (OK)"
           outln ", no session tickets"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
@@ -15268,87 +15304,87 @@ run_ticketbleed() {
 
      client_hello="
      # TLS header (5 bytes)
-     ,x16,               # Content type (x16 for handshake)
-     x03,x01,            # TLS version record layer
+     ,16,               # Content type (x16 for handshake)
+     03,01,            # TLS version record layer
                          # Length Secure Socket Layer follows:
      $xlen_handshake_ssl_layer,
      # Handshake header
-     x01,                # Type (x01 for ClientHello)
+     01,                # Type (x01 for ClientHello)
                          # Length of ClientHello follows:
-     x00, $xlen_handshake_record_layer,
+     00, $xlen_handshake_record_layer,
      $tls_hexcode,        # TLS Version
      # Random (32 byte) Unix time etc, see www.moserware.com/2009/06/first-few-milliseconds-of-https.html
-     xee, xee, x5b, x90, x9d, x9b, x72, x0b,
-     xbc, x0c, xbc, x2b, x92, xa8, x48, x97,
-     xcf, xbd, x39, x04, xcc, x16, x0b, x85,
-     x03, x90, x9f, x77, x04, x33, xff, xff,
+     ee, ee, 5b, 90, 9d, 9b, 72, 0b,
+     bc, 0c, bc, 2b, 92, a8, 48, 97,
+     cf, bd, 39, 04, cc, 16, 0b, 85,
+     03, 90, 9f, 77, 04, 33, ff, ff,
      $xlen_sid,          # Session ID length
      $sid
-     x00, x6a,           # Cipher suites length 106
-     # 53 Cipher suites
-     xc0,x14, xc0,x13, xc0,x0a, xc0,x21,
-     x00,x39, x00,x38, x00,x88, x00,x87,
-     xc0,x0f, xc0,x05, x00,x35, x00,x84,
-     xc0,x12, xc0,x08, xc0,x1c, xc0,x1b,
-     x00,x16, x00,x13, xc0,x0d, xc0,x03,
-     x00,x0a, xc0,x13, xc0,x09, xc0,x1f,
-     xc0,x1e, x00,x33, x00,x32, x00,x9a,
-     x00,x99, x00,x45, x00,x44, xc0,x0e,
-     xc0,x04, x00,x2f, x00,x96, x00,x41,
-     xc0,x11, xc0,x07, xc0,x0c, xc0,x02,
-     x00,x05, x00,x04, x00,x15, x00,x12,
-     xc0,x30, xc0,x2f, x00,x9d, x00,x9c,
-     x00,x3d, x00,x3c, x00,x9f, x00,x9e,
-     x00,xff,
-     x01,               # Compression methods length
-     x00,               # Compression method (x00 for NULL)
-     x01,x5b,           # Extensions length    ####### 10b + x14 + x3c
+     00, 6a,           # Cipher suites length 106
+# 53 Cipher suites
+     c0,14, c0,13, c0,0a, c0,21,
+     00,39, 00,38, 00,88, 00,87,
+     c0,0f, c0,05, 00,35, 00,84,
+     c0,12, c0,08, c0,1c, c0,1b,
+     00,16, 00,13, c0,0d, c0,03,
+     00,0a, c0,13, c0,09, c0,1f,
+     c0,1e, 00,33, 00,32, 00,9a,
+     00,99, 00,45, 00,44, c0,0e,
+     c0,04, 00,2f, 00,96, 00,41,
+     c0,11, c0,07, c0,0c, c0,02,
+     00,05, 00,04, 00,15, 00,12,
+     c0,30, c0,2f, 00,9d, 00,9c,
+     00,3d, 00,3c, 00,9f, 00,9e,
+     00,ff,
+     01,               # Compression methods length
+     00,               # Compression method (x00 for NULL)
+     01,5b,            # Extensions length    ####### 10b + x14 + x3c
 # Extension Padding
-     x00,x15,
+     00,15,
      # length:
-     x00,x38,
-     x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00,
-     x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00,
-     x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00, x00,x00,
+     00,38,
+     00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00,
+     00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00,
+     00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00, 00,00,
 # Extension: ec_point_formats
-     x00,x0b,
+     00,0b,
      # length:
-     x00,x04,
+     00,04,
      # data:
-     x03,x00, x01,x02,
+     03,00, 01,02,
 # Extension: elliptic_curves
-     x00,x0a,
+     00,0a,
      # length
-     x00,x34,
-     x00,x32,
+     00,34,
+     00,32,
      # data:
-     x00,x0e, x00,x0d, x00,x19, x00,x0b, x00,x0c,
-     x00,x18, x00,x09, x00,x0a, x00,x16,
-     x00,x17, x00,x08, x00,x06, x00,x07,
-     x00,x14, x00,x15, x00,x04, x00,x05,
-     x00,x12, x00,x13, x00,x01, x00,x02,
-     x00,x03, x00,x0f, x00,x10, x00,x11,
+     00,0e, 00,0d, 00,19, 00,0b, 00,0c,
+     00,18, 00,09, 00,0a, 00,16,
+     00,17, 00,08, 00,06, 00,07,
+     00,14, 00,15, 00,04, 00,05,
+     00,12, 00,13, 00,01, 00,02,
+     00,03, 00,0f, 00,10, 00,11,
 # Extension: Signature Algorithms
-     x00,x0d,
+     00,0d,
      # length:
-     x00,x10,
+     00,10,
      # data:
-     x00,x0e ,x04,x01, x05,x01 ,x02,x01, x04,x03, x05,x03,
-     x02,x03, x02,x02,
+     00,0e ,04,01, 05,01 ,02,01, 04,03, 05,03,
+     02,03, 02,02,
 # Extension: SessionTicket TLS
-     x00, x23,
+     00, 23,
      # length of SessionTicket TLS
-     x00, $xlen_tckt_tls,
+     00, $xlen_tckt_tls,
      # data, Session Ticket
-     $session_tckt_tls                       # here we have the comma already
+     $session_tckt_tls                       # we have the comma already
 # Extension: Heartbeat
-     x00, x0f, x00, x01, x01"
+     00, 0f, 00, 01, 01"
 
-     # we do 3 client hellos, then see whether different memory is returned
+     # we do 3 client hellos, then we'll look whether different memory is returned
      for i in 1 2 3; do
           fd_socket 5 || return 6
           debugme echo -n "sending client hello... "
-          socksend "$client_hello" 0
+          socksend_clienthello "$client_hello" 0
 
           debugme echo "reading server hello (ticketbleed reply)... "
           if "$FAST_SOCKET"; then
@@ -15386,7 +15422,8 @@ run_ticketbleed() {
                else
                     debugme echo -n "Message type: ${tls_hello_ascii:10:6} -- "
                fi
-               sid_input=$(sed -e 's/x//g' -e 's/,//g' <<< "$sid")
+               sid_input=${sid//x/}
+               sid_input=${sid_input//,/}
                sid_detected[i]="${tls_hello_ascii:88:32}"
                memory[i]="${tls_hello_ascii:$((88+ len_sid*2)):$((32 - len_sid*2))}"
                if [[ "$DEBUG" -ge 3 ]]; then
