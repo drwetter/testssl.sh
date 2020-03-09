@@ -67,6 +67,9 @@
 #
 #################### Stop talking, action now ####################
 
+# This is quite handy. It enables extended pattern matching operators (see bash(1). Works also for bashv3)
+shopt -s extglob
+
 
 ########### Definition of error codes
 #
@@ -774,7 +777,7 @@ dec02hex() {
 # convert decimal number between 256 and < 256*256 to hex
 dec04hex() {
      local a=$(printf "%04x" "$1")
-     printf "%02s, %02s" "${a:0:2}" "${a:2:2}"
+     printf "%02s,%02s" "${a:0:2}" "${a:2:2}"
 }
 
 
@@ -10457,7 +10460,7 @@ close_socket(){
 send_close_notify() {
      local detected_tlsversion="$1"
 
-     debugme echo "sending close_notify..."
+     debugme echo " sending close_notify..."
      if [[ $detected_tlsversion == 0300 ]]; then
           socksend_clienthello ",15, 03, 00, 00, 02, 02, 00" 0
      else
@@ -10498,13 +10501,13 @@ check_bytestream() {
                # first line is empty because this is a LF
                :
           elif [[ ${#line} -ne 4 ]] && [[ $i != 0 ]]; then
-               echo "length of byte $i called from $2 is not ok"
+               echo "length of byte $i (${line/_/}) called from $2 is not ok"
           elif [[ ${line:0:1} != _ ]]; then
-               echo "char $i called from $2 doesn't start with a \"\\\""
+               echo "char $i (${line/_/}) called from $2 doesn't start with a \"\\\""
           elif [[ ${line:1:1} != x ]]; then
-               echo "char $i called from $2 doesn't have an x in second position"
+               echo "char $i (${line/_/}) called from $2 doesn't have an x in second position"
           elif [[ ${line:2:2} != [0-9a-fA-F][0-9a-fA-F] ]]; then
-               echo "byte $i called from $2 is not hex"
+               echo "byte $i (${line/_/}) called from $2 is not hex"
           fi
           i+=1
      done < <( echo -e ${1//\\/\\n_})
@@ -15205,17 +15208,40 @@ run_ccs_injection(){
      return $ret
 }
 
-sub_session_ticket_tls() {
+# Generic function to retrieve the session ticket via openssl. It is called via run_ticketbleed() only atm.
+# Return value: string with TLS session ticket
+# For ticketbleed SNI would not be needed as we assume ticketbleed is a vulnerability of the TLS stack.
+# However for a generic function we would need SNI
+#FIXME: We should consideer to do this earlier, and save it in a global variable. It would save 1x connect.
+#
+session_ticket_from_openssl() {
      local sessticket_tls=""
-     #FIXME: we likely have done this already before (either @ run_server_defaults() or at least the output
-     #       from a previous handshake) --> would save 1x connect. We have TLS_TICKET but not yet the ticket itself #FIXME
-     #ATTENTION: we DO NOT use SNI here as we assume ticketbleed is a vulnerability of the TLS stack. If we'd do SNI here, we'd also need
-     #           it in the ClientHello of run_ticketbleed() otherwise the ticket will be different and the whole thing won't work!
-     #
-     sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $OPTIMAL_PROTO $PROXY -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
-     sessticket_tls="$(sed -e 's/^.* - /x/g' -e 's/  .*$//g' <<< "$sessticket_tls" | tr '\n' ',')"
-     sed -e 's/ /,x/g' -e 's/-/,x/g' <<< "$sessticket_tls"
+     local line=""
+     local first=true
 
+    sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $OPTIMAL_PROTO $PROXY $SNI -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
+
+     # This needs to be on stderr
+     debugme echo "$sessticket_tls" >&2
+     # Now we extract the session ticket. First we'll remove the ASCII garbage (len=16chars)
+     # at the rhs, then we'll sqush all white spaces (normally it's just 3x " " but we're
+     # tolerant here. Then we remove evryth. up to the address, replace the dash in the middle.
+     # In the end we want commas between all bytes.
+     # Note the second expression requires "shopt -s extglob".
+     while read -r line; do
+          line="${line:0:$((${#line}-16))}"
+          line="${line%%+([[:space:]])}"
+          line="${line#*- }"
+          line="${line//-/ }"
+          line="${line// /,}"
+          if "$first"; then
+               # No comma in the beginning
+               printf "%s" "${line}"
+               first=false
+          else
+               printf "%s" ",${line}"
+          fi
+     done <<< "$sessticket_tls"
 }
 
 
@@ -15276,7 +15302,7 @@ run_ticketbleed() {
      fi
      debugme echo "using protocol $tls_hexcode"
 
-     session_tckt_tls="$(sub_session_ticket_tls)"
+     session_tckt_tls="$(session_ticket_from_openssl)"
      if [[ "$session_tckt_tls" == , ]]; then
           pr_svrty_best "not vulnerable (OK)"
           outln ", no session tickets"
@@ -15286,7 +15312,7 @@ run_ticketbleed() {
      fi
 
      len_tckt_tls=${#session_tckt_tls}
-     len_tckt_tls=$(( len_tckt_tls / 4))
+     len_tckt_tls=$(( len_tckt_tls / 3))          # Attention: this also counts commas. So we have two bytes like 32,23,
      xlen_tckt_tls="$(dec02hex $len_tckt_tls)"
      len_handshake_record_layer="$(( len_sid + len_ch + len_tckt_tls ))"
      xlen_handshake_record_layer="$(dec04hex "$len_handshake_record_layer")"
@@ -15374,9 +15400,9 @@ run_ticketbleed() {
 # Extension: SessionTicket TLS
      00, 23,
      # length of SessionTicket TLS
-     00, $xlen_tckt_tls,
+     00, $xlen_tckt_tls ,
      # data, Session Ticket
-     $session_tckt_tls                       # we have the comma already
+     $session_tckt_tls ,
 # Extension: Heartbeat
      00, 0f, 00, 01, 01"
 
