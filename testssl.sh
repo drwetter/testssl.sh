@@ -8178,6 +8178,7 @@ certificate_info() {
      local trust_sni_finding
      local -i certificates_provided
      local cnfinding trustfinding trustfinding_nosni
+     local cntext
      local cnok="OK"
      local expfinding expok="OK"
      local -i ret=0
@@ -8457,7 +8458,7 @@ certificate_info() {
 
      cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g')"
      fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1//SHA1 /}"
-     outln "$cert_serial / $cert_fingerprint_sha1"
+     outln "$(out_row_aligned_max_width "$cert_serial / $cert_fingerprint_sha1" "$spaces" $TERM_WIDTH)"
 
      cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
      fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2//SHA256 /}"
@@ -8477,11 +8478,11 @@ certificate_info() {
      cnfinding="Common Name (CN) : "
      cn="$(get_cn_from_cert $HOSTCERT)"
      if [[ -n "$cn" ]]; then
-          pr_italic "$cn"
+          cntext="$(pr_italic "$cn")"
           cnfinding="$cn"
      else
           cn="no CN field in subject"
-          out "($cn)"
+          cntext="($cn)"
           cnfinding="$cn"
           cnok="INFO"
      fi
@@ -8502,21 +8503,25 @@ certificate_info() {
           outln
           cnfinding="$cn"
      elif [[ -z "$cn_nosni" ]]; then
-          out " (request w/o SNI didn't succeed";
+          cntext+=" (request w/o SNI didn't succeed)"
           cnfinding+="request w/o SNI didn't succeed"
           if [[ $cert_sig_algo =~ ecdsa ]]; then
-               out ", usual for EC certificates"
+               cntext+=", usual for EC certificates"
                cnfinding+=", usual for EC certificates"
           fi
-          outln ")"
+          cntext+=")"
           cnfinding+=""
      elif [[ "$cn_nosni" == *"no CN field"* ]]; then
-          outln ", (request w/o SNI: $cn_nosni)"
+          cntext+=", (request w/o SNI: $cn_nosni)"
           cnfinding="$cn_nosni"
      else
-          out " (CN in response to request w/o SNI: "; pr_italic "$cn_nosni"; outln ")"
+          cntext+=" (CN in response to request w/o SNI: "
+          cntext+="$(pr_italic "$cn_nosni")"
+          cntext+=")"
           cnfinding="$cn_nosni"
      fi
+     out_row_aligned_max_width "$cntext" "$spaces" $TERM_WIDTH
+     outln
      fileout "cert_commonName_wo_SNI${json_postfix}" "INFO" "$cnfinding"
 
      sans=$(grep -A2 "Subject Alternative Name" <<< "$cert_txt" | \
@@ -15708,6 +15713,7 @@ run_breach() {
      local url="$1"
      local spaces="                                          "
      local disclaimer=""
+     local infotext=""
      local when_makesense=" Can be ignored for static pages or if no secrets in the page"
      local cve="CVE-2013-3587"
      local cwe="CWE-310"
@@ -15754,13 +15760,19 @@ run_breach() {
           prln_warning ") "
           ret=1
      elif [[ -z $result ]]; then
-          pr_svrty_best "no HTTP compression (OK) "
-          outln "$disclaimer"
+          infotext="$(pr_svrty_best "no HTTP compression (OK) ")"
+          infotext+="$disclaimer"
+          out_row_aligned_max_width "$infotext" "$spaces " $TERM_WIDTH
+          outln
           fileout "$jsonID" "OK" "not vulnerable, no HTTP compression $disclaimer" "$cve" "$cwe"
      else
-          pr_svrty_high "potentially NOT ok, uses $result HTTP compression."
-          outln "$disclaimer"
-          outln "$spaces$when_makesense"
+          infotext="$(pr_svrty_high "potentially NOT ok, uses $result HTTP compression.")"
+          infotext+="$disclaimer"
+          out_row_aligned_max_width "$infotext" "$spaces " $TERM_WIDTH
+          outln
+          out "$spaces"
+          out_row_aligned_max_width "$when_makesense" "$spaces " $TERM_WIDTH
+          outln
           fileout "$jsonID" "HIGH" "potentially VULNERABLE, uses $result HTTP compression $disclaimer" "$cve" "$cwe" "$hint"
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
@@ -16609,7 +16621,8 @@ run_drown() {
                     outln " could help you to find out"
                     fileout "${jsonID}_hint" "INFO" "Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe"
                else
-                    outln "$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
+                    infotext="$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
+                    outln "$(out_row_aligned_max_width "$infotext" "$spaces " $TERM_WIDTH)"
                     fileout "${jsonID}_hint" "INFO" "no RSA certificate, can't be used with SSLv2 elsewhere" "$cve" "$cwe"
                fi
                ;;
@@ -16888,12 +16901,15 @@ run_beast(){
                     outln; out " "
                     # NOT ok seems too harsh for me if we have TLS >1.0
                     pr_svrty_low "VULNERABLE"
-                    outln " -- but also supports higher protocols (possible mitigation) $higher_proto_supported"
+                    infotext=" -- but also supports higher protocols (possible mitigation) $higher_proto_supported"
+                    out_row_aligned_max_width "$infotext" "$spaces" $TERM_WIDTH
                     outln
                else
                     out "$spaces"
                     pr_svrty_low "VULNERABLE"
-                    outln " -- but also supports higher protocols $higher_proto_supported (likely mitigated)"
+                    infotext=" -- but also supports higher protocols $higher_proto_supported (likely mitigated)"
+                    out_row_aligned_max_width "$infotext" "$spaces" $TERM_WIDTH
+                    outln
                fi
                fileout "$jsonID" "LOW" "VULNERABLE -- but also supports higher protocols $higher_proto_supported (likely mitigated)" "$cve" "$cwe" "$hint"
           else
@@ -16967,8 +16983,9 @@ run_lucky13() {
           [[ "$DEBUG" -eq 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      fi
      if [[ $sclient_success -eq 0 ]]; then
-          out "potentially "
-          pr_svrty_low "VULNERABLE"; out ", uses cipher block chaining (CBC) ciphers with TLS. Check patches"
+          vulntext="potentially $(pr_svrty_low "VULNERABLE")"
+          vulntext="$vulntext, uses cipher block chaining (CBC) ciphers with TLS. Check patches"
+          out_row_aligned_max_width "$vulntext" "$spaces" $TERM_WIDTH
           fileout "$jsonID" "LOW" "potentially vulnerable, uses TLS CBC ciphers" "$cve" "$cwe" "$hint"
           # the CBC padding which led to timing differences during MAC processing has been solved in openssl (https://www.openssl.org/news/secadv/20130205.txt)
           # and other software. However we can't tell with reasonable effort from the outside. Thus we still issue a warning and label it experimental
