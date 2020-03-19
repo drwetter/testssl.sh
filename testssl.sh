@@ -2727,10 +2727,14 @@ emphasize_stuff_in_headers(){
      local html_brown="<span style=\\\"color:olive;\\\">"
      local html_yellow="<span style=\\\"color:olive;font-weight:bold;\\\">"
      local html_off="<\\/span>"
+     local escaped=""
 
-# see http://www.grymoire.com/Unix/Sed.html#uh-3
-#    outln "$1" | sed "s/[0-9]*/$brown&${off}/g"
-     tmln_out "$1" | sed -e "s/\([0-9]\)/${brown}\1${off}/g" \
+     # removes non-printable characters
+     escaped="$(safe_echo "$1" | tr -cd "[:print:]")"
+
+     # see http://www.grymoire.com/Unix/Sed.html#uh-3
+     #    outln "$1" | sed "s/[0-9]*/$brown&${off}/g"
+     tmln_out "$escaped" | sed -e "s/\([0-9]\)/${brown}\1${off}/g" \
           -e "s/Unix/${yellow}Unix${off}/g" \
           -e "s/Debian/${yellow}Debian${off}/g" \
           -e "s/Win32/${yellow}Win32${off}/g" \
