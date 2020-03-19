@@ -1412,6 +1412,25 @@ out_row_aligned() {
      done <<< "$1"
 }
 
+# prints out a text, trying to align it to the right border if it is too long.
+print_aligned_right_max_width() {
+     local text="$1"
+     local spaces="$2"
+     local -i max_width="$3"
+     local -i i len
+     local print_function="$4"
+     len=${#text}+${#spaces}
+     if [[ $len -lt $max_width ]]; then
+          # If the text to print is shorter than $max_width,
+          # then just print it using print_function.
+          out "$spaces"
+          $print_function "$text"
+     else
+          # try to right-align url
+          printf "%${max_width}s" "$text"
+     fi
+}
+
 # prints text over multiple lines, trying to make no line longer than $max_width.
 # Each line is indented with $spaces.
 out_row_aligned_max_width() {
@@ -8462,7 +8481,8 @@ certificate_info() {
 
      cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
      fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2//SHA256 /}"
-     outln "$spaces$cert_fingerprint_sha2"
+     print_aligned_right_max_width "$cert_fingerprint_sha2" "$spaces" $TERM_WIDTH out
+     outln
 
      # " " needs to be converted back to lf in JSON/CSV output
      fileout "cert${json_postfix}" "INFO" "$(< $HOSTCERT)"
@@ -16553,6 +16573,7 @@ run_drown() {
      local cve="CVE-2016-0800 CVE-2016-0703"
      local cwe="CWE-310"
      local hint=""
+     local infotext=""
      local jsonID="DROWN"
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
@@ -16606,19 +16627,23 @@ run_drown() {
                          prln_svrty_critical  "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
                          fileout "$jsonID" "CRITICAL" "VULNERABLE, SSLv2 offered with $nr_ciphers_detected ciphers. Make sure you don't use this certificate elsewhere, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe" "$hint"
                     fi
-                    outln "$spaces Make sure you don't use this certificate elsewhere, see:"
+                    infotext="Make sure you don't use this certificate elsewhere, see:"
                     out "$spaces "
-                    pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
+                    outln "$(out_row_aligned_max_width "$infotext" "$spaces " $TERM_WIDTH)"
+                    print_aligned_right_max_width "https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$spaces " $TERM_WIDTH pr_url
                     outln
                fi
                ;;
           *)   prln_svrty_best "not vulnerable on this host and port (OK)"
                fileout "$jsonID" "OK" "not vulnerable on this host and port" "$cve" "$cwe"
                if [[ -n "$cert_fingerprint_sha2" ]]; then
-                    outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
+                    infotext="make sure you don't use this certificate elsewhere with SSLv2 enabled services"
                     out "$spaces "
-                    pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
-                    outln " could help you to find out"
+                    outln "$(out_row_aligned_max_width "$infotext" "$spaces " $TERM_WIDTH)"
+                    print_aligned_right_max_width "https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$spaces " $TERM_WIDTH pr_url
+                    outln
+                    out "$spaces "
+                    outln "$(out_row_aligned_max_width "could help you to find out" "$spaces " $TERM_WIDTH)"
                     fileout "${jsonID}_hint" "INFO" "Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe"
                else
                     infotext="$spaces no RSA certificate, thus certificate can't be used with SSLv2 elsewhere"
