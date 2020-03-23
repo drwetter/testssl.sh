@@ -15219,15 +15219,20 @@ session_ticket_from_openssl() {
      local line=""
      local first=true
 
-    sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $OPTIMAL_PROTO $PROXY $SNI -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
-
-     # This needs to be on stderr
+     sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $OPTIMAL_PROTO $PROXY $SNI -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
+     # This needs to be on stderr (return value)
      debugme echo "$sessticket_tls" >&2
+     if [[ -z "$sessticket_tls" ]] || [[ "$sessticket_tls" == " " ]]; then
+          echo ""
+          return 0
+     fi
+
      # Now we extract the session ticket. First we'll remove the ASCII garbage (len=16chars)
      # at the rhs, then we'll sqush all white spaces (normally it's just 3x " " but we're
      # tolerant here. Then we remove evryth. up to the address, replace the dash in the middle.
      # In the end we want commas between all bytes.
      # Note the second expression requires "shopt -s extglob".
+
      while read -r line; do
           line="${line:0:$((${#line}-16))}"
           line="${line%%+([[:space:]])}"
@@ -15302,13 +15307,20 @@ run_ticketbleed() {
      fi
      debugme echo "using protocol $tls_hexcode"
 
-     session_tckt_tls="$(session_ticket_from_openssl)"
-     if [[ "$session_tckt_tls" == , ]]; then
-          pr_svrty_best "not vulnerable (OK)"
-          outln ", no session tickets"
-          fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
-          debugme echo " session ticket TLS \"$session_tckt_tls\""
+     if "$CLIENT_AUTH"; then
+          prln_warning "client x509-based authentication prevents this from being tested"
+          fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested" "$cve" "$cwe"
+          # not sure yet whether this test w client auth would make sense at all
           return 0
+     else
+          session_tckt_tls="$(session_ticket_from_openssl)"
+          if [[ "$session_tckt_tls" == , ]] || [[ -z "$session_tckt_tls" ]] ; then
+               pr_svrty_best "not vulnerable (OK)"
+               outln ", no session tickets"
+               fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
+               debugme echo " session ticket TLS \"$session_tckt_tls\""
+               return 0
+          fi
      fi
 
      len_tckt_tls=${#session_tckt_tls}
@@ -15598,7 +15610,7 @@ run_renego() {
           fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
      elif "$CLIENT_AUTH"; then
           prln_warning "client x509-based authentication prevents this from being tested"
-          fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
+          fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested" "$cve" "$cwe"
           sec_client_renego=1
      else
           # We need up to two tries here, as some LiteSpeed servers don't answer on "R" and block. Thus first try in the background
@@ -15789,8 +15801,9 @@ run_breach() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
      if "$CLIENT_AUTH"; then
-          outln "cannot be tested (server side requires x509 authentication)"
-          fileout "$jsonID" "INFO" "was not tested, server side requires x509 authentication" "$cve" "$cwe"
+          prln_warning "client x509-based authentication prevents this from being tested"
+          fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested" "$cve" "$cwe"
+          return 0
      fi
 
      # if [[ $NR_HEADER_FAIL -ge $MAX_HEADER_FAIL ]]; then
