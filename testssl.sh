@@ -15733,7 +15733,7 @@ run_breach() {
      [[ "$NODE" =~ google ]] && referer="https://yandex.ru/"     # otherwise we have a false positive for google.com
      useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
-     printf "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
+     tm_out "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      was_killed=$?                           # !=0 was killed
      result=$(awk '/^Content-Encoding/ { print $2 }' $TMPFILE)
