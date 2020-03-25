@@ -16806,7 +16806,7 @@ get_install_dir() {
      fi
 
      if [[ ! -r "$CIPHERS_BY_STRENGTH_FILE" ]]; then
-          DISPLAY_CIPHERNAMES="no-rfc"
+          DISPLAY_CIPHERNAMES="openssl-only"
           debugme echo "$CIPHERS_BY_STRENGTH_FILE"
           prln_warning "\nATTENTION: No cipher mapping file found!"
           outln "Please note from 2.9 on $PROG_NAME needs files in \"\$TESTSSL_INSTALL_DIR/etc/\" to function correctly."
