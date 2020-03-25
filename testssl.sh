@@ -5969,7 +5969,7 @@ pr_cipher_quality() {
                          pr_svrty_high "$text"
                          return 2
                          ;;
-                    PSK-*GCM*|PSK-*CCM*|RSA-PSK-*GCM*|RSA-PSK-CHACHA20-POLY1305|PSK-CHACHA20-POLY1305|PSK-ARIA*-GCM-SHA*|RSA-PSK-ARIA*-GCM-SHA*)
+                    PSK-*GCM*|PSK-*CCM*|RSA-PSK-*GCM*|RSA-PSK-CHACHA20-POLY1305|PSK-CHACHA20-POLY1305)
                          # PSK kx and e.g. GCM isn't certainly the best
                          pr_svrty_good "$text"
                          return 6
