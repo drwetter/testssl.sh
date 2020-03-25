@@ -5948,7 +5948,7 @@ pr_cipher_quality() {
                # We have an OpenSSL name and can't convert it to the RFC name which is rarely
                # the case, see "prepare_arrays()" and "./etc/cipher-mapping.txt"
                case "$cipher" in
-                    *NULL*|EXP*|ADH*|AECDH*)
+                    *NULL*|EXP*|ADH*|AECDH*|*anon*)
                          pr_svrty_critical "$text"
                          return 1
                          ;;
@@ -5983,7 +5983,7 @@ pr_cipher_quality() {
                          pr_svrty_best "$text"
                          return 7
                          ;; #best ones
-                    *AES*SHA*|*CAMELLIA*SHA*|*SEED*SHA*)
+                    *AES*SHA*|*CAMELLIA*SHA*|*SEED*SHA*|*CBC*)
                          pr_svrty_low "$text"
                          return 4
                          ;;
