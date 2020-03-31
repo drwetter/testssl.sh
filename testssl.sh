@@ -5948,7 +5948,7 @@ pr_cipher_quality() {
                # We have an OpenSSL name and can't convert it to the RFC name which is rarely
                # the case, see "prepare_arrays()" and "./etc/cipher-mapping.txt"
                case "$cipher" in
-                    *NULL*|EXP*|ADH*)
+                    *NULL*|EXP*|ADH*|AECDH*|*anon*)
                          pr_svrty_critical "$text"
                          return 1
                          ;;
@@ -5956,8 +5956,26 @@ pr_cipher_quality() {
                          pr_svrty_high "$text"
                          return 2
                          ;;
-                    AES256-GCM-SHA384|AES128-GCM-SHA256|AES256-CCM|AES128-CCM|ARIA256-GCM-SHA384|ARIA128-GCM-SHA256)
+                    AES256-GCM-SHA384|AES128-GCM-SHA256|AES256-CCM*|AES128-CCM*|ARIA256-GCM-SHA384|ARIA128-GCM-SHA256)
                          # RSA kx and e.g. GCM isn't certainly the best
+                         pr_svrty_good "$text"
+                         return 6
+                         ;;
+                    *CBC3*|*3DES*|*IDEA*)
+                         pr_svrty_medium "$text"
+                         return 3
+                         ;;
+                    *DES*)
+                         pr_svrty_high "$text"
+                         return 2
+                         ;;
+                    PSK-*GCM*|PSK-*CCM*|RSA-PSK-*GCM*|RSA-PSK-CHACHA20-POLY1305|PSK-CHACHA20-POLY1305)
+                         # PSK kx and e.g. GCM isn't certainly the best
+                         pr_svrty_good "$text"
+                         return 6
+                         ;;
+                    DH-*GCM*|ECDH-*GCM*)
+                         # static DH or ECDH kx and GCM isn't certainly the best
                          pr_svrty_good "$text"
                          return 6
                          ;;
@@ -5965,11 +5983,7 @@ pr_cipher_quality() {
                          pr_svrty_best "$text"
                          return 7
                          ;; #best ones
-                    *CBC3*|*SEED*|*3DES*|*IDEA*)
-                         pr_svrty_medium "$text"
-                         return 3
-                         ;;
-                    ECDHE*AES*|DHE*AES*SHA*|*CAMELLIA*SHA)
+                    *AES*SHA*|*CAMELLIA*SHA*|*SEED*SHA*|*CBC*)
                          pr_svrty_low "$text"
                          return 4
                          ;;
@@ -6000,27 +6014,22 @@ pr_cipher_quality() {
                pr_svrty_high "$text"
                return 2
                ;;
-          *CBC3*|*SEED*|*3DES*|*IDEA*)
+          *CBC3*|*3DES*|*IDEA*)
                pr_svrty_medium "$text"
                return 3
                ;;
-          TLS_RSA_*)
-               if [[ "$cipher" =~ CBC ]]; then
-                    pr_svrty_low "$text"
-                    return 4
-               else
-                    pr_svrty_good "$text"
-                    # RSA kx and e.g. GCM isn't certainly the best
-                    return 6
-               fi
+          *CBC*)
+               pr_svrty_low "$text"
+               return 4
+               ;;
+          TLS_RSA_*|TLS_DH_*|TLS_ECDH_*|TLS_PSK_WITH_*)
+               pr_svrty_good "$text"
+               # RSA, or static DH, ECDH, or PSK kx and e.g. GCM isn't certainly the best
+               return 6
                ;;
           *GCM*|*CCM*|*CHACHA20*)
                pr_svrty_best "$text"
                return 7
-               ;;
-          *ECDHE*AES*CBC*|*DHE*AES*SHA*|*RSA*AES*SHA*|*CAMELLIA*SHA*)
-               pr_svrty_low "$text"
-               return 4
                ;;
           *)
                out "$text"
