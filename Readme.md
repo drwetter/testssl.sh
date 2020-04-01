@@ -1,8 +1,11 @@
 
 ## Intro
 
-[![Build Status](https://travis-ci.org/drwetter/testssl.sh.svg?branch=master)](https://travis-ci.org/drwetter/testssl.sh)
+<!-- [![Travis CI Status](https://img.shields.io/travis/drwetter/testssl.sh)](https://travis-ci.org/drwetter/testssl.sh)  -->
+[![Travis CI Status](https://travis-ci.org/drwetter/testssl.sh.svg?branch=3.1dev)](https://travis-ci.org/drwetter/testssl.sh)
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/drwetter/testssl.sh?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![License](https://img.shields.io/github/license/drwetter/testssl.sh)](https://github.com/drwetter/testssl.sh/LICENSE)
+[![Docker](https://img.shields.io/docker/pulls/drwetter/testssl.sh)](https://github.com/drwetter/testssl.sh/blob/3.1dev/Dockerfile.md)
 
 `testssl.sh` is a free command line tool which checks a server's service on
 any port for the support of TLS/SSL ciphers, protocols as well as some
@@ -35,7 +38,7 @@ this program and where to get this program from.
 
 testssl.sh is working on every Linux/BSD distribution out of the box. Latest by 2.9dev
 most of the limitations of disabled features from the openssl client are gone
-due to bash-socket-based checks. As a result you can also use e.g. LibreSSL or OpenSSL
+due to bash-socket-based checks. As a result you can also use e.g. LibreSSL or OpenSSL >=
 1.1.1 . testssl.sh also works on other unixoid system out of the box, supposed they have
 `/bin/bash` >= version 3.2 and standard tools like sed and awk installed. An implicit
 (silent) check for binaries is done when you start testssl.sh . System V needs probably
@@ -49,7 +52,7 @@ You can download testssl.sh by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
-Or help yourself downloading the ZIP archive [https://github.com/drwetter/testssl.sh/archive/3.0.zip](https://github.com/drwetter/testssl.sh/archive/3.0.zip). Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
+Or help yourself downloading the 3.0 ZIP archive [https://github.com/drwetter/testssl.sh/archive/3.0.zip](https://github.com/drwetter/testssl.sh/archive/3.0.zip). Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
 
 #### Docker
 
@@ -113,6 +116,10 @@ Please address questions not specifically to the code of testssl.sh to the respe
 
 #### Privacy checker using testssl.sh
 * https://privacyscore.org
+
+#### Nagios / Icinga Plugins
+* https://github.com/dnmvisser/nagios-testssl (Python 3)
+* https://gitgud.malvager.net/Wazakindjes/icinga2_plugins/src/master/check_testssl.sh (Shell)
 
 #### Brew package
 
