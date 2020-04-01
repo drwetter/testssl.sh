@@ -1290,7 +1290,7 @@ get_cipher() {
      # and https://github.com/drwetter/testssl.sh/issues/1292
      # Performance measurements showed no to barely measureable penalty (1s displayed in 9 tries).
 
-     if [[ "$server_hello" =~ Cipher\ *:\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]]; then
+     if [[ "$server_hello" =~ Cipher\ *:\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+|SSL_[A-Za-z0-9_]+) ]]; then
           cipher="${BASH_REMATCH##* }"
      elif [[ "$server_hello" =~ (New|Reused)", "(SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)", Cipher is "([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]]; then
           cipher="${BASH_REMATCH##* }"
@@ -15685,6 +15685,7 @@ run_beast(){
                     for (( i=0; i < nr_ciphers; i++ )); do
                          [[ "$cbc_cipher" == "${rfc_ciph[i]}" ]] && break
                     done
+                    [[ $i -eq $nr_ciphers ]] && break
                     ciphers_found[i]=true
                     if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${ciph[i]}" != - ]] ) || [[ "${rfc_ciph[i]}" == - ]]; then
                          detected_cbc_ciphers+="${ciph[i]} "
