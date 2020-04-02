@@ -5937,6 +5937,7 @@ pr_ecdh_curve_quality() {
 pr_cipher_quality() {
      local cipher="$1"
      local text="$2"
+     local ossl_cipher
 
      [[ -z "$1" ]] && return 0
      [[ -z "$text" ]] && text="$cipher"
@@ -5983,7 +5984,7 @@ pr_cipher_quality() {
                          pr_svrty_best "$text"
                          return 7
                          ;; #best ones
-                    *AES*SHA*|*CAMELLIA*SHA*|*SEED*SHA*|*CBC*)
+                    *AES*SHA*|*CAMELLIA*SHA*|*SEED*SHA*|*CBC*|*GOST*)
                          pr_svrty_low "$text"
                          return 4
                          ;;
@@ -5993,7 +5994,9 @@ pr_cipher_quality() {
                          ;;
                esac
           fi
+          ossl_cipher="$cipher"
           cipher="$(openssl2rfc "$cipher")"
+          [[ -z "$cipher" ]] && cipher="$ossl_cipher"
      fi
 
      # Now we look at the RFC cipher names. The sequence matters - as above.
@@ -6018,7 +6021,7 @@ pr_cipher_quality() {
                pr_svrty_medium "$text"
                return 3
                ;;
-          *CBC*)
+          *CBC*|*GOST*)
                pr_svrty_low "$text"
                return 4
                ;;
