@@ -13,7 +13,7 @@
 # Project lead and initiator: Dirk Wetter, copyleft: 2007-today, contributions so far see CREDITS.md
 # Main contributions from David Cooper
 #
-# License: GPLv2, see http://www.fsf.org/licensing/licenses/info/GPLv2.html
+# License: GPLv2, see https://spdx.org/licenses/GPL-2.0-only.html
 # and accompanying license "LICENSE.txt". Redistribution + modification under this
 # license permitted.
 # If you enclose this script or parts of it in your software, it has to
@@ -142,7 +142,7 @@ HNAME="${HNAME%%.*}"
 declare CMDLINE
 CMDLINE_PARSED=""                                 # This makes sure we don't let early fatal() write into files when files aren't created yet
 declare -r -a CMDLINE_ARRAY=("$@")                # When performing mass testing, the child processes need to be sent the
-declare -a MASS_TESTING_CMDLINE                   # command line in the form of an array (see #702 and http://mywiki.wooledge.org/BashFAQ/050).
+declare -a MASS_TESTING_CMDLINE                   # command line in the form of an array (see #702 and https://mywiki.wooledge.org/BashFAQ/050).
 
 
 ########### Defining (and presetting) variables which can be changed
@@ -514,7 +514,7 @@ outln() { printf -- "%b" "$1\n"; html_out "$(html_reserved "$1")\n"; }
 
 #TODO: Still no shell injection safe but if just run it from the cmd line: that's fine
 
-# Color print functions, see also http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
+# Color print functions, see also https://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x329.html
 tm_liteblue()   { [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && tm_out "\033[0;32m$1" || tm_out "\033[0;34m$1" ) || tm_out "$1"; tm_off; }    # not yet used
 pr_liteblue()   { tm_liteblue "$1"; [[ "$COLOR" -ge 2 ]] && ( "$COLORBLIND" && html_out "<span style=\"color:#00cd00;\">$(html_reserved "$1")</span>" || html_out "<span style=\"color:#0000ee;\">$(html_reserved "$1")</span>" ) || html_out "$(html_reserved "$1")"; }
 tmln_liteblue() { tm_liteblue "$1"; tmln_out; }
@@ -629,7 +629,7 @@ pr_reverse()      { tm_reverse "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span sty
 pr_reverse_bold() { tm_reverse_bold "$1"; [[ "$COLOR" -ne 0 ]] && html_out "<span style=\"color:white;background-color:black;font-weight:bold;\">$(html_reserved "$1")</span>" || html_out "$(html_reserved "$1")"; }
 
 #pr_headline() { pr_blue "$1"; }
-#http://misc.flogisoft.com/bash/tip_colors_and_formatting
+#https://misc.flogisoft.com/bash/tip_colors_and_formatting
 
 #pr_headline() { [[ "$COLOR" -ge 2 ]] && out "\033[1;30m\033[47m$1" || out "$1"; tm_off; }
 tm_headline()   { [[ "$COLOR" -ne 0 ]] && tm_out "\033[1m\033[4m$1" || tm_out "$1"; tm_off; }
@@ -658,7 +658,7 @@ pr_url()     { tm_out "$1"; html_out "<a href=\"$1\" style=\"color:black;text-de
 pr_boldurl() { tm_bold "$1"; html_out "<a href=\"$1\" style=\"font-weight:bold;color:black;text-decoration:none;\">$1</a>"; }
 
 ### color switcher (see e.g. https://linuxtidbits.wordpress.com/2008/08/11/output-color-on-bash-scripts/
-###                          http://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
+###                          https://www.tldp.org/HOWTO/Bash-Prompt-HOWTO/x405.html
 ### no output support for HTML!
 set_color_functions() {
      local ncurses_tput=true
@@ -816,7 +816,7 @@ is_number() {
 }
 
 strip_quote() {
-     # remove color codes (see http://www.commandlinefu.com/commands/view/3584/remove-color-codes-special-characters-with-sed)
+     # remove color codes (see https://www.commandlinefu.com/commands/view/3584/remove-color-codes-special-characters-with-sed)
      #  \', leading and all trailing spaces
      sed -e "s,$(echo -e "\033")\[[0-9;]*[a-zA-Z],,g" \
           -e "s/\"/\\'/g" \
@@ -1334,7 +1334,7 @@ html_header() {
           html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
           html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
           html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
-          html_out "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
+          html_out "<html xmlns=\"http://www.w3.org/1999/xhtml/\">\n"
           html_out "<head>\n"
           html_out "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
           html_out "<title>testssl.sh</title>\n"
@@ -2582,7 +2582,7 @@ run_hpkp() {
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $PROXY -showcerts -connect $NODEIP:$PORT $SNI")  </dev/null >$TMPFILE 2>$ERRFILE
           # Place the server's certificate in $HOSTCERT and any intermediate
           # certificates that were provided in $TEMPDIR/intermediatecerts.pem
-          # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
+          # https://backreference.org/2010/05/09/ocsp-verification-with-openssl/
           awk -v n=-1 "/Certificate chain/ {start=1}
                   /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
                   inc { print > (\"$TEMPDIR/level\" n \".crt\") }
@@ -2728,7 +2728,7 @@ emphasize_stuff_in_headers(){
      local html_yellow="<span style=\\\"color:olive;font-weight:bold;\\\">"
      local html_off="<\\/span>"
 
-# see http://www.grymoire.com/Unix/Sed.html#uh-3
+# see https://www.grymoire.com/Unix/Sed.html#uh-3
 #    outln "$1" | sed "s/[0-9]*/$brown&${off}/g"
      tmln_out "$1" | sed -e "s/\([0-9]\)/${brown}\1${off}/g" \
           -e "s/Unix/${yellow}Unix${off}/g" \
@@ -6744,7 +6744,7 @@ cipher_pref_check() {
                ciphers_found="$order"
           fi
           if "$WIDE" || [[ -z "$order" ]]; then
-               tested_cipher=""; order=""; nr_ciphers_found=0 
+               tested_cipher=""; order=""; nr_ciphers_found=0
                while true; do
                     if [[ $p != tls1_3 ]]; then
                          if [[ -n "$ciphers_found" ]]; then
@@ -7311,7 +7311,7 @@ extract_certificates() {
      # Place the server's certificate in $HOSTCERT and any intermediate
      # certificates that were provided in $TEMPDIR/intermediatecerts.pem
      savedir="$PWD"; cd $TEMPDIR
-     # http://backreference.org/2010/05/09/ocsp-verification-with-openssl/
+     # https://backreference.org/2010/05/09/ocsp-verification-with-openssl/
      if [[ "$version" == ssl2 ]]; then
           awk -v n=-1 '/Server certificate/ {start=1}
                /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
@@ -8352,10 +8352,10 @@ certificate_info() {
                                         let ret++ ;;
           esac
           out "$short_keyAlgo "
-          # https://tools.ietf.org/html/rfc4492,  http://www.keylength.com/en/compare/
-          # http://infoscience.epfl.ch/record/164526/files/NPDF-22.pdf
-          # see http://csrc.nist.gov/publications/nistpubs/800-57/sp800-57_part1_rev3_general.pdf
-          # Table 2 @ chapter 5.6.1 (~ p64)
+          # https://tools.ietf.org/html/rfc4492,  https://www.keylength.com/en/compare/
+          # https://doi.org/10.1007/s00145-001-0009-4
+          # see http://dx.doi.org/10.6028/NIST.SP.800-57pt1r4
+          # Table 2 @ chapter 5.6.1 (~ p66)
           if [[ $cert_key_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey ]]; then
                if [[ "$cert_keysize" -le 110 ]]; then       # a guess
                     pr_svrty_critical "$cert_keysize"
@@ -8723,7 +8723,7 @@ certificate_info() {
           determine_trust "$jsonID" "$json_postfix" || ((ret++))
      fi
 
-     # http://events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see page 40pp
+     # https://www.eff.org/files/ccc2010.pdf, see page 40pp
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
      jsonID="cert_certificatePolicies_EV"
      # only the first one, seldom we have two
@@ -8745,8 +8745,8 @@ certificate_info() {
      debugme echo "($(newline_to_spaces "$policy_oid"))"
      outln
 #TODO: check browser OIDs:
-#         https://mxr.mozilla.org/mozilla-central/source/security/certverifier/ExtendedValidation.cpp
-#         http://src.chromium.org/chrome/trunk/src/net/cert/ev_root_ca_metadata.cc
+#         https://dxr.mozilla.org/mozilla-central/source/security/certverifier/ExtendedValidation.cpp
+#         https://chromium.googlesource.com/chromium/chromium/+/master/net/base/ev_root_ca_metadata.cc
 #         https://certs.opera.com/03/ev-oids.xml
 #         see #967
 
@@ -9990,7 +9990,7 @@ run_pfs() {
 
 
 # good source for configuration and bugs: https://wiki.mozilla.org/Security/Server_Side_TLS
-# good start to read: http://en.wikipedia.org/wiki/Transport_Layer_Security#Attacks_against_TLS.2FSSL
+# good start to read: https://en.wikipedia.org/wiki/Transport_Layer_Security#Attacks_against_TLS.2FSSL
 
 
 npn_pre(){
@@ -10054,7 +10054,7 @@ run_npn() {
                ((ret++))
           fi
      fi
-     # btw: nmap can do that too http://nmap.org/nsedoc/scripts/tls-nextprotoneg.html
+     # btw: nmap can do that too https://nmap.org/nsedoc/scripts/tls-nextprotoneg.html
      # nmap --script=tls-nextprotoneg #NODE -p $PORT is your friend if your openssl doesn't want to test this
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
@@ -10445,7 +10445,7 @@ fd_socket() {
                     starttls_xmpp_dialog
                     # IM observatory: https://xmpp.net , XMPP server directory: https://xmpp.net/directory.php
                     ;;
-               postgres) # Postgres SQL, see http://www.postgresql.org/docs/devel/static/protocol-message-formats.html
+               postgres) # Postgres SQL, see https://www.postgresql.org/docs/devel/protocol-message-formats.html
                     starttls_postgres_dialog
                     ;;
                mysql) # MySQL, see https://dev.mysql.com/doc/internals/en/x-protocol-lifecycle-lifecycle.html#x-protocol-lifecycle-tls-extension
@@ -10484,7 +10484,7 @@ code2network() {
      NW_STR=$(sed -e 's/,/\\\x/g' <<< "$1" | sed -e 's/# .*$//g' -e 's/ //g' -e '/^$/d' | tr -d '\n' | tr -d '\t')
 }
 
-# sockets inspired by http://blog.chris007.de/?p=238
+# sockets inspired by https://blog.chris007.de/using-bash-for-network-socket-operation/
 # ARG1: hexbytes separated by commas, with a leading comma
 # ARG2: seconds to sleep
 socksend_clienthello() {
@@ -11226,7 +11226,7 @@ derive-handshake-traffic-keys() {
           label="732068732074726166666963"
      else
           # "632068732074726166666963" = "c hs traffic"
-          label="632068732074726166666963" 
+          label="632068732074726166666963"
      fi
      handshake_traffic_secret="$(derive-secret "$hash_fn" "$handshake_secret" "$label" "$transcript")"
      [[ $? -ne 0 ]] && return 7
@@ -11317,7 +11317,7 @@ derive-application-traffic-keys() {
           label="732061702074726166666963"
      else
           # "632061702074726166666963" = "c hs traffic"
-          label="632061702074726166666963" 
+          label="632061702074726166666963"
      fi
      application_traffic_secret_0="$(derive-secret "$hash_fn" "$master_secret" "$label" "$transcript")"
      [[ $? -ne 0 ]] && return 7
@@ -11544,7 +11544,7 @@ chacha20() {
 # Used to decode value encoded as 32-bit little-endian integer
 u8to32() {
      local p="$1"
-     
+
      tm_out "0x${p:6:2}${p:4:2}${p:2:2}${p:0:2}"
      return 0
 }
@@ -11627,12 +11627,12 @@ poly1305_mac() {
      s2=$((r2*5))
      s3=$((r3*5))
      s4=$((r4*5))
-     
+
      pad0=$(u8to32 "${mac_key:32:8}")
      pad1=$(u8to32 "${mac_key:40:8}")
      pad2=$(u8to32 "${mac_key:48:8}")
      pad3=$(u8to32 "${mac_key:56:8}")
-     
+
      # poly1305_update
      for (( 1 ; bytes > 0; bytes=bytes-blocksize )); do
           if [[ $bytes -ge 32 ]]; then
@@ -12625,7 +12625,7 @@ parse_tls_serverhello() {
 
      # Client messages, including handshake messages, are carried by the record layer.
      # First, extract the handshake and alert messages.
-     # see http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#TLS_record
+     # see https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_record
      # byte 0:      content type:                 0x14=CCS,    0x15=TLS alert  x16=Handshake,  0x17 Application, 0x18=HB
      # byte 1+2:    TLS version word, major is 03, minor 00=SSL3, 01=TLS1 02=TLS1.1 03=TLS 1.2
      # byte 3+4:    fragment length
@@ -13594,7 +13594,7 @@ parse_tls_serverhello() {
                if [[ $curve_type -eq 3 ]]; then
                     # named_curve - the curve is identified by a 2-byte number
                     named_curve=$(hex2dec "${tls_serverkeyexchange_ascii:2:4}")
-                    # http://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8
+                    # https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8
                     case $named_curve in
                          1) dh_bits=163 ; named_curve_str="K-163" ;;
                          2) dh_bits=162 ; named_curve_str="sect163r1" ;;
@@ -14301,7 +14301,7 @@ prepare_tls_clienthello() {
      [[ 0x$tls_legacy_version -ge 0x04 ]] && tls_legacy_version="03"
 
      if "$offer_compression"; then
-          # See http://www.iana.org/assignments/comp-meth-ids/comp-meth-ids.xhtml#comp-meth-ids-2
+          # See https://www.iana.org/assignments/comp-meth-ids/comp-meth-ids.xhtml#comp-meth-ids-2
           compression_methods="03,01,40,00" # Offer NULL, DEFLATE, and LZS compression
      else
           compression_methods="01,00" # Only offer NULL compression (0x00)
@@ -14726,7 +14726,7 @@ tls_sockets() {
                     finished_msg="$(sym-encrypt "$cipher" "$key" "$(get-nonce "$iv" 0)" "${finished_msg}16" "")"
                fi
                finished_msg="$aad$finished_msg"
-               
+
                len=${#finished_msg}
                for (( i=0; i < len; i+=2 )); do
                     data+=", ${finished_msg:i:2}"
@@ -14734,7 +14734,7 @@ tls_sockets() {
                debugme echo -e "\nsending finished..."
                socksend_clienthello "${data}"
                sleep $USLEEP_SND
-               
+
                # Compute application traffic keys and IVs.
                master_secret="$(derive-master-secret "$cipher" "$handshake_secret")"
                master_traffic_keys="$(derive-application-traffic-keys "$cipher" "$master_secret" "$msg_transcript" server)"
@@ -14832,7 +14832,7 @@ receive_app_data() {
 
      read -r tls_version cipher server_key server_iv server_seq client_key client_iv client_seq <<< "$APP_TRAF_KEY_INFO"
      [[ "${tls_version:0:2}" == 7F ]] && [[ 0x${tls_version:2:2} -lt 25 ]] && include_headers=false
-     
+
      sleep $USLEEP_REC
      while true; do
           len=${#ciphertext}
@@ -14882,7 +14882,7 @@ receive_app_data() {
 
 ####### Vulnerabilities follow #######
 # General overview which browser "supports" which vulnerability:
-# http://en.wikipedia.org/wiki/Transport_Layer_Security-SSL#Web_browsers
+# https://en.wikipedia.org/wiki/Transport_Layer_Security#Web_browsers
 
 # mainly adapted from https://gist.github.com/takeshixx/10107280
 #
@@ -15190,7 +15190,7 @@ sub_session_ticket_tls() {
 }
 
 
-# see https://blog.filippo.io/finding-ticketbleed/ |  http://ticketbleed.com/
+# see https://blog.filippo.io/finding-ticketbleed/ |  https://filippo.io/ticketbleed/
 run_ticketbleed() {
      local session_tckt_tls=""
      local -i len_ch=300                            # fixed len of prepared clienthello below
@@ -15512,7 +15512,7 @@ run_renego() {
      jsonID="secure_client_renego"
      cve="CVE-2011-1473"
      # see: https://blog.qualys.com/ssllabs/2011/10/31/tls-renegotiation-and-denial-of-service-attacks
-     #      http://blog.ivanristic.com/2009/12/testing-for-ssl-renegotiation.html -- head/get doesn't seem to be needed though
+     #      https://blog.ivanristic.com/2009/12/testing-for-ssl-renegotiation.html -- head/get doesn't seem to be needed though
      #      https://archive.fo/20130415224936/http://www.thc.org/thc-ssl-dos/
      #      https://vincent.bernat.ch/en/blog/2011-ssl-dos-mitigation
      case "$OSSL_VER" in
@@ -16930,7 +16930,8 @@ run_beast(){
 }
 
 
-# http://www.isg.rhul.ac.uk/tls/Lucky13.html
+# https://web.archive.org/web/20200324101422/http://www.isg.rhul.ac.uk/tls/Lucky13.html
+# Paper: https://doi.org/10.1109/SP.2013.42
 # in a nutshell: don't offer CBC suites (again). MAC as a fix for padding oracles is not enough. Best: TLS v1.2+ AES GCM
 run_lucky13() {
      local spaces="                                           "
@@ -17010,7 +17011,7 @@ run_lucky13() {
 
 # https://tools.ietf.org/html/rfc7465    REQUIRES that TLS clients and servers NEVER negotiate the use of RC4 cipher suites!
 # https://en.wikipedia.org/wiki/Transport_Layer_Security#RC4_attacks
-# http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
+# https://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
 #
 run_rc4() {
      local -i rc4_offered=0
@@ -17265,8 +17266,9 @@ run_rc4() {
 run_youknowwho() {
      local cve="CVE-2013-2566"
      local cwe="CWE-310"
-     # NOT FIXME as there's no code: http://www.isg.rhul.ac.uk/tls/
-     # http://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html
+     # NOT FIXME as there's no code: https://web.archive.org/web/20191008002003/http://www.isg.rhul.ac.uk/tls/index.html
+     # Paper and presentation: https://www.usenix.org/conference/usenixsecurity13/technical-sessions/paper/alFardan
+     # https://blog.cryptographyengineering.com/2013/03/12/attack-of-week-rc4-is-kind-of-broken-in/
      return 0
      # in a nutshell: don't use RC4, really not!
 }
@@ -18026,7 +18028,8 @@ find_openssl_binary() {
           fatal "cannot exec or find any openssl binary" $ERR_OSSLBIN
      fi
 
-     # http://www.openssl.org/news/openssl-notes.html
+     # https://www.openssl.org/news/changelog.html
+     # https://web.archive.org/web/20150815130800/http://openssl.org/news/openssl-notes.html
      OSSL_NAME=$($OPENSSL version 2>/dev/null | awk '{ print $1 }')
      OSSL_VER=$($OPENSSL version 2>/dev/null | awk -F' ' '{ print $2 }')
      OSSL_VER_MAJOR="${OSSL_VER%%\.*}"
@@ -18597,7 +18600,7 @@ mybanner() {
      bb1=$(cat <<EOF
 
 ###########################################################
-    $PROG_NAME       $VERSION from 
+    $PROG_NAME       $VERSION from
 EOF
 )
      bb2=$(cat <<EOF
@@ -18606,7 +18609,7 @@ EOF
              modification under GPLv2 permitted.
       USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
 
-       Please file bugs @ 
+       Please file bugs @
 EOF
 )
      bb3=$(cat <<EOF
@@ -19648,7 +19651,7 @@ determine_service() {
                                    fatal "Your $OPENSSL does not support the \"-xmpphost\" option" $ERR_OSSLBIN
                               fi
                               STARTTLS="$STARTTLS -xmpphost $XMPP_HOST"         # small hack -- instead of changing calls all over the place
-                              # see http://xmpp.org/rfcs/rfc3920.html
+                              # see https://xmpp.org/rfcs/rfc3920.html
                          else
                               if is_ipv4addr "$NODE"; then
                                    # XMPP needs a jabber domainname
@@ -20470,7 +20473,7 @@ parse_opt_equal_sign() {
 }
 
 # Create the command line string for printing purposes
-# See http://stackoverflow.com/questions/10835933/preserve-quotes-in-bash-arguments
+# See https://stackoverflow.com/questions/10835933/preserve-quotes-in-bash-arguments
 create_cmd_line_string() {
      local arg
      local -a allargs=()
@@ -21312,4 +21315,3 @@ lets_roll() {
      fi
 
 exit $RET
-
