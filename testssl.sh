@@ -197,6 +197,7 @@ IGN_OCSP_PROXY=${IGN_OCSP_PROXY:-false} # Also when --proxy is supplied it is ig
 HEADER_MAXSLEEP=${HEADER_MAXSLEEP:-5}   # we wait this long before killing the process to retrieve a service banner / http header
 MAX_SOCKET_FAIL=${MAX_SOCKET_FAIL:-2}   # If this many failures for TCP socket connects are reached we terminate
 MAX_OSSL_FAIL=${MAX_OSSL_FAIL:-2}       # If this many failures for s_client connects are reached we terminate
+MAX_STARTTLS_FAIL=${MAX_STARTTLS_FAIL:-2}   # max number of STARTTLS handshake failures, mostly when server doesn't reply in plaintext
 MAX_HEADER_FAIL=${MAX_HEADER_FAIL:-2}   # If this many failures for HTTP GET are encountered we don't try again to get the header
 MAX_WAITSOCK=${MAX_WAITSOCK:-10}        # waiting at max 10 seconds for socket reply. There shouldn't be any reason to change this.
 CCS_MAX_WAITSOCK=${CCS_MAX_WAITSOCK:-5} # for the two CCS payload (each). There shouldn't be any reason to change this.
@@ -252,6 +253,7 @@ TIMEOUT_CMD=""
 HAD_SLEPT=0
 NR_SOCKET_FAIL=0                        # Counter for socket failures
 NR_OSSL_FAIL=0                          # .. for OpenSSL connects
+NR_STARTTLS_FAIL=0                      # .. for STARTTLS failures
 NR_HEADER_FAIL=0                        # .. for HTTP_GET
 PROTOS_OFFERED=""                       # This keeps which protocol is being offered. See has_server_protocol().
 TLS12_CIPHER_OFFERED=""                 # This contains the hexcode of a cipher known to be supported by the server with TLS 1.2
@@ -10139,15 +10141,18 @@ starttls_io() {
 }
 
 
-# Line-based send with newline characters appended (arg2 empty)
-# Stream-based send: arg2: <any>
+# Line-based send of arg1 with newline characters appended
+# arg2: debug str
 starttls_just_send(){
-     if [[ -z "$2" ]] ; then
-          debugme echo -e "C: $1 plus lf"
-          echo -ne "$1\r\n" >&5
+     local -i ret=0
+
+     debugme echo -e "C: $1 \\\n"
+     echo -ne "$1\r\n" >&5
+     ret=$?
+     if [[ $ret -eq 0 ]]; then
+          debugme echo "succeeded $2"
      else
-          debugme echo -e "C: $1"
-          echo -ne "$1" >&5
+          debugme echo "failed $2"
      fi
      return $?
 }
@@ -10166,26 +10171,31 @@ starttls_just_read(){
      return 0
 }
 
+
 starttls_full_read(){
      local starttls_read_data=()
      local one_line=""
      local ret=0
      local cont_pattern="$1"
      local end_pattern="$2"
+     local starttls_expr="$3"           # optional: pattern we search for in the server response
+     local debug_str="$4"               # optional
      local ret_found=0
 
      debugme echo "=== reading banner ... ==="
-     if [[ $# -ge 3 ]]; then
-          debugme echo "=== we'll have to search for \"$3\" pattern ==="
-          ret_found=3
+     if [[ -n "$starttls_expr" ]]; then
+          debugme echo "=== we'll have to search for \"$starttls_expr\" pattern ==="
+          ret_found=3                   # pre-set an error when we couldn't find the ~regex
      fi
 
      local oldIFS="$IFS"
      IFS=''
+     # Now read handshake line by line and act on the args supplied
+     # Exit the subshell if timeout is hit
      while read -r -t $STARTTLS_SLEEP one_line; ret=$?; (exit $ret); do
           debugme echo "S: ${one_line}"
           if [[ $# -ge 3 ]]; then
-               if [[ ${one_line} =~ $3 ]]; then
+               if [[ ${one_line} =~ $starttls_expr ]]; then
                     ret_found=0
                     debugme echo "^^^^^^^ that's what we were looking for ==="
                fi
@@ -10199,34 +10209,51 @@ starttls_full_read(){
           if [[ ${one_line} =~ ${end_pattern} ]]; then
                debugme echo "=== full read finished ==="
                IFS="${oldIFS}"
-               return ${ret_found}
+               break
           fi
           if [[ ! ${one_line} =~ ${cont_pattern} ]]; then
                debugme echo "=== full read syntax error, expected regex pattern ${cont_pattern} (cont) or ${end_pattern} (end) ==="
                IFS="${oldIFS}"
-               return 2
+               ret_found=2
+               break
           fi
      done <&5
-     if [[ $DEBUG -ge 2 ]]; then
-          if [[ $ret -ge 128 ]]; then
-               echo "=== timeout reading ==="
-          else
-               echo "=== full read error (no timeout) ==="
-          fi
+     if [[ $ret -ge 128 ]]; then
+          debugme echo "=== timeout reading ==="
+          ret_found=$ret
      fi
      IFS="${oldIFS}"
-     return $ret
+
+     if [[ $ret_found -eq 0 ]]; then
+          [[ -n "$4" ]] && debugme echo "$4"
+     elif [[ $ret_found -eq 3 ]]; then
+          debugme echo "NO MATCH \"$4\""
+     else
+          [[ -n "$4" ]] && debugme echo "FAILED: $4"
+     fi
+     return $ret_found
 }
 
+
+
 starttls_ftp_dialog() {
+     local patAUTHTLS='^ AUTH TLS'
+     local -i ret=0
+
      debugme echo "=== starting ftp STARTTLS dialog ==="
-     local reAUTHTLS='^ AUTH TLS'
-     starttls_full_read '^220-' '^220 '                    && debugme echo "received server greeting" &&
-     starttls_just_send 'FEAT'                             && debugme echo "sent FEAT" &&
-     starttls_full_read '^(211-| )' '^211 ' "${reAUTHTLS}" && debugme echo "received server features and checked STARTTLS availability" &&
-     starttls_just_send 'AUTH TLS'                         && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '^234-' '^234 '                    && debugme echo "received ack for STARTTLS"
-     local ret=$?
+     starttls_full_read '^220-' '^220 ' ''                 "received server greeting" &&
+     starttls_just_send 'FEAT'                             "sent FEAT" &&
+     starttls_full_read '^(211-| )' '^211 ' "${patAUTHTLS}" "received server features and checked STARTTLS availability"
+     # We check for an early exit. "3" indicates the pattern ${patAUTHTLS} wasn't found
+     ret=$?
+     if [[ $ret -eq 3 ]]; then
+          return 3
+     elif [[ $ret -ne 0 ]]; then
+          return $ret
+     fi
+     starttls_just_send 'AUTH TLS'                         "initiated STARTTLS" &&
+     starttls_full_read '^234-' '^234 ' ''                 "received ack for STARTTLS"
+     ret=$?
      debugme echo "=== finished ftp STARTTLS dialog with ${ret} ==="
      return $ret
 }
@@ -10234,45 +10261,62 @@ starttls_ftp_dialog() {
 # argv1: empty: SMTP, "lmtp" : LMTP
 #
 starttls_smtp_dialog() {
+     local pat250STARTTLS='^250[ -]STARTTLS'
      local greet_str="EHLO"
      local proto="smtp"
+     local -i ret=0
 
      if [[ "$1" == lmtp ]]; then
           proto="lmtp"
           greet_str="LHLO"
      fi
-     debugme echo "=== starting $proto STARTTLS dialog ==="
 
-     local re250STARTTLS='^250[ -]STARTTLS'
-     starttls_full_read '^220-' '^220 '                    && debugme echo "received server greeting" &&
-     starttls_just_send "$greet_str testssl.sh"            && debugme echo "sent $greet_str" &&
-     starttls_full_read '^250-' '^250 ' "${re250STARTTLS}" && debugme echo "received server capabilities and checked STARTTLS availability" &&
-     starttls_just_send 'STARTTLS'                         && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '^220-' '^220 '                    && debugme echo "received ack for STARTTLS"
-     local ret=$?
+     debugme echo "=== starting $proto STARTTLS dialog ==="
+     starttls_full_read '^220-' '^220 ' ''                 "received server greeting" &&
+     starttls_just_send "$greet_str testssl.sh"            "sent $greet_str" &&
+     starttls_full_read '^250-' '^250 ' "${pat250STARTTLS}" "received server capabilities and checked STARTTLS availability"
+     ret=$?
+     if [[ $ret -eq 3 ]]; then
+          return 3
+     elif [[ $ret -ne 0 ]]; then
+          return $ret
+     fi
+     starttls_just_send 'STARTTLS'                         "initiated STARTTLS" &&
+     starttls_full_read '^220-' '^220 '  ''                "received ack for STARTTLS" &&
+     ret=$?
      debugme echo "=== finished $proto STARTTLS dialog with ${ret} ==="
      return $ret
 }
 
 starttls_pop3_dialog() {
+     local -i ret=0
+
      debugme echo "=== starting pop3 STARTTLS dialog ==="
-     starttls_full_read '^\+OK' '^\+OK'                    && debugme echo "received server greeting" &&
-     starttls_just_send 'STLS'                             && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '^\+OK' '^\+OK'                    && debugme echo "received ack for STARTTLS"
-     local ret=$?
+     starttls_full_read '^\+OK' '^\+OK'  ''                "received server greeting" &&
+     starttls_just_send 'STLS'                             "initiated STARTTLS" &&
+     starttls_full_read '^\+OK' '^\+OK' ''                 "received ack for STARTTLS"
+     ret=$?
      debugme echo "=== finished pop3 STARTTLS dialog with ${ret} ==="
      return $ret
 }
 
 starttls_imap_dialog() {
+     local -i ret=0
+     local patSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS(.*)?|( .*)? STARTTLS( .*)? IMAP4rev1(.*)?)$'
+
      debugme echo "=== starting imap STARTTLS dialog ==="
-     local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS(.*)?|( .*)? STARTTLS( .*)? IMAP4rev1(.*)?)$'
-     starttls_full_read '^\* ' '^\* OK '                   && debugme echo "received server greeting" &&
-     starttls_just_send 'a001 CAPABILITY'                  && debugme echo "sent CAPABILITY" &&
-     starttls_full_read '^\* ' '^a001 OK ' "${reSTARTTLS}" && debugme echo "received server capabilities and checked STARTTLS availability" &&
-     starttls_just_send 'a002 STARTTLS'                    && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '^\* ' '^a002 OK '                 && debugme echo "received ack for STARTTLS"
-     local ret=$?
+     starttls_full_read '^\* ' '^\* OK '  ''               "received server greeting" &&
+     starttls_just_send 'a001 CAPABILITY'                  "sent CAPABILITY" &&
+     starttls_full_read '^\* ' '^a001 OK ' "${patSTARTTLS}" "received server capabilities and checked STARTTLS availability"
+     ret=$?
+     if [[ $ret -eq 3 ]]; then
+          return 3
+     elif [[ $ret -ne 0 ]]; then
+          return $ret
+     fi
+     starttls_just_send 'a002 STARTTLS'                    "initiated STARTTLS" &&
+     starttls_full_read '^\* ' '^a002 OK ' ''              "received ack for STARTTLS"
+     ret=$?
      debugme echo "=== finished imap STARTTLS dialog with ${ret} ==="
      return $ret
 }
@@ -10290,9 +10334,9 @@ starttls_xmpp_dialog() {
 
 starttls_nntp_dialog() {
      debugme echo "=== starting nntp STARTTLS dialog ==="
-     starttls_full_read '$^' '^20[01] '                    && debugme echo "received server greeting" &&
-     starttls_just_send 'STARTTLS'                         && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '$^' '^382 '                       && debugme echo "received ack for STARTTLS"
+     starttls_full_read '$^' '^20[01] ' ''                 "received server greeting" &&
+     starttls_just_send 'STARTTLS'                         "initiated STARTTLS" &&
+     starttls_full_read '$^' '^382 '    ''                 "received ack for STARTTLS"
      local ret=$?
      debugme echo "=== finished nntp STARTTLS dialog with ${ret} ==="
      return $ret
@@ -10436,10 +10480,20 @@ fd_socket() {
                *) # we need to throw an error here -- otherwise testssl.sh treats the STARTTLS protocol as plain SSL/TLS which leads to FP
                     fatal "FIXME: STARTTLS protocol $STARTTLS_PROTOCOL is not yet supported" $ERR_NOSUPPORT
           esac
-     fi
+          ret=$?
+          case $ret in
+               0)   return 0 ;;
+               3)   fatal "No STARTTLS found in handshake" $ERR_CONNECT ;;
+               *)   ((NR_STARTTLS_FAIL++))
+                    # This are mostly timeouts here (code >128). We give the client a chance to try again later
+                    # For cases where we have no STARTTLS in the server banner - ret code =3 - we don't neet to try again
+                    connectivity_problem $NR_STARTTLS_FAIL $MAX_STARTTLS_FAIL "STARTTLS handshake failed (code: $ret)" "repeated STARTTLS problems, giving up ($ret)"
+                    return 6 ;;
+          esac
+     # Plain socket ok, yes or no?
      [[ $? -eq 0 ]] && return 0
-     prln_warning " STARTTLS handshake failed"
      return 1
+     fi
 }
 
 close_socket(){
