@@ -16619,7 +16619,7 @@ run_drown() {
                if [[ -n "$cert_fingerprint_sha2" ]]; then
                     outln "$spaces make sure you don't use this certificate elsewhere with SSLv2 enabled services"
                     out "$spaces "
-                    pr_url "https://censys.io/ipv4?q=$cert_fingerprint_sha2"
+                    pr_url "https://censys.io/certificates/$cert_fingerprint_sha2"
                     outln " could help you to find out"
                     fileout "${jsonID}_hint" "INFO" "Make sure you don't use this certificate elsewhere with SSLv2 enabled services, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe"
                else
