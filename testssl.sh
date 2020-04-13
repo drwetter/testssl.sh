@@ -13,7 +13,7 @@
 # Project lead and initiator: Dirk Wetter, copyleft: 2007-today, contributions so far see CREDITS.md
 # Main contributions from David Cooper
 #
-# License: GPLv2, see https://spdx.org/licenses/GPL-2.0-only.html
+# License: GPLv2, see https://opensource.org/licenses/gpl-2.0.php
 # and accompanying license "LICENSE.txt". Redistribution + modification under this
 # license permitted.
 # If you enclose this script or parts of it in your software, it has to
@@ -1334,7 +1334,7 @@ html_header() {
           html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
           html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
           html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
-          html_out "<html xmlns=\"http://www.w3.org/1999/xhtml/\">\n"
+          html_out "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
           html_out "<head>\n"
           html_out "<meta http-equiv=\"Content-Type\" content=\"application/xml+xhtml; charset=UTF-8\" />\n"
           html_out "<title>testssl.sh</title>\n"
@@ -8354,7 +8354,7 @@ certificate_info() {
           out "$short_keyAlgo "
           # https://tools.ietf.org/html/rfc4492,  https://www.keylength.com/en/compare/
           # https://doi.org/10.1007/s00145-001-0009-4
-          # see http://dx.doi.org/10.6028/NIST.SP.800-57pt1r4
+          # see https://csrc.nist.gov/publications/detail/sp/800-57-part-1/rev-4/final
           # Table 2 @ chapter 5.6.1 (~ p66)
           if [[ $cert_key_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey ]]; then
                if [[ "$cert_keysize" -le 110 ]]; then       # a guess
@@ -8723,7 +8723,7 @@ certificate_info() {
           determine_trust "$jsonID" "$json_postfix" || ((ret++))
      fi
 
-     # https://www.eff.org/files/ccc2010.pdf, see page 40pp
+     # https://fahrplan.events.ccc.de/congress/2010/Fahrplan/attachments/1777_is-the-SSLiverse-a-safe-place.pdf, see p40+
      out "$indent"; pr_bold " EV cert"; out " (experimental)       "
      jsonID="cert_certificatePolicies_EV"
      # only the first one, seldom we have two
@@ -18617,7 +18617,7 @@ EOF
 ###########################################################
 EOF
 )
-     pr_bold "$bb1"
+     pr_bold "$bb1 "
      pr_boldurl "$SWURL"; outln
      if [[ -n "$idtag" ]]; then
           #FIXME: if we run it not off the git dir we miss the version tag.
@@ -18626,7 +18626,7 @@ EOF
           pr_grey "$idtag"
           prln_bold ")"
      fi
-     pr_bold "$bb2"
+     pr_bold "$bb2 "
      pr_boldurl "https://testssl.sh/bugs/"; outln
      pr_bold "$bb3"
      outln "\n"
