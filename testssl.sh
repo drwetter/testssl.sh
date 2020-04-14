@@ -94,7 +94,7 @@ declare -r ALLOK=0                 # All is fine
 ########### Debugging helpers + profiling
 #
 declare -r PS4='|${LINENO}> \011${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
-DEBUGTIME=${DEBUGTIME:-false}                     # stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353, profiling bash
+DEBUGTIME=${DEBUGTIME:-false}                     # https://stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup#20855353
 DEBUG_ALLINONE=${DEBUG_ALLINONE:-false}           # true: do debugging in one screen (old behavior for testssl.sh and bash3's default
                                                   # false: needed for performance analysis or useful for just having an extra file
 DEBUG_ALLINONE=${SETX:-false}                     # SETX as a shortcut for old style debugging, overriding DEBUG_ALLINONE
@@ -124,14 +124,10 @@ declare -r SWCONTACT="dirk aet testssl dot sh"
 grep -E -q "dev|rc|beta" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
      SWURL="https://testssl.sh/"
-declare -r CVS_REL="$(tail -5 "$0" | awk '/dirkw Exp/ { print $4" "$5" "$6}')"
-declare -r CVS_REL_SHORT="$(tail -5 "$0" | awk '/dirkw Exp/ { print $4 }')"
 if git log &>/dev/null; then
      declare -r GIT_REL="$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
      declare -r GIT_REL_SHORT="$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $1 }')"
      declare -r REL_DATE="$(git log --format='%h %ci' -1 2>/dev/null | awk '{ print $2 }')"
-else
-     declare -r REL_DATE="$(tail -5 "$0" | awk '/dirkw Exp/ { print $5 }')"
 fi
 declare -r PROG_NAME="$(basename "$0")"
 declare -r RUN_DIR="$(dirname "$0")"
@@ -1119,7 +1115,7 @@ fileout_pretty_json_banner() {
 
      echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
           \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
-          \"version\"     : \"$VERSION ${GIT_REL_SHORT:-$CVS_REL_SHORT} from $REL_DATE\",
+          \"version\"     : \"$VERSION $GIT_REL_SHORT\",
           \"openssl\"     : \"$OSSL_NAME $OSSL_VER from $OSSL_BUILD_DATE\",
           \"startTime\"   : \"$START_TIME\",
           \"scanResult\"  : ["
@@ -6117,7 +6113,7 @@ read_dhbits_from_file() {
           else
                pr_dh_quality "$bits" "$bits $add"
           fi
-     # https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography, http://www.keylength.com/en/compare/
+     # https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography, https://www.keylength.com/en/compare/
      elif [[ $what_dh == ECDH ]]; then
           add="bit ECDH"
           [[ -n "$curve" ]] && add+=" ($curve)"
@@ -13785,7 +13781,8 @@ sslv2_sockets() {
           FF,80,00, # 11
           FF,80,10, # 12
           00,00,00" # 13
-          # FIXME: http://max.euston.net/d/tip_sslciphers.html <-- also SSLv3 ciphers
+          # FIXME: also SSLv3 ciphers, see
+          # https://web.archive.org/web/20170310142840/http://max.euston.net/d/tip_sslciphers.html
      fi
 
      code2network "$cipher_suites" # convert CIPHER_SUITES
@@ -17273,9 +17270,9 @@ run_youknowwho() {
      # in a nutshell: don't use RC4, really not!
 }
 
+run_tls_truncation() {
      # https://www.usenix.org/conference/woot13/workshop-program/presentation/smyth
      # https://secure-resumption.com/tlsauth.pdf
-run_tls_truncation() {
      #FIXME: difficult to test, is there any test available: pls let me know
      :
 }
