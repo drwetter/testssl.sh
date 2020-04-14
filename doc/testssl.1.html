@@ -123,7 +123,7 @@ linked OpenSSL binaries for major operating systems are supplied in <code>./bin/
 
 <p>2) standard cipher categories to give you upfront an idea for the ciphers supported</p>
 
-<p>3) checks (perfect) forward secrecy: ciphers and elliptical curves</p>
+<p>3) checks forward secrecy: ciphers and elliptical curves</p>
 
 <p>4) server preferences (server order)</p>
 
@@ -244,7 +244,7 @@ ADDITIONAL_CA_FILES is the environment variable for this.</p>
 </ul>
 
 
-<p><code>-f, --pfs, --fs,--nsa</code> Checks robust (perfect) forward secrecy key exchange. "Robust" means that ciphers having intrinsic severe weaknesses like Null Authentication or Encryption, 3DES and RC4 won't be considered here. There shouldn't be the wrong impression that a secure key exchange has been taking place and everything is fine when in reality the encryption sucks. Also this section lists the available elliptical curves and Diffie Hellman groups, as well as FFDHE groups (TLS 1.2 and TLS 1.3).</p>
+<p><code>-f, --fs, --nsa, --forward-secrecy</code> Checks robust forward secrecy key exchange. "Robust" means that ciphers having intrinsic severe weaknesses like Null Authentication or Encryption, 3DES and RC4 won't be considered here. There shouldn't be the wrong impression that a secure key exchange has been taking place and everything is fine when in reality the encryption sucks. Also this section lists the available elliptical curves and Diffie Hellman groups, as well as FFDHE groups (TLS 1.2 and TLS 1.3).</p>
 
 <p><code>-p, --protocols</code>  checks TLS/SSL protocols SSLv2, SSLv3, TLS 1.0 through TLS 1.3 and for HTTP: SPDY (NPN) and ALPN, a.k.a. HTTP/2. For TLS 1.3 several drafts (from 18 on) and final are supported and being tested for.</p>
 
@@ -345,7 +345,7 @@ Also for multiple server certificates are being checked for as well as for the c
 
 <p><code>-q, --quiet</code>  Normally testssl.sh displays a banner on stdout with several version information, usage rights and a warning. This option suppresses it. Please note that by choosing this option you acknowledge usage terms and the warning normally appearing in the banner.</p>
 
-<p><code>--wide</code> Except the "each cipher output" all tests displays the single cipher name (scheme see below). This option enables testssl.sh to display also for the following sections the same output as for testing each ciphers: BEAST, PFS, RC4. The client simulation has also a wide mode. The difference here is restricted to a column aligned output and a proper headline. The environment variable <code>WIDE</code> can be used instead.</p>
+<p><code>--wide</code> Except the "each cipher output" all tests displays the single cipher name (scheme see below). This option enables testssl.sh to display also for the following sections the same output as for testing each ciphers: BEAST, FS, RC4. The client simulation has also a wide mode. The difference here is restricted to a column aligned output and a proper headline. The environment variable <code>WIDE</code> can be used instead.</p>
 
 <p><code>--mapping &lt;openssl|iana|no-openssl|no-iana></code></p>
 
@@ -480,7 +480,7 @@ Also for multiple server certificates are being checked for as well as for the c
 <pre><code>  testssl.sh testssl.sh
 </code></pre>
 
-<p>does a default run on https://testssl.sh (protocols, standard cipher lists, PFS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation.</p>
+<p>does a default run on https://testssl.sh (protocols, standard cipher lists, FS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation.</p>
 
 <pre><code>  testssl.sh testssl.net:443
 </code></pre>

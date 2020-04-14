@@ -211,7 +211,7 @@ DAYS2WARN2=${DAYS2WARN2:-30}            # days to warn before cert expires, thre
 VULN_THRESHLD=${VULN_THRESHLD:-1}       # if vulnerabilities to check >$VULN_THRESHLD we DON'T show a separate header line in the output each vuln. check
 UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo) don't support [bracketed] IPv6 addresses
 NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (external) openssl engine set this to true
-declare -r CLIENT_MIN_PFS=5             # number of ciphers needed to run a test for PFS
+declare -r CLIENT_MIN_FS=5              # number of ciphers needed to run a test for FS
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
 GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
 CERTIFICATE_LIST_ORDERING_PROBLEM=false # Set to true if server sends a certificate list that contains a certificate
@@ -1015,7 +1015,7 @@ fileout_json_section() {
            2) echo -e ",\n                    \"protocols\"         : [" ;;
            3) echo -e ",\n                    \"grease\"            : [" ;;
            4) echo -e ",\n                    \"ciphers\"           : [" ;;
-           5) echo -e ",\n                    \"pfs\"               : [" ;;
+           5) echo -e ",\n                    \"fs\"                : [" ;;
            6) echo -e ",\n                    \"serverPreferences\" : [" ;;
            7) echo -e ",\n                    \"serverDefaults\"    : [" ;;
            8) echo -e ",\n                    \"headerResponse\"    : [" ;;
@@ -8753,7 +8753,7 @@ certificate_info() {
      etsi_etls_visibility_info "$jsonID" "$spaces" "$HOSTCERT" "$cert_txt"
      # *Currently* this is even listed as a vulnerability (CWE-310, CVE-2019-919), see
      # https://nvd.nist.gov/vuln/detail/CVE-2019-9191, https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-9191
-     # For now we leave this here. We may want to change that later or add infos to other sections (PFS & vulnerability)
+     # For now we leave this here. We may want to change that later or add infos to other sections (FS & vulnerability)
 
      out "$indent"; pr_bold " Certificate Validity (UTC)   "
      # FreeBSD + OSX can't swallow the leading blank:
@@ -9337,7 +9337,7 @@ run_server_defaults() {
           unit=$(grep -a lifetime <<< "$sessticket_lifetime_hint" | sed -e 's/^.*'"$lifetime"'//' -e 's/[ ()]//g')
           out "$lifetime $unit"
           if [[ $((3600 * 24)) -lt $lifetime ]]; then
-               prln_svrty_low " but: PFS requires session ticket keys to be rotated < daily !"
+               prln_svrty_low " but: FS requires session ticket keys to be rotated < daily !"
                fileout "$jsonID" "LOW" "valid for $lifetime $unit (>daily)"
           else
                outln ", session tickets keys seems to be rotated < daily"
@@ -9494,15 +9494,15 @@ get_san_dns_from_cert() {
 }
 
 
-run_pfs() {
+run_fs() {
      local -i sclient_success
-     local pfs_offered=false ecdhe_offered=false ffdhe_offered=false
-     local pfs_tls13_offered=false
-     local protos_to_try proto hexc dash pfs_cipher sslvers auth mac export curve dhlen
+     local fs_offered=false ecdhe_offered=false ffdhe_offered=false
+     local fs_tls13_offered=false
+     local protos_to_try proto hexc dash fs_cipher sslvers auth mac export curve dhlen
      local -a hexcode normalized_hexcode ciph rfc_ciph kx enc ciphers_found sigalg ossl_supported
      # generated from 'kEECDH:kEDH:!aNULL:!eNULL:!DES:!3DES:!RC4' with openssl 1.0.2i and openssl 1.1.0
-     local pfs_cipher_list="DHE-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA:DHE-DSS-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA:DHE-DSS-SEED-SHA:DHE-RSA-AES128-CCM8:DHE-RSA-AES128-CCM:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-CCM8:DHE-RSA-AES256-CCM:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-RSA-CHACHA20-POLY1305-OLD:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-SEED-SHA:ECDHE-ECDSA-AES128-CCM8:ECDHE-ECDSA-AES128-CCM:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-CCM8:ECDHE-ECDSA-AES256-CCM:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305-OLD:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-RSA-CHACHA20-POLY1305-OLD:ECDHE-RSA-CHACHA20-POLY1305"
-     local pfs_hex_cipher_list="" ciphers_to_test tls13_ciphers_to_test
+     local fs_cipher_list="DHE-DSS-AES128-GCM-SHA256:DHE-DSS-AES128-SHA256:DHE-DSS-AES128-SHA:DHE-DSS-AES256-GCM-SHA384:DHE-DSS-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-DSS-CAMELLIA128-SHA256:DHE-DSS-CAMELLIA128-SHA:DHE-DSS-CAMELLIA256-SHA256:DHE-DSS-CAMELLIA256-SHA:DHE-DSS-SEED-SHA:DHE-RSA-AES128-CCM8:DHE-RSA-AES128-CCM:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-AES256-CCM8:DHE-RSA-AES256-CCM:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:DHE-RSA-CHACHA20-POLY1305-OLD:DHE-RSA-CHACHA20-POLY1305:DHE-RSA-SEED-SHA:ECDHE-ECDSA-AES128-CCM8:ECDHE-ECDSA-AES128-CCM:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-CCM8:ECDHE-ECDSA-AES256-CCM:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-ECDSA-CAMELLIA128-SHA256:ECDHE-ECDSA-CAMELLIA256-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305-OLD:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-CAMELLIA128-SHA256:ECDHE-RSA-CAMELLIA256-SHA384:ECDHE-RSA-CHACHA20-POLY1305-OLD:ECDHE-RSA-CHACHA20-POLY1305"
+     local fs_hex_cipher_list="" ciphers_to_test tls13_ciphers_to_test
      local ecdhe_cipher_list="" tls13_cipher_list="" ecdhe_cipher_list_hex="" ffdhe_cipher_list_hex=""
      local curves_hex=("00,01" "00,02" "00,03" "00,04" "00,05" "00,06" "00,07" "00,08" "00,09" "00,0a" "00,0b" "00,0c" "00,0d" "00,0e" "00,0f" "00,10" "00,11" "00,12" "00,13" "00,14" "00,15" "00,16" "00,17" "00,18" "00,19" "00,1a" "00,1b" "00,1c" "00,1d" "00,1e")
      local -a curves_ossl=("sect163k1" "sect163r1" "sect163r2" "sect193r1" "sect193r2" "sect233k1" "sect233r1" "sect239k1" "sect283k1" "sect283r1" "sect409k1" "sect409r1" "sect571k1" "sect571r1" "secp160k1" "secp160r1" "secp160r2" "secp192k1" "prime192v1" "secp224k1" "secp224r1" "secp256k1" "prime256v1" "secp384r1" "secp521r1" "brainpoolP256r1" "brainpoolP384r1" "brainpoolP512r1" "X25519" "X448")
@@ -9515,20 +9515,20 @@ run_pfs() {
      local -a ffdhe_groups_output=("ffdhe2048" "ffdhe3072" "ffdhe4096" "ffdhe6144" "ffdhe8192")
      local -a supported_curve
      local -i nr_supported_ciphers=0 nr_curves=0 nr_ossl_curves=0 i j low high
-     local pfs_ciphers curves_offered="" curves_to_test temp
+     local fs_ciphers curves_offered="" curves_to_test temp
      local len1 len2 curve_found
      local key_bitstring quality_str
      local -i len_dh_p quality
      local has_dh_bits="$HAS_DH_BITS"
      local using_sockets=true
-     local jsonID="PFS"
+     local jsonID="FS"
 
      "$SSL_NATIVE" && using_sockets=false
      "$FAST" && using_sockets=false
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
      outln
-     pr_headline " Testing robust (perfect) forward secrecy"; prln_underline ", (P)FS -- omitting Null Authentication/Encryption, 3DES, RC4 "
+     pr_headline " Testing robust forward secrecy (FS)"; prln_underline " -- omitting Null Authentication/Encryption, 3DES, RC4 "
      if ! "$using_sockets"; then
           [[ $TLS_NR_CIPHERS == 0 ]] && ! "$SSL_NATIVE" && ! "$FAST" && pr_warning " Cipher mapping not available, doing a fallback to openssl"
           if ! "$HAS_DH_BITS" && "$WIDE"; then
@@ -9540,12 +9540,12 @@ run_pfs() {
 
      if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-               pfs_cipher="${TLS_CIPHER_RFC_NAME[i]}"
+               fs_cipher="${TLS_CIPHER_RFC_NAME[i]}"
                hexc="${TLS_CIPHER_HEXCODE[i]}"
-               if ( [[ "$pfs_cipher" == "TLS_DHE_"* ]] || [[ "$pfs_cipher" == "TLS_ECDHE_"* ]] || [[ "${hexc:2:2}" == "13" ]] ) && \
-                  [[ ! "$pfs_cipher" =~ NULL ]] && [[ ! "$pfs_cipher" =~ DES ]] && [[ ! "$pfs_cipher" =~ RC4 ]] && \
-                  [[ ! "$pfs_cipher" =~ PSK ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
-                    pfs_hex_cipher_list+=", ${hexc:2:2},${hexc:7:2}"
+               if ( [[ "$fs_cipher" == "TLS_DHE_"* ]] || [[ "$fs_cipher" == "TLS_ECDHE_"* ]] || [[ "${hexc:2:2}" == "13" ]] ) && \
+                  [[ ! "$fs_cipher" =~ NULL ]] && [[ ! "$fs_cipher" =~ DES ]] && [[ ! "$fs_cipher" =~ RC4 ]] && \
+                  [[ ! "$fs_cipher" =~ PSK ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
+                    fs_hex_cipher_list+=", ${hexc:2:2},${hexc:7:2}"
                     ciph[nr_supported_ciphers]="${TLS_CIPHER_OSSL_NAME[i]}"
                     rfc_ciph[nr_supported_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
                     kx[nr_supported_ciphers]="${TLS_CIPHER_KX[i]}"
@@ -9574,26 +9574,26 @@ run_pfs() {
                sigalg[nr_supported_ciphers]=""
                ossl_supported[nr_supported_ciphers]=true
                nr_supported_ciphers+=1
-          done < <(actually_supported_osslciphers "$pfs_cipher_list" "ALL" "-V")
+          done < <(actually_supported_osslciphers "$fs_cipher_list" "ALL" "-V")
      fi
 
      if [[ $(has_server_protocol "tls1_3") -eq 0 ]]; then
-          # All TLSv1.3 cipher suites offer robust PFS.
+          # All TLSv1.3 cipher suites offer robust FS.
           sclient_success=0
      elif "$using_sockets"; then
-          tls_sockets "04" "${pfs_hex_cipher_list:2}, 00,ff"
+          tls_sockets "04" "${fs_hex_cipher_list:2}, 00,ff"
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
      else
           debugme echo $nr_supported_ciphers
-          debugme echo $(actually_supported_osslciphers $pfs_cipher_list "ALL")
-          if [[ "$nr_supported_ciphers" -le "$CLIENT_MIN_PFS" ]]; then
+          debugme echo $(actually_supported_osslciphers $fs_cipher_list "ALL")
+          if [[ "$nr_supported_ciphers" -le "$CLIENT_MIN_FS" ]]; then
                outln
-               prln_local_problem "You only have $nr_supported_ciphers PFS ciphers on the client side "
-               fileout "$jsonID" "WARN" "tests skipped as you only have $nr_supported_ciphers PFS ciphers on the client site. ($CLIENT_MIN_PFS are required)"
+               prln_local_problem "You only have $nr_supported_ciphers FS ciphers on the client side "
+               fileout "$jsonID" "WARN" "tests skipped as you only have $nr_supported_ciphers FS ciphers on the client site. ($CLIENT_MIN_FS are required)"
                return 1
           fi
-          $OPENSSL s_client $(s_client_options "-cipher $pfs_cipher_list -ciphersuites "ALL" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
+          $OPENSSL s_client $(s_client_options "-cipher $fs_cipher_list -ciphersuites "ALL" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
           [[ $sclient_success -eq 0 ]] && [[ $(grep -ac "BEGIN CERTIFICATE" $TMPFILE) -eq 0 ]] && sclient_success=1
@@ -9605,9 +9605,9 @@ run_pfs() {
           fileout "$jsonID" "MEDIUM" "No ciphers supporting (P)FS offered"
      else
           outln
-          pfs_offered=true
-          pfs_ciphers=""
-          pr_svrty_good " PFS is offered (OK)"
+          fs_offered=true
+          fs_ciphers=""
+          pr_svrty_good " FS is offered (OK) "
           fileout "$jsonID" "OK" "offered"
           if "$WIDE"; then
                outln ", ciphers follow (client/browser support is important here) \n"
@@ -9637,15 +9637,15 @@ run_pfs() {
                     [[ -z "$ciphers_to_test" ]] && [[ -z "$tls13_ciphers_to_test" ]] && break
                     $OPENSSL s_client $(s_client_options "$proto -cipher "\'${ciphers_to_test:1}\'" -ciphersuites "\'${tls13_ciphers_to_test:1}\'" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY $SNI") &>$TMPFILE </dev/null
                     sclient_connect_successful $? $TMPFILE || break
-                    pfs_cipher=$(get_cipher $TMPFILE)
-                    [[ -z "$pfs_cipher" ]] && break
+                    fs_cipher=$(get_cipher $TMPFILE)
+                    [[ -z "$fs_cipher" ]] && break
                     for (( i=0; i < nr_supported_ciphers; i++ )); do
-                         [[ "$pfs_cipher" == "${ciph[i]}" ]] && break
+                         [[ "$fs_cipher" == "${ciph[i]}" ]] && break
                     done
                     [[ $i -eq $nr_supported_ciphers ]] && break
                     ciphers_found[i]=true
-                    if [[ "$pfs_cipher" == TLS13* ]] || [[ "$pfs_cipher" == TLS_* ]]; then
-                         pfs_tls13_offered=true
+                    if [[ "$fs_cipher" == TLS13* ]] || [[ "$fs_cipher" == TLS_* ]]; then
+                         fs_tls13_offered=true
                          "$WIDE" && kx[i]="$(read_dhtype_from_file $TMPFILE)"
                     fi
                     if "$WIDE"; then
@@ -9674,14 +9674,14 @@ run_pfs() {
                          fi
                          sclient_success=$?
                          [[ $sclient_success -ne 0 ]] && [[ $sclient_success -ne 2 ]] && break
-                         pfs_cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
+                         fs_cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                          for (( i=0; i < nr_supported_ciphers; i++ )); do
-                              [[ "$pfs_cipher" == "${rfc_ciph[i]}" ]] && break
+                              [[ "$fs_cipher" == "${rfc_ciph[i]}" ]] && break
                          done
                          [[ $i -eq $nr_supported_ciphers ]] && break
                          ciphers_found[i]=true
                          if [[ "${kx[i]}" == Kx=any ]]; then
-                              pfs_tls13_offered=true
+                              fs_tls13_offered=true
                               "$WIDE" && kx[i]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
                          fi
                          if "$WIDE"; then
@@ -9697,20 +9697,20 @@ run_pfs() {
                ! "${ciphers_found[i]}" && ! "$SHOW_EACH_C" && continue
                if "${ciphers_found[i]}"; then
                     if ( [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]] && [[ "${ciph[i]}" != "-" ]] ) || [[ "${rfc_ciph[i]}" == "-" ]]; then
-                         pfs_cipher="${ciph[i]}"
+                         fs_cipher="${ciph[i]}"
                     else
-                         pfs_cipher="${rfc_ciph[i]}"
+                         fs_cipher="${rfc_ciph[i]}"
                     fi
-                    pfs_ciphers+="$pfs_cipher "
+                    fs_ciphers+="$fs_cipher "
 
                     if [[ "${ciph[i]}" == ECDHE-* ]] || [[ "${ciph[i]}" == TLS13* ]] || [[ "${ciph[i]}" == TLS_* ]] || ( "$using_sockets" && [[ "${rfc_ciph[i]}" == TLS_ECDHE_* ]] ); then
                          ecdhe_offered=true
                          ecdhe_cipher_list_hex+=", ${hexcode[i]}"
                          if [[ "${ciph[i]}" != "-" ]]; then
                               if  [[ "${ciph[i]}" == TLS13* ]] || [[ "${ciph[i]}" == TLS_* ]]; then
-                                   tls13_cipher_list+=":$pfs_cipher"
+                                   tls13_cipher_list+=":$fs_cipher"
                               else
-                                   ecdhe_cipher_list+=":$pfs_cipher"
+                                   ecdhe_cipher_list+=":$fs_cipher"
                               fi
                          fi
                     fi
@@ -9735,14 +9735,14 @@ run_pfs() {
           done
           if ! "$WIDE"; then
                if [[ "$COLOR" -le 2 ]]; then
-                    out "$(out_row_aligned_max_width "$pfs_ciphers" "                              " $TERM_WIDTH)"
+                    out "$(out_row_aligned_max_width "$fs_ciphers" "                              " $TERM_WIDTH)"
                else
-                    out_row_aligned_max_width_by_entry "$pfs_ciphers" "                              " $TERM_WIDTH pr_cipher_quality
+                    out_row_aligned_max_width_by_entry "$fs_ciphers" "                              " $TERM_WIDTH pr_cipher_quality
                fi
           fi
-          debugme echo $pfs_offered
+          debugme echo $fs_offered
           "$WIDE" || outln
-          fileout "${jsonID}_ciphers" "INFO" "$pfs_ciphers"
+          fileout "${jsonID}_ciphers" "INFO" "$fs_ciphers"
      fi
 
      # find out what elliptic curves are supported.
@@ -9772,7 +9772,7 @@ run_pfs() {
                     fi
                fi
                if "$HAS_TLS13"; then
-                    if "$pfs_tls13_offered"; then
+                    if "$fs_tls13_offered"; then
                          protos_to_try="-no_ssl2 -no_tls1_3"
                     else
                          protos_to_try="-no_tls1_3"
@@ -9809,7 +9809,7 @@ run_pfs() {
      fi
      if "$ecdhe_offered" && "$using_sockets"; then
           protos_to_try="03"
-          "$pfs_tls13_offered" && protos_to_try="04 03"
+          "$fs_tls13_offered" && protos_to_try="04 03"
           for proto in $protos_to_try; do
                if [[ "$proto" == 03 ]]; then
                     ecdhe_cipher_list_hex="$(strip_inconsistent_ciphers "03" "$ecdhe_cipher_list_hex")"
@@ -9872,7 +9872,7 @@ run_pfs() {
      CURVES_OFFERED=$(strip_trailing_space "$CURVES_OFFERED")
 
      # find out what groups are supported.
-     if "$using_sockets" && ( "$pfs_tls13_offered" || "$ffdhe_offered" ); then
+     if "$using_sockets" && ( "$fs_tls13_offered" || "$ffdhe_offered" ); then
           nr_curves=0
           for curve in "${ffdhe_groups_output[@]}"; do
                supported_curve[nr_curves]=false
@@ -9880,9 +9880,9 @@ run_pfs() {
                nr_curves+=1
           done
           protos_to_try=""
-          "$pfs_tls13_offered" && protos_to_try="04"
+          "$fs_tls13_offered" && protos_to_try="04"
           if "$ffdhe_offered"; then
-               if "$pfs_tls13_offered"; then
+               if "$fs_tls13_offered"; then
                     protos_to_try="04 03"
                else
                     protos_to_try="03"
@@ -16342,7 +16342,7 @@ out_common_prime() {
           out "common primes detected: "; pr_italic "$DH_GROUP_OFFERED"
           fileout "$jsonID2" "INFO" "$DH_GROUP_OFFERED" "$cve" "$cwe"
      # Now (below) size matters -- i.e. the bit size. As this is about a known prime we label it more strict.
-     # This needs maybe needs another thought as it could appear inconsistent with run_pfs and elsewhere.
+     # This needs maybe needs another thought as it could appear inconsistent with run_fs and elsewhere.
      # for now we label the bit size similar in the screen, but distinguish the leading text for logjam before
      elif [[ $DH_GROUP_LEN_P -le 800 ]]; then
           pr_svrty_critical "VULNERABLE (NOT ok):"; out " common prime: "
@@ -18326,7 +18326,7 @@ single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -e, --each-cipher             checks each local cipher remotely
      -E, --cipher-per-proto        checks those per protocol
      -s, --std, --standard         tests certain lists of cipher suites by strength
-     -f, --pfs, --fs, --nsa        checks (perfect) forward secrecy settings
+     -f, --fs, --nsa               checks forward secrecy settings
      -p, --protocols               checks TLS/SSL protocols (including SPDY/HTTP2)
      -g, --grease                  tests several server implementation bugs like GREASE and size limitations
      -S, --server-defaults         displays the server's default picks and certificate info
@@ -18374,7 +18374,7 @@ tuning / connect options (most also can be preset via environment variables):
 
 output options (can also be preset via environment variables):
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
-     --wide                        wide output for tests like RC4, BEAST. PFS also with hexcode, kx, strength, RFC name
+     --wide                        wide output for tests like RC4, BEAST. FS also with hexcode, kx, strength, RFC name
      --show-each                   for wide outputs: display all ciphers tested -- not only succeeded ones
      --mapping <openssl|           openssl: use the OpenSSL cipher suite name as the primary name cipher suite name form (default)
                 iana|rfc             -> use the IANA/(RFC) cipher suite name as the primary name cipher suite name form
@@ -18525,7 +18525,7 @@ DEBUG: $DEBUG
 
 HSTS_MIN: $HSTS_MIN
 HPKP_MIN: $HPKP_MIN
-CLIENT_MIN_PFS: $CLIENT_MIN_PFS
+CLIENT_MIN_FS: $CLIENT_MIN_FS
 DAYS2WARN1: $DAYS2WARN1
 DAYS2WARN2: $DAYS2WARN2
 
@@ -20384,7 +20384,7 @@ initialize_globals() {
      do_pretty_json=false
      do_csv=false
      do_html=false
-     do_pfs=false
+     do_fs=false
      do_protocols=false
      do_rc4=false
      do_grease=false
@@ -20421,7 +20421,7 @@ set_scanning_defaults() {
      do_ssl_poodle=true
      do_sweet32=true
      do_header=true
-     do_pfs=true
+     do_fs=true
      do_rc4=true
      do_protocols=true
      do_renego=true
@@ -20443,7 +20443,7 @@ count_do_variables() {
      local true_nr=0
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_robot do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
                     [[ "${!gbl}" == true ]] && let true_nr++
@@ -20456,7 +20456,7 @@ debug_globals() {
      local gbl
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_pfs do_protocols do_rc4 do_grease do_robot do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
@@ -20716,8 +20716,8 @@ parse_cmd_line() {
                     do_rc4=true
                     let "VULN_COUNT++"
                     ;;
-               -f|--pfs|--fs|--nsa)
-                    do_pfs=true
+               -f|--fs|--nsa|--forward-secrecy)
+                    do_fs=true
                     ;;
                -g|--grease)
                     do_grease=true
@@ -21156,7 +21156,7 @@ lets_roll() {
                "$do_cipherlists" && { run_cipherlists; ret=$(($? + ret)); stopwatch run_cipherlists; }
 
                fileout_section_header $section_number true && ((section_number++))
-               "$do_pfs" && { run_pfs; ret=$(($? + ret)); stopwatch run_pfs; }
+               "$do_fs" && { run_fs; ret=$(($? + ret)); stopwatch run_fs; }
 
                fileout_section_header $section_number true && ((section_number++))
                "$do_server_preference" && { run_server_preference; ret=$(($? + ret)); stopwatch run_server_preference; }
