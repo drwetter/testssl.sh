@@ -17,7 +17,7 @@ use Data::Dumper;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $check2run_smtp="--protocols --standard --pfs --server-preference --headers --vulnerable --each-cipher -q --ip=one --color 0";
+my $check2run_smtp="--protocols --standard --fs --server-preference --headers --vulnerable --each-cipher -q --ip=one --color 0";
 my $check2run="-q --ip=one --color 0";
 my $uri="";
 my $socket_out="";

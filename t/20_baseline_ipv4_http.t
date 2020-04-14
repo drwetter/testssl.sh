@@ -15,7 +15,7 @@ use JSON;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $check2run="-p -s -P --pfs -S -h -U -q --ip=one --color 0";
+my $check2run="-p -s -P --fs -S -h -U -q --ip=one --color 0";
 my $uri="google.com";
 my $socket_out="";
 my $openssl_out="";
