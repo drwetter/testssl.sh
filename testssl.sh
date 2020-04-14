@@ -265,7 +265,7 @@ else
 fi
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 declare -r UA_STD="TLS tester from $SWURL"
-declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
+declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0"
 
 ########### Initialization part, further global vars just being declared here
 #
