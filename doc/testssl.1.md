@@ -56,6 +56,8 @@ linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 9) client simulation
 
+10) Result of script in form of a grade
+
 
 ## OPTIONS AND PARAMETERS
 
@@ -142,8 +144,7 @@ in `/etc/hosts`.  The use of the switch is only useful if you either can't or ar
 
 `--phone-out` Checking for revoked certificates via CRL and OCSP is not done per default. This switch instructs testssl.sh to query external -- in a sense of the current run -- URIs. By using this switch you acknowledge that the check might have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting the endpoint which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.
 
-`--add-ca <cafile>` enables you to add your own CA(s) for trust chain checks. `cafile` can be a single path or multiple paths as a comma separated list of root CA files. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates is issued by internal CAs. Alternatively 
-ADDITIONAL_CA_FILES is the environment variable for this.
+`--add-ca <cafile>` enables you to add your own CA(s) for trust chain checks. `cafile` can be a single path or multiple paths as a comma separated list of root CA files. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates is issued by internal CAs. Alternatively ADDITIONAL_CA_FILES is the environment variable for this.
 
 
 ### SINGLE CHECK OPTIONS
@@ -286,6 +287,8 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 5. display bytes received via sockets
 6. whole 9 yards
 
+`--disable-grading` disables grading explicitly.
+Grading automatically gets disabled, to not give a wrong or misleading grade, when not all required functions are executed (e.g when checking for a single vulnerabilities). `DISABLE_GRADING` is the according environment variable which you can use.
 
 
 ### FILE OUTPUT OPTIONS
@@ -383,13 +386,56 @@ Except the environment variables mentioned above which can replace command line 
 * MAX_OSSL_FAIL: A number which tells testssl.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated TCP connect problems, giving up*.
 * MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can incerase the threshold when you spot messages like *Fatal error: repeated HTTP header connect problems, doesn't make sense to continue*.
 
+### GRADING
+This script has a near-complete implementation of SSLLabs's '[SSL Server Rating Guide](https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide)'.
 
+This is *not* a reimplementation of the [SSLLab's SSL Server Test](https://www.ssllabs.com/ssltest/analyze.html), but a implementation of the above grading specification, slight discrepancies might occur!
+
+Disclaimer: Having a good grade does **NOT** necessary equal to having good security! Never rely solely on a good grade!
+
+As of writing, these checks are missing:
+* Authenticated encryption (AEAD) - should be graded **B** if not supported
+* GOLDENDOODLE - should be graded **F** if vulnerable
+* Insecure renegotiation - should be graded **F** if vulnerable
+* Padding oracle in AES-NI CBC MAC check (CVE-2016-2107) - should be graded **F** if vulnerable
+* Sleeping POODLE - should be graded **F** if vulnerable
+* Zero Length Padding Oracle (CVE-2019-1559) - should be graded **F** if vulnerable
+* Zombie POODLE - should be graded **F** if vulnerable
+* All remaining old Symantec PKI certificates are distrusted - should be graded **T**
+* Symantec certificates issued before June 2016 are distrusted - should be graded **T**
+* ! A reading of DH params - should give correct points in `set_key_str_score()`
+* Anonymous key exchange - should give **0** points in `set_key_str_score()`
+* Exportable key exchange - should give **40** points in `set_key_str_score()`
+* Weak key (Debian OpenSSL Flaw) - should give **0** points in `set_key_str_score()`
+
+#### Implementing new grades caps or -warnings
+To implement at new grading cap, simply call the `set_grade_cap()` function, with the grade and a reason:
+```bash
+set_grade_cap "D" "Vulnerable to documentation"
+```
+To implement a new grade warning, simply call the `set_grade_warning()` function, with a message:
+```bash
+set_grade_warning "Documentation is always right"
+```
+#### Implementing a new check which contains grade caps
+When implementing a new check (be it vulnerability or not) that sets grade caps, the `set_grading_state()` has to be updated (i.e. the `$do_mycheck` variable-name has to be added to the loop, and `$nr_enabled` if-statement has to be incremented)
+
+The `set_grading_state()` automatically disables grading, if all the required checks are *not* enabled.
+This is to prevent giving out a misleading or wrong grade.
+
+#### Implementing a new revision
+When a new revision of the grading specification comes around, the following has to be done:
+* New grade caps has to be either:
+  1. Added to the script wherever relevant, or
+  2. Added to the above list of missing checks (if *i.* is not possible)
+* New grade warnings has to be added wherever relevant
+* The revision output in `run_grading()` function has to updated
 
 ## EXAMPLES
 
       testssl.sh testssl.sh
 
-does a default run on https://testssl.sh (protocols, standard cipher lists, FS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation.
+does a default run on https://testssl.sh (protocols, standard cipher lists, FS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation, and grading.
 
       testssl.sh testssl.net:443
 
@@ -508,4 +554,3 @@ Probably. Current known ones and interface for filing new ones: https://testssl.
 ## SEE ALSO
 
 `ciphers`(1), `openssl`(1), `s_client`(1), `x509`(1), `verify`(1), `ocsp`(1), `crl`(1), `bash`(1) and the websites https://testssl.sh/ and https://github.com/drwetter/testssl.sh/ .
-

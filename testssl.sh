@@ -227,6 +227,7 @@ fi
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 declare -r UA_STD="TLS tester from $SWURL"
 declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
+DISABLE_GRADING=${DISABLE_GRADING:-false} # Whether to disable grading, or not
 
 ########### Initialization part, further global vars just being declared here
 #
@@ -372,6 +373,13 @@ SERVER_COUNTER=0                        # Counter for multiple servers
 TLS_LOW_BYTE=""                         # For "secret" development stuff, see -q below
 HEX_CIPHER=""                           # "
 
+GRADE_CAP=""                            # Keeps track of the current grading cap
+GRADE_CAP_REASONS=()                    # Keeps track of all the reasons why grades are capped
+GRADE_WARNINGS=()                       # Keeps track of all the grade warnings
+KEY_EXCH_SCORE=0                        # Keeps track of the score for category 2 "Key Exchange Strength"
+CIPH_STR_BEST=0                         # Keeps track of the best bit size for category 3 "Cipher Strength"
+CIPH_STR_WORST=100000                   # Keeps track of the worst bit size for category 3 "Cipher Strength"
+                                        # Intentionally set very high, so it can be set to 0, if necessary
 
 ########### Global variables for parallel mass testing
 #
@@ -980,6 +988,105 @@ f5_port_decode() {
           tmp=00${tmp}
      fi
      echo $((16#${tmp:2:2}${tmp:0:2}))  # reverse order and convert it from hex to dec
+}
+
+# Sets the grade cap to ARG1
+# arg1: A grade to set ("A", "B", "C", "D", "E", "F", "M", or "T")
+# arg2: A reason why (e.g. "Vulnerable to CRIME")
+set_grade_cap() {
+     # Do nothing if disabled
+     "$DISABLE_GRADING" && return 0
+
+     GRADE_CAP_REASONS+=("Grade capped to $1. $2")
+
+     # Always set special attributes. These are hard caps, due to name mismatch or cert being invalid
+     if [[ "$1" == "T" || "$1" == "M" ]]; then
+          GRADE_CAP=$1
+     # Only keep track of the lowest grade cap, since a higher grade cap wont do anything (F = lowest, A = highest)
+     elif  [[ ! "$GRADE_CAP" > "$1" ]]; then
+          GRADE_CAP=$1
+     fi
+
+     return 0
+}
+
+# Sets a grade warning, as specified by the grade specification
+# arg1: A warning message
+set_grade_warning() {
+     # Do nothing if disabled
+     "$DISABLE_GRADING" && return 0
+
+     GRADE_WARNINGS+=("$1")
+
+     return 0
+}
+
+# Sets the score for Category 2 (Key Exchange Strength)
+# arg1: Short key algorithm ("EC", "DH", "RSA", ...) # Can die, when we get DH_PARAMs
+# arg2: key size (number of bits)
+set_key_str_score() {
+     local type=$1
+     local size=$2
+
+     # Do nothing if disabled
+     "$DISABLE_GRADING" && return 0
+
+     # TODO: We need to get the size of DH params (follows the same table as the "else" clause)
+     # For now, verifying the key size will do...
+     if [[ $type == "EC" || $type == "DH" ]]; then
+          if [[ $size -lt 110 ]]; then
+               let KEY_EXCH_SCORE=20
+               set_grade_cap "F" "Using a insecure key"
+          elif [[ $size -lt 123 ]]; then
+               let KEY_EXCH_SCORE=40
+               set_grade_cap "F" "Using a insecure key"
+          elif [[ $size -lt 163 ]]; then
+               let KEY_EXCH_SCORE=80
+               set_grade_cap "B" "Using a weak key"
+          elif [[ $size -lt 225 ]]; then
+               let KEY_EXCH_SCORE=90
+          elif [[ $size -ge 225 ]]; then
+               let KEY_EXCH_SCORE=100
+          else
+               let KEY_EXCH_SCORE=0
+               set_grade_cap "F" "Using a insecure key"
+          fi
+     else
+          if [[ $size -lt 512 ]]; then
+               let KEY_EXCH_SCORE=20
+               set_grade_cap "F" "Using a insecure key"
+          elif [[ $size -lt 1024 ]]; then
+               let KEY_EXCH_SCORE=40
+               set_grade_cap "F" "Using a insecure key"
+          elif [[ $size -lt 2048 ]]; then
+               let KEY_EXCH_SCORE=80
+               set_grade_cap "B" "Using a weak key"
+          elif [[ $size -lt 4096 ]]; then
+               let KEY_EXCH_SCORE=90
+          elif [[ $size -ge 4096 ]]; then
+               let KEY_EXCH_SCORE=100
+          else
+               let KEY_EXCH_SCORE=0
+               set_grade_cap "F" "Using a insecure key"
+          fi
+     fi
+
+     return 0
+}
+
+# Sets the best and worst bit size key, used to grade Category 3 (Cipher Strength)
+# This function itself doesn't actually set a score; its just in the name to keep it logical (score == grading function)
+# arg1: a bit size
+set_ciph_str_score() {
+     local size=$1
+
+     # Do nothing if disabled
+     "$DISABLE_GRADING" && return 0
+
+     [[ $size -gt $CIPH_STR_BEST ]] && let CIPH_STR_BEST=$size
+     [[ $size -lt $CIPH_STR_WORST ]] && let CIPH_STR_WORST=$size
+
+     return 0
 }
 
 ###### START ServerHello/OpenSSL/F5 function definitions ######
@@ -1756,12 +1863,14 @@ check_revocation_crl() {
                out ", "
                pr_svrty_critical "revoked"
                fileout "$jsonID" "CRITICAL" "revoked"
+               set_grade_cap "T" "Certificate revoked"
           else
                retcode="$(verify_retcode_helper "$retcode")"
                out " $retcode"
                retcode="${retcode#(}"
                retcode="${retcode%)}"
                fileout "$jsonID" "WARN" "$retcode"
+               set_grade_cap "T" "Issues with certificate $retcode"
                if [[ $DEBUG -ge 2 ]]; then
                     outln
                     cat "${tmpfile%%.crl}.err"
@@ -1823,6 +1932,7 @@ check_revocation_ocsp() {
                out ", "
                pr_svrty_critical "revoked"
                fileout "$jsonID" "CRITICAL" "revoked"
+               set_grade_cap "T" "Certificate revoked"
           else
                out ", "
                pr_warning "error querying OCSP responder"
@@ -2441,15 +2551,18 @@ run_hsts() {
           if [[ $hsts_age_days -eq -1 ]]; then
                pr_svrty_medium "misconfiguration: HSTS max-age (recommended > $HSTS_MIN seconds = $((HSTS_MIN/86400)) days ) is required but missing"
                fileout "${jsonID}_time" "MEDIUM" "misconfiguration, parameter max-age (recommended > $HSTS_MIN seconds = $((HSTS_MIN/86400)) days) missing"
+               set_grade_cap "A" "HSTS max-age is misconfigured"
           elif [[ $hsts_age_sec -eq 0 ]]; then
                pr_svrty_low "HSTS max-age is set to 0. HSTS is disabled"
                fileout "${jsonID}_time" "LOW" "0. HSTS is disabled"
+               set_grade_cap "A" "HSTS is disabled"
           elif [[ $hsts_age_sec -gt $HSTS_MIN ]]; then
                pr_svrty_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "${jsonID}_time" "OK" "$hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN seconds"
           else
                pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( > $HSTS_MIN seconds recommended)"
                fileout "${jsonID}_time" "MEDIUM" "max-age too short. $hsts_age_days days (=$hsts_age_sec seconds) <= $HSTS_MIN seconds"
+               set_grade_cap "A" "HSTS max-age is too short"
           fi
           if includeSubDomains "$TMPFILE"; then
                fileout "${jsonID}_subdomains" "OK" "includes subdomains"
@@ -2467,6 +2580,7 @@ run_hsts() {
      else
           pr_svrty_low "not offered"
           fileout "$jsonID" "LOW" "not offered"
+          set_grade_cap "A" "HSTS is not offered"
      fi
      outln
 
@@ -2502,6 +2616,7 @@ run_hpkp() {
                first_hpkp_header="$(grep -ai '^Public-Key-Pins:' $TMPFILE | head -1)"
                # we only evaluate the keys here, unless they a not present
                out "$spaces "
+               set_grade_cap "A" "Problems with HTTP Public Key Pinning (HPKP)"
           elif [[ $(grep -aci '^Public-Key-Pins-Report-Only:' $TMPFILE) -gt 1 ]]; then
                outln "Multiple HPKP headers (Report-Only), taking first line"
                fileout "HPKP_notice" "INFO" "multiple Public-Key-Pins-Report-Only in header"
@@ -2528,6 +2643,7 @@ run_hpkp() {
           if [[ $hpkp_nr_keys -eq 1 ]]; then
                pr_svrty_high "Only one key pinned (NOT ok), means the site may become unavailable in the future, "
                fileout "HPKP_SPKIs" "HIGH" "Only one key pinned"
+               set_grade_cap "A" "Problems with HTTP Public Key Pinning (HPKP)"
           else
                pr_svrty_good "$hpkp_nr_keys"
                out " keys, "
@@ -2548,6 +2664,7 @@ run_hpkp() {
                out "$hpkp_age_sec s = "
                pr_svrty_medium "$hpkp_age_days days (< $HPKP_MIN s = $((HPKP_MIN / 86400)) days is not good enough)"
                fileout "HPKP_age" "MEDIUM" "age is set to $hpkp_age_days days ($hpkp_age_sec sec) < $HPKP_MIN s = $((HPKP_MIN / 86400)) days is not good enough."
+               set_grade_cap "A" "Problems with HTTP Public Key Pinning (HPKP)"
           fi
 
           if includeSubDomains "$TMPFILE"; then
@@ -2705,11 +2822,13 @@ run_hpkp() {
                "$has_backup_spki" && out "$spaces"       # we had a few lines with backup SPKIs already
                prln_svrty_high " No matching key for SPKI found "
                fileout "HPKP_SPKImatch" "HIGH" "None of the SPKI match your host certificate, intermediate CA or known root CAs. Bricked site?"
+               set_grade_cap "A" "Problems with HTTP Public Key Pinning (HPKP)"
           fi
 
           if ! "$has_backup_spki"; then
                prln_svrty_high " No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site. "
                fileout "HPKP_backup" "HIGH" "No backup keys found. Loss/compromise of the currently pinned key(s) will lead to bricked site."
+               set_grade_cap "A" "Problems with HTTP Public Key Pinning (HPKP)"
           fi
      else
           outln "--"
@@ -3325,6 +3444,9 @@ neat_list(){
 
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
+
+     # For grading, set bits size
+     set_ciph_str_score $strength
 
      [[ "$export" =~ export ]] && strength="$strength,exp"
 
@@ -4986,6 +5108,7 @@ run_protocols() {
                     if [[ "$lines" -gt 1 ]]; then
                          nr_ciphers_detected=$((V2_HELLO_CIPHERSPEC_LENGTH / 3))
                          add_tls_offered ssl2 yes
+                         set_grade_cap "F" "SSLv2 is offered"
                          if [[ 0 -eq "$nr_ciphers_detected" ]]; then
                               prln_svrty_high "supported but couldn't detect a cipher and vulnerable to CVE-2015-3197 ";
                               fileout "$jsonID" "HIGH" "offered, no cipher" "CVE-2015-3197" "CWE-310"
@@ -5007,6 +5130,7 @@ run_protocols() {
                0)   prln_svrty_critical   "offered (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "offered"
                     add_tls_offered ssl2 yes
+                    set_grade_cap "F" "SSLv2 is offered"
                     ;;
                1)   prln_svrty_best "not offered (OK)"
                     fileout "$jsonID" "OK" "not offered"
@@ -5015,6 +5139,7 @@ run_protocols() {
                5)   prln_svrty_high "CVE-2015-3197: $supported_no_ciph2";
                     fileout "$jsonID" "HIGH" "offered, no cipher" "CVE-2015-3197" "CWE-310"
                     add_tls_offered ssl2 yes
+                    set_grade_cap "F" "SSLv2 is offered"
                     ;;
                7)   prln_local_problem "$OPENSSL doesn't support \"s_client -ssl2\""
                     fileout "$jsonID" "INFO" "not tested due to lack of local support"
@@ -5042,6 +5167,7 @@ run_protocols() {
                     latest_supported_string="SSLv3"
                fi
                add_tls_offered ssl3 yes
+               set_grade_cap "B" "SSLv3 is offered"
                ;;
           1)   prln_svrty_best "not offered (OK)"
                fileout "$jsonID" "OK" "not offered"
@@ -5077,6 +5203,7 @@ run_protocols() {
           5)   pr_svrty_high "$supported_no_ciph1"               # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "HIGH" "$supported_no_ciph1"
                add_tls_offered ssl3 yes
+               set_grade_cap "B" "SSLv3 is offered"
                ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
@@ -5108,6 +5235,7 @@ run_protocols() {
                latest_supported="0301"
                latest_supported_string="TLSv1.0"
                add_tls_offered tls1 yes
+               set_grade_cap "B" "TLS1.0 offered"
                ;;                                                # nothing wrong with it -- per se
           1)   out "not offered"
                add_tls_offered tls1 no
@@ -5154,6 +5282,7 @@ run_protocols() {
           5)   outln "$supported_no_ciph1"                                 # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1 yes
+               set_grade_cap "B" "TLS1.0 offered"
                ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
@@ -5186,6 +5315,7 @@ run_protocols() {
                latest_supported="0302"
                latest_supported_string="TLSv1.1"
                add_tls_offered tls1_1 yes
+               set_grade_cap "B" "TLS1.1 offered"
                ;;                                                # nothing wrong with it
           1)   out "not offered"
                add_tls_offered tls1_1 no
@@ -5235,6 +5365,7 @@ run_protocols() {
           5)   outln "$supported_no_ciph1"                       # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1_1 yes
+               set_grade_cap "B" "TLS1.1 offered"
                ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
@@ -5299,6 +5430,7 @@ run_protocols() {
                add_tls_offered tls1_2 yes
                ;;                                                     # GCM cipher in TLS 1.2: very good!
           1)   add_tls_offered tls1_2 no
+               set_grade_cap "C" "TLS1.2 is not offered"
                if "$offers_tls13"; then
                     out "not offered"
                else
@@ -5317,6 +5449,7 @@ run_protocols() {
                fi
                ;;
           2)   add_tls_offered tls1_2 no
+               set_grade_cap "C" "TLS1.2 is not offered"
                pr_svrty_medium "not offered and downgraded to a weaker protocol"
                if [[ "$tls12_detected_version" == 0300 ]]; then
                     detected_version_string="SSLv3"
@@ -5345,12 +5478,15 @@ run_protocols() {
           3)   out "not offered, "
                fileout "$jsonID" "INFO" "not offered"
                add_tls_offered tls1_2 no
+               set_grade_cap "C" "TLS1.2 is not offered"
                pr_warning "TLS downgraded to STARTTLS plaintext"; outln
                fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
+               set_grade_cap "C" "TLS1.2 is not offered"
                ;;
           4)   out "likely "; pr_svrty_medium "not offered, "
                fileout "$jsonID" "MEDIUM" "not offered"
                add_tls_offered tls1_2 no
+               set_grade_cap "C" "TLS1.2 is not offered"
                pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                ;;
@@ -5717,6 +5853,8 @@ sub_cipherlists() {
                          ((ret++))
                          ;;
                esac
+
+               [[ $sclient_success -eq 0 && "$1" =~ (^|:)EXPORT(:|$) ]] && set_grade_cap "F" "Export suite offered"
           fi
           tmpfile_handle ${FUNCNAME[0]}.${5}.txt
           [[ $DEBUG -ge 1 ]] && tm_out " -- $1"
@@ -6991,17 +7129,17 @@ verify_retcode_helper() {
 
      case $retcode in
           # codes from ./doc/apps/verify.pod | verify(1ssl)
-          44) tm_out "(different CRL scope)" ;;                  # X509_V_ERR_DIFFERENT_CRL_SCOPE
-          26) tm_out "(unsupported certificate purpose)" ;;      # X509_V_ERR_INVALID_PURPOSE
-          24) tm_out "(certificate unreadable)" ;;               # X509_V_ERR_INVALID_CA
-          23) tm_out "(certificate revoked)" ;;                  # X509_V_ERR_CERT_REVOKED
-          21) tm_out "(chain incomplete, only 1 cert provided)" ;;    # X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
-          20) tm_out "(chain incomplete)" ;;                     # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
-          19) tm_out "(self signed CA in chain)" ;;              # X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
-          18) tm_out "(self signed)" ;;                          # X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
-          10) tm_out "(expired)" ;;                              # X509_V_ERR_CERT_HAS_EXPIRED
-          9)  tm_out "(not yet valid)" ;;                        # X509_V_ERR_CERT_NOT_YET_VALID
-          2)  tm_out "(issuer cert missing)" ;;                  # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
+          44) tm_out "(different CRL scope)" ;;                    # X509_V_ERR_DIFFERENT_CRL_SCOPE
+          26) tm_out "(unsupported certificate purpose)" ;;        # X509_V_ERR_INVALID_PURPOSE
+          24) tm_out "(certificate unreadable)" ;;                 # X509_V_ERR_INVALID_CA
+          23) tm_out "(certificate revoked)" ;;                    # X509_V_ERR_CERT_REVOKED
+          21) tm_out "(chain incomplete, only 1 cert provided)" ;; # X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE
+          20) tm_out "(chain incomplete)" ;;                       # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY
+          19) tm_out "(self signed CA in chain)" ;;                # X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN
+          18) tm_out "(self signed)" ;;                            # X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT
+          10) tm_out "(expired)" ;;                                # X509_V_ERR_CERT_HAS_EXPIRED
+          9)  tm_out "(not yet valid)" ;;                          # X509_V_ERR_CERT_NOT_YET_VALID
+          2)  tm_out "(issuer cert missing)" ;;                    # X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT
           *) ret=1 ; tm_out " (unknown, pls report) $1" ;;
      esac
      return $ret
@@ -7097,6 +7235,7 @@ determine_trust() {
                     out "$code"
                fi
                fileout "${jsonID}${json_postfix}" "CRITICAL" "failed $code. $addtl_warning"
+               set_grade_cap "T" "Issues with certificate $code"
           else
                # is one ok and the others not ==> display the culprit store
                if "$some_ok"; then
@@ -7115,6 +7254,7 @@ determine_trust() {
                                    out "$code"
                               fi
                               notok_was="${certificate_file[i]} $code $notok_was"
+                              set_grade_cap "T" "Issues with certificate $code"
                          fi
                     done
                     #pr_svrty_high "$notok_was "
@@ -8232,6 +8372,7 @@ certificate_info() {
                fi
                outln
                fileout "${jsonID}${json_postfix}" "MEDIUM" "SHA1 with RSA"
+               set_grade_cap "T" "Uses SHA1 algorithm"
                ;;
           sha224WithRSAEncryption)
                outln "SHA224 with RSA"
@@ -8252,6 +8393,7 @@ certificate_info() {
           ecdsa-with-SHA1)
                prln_svrty_medium "ECDSA with SHA1"
                fileout "${jsonID}${json_postfix}" "MEDIUM" "ECDSA with SHA1"
+               set_grade_cap "T" "Uses SHA1 algorithm"
                ;;
           ecdsa-with-SHA224)
                outln "ECDSA with SHA224"
@@ -8272,6 +8414,7 @@ certificate_info() {
           dsaWithSHA1)
                prln_svrty_medium "DSA with SHA1"
                fileout "${jsonID}${json_postfix}" "MEDIUM" "DSA with SHA1"
+               set_grade_cap "T" "Uses SHA1 algorithm"
                ;;
           dsa_with_SHA224)
                outln "DSA with SHA224"
@@ -8287,6 +8430,7 @@ certificate_info() {
                     sha1)
                          prln_svrty_medium "RSASSA-PSS with SHA1"
                          fileout "${jsonID}${json_postfix}" "MEDIUM" "RSASSA-PSS with SHA1"
+                         set_grade_cap "T" "Uses SHA1 algorithm"
                          ;;
                     sha224)
                          outln "RSASSA-PSS with SHA224"
@@ -8313,6 +8457,7 @@ certificate_info() {
           md2*)
                prln_svrty_critical "MD2"
                fileout "${jsonID}${json_postfix}" "CRITICAL" "MD2"
+               set_grade_cap "F" "Supports a insecure signature (MD2)"
                ;;
           md4*)
                prln_svrty_critical "MD4"
@@ -8321,6 +8466,7 @@ certificate_info() {
           md5*)
                prln_svrty_critical "MD5"
                fileout "${jsonID}${json_postfix}" "CRITICAL" "MD5"
+               set_grade_cap "F" "Supports a insecure signature (MD5)"
                ;;
           *)
                out "$cert_sig_algo ("
@@ -8375,6 +8521,8 @@ certificate_info() {
                     ((ret++))
                fi
                outln " bits"
+
+               set_key_str_score "$short_keyAlgo" "$cert_keysize" # TODO: should be $dh_param_size
           elif [[ $cert_key_algo =~ RSA ]] || [[ $cert_key_algo =~ rsa ]] || [[ $cert_key_algo =~ dsa ]] || \
                [[ $cert_key_algo =~ dhKeyAgreement ]] || [[ $cert_key_algo == X9.42\ DH ]]; then
                if [[ "$cert_keysize" -le 512 ]]; then
@@ -8401,6 +8549,8 @@ certificate_info() {
                     fileout "${jsonID}${json_postfix}" "WARN" "$cert_keysize bits (Odd)"
                     ((ret++))
                fi
+
+               set_key_str_score "$short_keyAlgo" "$cert_keysize"
           else
                out "$cert_key_algo + $cert_keysize bits ("
                pr_warning "FIXME: can't tell whether this is good or not"
@@ -8567,6 +8717,7 @@ certificate_info() {
      if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$cn" ]]; then
           prln_svrty_critical "self-signed (NOT ok)"
           fileout "${jsonID}${json_postfix}" "CRITICAL" "selfsigned"
+          set_grade_cap "T" "Self-signed certificate"
      else
           issuerfinding="$issuer_CN"
           pr_italic "$issuer_CN"
@@ -8610,7 +8761,9 @@ certificate_info() {
      has_dns_sans=$HAS_DNS_SANS
 
      case $trust_sni in
-          0) trustfinding="certificate does not match supplied URI" ;;
+          0) trustfinding="certificate does not match supplied URI"
+             set_grade_cap "M" "Domain name mismatch"
+             ;;
           1) trustfinding="Ok via SAN" ;;
           2) trustfinding="Ok via SAN wildcard" ;;
           4) if "$has_dns_sans"; then
@@ -8715,6 +8868,7 @@ certificate_info() {
           # Shortcut for this special case here.
           pr_italic "WoSign/StartCom"; out " are " ; prln_svrty_critical "not trusted anymore (NOT ok)"
           fileout "${jsonID}${json_postfix}" "CRITICAL" "Issuer not trusted anymore (WoSign/StartCom)"
+          set_grade_cap "T" "Untrusted certificate chain"
      else
           # Also handles fileout, keep error if happened
           determine_trust "$jsonID" "$json_postfix" || ((ret++))
@@ -8807,6 +8961,7 @@ certificate_info() {
           pr_svrty_critical "expired"
           expfinding="expired"
           expok="CRITICAL"
+          set_grade_cap "T" "Certificate expired"
      else
           secs2warn=$((24 * 60 * 60 * days2warn2))          # low threshold first
           expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
@@ -9603,6 +9758,7 @@ run_fs() {
           outln
           prln_svrty_medium " No ciphers supporting Forward Secrecy offered"
           fileout "$jsonID" "MEDIUM" "No ciphers supporting (P)FS offered"
+          set_grade_cap "B" "Forward Security (PFS) is not supported"
      else
           outln
           fs_offered=true
@@ -14973,6 +15129,7 @@ run_heartbleed(){
                else
                     pr_svrty_critical "VULNERABLE (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "VULNERABLE $cve" "$cwe" "$hint"
+                    set_grade_cap "F" "Vulnerable to Heartbleed"
                fi
           else
                pr_svrty_best "not vulnerable (OK)"
@@ -15131,6 +15288,7 @@ run_ccs_injection(){
                # decryption failed received
                pr_svrty_critical "VULNERABLE (NOT ok)"
                fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
+               set_grade_cap "F" "Vulnerable to CCS injection"
           elif [[ "$byte6" == "0A" ]] || [[ "$byte6" == "28" ]]; then
                # Unexpected message / Handshake failure  received
                pr_warning "likely "
@@ -15428,6 +15586,7 @@ run_ticketbleed() {
                if [[ ${memory[1]} != ${memory[2]} ]] && [[ ${memory[2]} != ${memory[3]} ]]; then
                     pr_svrty_critical "VULNERABLE (NOT ok)"
                     fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
+                    set_grade_cap "F" "Vulnerable to Ticketbleed"
                else
                     pr_svrty_best "not vulnerable (OK)"
                     out ", session IDs were returned but potential memory fragments do not differ"
@@ -15485,6 +15644,7 @@ run_renego() {
                case $sec_renego in
                     0)   prln_svrty_critical "Not supported / VULNERABLE (NOT ok)"
                          fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
+                         set_grade_warning "Secure renegotiation is not supported"
                          ;;
                     1)   prln_svrty_best "supported (OK)"
                          fileout "$jsonID" "OK" "supported" "$cve" "$cwe"
@@ -15668,6 +15828,7 @@ run_crime() {
                # not clear whether a protocol != HTTP offers the ability to repeatedly modify the input
                # which is done e.g. via javascript in the context of HTTP
           fi
+          set_grade_cap "C" "Vulnerable to CRIME"
      fi
      outln
 
@@ -15800,6 +15961,7 @@ run_sweet32() {
      local -i nr_sweet32_ciphers=0 nr_supported_ciphers=0 nr_ssl2_sweet32_ciphers=0 nr_ssl2_supported_ciphers=0
      local ssl2_sweet=false
      local using_sockets=true
+     local tls1_1_vulnable=false
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SWEET32 (Birthday Attacks on 64-bit Block Ciphers)       " && outln
      pr_bold " SWEET32"; out " (${cve// /, })    "
@@ -15860,6 +16022,7 @@ run_sweet32() {
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
                [[ $DEBUG -ge 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
+               [[ $proto == -tls1_1 && $sclient_success -eq 0 ]] && tls1_1_vulnable=true
                [[ $sclient_success -eq 0 ]] && break
           done
           if "$HAS_SSL2"; then
@@ -15879,9 +16042,11 @@ run_sweet32() {
      if [[ $sclient_success -eq 0 ]] && "$ssl2_sweet" ; then
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers for SSLv2 and above"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers for SSLv2 and above" "$cve" "$cwe" "$hint"
+          "$tls1_1_vulnable" && set_grade_cap "C" "Uses 64 bit block ciphers with TLS1.1+ (vulnerable to SWEET32)"
      elif [[ $sclient_success -eq 0 ]]; then
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers" "$cve" "$cwe" "$hint"
+          "$tls1_1_vulnable" && set_grade_cap "C" "Uses 64 bit block ciphers with TLS1.1+ (vulnerable to SWEET32)"
      elif "$ssl2_sweet"; then
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers wth SSLv2 only"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers with SSLv2 only" "$cve" "$cwe" "$hint"
@@ -15963,6 +16128,7 @@ run_ssl_poodle() {
           POODLE=0
           pr_svrty_high "VULNERABLE (NOT ok)"; out ", uses SSLv3+CBC (check TLS_FALLBACK_SCSV mitigation below)"
           fileout "$jsonID" "HIGH" "VULNERABLE, uses SSLv3+CBC" "$cve" "$cwe" "$hint"
+          set_grade_cap "C" "Vulnerable to POODLE"
      else
           POODLE=1
           pr_svrty_best "not vulnerable (OK)";
@@ -15993,6 +16159,8 @@ run_tls_poodle() {
      #FIXME
      prln_warning "#FIXME"
      fileout "$jsonID" "WARN" "Not yet implemented #FIXME" "$cve" "$cwe"
+     # set_grade_cap "F" "Vulnerable to POODLE TLS"
+
      return 0
 }
 
@@ -16021,6 +16189,7 @@ run_tls_fallback_scsv() {
      if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
           prln_svrty_critical "No fallback possible, SSLv2 is the only protocol"
           fileout "$jsonID" "CRITICAL" "SSLv2 is the only protocol"
+          set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
           return 0
      fi
      for p in tls1_2 tls1_1 tls1 ssl3; do
@@ -16049,6 +16218,7 @@ run_tls_fallback_scsv() {
           "ssl3")
                prln_svrty_high "No fallback possible, SSLv3 is the only protocol"
                fileout "$jsonID" "HIGH" "only SSLv3 supported"
+               set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
                return 0
                ;;
           *)   if [[ $(has_server_protocol tls1_3) -eq 0 ]]; then
@@ -16056,6 +16226,7 @@ run_tls_fallback_scsv() {
                     # then assume it does not support SSLv3, even if SSLv3 cannot be tested.
                     pr_svrty_good "No fallback possible (OK)"; outln ", TLS 1.3 is the only protocol"
                     fileout "$jsonID" "OK" "only TLS 1.3 supported"
+                    set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
                elif [[ $(has_server_protocol tls1_3) -eq 1 ]] && \
                     ( [[ $(has_server_protocol ssl3) -eq 1 ]] || "$HAS_SSL3" ); then
                     # TLS 1.3, TLS 1.2, TLS 1.1, TLS 1, and SSLv3 are all not supported.
@@ -16069,6 +16240,7 @@ run_tls_fallback_scsv() {
                     # it is very likely that SSLv3 is the only supported protocol.
                     pr_svrty_high "NOT ok, no fallback possible"; outln ", TLS 1.3, 1.2, 1.1 and 1.0 not supported"
                     fileout "$jsonID" "HIGH" "TLS 1.3, 1.2, 1.1, 1.0 not supported"
+                    set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
                else
                     # TLS 1.2, TLS 1.1, and TLS 1 are not supported, but can't tell whether TLS 1.3 is supported.
                     # This could be a TLS 1.3 only server, an SSLv3 only server (if SSLv3 support cannot be tested),
@@ -16076,6 +16248,7 @@ run_tls_fallback_scsv() {
                     # since this could either be good or bad.
                     outln "No fallback possible, TLS 1.2, TLS 1.1, and TLS 1 not supported"
                     fileout "$jsonID" "INFO" "TLS 1.2, TLS 1.1, and TLS 1 not supported"
+                    set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
                fi
                return 0
      esac
@@ -16120,6 +16293,7 @@ run_tls_fallback_scsv() {
                     ;;
           esac
           fileout "$jsonID" "OK" "no protocol below $high_proto_str offered"
+          set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
           return 0
      fi
      case "$low_proto" in
@@ -16140,15 +16314,18 @@ run_tls_fallback_scsv() {
                if [[ -z "$POODLE" ]]; then
                     pr_warning "Rerun including POODLE SSL check. "
                     pr_svrty_medium "Downgrade attack prevention NOT supported"
-                    fileout "$jsonID" "WARN" "NOT supported. Pls rerun wity POODLE SSL check"
+                    fileout "$jsonID" "WARN" "NOT supported. Pls rerun with POODLE SSL check"
                     ret=1
                elif [[ "$POODLE" -eq 0 ]]; then
                     pr_svrty_high "Downgrade attack prevention NOT supported and vulnerable to POODLE SSL"
                     fileout "$jsonID" "HIGH" "NOT supported and vulnerable to POODLE SSL"
+                    set_grade_cap "C" "Vulnerable to POODLE"
                else
                     pr_svrty_medium "Downgrade attack prevention NOT supported"
                     fileout "$jsonID" "MEDIUM" "NOT supported"
                fi
+               set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
+
           elif grep -qa "alert inappropriate fallback" "$TMPFILE"; then
                pr_svrty_good "Downgrade attack prevention supported (OK)"
                fileout "$jsonID" "OK" "supported"
@@ -16493,6 +16670,7 @@ run_logjam() {
      if "$vuln_exportdh_ciphers"; then
           pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DH EXPORT ciphers"
           fileout "$jsonID" "HIGH" "VULNERABLE, uses DH EXPORT ciphers" "$cve" "$cwe" "$hint"
+          set_grade_cap "B" "Uses weak DH key exchange parameters (vulnerable to LOGJAM)"
           if [[ $subret -eq 3 ]]; then
                out ", no DH key detected with <= TLS 1.2"
                fileout "$jsonID2" "OK" "no DH key detected with <= TLS 1.2"
@@ -16508,6 +16686,7 @@ run_logjam() {
      else
           if [[ $subret -eq 1 ]]; then
                out_common_prime "$jsonID2" "$cve" "$cwe"
+               set_grade_cap "B" "Uses weak DH key exchange parameters (vulnerable to LOGJAM)"
                if ! "$openssl_no_expdhciphers"; then
                     outln ","
                     out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
@@ -16605,6 +16784,7 @@ run_drown() {
                     else
                          prln_svrty_critical  "VULNERABLE (NOT ok), SSLv2 offered with $nr_ciphers_detected ciphers";
                          fileout "$jsonID" "CRITICAL" "VULNERABLE, SSLv2 offered with $nr_ciphers_detected ciphers. Make sure you don't use this certificate elsewhere, see https://censys.io/ipv4?q=$cert_fingerprint_sha2" "$cve" "$cwe" "$hint"
+                         set_grade_cap "F" "Vulnerable to DROWN"
                     fi
                     outln "$spaces Make sure you don't use this certificate elsewhere, see:"
                     out "$spaces "
@@ -16918,6 +17098,7 @@ run_beast(){
                pr_svrty_medium "VULNERABLE"
                outln " -- and no higher protocols as mitigation supported"
                fileout "$jsonID" "MEDIUM" "VULNERABLE -- and no higher protocols as mitigation supported" "$cve" "$cwe" "$hint"
+               set_grade_cap "B" "Vulnerable to BEAST"
           fi
      fi
      "$first" && ! "$vuln_beast" && prln_svrty_good "no CBC ciphers found for any protocol (OK)"
@@ -17165,6 +17346,11 @@ run_rc4() {
                fi
                "$WIDE" && "$SHOW_SIGALGO" && grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TMPFILE && \
                     sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
+
+               # If you use RC4 with newer protocols, you are punished harder
+               if [[ "$proto" == "-tls1_1" ]]; then
+                    set_grade_cap "C" "RC4 ciphers offered on TLS1.1"
+               fi
           done
      done
 
@@ -17245,6 +17431,7 @@ run_rc4() {
           outln
           "$WIDE" && out " " && prln_svrty_high "VULNERABLE (NOT ok)"
           fileout "$jsonID" "HIGH" "VULNERABLE, Detected ciphers: $rc4_detected" "$cve" "$cwe" "$hint"
+          set_grade_cap "B" "RC4 ciphers offered"
      elif [[ $nr_ciphers -eq 0 ]]; then
           prln_local_problem "No RC4 Ciphers configured in $OPENSSL"
           fileout "$jsonID" "WARN" "RC4 ciphers not supported by local OpenSSL ($OPENSSL)"
@@ -17889,6 +18076,7 @@ run_robot() {
                prln_svrty_critical "VULNERABLE (NOT ok)"
                fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe"
           fi
+          set_grade_cap "F" "Vulnerable to ROBOT"
      else
           prln_svrty_best "not vulnerable (OK)"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
@@ -18383,6 +18571,7 @@ output options (can also be preset via environment variables):
      --color <0|1|2|3>             0: no escape or other codes,  1: b/w escape codes,  2: color (default), 3: extra color (color all ciphers)
      --colorblind                  swap green and blue in the output
      --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
+     --disable-grading             Explicitly disables the grading output
 
 file output options (can also be preset via environment variables)
      --log, --logging              logs stdout to '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.log' in current working directory (cwd)
@@ -20357,6 +20546,215 @@ run_mass_testing_parallel() {
      return $?
 }
 
+run_grading() {
+     local final_score pre_cap_grade final_grade
+     local c1_score c2_score c3_score c1_wscore c2_wscore c3_wscore
+     local c1_worst c1_best
+     local c3_worst c3_best c3_worst_cb c3_best_cb
+     local old_ifs=$IFS sorted_reasons sorted_warnings reason_loop=0 warning_loop=0
+
+     # Sort the reasons. This is just nicer to read in genereal
+     IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
+     IFS=$'\n' sorted_warnings=($(sort -u <<<"${GRADE_WARNINGS[*]}"))
+     IFS=$old_ifs
+     fileout "grading_spec" "INFO" "SSLLabs's 'SSL Server Rating Guide' (revision 2009q) (near complete)"
+     pr_bold " Grading specification         "; out "SSLLabs's 'SSL Server Rating Guide' (revision 2009q)"; prln_warning " (near complete)"
+     pr_bold " Specification documentation   "; pr_url "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
+     outln
+
+     # No point in calculating a score, if a cap of "F", "T", or "M" has been set
+     if [[ $GRADE_CAP == "F" || $GRADE_CAP == "T" || $GRADE_CAP == "M" ]]; then
+          pr_bold " Protocol Support "; out "(weighted)   "; outln "0 (0)"
+          pr_bold " Key Exchange "; out "    (weighted)   "; outln "0 (0)"
+          pr_bold " Cipher Stregth "; out "  (weighted)   "; outln "0 (0)"
+          pr_bold " Final Score                   "; outln "0"
+          pr_bold " Grade                         "; prln_svrty_critical "$GRADE_CAP"
+          fileout "grade" "CRITICAL" "$GRADE_CAP"
+          outln
+     else
+          ## Category 1
+          # get best score, by searching for the best protocol, until a hit occurs
+          if [[ $(has_server_protocol "tls1_3") -eq 0 || $(has_server_protocol "tls1_2") -eq 0 ]]; then
+               c1_best=100
+          elif [[ $(has_server_protocol "tls1_1") -eq 0 ]]; then
+               c1_best=95
+          elif [[ $(has_server_protocol "tls1") -eq 0 ]]; then
+               c1_best=90
+          elif [[ $(has_server_protocol "ssl3") -eq 0 ]]; then
+               c1_best=80
+               # If the best protocol offered is SSLv3, cap to F. It is easier done here
+               set_grade_cap "F" "SSLv3 is the best protocol offered"
+          else # SSLv2 gives 0 points
+               c1_best=0
+          fi
+
+          # get worst score, by searching for the worst protcol, until a hit occurs
+          if [[ $(has_server_protocol "ssl2") -eq 0 ]]; then
+               c1_worst=0
+          elif [[ $(has_server_protocol "ssl3") -eq 0 ]]; then
+               c1_worst=80
+          elif [[ $(has_server_protocol "tls1") -eq 0 ]]; then
+               c1_worst=90
+          elif [[ $(has_server_protocol "tls1_1") -eq 0 ]]; then
+               c1_worst=95
+          else # TLS1.2 and TLS1.3 both give 100 points
+               c1_worst=100
+          fi
+
+          let c1_score="($c1_best+$c1_worst)/2" # Gets the category score
+          let c1_wscore=$c1_score*30/100 # Gets the weighted score for category (30%)
+
+          pr_bold " Protocol Support "; out "(weighted)   "; outln "$c1_score ($c1_wscore)"
+
+          ## Category 2
+          let c2_score=$KEY_EXCH_SCORE
+          let c2_wscore=$c2_score*30/100
+
+          pr_bold " Key Exchange "; out "    (weighted)   "; outln "$c2_score ($c2_wscore)"
+
+
+          ## Category 3
+          # Get the cipher bits sizes for the best cipher, and the worst cipher
+          c3_best_cb=$CIPH_STR_BEST
+          c3_worst_cb=$CIPH_STR_WORST
+
+          # Determine score for the best key
+          if [[ $c3_best_cb -ge 256 ]]; then
+               c3_best=100
+          elif [[ $c3_best_cb -ge 128 ]]; then
+               c3_best=80
+          elif [[ $c3_best_cb -ge 0 ]]; then
+               c3_best=20
+          else
+               c3_best=0
+          fi
+
+          # Determine the score for the worst key
+          if [[ $c3_worst_cb -gt 0 && $c3_worst_cb -lt 128 ]]; then
+               c3_worst=20
+          elif [[ $c3_worst_cb -lt 256 ]]; then
+               c3_worst=80
+          elif [[ $c3_worst_cb -ge 256 ]]; then
+               c3_worst=100
+          else
+               c3_worst=0
+          fi
+          let c3_score="($c3_best+$c3_worst)/2" # Gets the category score
+          let c3_wscore=$c3_score*40/100 # Gets the weighted score for category (40%)
+
+          pr_bold " Cipher Stregth "; out "  (weighted)   "; outln "$c3_score ($c3_wscore)"
+
+          ## Calculate final score and grade
+          let final_score=$c1_wscore+$c2_wscore+$c3_wscore
+
+          pr_bold " Final Score                   "; outln $final_score
+
+          # get score, and somehow do something about the GRADE_CAP
+          if [[ $final_score -ge 80 ]]; then
+               pre_cap_grade="A"
+          elif [[ $final_score -ge 65 ]]; then
+               pre_cap_grade="B"
+          elif [[ $final_score -ge 50 ]]; then
+               pre_cap_grade="C"
+          elif [[ $final_score -ge 35 ]]; then
+               pre_cap_grade="D"
+          elif [[ $final_score -ge 20 ]]; then
+               pre_cap_grade="E"
+          elif [[ $final_score -lt 20 ]]; then
+               pre_cap_grade="F"
+          fi
+
+          # If the calculated grade is bigger than the grade cap, then set grade as the cap
+          if [[ $GRADE_CAP != "" && ! $pre_cap_grade > $GRADE_CAP ]]; then
+               final_grade=$GRADE_CAP
+          # For "exceptional" config, an "A+" is awarded, or "A-" for slightly less "exceptional"
+          elif [[ $GRADE_CAP == "" && $pre_cap_grade == "A" ]]; then
+               if [[ ${#sorted_warnings[@]} -eq 0 ]]; then
+                    final_grade="A+"
+               else
+                    final_grade="A-"
+               fi
+          else
+               final_grade=$pre_cap_grade
+          fi
+
+          case "$final_grade" in
+               "A"*) pr_bold " Grade                         "
+                    prln_svrty_best $final_grade
+                    fileout "grade" "OK" "$final_grade"
+                    ;;
+               "B")  pr_bold " Grade                         "
+                    prln_svrty_medium $final_grade
+                    fileout "grade" "MEDIUM" "$final_grade"
+                    ;;
+               "C")  pr_bold " Grade                         "
+                    prln_svrty_medium $final_grade
+                    fileout "grade" "MEDIUM" "$final_grade"
+                    ;;
+               "D")  pr_bold " Grade                         "
+                    prln_svrty_high $final_grade
+                    fileout "grade" "HIGH" "$final_grade"
+                    ;;
+               "E")  pr_bold " Grade                         "
+                    prln_svrty_high $final_grade
+                    fileout "grade" "HIGH" "$final_grade"
+                    ;;
+               "F")  pr_bold " Grade                         "
+                    prln_svrty_critical $final_grade
+                    fileout "grade" "CRITICAL" "$final_grade"
+                    ;;
+          esac
+     fi
+
+     # Pretty print - again, it's just nicer to read
+     for reason in "${sorted_reasons[@]}"; do
+          if [[ $reason_loop -eq 0 ]]; then
+               pr_bold " Grade cap reasons             "; outln "$reason"
+               let reason_loop++
+          else
+               outln "                               $reason"
+          fi
+     done
+
+     for warning in "${sorted_warnings[@]}"; do
+          if [[ $warning_loop -eq 0 ]]; then
+               pr_bold " Grade warning                 "; prln_svrty_medium "$warning"
+               let warning_loop++
+          else
+               prln_svrty_medium "                               $warning"
+          fi
+     done
+
+     return 0
+}
+
+# Checks whether grading can be done or not.
+# Grading needs a mix of certificate and vulnerabilities checks, in order to give out a proper grade.
+# This function disables grading, if not all required checks are enabled
+# Returns "0" if grading is enabled, and "1" if grading is disabled
+set_grading_state() {
+     local gbl
+     local nr_enabled=0
+
+     # All of these should be enabled
+     for gbl in do_protocols do_cipherlists do_fs do_server_defaults do_header \
+          do_heartbleed do_ccs_injection do_ticketbleed do_robot do_renego \
+          do_crime do_ssl_poodle do_tls_fallback_scsv do_drown do_beast \
+          do_rc4 do_logjam; do
+          [[ "${!gbl}" == true ]] && let nr_enabled++
+     done
+
+     # ... atleast one of these has to be set
+     [[ $do_allciphers == true || $do_cipher_per_proto == true ]] && let nr_enabled++
+
+     # ... else we can't grade
+     if [[ $nr_enabled -lt 18 ]]; then
+          DISABLE_GRADING=true
+          return 1
+     fi
+
+     return 0
+}
 
 
 # This initializes boolean global do_* variables. They keep track of what to do
@@ -20722,6 +21120,9 @@ parse_cmd_line() {
                -g|--grease)
                     do_grease=true
                     ;;
+               --disable-grading)
+                    DISABLE_GRADING=true
+                    ;;
                -9|--full)
                     set_scanning_defaults
                     do_allciphers=false
@@ -21005,9 +21406,9 @@ parse_cmd_line() {
                     SSL_NATIVE=true
                     ;;
                --basicauth|--basicauth=*)
-                   BASICAUTH="$(parse_opt_equal_sign "$1" "$2")"
-                   [[ $? -eq 0 ]] && shift
-                   ;;
+                    BASICAUTH="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    ;;
                (--) shift
                     break
                     ;;
@@ -21045,6 +21446,11 @@ parse_cmd_line() {
 
      count_do_variables
      [[ $? -eq 0 ]] && set_scanning_defaults
+
+     # Unless explicit disabled, check if grading can be enabled
+     # Should be called after set_scanning_defaults
+     "$DISABLE_GRADING" || set_grading_state
+
      CMDLINE_PARSED=true
 }
 
@@ -21213,6 +21619,14 @@ lets_roll() {
 
                fileout_section_header $section_number true && ((section_number++))
                "$do_client_simulation" && { run_client_simulation; ret=$(($? + ret)); stopwatch run_client_simulation; }
+
+               if ! "$DISABLE_GRADING"; then
+                    outln; pr_headlineln " Calculating grade "
+                    outln
+
+                    fileout_section_header $section_number true && ((section_number++))
+                    { run_grading; ret=$(($? + ret)); stopwatch run_grading; }
+               fi
           fi
           fileout_section_footer true
      fi
