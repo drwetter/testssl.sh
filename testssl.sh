@@ -20737,7 +20737,7 @@ set_grading_state() {
      done
 
      # ... atleast one of these has to be set
-     "$do_allciphers" || "$do_cipher_per_proto" && let nr_enabled++
+     [[ "$do_allciphers" || "$do_cipher_per_proto" ]] && let nr_enabled++
 
      # ... else we can't grade
      if [[ $nr_enabled -lt 18 ]]; then
