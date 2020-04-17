@@ -288,7 +288,7 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 6. whole 9 yards
 
 `--disable-grading` disables grading explicitly.
-Grading automatically gets disabled, to not give a wrong or misleading grade, when not all required functions are executed (e.g when checking for a single vulnerabilities). `DISABLE_GRADING` is the according environment variable which you can use.
+Grading automatically gets disabled, to not give a wrong or misleading grade, when not all required functions are executed (e.g when checking for a single vulnerabilities).
 
 
 ### FILE OUTPUT OPTIONS
@@ -394,7 +394,6 @@ This is *not* a reimplementation of the [SSLLab's SSL Server Test](https://www.s
 Disclaimer: Having a good grade does **NOT** necessary equal to having good security! Never rely solely on a good grade!
 
 As of writing, these checks are missing:
-* Authenticated encryption (AEAD) - should be graded **B** if not supported
 * GOLDENDOODLE - should be graded **F** if vulnerable
 * Insecure renegotiation - should be graded **F** if vulnerable
 * Padding oracle in AES-NI CBC MAC check (CVE-2016-2107) - should be graded **F** if vulnerable
@@ -409,7 +408,7 @@ As of writing, these checks are missing:
 * Weak key (Debian OpenSSL Flaw) - should give **0** points in `set_key_str_score()`
 
 #### Implementing new grades caps or -warnings
-To implement at new grading cap, simply call the `set_grade_cap()` function, with the grade and a reason:
+To implement a new grading cap, simply call the `set_grade_cap()` function, with the grade and a reason:
 ```bash
 set_grade_cap "D" "Vulnerable to documentation"
 ```
