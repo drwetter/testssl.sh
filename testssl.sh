@@ -10363,7 +10363,7 @@ starttls_mysql_dialog() {
      x00, x00, x00, x00, x00, x00, x00, x00,
      x00, x00, x00, x00, x00, x00, x00"
      socksend "${login_request}" 0
-     starttls_just_read 1                    && debugme echo "read succeeded"
+     starttls_just_read 1                    "read succeeded"
      # 1 is the timeout value which only MySQL needs. Note, there seems no response whether STARTTLS
      # succeeded. We could try harder, see https://github.com/openssl/openssl/blob/master/apps/s_client.c
      # but atm this seems sufficient as later we will fail if there's no STARTTLS.
