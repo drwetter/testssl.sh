@@ -5422,7 +5422,6 @@ run_protocols() {
                add_tls_offered tls1_2 yes
                ;;                                                     # GCM cipher in TLS 1.2: very good!
           1)   add_tls_offered tls1_2 no
-               set_grade_cap "C" "TLS 1.2 is not offered"
                if "$offers_tls13"; then
                     out "not offered"
                else
@@ -5434,6 +5433,7 @@ run_protocols() {
                          fileout "$jsonID" "INFO" "not offered"
                     else
                          fileout "$jsonID" "MEDIUM" "not offered"     # TLS 1.3, no TLS 1.2 --> no GCM, penalty
+                         set_grade_cap "C" "TLS 1.2 or TLS 1.3 are not offered"
                     fi
                else
                     prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string"
@@ -20555,18 +20555,18 @@ run_grading() {
      IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
      IFS=$'\n' sorted_warnings=($(sort -u <<<"${GRADE_WARNINGS[*]}"))
      IFS=$old_ifs
-     fileout "grading_spec" "INFO" "SSLLabs's 'SSL Server Rating Guide' version 2009q from 2020-01-30 (near complete)"
-     pr_bold " Grading specification         "; out "SSL Labs's 'SSL Server Rating Guide' version 2009q from 2020-01-30"; prln_warning " (near complete)"
-     pr_bold " Specification documentation   "; pr_url "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
+     pr_bold " Grading specs"; out ", not complete  "; outln "SSL Labs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
+     pr_bold " Specification documentation  "; pr_url "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
      outln
+     fileout "grading_spec" "INFO" "SSLLabs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
 
      # No point in calculating a score, if a cap of "F", "T", or "M" has been set
      if [[ $GRADE_CAP == F || $GRADE_CAP == T || $GRADE_CAP == M ]]; then
-          pr_bold " Protocol Support "; out "(weighted)   "; outln "0 (0)"
-          pr_bold " Key Exchange "; out "    (weighted)   "; outln "0 (0)"
-          pr_bold " Cipher Strength "; out " (weighted)   "; outln "0 (0)"
-          pr_bold " Final Score                   "; outln "0"
-          pr_bold " Grade                         "; prln_svrty_critical "$GRADE_CAP"
+          pr_bold " Protocol Support"; out " (weighted)  "; outln "0 (0)"
+          pr_bold " Key Exchange"; out "     (weighted)  "; outln "0 (0)"
+          pr_bold " Cipher Strength"; out "  (weighted)  "; outln "0 (0)"
+          pr_bold " Final Score                  "; outln "0"
+          pr_bold " Grade                        "; prln_svrty_critical "$GRADE_CAP"
           fileout "grade" "CRITICAL" "$GRADE_CAP"
      else
           ## Category 1
@@ -20601,13 +20601,13 @@ run_grading() {
           let c1_score="($c1_best+$c1_worst)/2" # Gets the category score
           let c1_wscore=$c1_score*30/100 # Gets the weighted score for category (30%)
 
-          pr_bold " Protocol Support "; out "(weighted)   "; outln "$c1_score ($c1_wscore)"
+          pr_bold " Protocol Support "; out "(weighted)  "; outln "$c1_score ($c1_wscore)"
 
           ## Category 2
           let c2_score=$KEY_EXCH_SCORE
           let c2_wscore=$c2_score*30/100
 
-          pr_bold " Key Exchange "; out "    (weighted)   "; outln "$c2_score ($c2_wscore)"
+          pr_bold " Key Exchange "; out "    (weighted)  "; outln "$c2_score ($c2_wscore)"
 
 
           ## Category 3
@@ -20639,12 +20639,12 @@ run_grading() {
           let c3_score="($c3_best+$c3_worst)/2" # Gets the category score
           let c3_wscore=$c3_score*40/100 # Gets the weighted score for category (40%)
 
-          pr_bold " Cipher Strength "; out "  (weighted)   "; outln "$c3_score ($c3_wscore)"
+          pr_bold " Cipher Strength "; out " (weighted)  "; outln "$c3_score ($c3_wscore)"
 
           ## Calculate final score and grade
           let final_score=$c1_wscore+$c2_wscore+$c3_wscore
 
-          pr_bold " Final Score                   "; outln $final_score
+          pr_bold " Final Score                  "; outln $final_score
 
           # get score, and somehow do something about the GRADE_CAP
           if [[ $final_score -ge 80 ]]; then
@@ -20662,10 +20662,10 @@ run_grading() {
           fi
 
           # If the calculated grade is bigger than the grade cap, then set grade as the cap
-          if [[ $GRADE_CAP != "" && ! $pre_cap_grade > $GRADE_CAP ]]; then
+          if [[ -n "$GRADE_CAP" && ! $pre_cap_grade > $GRADE_CAP ]]; then
                final_grade=$GRADE_CAP
           # For "exceptional" config, an "A+" is awarded, or "A-" for slightly less "exceptional"
-          elif [[ $GRADE_CAP == "" && $pre_cap_grade == A ]]; then
+          elif [[ -z "$GRADE_CAP" && $pre_cap_grade == A ]]; then
                if [[ ${#sorted_warnings[@]} -eq 0 ]]; then
                     final_grade="A+"
                else
@@ -20675,30 +20675,25 @@ run_grading() {
                final_grade=$pre_cap_grade
           fi
 
+          pr_bold " Grade                        "
           case "$final_grade" in
-               A*) pr_bold " Grade                         "
-                    prln_svrty_best $final_grade
-                    fileout "grade" "OK" "$final_grade"
+               A*) prln_svrty_best $final_grade
+                   fileout "grade" "OK" "$final_grade"
                     ;;
-               B)  pr_bold " Grade                         "
-                    prln_svrty_medium $final_grade
-                    fileout "grade" "MEDIUM" "$final_grade"
+               B) prln_svrty_medium $final_grade
+                  fileout "grade" "MEDIUM" "$final_grade"
                     ;;
-               C)  pr_bold " Grade                         "
-                    prln_svrty_medium $final_grade
-                    fileout "grade" "MEDIUM" "$final_grade"
+               C) prln_svrty_medium $final_grade
+                  fileout "grade" "MEDIUM" "$final_grade"
                     ;;
-               D)  pr_bold " Grade                         "
-                    prln_svrty_high $final_grade
-                    fileout "grade" "HIGH" "$final_grade"
+               D) prln_svrty_high $final_grade
+                  fileout "grade" "HIGH" "$final_grade"
                     ;;
-               E)  pr_bold " Grade                         "
-                    prln_svrty_high $final_grade
-                    fileout "grade" "HIGH" "$final_grade"
+               E) prln_svrty_high $final_grade
+                  fileout "grade" "HIGH" "$final_grade"
                     ;;
-               F)  pr_bold " Grade                         "
-                    prln_svrty_critical $final_grade
-                    fileout "grade" "CRITICAL" "$final_grade"
+               F) prln_svrty_critical $final_grade
+                  fileout "grade" "CRITICAL" "$final_grade"
                     ;;
           esac
      fi
@@ -20706,10 +20701,10 @@ run_grading() {
      # Pretty print - again, it's just nicer to read
      for reason in "${sorted_reasons[@]}"; do
           if [[ $reason_loop -eq 0 ]]; then
-               pr_bold " Grade cap reasons             "; outln "$reason"
+               pr_bold " Grade cap reasons            "; outln "$reason"
                let reason_loop++
           else
-               outln "                               $reason"
+               outln "                              $reason"
           fi
      done
 
@@ -20738,11 +20733,11 @@ set_grading_state() {
           do_heartbleed do_ccs_injection do_ticketbleed do_robot do_renego \
           do_crime do_ssl_poodle do_tls_fallback_scsv do_drown do_beast \
           do_rc4 do_logjam; do
-          [[ "${!gbl}" == true ]] && let nr_enabled++
+          "${!gbl}" && let nr_enabled++
      done
 
      # ... atleast one of these has to be set
-     [[ $do_allciphers == true || $do_cipher_per_proto == true ]] && let nr_enabled++
+     "$do_allciphers" || "$do_cipher_per_proto" && let nr_enabled++
 
      # ... else we can't grade
      if [[ $nr_enabled -lt 18 ]]; then
