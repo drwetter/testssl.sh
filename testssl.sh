@@ -227,7 +227,6 @@ fi
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 declare -r UA_STD="TLS tester from $SWURL"
 declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
-DISABLE_GRADING=${DISABLE_GRADING:-false} # Whether to disable grading, or not
 
 ########### Initialization part, further global vars just being declared here
 #
@@ -990,34 +989,33 @@ f5_port_decode() {
      echo $((16#${tmp:2:2}${tmp:0:2}))  # reverse order and convert it from hex to dec
 }
 
+###### END universal helper function definitions ######
+
+
+###### START scoring function definitions ######
+
 # Sets the grade cap to ARG1
 # arg1: A grade to set ("A", "B", "C", "D", "E", "F", "M", or "T")
 # arg2: A reason why (e.g. "Vulnerable to CRIME")
 set_grade_cap() {
-     # Do nothing if disabled
-     "$DISABLE_GRADING" && return 0
-
+     "$do_grading" || return 0
      GRADE_CAP_REASONS+=("Grade capped to $1. $2")
 
      # Always set special attributes. These are hard caps, due to name mismatch or cert being invalid
-     if [[ "$1" == "T" || "$1" == "M" ]]; then
-          GRADE_CAP=$1
+     if [[ "$1" == T || "$1" == M ]]; then
+          GRADE_CAP="$1"
      # Only keep track of the lowest grade cap, since a higher grade cap wont do anything (F = lowest, A = highest)
      elif  [[ ! "$GRADE_CAP" > "$1" ]]; then
-          GRADE_CAP=$1
+          GRADE_CAP="$1"
      fi
-
      return 0
 }
 
 # Sets a grade warning, as specified by the grade specification
 # arg1: A warning message
 set_grade_warning() {
-     # Do nothing if disabled
-     "$DISABLE_GRADING" && return 0
-
+     "$do_grading" || return 0
      GRADE_WARNINGS+=("$1")
-
      return 0
 }
 
@@ -1028,18 +1026,17 @@ set_key_str_score() {
      local type=$1
      local size=$2
 
-     # Do nothing if disabled
-     "$DISABLE_GRADING" && return 0
+     "$do_grading" || return 0
 
      # TODO: We need to get the size of DH params (follows the same table as the "else" clause)
      # For now, verifying the key size will do...
-     if [[ $type == "EC" || $type == "DH" ]]; then
+     if [[ $type == EC || $type == DH ]]; then
           if [[ $size -lt 110 ]]; then
                let KEY_EXCH_SCORE=20
-               set_grade_cap "F" "Using a insecure key"
+               set_grade_cap "F" "Using an insecure key"
           elif [[ $size -lt 123 ]]; then
                let KEY_EXCH_SCORE=40
-               set_grade_cap "F" "Using a insecure key"
+               set_grade_cap "F" "Using an insecure key"
           elif [[ $size -lt 163 ]]; then
                let KEY_EXCH_SCORE=80
                set_grade_cap "B" "Using a weak key"
@@ -1049,15 +1046,15 @@ set_key_str_score() {
                let KEY_EXCH_SCORE=100
           else
                let KEY_EXCH_SCORE=0
-               set_grade_cap "F" "Using a insecure key"
+               set_grade_cap "F" "Using an insecure key"
           fi
      else
           if [[ $size -lt 512 ]]; then
                let KEY_EXCH_SCORE=20
-               set_grade_cap "F" "Using a insecure key"
+               set_grade_cap "F" "Using an insecure key"
           elif [[ $size -lt 1024 ]]; then
                let KEY_EXCH_SCORE=40
-               set_grade_cap "F" "Using a insecure key"
+               set_grade_cap "F" "Using an insecure key"
           elif [[ $size -lt 2048 ]]; then
                let KEY_EXCH_SCORE=80
                set_grade_cap "B" "Using a weak key"
@@ -1067,10 +1064,9 @@ set_key_str_score() {
                let KEY_EXCH_SCORE=100
           else
                let KEY_EXCH_SCORE=0
-               set_grade_cap "F" "Using a insecure key"
+               set_grade_cap "F" "Using an insecure key"
           fi
      fi
-
      return 0
 }
 
@@ -1080,18 +1076,14 @@ set_key_str_score() {
 set_ciph_str_score() {
      local size=$1
 
-     # Do nothing if disabled
-     "$DISABLE_GRADING" && return 0
+     "$do_grading" || return 0
 
      [[ $size -gt $CIPH_STR_BEST ]] && let CIPH_STR_BEST=$size
      [[ $size -lt $CIPH_STR_WORST ]] && let CIPH_STR_WORST=$size
-
      return 0
 }
 
-###### START ServerHello/OpenSSL/F5 function definitions ######
-###### END helper function definitions ######
-
+###### END scoring function definitions ######
 
 ##################### START output file formatting functions #########################
 #################### START JSON file functions ####################
@@ -5235,7 +5227,7 @@ run_protocols() {
                latest_supported="0301"
                latest_supported_string="TLSv1.0"
                add_tls_offered tls1 yes
-               set_grade_cap "B" "TLS1.0 offered"
+               set_grade_cap "B" "TLS 1.0 offered"
                ;;                                                # nothing wrong with it -- per se
           1)   out "not offered"
                add_tls_offered tls1 no
@@ -5282,7 +5274,7 @@ run_protocols() {
           5)   outln "$supported_no_ciph1"                                 # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1 yes
-               set_grade_cap "B" "TLS1.0 offered"
+               set_grade_cap "B" "TLS 1.0 offered"
                ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
@@ -5315,7 +5307,7 @@ run_protocols() {
                latest_supported="0302"
                latest_supported_string="TLSv1.1"
                add_tls_offered tls1_1 yes
-               set_grade_cap "B" "TLS1.1 offered"
+               set_grade_cap "B" "TLS 1.1 offered"
                ;;                                                # nothing wrong with it
           1)   out "not offered"
                add_tls_offered tls1_1 no
@@ -5365,7 +5357,7 @@ run_protocols() {
           5)   outln "$supported_no_ciph1"                       # protocol detected but no cipher --> comes from run_prototest_openssl
                fileout "$jsonID" "INFO" "$supported_no_ciph1"
                add_tls_offered tls1_1 yes
-               set_grade_cap "B" "TLS1.1 offered"
+               set_grade_cap "B" "TLS 1.1 offered"
                ;;
           7)   if "$using_sockets" ; then
                     # can only happen in debug mode
@@ -5430,7 +5422,7 @@ run_protocols() {
                add_tls_offered tls1_2 yes
                ;;                                                     # GCM cipher in TLS 1.2: very good!
           1)   add_tls_offered tls1_2 no
-               set_grade_cap "C" "TLS1.2 is not offered"
+               set_grade_cap "C" "TLS 1.2 is not offered"
                if "$offers_tls13"; then
                     out "not offered"
                else
@@ -5449,7 +5441,7 @@ run_protocols() {
                fi
                ;;
           2)   add_tls_offered tls1_2 no
-               set_grade_cap "C" "TLS1.2 is not offered"
+               set_grade_cap "C" "TLS 1.2 is not offered"
                pr_svrty_medium "not offered and downgraded to a weaker protocol"
                if [[ "$tls12_detected_version" == 0300 ]]; then
                     detected_version_string="SSLv3"
@@ -5478,15 +5470,15 @@ run_protocols() {
           3)   out "not offered, "
                fileout "$jsonID" "INFO" "not offered"
                add_tls_offered tls1_2 no
-               set_grade_cap "C" "TLS1.2 is not offered"
+               set_grade_cap "C" "TLS 1.2 is not offered"
                pr_warning "TLS downgraded to STARTTLS plaintext"; outln
                fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
-               set_grade_cap "C" "TLS1.2 is not offered"
+               set_grade_cap "C" "TLS 1.2 is not offered"
                ;;
           4)   out "likely "; pr_svrty_medium "not offered, "
                fileout "$jsonID" "MEDIUM" "not offered"
                add_tls_offered tls1_2 no
-               set_grade_cap "C" "TLS1.2 is not offered"
+               set_grade_cap "C" "TLS 1.2 is not offered"
                pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
                ;;
@@ -5854,7 +5846,9 @@ sub_cipherlists() {
                          ;;
                esac
 
+               # Not a perfect place here. A new one should be picked in the future
                [[ $sclient_success -eq 0 && "$1" =~ (^|:)EXPORT(:|$) ]] && set_grade_cap "F" "Export suite offered"
+               [[ $sclient_success -eq 0 && "$1" =~ AEAD ]] && set_grade_cap "B" "No AEAD ciphers offered"
           fi
           tmpfile_handle ${FUNCNAME[0]}.${5}.txt
           [[ $DEBUG -ge 1 ]] && tm_out " -- $1"
@@ -5959,7 +5953,7 @@ run_cipherlists() {
      ret=$((ret + $?))
      sub_cipherlists "$ossl_good_ciphers"      "" " non-FS Strong encryption (AEAD ciphers)        "     6 "GOOD"      "$good_ciphers"     ""                     "$using_sockets" ""      ""
      ret=$((ret + $?))
-     sub_cipherlists "$ossl_strong_ciphers" 'ALL' " Forward Secure Strong encryption (AEAD ciphers)"     7 "STRONG"    "$strong_ciphers"   ""                     "$using_sockets" ""      ""
+     sub_cipherlists "$ossl_strong_ciphers"  ALL  " FS + Strong encryption (AEAD ciphers)          "     7 "STRONG"    "$strong_ciphers"   ""                     "$using_sockets" ""      ""
      ret=$((ret + $?))
 
      outln
@@ -9756,9 +9750,9 @@ run_fs() {
 
      if [[ $sclient_success -ne 0 ]]; then
           outln
-          prln_svrty_medium " No ciphers supporting Forward Secrecy offered"
-          fileout "$jsonID" "MEDIUM" "No ciphers supporting (P)FS offered"
-          set_grade_cap "B" "Forward Security (PFS) is not supported"
+          prln_svrty_medium " No ciphers supporting Forward Secrecy (FS) offered"
+          fileout "$jsonID" "MEDIUM" "No ciphers supporting Forward Secrecy offered"
+          set_grade_cap "B" "Forward Secrecy (FS) is not supported"
      else
           outln
           fs_offered=true
@@ -15961,7 +15955,7 @@ run_sweet32() {
      local -i nr_sweet32_ciphers=0 nr_supported_ciphers=0 nr_ssl2_sweet32_ciphers=0 nr_ssl2_supported_ciphers=0
      local ssl2_sweet=false
      local using_sockets=true
-     local tls1_1_vulnable=false
+     local tls1_1_vulnerable=false
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for SWEET32 (Birthday Attacks on 64-bit Block Ciphers)       " && outln
      pr_bold " SWEET32"; out " (${cve// /, })    "
@@ -16022,7 +16016,7 @@ run_sweet32() {
                sclient_connect_successful $? $TMPFILE
                sclient_success=$?
                [[ $DEBUG -ge 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
-               [[ $proto == -tls1_1 && $sclient_success -eq 0 ]] && tls1_1_vulnable=true
+               [[ $proto == -tls1_1 && $sclient_success -eq 0 ]] && tls1_1_vulnerable=true
                [[ $sclient_success -eq 0 ]] && break
           done
           if "$HAS_SSL2"; then
@@ -16042,11 +16036,11 @@ run_sweet32() {
      if [[ $sclient_success -eq 0 ]] && "$ssl2_sweet" ; then
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers for SSLv2 and above"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers for SSLv2 and above" "$cve" "$cwe" "$hint"
-          "$tls1_1_vulnable" && set_grade_cap "C" "Uses 64 bit block ciphers with TLS1.1+ (vulnerable to SWEET32)"
+          "$tls1_1_vulnerable" && set_grade_cap "C" "Uses 64 bit block ciphers with TLS 1.1 (vulnerable to SWEET32)"
      elif [[ $sclient_success -eq 0 ]]; then
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers" "$cve" "$cwe" "$hint"
-          "$tls1_1_vulnable" && set_grade_cap "C" "Uses 64 bit block ciphers with TLS1.1+ (vulnerable to SWEET32)"
+          "$tls1_1_vulnerable" && set_grade_cap "C" "Uses 64 bit block ciphers with TLS 1.1 (vulnerable to SWEET32)"
      elif "$ssl2_sweet"; then
           pr_svrty_low "VULNERABLE"; out ", uses 64 bit block ciphers wth SSLv2 only"
           fileout "SWEET32" "LOW" "uses 64 bit block ciphers with SSLv2 only" "$cve" "$cwe" "$hint"
@@ -17348,8 +17342,8 @@ run_rc4() {
                     sigalg[i]="$(read_sigalg_from_file "$TMPFILE")"
 
                # If you use RC4 with newer protocols, you are punished harder
-               if [[ "$proto" == "-tls1_1" ]]; then
-                    set_grade_cap "C" "RC4 ciphers offered on TLS1.1"
+               if [[ "$proto" == -tls1_1 ]]; then
+                    set_grade_cap "C" "RC4 ciphers offered on TLS 1.1"
                fi
           done
      done
@@ -20553,24 +20547,27 @@ run_grading() {
      local c3_worst c3_best c3_worst_cb c3_best_cb
      local old_ifs=$IFS sorted_reasons sorted_warnings reason_loop=0 warning_loop=0
 
+     outln "\n";
+     pr_headlineln " Calculating grades (experimental)"
+     outln
+
      # Sort the reasons. This is just nicer to read in genereal
      IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
      IFS=$'\n' sorted_warnings=($(sort -u <<<"${GRADE_WARNINGS[*]}"))
      IFS=$old_ifs
-     fileout "grading_spec" "INFO" "SSLLabs's 'SSL Server Rating Guide' (revision 2009q) (near complete)"
-     pr_bold " Grading specification         "; out "SSLLabs's 'SSL Server Rating Guide' (revision 2009q)"; prln_warning " (near complete)"
+     fileout "grading_spec" "INFO" "SSLLabs's 'SSL Server Rating Guide' version 2009q from 2020-01-30 (near complete)"
+     pr_bold " Grading specification         "; out "SSL Labs's 'SSL Server Rating Guide' version 2009q from 2020-01-30"; prln_warning " (near complete)"
      pr_bold " Specification documentation   "; pr_url "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
      outln
 
      # No point in calculating a score, if a cap of "F", "T", or "M" has been set
-     if [[ $GRADE_CAP == "F" || $GRADE_CAP == "T" || $GRADE_CAP == "M" ]]; then
+     if [[ $GRADE_CAP == F || $GRADE_CAP == T || $GRADE_CAP == M ]]; then
           pr_bold " Protocol Support "; out "(weighted)   "; outln "0 (0)"
           pr_bold " Key Exchange "; out "    (weighted)   "; outln "0 (0)"
-          pr_bold " Cipher Stregth "; out "  (weighted)   "; outln "0 (0)"
+          pr_bold " Cipher Strength "; out " (weighted)   "; outln "0 (0)"
           pr_bold " Final Score                   "; outln "0"
           pr_bold " Grade                         "; prln_svrty_critical "$GRADE_CAP"
           fileout "grade" "CRITICAL" "$GRADE_CAP"
-          outln
      else
           ## Category 1
           # get best score, by searching for the best protocol, until a hit occurs
@@ -20642,7 +20639,7 @@ run_grading() {
           let c3_score="($c3_best+$c3_worst)/2" # Gets the category score
           let c3_wscore=$c3_score*40/100 # Gets the weighted score for category (40%)
 
-          pr_bold " Cipher Stregth "; out "  (weighted)   "; outln "$c3_score ($c3_wscore)"
+          pr_bold " Cipher Strength "; out "  (weighted)   "; outln "$c3_score ($c3_wscore)"
 
           ## Calculate final score and grade
           let final_score=$c1_wscore+$c2_wscore+$c3_wscore
@@ -20668,7 +20665,7 @@ run_grading() {
           if [[ $GRADE_CAP != "" && ! $pre_cap_grade > $GRADE_CAP ]]; then
                final_grade=$GRADE_CAP
           # For "exceptional" config, an "A+" is awarded, or "A-" for slightly less "exceptional"
-          elif [[ $GRADE_CAP == "" && $pre_cap_grade == "A" ]]; then
+          elif [[ $GRADE_CAP == "" && $pre_cap_grade == A ]]; then
                if [[ ${#sorted_warnings[@]} -eq 0 ]]; then
                     final_grade="A+"
                else
@@ -20679,27 +20676,27 @@ run_grading() {
           fi
 
           case "$final_grade" in
-               "A"*) pr_bold " Grade                         "
+               A*) pr_bold " Grade                         "
                     prln_svrty_best $final_grade
                     fileout "grade" "OK" "$final_grade"
                     ;;
-               "B")  pr_bold " Grade                         "
+               B)  pr_bold " Grade                         "
                     prln_svrty_medium $final_grade
                     fileout "grade" "MEDIUM" "$final_grade"
                     ;;
-               "C")  pr_bold " Grade                         "
+               C)  pr_bold " Grade                         "
                     prln_svrty_medium $final_grade
                     fileout "grade" "MEDIUM" "$final_grade"
                     ;;
-               "D")  pr_bold " Grade                         "
+               D)  pr_bold " Grade                         "
                     prln_svrty_high $final_grade
                     fileout "grade" "HIGH" "$final_grade"
                     ;;
-               "E")  pr_bold " Grade                         "
+               E)  pr_bold " Grade                         "
                     prln_svrty_high $final_grade
                     fileout "grade" "HIGH" "$final_grade"
                     ;;
-               "F")  pr_bold " Grade                         "
+               F)  pr_bold " Grade                         "
                     prln_svrty_critical $final_grade
                     fileout "grade" "CRITICAL" "$final_grade"
                     ;;
@@ -20749,7 +20746,7 @@ set_grading_state() {
 
      # ... else we can't grade
      if [[ $nr_enabled -lt 18 ]]; then
-          DISABLE_GRADING=true
+          do_grading=false
           return 1
      fi
 
@@ -20798,6 +20795,7 @@ initialize_globals() {
      do_client_simulation=false
      do_display_only=false
      do_starttls=false
+     do_grading=false
 }
 
 
@@ -20833,6 +20831,7 @@ set_scanning_defaults() {
      else
           VULN_COUNT=12
      fi
+     do_grading=true
 }
 
 # returns number of $do variables set = number of run_funcs() to perform
@@ -20843,7 +20842,7 @@ count_do_variables() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
-               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
+               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_grading; do
                     [[ "${!gbl}" == true ]] && let true_nr++
      done
      return $true_nr
@@ -20856,7 +20855,7 @@ debug_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
-               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only; do
+               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_grading; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
      printf "%-22s : %s\n" URI: "$URI"
@@ -21121,7 +21120,7 @@ parse_cmd_line() {
                     do_grease=true
                     ;;
                --disable-grading)
-                    DISABLE_GRADING=true
+                    do_grading=false
                     ;;
                -9|--full)
                     set_scanning_defaults
@@ -21449,7 +21448,7 @@ parse_cmd_line() {
 
      # Unless explicit disabled, check if grading can be enabled
      # Should be called after set_scanning_defaults
-     "$DISABLE_GRADING" || set_grading_state
+     "$do_grading" || set_grading_state
 
      CMDLINE_PARSED=true
 }
@@ -21620,13 +21619,9 @@ lets_roll() {
                fileout_section_header $section_number true && ((section_number++))
                "$do_client_simulation" && { run_client_simulation; ret=$(($? + ret)); stopwatch run_client_simulation; }
 
-               if ! "$DISABLE_GRADING"; then
-                    outln; pr_headlineln " Calculating grade "
-                    outln
+               fileout_section_header $section_number true && ((section_number++))
+               "$do_grading" && { run_grading; ret=$(($? + ret)); stopwatch run_grading; }
 
-                    fileout_section_header $section_number true && ((section_number++))
-                    { run_grading; ret=$(($? + ret)); stopwatch run_grading; }
-               fi
           fi
           fileout_section_footer true
      fi
