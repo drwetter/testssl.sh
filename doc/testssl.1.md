@@ -287,7 +287,7 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 5. display bytes received via sockets
 6. whole 9 yards
 
-`--disable-grading` disables grading explicitly.
+`--disable-rating` disables rating explicitly.
 Grading automatically gets disabled, to not give a wrong or misleading grade, when not all required functions are executed (e.g when checking for a single vulnerabilities).
 
 
@@ -386,12 +386,12 @@ Except the environment variables mentioned above which can replace command line 
 * MAX_OSSL_FAIL: A number which tells testssl.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated TCP connect problems, giving up*.
 * MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can incerase the threshold when you spot messages like *Fatal error: repeated HTTP header connect problems, doesn't make sense to continue*.
 
-### GRADING
-This script has a near-complete implementation of SSLLabs's '[SSL Server Rating Guide](https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide)'.
+### RATING
+This program has a near-complete implementation of SSL Labs's '[SSL Server Rating Guide](https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide)'.
 
-This is *not* a reimplementation of the [SSLLab's SSL Server Test](https://www.ssllabs.com/ssltest/analyze.html), but a implementation of the above grading specification, slight discrepancies might occur!
+This is *not* a reimplementation of the [SS LLab's SSL Server Test](https://www.ssllabs.com/ssltest/analyze.html), but a implementation of the above rating specification, slight discrepancies might occur!
 
-Disclaimer: Having a good grade does **NOT** necessary equal to having good security! Never rely solely on a good grade!
+Disclaimer: Having a good grade does **NOT** necessary equal to having good security! Never rely solely on a good rating!
 
 As of writing, these checks are missing:
 * GOLDENDOODLE - should be graded **F** if vulnerable
@@ -417,24 +417,24 @@ To implement a new grade warning, simply call the `set_grade_warning()` function
 set_grade_warning "Documentation is always right"
 ```
 #### Implementing a new check which contains grade caps
-When implementing a new check (be it vulnerability or not) that sets grade caps, the `set_grading_state()` has to be updated (i.e. the `$do_mycheck` variable-name has to be added to the loop, and `$nr_enabled` if-statement has to be incremented)
+When implementing a new check (be it vulnerability or not) that sets grade caps, the `set_rating_state()` has to be updated (i.e. the `$do_mycheck` variable-name has to be added to the loop, and `$nr_enabled` if-statement has to be incremented)
 
-The `set_grading_state()` automatically disables grading, if all the required checks are *not* enabled.
+The `set_rating_state()` automatically disables ratinng, if all the required checks are *not* enabled.
 This is to prevent giving out a misleading or wrong grade.
 
 #### Implementing a new revision
-When a new revision of the grading specification comes around, the following has to be done:
+When a new revision of the rating specification comes around, the following has to be done:
 * New grade caps has to be either:
   1. Added to the script wherever relevant, or
   2. Added to the above list of missing checks (if *i.* is not possible)
 * New grade warnings has to be added wherever relevant
-* The revision output in `run_grading()` function has to updated
+* The revision output in `run_rating()` function has to updated
 
 ## EXAMPLES
 
       testssl.sh testssl.sh
 
-does a default run on https://testssl.sh (protocols, standard cipher lists, FS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation, and grading.
+does a default run on https://testssl.sh (protocols, standard cipher lists, FS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation, and rating.
 
       testssl.sh testssl.net:443
 
