@@ -20546,6 +20546,14 @@ run_grading() {
      pr_headlineln " Calculating grades (experimental)"
      outln
 
+     if [[ -n "$STARTTLS_PROTOCOL" ]]; then
+          pr_bold " Grade                        "; pr_svrty_critical "T"
+          outln   " - STARTTLS encryption is opportunistic"
+          outln   "                                  (Further details would lead to a false sense of security)"
+          fileout "grade" "CRITICAL" "T, No more details shown as it would lead to a false sense of security"
+          return 0
+     fi
+
      # Sort the reasons. This is just nicer to read in genereal
      IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
      IFS=$'\n' sorted_warnings=($(sort -u <<<"${GRADE_WARNINGS[*]}"))
