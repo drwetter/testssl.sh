@@ -1121,7 +1121,7 @@ fileout_json_section() {
            9) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
           10) echo -e ",\n                    \"cipherTests\"       : [" ;;
           11) echo -e ",\n                    \"browserSimulations\": [" ;;
-          12) echo -e ",\n                    \"rating\"           : [" ;;
+          12) echo -e ",\n                    \"rating\"            : [" ;;
            *) echo "invalid section" ;;
      esac
 }
