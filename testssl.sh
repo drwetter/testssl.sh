@@ -998,7 +998,7 @@ f5_port_decode() {
 # arg1: A grade to set ("A", "B", "C", "D", "E", "F", "M", or "T")
 # arg2: A reason why (e.g. "Vulnerable to CRIME")
 set_grade_cap() {
-     "$do_grading" || return 0
+     "$do_rating" || return 0
      GRADE_CAP_REASONS+=("Grade capped to $1. $2")
 
      # Always set special attributes. These are hard caps, due to name mismatch or cert being invalid
@@ -1014,7 +1014,7 @@ set_grade_cap() {
 # Sets a grade warning, as specified by the grade specification
 # arg1: A warning message
 set_grade_warning() {
-     "$do_grading" || return 0
+     "$do_rating" || return 0
      GRADE_WARNINGS+=("$1")
      return 0
 }
@@ -1026,7 +1026,7 @@ set_key_str_score() {
      local type=$1
      local size=$2
 
-     "$do_grading" || return 0
+     "$do_rating" || return 0
 
      # TODO: We need to get the size of DH params (follows the same table as the "else" clause)
      # For now, verifying the key size will do...
@@ -1076,7 +1076,7 @@ set_key_str_score() {
 set_ciph_str_score() {
      local size=$1
 
-     "$do_grading" || return 0
+     "$do_rating" || return 0
 
      [[ $size -gt $CIPH_STR_BEST ]] && let CIPH_STR_BEST=$size
      [[ $size -lt $CIPH_STR_WORST ]] && let CIPH_STR_WORST=$size
@@ -1121,7 +1121,7 @@ fileout_json_section() {
            9) echo -e ",\n                    \"vulnerabilities\"   : [" ;;
           10) echo -e ",\n                    \"cipherTests\"       : [" ;;
           11) echo -e ",\n                    \"browserSimulations\": [" ;;
-          12) echo -e ",\n                    \"grading\"           : [" ;;
+          12) echo -e ",\n                    \"rating\"           : [" ;;
            *) echo "invalid section" ;;
      esac
 }
@@ -3438,7 +3438,7 @@ neat_list(){
      enc="${enc//POLY1305/}"            # remove POLY1305
      enc="${enc//\//}"                  # remove "/"
 
-     # For grading, set bits size
+     # For rating set bit size
      set_ciph_str_score $strength
 
      [[ "$export" =~ export ]] && strength="$strength,exp"
@@ -18560,7 +18560,7 @@ output options (can also be preset via environment variables):
      --color <0|1|2|3>             0: no escape or other codes,  1: b/w escape codes,  2: color (default), 3: extra color (color all ciphers)
      --colorblind                  swap green and blue in the output
      --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
-     --disable-grading             Explicitly disables the grading output
+     --disable-rating              Explicitly disables the rating output
 
 file output options (can also be preset via environment variables)
      --log, --logging              logs stdout to '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.log' in current working directory (cwd)
@@ -20535,7 +20535,7 @@ run_mass_testing_parallel() {
      return $?
 }
 
-run_grading() {
+run_rating() {
      local final_score pre_cap_grade final_grade
      local c1_score c2_score c3_score c1_wscore c2_wscore c3_wscore
      local c1_worst c1_best
@@ -20543,14 +20543,15 @@ run_grading() {
      local old_ifs=$IFS sorted_reasons sorted_warnings reason_loop=0 warning_loop=0
 
      outln "\n";
-     pr_headlineln " Calculating grades (experimental)"
+     pr_headlineln " Rating (experimental) "
      outln
 
      if [[ -n "$STARTTLS_PROTOCOL" ]]; then
           pr_bold " Grade                        "; pr_svrty_critical "T"
           outln   " - STARTTLS encryption is opportunistic"
           outln   "                                  (Further details would lead to a false sense of security)"
-          fileout "grade" "CRITICAL" "T, No more details shown as it would lead to a false sense of security"
+          fileout "grade" "CRITICAL" "T"
+          fileout "grade_cap_reasons" "INFO" "No more details shown as it would lead to a false sense of security"
           return 0
      fi
 
@@ -20558,10 +20559,10 @@ run_grading() {
      IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
      IFS=$'\n' sorted_warnings=($(sort -u <<<"${GRADE_WARNINGS[*]}"))
      IFS=$old_ifs
-     pr_bold " Grading specs"; out ", not complete  "; outln "SSL Labs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
+     pr_bold " Rating specs"; out " (not complete)  "; outln "SSL Labs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
      pr_bold " Specification documentation  "; pr_url "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
      outln
-     fileout "grading_spec" "INFO" "SSLLabs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
+     fileout "rating_spec" "INFO" "SSL Labs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
 
      # No point in calculating a score, if a cap of "F", "T", or "M" has been set
      if [[ $GRADE_CAP == F || $GRADE_CAP == T || $GRADE_CAP == M ]]; then
@@ -20569,7 +20570,7 @@ run_grading() {
           pr_bold " Key Exchange"; out "     (weighted)  "; outln "0 (0)"
           pr_bold " Cipher Strength"; out "  (weighted)  "; outln "0 (0)"
           pr_bold " Final Score                  "; outln "0"
-          pr_bold " Grade                        "; prln_svrty_critical "$GRADE_CAP"
+          pr_bold " Overall Grade                "; prln_svrty_critical "$GRADE_CAP"
           fileout "grade" "CRITICAL" "$GRADE_CAP"
      else
           ## Category 1
@@ -20640,7 +20641,7 @@ run_grading() {
                c3_worst=0
           fi
           let c3_score="($c3_best+$c3_worst)/2" # Gets the category score
-          let c3_wscore=$c3_score*40/100 # Gets the weighted score for category (40%)
+          let c3_wscore=$c3_score*40/100        # Gets the weighted score for category (40%)
 
           pr_bold " Cipher Strength "; out " (weighted)  "; outln "$c3_score ($c3_wscore)"
 
@@ -20678,7 +20679,7 @@ run_grading() {
                final_grade=$pre_cap_grade
           fi
 
-          pr_bold " Grade                        "
+          pr_bold " Overall Grade                "
           case "$final_grade" in
                A*) prln_svrty_best $final_grade
                    fileout "grade" "OK" "$final_grade"
@@ -20720,14 +20721,26 @@ run_grading() {
           fi
      done
 
+     case $GRADE_CAP in
+          # A-E: WIP
+          A) fileout "grade_cap_reasons" "INFO" "" ;;
+          B) fileout "grade_cap_reasons" "INFO" "" ;;
+          C) fileout "grade_cap_reasons" "INFO" "" ;;
+          D) fileout "grade_cap_reasons" "INFO" "" ;;
+          E) fileout "grade_cap_reasons" "INFO" "" ;;
+          M) fileout "grade_cap_reasons" "INFO" "SAN / CN mismatch" ;;
+          F) fileout "grade_cap_reasons" "INFO" "Severe vulnerability or cryptographic problem" ;;
+          T) fileout "grade_cap_reasons" "INFO" "Issue with certificate" ;;
+     esac
+
      return 0
 }
 
-# Checks whether grading can be done or not.
-# Grading needs a mix of certificate and vulnerabilities checks, in order to give out a proper grade.
-# This function disables grading, if not all required checks are enabled
-# Returns "0" if grading is enabled, and "1" if grading is disabled
-set_grading_state() {
+# Checks whether rating can be done or not.
+# Rating needs a mix of certificate and vulnerabilities checks, in order to give out proper grades.
+# This function disables rating, if not all required checks are enabled
+# Returns "0" if rating is enabled, and "1" if rating is disabled
+set_rating_state() {
      local gbl
      local nr_enabled=0
 
@@ -20742,9 +20755,9 @@ set_grading_state() {
      # ... atleast one of these has to be set
      [[ "$do_allciphers" || "$do_cipher_per_proto" ]] && let nr_enabled++
 
-     # ... else we can't grade
+     # ... else we can't do rating
      if [[ $nr_enabled -lt 18 ]]; then
-          do_grading=false
+          do_rating=false
           return 1
      fi
 
@@ -20793,7 +20806,7 @@ initialize_globals() {
      do_client_simulation=false
      do_display_only=false
      do_starttls=false
-     do_grading=false
+     do_rating=false
 }
 
 
@@ -20829,7 +20842,7 @@ set_scanning_defaults() {
      else
           VULN_COUNT=12
      fi
-     do_grading=true
+     do_rating=true
 }
 
 # returns number of $do variables set = number of run_funcs() to perform
@@ -20840,8 +20853,8 @@ count_do_variables() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
-               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_grading; do
-                    [[ "${!gbl}" == true ]] && let true_nr++
+               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
+                    "${!gbl}" && let true_nr++
      done
      return $true_nr
 }
@@ -20853,7 +20866,7 @@ debug_globals() {
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
-               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_grading; do
+               do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
      printf "%-22s : %s\n" URI: "$URI"
@@ -20931,7 +20944,7 @@ parse_cmd_line() {
                ;;
      esac
 
-     # initializing
+     # set all globals to false
      initialize_globals
 
      while [[ $# -gt 0 ]]; do
@@ -21117,8 +21130,8 @@ parse_cmd_line() {
                -g|--grease)
                     do_grease=true
                     ;;
-               --disable-grading)
-                    do_grading=false
+               --disable-rating)
+                    do_rating=false
                     ;;
                -9|--full)
                     set_scanning_defaults
@@ -21439,14 +21452,13 @@ parse_cmd_line() {
           grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
 
-     [[ "$DEBUG" -ge 5 ]] && debug_globals
-
      count_do_variables
      [[ $? -eq 0 ]] && set_scanning_defaults
+     [[ "$DEBUG" -ge 5 ]] && debug_globals
 
-     # Unless explicit disabled, check if grading can be enabled
+     # Unless explicit disabled, check if rating can be enabled
      # Should be called after set_scanning_defaults
-     "$do_grading" || set_grading_state
+     ! "$do_rating" && set_rating_state
 
      CMDLINE_PARSED=true
 }
@@ -21618,7 +21630,7 @@ lets_roll() {
                "$do_client_simulation" && { run_client_simulation; ret=$(($? + ret)); stopwatch run_client_simulation; }
 
                fileout_section_header $section_number true && ((section_number++))
-               "$do_grading" && { run_grading; ret=$(($? + ret)); stopwatch run_grading; }
+               "$do_rating" && { run_rating; ret=$(($? + ret)); stopwatch run_rating; }
 
           fi
           fileout_section_footer true
