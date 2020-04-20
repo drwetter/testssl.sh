@@ -1,6 +1,12 @@
 
 ## Change Log
 
+### Features implemented / improvements in 3.1
+* Renamed PFS into FS
+* Improved mass testing
+* Security fix: DNS input
+* Rating
+
 ### Features implemented / improvements in 3.0
 
 * Full support of TLS 1.3, shows also drafts supported
