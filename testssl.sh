@@ -16184,7 +16184,6 @@ run_tls_fallback_scsv() {
      if [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
           prln_svrty_critical "No fallback possible, SSLv2 is the only protocol"
           fileout "$jsonID" "CRITICAL" "SSLv2 is the only protocol"
-          set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
           return 0
      fi
      for p in tls1_2 tls1_1 tls1 ssl3; do
@@ -16213,7 +16212,6 @@ run_tls_fallback_scsv() {
           "ssl3")
                prln_svrty_high "No fallback possible, SSLv3 is the only protocol"
                fileout "$jsonID" "HIGH" "only SSLv3 supported"
-               set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
                return 0
                ;;
           *)   if [[ $(has_server_protocol tls1_3) -eq 0 ]]; then
@@ -16221,7 +16219,6 @@ run_tls_fallback_scsv() {
                     # then assume it does not support SSLv3, even if SSLv3 cannot be tested.
                     pr_svrty_good "No fallback possible (OK)"; outln ", TLS 1.3 is the only protocol"
                     fileout "$jsonID" "OK" "only TLS 1.3 supported"
-                    set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
                elif [[ $(has_server_protocol tls1_3) -eq 1 ]] && \
                     ( [[ $(has_server_protocol ssl3) -eq 1 ]] || "$HAS_SSL3" ); then
                     # TLS 1.3, TLS 1.2, TLS 1.1, TLS 1, and SSLv3 are all not supported.
@@ -16235,7 +16232,6 @@ run_tls_fallback_scsv() {
                     # it is very likely that SSLv3 is the only supported protocol.
                     pr_svrty_high "NOT ok, no fallback possible"; outln ", TLS 1.3, 1.2, 1.1 and 1.0 not supported"
                     fileout "$jsonID" "HIGH" "TLS 1.3, 1.2, 1.1, 1.0 not supported"
-                    set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
                else
                     # TLS 1.2, TLS 1.1, and TLS 1 are not supported, but can't tell whether TLS 1.3 is supported.
                     # This could be a TLS 1.3 only server, an SSLv3 only server (if SSLv3 support cannot be tested),
@@ -16243,7 +16239,6 @@ run_tls_fallback_scsv() {
                     # since this could either be good or bad.
                     outln "No fallback possible, TLS 1.2, TLS 1.1, and TLS 1 not supported"
                     fileout "$jsonID" "INFO" "TLS 1.2, TLS 1.1, and TLS 1 not supported"
-                    set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
                fi
                return 0
      esac
@@ -16288,7 +16283,6 @@ run_tls_fallback_scsv() {
                     ;;
           esac
           fileout "$jsonID" "OK" "no protocol below $high_proto_str offered"
-          set_grade_cap "A" "Does not support TLS_FALLBACK_SCSV"
           return 0
      fi
      case "$low_proto" in
