@@ -20879,6 +20879,8 @@ debug_globals() {
 # It achieves that by setting the do_<variables> according to the global array $SKIP_TESTS
 #
 set_skip_tests() {
+     local t
+
      for t in ${SKIP_TESTS[@]} ; do
           t="do_${t}"
           # declare won't do it here --> local scope
