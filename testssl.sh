@@ -140,6 +140,7 @@ declare CMDLINE
 CMDLINE_PARSED=""                                 # This makes sure we don't let early fatal() write into files when files aren't created yet
 declare -r -a CMDLINE_ARRAY=("$@")                # When performing mass testing, the child processes need to be sent the
 declare -a MASS_TESTING_CMDLINE                   # command line in the form of an array (see #702 and https://mywiki.wooledge.org/BashFAQ/050).
+declare -a SKIP_TESTS=()                          # This array hold the checks to be skipped
 
 
 ########### Defining (and presetting) variables which can be changed
@@ -20842,7 +20843,6 @@ set_scanning_defaults() {
      else
           VULN_COUNT=12
      fi
-     do_rating=true
 }
 
 # returns number of $do variables set = number of run_funcs() to perform
@@ -20869,8 +20869,24 @@ debug_globals() {
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
+     # ${!var} is an indirect expansion, see https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html
+     # Example: https://stackoverflow.com/questions/8515411/what-is-indirect-expansion-what-does-var-mean#8515492
      printf "%-22s : %s\n" URI: "$URI"
 }
+
+
+# This is determining the tests which should be skipped by --no-* or --disable-* a a cmdline arg.
+# It achieves that by setting the do_<variables> according to the global array $SKIP_TESTS
+#
+set_skip_tests() {
+     for t in ${SKIP_TESTS[@]} ; do
+          t="do_${t}"
+          # declare won't do it here --> local scope
+          eval "$t"=false
+          debugme printf '%s\n' "set $t: ${!t}"
+     done
+}
+
 
 
 # arg1: either switch+value (=) or switch
@@ -20944,7 +20960,7 @@ parse_cmd_line() {
                ;;
      esac
 
-     # set all globals to false
+     # set all do_* globals to false
      initialize_globals
 
      while [[ $# -gt 0 ]]; do
@@ -21130,8 +21146,10 @@ parse_cmd_line() {
                -g|--grease)
                     do_grease=true
                     ;;
-               --disable-rating)
-                    do_rating=false
+               --disable-rating|--no-rating)
+                    SKIP_TESTS+=("rating")
+                    # TODO: a generic thing would be --disable-* / --no-* ,
+                    # catch $1 and add it to the array ( #1502 )
                     ;;
                -9|--full)
                     set_scanning_defaults
@@ -21143,18 +21161,18 @@ parse_cmd_line() {
                     ADDTL_CA_FILES="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     ;;
-               --devel) ### this development feature will soon disappear
+               --devel) echo -e "\nthis is a development feature and may disappear at any time"
                     # arg1: SSL/TLS protocol (SSLv2=22)
                     # arg2: list of cipher suites / hostname/ip
                     # arg3: hostname/ip
-                    HEX_CIPHER="$TLS12_CIPHER"
-                    # DEBUG=3  ./testssl.sh --devel 04 "13,02, 13,01" google.com                               --> TLS 1.3
-                    # DEBUG=3  ./testssl.sh --devel 03 "cc, 13, c0, 13" google.de                              --> TLS 1.2, old CHACHA/POLY
-                    # DEBUG=3  ./testssl.sh --devel 03 "cc,a8, cc,a9, cc,aa, cc,ab, cc,ac" blog.cloudflare.com -->          new CHACHA/POLY
-                    # DEBUG=3  ./testssl.sh --devel 01 yandex.ru                     --> TLS 1.0
+                    # DEBUG=3  ./testssl.sh --devel 04 "13,02, 13,01" google.com                                --> TLS 1.3
+                    # DEBUG=3  ./testssl.sh --devel 03 "cc, 13, c0, 13" google.de                               --> TLS 1.2, old CHACHA/POLY
+                    # DEBUG=3  ./testssl.sh --devel 03 "cc,a8, cc,a9, cc,aa, cc,ab, cc,ac" blog.cloudflare.com  -->          new CHACHA/POLY
+                    # DEBUG=3  ./testssl.sh --devel 01 yandex.ru                                                --> TLS 1.0
                     # DEBUG=3  ./testssl.sh --devel 00 <host which supports SSLv3>
                     # DEBUG=3  ./testssl.sh --devel 22 <host which still supports SSLv2>
-                    TLS_LOW_BYTE="$2";
+                    HEX_CIPHER="$TLS12_CIPHER"
+                    TLS_LOW_BYTE="$2"
                     if [[ $# -eq 4 ]]; then  # protocol AND ciphers specified
                          HEX_CIPHER="$3"
                          shift
@@ -21454,6 +21472,7 @@ parse_cmd_line() {
 
      count_do_variables
      [[ $? -eq 0 ]] && set_scanning_defaults
+     set_skip_tests
      [[ "$DEBUG" -ge 5 ]] && debug_globals
 
      # Unless explicit disabled, check if rating can be enabled
