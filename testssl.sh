@@ -16675,7 +16675,7 @@ run_logjam() {
      else
           if [[ $subret -eq 1 ]]; then
                out_common_prime "$jsonID2" "$cve" "$cwe"
-               set_grade_cap "B" "Uses weak DH key exchange parameters (vulnerable to LOGJAM)"
+               set_grade_cap "A" "Uses known DH key exchange parameters"
                if ! "$openssl_no_expdhciphers"; then
                     outln ","
                     out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
