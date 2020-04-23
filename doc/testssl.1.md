@@ -144,7 +144,8 @@ in `/etc/hosts`.  The use of the switch is only useful if you either can't or ar
 
 `--phone-out` Checking for revoked certificates via CRL and OCSP is not done per default. This switch instructs testssl.sh to query external -- in a sense of the current run -- URIs. By using this switch you acknowledge that the check might have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting the endpoint which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.
 
-`--add-ca <cafile>` enables you to add your own CA(s) for trust chain checks. `cafile` can be a single path or multiple paths as a comma separated list of root CA files. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates is issued by internal CAs. Alternatively ADDITIONAL_CA_FILES is the environment variable for this.
+`--add-ca <cafile>` enables you to add your own CA(s) for trust chain checks. `cafile` can be a single path or multiple paths as a comma separated list of root CA files. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates is issued by internal CAs. Alternatively 
+ADDTL_CA_FILES is the environment variable for this.
 
 
 ### SINGLE CHECK OPTIONS
@@ -192,7 +193,7 @@ Any single check switch supplied as an argument prevents testssl.sh from doing a
     - Certificate Transparency info (if provided by server).
 
 For the trust chain check 5 certificate stores are provided. If the test against one of the trust stores failed, the one is being identified and the reason for the failure is displayed - in addition the ones which succeeded are displayed too.
-You can configure your own CA via ADDITIONAL_CA_FILES, see section `FILES` below.  If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be indicated as this is deprecated.
+You can configure your own CA via ADDTL_CA_FILES, see section `FILES` below.  If the server provides no matching record in Subject Alternative Name (SAN) but in Common Name (CN), it will be indicated as this is deprecated.
 Also for multiple server certificates are being checked for as well as for the certificate reply to a non-SNI (Server Name Indication) client hello to the IP address. Regarding the TLS clock skew: it displays the time difference to the client. Only a few TLS stacks nowadays still support this and return the local clock `gmt_unix_time`, e.g. IIS, openssl < 1.0.1f. In addition to the HTTP date you could e.g. derive that there are different hosts where your TLS and your HTTP request ended -- if the time deltas differ significantly.
 
 `-x <pattern>, --single-cipher <pattern>` tests matched `pattern` of ciphers against a server. Patterns are similar to `-V pattern , --local pattern`, see above about matching.
