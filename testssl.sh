@@ -15265,15 +15265,13 @@ run_logjam() {
           tls_sockets "03" "$exportdh_cipher_list_hex, 00,ff"
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
+          [[ $sclient_success -eq 0 ]] && vuln_exportdh_ciphers=true
      elif [[ $nr_supported_ciphers -ne 0 ]]; then
           $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -cipher $exportdh_cipher_list -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
-          sclient_success=$?
+          [[ $? -eq 0 ]] && vuln_exportdh_ciphers=true
           debugme grep -Ea "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
      fi
-     [[ $sclient_success -eq 0 ]] && \
-          vuln_exportdh_ciphers=true || \
-          vuln_exportdh_ciphers=false
 
      if [[ $DEBUG -ge 2 ]]; then
           if "$using_sockets"; then
