@@ -20843,6 +20843,7 @@ set_scanning_defaults() {
      else
           VULN_COUNT=12
      fi
+     do_rating=true
 }
 
 # returns number of $do variables set = number of run_funcs() to perform
