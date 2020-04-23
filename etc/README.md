@@ -18,7 +18,7 @@ The certificate trust stores were retrieved from
 
 Google Chromium uses basically the trust stores above, see https://www.chromium.org/Home/chromium-security/root-ca-policy.
 
-If you want to check trust against e.g. a company internal CA you need to use ``./testssl.sh --add-ca companyCA1.pem,companyCA2.pem <further_cmds>`` or ``ADDITIONAL_CA_FILES=companyCA1.pem,companyCA2.pem ./testssl.sh <further_cmds>``.
+If you want to check trust against e.g. a company internal CA you need to use ``./testssl.sh --add-ca companyCA1.pem,companyCA2.pem <further_cmds>`` or ``ADDTL_CA_FILES=companyCA1.pem,companyCA2.pem ./testssl.sh <further_cmds>``.
 
 
 #### Further files
