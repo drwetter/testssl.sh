@@ -65,7 +65,7 @@ Bash is actually quite powerful -- not only with respect to sockets. It's not as
 
 ### Misc
 
-* If you're implementing a new feature a cmd line switch, there has to be also a global ENV variable which can be used without the switch (see e.g. `SNEAKY`, `ASSUME_HTTP` or `ADDITIONAL_CA_FILES`)
+* If you're implementing a new feature a cmd line switch, there has to be also a global ENV variable which can be used without the switch (see e.g. `SNEAKY`, `ASSUME_HTTP` or `ADDTL_CA_FILES`)
 * Test before doing a PR! Best if you check with two bad and two good examples which should then work as expected. Maybe compare results e.g. with SSLlabs.
 * Unit tests are done automatically done with Perl using Travis. The trigger is `~/.travis.yml`. The general documentation for [Test::More](https://perldoc.perl.org/Test/More.html) is a good start. You are encouraged to write own checks. You can use e.g. `t/20_baseline_ipv4_http.t` as an example.
 * If it's an OpenSSL feature you want to use and it could be not available for older OpenSSL versions testssl.sh needs to find out whether OpenSSL has that feature. Best do this with OpenSSL itself and not by checking the version as some vendors do backports. See the examples for `HAS_SSL2` or proxy option check of OpenSSL in `check_proxy()`.
