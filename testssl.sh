@@ -3984,13 +3984,17 @@ ciphers_by_strength() {
      local has_dh_bits="$HAS_DH_BITS"
 
      # for local problem if it happens
-     out "  "
+     "$wide" || out "  "
      if ! "$using_sockets" && ! locally_supported "$proto"; then
+          pr_local_problem "Your $OPENSSL does not support $proto"
+          "$wide" && outln
           return 0
      fi
-     "$wide" && outln
 
-     [[ $(has_server_protocol "${proto:1}") -eq 1 ]] && return 0
+     if [[ $(has_server_protocol "${proto:1}") -eq 1 ]]; then
+          "$wide" && outln " - "
+          return 0
+     fi
 
      # get a list of all the cipher suites to test
      nr_ciphers=0
@@ -4005,7 +4009,8 @@ ciphers_by_strength() {
                ciphers_found[nr_ciphers]=false
                sigalg[nr_ciphers]=""
                ossl_supported[nr_ciphers]=${TLS_CIPHER_OSSL_SUPPORTED[i]}
-               if "$using_sockets" && "$wide" && ! "$has_dh_bits" && ( [[ ${kx[nr_ciphers]} == "Kx=ECDH" ]] || [[ ${kx[nr_ciphers]} == "Kx=DH" ]] || [[ ${kx[nr_ciphers]} == "Kx=EDH" ]] ); then
+               if "$using_sockets" && "$wide" && ! "$has_dh_bits" && \
+                    ( [[ ${kx[nr_ciphers]} == "Kx=ECDH" ]] || [[ ${kx[nr_ciphers]} == "Kx=DH" ]] || [[ ${kx[nr_ciphers]} == "Kx=EDH" ]] ); then
                     ossl_supported[nr_ciphers]=false
                fi
                if [[ ${#hexc} -eq 9 ]]; then
@@ -4289,7 +4294,7 @@ run_cipher_per_proto() {
      outln
      neat_header
      while read proto proto_hex proto_text; do
-          pr_underline "$(printf -- "%b" "$proto_text")"
+          prln_underline "$(printf -- "%b" "$proto_text")"
           ciphers_by_strength "$proto" "$proto_hex" "$proto_text" "$using_sockets" "true"
      done <<< "$(tm_out " -ssl2 22 SSLv2\n -ssl3 00 SSLv3\n -tls1 01 TLS 1\n -tls1_1 02 TLS 1.1\n -tls1_2 03 TLS 1.2\n -tls1_3 04 TLS 1.3")"
      return 0
@@ -6527,23 +6532,32 @@ run_server_preference() {
 
      # TODO: Shouldn't say "Cipher order" if the server does not always impose an order.
      # TODO: In non-wide mode, need to distinguish between those order by server preference and those ordered by encryption strength.
-     pr_bold " Cipher order"
-     "$WIDE" && outln && neat_header
+     pr_bold " Cipher listing per protocol"
+     "$WIDE" && outln "\n" && neat_header
      while read proto_ossl proto_hex proto_txt; do
           if "$WIDE"; then
                pr_underline "$(printf -- "%b" "$proto_txt")"
-               if [[ "$proto_ossl" == ssl2 ]] || ( [[ "$proto_ossl" != tls1_3 ]] && ! "$has_cipher_order" ]] ) || \
-                  ( [[ "$proto_ossl" == tls1_3 ]] && ! "$has_tls13_cipher_order" ]] ); then
+               # TODO: If there's no cipher we should consider not displaying the text in the round brackets)
+               # the following takes care of that but only if we know the protocol is not supported
+               if [[ $(has_server_protocol "$proto_ossl") -eq 1 ]]; then
+                    "$WIDE" && outln "\n - "
+                    continue
+               fi
+               # TODO: Also the fact that a protocol is not supported seems not to be saved by cipher_pref_check()
+               # (./testssl.sh --wide -p -P -E  vs ./testssl.sh --wide -P -E )
+               if [[ "$proto_ossl" == ssl2 ]] || \
+                         ( [[ "$proto_ossl" != tls1_3 ]] && ! "$has_cipher_order" ]] ) || \
+                         ( [[ "$proto_ossl" == tls1_3 ]] && ! "$has_tls13_cipher_order" ]] ); then
                     if [[ "$proto_ossl" == ssl2 ]]; then
-                        out " (listed by strength)"
+                        outln " (listed by strength)"
                     elif [[ "$proto_ossl" == tls1_3 ]]; then
-                         out " (no server order, thus listed by strength)"
+                         outln " (no server order, thus listed by strength)"
                     else
-                         pr_svrty_high " (no server order, thus listed by strength)"
+                         prln_svrty_high " (no server order, thus listed by strength)"
                     fi
                     ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "$WIDE"
                else
-                    out " (server order)"
+                    outln " (server order)"
                     cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets"
                fi
           else
@@ -6559,6 +6573,7 @@ run_server_preference() {
      outln
 
      return $ret
+     # end of run_server_preference()
 }
 
 # arg1: true if the list that is returned does not need to be ordered by preference.
@@ -6662,8 +6677,6 @@ cipher_pref_check() {
           out "\n    TLSv1.3    "; pr_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\"";
           return 0
      fi
-
-     [[ $(has_server_protocol "$p") -eq 1 ]] && return 0
 
      if ( [[ $p != tls1_3 ]] || "$HAS_TLS13" ) && ( [[ $p != ssl3 ]] || "$HAS_SSL3" ); then
           if [[ $p == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
@@ -6869,7 +6882,6 @@ cipher_pref_check() {
           order="$rfc_order"
      fi
 
-     "$WIDE" && outln
      if [[ -n "$order" ]]; then
           add_tls_offered "$p" yes
           if "$WIDE"; then
