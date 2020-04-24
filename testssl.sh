@@ -4794,7 +4794,7 @@ run_client_simulation() {
 #
 locally_supported() {
      [[ -n "$2" ]] && out "$2 "
-     if $OPENSSL s_client "$1" -connect invalid. 2>&1 | grep -aq "unknown option"; then
+     if $OPENSSL s_client "$1" -connect invalid. 2>&1 | grep -aiq "unknown option"; then
           prln_local_problem "$OPENSSL doesn't support \"s_client $1\""
           return 7
      fi
@@ -4816,7 +4816,7 @@ run_prototest_openssl() {
      local protos proto
 
      # check whether the protocol being tested is supported by $OPENSSL
-     $OPENSSL s_client "$1" -connect invalid. 2>&1 | grep -aq "unknown option" && return 7
+     $OPENSSL s_client "$1" -connect invalid. 2>&1 | grep -aiq "unknown option" && return 7
      case "$1" in
           -ssl2) protos="-ssl2" ;;
           -ssl3) protos="-ssl3" ;;
@@ -13684,8 +13684,8 @@ parse_tls_serverhello() {
                esac
                [[ -z "$key_bitstring" ]] && named_curve=0 && named_curve_str=""
                if "$HAS_PKEY" && [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ BEGIN ]]; then
-                    ephemeral_param="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | grep -A 1000 "prime:")"
-                    rfc7919_param="$($OPENSSL pkey -text -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -A 1000 "prime:")"
+                    ephemeral_param="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | grep -EA 1000 "prime:|prime P:")"
+                    rfc7919_param="$($OPENSSL pkey -text -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -EA 1000 "prime:|prime P:")"
                     [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
                fi
 
@@ -16302,7 +16302,7 @@ get_common_prime() {
      local -i lineno_matched=0
 
      "$HAS_PKEY" || return 2
-     dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:/,/generator:/' | grep -Ev "prime|generator")"
+     dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:|prime P:/,/generator:|generator G:/' | grep -Ev "prime|generator")"
      dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
      [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
      DH_GROUP_LEN_P="$((4*${#dh_p}))"
@@ -18094,18 +18094,18 @@ find_openssl_binary() {
      HAS_AES256_GCM=false
      HAS_ZLIB=false
 
-     $OPENSSL ciphers -s 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || \
           OSSL_CIPHERS_S="-s"
 
      # This and all other occurences we do a little trick using "invalid." to avoid plain and
      # link level DNS lookups. See issue #1418 and https://tools.ietf.org/html/rfc6761#section-6.4
-     $OPENSSL s_client -ssl2 -connect invalid. 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_SSL2=true
 
-     $OPENSSL s_client -ssl3 -connect invalid. 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -ssl3 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_SSL3=true
 
-     $OPENSSL s_client -tls1_3 -connect invalid. 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -tls1_3 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_TLS13=true
 
      $OPENSSL genpkey -algorithm X448 -out - 2>&1 | grep -aq "not found" || \
@@ -18114,19 +18114,19 @@ find_openssl_binary() {
      $OPENSSL genpkey -algorithm X25519 -out - 2>&1 | grep -aq "not found" || \
           HAS_X25519=true
 
-     $OPENSSL s_client -no_ssl2 -connect invalid. 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -no_ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_NO_SSL2=true
 
-     $OPENSSL s_client -noservername -connect invalid. 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -noservername -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_NOSERVERNAME=true
 
-     $OPENSSL s_client -ciphersuites -connect invalid. 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -ciphersuites -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_CIPHERSUITES=true
 
-     $OPENSSL s_client -comp -connect invalid. 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -comp -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_COMP=true
 
-     $OPENSSL s_client -no_comp -connect invalid. 2>&1 | grep -aq "unknown option" || \
+     $OPENSSL s_client -no_comp -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_NO_COMP=true
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
@@ -19551,7 +19551,7 @@ determine_optimal_proto() {
      elif "$all_failed" && ! "$ALL_FAILED_SOCKETS"; then
           if ! "$HAS_TLS13" && "$TLS13_ONLY"; then
                pr_magenta " $NODE:$PORT appears to support TLS 1.3 ONLY. You better use --openssl=<path_to_openssl_supporting_TLS_1.3>"
-               if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 -connect invalid. 2>&1 | grep -aq "unknown option"; then
+               if ! "$OSSL_SHORTCUT" || [[ ! -x /usr/bin/openssl ]] || /usr/bin/openssl s_client -tls1_3 -connect invalid. 2>&1 | grep -aiq "unknown option"; then
                     outln
                     ignore_no_or_lame " Type \"yes\" to proceed and accept all scan problems" "yes"
                     [[ $? -ne 0 ]] && exit $ERR_CLUELESS
