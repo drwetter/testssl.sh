@@ -6530,46 +6530,34 @@ run_server_preference() {
      "$FAST" && using_sockets=false
      [[ $TLS_NR_CIPHERS == 0 ]] && using_sockets=false
 
-     # TODO: Shouldn't say "Cipher order" if the server does not always impose an order.
-     # TODO: In non-wide mode, need to distinguish between those order by server preference and those ordered by encryption strength.
-     pr_bold " Cipher listing per protocol"
-     "$WIDE" && outln "\n" && neat_header
+     pr_bold " Cipher per protocol"
+     outln "\n" && neat_header
      while read proto_ossl proto_hex proto_txt; do
-          if "$WIDE"; then
-               pr_underline "$(printf -- "%b" "$proto_txt")"
-               # TODO: If there's no cipher we should consider not displaying the text in the round brackets)
-               # the following takes care of that but only if we know the protocol is not supported
-               if [[ $(has_server_protocol "$proto_ossl") -eq 1 ]]; then
-                    "$WIDE" && outln "\n - "
-                    continue
-               fi
-               # TODO: Also the fact that a protocol is not supported seems not to be saved by cipher_pref_check()
-               # (./testssl.sh --wide -p -P -E  vs ./testssl.sh --wide -P -E )
-               if [[ "$proto_ossl" == ssl2 ]] || \
-                         ( [[ "$proto_ossl" != tls1_3 ]] && ! "$has_cipher_order" ]] ) || \
-                         ( [[ "$proto_ossl" == tls1_3 ]] && ! "$has_tls13_cipher_order" ]] ); then
-                    if [[ "$proto_ossl" == ssl2 ]]; then
-                        outln " (listed by strength)"
-                    elif [[ "$proto_ossl" == tls1_3 ]]; then
-                         outln " (no server order, thus listed by strength)"
-                    else
-                         prln_svrty_high " (no server order, thus listed by strength)"
-                    fi
-                    ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "$WIDE"
+          pr_underline "$(printf -- "%b" "$proto_txt")"
+          # TODO: If there's no cipher we should consider not displaying the text in the round brackets)
+          # the following takes care of that but only if we know the protocol is not supported
+          if [[ $(has_server_protocol "$proto_ossl") -eq 1 ]]; then
+               outln "\n - "
+               continue
+          fi
+          # TODO: Also the fact that a protocol is not supported seems not to be saved by cipher_pref_check()
+          # (./testssl.sh --wide -p -P -E  vs ./testssl.sh --wide -P -E )
+          if [[ "$proto_ossl" == ssl2 ]] || \
+                    ( [[ "$proto_ossl" != tls1_3 ]] && ! "$has_cipher_order" ]] ) || \
+                    ( [[ "$proto_ossl" == tls1_3 ]] && ! "$has_tls13_cipher_order" ]] ); then
+               if [[ "$proto_ossl" == ssl2 ]]; then
+                   outln " (listed by strength)"
+               elif [[ "$proto_ossl" == tls1_3 ]]; then
+                    outln " (no server order, thus listed by strength)"
                else
-                    outln " (server order)"
-                    cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets"
+                    prln_svrty_high " (no server order, thus listed by strength)"
                fi
+               ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
           else
-               if [[ "$proto_ossl" == ssl2 ]] || ( [[ "$proto_ossl" != tls1_3 ]] && ! "$has_cipher_order" ]] ) || \
-                  ( [[ "$proto_ossl" == tls1_3 ]] && ! "$has_tls13_cipher_order" ]] ); then
-                    ciphers_by_strength "-$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "$WIDE"
-               else
-                    cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets"
-               fi
+               outln " (server order)"
+               cipher_pref_check "$proto_ossl" "$proto_hex" "$proto_txt" "$using_sockets" "true"
           fi
      done <<< "$(tm_out " ssl2 22 SSLv2\n ssl3 00 SSLv3\n tls1 01 TLSv1\n tls1_1 02 TLSv1.1\n tls1_2 03 TLSv1.2\n tls1_3 04 TLSv1.3\n")"
-     outln
      outln
 
      return $ret
@@ -6658,6 +6646,7 @@ check_tls12_pref() {
 cipher_pref_check() {
      local p="$1" proto_hex="$2" proto="$3"
      local using_sockets="$4"
+     local wide="$5"          # at the moment this is called ALWAYS via run_server_preference and ALWAYS w true
      local tested_cipher cipher order rfc_cipher rfc_order
      local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
      local -i i nr_ciphers nr_nonossl_ciphers num_bundles bundle_size bundle end_of_bundle success
@@ -6680,11 +6669,11 @@ cipher_pref_check() {
 
      if ( [[ $p != tls1_3 ]] || "$HAS_TLS13" ) && ( [[ $p != ssl3 ]] || "$HAS_SSL3" ); then
           if [[ $p == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
-               order="$(check_tls12_pref "$WIDE")"
+               order="$(check_tls12_pref "$wide")"
                [[ "${order:0:1}" == \  ]] && order="${order:1}"
                ciphers_found="$order"
           fi
-          if "$WIDE" || [[ -z "$order" ]]; then
+          if "$wide" || [[ -z "$order" ]]; then
                tested_cipher=""; order=""; nr_ciphers_found=0
                while true; do
                     if [[ $p != tls1_3 ]]; then
@@ -6713,7 +6702,7 @@ cipher_pref_check() {
                     order+="$cipher "
                     tested_cipher+=":-"$cipher
                     "$FAST" && break
-                    if "$WIDE"; then
+                    if "$wide"; then
                          for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                               [[ "$cipher" == ${TLS_CIPHER_OSSL_NAME[i]} ]] && break
                          done
@@ -6843,7 +6832,7 @@ cipher_pref_check() {
                for (( i=0; i < nr_ciphers; i++ )); do
                     [[ "$cipher" == ${rfc_ciph[i]} ]] && ciphers_found2[i]=true && break
                done
-               if "$WIDE"; then
+               if "$wide"; then
                     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                          [[ "$cipher" == ${TLS_CIPHER_RFC_NAME[i]} ]] && break
                     done
@@ -6884,7 +6873,7 @@ cipher_pref_check() {
 
      if [[ -n "$order" ]]; then
           add_tls_offered "$p" yes
-          if "$WIDE"; then
+          if "$wide"; then
                for (( i=0 ; i<nr_ciphers_found; i++ )); do
                     neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}" "true"
                     outln "${sigalg[i]}"
@@ -20348,7 +20337,7 @@ initialize_globals() {
 
 # Set default scanning options for the boolean global do_* variables.
 set_scanning_defaults() {
-     do_allciphers=true
+     do_allciphers=false
      do_vulnerabilities=true
      do_beast=true
      do_lucky13=true
@@ -21098,11 +21087,11 @@ lets_roll() {
                fileout_section_header $section_number true && ((section_number++))
                "$do_cipherlists" && { run_cipherlists; ret=$(($? + ret)); stopwatch run_cipherlists; }
 
-               fileout_section_header $section_number true && ((section_number++))
-               "$do_fs" && { run_fs; ret=$(($? + ret)); stopwatch run_fs; }
+              fileout_section_header $section_number true && ((section_number++))
+               "$do_server_preference" && { run_server_preference; ret=$(($? + ret)); stopwatch run_server_preference; }
 
                fileout_section_header $section_number true && ((section_number++))
-               "$do_server_preference" && { run_server_preference; ret=$(($? + ret)); stopwatch run_server_preference; }
+               "$do_fs" && { run_fs; ret=$(($? + ret)); stopwatch run_fs; }
 
                fileout_section_header $section_number true && ((section_number++))
                "$do_server_defaults" && { run_server_defaults; ret=$(($? + ret)); stopwatch run_server_defaults; }
