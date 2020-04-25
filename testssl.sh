@@ -6392,12 +6392,12 @@ run_server_preference() {
                fileout "$jsonID" "OK" "Default protocol TLS1.2"
                ;;
           *TLSv1.1)
-               prln_svrty_good $default_proto
-               fileout "$jsonID" "OK" "Default protocol TLS1.1"
+               prln_svrty_low $default_proto
+               fileout "$jsonID" "LOW" "Default protocol TLS1.1"
                ;;
           *TLSv1)
-               outln $default_proto
-               fileout "$jsonID" "INFO" "Default protocol TLS1.0"
+               prln_svrty_low $default_proto
+               fileout "$jsonID" "LOW" "Default protocol TLS1.0"
                ;;
           *SSLv2)
                prln_svrty_critical $default_proto
