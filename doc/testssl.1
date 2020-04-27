@@ -46,10 +46,10 @@ Any OpenSSL or LibreSSL version is needed as a helper\. Unlike previous versions
 2) standard cipher categories to give you upfront an idea for the ciphers supported
 .
 .P
-3) checks forward secrecy: ciphers and elliptical curves
+3) server's cipher preferences (server order)
 .
 .P
-4) server preferences (server order)
+4) forward secrecy: ciphers and elliptical curves
 .
 .P
 5) server defaults (certificate info, TLS extensions, session information)
@@ -61,10 +61,7 @@ Any OpenSSL or LibreSSL version is needed as a helper\. Unlike previous versions
 7) vulnerabilities
 .
 .P
-8) testing each of 370 preconfigured ciphers
-.
-.P
-9) client simulation
+8) client simulation
 .
 .SH "OPTIONS AND PARAMETERS"
 Options are either short or long options\. Any long or short option requiring a value can be called with or without an equal sign\. E\.g\. \fBtestssl\.sh \-t=smtp \-\-wide \-\-openssl=/usr/bin/openssl <URI>\fR (short options with equal sign) is equivalent to \fBtestssl\.sh \-\-starttls smtp \-\-wide \-\-openssl /usr/bin/openssl <URI>\fR (long option without equal sign)\. Some command line options can also be preset via ENV variables\. \fBWIDE=true OPENSSL=/usr/bin/openssl testssl\.sh \-\-starttls=smtp <URI>\fR would be the equivalent to the aforementioned examples\. Preference has the command line over any environment variables\.
