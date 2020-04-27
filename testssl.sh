@@ -259,6 +259,7 @@ APP_TRAF_KEY_INFO=""                    # Information about the application traf
 TLS13_ONLY=false                        # Does the server support TLS 1.3 ONLY?
 OSSL_SHORTCUT=${OSSL_SHORTCUT:-false}   # Hack: if during the scan turns out the OpenSSL binary suports TLS 1.3 would be a better choice, this enables it.
 TLS_EXTENSIONS=""
+V2_HELLO_CIPHERSPEC_LENGTH=0
 declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observed @ facebook and others, old ones like h2-17 omitted as they could not be found
 declare -r ALPN_PROTOs="h2 spdy/3.1 http/1.1 grpc-exp h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
@@ -4045,7 +4046,7 @@ ciphers_by_strength() {
           # The OpenSSL ciphers function, prior to version 1.1.0, could only understand -ssl2, -ssl3, and -tls1.
           if [[ "$OSSL_NAME" =~ LibreSSL ]]; then
                ossl_ciphers_proto=""
-          elif [[ "$proto" == -ssl2 ]] || [[ "$proto" == -ssl3 ]] || \
+          elif [[ $proto == -ssl2 ]] || [[ $proto == -ssl3 ]] || \
                [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.0* ]] || [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]] || \
                [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]]; then
                ossl_ciphers_proto="$proto"
@@ -4072,23 +4073,32 @@ ciphers_by_strength() {
           done < <(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL:@STRENGTH' 'ALL' "$ossl_ciphers_proto -V")
      fi
 
-     if [[ "$proto" == -ssl2 ]]; then
+     if [[ $proto == -ssl2 ]]; then
           if "$using_sockets"; then
                sslv2_sockets "${sslv2_ciphers:2}" "true"
-               if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
-                    supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
-                    "$wide" && "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$HOSTCERT")"
-                    for (( i=0 ; i<nr_ciphers; i++ )); do
-                         if [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
-                              ciphers_found[i]=true
-                              "$wide" && "$SHOW_SIGALGO" && sigalg[i]="$s"
-                         fi
-                    done
+               if [[ $? -eq 3 ]] ; then
+                    add_tls_offered ssl2 yes
+                    if [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
+                         supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
+                         "$wide" && "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$HOSTCERT")"
+                         for (( i=0 ; i<nr_ciphers; i++ )); do
+                              if [[ "$supported_sslv2_ciphers" =~ ${normalized_hexcode[i]} ]]; then
+                                   ciphers_found[i]=true
+                                   "$wide" && "$SHOW_SIGALGO" && sigalg[i]="$s"
+                              fi
+                         done
+                    else
+                         outln " protocol support with no cipher "
+                    fi
+               else
+                    add_tls_offered ssl2 no
+                    "$wide" && outln " - "
                fi
           else
                $OPENSSL s_client $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
                sclient_connect_successful $? "$TMPFILE"
                if [[ $? -eq 0 ]]; then
+                    add_tls_offered ssl2 yes
                     supported_sslv2_ciphers="$(grep -A 4 "Ciphers common between both SSL endpoints:" $TMPFILE)"
                     "$wide" && "$SHOW_SIGALGO" && s="$(read_sigalg_from_file "$TMPFILE")"
                     for (( i=0 ; i<nr_ciphers; i++ )); do
@@ -4097,6 +4107,9 @@ ciphers_by_strength() {
                               "$wide" && "$SHOW_SIGALGO" && sigalg[i]="$s"
                          fi
                     done
+               else
+                    add_tls_offered ssl2 no
+                    "$wide" && outln " - "
                fi
           fi
      else # no SSLv2
@@ -4253,6 +4266,16 @@ ciphers_by_strength() {
                fileout "$id" "INFO" "$proto_text  $(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}") $available"
           fi
      done
+
+     if [[ $proto != -ssl2 ]]; then
+          # We handled SSLv2 above already
+          if [[ -n "$cipher" ]]; then
+               add_tls_offered $proto yes
+          else
+               add_tls_offered $proto no
+               "$wide" && outln " -"
+          fi
+     fi
      if ! "$wide" && [[ -n "$cipher" ]]; then
           outln
           out "$(printf "    %-10s " "$proto_text: ")"
@@ -6542,12 +6565,12 @@ run_server_preference() {
           fi
           # TODO: Also the fact that a protocol is not supported seems not to be saved by cipher_pref_check()
           # (./testssl.sh --wide -p -P -E  vs ./testssl.sh --wide -P -E )
-          if [[ "$proto_ossl" == ssl2 ]] || \
-                    ( [[ "$proto_ossl" != tls1_3 ]] && ! "$has_cipher_order" ]] ) || \
-                    ( [[ "$proto_ossl" == tls1_3 ]] && ! "$has_tls13_cipher_order" ]] ); then
-               if [[ "$proto_ossl" == ssl2 ]]; then
+          if [[ $proto_ossl == ssl2 ]] || \
+                    ( [[ $proto_ossl != tls1_3 ]] && ! "$has_cipher_order" ]] ) || \
+                    ( [[ $proto_ossl == tls1_3 ]] && ! "$has_tls13_cipher_order" ]] ); then
+               if [[ $proto_ossl == ssl2 ]]; then
                    outln " (listed by strength)"
-               elif [[ "$proto_ossl" == tls1_3 ]]; then
+               elif [[ $proto_ossl == tls1_3 ]]; then
                     outln " (no server order, thus listed by strength)"
                else
                     prln_svrty_high " (no server order, thus listed by strength)"
@@ -6642,11 +6665,11 @@ check_tls12_pref() {
      return 0
 }
 
-
+# At the moment only called from run_server_preference()
 cipher_pref_check() {
      local proto_ossl="$1" proto_hex="$2" proto="$3"
      local using_sockets="$4"
-     local wide="$5"          # at the moment this is called ALWAYS via run_server_preference and ALWAYS w true
+     local wide="$5"          # at the moment always = true
      local tested_cipher cipher order rfc_cipher rfc_order
      local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
      local -i i nr_ciphers nr_nonossl_ciphers num_bundles bundle_size bundle end_of_bundle success
@@ -6890,6 +6913,10 @@ cipher_pref_check() {
                fi
           fi
           fileout "cipherorder_${proto//./_}" "INFO" "$order"
+     else
+          # Order doesn't contain any ciphers, so we can safely unset the protocol and put a dash out
+          add_tls_offered "$proto_ossl" no
+          outln " -"
      fi
 
      tmpfile_handle ${FUNCNAME[0]}-$proto_ossl.txt
