@@ -1,6 +1,20 @@
 
 ## Change Log
 
+### Features implemented / improvements in 3.1dev
+
+* Extend Server (cipher) preference: always now in wide mode instead of running all ciphers in the end (per default)
+* Improved compatibility with OpenSSL 3.0
+* Renamed PFS/perfect forward secrecy --> FS/forward secrecy
+* Improved mass testing
+* Align better colors of ciphers with standard cipherlists
+* Added several ciphers to colored ciphers
+* Percent output char problem fixed
+* Several display/output fixes
+* Security fix: DNS input
+* Don't use external pwd anymore
+* Rating (pending)
+
 ### Features implemented / improvements in 3.0
 
 * Full support of TLS 1.3, shows also drafts supported
