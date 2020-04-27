@@ -6282,7 +6282,7 @@ run_server_preference() {
      "$SSL_NATIVE" && using_sockets=false
 
      outln
-     pr_headlineln " Testing server preferences "
+     pr_headlineln " Testing server's cipher preferences "
 
      outln
      pr_bold " Has server cipher order?     "
@@ -6644,7 +6644,7 @@ check_tls12_pref() {
 
 
 cipher_pref_check() {
-     local p="$1" proto_hex="$2" proto="$3"
+     local proto_ossl="$1" proto_hex="$2" proto="$3"
      local using_sockets="$4"
      local wide="$5"          # at the moment this is called ALWAYS via run_server_preference and ALWAYS w true
      local tested_cipher cipher order rfc_cipher rfc_order
@@ -6658,17 +6658,17 @@ cipher_pref_check() {
      local ciphers_found_with_sockets
 
      order=""; ciphers_found_with_sockets=false
-     if [[ $p == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
+     if [[ $proto_ossl == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
           out "\n    SSLv3:     "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
           return 0
      fi
-     if [[ $p == tls1_3 ]] && ! "$HAS_TLS13" && ! "$using_sockets"; then
+     if [[ $proto_ossl == tls1_3 ]] && ! "$HAS_TLS13" && ! "$using_sockets"; then
           out "\n    TLSv1.3    "; pr_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\"";
           return 0
      fi
 
-     if ( [[ $p != tls1_3 ]] || "$HAS_TLS13" ) && ( [[ $p != ssl3 ]] || "$HAS_SSL3" ); then
-          if [[ $p == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
+     if ( [[ $proto_ossl != tls1_3 ]] || "$HAS_TLS13" ) && ( [[ $proto_ossl != ssl3 ]] || "$HAS_SSL3" ); then
+          if [[ $proto_ossl == tls1_2 ]] && "$SERVER_SIZE_LIMIT_BUG"; then
                order="$(check_tls12_pref "$wide")"
                [[ "${order:0:1}" == \  ]] && order="${order:1}"
                ciphers_found="$order"
@@ -6676,7 +6676,7 @@ cipher_pref_check() {
           if "$wide" || [[ -z "$order" ]]; then
                tested_cipher=""; order=""; nr_ciphers_found=0
                while true; do
-                    if [[ $p != tls1_3 ]]; then
+                    if [[ $proto_ossl != tls1_3 ]]; then
                          if [[ -n "$ciphers_found" ]]; then
                                   ciphers_to_test=""
                                   for cipher in $ciphers_found; do
@@ -6695,7 +6695,7 @@ cipher_pref_check() {
                          [[ -z "$ciphers_to_test" ]] && break
                          ciphers_to_test="-ciphersuites ${ciphers_to_test:1}"
                     fi
-                    $OPENSSL s_client $(s_client_options "$STARTTLS -"$p" $BUGS $ciphers_to_test -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
+                    $OPENSSL s_client $(s_client_options "$STARTTLS -"$proto_ossl" $BUGS $ciphers_to_test -connect $NODEIP:$PORT $PROXY $SNI") </dev/null 2>>$ERRFILE >$TMPFILE
                     sclient_connect_successful $? $TMPFILE || break
                     cipher=$(get_cipher $TMPFILE)
                     [[ -z "$cipher" ]] && break
@@ -6710,7 +6710,7 @@ cipher_pref_check() {
                          normalized_hexcode[nr_ciphers_found]="$(normalize_ciphercode "${TLS_CIPHER_HEXCODE[i]}")"
                          ciph[nr_ciphers_found]="${TLS_CIPHER_OSSL_NAME[i]}"
                          kx[nr_ciphers_found]="${TLS_CIPHER_KX[i]}"
-                         [[ "$p" == tls1_3 ]] && kx[nr_ciphers_found]="$(read_dhtype_from_file $TMPFILE)"
+                         [[ $proto_ossl == tls1_3 ]] && kx[nr_ciphers_found]="$(read_dhtype_from_file $TMPFILE)"
                          if ( [[ ${kx[nr_ciphers_found]} == Kx=ECDH ]] || [[ ${kx[nr_ciphers_found]} == Kx=DH ]] || [[ ${kx[nr_ciphers_found]} == Kx=EDH ]] ); then
                               kx[nr_ciphers_found]+=" $(read_dhbits_from_file "$TMPFILE" quiet)"
                          fi
@@ -6739,9 +6739,9 @@ cipher_pref_check() {
                          rfc_ciph[nr_nonossl_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
                          index[nr_nonossl_ciphers]=$i
                          # Only test ciphers that are relevant to the protocol.
-                         if [[ "$p" == tls1_3 ]]; then
-                              [[ "${hexc:2:2}" == "13" ]] && nr_nonossl_ciphers+=1
-                         elif [[ "$p" == tls1_2 ]]; then
+                         if [[ $proto_ossl == tls1_3 ]]; then
+                              [[ "${hexc:2:2}" == 13 ]] && nr_nonossl_ciphers+=1
+                         elif [[ $proto_ossl == tls1_2 ]]; then
                               [[ "${hexc:2:2}" != 13 ]] && nr_nonossl_ciphers+=1
                          elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
                               [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
@@ -6756,7 +6756,7 @@ cipher_pref_check() {
 
      if [[ $nr_nonossl_ciphers -eq 0 ]]; then
           num_bundles=0
-     elif [[ $p != tls1_2 ]] || ! "$SERVER_SIZE_LIMIT_BUG"; then
+     elif [[ $proto_ossl != tls1_2 ]] || ! "$SERVER_SIZE_LIMIT_BUG"; then
           num_bundles=1
           bundle_size=$nr_nonossl_ciphers
      else
@@ -6785,7 +6785,7 @@ cipher_pref_check() {
                i=${index[i]}
                ciphers_found[i]=true
                ciphers_found_with_sockets=true
-               if [[ $p != tls1_2 ]] || ! "$SERVER_SIZE_LIMIT_BUG"; then
+               if [[ $proto_ossl != tls1_2 ]] || ! "$SERVER_SIZE_LIMIT_BUG"; then
                     # Throw out the results found so far and start over using just sockets
                     bundle=$num_bundles
                     for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
@@ -6808,9 +6808,9 @@ cipher_pref_check() {
                     ciphers_found2[nr_ciphers]=false
                     hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
                     rfc_ciph[nr_ciphers]="${TLS_CIPHER_RFC_NAME[i]}"
-                    if [[ "$p" == "tls1_3" ]]; then
+                    if [[ $proto_ossl == "tls1_3" ]]; then
                          [[ "${hexc:2:2}" == "13" ]] && nr_ciphers+=1
-                    elif [[ "$p" == "tls1_2" ]]; then
+                    elif [[ $proto_ossl == "tls1_2" ]]; then
                          [[ "${hexc:2:2}" != "13" ]] && nr_ciphers+=1
                     elif [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA256 ]] && \
                          [[ ! "${TLS_CIPHER_RFC_NAME[i]}" =~ SHA384 ]] && \
@@ -6840,7 +6840,7 @@ cipher_pref_check() {
                     normalized_hexcode[nr_ciphers_found]="$(normalize_ciphercode "${TLS_CIPHER_HEXCODE[i]}")"
                     ciph[nr_ciphers_found]="${TLS_CIPHER_OSSL_NAME[i]}"
                     kx[nr_ciphers_found]="${TLS_CIPHER_KX[i]}"
-                    [[ "$p" == tls1_3 ]] && kx[nr_ciphers_found]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
+                    [[ $proto_ossl == tls1_3 ]] && kx[nr_ciphers_found]="$(read_dhtype_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")"
                     if ( [[ ${kx[nr_ciphers_found]} == Kx=ECDH ]] || [[ ${kx[nr_ciphers_found]} == Kx=DH ]] || [[ ${kx[nr_ciphers_found]} == Kx=EDH ]] ); then
                          kx[nr_ciphers_found]+=" $(read_dhbits_from_file "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" quiet)"
                     fi
@@ -6872,12 +6872,12 @@ cipher_pref_check() {
      fi
 
      if [[ -n "$order" ]]; then
-          add_tls_offered "$p" yes
+          add_tls_offered "$proto_ossl" yes
           if "$wide"; then
                for (( i=0 ; i<nr_ciphers_found; i++ )); do
                     neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}" "true"
                     outln "${sigalg[i]}"
-                    id="cipher-${p}_${normalized_hexcode[i]}"
+                    id="cipher-${proto_ossl}_${normalized_hexcode[i]}"
                     fileout "$id" "INFO" "$proto  $(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}")"
                done
           else
@@ -6892,7 +6892,7 @@ cipher_pref_check() {
           fileout "cipherorder_${proto//./_}" "INFO" "$order"
      fi
 
-     tmpfile_handle ${FUNCNAME[0]}-$p.txt
+     tmpfile_handle ${FUNCNAME[0]}-$proto_ossl.txt
      return 0
 }
 
