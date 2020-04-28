@@ -28,9 +28,12 @@ cryptographic flaws.
 ### License
 
 This software is free. You can use it under the terms of GPLv2, see LICENSE.
-In addition starting from version 3.0rc1 if you're offering a scanner based on testssl.sh
-as a public and / or paid service in the internet you need to mention to your audience that you're using
-this program and where to get this program from.
+
+Attribution is important for the future of this project -- also in the
+internet. Thus if you're offering a scanner based on testssl.sh as a public and/or
+paid service in the internet you are strongly encouraged to mention to your audience
+that you're using this program and where to get this program from. That helps us
+to get bugfixes, other feedback and more contributions.
 
 ### Compatibility
 
