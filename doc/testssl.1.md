@@ -40,9 +40,9 @@ linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 1) SSL/TLS protocol check
 
-2) standard cipher categories to give you upfront an idea for the ciphers supported
+2) checks forward secrecy: ciphers and elliptical curves
 
-3) checks forward secrecy: ciphers and elliptical curves
+3) standard cipher categories to give you upfront an idea for the ciphers supported
 
 4) server preferences (server order)
 
@@ -54,9 +54,9 @@ linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 8) testing each of 370 preconfigured ciphers
 
-9) client simulation
+8) client simulation
 
-10) Result of script in form of a grade
+9) Result of script in form of a grade
 
 
 ## OPTIONS AND PARAMETERS
