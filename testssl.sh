@@ -20541,7 +20541,7 @@ run_rating() {
      local c1_score c2_score c3_score c1_wscore c2_wscore c3_wscore
      local c1_worst c1_best
      local c3_worst c3_best c3_worst_cb c3_best_cb
-     local old_ifs=$IFS sorted_reasons sorted_warnings reason_loop=0 warning_loop=0
+     local old_ifs=$IFS sorted_reasons sorted_warnings reason_nr=0 warning_nr=0
 
      outln "\n";
      pr_headlineln " Rating (experimental) "
@@ -20705,34 +20705,24 @@ run_rating() {
 
      # Pretty print - again, it's just nicer to read
      for reason in "${sorted_reasons[@]}"; do
-          if [[ $reason_loop -eq 0 ]]; then
+          if [[ $reason_nr -eq 0 ]]; then
                pr_bold " Grade cap reasons            "; outln "$reason"
-               let reason_loop++
           else
                outln "                              $reason"
           fi
+          let reason_nr++
+          fileout "grade_cap_reason_${reason_nr}" "INFO" "$reason"
      done
 
      for warning in "${sorted_warnings[@]}"; do
-          if [[ $warning_loop -eq 0 ]]; then
-               pr_bold " Grade warning                 "; prln_svrty_medium "$warning"
-               let warning_loop++
+          if [[ $warning_nr -eq 0 ]]; then
+               pr_bold " Grade warning                "; prln_svrty_medium "$warning"
           else
-               prln_svrty_medium "                               $warning"
+               prln_svrty_medium "                              $warning"
           fi
+          let warning_nr++
+          fileout "grade_cap_warning_${warning_nr}" "INFO" "$warning"
      done
-
-     case $GRADE_CAP in
-          # A-E: WIP
-          A) fileout "grade_cap_reasons" "INFO" "" ;;
-          B) fileout "grade_cap_reasons" "INFO" "" ;;
-          C) fileout "grade_cap_reasons" "INFO" "" ;;
-          D) fileout "grade_cap_reasons" "INFO" "" ;;
-          E) fileout "grade_cap_reasons" "INFO" "" ;;
-          M) fileout "grade_cap_reasons" "INFO" "SAN / CN mismatch" ;;
-          F) fileout "grade_cap_reasons" "INFO" "Severe vulnerability or cryptographic problem" ;;
-          T) fileout "grade_cap_reasons" "INFO" "Issue with certificate" ;;
-     esac
 
      return 0
 }
