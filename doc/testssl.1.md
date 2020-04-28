@@ -390,9 +390,9 @@ Except the environment variables mentioned above which can replace command line 
 ### RATING
 This program has a near-complete implementation of SSL Labs's '[SSL Server Rating Guide](https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide)'.
 
-This is *not* a reimplementation of the [SS LLab's SSL Server Test](https://www.ssllabs.com/ssltest/analyze.html), but a implementation of the above rating specification, slight discrepancies might occur!
+This is *not* a 100% reimplementation of the [SSL Lab's SSL Server Test](https://www.ssllabs.com/ssltest/analyze.html), but an implementation of the above rating specification, slight discrepancies may occur. Please note that for now we stick to the SSL Labs rating as good as possible. We are not responsible for their rating. Before filing issues please inspect their Rating Guide.
 
-Disclaimer: Having a good grade does **NOT** necessary equal to having good security! Never rely solely on a good rating!
+Disclaimer: Having a good grade is **NOT** necessarily equal to having good security! Don't start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it.
 
 As of writing, these checks are missing:
 * GOLDENDOODLE - should be graded **F** if vulnerable
@@ -435,7 +435,7 @@ When a new revision of the rating specification comes around, the following has 
 
       testssl.sh testssl.sh
 
-does a default run on https://testssl.sh (protocols, standard cipher lists, FS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation, and rating.
+does a default run on https://testssl.sh (protocols, standard cipher lists, server's cipher preferences, FS, server defaults, vulnerabilities, client simulation, and rating.
 
       testssl.sh testssl.net:443
 
