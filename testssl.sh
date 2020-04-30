@@ -14028,13 +14028,14 @@ run_ccs_injection(){
 }
 
 sub_session_ticket_tls() {
+     local tls_proto="$1"
      local sessticket_tls=""
      #FIXME: we likely have done this already before (either @ run_server_defaults() or at least the output
      #       from a previous handshake) --> would save 1x connect. We have TLS_TICKET but not yet the ticket itself #FIXME
      #ATTENTION: we DO NOT use SNI here as we assume ticketbleed is a vulnerability of the TLS stack. If we'd do SNI here, we'd also need
      #           it in the ClientHello of run_ticketbleed() otherwise the ticket will be different and the whole thing won't work!
      #
-     sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $OPTIMAL_PROTO $PROXY -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
+     sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $tls_proto $PROXY -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
      sessticket_tls="$(sed -e 's/^.* - /x/g' -e 's/  .*$//g' <<< "$sessticket_tls" | tr '\n' ',')"
      sed -e 's/ /,x/g' -e 's/-/,x/g' <<< "$sessticket_tls"
 
@@ -14043,6 +14044,7 @@ sub_session_ticket_tls() {
 
 # see https://blog.filippo.io/finding-ticketbleed/ |  https://ticketbleed.com/
 run_ticketbleed() {
+     local tls_hexcode tls_proto=""
      local session_tckt_tls=""
      local -i len_ch=300                            # fixed len of prepared clienthello below
      local sid="x00,x0B,xAD,xC0,xDE,x00,"           # some abitratry bytes
@@ -14080,25 +14082,26 @@ run_ticketbleed() {
      fi
 
      if [[ 0 -eq $(has_server_protocol tls1) ]]; then
-          tls_hexcode="x03, x01"
+          tls_hexcode="x03, x01"; tls_proto="-tls1"
      elif [[ 0 -eq $(has_server_protocol tls1_1) ]]; then
-          tls_hexcode="x03, x02"
+          tls_hexcode="x03, x02"; tls_proto="-tls1_1"
      elif [[ 0 -eq $(has_server_protocol tls1_2) ]]; then
-          tls_hexcode="x03, x03"
+          tls_hexcode="x03, x03"; tls_proto="-tls1_2"
      elif [[ 0 -eq $(has_server_protocol ssl3) ]]; then
-          tls_hexcode="x03, x00"
+          tls_hexcode="x03, x00"; tls_proto="-ssl3"
      else # no protocol for some reason defined, determine TLS versions offered with a new handshake
-          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>$ERRFILE </dev/null
+          "$HAS_TLS13" && tls_proto="-no_tls1_3"
+          $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS $tls_proto -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>$ERRFILE </dev/null
           case "$(get_protocol $TMPFILE)" in
-               *1.2)  tls_hexcode="x03, x03" ; add_tls_offered tls1_2 yes ;;
-               *1.1)  tls_hexcode="x03, x02" ; add_tls_offered tls1_1 yes ;;
-               TLSv1) tls_hexcode="x03, x01" ; add_tls_offered tls1 yes ;;
-               SSLv3) tls_hexcode="x03, x00" ; add_tls_offered ssl3 yes ;;
+               *1.2)  tls_hexcode="x03, x03"; tls_proto="-tls1_2" ; add_tls_offered tls1_2 yes ;;
+               *1.1)  tls_hexcode="x03, x02"; tls_proto="-tls1_1" ; add_tls_offered tls1_1 yes ;;
+               TLSv1) tls_hexcode="x03, x01"; tls_proto="-tls1" ; add_tls_offered tls1 yes ;;
+               SSLv3) tls_hexcode="x03, x00"; tls_proto="-ssl3" ; add_tls_offered ssl3 yes ;;
           esac
      fi
      debugme echo "using protocol $tls_hexcode"
 
-     session_tckt_tls="$(sub_session_ticket_tls)"
+     session_tckt_tls="$(sub_session_ticket_tls "$tls_proto")"
      if [[ "$session_tckt_tls" == "," ]]; then
           pr_svrty_best "not vulnerable (OK)"
           outln ", no session tickets"
