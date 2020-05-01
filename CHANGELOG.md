@@ -13,6 +13,7 @@
 * Several display/output fixes
 * Security fix: DNS input
 * Don't use external pwd anymore
+* STARTTLS: XMPP server support
 * Rating (SSL Labs, not complete)
 
 ### Features implemented / improvements in 3.0
