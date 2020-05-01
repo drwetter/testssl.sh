@@ -330,6 +330,7 @@ OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 CLIENT_PROB_NO=1
 HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
+HAS_CURVES=false
 OSSL_SUPPORTED_CURVES=""
 HAS_SSL2=false
 HAS_SSL3=false
@@ -2031,6 +2032,7 @@ s_client_options() {
      # (e.g. client simulations) we replace it with the name which OpenSSL understands
      # This shouldn't be needed. We have this here as a last resort
      if [[ "$1" =~ " -curves " ]]; then
+          ! "$HAS_CURVES" && options="${options// -curves / -groups }"
           [[ "$1" =~ secp192r1 ]] && options="${options//secp192r1/prime192v1}"
           [[ "$1" =~ secp256r1 ]] && options="${options//secp256r1/prime256v1}"
      fi
@@ -16929,6 +16931,7 @@ find_openssl_binary() {
      HAS_CIPHERSUITES=false
      HAS_COMP=false
      HAS_NO_COMP=false
+     HAS_CURVES=false
      OSSL_SUPPORTED_CURVES=""
      HAS_PKEY=false
      HAS_PKUTIL=false
@@ -16961,10 +16964,10 @@ find_openssl_binary() {
      $OPENSSL s_client -tls1_3 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_TLS13=true
 
-     $OPENSSL genpkey -algorithm X448 -out - 2>&1 | grep -aq "not found" || \
+     $OPENSSL genpkey -algorithm X448 2>&1 | grep -aq "not found" || \
           HAS_X448=true
 
-     $OPENSSL genpkey -algorithm X25519 -out - 2>&1 | grep -aq "not found" || \
+     $OPENSSL genpkey -algorithm X25519 2>&1 | grep -aq "not found" || \
           HAS_X25519=true
 
      $OPENSSL s_client -no_ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
@@ -16984,10 +16987,18 @@ find_openssl_binary() {
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
-     for curve in "${curves_ossl[@]}"; do
-          $OPENSSL s_client -curves $curve -connect invalid. 2>&1 | grep -Eiaq "Error with command|unknown option"
-          [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
-     done
+     if $OPENSSL s_client -curves "${curves_ossl[0]}" -connect invalid. 2>&1 | grep -aiq "unknown option"; then
+          for curve in "${curves_ossl[@]}"; do
+               $OPENSSL s_client -groups $curve -connect invalid.:8443 2>&1 | grep -Eiaq "Error with command|unknown option|Failed to set groups"
+               [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
+          done
+     else
+          HAS_CURVES=true
+          for curve in "${curves_ossl[@]}"; do
+               $OPENSSL s_client -curves $curve -connect invalid. 2>&1 | grep -Eiaq "Error with command|unknown option"
+               [[ $? -ne 0 ]] && OSSL_SUPPORTED_CURVES+=" $curve "
+          done
+     fi
 
      $OPENSSL pkey -help 2>&1 | grep -q Error || \
           HAS_PKEY=true
@@ -17317,6 +17328,7 @@ OSSL_VER_PLATFORM: $OSSL_VER_PLATFORM
 
 OPENSSL_NR_CIPHERS: $OPENSSL_NR_CIPHERS
 OPENSSL_CONF: $OPENSSL_CONF
+HAS_CURVES: $HAS_CURVES
 OSSL_SUPPORTED_CURVES: $OSSL_SUPPORTED_CURVES
 
 HAS_IPv6: $HAS_IPv6
