@@ -99,7 +99,7 @@ $openssl_out = `./testssl.sh --ssl-native $check2run -t xmpp $uri 2>&1`;
 unlike($openssl_out, qr/$openssl_regex_bl/, "");
 $tests++;
 
-uri="jabber.ccc.de:5269";
+$uri="jabber.ccc.de:5269";
 printf "\n%s\n", "Quick STARTTLS XMPP S2S unit tests via sockets --> $uri ...";
 $openssl_out = `./testssl.sh --openssl=/usr/bin/openssl -p $check2run -t xmpp-server $uri 2>&1`;
 # $openssl_json = json('tmp.json');
