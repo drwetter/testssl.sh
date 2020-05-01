@@ -13838,26 +13838,13 @@ generate_key_share_extension() {
           # with X25519 keys, so don't include the X25519 key share
           # if the server's response needs to be decrypted and an
           # older version of OpenSSL is being used.
-          if [[ $i -gt 12 ]] && [[ $group -eq 29 ]] && [[ "$2" == all ]]; then
-               [[ "$OSSL_NAME" =~ LibreSSL ]] && continue
-               if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 1.1.0* ]] && \
-                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 1.1.1* ]] && \
-                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 3.0.0* ]]; then
-                    continue
-               fi
-          fi
+          [[ $i -gt 12 ]] && [[ $group -eq 29 ]] && [[ "$2" == all ]] && ! "$HAS_X25519" && continue
 
           # Versions of OpenSSL prior to 1.1.1 cannot perform operations
           # with X448 keys, so don't include the X448 key share
           # if the server's response needs to be decrypted and an
           # older version of OpenSSL is being used.
-          if [[ $i -gt 12 ]] && [[ $group -eq 30 ]] && [[ "$2" == all ]]; then
-               [[ "$OSSL_NAME" =~ LibreSSL ]] && continue
-               if [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 1.1.1* ]] && \
-                  [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR != 3.0.0* ]]; then
-                    continue
-               fi
-          fi
+          [[ $i -gt 12 ]] && [[ $group -eq 30 ]] && [[ "$2" == all ]] && ! "$HAS_X448" && continue
 
           # NOTE: The public keys could be extracted from the private keys
           # (TLS13_KEY_SHARES) using $OPENSSL, but only OpenSSL 1.1.0 and newer can
@@ -14019,9 +14006,7 @@ prepare_tls_clienthello() {
                00, 01, 00, 02, 00, 03, 00, 0f, 00, 10, 00, 11"
           elif [[ 0x$tls_low_byte -gt 0x03 ]]; then
                # Supported Groups Extension
-               if [[ ! "$process_full" =~ all ]] || ( [[ ! "$OSSL_NAME" =~ LibreSSL ]] && \
-                  ( [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.1* ]] || \
-                    [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]] ) ); then
+               if [[ ! "$process_full" =~ all ]] || ( "$HAS_X25519" && "$HAS_X448" ); then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,10, 00,0e,               # lengths
@@ -14030,13 +14015,13 @@ prepare_tls_clienthello() {
                     # OpenSSL prior to 1.1.1 does not support X448, so list it as the least
                     # preferred option if the response needs to be decrypted, and do not
                     # list it at all if the response MUST be decrypted.
-               elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 1.1.0* ]] && [[ "$process_full" == all+ ]]; then
+               elif "$HAS_X25519" && [[ "$process_full" == all+ ]]; then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,0e, 00,0c,               # lengths
                     00,1d, 00,17, 00,18, 00,19,
                     01,00, 01,01"
-               elif [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == "1.1.0"* ]]; then
+               elif "$HAS_X25519"; then
                     extension_supported_groups="
                     00,0a,                      # Type: Supported Groups, see RFC 8446
                     00,10, 00,0e,               # lengths
