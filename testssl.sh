@@ -317,6 +317,7 @@ HAS_NPN=false
 HAS_FALLBACK_SCSV=false
 HAS_PROXY=false
 HAS_XMPP=false
+HAS_XMPP_SERVER=false
 HAS_POSTGRES=false
 HAS_MYSQL=false
 HAS_LMTP=false
@@ -18214,6 +18215,7 @@ find_openssl_binary() {
      HAS_FALLBACK_SCSV=false
      HAS_PROXY=false
      HAS_XMPP=false
+     HAS_XMPP_SERVER=false
      HAS_POSTGRES=false
      HAS_MYSQL=false
      HAS_LMTP=false
@@ -18298,8 +18300,11 @@ find_openssl_binary() {
      grep -q '\-proxy' $s_client_has && \
           HAS_PROXY=true
 
-     grep -q '\-xmpp' $s_client_has && \
+     grep -q 'xmpp' $s_client_starttls_has && \
           HAS_XMPP=true
+
+     grep -q 'xmpp-server' $s_client_starttls_has && \
+          HAS_XMPP_SERVER=true
 
      grep -q 'postgres' $s_client_starttls_has && \
           HAS_POSTGRES=true
@@ -18623,6 +18628,7 @@ HAS_PKEY: $HAS_PKEY
 HAS_PKUTIL: $HAS_PKUTIL
 HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
+HAS_XMPP_SERVER: $HAS_XMPP_SERVER
 HAS_POSTGRES: $HAS_POSTGRES
 HAS_MYSQL: $HAS_MYSQL
 HAS_LMTP: $HAS_LMTP
@@ -19810,6 +19816,9 @@ determine_service() {
                                         fatal "No DNS supplied and no PTR record available which I can try for XMPP" $ERR_DNSLOOKUP
                                    fi
                               fi
+                         fi
+                         if [[ "$protocol" == xmpp-server ]] && ! "$HAS_XMPP_SERVER"; then
+                              fatal "Your $OPENSSL does not support the \"-xmpphost\" option" $ERR_OSSLBIN
                          fi
                     elif [[ "$protocol" == postgres ]]; then
                          # Check if openssl version supports postgres.
