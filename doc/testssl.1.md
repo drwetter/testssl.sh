@@ -40,11 +40,11 @@ linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 1) SSL/TLS protocol check
 
-2) checks forward secrecy: ciphers and elliptical curves
+2) standard cipher categories
 
-3) standard cipher categories to give you upfront an idea for the ciphers supported
+3) server's cipher preferences (server order?)
 
-4) server preferences (server order)
+4) forward secrecy: ciphers and elliptical curves
 
 5) server defaults (certificate info, TLS extensions, session information)
 
@@ -56,7 +56,8 @@ linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 8) client simulation
 
-9) Result of script in form of a grade
+9) rating
+
 
 
 ## OPTIONS AND PARAMETERS
@@ -269,7 +270,7 @@ Also for multiple server certificates are being checked for as well as for the c
 * `no-openssl`: don't display the OpenSSL cipher suite name, display IANA names only.
 * `no-iana`: don't display the IANA cipher suite name, display OpenSSL names only.
 
-Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and `no-rfc` instead of `no-iana` but it'll disappear after 3.0.
+Please note that in testssl.sh 3.0 you can still use `rfc` instead of `iana` and `no-rfc` instead of `no-iana` but it'll disappear after 3.0.
 
 `--show-each` This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  `SHOW_EACH_C` is your friend if you prefer to set this via the shell environment.
 
@@ -288,8 +289,8 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 5. display bytes received via sockets
 6. whole 9 yards
 
-`--disable-rating` disables rating explicitly.
-Grading automatically gets disabled, to not give a wrong or misleading grade, when not all required functions are executed (e.g when checking for a single vulnerabilities).
+`--disable-rating` disables rating.
+Rating automatically gets disabled, to not give a wrong or misleading grade, when not all required functions are executed (e.g when checking for a single vulnerabilities).
 
 
 ### FILE OUTPUT OPTIONS
@@ -435,7 +436,7 @@ When a new revision of the rating specification comes around, the following has 
 
       testssl.sh testssl.sh
 
-does a default run on https://testssl.sh (protocols, standard cipher lists, server's cipher preferences, FS, server defaults, vulnerabilities, client simulation, and rating.
+does a default run on https://testssl.sh (protocols, standard cipher lists, server's cipher preferences, forward secrecy, server defaults, vulnerabilities, client simulation, and rating.
 
       testssl.sh testssl.net:443
 

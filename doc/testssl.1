@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "TESTSSL" "1" "January 2020" "" ""
+.TH "TESTSSL" "1" "May 2020" "" ""
 .
 .SH "NAME"
 \fBtestssl\fR
@@ -43,13 +43,13 @@ Any OpenSSL or LibreSSL version is needed as a helper\. Unlike previous versions
 1) SSL/TLS protocol check
 .
 .P
-2) standard cipher categories to give you upfront an idea for the ciphers supported
+2) standard cipher categories
 .
 .P
-3) checks forward secrecy: ciphers and elliptical curves
+3) server\'s cipher preferences (server order?)
 .
 .P
-4) server preferences (server order)
+4) forward secrecy: ciphers and elliptical curves
 .
 .P
 5) server defaults (certificate info, TLS extensions, session information)
@@ -64,7 +64,10 @@ Any OpenSSL or LibreSSL version is needed as a helper\. Unlike previous versions
 8) testing each of 370 preconfigured ciphers
 .
 .P
-9) client simulation
+8) client simulation
+.
+.P
+9) rating
 .
 .SH "OPTIONS AND PARAMETERS"
 Options are either short or long options\. Any long or short option requiring a value can be called with or without an equal sign\. E\.g\. \fBtestssl\.sh \-t=smtp \-\-wide \-\-openssl=/usr/bin/openssl <URI>\fR (short options with equal sign) is equivalent to \fBtestssl\.sh \-\-starttls smtp \-\-wide \-\-openssl /usr/bin/openssl <URI>\fR (long option without equal sign)\. Some command line options can also be preset via ENV variables\. \fBWIDE=true OPENSSL=/usr/bin/openssl testssl\.sh \-\-starttls=smtp <URI>\fR would be the equivalent to the aforementioned examples\. Preference has the command line over any environment variables\.
@@ -238,8 +241,7 @@ session resumption capabilities,
 Time skew relative to localhost (most server implementations return random values)\.
 .
 .IP "\(bu" 4
-Several certificate information
-.RS
+.
 .IP "\(bu" 4
 signature algorithm,
 .
@@ -275,7 +277,7 @@ displaying DNS Certification Authority Authorization resource record
 .
 .IP "\(bu" 4
 Certificate Transparency info (if provided by server)\.
-.RE
+.
 .IP "" 0
 
 .
@@ -409,7 +411,7 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, Expect\-CT,\.\.\. , CSP
 .IP "" 0
 .
 .P
-Please note that in testssl\.sh 3,0 you can still use \fBrfc\fR instead of \fBiana\fR and \fBno\-rfc\fR instead of \fBno\-iana\fR but it\'ll disappear after 3\.0\.
+Please note that in testssl\.sh 3\.0 you can still use \fBrfc\fR instead of \fBiana\fR and \fBno\-rfc\fR instead of \fBno\-iana\fR but it\'ll disappear after 3\.0\.
 .
 .P
 \fB\-\-show\-each\fR This is an option for all wide modes only: it displays all ciphers tested \-\- not only succeeded ones\. \fBSHOW_EACH_C\fR is your friend if you prefer to set this via the shell environment\.
@@ -442,6 +444,9 @@ display bytes received via sockets
 whole 9 yards
 .
 .IP "" 0
+.
+.P
+\fB\-\-disable\-rating\fR disables rating\. Rating automatically gets disabled, to not give a wrong or misleading grade, when not all required functions are executed (e\.g when checking for a single vulnerabilities)\.
 .
 .SS "FILE OUTPUT OPTIONS"
 \fB\-\-log, \-\-logging\fR Logs stdout also to \fB${NODE}\-p${port}${YYYYMMDD\-HHMM}\.log\fR in current working directory of the shell\. Depending on the color output option (see above) the output file will contain color and other markup escape codes, unless you specify \fB\-\-color 0\fR too\. \fBcat\fR and \-\- if properly configured \fBless\fR \-\- will show the output properly formatted on your terminal\. The output shows a banner with the almost the same information as on the screen\. In addition it shows the command line of the testssl\.sh instance\. Please note that the resulting log file is formatted according to the width of your screen while running testssl\.sh\. You can override the width with the environment variable TERM_WIDTH\.
@@ -626,6 +631,30 @@ MAX_HEADER_FAIL: A number which tells testssl\.sh how often a HTTP GET request o
 .
 .IP "" 0
 .
+.SS "RATING"
+This program has a near\-complete implementation of SSL Labs\'s \'SSL Server Rating Guide \fIhttps://github\.com/ssllabs/research/wiki/SSL\-Server\-Rating\-Guide\fR\'\.
+.
+.P
+This is \fInot\fR a 100% reimplementation of the SSL Lab\'s SSL Server Test \fIhttps://www\.ssllabs\.com/ssltest/analyze\.html\fR, but an implementation of the above rating specification, slight discrepancies may occur\. Please note that for now we stick to the SSL Labs rating as good as possible\. We are not responsible for their rating\. Before filing issues please inspect their Rating Guide\.
+.
+.P
+Disclaimer: Having a good grade is \fBNOT\fR necessarily equal to having good security! Don\'t start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it\.
+.
+.P
+As of writing, these checks are missing: * GOLDENDOODLE \- should be graded \fBF\fR if vulnerable * Insecure renegotiation \- should be graded \fBF\fR if vulnerable * Padding oracle in AES\-NI CBC MAC check (CVE\-2016\-2107) \- should be graded \fBF\fR if vulnerable * Sleeping POODLE \- should be graded \fBF\fR if vulnerable * Zero Length Padding Oracle (CVE\-2019\-1559) \- should be graded \fBF\fR if vulnerable * Zombie POODLE \- should be graded \fBF\fR if vulnerable * All remaining old Symantec PKI certificates are distrusted \- should be graded \fBT\fR * Symantec certificates issued before June 2016 are distrusted \- should be graded \fBT\fR * ! A reading of DH params \- should give correct points in \fBset_key_str_score()\fR * Anonymous key exchange \- should give \fB0\fR points in \fBset_key_str_score()\fR * Exportable key exchange \- should give \fB40\fR points in \fBset_key_str_score()\fR * Weak key (Debian OpenSSL Flaw) \- should give \fB0\fR points in \fBset_key_str_score()\fR
+.
+.P
+To implement a new grading cap, simply call the \fBset_grade_cap()\fR function, with the grade and a reason: \fBbash set_grade_cap "D" "Vulnerable to documentation"\fR To implement a new grade warning, simply call the \fBset_grade_warning()\fR function, with a message: \fBbash set_grade_warning "Documentation is always right"\fR
+.
+.P
+When implementing a new check (be it vulnerability or not) that sets grade caps, the \fBset_rating_state()\fR has to be updated (i\.e\. the \fB$do_mycheck\fR variable\-name has to be added to the loop, and \fB$nr_enabled\fR if\-statement has to be incremented)
+.
+.P
+The \fBset_rating_state()\fR automatically disables ratinng, if all the required checks are \fInot\fR enabled\. This is to prevent giving out a misleading or wrong grade\.
+.
+.P
+When a new revision of the rating specification comes around, the following has to be done: * New grade caps has to be either: 1\. Added to the script wherever relevant, or 2\. Added to the above list of missing checks (if \fIi\.\fR is not possible) * New grade warnings has to be added wherever relevant * The revision output in \fBrun_rating()\fR function has to updated
+.
 .SH "EXAMPLES"
 .
 .nf
@@ -635,7 +664,7 @@ MAX_HEADER_FAIL: A number which tells testssl\.sh how often a HTTP GET request o
 .fi
 .
 .P
-does a default run on https://testssl\.sh (protocols, standard cipher lists, FS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation\.
+does a default run on https://testssl\.sh (protocols, standard cipher lists, server\'s cipher preferences, forward secrecy, server defaults, vulnerabilities, client simulation, and rating\.
 .
 .IP "" 4
 .

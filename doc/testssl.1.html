@@ -121,11 +121,11 @@ linked OpenSSL binaries for major operating systems are supplied in <code>./bin/
 
 <p>1) SSL/TLS protocol check</p>
 
-<p>2) standard cipher categories to give you upfront an idea for the ciphers supported</p>
+<p>2) standard cipher categories</p>
 
-<p>3) checks forward secrecy: ciphers and elliptical curves</p>
+<p>3) server's cipher preferences (server order?)</p>
 
-<p>4) server preferences (server order)</p>
+<p>4) forward secrecy: ciphers and elliptical curves</p>
 
 <p>5) server defaults (certificate info, TLS extensions, session information)</p>
 
@@ -133,9 +133,9 @@ linked OpenSSL binaries for major operating systems are supplied in <code>./bin/
 
 <p>7) vulnerabilities</p>
 
-<p>8) testing each of 370 preconfigured ciphers</p>
+<p>8) client simulation</p>
 
-<p>9) client simulation</p>
+<p>9) rating</p>
 
 <h2 id="OPTIONS-AND-PARAMETERS">OPTIONS AND PARAMETERS</h2>
 
@@ -185,7 +185,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--openssl-timeout &lt;seconds></code> This is especially useful for all connects using openssl and practically useful for mass testing. It avoids the openssl connect to hang for ~2 minutes. The expected parameter <code>seconds</code> instructs testssl.sh to wait before the openssl connect will be terminated. The option is only available if your OS has a timeout binary installed. As there are different implementations of <code>timeout</code>: It automatically calls the binary with the right parameters. OPENSSL_TIMEOUT is the equivalent environment variable.</p>
 
-<p><code>--basicauth &lt;user:pass></code> This can be set to provide HTTP basic auth credentials which are used during checks for security headers. BASICAUTH is the ENV variable you can use instead.</p>
+<p><code>--basicauth &lt;user:pass&gt;</code> This can be set to provide HTTP basic auth credentials which are used during checks for security headers. BASICAUTH is the ENV variable you can use instead.</p>
 
 <h3 id="SPECIAL-INVOCATIONS">SPECIAL INVOCATIONS</h3>
 
@@ -357,7 +357,7 @@ Also for multiple server certificates are being checked for as well as for the c
 </ul>
 
 
-<p>Please note that in testssl.sh 3,0 you can still use <code>rfc</code> instead of <code>iana</code> and <code>no-rfc</code> instead of <code>no-iana</code> but it'll disappear after 3.0.</p>
+<p>Please note that in testssl.sh 3.0 you can still use <code>rfc</code> instead of <code>iana</code> and <code>no-rfc</code> instead of <code>no-iana</code> but it'll disappear after 3.0.</p>
 
 <p><code>--show-each</code> This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  <code>SHOW_EACH_C</code> is your friend if you prefer to set this via the shell environment.</p>
 
@@ -376,6 +376,9 @@ Also for multiple server certificates are being checked for as well as for the c
 <li>whole 9 yards</li>
 </ol>
 
+
+<p><code>--disable-rating</code> disables rating.
+Rating automatically gets disabled, to not give a wrong or misleading grade, when not all required functions are executed (e.g when checking for a single vulnerabilities).</p>
 
 <h3 id="FILE-OUTPUT-OPTIONS">FILE OUTPUT OPTIONS</h3>
 
@@ -475,12 +478,61 @@ Also for multiple server certificates are being checked for as well as for the c
 </ul>
 
 
+<h3 id="RATING">RATING</h3>
+
+<p>This program has a near-complete implementation of SSL Labs's '<a href="https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide">SSL Server Rating Guide</a>'.</p>
+
+<p>This is <em>not</em> a 100% reimplementation of the <a href="https://www.ssllabs.com/ssltest/analyze.html">SSL Lab's SSL Server Test</a>, but an implementation of the above rating specification, slight discrepancies may occur. Please note that for now we stick to the SSL Labs rating as good as possible. We are not responsible for their rating. Before filing issues please inspect their Rating Guide.</p>
+
+<p>Disclaimer: Having a good grade is <strong>NOT</strong> necessarily equal to having good security! Don't start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it.</p>
+
+<p>As of writing, these checks are missing:
+* GOLDENDOODLE - should be graded <strong>F</strong> if vulnerable
+* Insecure renegotiation - should be graded <strong>F</strong> if vulnerable
+* Padding oracle in AES-NI CBC MAC check (CVE-2016-2107) - should be graded <strong>F</strong> if vulnerable
+* Sleeping POODLE - should be graded <strong>F</strong> if vulnerable
+* Zero Length Padding Oracle (CVE-2019-1559) - should be graded <strong>F</strong> if vulnerable
+* Zombie POODLE - should be graded <strong>F</strong> if vulnerable
+* All remaining old Symantec PKI certificates are distrusted - should be graded <strong>T</strong>
+* Symantec certificates issued before June 2016 are distrusted - should be graded <strong>T</strong>
+* ! A reading of DH params - should give correct points in <code>set_key_str_score()</code>
+* Anonymous key exchange - should give <strong>0</strong> points in <code>set_key_str_score()</code>
+* Exportable key exchange - should give <strong>40</strong> points in <code>set_key_str_score()</code>
+* Weak key (Debian OpenSSL Flaw) - should give <strong>0</strong> points in <code>set_key_str_score()</code></p>
+
+<h4 id="Implementing-new-grades-caps-or-warnings">Implementing new grades caps or -warnings</h4>
+
+<p>To implement a new grading cap, simply call the <code>set_grade_cap()</code> function, with the grade and a reason:
+<code>bash
+set_grade_cap "D" "Vulnerable to documentation"
+</code>
+To implement a new grade warning, simply call the <code>set_grade_warning()</code> function, with a message:
+<code>bash
+set_grade_warning "Documentation is always right"
+</code></p>
+
+<h4 id="Implementing-a-new-check-which-contains-grade-caps">Implementing a new check which contains grade caps</h4>
+
+<p>When implementing a new check (be it vulnerability or not) that sets grade caps, the <code>set_rating_state()</code> has to be updated (i.e. the <code>$do_mycheck</code> variable-name has to be added to the loop, and <code>$nr_enabled</code> if-statement has to be incremented)</p>
+
+<p>The <code>set_rating_state()</code> automatically disables ratinng, if all the required checks are <em>not</em> enabled.
+This is to prevent giving out a misleading or wrong grade.</p>
+
+<h4 id="Implementing-a-new-revision">Implementing a new revision</h4>
+
+<p>When a new revision of the rating specification comes around, the following has to be done:
+* New grade caps has to be either:
+  1. Added to the script wherever relevant, or
+  2. Added to the above list of missing checks (if <em>i.</em> is not possible)
+* New grade warnings has to be added wherever relevant
+* The revision output in <code>run_rating()</code> function has to updated</p>
+
 <h2 id="EXAMPLES">EXAMPLES</h2>
 
 <pre><code>  testssl.sh testssl.sh
 </code></pre>
 
-<p>does a default run on https://testssl.sh (protocols, standard cipher lists, FS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation.</p>
+<p>does a default run on https://testssl.sh (protocols, standard cipher lists, server's cipher preferences, forward secrecy, server defaults, vulnerabilities, client simulation, and rating.</p>
 
 <pre><code>  testssl.sh testssl.net:443
 </code></pre>
@@ -606,7 +658,7 @@ where to get this program from.</p>
 
   <ol class='man-decor man-foot man foot'>
     <li class='tl'></li>
-    <li class='tc'>January 2020</li>
+    <li class='tc'>May 2020</li>
     <li class='tr'>testssl(1)</li>
   </ol>
 

@@ -13,7 +13,7 @@
 * Several display/output fixes
 * Security fix: DNS input
 * Don't use external pwd anymore
-* Rating (via SSL Labs)
+* Rating (SSL Labs, not complete)
 
 ### Features implemented / improvements in 3.0
 
