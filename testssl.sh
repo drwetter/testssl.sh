@@ -10411,7 +10411,10 @@ starttls_xmpp_dialog() {
      debugme echo "=== starting xmpp STARTTLS dialog ==="
      [[ -z $XMPP_HOST ]] && XMPP_HOST="$NODE"
 
-     starttls_io "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='"$XMPP_HOST"' version='1.0'>"  'starttls(.*)features'  1 &&
+     namespace="jabber:client"
+     [[ "$STARTTLS_PROTOCOL" == xmpp-server ]] && namespace="jabber:server"
+
+     starttls_io "<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='"$namespace"' to='"$XMPP_HOST"' version='1.0'>"  'starttls(.*)features'  1 &&
      starttls_io "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>"  '<proceed'  1
      local ret=$?
      debugme echo "=== finished xmpp STARTTLS dialog with ${ret} ==="
@@ -10553,7 +10556,7 @@ fd_socket() {
                acap|acaps) # ACAP = Application Configuration Access Protocol, see https://tools.ietf.org/html/rfc2595
                     fatal "ACAP Easteregg: not implemented -- probably never will" $ERR_NOSUPPORT
                     ;;
-               xmpp|xmpps) # XMPP, see https://tools.ietf.org/html/rfc6120
+               xmpp|xmpps|xmpp-server) # XMPP, see https://tools.ietf.org/html/rfc6120
                     starttls_xmpp_dialog
                     # IM observatory: https://xmpp.net , XMPP server directory: https://xmpp.net/directory.php
                     ;;
@@ -18446,7 +18449,7 @@ help() {
 "$PROG_NAME [options] <URI>", where [options] is:
 
      -t, --starttls <protocol>     Does a default run against a STARTTLS enabled <protocol,
-                                   protocol is <ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|nntp|postgres|mysql>
+                                   protocol is <ftp|smtp|lmtp|pop3|imap|xmpp|xmpp-server|telnet|ldap|nntp|postgres|mysql>
      --xmpphost <to_domain>        For STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
      --file/-iL <fname>            Mass testing option: Reads one testssl.sh command line per line from <fname>.
@@ -19784,9 +19787,9 @@ determine_service() {
           fi
 
           case "$protocol" in
-               ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|postgres|mysql|nntp)
+               ftp|smtp|lmtp|pop3|imap|xmpp|xmpp-server|telnet|ldap|postgres|mysql|nntp)
                     STARTTLS="-starttls $protocol"
-                    if [[ "$protocol" == xmpp ]]; then
+                    if [[ "$protocol" == xmpp ]] || [[ "$protocol" == xmpp-server ]]; then
                          # for XMPP, openssl has a problem using -connect $NODEIP:$PORT. thus we use -connect $NODE:$PORT instead!
                          NODEIP="$NODE"
                          if [[ -n "$XMPP_HOST" ]]; then
@@ -20967,7 +20970,7 @@ parse_cmd_line() {
                     STARTTLS_PROTOCOL="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     case $STARTTLS_PROTOCOL in
-                         ftp|smtp|lmtp|pop3|imap|xmpp|telnet|ldap|irc|nntp|postgres|mysql) ;;
+                         ftp|smtp|lmtp|pop3|imap|xmpp|xmpp-server|telnet|ldap|irc|nntp|postgres|mysql) ;;
                          ftps|smtps|lmtps|pop3s|imaps|xmpps|telnets|ldaps|ircs|nntps|mysqls) ;;
                          *)   tmln_magenta "\nunrecognized STARTTLS protocol \"$1\", see help" 1>&2
                               help 1 ;;
