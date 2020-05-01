@@ -40,7 +40,7 @@ linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 1) SSL/TLS protocol check
 
-2) standard cipher categories to give you upfront an idea for the ciphers supported
+2) standard cipher categories
 
 3) server's cipher preferences (server order?)
 
@@ -52,7 +52,12 @@ linked OpenSSL binaries for major operating systems are supplied in `./bin/`.
 
 7) vulnerabilities
 
+8) testing each of 370 preconfigured ciphers
+
 8) client simulation
+
+9) rating
+
 
 
 ## OPTIONS AND PARAMETERS
@@ -265,7 +270,7 @@ Also for multiple server certificates are being checked for as well as for the c
 * `no-openssl`: don't display the OpenSSL cipher suite name, display IANA names only.
 * `no-iana`: don't display the IANA cipher suite name, display OpenSSL names only.
 
-Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and `no-rfc` instead of `no-iana` but it'll disappear after 3.0.
+Please note that in testssl.sh 3.0 you can still use `rfc` instead of `iana` and `no-rfc` instead of `no-iana` but it'll disappear after 3.0.
 
 `--show-each` This is an option for all wide modes only: it displays all ciphers tested -- not only succeeded ones.  `SHOW_EACH_C` is your friend if you prefer to set this via the shell environment.
 
@@ -284,6 +289,8 @@ Please note that in testssl.sh 3,0 you can still use `rfc` instead of `iana` and
 5. display bytes received via sockets
 6. whole 9 yards
 
+`--disable-rating` disables rating.
+Rating automatically gets disabled, to not give a wrong or misleading grade, when not all required functions are executed (e.g when checking for a single vulnerabilities).
 
 
 ### FILE OUTPUT OPTIONS
@@ -381,13 +388,55 @@ Except the environment variables mentioned above which can replace command line 
 * MAX_OSSL_FAIL: A number which tells testssl.sh how often an OpenSSL s_client connect may fail before the program gives up and terminates. The default is 2. You can increase it to a higher value if you frequently see a message like *Fatal error: repeated TCP connect problems, giving up*.
 * MAX_HEADER_FAIL: A number which tells testssl.sh how often a HTTP GET request over OpenSSL may return an empty file before the program gives up and terminates. The default is 3. Also here you can incerase the threshold when you spot messages like *Fatal error: repeated HTTP header connect problems, doesn't make sense to continue*.
 
+### RATING
+This program has a near-complete implementation of SSL Labs's '[SSL Server Rating Guide](https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide)'.
 
+This is *not* a 100% reimplementation of the [SSL Lab's SSL Server Test](https://www.ssllabs.com/ssltest/analyze.html), but an implementation of the above rating specification, slight discrepancies may occur. Please note that for now we stick to the SSL Labs rating as good as possible. We are not responsible for their rating. Before filing issues please inspect their Rating Guide.
+
+Disclaimer: Having a good grade is **NOT** necessarily equal to having good security! Don't start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it.
+
+As of writing, these checks are missing:
+* GOLDENDOODLE - should be graded **F** if vulnerable
+* Insecure renegotiation - should be graded **F** if vulnerable
+* Padding oracle in AES-NI CBC MAC check (CVE-2016-2107) - should be graded **F** if vulnerable
+* Sleeping POODLE - should be graded **F** if vulnerable
+* Zero Length Padding Oracle (CVE-2019-1559) - should be graded **F** if vulnerable
+* Zombie POODLE - should be graded **F** if vulnerable
+* All remaining old Symantec PKI certificates are distrusted - should be graded **T**
+* Symantec certificates issued before June 2016 are distrusted - should be graded **T**
+* ! A reading of DH params - should give correct points in `set_key_str_score()`
+* Anonymous key exchange - should give **0** points in `set_key_str_score()`
+* Exportable key exchange - should give **40** points in `set_key_str_score()`
+* Weak key (Debian OpenSSL Flaw) - should give **0** points in `set_key_str_score()`
+
+#### Implementing new grades caps or -warnings
+To implement a new grading cap, simply call the `set_grade_cap()` function, with the grade and a reason:
+```bash
+set_grade_cap "D" "Vulnerable to documentation"
+```
+To implement a new grade warning, simply call the `set_grade_warning()` function, with a message:
+```bash
+set_grade_warning "Documentation is always right"
+```
+#### Implementing a new check which contains grade caps
+When implementing a new check (be it vulnerability or not) that sets grade caps, the `set_rating_state()` has to be updated (i.e. the `$do_mycheck` variable-name has to be added to the loop, and `$nr_enabled` if-statement has to be incremented)
+
+The `set_rating_state()` automatically disables ratinng, if all the required checks are *not* enabled.
+This is to prevent giving out a misleading or wrong grade.
+
+#### Implementing a new revision
+When a new revision of the rating specification comes around, the following has to be done:
+* New grade caps has to be either:
+  1. Added to the script wherever relevant, or
+  2. Added to the above list of missing checks (if *i.* is not possible)
+* New grade warnings has to be added wherever relevant
+* The revision output in `run_rating()` function has to updated
 
 ## EXAMPLES
 
       testssl.sh testssl.sh
 
-does a default run on https://testssl.sh (protocols, standard cipher lists, FS, server preferences, server defaults, vulnerabilities, testing all known 370 ciphers, client simulation.
+does a default run on https://testssl.sh (protocols, standard cipher lists, server's cipher preferences, forward secrecy, server defaults, vulnerabilities, client simulation, and rating.
 
       testssl.sh testssl.net:443
 
@@ -506,4 +555,3 @@ Probably. Current known ones and interface for filing new ones: https://testssl.
 ## SEE ALSO
 
 `ciphers`(1), `openssl`(1), `s_client`(1), `x509`(1), `verify`(1), `ocsp`(1), `crl`(1), `bash`(1) and the websites https://testssl.sh/ and https://github.com/drwetter/testssl.sh/ .
-

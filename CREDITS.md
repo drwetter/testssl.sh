@@ -46,9 +46,9 @@ Full contribution, see git log.
   - Client simulations
   - CI integration, some test cases for it
 
- * Steven Danneman
-   - Postgres and MySQL STARTTLS support
-   - MongoDB support
+* Steven Danneman
+  - Postgres and MySQL STARTTLS support
+  - MongoDB support
 
 * Christian Dresen
    - Dockerfile
@@ -77,6 +77,9 @@ Full contribution, see git log.
 
 * Hubert Kario
   - helped with avoiding accidental TCP fragmentation
+
+* Magnus Larsen
+  - SSL Labs Rating
 
 * Jacco de Leeuw
   - skip checks which might trigger an IDS ($OFFENSIVE / --ids-friendly)
