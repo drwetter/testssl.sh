@@ -5182,7 +5182,6 @@ run_protocols() {
                5)   prln_svrty_high "CVE-2015-3197: $supported_no_ciph2";
                     fileout "$jsonID" "HIGH" "offered, no cipher" "CVE-2015-3197" "CWE-310"
                     add_proto_offered ssl2 yes
-                    add_tls_offered ssl2 yes
                     set_grade_cap "F" "SSLv2 is offered"
                     ;;
                7)   prln_local_problem "$OPENSSL doesn't support \"s_client -ssl2\""
@@ -5211,7 +5210,6 @@ run_protocols() {
                     latest_supported_string="SSLv3"
                fi
                add_proto_offered ssl3 yes
-               add_tls_offered ssl3 yes
                set_grade_cap "B" "SSLv3 is offered"
                ;;
           1)   prln_svrty_best "not offered (OK)"
