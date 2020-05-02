@@ -143,6 +143,9 @@ Full contribution, see git log.
 * Dmitri S
   - inspiration & help for Darwin port
 
+* Jonas Schäfer
+  - XMPP server patch
+
 * Marcin Szychowski
   - Quick'n'dirty client certificate support
 

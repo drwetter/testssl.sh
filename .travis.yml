@@ -1,4 +1,5 @@
 language: perl
+dist: bionic
 perl:
    - "5.26"
 addons:
