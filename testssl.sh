@@ -14607,12 +14607,14 @@ run_breach() {
      [[ "$NODE" =~ google ]] && referer="https://yandex.ru/"     # otherwise we have a false positive for google.com
      useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
-     printf "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
+     printf "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress,br\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      was_killed=$?                           # !=0 was killed
-     result=$(awk '/^Content-Encoding/ { print $2 }' $TMPFILE)
-     result=$(strip_lf "$result")
-     debugme grep '^Content-Encoding' $TMPFILE
+     result="$(grep -ia Content-Encoding: $TMPFILE)"
+     result="$(strip_lf "$result")"
+     result="${result#*:}"
+     result="$(strip_spaces "$result")"
+     debugme echo "$result"
      if [[ ! -s $TMPFILE ]]; then
           pr_warning "failed (HTTP header request stalled or empty return"
           if [[ $was_killed -ne 0 ]]; then
@@ -14628,10 +14630,10 @@ run_breach() {
           outln "$disclaimer"
           fileout "$jsonID" "OK" "not vulnerable, no HTTP compression $disclaimer" "$cve" "$cwe"
      else
-          pr_svrty_high "potentially NOT ok, uses $result HTTP compression."
+          pr_svrty_high "potentially NOT ok, \"$result\" HTTP compression detected."
           outln "$disclaimer"
           outln "$spaces$when_makesense"
-          fileout "$jsonID" "HIGH" "potentially VULNERABLE, uses $result HTTP compression $disclaimer" "$cve" "$cwe" "$hint"
+          fileout "$jsonID" "HIGH" "potentially VULNERABLE, $result HTTP compression detected $disclaimer" "$cve" "$cwe" "$hint"
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
 
