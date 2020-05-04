@@ -12795,7 +12795,8 @@ parse_tls_serverhello() {
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 3
                fi
-          elif [[ $tls_content_type != 14 ]] && [[ $tls_content_type != 15 ]] && \
+          fi
+          if [[ $tls_content_type != 14 ]] && [[ $tls_content_type != 15 ]] && \
                [[ $tls_content_type != 16 ]] && [[ $tls_content_type != 17 ]]; then
                debugme tmln_warning "Content type other than alert, handshake, change cipher spec, or application data detected."
                [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
