@@ -10049,11 +10049,6 @@ starttls_io() {
           debugme echo -en "C: $1"
           echo -en "$1" >&5
      fi
-     if [[ "$2" == JUSTSEND ]]; then
-          debugme echo -e "\n  (only sent)\n"
-          dd of=/dev/null bs=512 count=1 <&5 2>/dev/null &
-          return 0
-     fi
 
      # This seems a bit dangerous but works. No blockings yet. "if=nonblock" doesn't work on BSDs
      buffer="$(dd bs=512 count=1 <&5 2>/dev/null)"
