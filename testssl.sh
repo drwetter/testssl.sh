@@ -3,23 +3,25 @@
 # vim:ts=5:sw=5:expandtab
 # we have a spaces softtab, that ensures readability with other editors too
 
-# testssl.sh is a program for spotting weak SSL encryption, ciphers, version and some
-# vulnerabilities or features
+# testssl.sh is a program for spotting weak SSL/TLS encryption, ciphers, protocols and some
+# vulnerabilities or features. It may or may be not distributed by your distribution.
+# The upstream versions are available (please leave the links intact):
 #
-# Devel version is available from    https://github.com/drwetter/testssl.sh
-# Stable version from                https://testssl.sh
-# Please file bugs at github!        https://github.com/drwetter/testssl.sh/issues
+# Development version       https://github.com/drwetter/testssl.sh
+# Stable version            https://testssl.sh
+# File bugs at github       https://github.com/drwetter/testssl.sh/issues
 #
 # Project lead and initiator: Dirk Wetter, copyleft: 2007-today, contributions so far see CREDITS.md
 # Main contributions from David Cooper
+# Project lead and initiator: Dirk Wetter, copyleft: 2007-today.
+# Main contributions from David Cooper. Further contributors see CREDITS.md .
 #
-# License: GPLv2, see https://opensource.org/licenses/gpl-2.0.php
-# and accompanying license "LICENSE.txt". Redistribution + modification under this
+# License: GPLv2, see https://opensource.org/licenses/gpl-2.0.php and
+# ccompanying license "LICENSE.txt". Redistribution + modification under this
 # license permitted.
-# If you enclose this script or parts of it in your software, it has to
-# be accompanied by the same license (see link) and the place where to get
-# the recent version of this program. Do not violate the license and if
-# you do not agree to all of these terms, do not use it in the first place.
+# If you enclose this program or parts of it in your software, it has to be
+# accompanied by the same license (see link). Do not violate the license.
+# If you do not agree to these terms, do not use it in the first place!
 #
 # OpenSSL, which is being used and maybe distributed via one of this projects'
 # web sites, is subject to their licensing: https://www.openssl.org/source/license.txt
@@ -30,13 +32,13 @@
 #
 # Please note:  USAGE WITHOUT ANY WARRANTY, THE SOFTWARE IS PROVIDED "AS IS".
 # USE IT AT your OWN RISK!
-# Seriously! The threat is you run this code on your computer and input could be /
-# is being supplied via untrusted sources.
+# Seriously! The threat is you run this code on your computer and untrusted input e.g.
+# could be supplied from a server you are querying.
 #
 # HISTORY:
 # Back in 2006 it all started with a few openssl commands...
 # That's because openssl is a such a good swiss army knife (see e.g.
-# wiki.openssl.org/index.php/Command_Line_Utilities) that it was difficult to resist
+# https://wiki.openssl.org/index.php/Command_Line_Utilities) that it was difficult to resist
 # wrapping some shell commands around it, which I used for my pen tests. This is how
 # everything started.
 # Now it has grown up, it has bash socket support for most features, which has been basically
