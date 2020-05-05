@@ -3,7 +3,7 @@
 # vim:ts=5:sw=5:expandtab
 # we have a spaces softtab, that ensures readability with other editors too
 
-# testssl.sh is a program for spotting weak SSL/TLS encryption, ciphers, version and some
+# testssl.sh is a program for spotting weak SSL/TLS encryption, ciphers, protocols and some
 # vulnerabilities or features. It may or may be not distributed by your distribution.
 # The upstream versions are available (please leave the links intact):
 #
@@ -4866,8 +4866,9 @@ run_prototest_openssl() {
 # arg1: protocol
 # arg2: available (yes) or not (no)
 add_tls_offered() {
+     # the ":" is mandatory here (and @ other places), otherwise e.g. tls1 will match tls1_2
      if [[ "$PROTOS_OFFERED" =~ $1: ]]; then
-          # the ":" is mandatory here (and @ other places), otherwise e.g. tls1 will match tls1_2
+          # we got that protcol already
           :
      else
           PROTOS_OFFERED+="${1}:$2 "
@@ -10031,12 +10032,13 @@ run_alpn() {
      return $ret
 }
 
-# arg1: string to send
-# arg2: possible success strings a egrep pattern, needed!
-# arg3: wait in seconds
+# arg1: send string
+# arg2: success string: an egrep pattern
+# arg3: number of loops we should read from the buffer (optional, otherwise STARTTLS_SLEEP)
 starttls_io() {
-     local waitsleep=$STARTTLS_SLEEP
+     local nr_waits=$STARTTLS_SLEEP
      local buffer=""
+     local -i i
 
      [[ -n "$3" ]] && waitsleep=$3
      [[ -z "$2" ]] && echo "FIXME $((LINENO))"
@@ -10044,27 +10046,26 @@ starttls_io() {
      # If there's a sending part it's IO. Postgres sends via socket and replies via
      # strings "S". So there's no I part of IO ;-)
      if [[ -n "$1" ]]; then
-          debugme echo -en "C: \"$1\""
+          debugme echo -en "C: $1"
           echo -en "$1" >&5
      fi
 
      # This seems a bit dangerous but works. No blockings yet. "if=nonblock" doesn't work on BSDs
      buffer="$(dd bs=512 count=1 <&5 2>/dev/null)"
-     [[ "$DEBUG" -ge 2 ]] && echo -en "\nS: " && echo $buffer
 
-     for ((i=1; i < $waitsleep; i++ )); do
+     for ((i=1; i < $nr_waits; i++ )); do
+          [[ "$DEBUG" -ge 2 ]] && echo -en "\nS: " && echo $buffer
           if [[ "$buffer" =~ $2 ]]; then
                debugme echo "     ---> reply matched \"$2\""
                # the fd sometimes still seem to contain chars which confuses the following TLS handshake, trying to empty:
-               dd of=/dev/null bs=512 count=1 <&5 2>/dev/null
+               # dd of=/dev/null bs=512 count=1 <&5 2>/dev/null
                return 0
           else
                # no match yet, more reading from fd helps.
                buffer+=$(dd bs=512 count=1 <&5 2>/dev/null)
           fi
-          sleep 0.5
      done
-     return 0
+     return 1
 }
 
 
@@ -18356,7 +18357,7 @@ determine_optimal_proto() {
                $OPENSSL s_client $(s_client_options "$STARTTLS_OPTIMAL_PROTO $BUGS -connect "$NODEIP:$PORT" $PROXY -msg $STARTTLS $SNI") </dev/null >$TMPFILE 2>>$ERRFILE
                if sclient_auth $? $TMPFILE; then
                     all_failed=false
-                    add_tls_offered "${proto/-/}" yes
+                    add_tls_offered "${STARTTLS_OPTIMAL_PROTO/-/}" yes
                     break
                fi
           done
