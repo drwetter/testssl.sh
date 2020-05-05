@@ -2865,6 +2865,7 @@ emphasize_stuff_in_headers(){
           -e "s/CentOS/${yellow}CentOS${off}/g" \
           -e "s/Via/${yellow}Via${off}/g" \
           -e "s/X-Forwarded/${yellow}X-Forwarded${off}/g" \
+          -e "s/X-TYPO3-Parsetime/${yellow}X-TYPO3-Parsetime${off}/g" \
           -e "s/Liferay-Portal/${yellow}Liferay-Portal${off}/g" \
           -e "s/X-Cache-Lookup/${yellow}X-Cache-Lookup${off}/g" \
           -e "s/X-Cache/${yellow}X-Cache${off}/g" \
@@ -2912,6 +2913,7 @@ emphasize_stuff_in_headers(){
                     -e "s/CentOS/${html_yellow}CentOS${html_off}/g" \
                     -e "s/Via/${html_yellow}Via${html_off}/g" \
                     -e "s/X-Forwarded/${html_yellow}X-Forwarded${html_off}/g" \
+                    -e "s/X-TYPO3-Parsetime/${yellow}X-TYPO3-Parsetime${html_off}/g" \
                     -e "s/Liferay-Portal/${html_yellow}Liferay-Portal${html_off}/g" \
                     -e "s/X-Cache-Lookup/${html_yellow}X-Cache-Lookup${html_off}/g" \
                     -e "s/X-Cache/${html_yellow}X-Cache${html_off}/g" \
@@ -2991,7 +2993,7 @@ run_appl_banner() {
           run_http_header "$1" || return 1
      fi
      pr_bold " Application banner           "
-     grep -Eai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
+     grep -Eai '^X-Powered-By|^X-AspNet-Version|^X-Version|^Liferay-Portal|^X-TYPO3-Parsetime|^X-OWA-Version^|^MicrosoftSharePointTeamServices' $HEADERFILE >$TMPFILE
      if [[ $? -ne 0 ]]; then
           outln "--"
           fileout "$jsonID" "INFO" "No application banner found"
