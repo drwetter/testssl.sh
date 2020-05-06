@@ -8547,6 +8547,7 @@ certificate_info() {
                  if [[ -n "$cert_spki_info" ]]; then
                       out " (exponent is $cert_spki_info)"
                       json_msg+=" (exponent is $cert_spki_info)"
+                      [[ $cert_spki_info -eq 1 ]] && set_grade_cap "F" "RSA certificate uses exponent of 1"
                  fi
                  ;;
           "EC")  cert_spki_info="${cert_txt##*Subject Public Key Info:}"
