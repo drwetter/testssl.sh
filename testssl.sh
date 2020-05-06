@@ -12809,7 +12809,7 @@ parse_tls_serverhello() {
                [[ $tls_content_type != 16 ]] && [[ $tls_content_type != 17 ]]; then
                debugme tmln_warning "Content type other than alert, handshake, change cipher spec, or application data detected."
                [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
-               return 8
+               return 1
           elif [[ "${tls_protocol:0:2}" != 03 ]]; then
                debugme tmln_warning "Protocol record_version.major is not 03."
                [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
