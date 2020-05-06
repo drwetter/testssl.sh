@@ -70,7 +70,7 @@ Options are either short or long options. Any long or short option requiring a v
 
 `--help` (or no arg) display command line help
 
-`-b, --banner`        displays testssl.sh banner, including license, usage conditions, version of testssl.sh, detected openssl version, its path to it, # of ciphers of openssl, its build date and the architecture
+`-b, --banner`        displays testssl.sh banner, including license, usage conditions, version of testssl.sh, detected openssl version, its path to it, # of ciphers of openssl, its build date and the architecture.
 
 `-v, --version`     same as before
 
@@ -536,10 +536,15 @@ Developed by Dirk Wetter, David Cooper and many others, see CREDITS.md .
 ## COPYRIGHT
 
 Copyright © 2012 Dirk Wetter. License GPLv2: Free Software Foundation, Inc.
-       This is free software: you are free to change and redistribute it under the terms of the license. Usage WITHOUT ANY WARRANTY. USE at your OWN RISK!
+       This is free software: you are free to change and redistribute it under the terms of the license, see LICENSE.
 
-If you're offering testssl.sh as a public and / or paid service in the internet you need to mention to your audience that you're using this program and
-where to get this program from.
+Attribution is important for the future of this project - also in the
+internet. Thus if you're offering a scanner based on testssl.sh as a public
+and/or paid service in the internet you are strongly encouraged to mention to
+your audience that you're using this program and where to get this program
+from. That helps us to get bugfixes, other feedback and more contributions.
+
+Usage WITHOUT ANY WARRANTY. USE at your OWN RISK!
 
 
 ## LIMITATION
