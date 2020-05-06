@@ -312,6 +312,7 @@ HAS_PKEY=false
 HAS_NO_SSL2=false
 HAS_NOSERVERNAME=false
 HAS_CIPHERSUITES=false
+HAS_SECLEVEL=false
 HAS_COMP=false
 HAS_NO_COMP=false
 HAS_ALPN=false
@@ -870,15 +871,17 @@ is_ipv6addr() {
 #arg2: TLS 1.3 ciphers
 #arg3: options (e.g., -V)
 actually_supported_osslciphers() {
+     local ciphers="$1"
      local tls13_ciphers="$TLS13_OSSL_CIPHERS"
 
      [[ "$2" != ALL ]] && tls13_ciphers="$2"
+     "$HAS_SECLEVEL" && [[ -n "$ciphers" ]] && ciphers="@SECLEVEL=0:$1"
      if "$HAS_CIPHERSUITES"; then
-          $OPENSSL ciphers $3 $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$1" 2>/dev/null || echo ""
+          $OPENSSL ciphers $3 $OSSL_CIPHERS_S -ciphersuites "$tls13_ciphers" "$ciphers" 2>/dev/null || echo ""
      elif [[ -n "$tls13_ciphers" ]]; then
-          $OPENSSL ciphers $3 $OSSL_CIPHERS_S "$tls13_ciphers:$1" 2>/dev/null || echo ""
+          $OPENSSL ciphers $3 $OSSL_CIPHERS_S "$tls13_ciphers:$ciphers" 2>/dev/null || echo ""
      else
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$1" 2>/dev/null || echo ""
+          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$ciphers" 2>/dev/null || echo ""
      fi
 }
 
@@ -2121,6 +2124,13 @@ s_client_options() {
           options+=" -no_tls1_3"
      fi
 
+     if "$HAS_SECLEVEL"; then
+          if [[ "$ciphers" == notpresent ]]; then
+               [[ ! " $options " =~ \ -tls1_3\  ]] && ciphers="@SECLEVEL=0:ALL:COMPLEMENTOFALL"
+          else
+               ciphers="@SECLEVEL=0:$ciphers"
+          fi
+     fi
      if [[ "$ciphers" != notpresent ]] || [[ "$tls13_ciphers" != notpresent ]]; then
           if ! "$HAS_CIPHERSUITES"; then
                [[ "$ciphers" == notpresent ]] && ciphers=""
@@ -5717,15 +5727,17 @@ run_protocols() {
 listciphers() {
      local -i ret
      local debugname=""
+     local ciphers="$1"
      local tls13_ciphers="$TLS13_OSSL_CIPHERS"
 
      [[ "$2" != ALL ]] && tls13_ciphers="$2"
+     "$HAS_SECLEVEL" && [[ -n "$ciphers" ]] && ciphers="@SECLEVEL=0:$1"
      if "$HAS_CIPHERSUITES"; then
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 -ciphersuites "$tls13_ciphers" "$1" &>$TMPFILE
+          $OPENSSL ciphers $OSSL_CIPHERS_S $3 -ciphersuites "$tls13_ciphers" "$ciphers" &>$TMPFILE
      elif [[ -n "$tls13_ciphers" ]]; then
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$tls13_ciphers:$1" &>$TMPFILE
+          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$tls13_ciphers:$ciphers" &>$TMPFILE
      else
-          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$1" &>$TMPFILE
+          $OPENSSL ciphers $OSSL_CIPHERS_S $3 "$ciphers" &>$TMPFILE
      fi
      ret=$?
      debugme cat $TMPFILE
@@ -16080,7 +16092,7 @@ run_ssl_poodle() {
           nr_cbc_ciphers=$(count_ciphers $cbc_ciphers)
           nr_supported_ciphers=$(count_ciphers $(actually_supported_osslciphers $cbc_ciphers))
           # SNI not needed as SSLv3 has none:
-          $OPENSSL s_client -ssl3 $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY >$TMPFILE 2>$ERRFILE </dev/null
+          $OPENSSL s_client $(s_client_options "-ssl3 $STARTTLS $BUGS -cipher $cbc_ciphers -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? $TMPFILE
           sclient_success=$?
           [[ "$DEBUG" -eq 2 ]] && grep -Eq "error|failure" $ERRFILE | grep -Eav "unable to get local|verify error"
@@ -18214,6 +18226,7 @@ find_openssl_binary() {
      HAS_NO_SSL2=false
      HAS_NOSERVERNAME=false
      HAS_CIPHERSUITES=false
+     HAS_SECLEVEL=false
      HAS_COMP=false
      HAS_NO_COMP=false
      HAS_CURVES=false
@@ -18264,6 +18277,9 @@ find_openssl_binary() {
 
      $OPENSSL s_client -ciphersuites -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_CIPHERSUITES=true
+
+     $OPENSSL ciphers @SECLEVEL=0:ALL > /dev/null 2> /dev/null
+     [[ $? -eq 0 ]] && HAS_SECLEVEL=true
 
      $OPENSSL s_client -comp -connect invalid. 2>&1 | grep -aiq "unknown option" || \
           HAS_COMP=true
@@ -18634,6 +18650,7 @@ HAS_FALLBACK_SCSV: $HAS_FALLBACK_SCSV
 HAS_COMP: $HAS_COMP
 HAS_NO_COMP: $HAS_NO_COMP
 HAS_CIPHERSUITES: $HAS_CIPHERSUITES
+HAS_SECLEVEL: $HAS_SECLEVEL
 HAS_PKEY: $HAS_PKEY
 HAS_PKUTIL: $HAS_PKUTIL
 HAS_PROXY: $HAS_PROXY
