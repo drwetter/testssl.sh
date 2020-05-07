@@ -382,7 +382,7 @@ HEX_CIPHER=""                           # "
 GRADE_CAP=""                            # Keeps track of the current grading cap
 GRADE_CAP_REASONS=()                    # Keeps track of all the reasons why grades are capped
 GRADE_WARNINGS=()                       # Keeps track of all the grade warnings
-KEY_EXCH_SCORE=0                        # Keeps track of the score for category 2 "Key Exchange Strength"
+KEY_EXCH_SCORE=100                      # Keeps track of the score for category 2 "Key Exchange Strength"
 CIPH_STR_BEST=0                         # Keeps track of the best bit size for category 3 "Cipher Strength"
 CIPH_STR_WORST=100000                   # Keeps track of the worst bit size for category 3 "Cipher Strength"
                                         # Intentionally set very high, so it can be set to 0, if necessary
@@ -1039,41 +1039,31 @@ set_key_str_score() {
 
      # TODO: We need to get the size of DH params (follows the same table as the "else" clause)
      # For now, verifying the key size will do...
-     if [[ $type == EC || $type == DH ]]; then
-          if [[ $size -lt 110 ]]; then
+     if [[ $type == EC ]]; then
+          if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -gt 20 ]]; then
                let KEY_EXCH_SCORE=20
                set_grade_cap "F" "Using an insecure key"
-          elif [[ $size -lt 123 ]]; then
+          elif [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
                let KEY_EXCH_SCORE=40
                set_grade_cap "F" "Using an insecure key"
-          elif [[ $size -lt 163 ]]; then
+          elif [[ $size -lt 163 ]] && [[ $KEY_EXCH_SCORE -gt 80 ]]; then
                let KEY_EXCH_SCORE=80
                set_grade_cap "B" "Using a weak key"
-          elif [[ $size -lt 225 ]]; then
+          elif [[ $size -lt 225 ]] && [[ $KEY_EXCH_SCORE -gt 90 ]]; then
                let KEY_EXCH_SCORE=90
-          elif [[ $size -ge 225 ]]; then
-               let KEY_EXCH_SCORE=100
-          else
-               let KEY_EXCH_SCORE=0
-               set_grade_cap "F" "Using an insecure key"
           fi
      else
-          if [[ $size -lt 512 ]]; then
+          if [[ $size -lt 512 ]] && [[ $KEY_EXCH_SCORE -gt 20 ]]; then
                let KEY_EXCH_SCORE=20
                set_grade_cap "F" "Using an insecure key"
-          elif [[ $size -lt 1024 ]]; then
+          elif [[ $size -lt 1024 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
                let KEY_EXCH_SCORE=40
                set_grade_cap "F" "Using an insecure key"
-          elif [[ $size -lt 2048 ]]; then
+          elif [[ $size -lt 2048 ]] && [[ $KEY_EXCH_SCORE -gt 80 ]]; then
                let KEY_EXCH_SCORE=80
                set_grade_cap "B" "Using a weak key"
-          elif [[ $size -lt 4096 ]]; then
+          elif [[ $size -lt 4096 ]] && [[ $KEY_EXCH_SCORE -gt 90 ]]; then
                let KEY_EXCH_SCORE=90
-          elif [[ $size -ge 4096 ]]; then
-               let KEY_EXCH_SCORE=100
-          else
-               let KEY_EXCH_SCORE=0
-               set_grade_cap "F" "Using an insecure key"
           fi
      fi
      return 0
