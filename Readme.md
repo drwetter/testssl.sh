@@ -17,11 +17,9 @@ cryptographic flaws.
 * Machine readable output (CSV, two JSON formats)
 * No need to install or to configure something.  No gems, CPAN, pip or the like.
 * Works out of the box: Linux, OSX/Darwin, FreeBSD, NetBSD, MSYS2/Cygwin, WSL (bash on Windows). Only OpenBSD needs bash.
-* A Dockerfile is provided, there's also an offical container @ dockerhub.
-* Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not
-  only web servers at port 443.
-* Toolbox: Several command line options help you to run *your* test and
-  configure *your* output.
+* A Dockerfile is provided, there's also an offical container build @ dockerhub.
+* Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not only web servers at port 443.
+* Toolbox: Several command line options help you to run *your* test and configure *your* output.
 * Reliability: features are tested thoroughly.
 * Privacy: It's only you who sees the result, not a third party.
 * Freedom: It's 100% open source. You can look at the code, see what's going on.
@@ -39,7 +37,7 @@ to get bugfixes, other feedback and more contributions.
 
 ### Compatibility
 
-testssl.sh is working on every Linux/BSD distribution out of the box. Latest by 2.9dev
+Testssl.sh is working on every Linux/BSD distribution out of the box. Latest by 2.9dev
 most of the limitations of disabled features from the openssl client are gone
 due to bash-socket-based checks. As a result you can also use e.g. LibreSSL or OpenSSL >=
 1.1.1 . testssl.sh also works on other unixoid system out of the box, supposed they have
@@ -51,18 +49,20 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 ### Installation
 
-You can download testssl.sh by cloning this git repository:
+You can download testssl.sh branch 3.1dev just by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
-Or help yourself downloading the 3.0 ZIP archive [https://github.com/drwetter/testssl.sh/archive/3.0.1.zip](https://github.com/drwetter/testssl.sh/archive/3.0.1.zip). Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
+Think of 3.1dev like a rolling release, see below. For the stable version help yourself by downloading the [ZIP](https://github.com/drwetter/testssl.sh/archive/3.0.2.zip) or [tar.gz](https://github.com/drwetter/testssl.sh/archive/3.0.2.zip) archive. Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
 
 #### Docker
 
 Testssl.sh has minimal requirements. As stated you don't have to install or build anything.  You can just run it from the pulled/cloned directory. Still if you don't want to pull the github repo to your directory of choice you can pull a container from dockerhub and run it:
+
 ```
-docker run --rm -ti drwetter/testssl.sh <your_cmd_line>
+docker run --rm -ti  drwetter/testssl.sh:3.1dev <your_cmd_line>
 ```
+
 Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and run
 ```
 docker build .
@@ -77,16 +77,15 @@ Successfully built 889fa2f99933
 
 ### Status
 
-We're currently in the developement pase of 3.1dev. That means **occasionally** things can break. But we plan to keep it usable, think more of a rolling development. For missing critical purposes or when you don't like changes you should wait a bit until we're in the release phase. As soon as we reach that or the "dev" disappears in the branch you should rather use this version.
+We're currently in the development phase, version 3.1dev. 3.1dev will eventually become 3.2. Bigger features are developed in a separate branch before merged into 3.1dev to avoid hiccups or inconsistencies. Albeit we try to keep 3.1dev as solid as possible things will certainly change in 3.1dev. So if you need stability the 3.0 branch is better for you. Think of the 3.1dev branch like a rolling release.
 
-Support for 2.9.5 has been dropped. Supported is 3.0 only.
-
+Support for 2.9.5 has been dropped. Supported is 3.0.x only.
 
 ### Documentation
 
 * .. it is there for reading. Please do so :-) -- at least before asking questions. See man page in groff, html and markdown format in `~/doc/`.
 * [https://testssl.sh/](https://testssl.sh/) will help to get you started.
-* Will Hunt provides a longer, good [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/) for the (older) version 2.8, including useful background info.
+* For the (older) version 2.8 will Hunt provides a longer, good [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/), including useful background info.
 
 
 ### Contributing
