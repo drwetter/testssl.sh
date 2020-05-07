@@ -9312,7 +9312,7 @@ run_server_defaults() {
                               if [[ -z "${ciphers_to_test[n+1]}" ]]; then
                                    ciphers_to_test[n+1]="${ciphers_to_test[n]/aDSS/}"
                                    ciphers_to_test[n+1]="${ciphers_to_test[n+1]/::/:}"
-                                   [[ "${ciphe-S 127.0.0.1rs_to_test[n+1]:0:1}" == : ]] && ciphers_to_test[n+1]="${ciphers_to_test[n+1]:1}"
+                                   [[ "${ciphers_to_test[n+1]:0:1}" == : ]] && ciphers_to_test[n+1]="${ciphers_to_test[n+1]:1}"
                               fi
                               ciphers_to_test[n]="aDSS"
                          elif [[ "$ciph" == TLS_DH_* ]]; then
