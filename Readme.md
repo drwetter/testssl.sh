@@ -12,14 +12,10 @@ cryptographic flaws.
 
 * Clear output: you can tell easily whether anything is good or bad.
 * Machine readable output.
-* No installation needed: Linux, OSX/Darwin, FreeBSD, NetBSD, MSYS2/Cygwin,
-  WSL work out of the box. Only OpenBSD needs bash. No need to install
-  or to configure something.  No gems, CPAN, pip or the like.
+* No installation needed: Linux, OSX/Darwin, FreeBSD, NetBSD, MSYS2/Cygwin,  WSL work out of the box. Only OpenBSD needs bash. No need to install  or to configure something.  No gems, CPAN, pip or the like.
 * A Dockerfile is provided, there's also an offical container @ dockerhub.
-* Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not
-  only web servers at port 443.
-* Toolbox: Several command line options help you to run *your* test and
-  configure *your* output.
+* Flexibility: You can test any SSL/TLS enabled and STARTTLS service, not only web servers at port 443.
+* Toolbox: Several command line options help you to run *your* test and configure *your* output.
 * Reliability: features are tested thoroughly.
 * Privacy: It's only you who sees the result, not a third party.
 * Freedom: It's 100% open source. You can look at the code, see what's going on.
@@ -53,13 +49,14 @@ You can download testssl.sh by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
-Or help yourself downloading the latest ZIP archive [https://github.com/drwetter/testssl.sh/archive/3.0.1.zip](https://github.com/drwetter/testssl.sh/archive/3.0.1.zip). Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
+and checkout the 3.0 branch. For this stable version you also can help yourself by downloading the [ZIP](https://github.com/drwetter/testssl.sh/archive/3.0.2.zip) or [tar.gz](https://github.com/drwetter/testssl.sh/archive/3.0.2.zip) archive. Then
+just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
 
 #### Docker
 
 Testssl.sh has minimal requirements. As stated you don't have to install or build anything.  You can just run it from the pulled/cloned directory. Still if you don't want to pull the github repo to your directory of choice you can pull a container from dockerhub and run it:
 ```
-docker run --rm -ti drwetter/testssl.sh <your_cmd_line>
+docker run --rm -ti drwetter/testssl.sh:3.0 <your_cmd_line>
 ```
 Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and run
 ```
@@ -75,17 +72,16 @@ Successfully built 889fa2f99933
 
 ### Status
 
-We're currently in the late release candidate phase. That means you can and should use it for production
-and let us know if you encounter any additional bugs. Features implemented in 3.0 are listed in the [Changelog](https://github.com/drwetter/testssl.sh/blob/3.0/CHANGELOG.md).
+This is the stable 3.0 version. That means you can and should use it for production and let us know if you encounter any additional bugs. Features implemented in 3.0 are listed in the [Changelog](https://github.com/drwetter/testssl.sh/blob/3.0/CHANGELOG.md). Support for 2.9.5 has been dropped.
 
-Support for 2.9.5 has been dropped.
+The version 3.0 will receive bugfixes, labled as 3.0.1, 3.0.2 and so on. This will happen until 3.2 is released. Development is taking place in the [3.1dev](https://github.com/drwetter/testssl.sh/tree/3.1dev) branch which will eventually lead to version 3.2. We try to keep 3.1dev as solid as possible but things will certainly change in 3.1dev. Think of the 3.1dev branch like a rolling release.
 
 
 ### Documentation
 
 * .. it is there for reading. Please do so :-) -- at least before asking questions. See man page in groff, html and markdown format in `~/doc/`.
 * [https://testssl.sh/](https://testssl.sh/) will help to get you started.
-* Will Hunt provides a longer, good [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/) for the (older) version 2.8, including useful background info.
+* Albeit a bit older Will Hunt provides a longer, good [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/) for the (older) version 2.8, including useful background info.
 
 
 ### Contributing
@@ -96,8 +92,7 @@ Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/tes
 
 Bug reports are important. It makes this project more robust.
 
-Please file bugs in the issue tracker @ github. Do not forget to provide detailed information, see template for issue, and further details @
-https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. Nobody can read your thoughts -- yet. And only agencies your screen ;-)
+Please file bugs in the issue tracker @ github. Do not forget to provide detailed information, see template for issue, and further details @ https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. Nobody can read your thoughts -- yet. And only agencies your screen ;-)
 
 You can also debug yourself, see [here](https://github.com/drwetter/testssl.sh/wiki/Findings-and-HowTo-Fix-them).
 
