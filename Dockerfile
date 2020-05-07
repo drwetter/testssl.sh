@@ -10,7 +10,7 @@ RUN ln -s /home/testssl/testssl.sh /usr/local/bin/
 USER testssl
 WORKDIR /home/testssl/
 
-RUN git clone --depth=1 https://github.com/drwetter/testssl.sh.git .
+COPY . ./
 
 ENTRYPOINT ["testssl.sh"]
 
