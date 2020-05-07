@@ -8290,7 +8290,10 @@ certificate_info() {
      local sni_used="${10}"
      local ct="${11}"
      local certificate_list_ordering_problem="${12}"
-     local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_keyusage cert_ext_keyusage short_keyAlgo
+     local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_spki_info
+     local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
+     local -i lineno_matched=0
+     local cert_keyusage cert_ext_keyusage short_keyAlgo
      local outok=true
      local expire days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
@@ -8308,6 +8311,7 @@ certificate_info() {
      local -i ret=0
      local json_postfix=""                   # string to place at the end of JSON IDs when there is more than one certificate
      local jsonID=""                         # string to place at beginning of JSON IDs
+     local json_rating json_msg
      local indent=""
      local days2warn2=$DAYS2WARN2
      local days2warn1=$DAYS2WARN1
@@ -8476,51 +8480,51 @@ certificate_info() {
           if [[ $cert_key_algo =~ ecdsa ]] || [[ $cert_key_algo =~ ecPublicKey ]]; then
                if [[ "$cert_keysize" -le 110 ]]; then       # a guess
                     pr_svrty_critical "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "CRITICAL" "$short_keyAlgo $cert_keysize bits"
+                    json_rating="CRITICAL"; json_msg="$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 123 ]]; then     # a guess
                     pr_svrty_high "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "HIGH" "$short_keyAlgo $cert_keysize bits"
+                    json_rating="HIGH"; json_msg="$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 163 ]]; then
                     pr_svrty_medium "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "MEDIUM" "$short_keyAlgo $cert_keysize bits"
+                    json_rating="MEDIUM"; json_msg="$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 224 ]]; then
                     out "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "INFO" "$short_keyAlgo $cert_keysize bits"
+                    json_rating="INFO"; json_msg="$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 533 ]]; then
                     pr_svrty_good "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "OK" "$short_keyAlgo $cert_keysize bits"
+                    json_rating="OK"; json_msg="$short_keyAlgo $cert_keysize bits"
                else
                     out "keysize: $cert_keysize (not expected, FIXME)"
-                    fileout "${jsonID}${json_postfix}" "DEBUG" " $cert_keysize bits (not expected)"
+                    json_rating="DEBUG"; json_msg=" $cert_keysize bits (not expected)"
                     ((ret++))
                fi
-               outln " bits"
+               out " bits"
 
                set_key_str_score "$short_keyAlgo" "$cert_keysize" # TODO: should be $dh_param_size
           elif [[ $cert_key_algo =~ RSA ]] || [[ $cert_key_algo =~ rsa ]] || [[ $cert_key_algo =~ dsa ]] || \
                [[ $cert_key_algo =~ dhKeyAgreement ]] || [[ $cert_key_algo == X9.42\ DH ]]; then
                if [[ "$cert_keysize" -le 512 ]]; then
                     pr_svrty_critical "$cert_keysize"
-                    outln " bits"
-                    fileout "${jsonID}${json_postfix}" "CRITICAL" "$short_keyAlgo $cert_keysize bits"
+                    out " bits"
+                    json_rating="CRITICAL"; json_msg="$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 768 ]]; then
                     pr_svrty_high "$cert_keysize"
-                    outln " bits"
-                    fileout "${jsonID}${json_postfix}" "HIGH" "$short_keyAlgo $cert_keysize bits"
+                    out " bits"
+                    json_rating="HIGH"; json_msg="$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 1024 ]]; then
                     pr_svrty_medium "$cert_keysize"
-                    outln " bits"
-                    fileout "${jsonID}${json_postfix}" "MEDIUM" "$short_keyAlgo $cert_keysize bits"
+                    out " bits"
+                    json_rating="MEDIUM"; json_msg="$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 2048 ]]; then
-                    outln "$cert_keysize bits"
-                    fileout "${jsonID}${json_postfix}" "INFO" "$short_keyAlgo $cert_keysize bits"
+                    out "$cert_keysize bits"
+                    json_rating="INFO"; json_msg="$short_keyAlgo $cert_keysize bits"
                elif [[ "$cert_keysize" -le 4096 ]]; then
                     pr_svrty_good "$cert_keysize"
-                    fileout "${jsonID}${json_postfix}" "OK" "$short_keyAlgo $cert_keysize bits"
-                    outln " bits"
+                    json_rating="OK"; json_msg="$short_keyAlgo $cert_keysize bits"
+                    out " bits"
                else
-                    pr_warning "weird key size: $cert_keysize bits"; outln " (could cause compatibility problems)"
-                    fileout "${jsonID}${json_postfix}" "WARN" "$cert_keysize bits (Odd)"
+                    pr_warning "weird key size: $cert_keysize bits"; out " (could cause compatibility problems)"
+                    json_rating="WARN"; json_msg="$cert_keysize bits (Odd)"
                     ((ret++))
                fi
 
@@ -8528,11 +8532,53 @@ certificate_info() {
           else
                out "$cert_key_algo + $cert_keysize bits ("
                pr_warning "FIXME: can't tell whether this is good or not"
-               outln ")"
-               fileout "${jsonID}${json_postfix}" "WARN" "Server keys $cert_keysize bits, unknown public key algorithm $cert_key_algo"
+               out ")"
+               json_rating="WARN"; json_msg="Server keys $cert_keysize bits, unknown public key algorithm $cert_key_algo"
                ((ret++))
           fi
      fi
+
+     case "$short_keyAlgo" in
+          "RSA") cert_spki_info="${cert_txt##*Subject Public Key Info:}"
+                 cert_spki_info="${cert_spki_info##*Public Key Algorithm:}"
+                 cert_spki_info="${cert_spki_info#*Exponent:}"
+                 cert_spki_info="$(strip_leading_space "$cert_spki_info")"
+                 cert_spki_info="${cert_spki_info%%[[:space:]]*}"
+                 if [[ -n "$cert_spki_info" ]]; then
+                      out " (exponent is $cert_spki_info)"
+                      json_msg+=" (exponent is $cert_spki_info)"
+                      [[ $cert_spki_info -eq 1 ]] && set_grade_cap "F" "RSA certificate uses exponent of 1"
+                 fi
+                 ;;
+          "EC")  cert_spki_info="${cert_txt##*Subject Public Key Info:}"
+                 cert_spki_info="${cert_spki_info##*Public Key Algorithm:}"
+                 cert_spki_info="${cert_spki_info##*ASN1 OID: }"
+                 [[ "$cert_spki_info" =~ NIST\ CURVE:\  ]] && cert_spki_info="${cert_spki_info##*NIST CURVE: }"
+                 cert_spki_info="${cert_spki_info%%[[:space:]]*}"
+                 cert_spki_info="$(strip_lf "$(strip_spaces "$cert_spki_info")")"
+                 if [[ -n "$cert_spki_info" ]]; then
+                      out " (curve $cert_spki_info)"
+                      json_msg+=" (curve $cert_spki_info)"
+                 fi
+                 ;;
+          "DH")  if [[ -s "$common_primes_file" ]]; then
+                      cert_spki_info="${cert_txt##*Subject Public Key Info:}"
+                      cert_spki_info="${cert_spki_info##*Public Key Algorithm:}"
+                      cert_spki_info="$(awk '/prime:|prime P:/,/generator:|generator G:/' <<< "$cert_spki_info" | grep -Ev "prime|generator")"
+                      cert_spki_info="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$cert_spki_info")")")"
+                      [[ "${cert_spki_info:0:2}" == 00 ]] && cert_spki_info="${cert_spki_info:2}"
+                      cert_spki_info="$(toupper "$cert_spki_info")"
+                      lineno_matched=$(grep -n "$cert_spki_info" "$common_primes_file" 2>/dev/null | awk -F':' '{ print $1 }')
+                      if [[ "$lineno_matched" -ne 0 ]]; then
+                           cert_spki_info="$(awk "NR == $lineno_matched-1" "$common_primes_file" | awk -F'"' '{ print $2 }')"
+                           out " ($cert_spki_info)"
+                           json_msg+=" ($cert_spki_info)"
+                      fi
+                 fi
+                 ;;
+     esac
+     outln
+     fileout "${jsonID}${json_postfix}" "$json_rating" "$json_msg"
 
      out "$indent"; pr_bold " Server key usage             ";
      outok=true
