@@ -37,7 +37,7 @@ to get bugfixes, other feedback and more contributions.
 
 ### Compatibility
 
-testssl.sh is working on every Linux/BSD distribution out of the box. Latest by 2.9dev
+Testssl.sh is working on every Linux/BSD distribution out of the box. Latest by 2.9dev
 most of the limitations of disabled features from the openssl client are gone
 due to bash-socket-based checks. As a result you can also use e.g. LibreSSL or OpenSSL >=
 1.1.1 . testssl.sh also works on other unixoid system out of the box, supposed they have
@@ -49,7 +49,7 @@ Update notification here or @ [twitter](https://twitter.com/drwetter).
 
 ### Installation
 
-You can download testssl.sh version 3.1dev by cloning this git repository:
+You can download testssl.sh branch 3.1dev just by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
@@ -77,7 +77,7 @@ Successfully built 889fa2f99933
 
 ### Status
 
-We're currently in the development phase, version 3.1dev. 3.1dev will eventually become 3.2. Bigger features are developed in a seperate branch before merged into 3.1dev to avoid hiccups or inconsitencies. Albeit we try to keep 3.1dev as solid as possible things will certainly change in 3.1dev. So if you need stability the 3.0 branch is better for you. Think of the 3.1dev branch like a rolling release.
+We're currently in the development phase, version 3.1dev. 3.1dev will eventually become 3.2. Bigger features are developed in a separate branch before merged into 3.1dev to avoid hiccups or inconsistencies. Albeit we try to keep 3.1dev as solid as possible things will certainly change in 3.1dev. So if you need stability the 3.0 branch is better for you. Think of the 3.1dev branch like a rolling release.
 
 Support for 2.9.5 has been dropped. Supported is 3.0.x only.
 
@@ -85,7 +85,7 @@ Support for 2.9.5 has been dropped. Supported is 3.0.x only.
 
 * .. it is there for reading. Please do so :-) -- at least before asking questions. See man page in groff, html and markdown format in `~/doc/`.
 * [https://testssl.sh/](https://testssl.sh/) will help to get you started.
-* Will Hunt provides a longer, good [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/) for the (older) version 2.8, including useful background info.
+* For the (older) version 2.8 will Hunt provides a longer, good [description](https://www.4armed.com/blog/doing-your-own-ssl-tls-testing/), including useful background info.
 
 
 ### Contributing
