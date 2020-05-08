@@ -8535,9 +8535,14 @@ certificate_info() {
                  cert_spki_info="$(strip_leading_space "$cert_spki_info")"
                  cert_spki_info="${cert_spki_info%%[[:space:]]*}"
                  if [[ -n "$cert_spki_info" ]]; then
-                      out " (exponent is $cert_spki_info)"
+                      if [[ $cert_spki_info -eq 1 ]]; then
+                           out " (exponent is "; pr_svrty_critical "$cert_spki_info"; out ")"
+                           json_rating="CRITICAL"
+                           set_grade_cap "F" "RSA certificate uses exponent of 1"
+                      else
+                           out " (exponent is $cert_spki_info)"
+                      fi
                       json_msg+=" (exponent is $cert_spki_info)"
-                      [[ $cert_spki_info -eq 1 ]] && set_grade_cap "F" "RSA certificate uses exponent of 1"
                  fi
                  ;;
           "EC")  cert_spki_info="${cert_txt##*Subject Public Key Info:}"
