@@ -63,7 +63,7 @@ Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and r
 docker build .
 ```
 
-followed by ``docker exec -ti <ID> <your_cmd_line>`` where ``ID`` is the identifier in the last line from the build command like
+followed by ``docker run -ti <ID> <your_cmd_line>`` where ``ID`` is the identifier in the last line from the build command like
 
 ```
  ---> 889fa2f99933
