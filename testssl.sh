@@ -6825,11 +6825,11 @@ cipher_pref_check() {
 
      order=""; ciphers_found_with_sockets=false
      if [[ $proto == ssl3 ]] && ! "$HAS_SSL3" && ! "$using_sockets"; then
-          out "\n    SSLv3:     "; pr_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
+          prln_local_problem "$OPENSSL doesn't support \"s_client -ssl3\"";
           return 0
      fi
      if [[ $proto == tls1_3 ]] && ! "$HAS_TLS13" && ! "$using_sockets"; then
-          out "\n    TLSv1.3    "; pr_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\"";
+          prln_local_problem "$OPENSSL doesn't support \"s_client -tls1_3\"";
           return 0
      fi
 
