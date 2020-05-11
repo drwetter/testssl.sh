@@ -15887,6 +15887,7 @@ run_crime() {
 # BREACH is a HTTP-level compression & an attack which works against any cipher suite and is agnostic
 # to the version of TLS/SSL, more: http://www.breachattack.com/ . Foreign referrers are the important thing here!
 # Mitigation: see https://community.qualys.com/message/20360
+# Any URL can be vulnerable. Here only the given URL is tested. See also $when_makesense
 #
 run_breach() {
      local header
@@ -15899,8 +15900,10 @@ run_breach() {
      local when_makesense=" Can be ignored for static pages or if no secrets in the page"
      local cve="CVE-2013-3587"
      local cwe="CWE-310"
-     local hint=""
+     local hint="" c=""
      local jsonID="BREACH"
+     local compressions="gzip deflate compress br"
+     local has_compression=()
 
      [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH" && return 7
 
@@ -15925,33 +15928,55 @@ run_breach() {
      [[ "$NODE" =~ google ]] && referer="https://yandex.ru/"     # otherwise we have a false positive for google.com
      useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
-     tm_out "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
-     wait_kill $! $HEADER_MAXSLEEP
-     was_killed=$?                           # !=0 was killed
-     result=$(awk '/^Content-Encoding/ { print $2 }' $TMPFILE)
-     result=$(strip_lf "$result")
-     debugme grep '^Content-Encoding' $TMPFILE
-     if [[ ! -s $TMPFILE ]]; then
-          pr_warning "failed (HTTP header request stalled or empty return"
-          if [[ $was_killed -ne 0 ]]; then
-               pr_warning " and was terminated"
-               fileout "$jsonID" "WARN" "Test failed as HTTP request stalled and was terminated" "$cve" "$cwe"
+     for c in $compressions; do
+          tm_out "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: $c\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
+          wait_kill $! $HEADER_MAXSLEEP
+          was_killed=$?                           # !=0 was killed
+          result=$(grep -ia ^Content-Encoding: $TMPFILE)
+          debugme echo "$result"
+          result="$(strip_lf "$result")"
+          result="${result#*:}"
+          result="$(strip_spaces "$result")"
+          if [[ ! -s $TMPFILE ]]; then
+               if [[ $was_killed -ne 0 ]]; then
+                    has_compression+=("$c:warn_stalled")
+               else
+                    has_compression+=("$c:warn_empty")
+               fi
+               ret+=1
+          elif [[ -z $result ]]; then
+               has_compression+=("$c:no")
           else
-               fileout "$jsonID" "WARN" "Test failed as HTTP response was empty" "$cve" "$cwe"
+               has_compression+=("$c:yes")
           fi
-          prln_warning ") "
-          ret=1
-     elif [[ -z $result ]]; then
-          pr_svrty_best "no HTTP compression (OK) "
+     done
+
+     result=""
+     if [[ ! ${has_compression[@]} =~ yes ]] && [[ ! ${has_compression[@]} =~ warn ]]; then
+          pr_svrty_best "no gzip/deflate/compress/br HTTP compression (OK) "
           outln "$disclaimer"
-          fileout "$jsonID" "OK" "not vulnerable, no HTTP compression $disclaimer" "$cve" "$cwe"
+          fileout "$jsonID" "OK" "not vulnerable, no gzip/deflate/compress/br HTTP compression $disclaimer" "$cve" "$cwe"
+     elif [[ ${has_compression[@]} =~ warn_stalled ]]; then
+          pr_warning "At least 1/4 checks failed (HTTP header request stalled and was terminated"
+          out ", debug: ${has_compression[@]})"
+          fileout "$jsonID" "WARN" "Test failed as HTTP request stalled and was terminated" "$cve" "$cwe"
+     elif [[ ${has_compression[@]} =~ warn_empty ]]; then
+          pr_warning "At least 1/4 checks failed (HTTP header request was empty, debug: ${has_compression[@]}"
+          out ", debug: ${has_compression[@]})"
+          fileout "$jsonID" "WARN" "Test failed as HTTP response was empty, debug: ${has_compression[@]}" "$cve" "$cwe"
      else
-          pr_svrty_high "potentially NOT ok, uses $result HTTP compression."
+          for c in ${has_compression[@]}; do
+               if [[ $c =~ yes ]]; then
+                    result+="${c%:*} "
+               fi
+          done
+          result="$(strip_trailing_space "$result")"
+          pr_svrty_high "potentially NOT ok, \"$result\" HTTP compression detected."
           outln "$disclaimer"
           outln "$spaces$when_makesense"
-          fileout "$jsonID" "HIGH" "potentially VULNERABLE, uses $result HTTP compression $disclaimer" "$cve" "$cwe" "$hint"
+          fileout "$jsonID" "HIGH" "potentially VULNERABLE, $result HTTP compression detected $disclaimer" "$cve" "$cwe" "$hint"
      fi
-     # Any URL can be vulnerable. I am testing now only the given URL!
+     debugme echo "has_compression: ${has_compression[@]}"
 
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
