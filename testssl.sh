@@ -6993,7 +6993,11 @@ cipher_pref_check() {
                     ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode[i]}"
                done
                [[ -z "$ciphers_to_test" ]] && break
-               tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+               if "$wide" && "$SHOW_SIGALGO"; then
+                    tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "all"
+               else
+                    tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+               fi
                [[ $? -ne 0 ]] && break
                cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                for (( i=0; i < nr_ciphers; i++ )); do
@@ -17006,7 +17010,7 @@ run_beast(){
                          ! "${ciphers_found[i]}" && ciphers_to_test+=", ${hexcode[i]}"
                     done
                     [[ -z "$ciphers_to_test" ]] && break
-                    if "$SHOW_SIGALGO"; then
+                    if "$WIDE" && "$SHOW_SIGALGO"; then
                          tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "all"
                     else
                          tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
