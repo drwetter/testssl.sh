@@ -11,6 +11,7 @@
 * Added several ciphers to colored ciphers
 * Percent output char problem fixed
 * Several display/output fixes
+* BREACH check: list all compression methods and add brotli
 * Security fix: DNS input
 * Don't use external pwd anymore
 * STARTTLS: XMPP server support
