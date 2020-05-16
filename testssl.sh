@@ -12800,6 +12800,7 @@ parse_tls_serverhello() {
      local len1 len2 len3 key_bitstring="" pem_certificate
      local dh_p dh_param ephemeral_param rfc7919_param
      local -i dh_p_len dh_param_len
+     local peering_signing_digest=0 peer_signature_type=0
 
      DETECTED_TLS_VERSION=""
      [[ $DEBUG -ge 1 ]] && echo > $TMPFILE
@@ -13033,6 +13034,14 @@ parse_tls_serverhello() {
                fi
                tls_serverkeyexchange_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverkeyexchange_ascii_len=$msg_len
+          elif [[ "$tls_msg_type" == 0F ]]; then
+               if [[ $msg_len -lt 4 ]]; then
+                    debugme tmln_warning "Response contained malformed certificate_verify message."
+                    return 1
+               fi
+               # Extract just the SignatureAndHashAlgorithm from the CertificateVerify message.
+               peering_signing_digest="${tls_handshake_ascii:i:2}"
+               peer_signature_type="${tls_handshake_ascii:$((i+2)):2}"
           elif [[ "$process_full" =~ all ]] && [[ "$tls_msg_type" == 16 ]]; then
                if [[ -n "$tls_certificate_status_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one certificate_status handshake message."
@@ -13811,12 +13820,24 @@ parse_tls_serverhello() {
                          29) dh_bits=253 ; named_curve_str="X25519" ;;
                          30) dh_bits=448 ; named_curve_str="X448" ;;
                     esac
+                    if [[ "$DETECTED_TLS_VERSION" == 0303 ]]; then
+                         # Skip over the public key to get to the SignatureAndHashAlgorithm
+                         # This is TLS 1.2-only, as this field does not appear in earlier versions.
+                         len1=2*$(hex2dec "${tls_serverkeyexchange_ascii:6:2}")
+                         offset=$((len1+8))
+                         if [[ $tls_serverkeyexchange_ascii_len -ge $((offset+4)) ]]; then
+                             # The SignatureAndHashAlgorithm won't be present in an anonymous
+                             # key exhange.
+                             peering_signing_digest="${tls_serverkeyexchange_ascii:offset:2}"
+                             peer_signature_type="${tls_serverkeyexchange_ascii:$((offset+2)):2}"
+                         fi
+                    fi
                fi
                if [[ $dh_bits -ne 0 ]] && [[ $named_curve -ne 29 ]] && [[ $named_curve -ne 30 ]]; then
-                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                ECDH, $named_curve_str, $dh_bits bits\n"
+                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
                     echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
                elif [[ $dh_bits -ne 0 ]]; then
-                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                $named_curve_str, $dh_bits bits\n"
+                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                $named_curve_str, $dh_bits bits"
                     echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
                fi
           elif [[ $rfc_cipher_suite =~ TLS_DHE_ ]] || [[ $rfc_cipher_suite =~ TLS_DH_anon ]] || \
@@ -13875,9 +13896,72 @@ parse_tls_serverhello() {
                     [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
                fi
 
-               [[ $DEBUG -ge 3 ]] && [[ $dh_bits -ne 0 ]] && echo -e "     dh_bits:                DH,$named_curve_str $dh_bits bits\n"
+               [[ $DEBUG -ge 3 ]] && [[ $dh_bits -ne 0 ]] && echo -e "     dh_bits:                DH,$named_curve_str $dh_bits bits"
                [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: DH,$named_curve_str $dh_bits bits" >> $TMPFILE
+               if [[ "$DETECTED_TLS_VERSION" == 0303 ]]; then
+                    # Skip over the public key (P, G, Y) to get to the SignatureAndHashAlgorithm
+                    # This is TLS 1.2-only, as this field does not appear in earlier versions.
+                    offset=$((dh_p_len+4))
+                    if [[ $tls_serverkeyexchange_ascii_len -lt $((offset+4)) ]]; then
+                         debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                         tmpfile_handle ${FUNCNAME[0]}.txt
+                         return 1
+                    fi
+                    len1=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+                    offset+=$((len1+4))
+                    if [[ $tls_serverkeyexchange_ascii_len -lt $((offset+4)) ]]; then
+                         debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                         tmpfile_handle ${FUNCNAME[0]}.txt
+                         return 1
+                    fi
+                    len1=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+                    offset+=$((len1+4))
+                    if [[ $tls_serverkeyexchange_ascii_len -ge $((offset+4)) ]]; then
+                        # The SignatureAndHashAlgorithm won't be present in an anonymous
+                        # key exhange.
+                         peering_signing_digest="${tls_serverkeyexchange_ascii:offset:2}"
+                         peer_signature_type="${tls_serverkeyexchange_ascii:$((offset+2)):2}"
+                    fi
+               fi
           fi
+     fi
+     if [[ 0x$peering_signing_digest -eq 8 ]] && \
+        [[ 0x$peer_signature_type -ge 4 ]] && [[ 0x$peer_signature_type -le 11 ]]; then
+          case $peer_signature_type in
+               04) peering_signing_digest="SHA256"; peer_signature_type="RSA-PSS" ;;
+               05) peering_signing_digest="SHA384"; peer_signature_type="RSA-PSS" ;;
+               06) peering_signing_digest="SHA512"; peer_signature_type="RSA-PSS" ;;
+               07) peering_signing_digest=""; peer_signature_type="Ed25519" ;;
+               08) peering_signing_digest=""; peer_signature_type="Ed448" ;;
+               09) peering_signing_digest="SHA256"; peer_signature_type="RSA-PSS" ;;
+               0A) peering_signing_digest="SHA384"; peer_signature_type="RSA-PSS" ;;
+               0B) peering_signing_digest="SHA512"; peer_signature_type="RSA-PSS" ;;
+          esac
+          if [[ -n "$peering_signing_digest" ]]; then
+               echo "Peer signing digest: $peering_signing_digest" >> $TMPFILE
+               [[ $DEBUG -ge 3 ]] && echo -e "     Peer signing digest:    $peering_signing_digest"
+          fi
+          echo "Peer signature type: $peer_signature_type" >> $TMPFILE
+          [[ $DEBUG -ge 3 ]] && echo -e "     Peer signature type:    $peer_signature_type\n"
+     elif [[ 0x$peering_signing_digest -ge 1 ]] && [[ 0x$peering_signing_digest -le 6 ]] && \
+          [[ 0x$peer_signature_type -ge 1 ]] && [[ 0x$peer_signature_type -le 3 ]]; then
+          case $peering_signing_digest in
+               01) peering_signing_digest="MD5" ;;
+               02) peering_signing_digest="SHA1" ;;
+               03) peering_signing_digest="SHA224" ;;
+               04) peering_signing_digest="SHA256" ;;
+               05) peering_signing_digest="SHA384" ;;
+               06) peering_signing_digest="SHA512" ;;
+          esac
+          case $peer_signature_type in
+               01) peer_signature_type="RSA" ;;
+               02) peer_signature_type="DSA" ;;
+               03) peer_signature_type="ECDSA" ;;
+          esac
+          echo "Peer signing digest: $peering_signing_digest" >> $TMPFILE
+          [[ $DEBUG -ge 3 ]] && echo -e "     Peer signing digest:    $peering_signing_digest"
+          echo "Peer signature type: $peer_signature_type" >> $TMPFILE
+          [[ $DEBUG -ge 3 ]] && echo -e "     Peer signature type:    $peer_signature_type\n"
      fi
      tmpfile_handle ${FUNCNAME[0]}.txt
 
