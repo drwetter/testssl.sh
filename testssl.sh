@@ -1040,7 +1040,7 @@ set_key_str_score() {
 
      # TODO: We need to get the size of DH params (follows the same table as the "else" clause)
      # For now, verifying the key size will do...
-     if [[ $type == EC ]]; then
+     if [[ $type == EC || $type == EdDSA ]]; then
           if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -gt 20 ]]; then
                let KEY_EXCH_SCORE=20
                set_grade_cap "F" "Using an insecure key"
@@ -6249,7 +6249,15 @@ read_dhtype_from_file() {
 
 # arg1: certificate file
 read_sigalg_from_file() {
-     $OPENSSL x509 -noout -text -in "$1" 2>/dev/null | awk -F':' '/Signature Algorithm/ { print $2; exit; }'
+     local sig_alg
+
+     sig_alg="$(strip_leading_space "$($OPENSSL x509 -noout -text -in "$1" 2>/dev/null | awk -F':' '/Signature Algorithm/ { print $2; exit; }')")"
+     case "$sig_alg" in
+          1.3.101.112|ED25519) tm_out "Ed25519" ;;
+          1.3.101.113|ED448)   tm_out "Ed448" ;;
+          *)                   tm_out "$sig_alg" ;;
+     esac
+
 }
 
 
@@ -7545,12 +7553,12 @@ get_server_certificate() {
      "$SSL_NATIVE" && using_sockets=false
 
      CERTIFICATE_LIST_ORDERING_PROBLEM=false
-     if [[ "$1" =~ "tls1_3" ]]; then
+     if [[ "$1" =~ tls1_3 ]]; then
           [[ $(has_server_protocol "tls1_3") -eq 1 ]] && return 1
-          if "$HAS_TLS13" && "$HAS_SIGALGS"; then
-               if [[ "$1" =~ "tls1_3_RSA" ]]; then
+          if "$HAS_TLS13" && "$HAS_SIGALGS" && [[ ! "$1" =~ tls1_3_EdDSA ]]; then
+               if [[ "$1" =~ tls1_3_RSA ]]; then
                     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs PSS+SHA256:PSS+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
-               elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
+               elif [[ "$1" =~ tls1_3_ECDSA ]]; then
                     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs ECDSA+SHA256:ECDSA+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
                else
                     return 1
@@ -7564,10 +7572,12 @@ get_server_certificate() {
                # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
                if ( [[ "$STARTTLS" =~ ldap ]] || [[ "$STARTTLS" =~ irc ]] ); then
                     return 1
-               elif [[ "$1" =~ "tls1_3_RSA" ]]; then
+               elif [[ "$1" =~ tls1_3_RSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
-               elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
+               elif [[ "$1" =~ tls1_3_ECDSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
+               elif [[ "$1" =~ tls1_3_EdDSA ]]; then
+                    tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,06,00,04,08,07,08,08"
                else
                     return 1
                fi
@@ -8332,8 +8342,16 @@ certificate_info() {
      GOOD_CA_BUNDLE=""
      cert_sig_algo="$(awk -F':' '/Signature Algorithm/ { print $2; if (++Match >= 1) exit; }' <<< "$cert_txt")"
      cert_sig_algo="${cert_sig_algo// /}"
+     case "$cert_sig_algo" in
+          1.3.101.112|ED25519) cert_sig_algo="Ed25519" ;;
+          1.3.101.113|ED448)   cert_sig_algo="Ed448" ;;
+     esac
      cert_key_algo="$(awk -F':' '/Public Key Algorithm:/ { print $2; if (++Match >= 1) exit; }' <<< "$cert_txt")"
      cert_key_algo="${cert_key_algo// /}"
+     case "$cert_key_algo" in
+          1.3.101.112|E[Dd]25519) cert_key_algo="Ed25519"; cert_keysize=253 ;;
+          1.3.101.113|E[Dd]448)   cert_key_algo="Ed448"; cert_keysize=456 ;;
+     esac
 
      out "$indent" ; pr_bold " Signature Algorithm          "
      jsonID="cert_signatureAlgorithm"
@@ -8441,6 +8459,10 @@ certificate_info() {
                fileout "${jsonID}${json_postfix}" "CRITICAL" "MD5"
                set_grade_cap "F" "Supports a insecure signature (MD5)"
                ;;
+          Ed25519|Ed448)
+               prln_svrty_good "$cert_sig_algo"
+               fileout "${jsonID}${json_postfix}" "OK" "$cert_sig_algo"
+               ;;
           *)
                out "$cert_sig_algo ("
                pr_warning "FIXME: can't tell whether this is good or not"
@@ -8461,6 +8483,7 @@ certificate_info() {
           case $cert_key_algo in
                *RSA*|*rsa*)             short_keyAlgo="RSA";;
                *ecdsa*|*ecPublicKey)    short_keyAlgo="EC";;
+               *Ed25519*|*Ed448*)       short_keyAlgo="EdDSA";;
                *DSA*|*dsa*)             short_keyAlgo="DSA";;
                *GOST*|*gost*)           short_keyAlgo="GOST";;
                *dh*|*DH*)               short_keyAlgo="DH" ;;
@@ -8524,6 +8547,10 @@ certificate_info() {
                fi
 
                set_key_str_score "$short_keyAlgo" "$cert_keysize"
+          elif [[ $cert_key_algo == Ed* ]]; then
+               pr_svrty_good "$cert_key_algo"
+               json_rating="OK"; json_msg="$short_keyAlgo $cert_key_algo"
+               set_key_str_score "$short_keyAlgo" "$cert_keysize"
           else
                out "$cert_key_algo + $cert_keysize bits ("
                pr_warning "FIXME: can't tell whether this is good or not"
@@ -8586,19 +8613,19 @@ certificate_info() {
      cert_keyusage="$(strip_leading_space "$(awk '/X509v3 Key Usage:/ { getline; print $0 }' <<< "$cert_txt")")"
      if [[ -n "$cert_keyusage" ]]; then
           outln "$cert_keyusage"
-          if ( [[ " $cert_type " =~ " RSASig " ]] || [[ " $cert_type " =~ " DSA " ]] || [[ " $cert_type " =~ " ECDSA " ]] ) && \
-             [[ ! "$cert_keyusage" =~ "Digital Signature" ]]; then
+          if ( [[ " $cert_type " =~ \ RSASig\  ]] || [[ " $cert_type " =~ \ DSA\  ]] || [[ " $cert_type " =~ \ ECDSA\  ]] || [[ " $cert_type " =~ \ EdDSA\  ]] ) && \
+             [[ ! "$cert_keyusage" =~ Digital\ Signature ]]; then
                prln_svrty_high "$indent                              Certificate incorrectly used for digital signatures"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for digital signatures: \"$cert_keyusage\""
                outok=false
           fi
-          if [[ " $cert_type " =~ " RSAKMK " ]] && [[ ! "$cert_keyusage" =~ "Key Encipherment" ]]; then
+          if [[ " $cert_type " =~ \ RSAKMK\  ]] && [[ ! "$cert_keyusage" =~ Key\ Encipherment ]]; then
                prln_svrty_high "$indent                              Certificate incorrectly used for key encipherment"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for key encipherment: \"$cert_keyusage\""
                outok=false
           fi
-          if ( [[ " $cert_type " =~ " DH " ]] || [[ " $cert_type " =~ " ECDH " ]] ) && \
-             [[ ! "$cert_keyusage" =~ "Key Agreement" ]]; then
+          if ( [[ " $cert_type " =~ \ DH\  ]] || [[ " $cert_type " =~ \ ECDH\  ]] ) && \
+             [[ ! "$cert_keyusage" =~ Key\ Agreement ]]; then
                prln_svrty_high "$indent                              Certificate incorrectly used for key agreement"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for key agreement: \"$cert_keyusage\""
                outok=false
@@ -9257,27 +9284,28 @@ run_server_defaults() {
      ciphers_to_test[7]=""
      ciphers_to_test[8]="tls1_3_RSA"
      ciphers_to_test[9]="tls1_3_ECDSA"
+     ciphers_to_test[10]="tls1_3_EdDSA"
      certificate_type[1]="" ; certificate_type[2]=""
      certificate_type[3]=""; certificate_type[4]=""
      certificate_type[5]="" ; certificate_type[6]=""
      certificate_type[7]="" ; certificate_type[8]="RSASig"
-     certificate_type[9]="ECDSA"
+     certificate_type[9]="ECDSA" ; certificate_type[10]="EdDSA"
 
-     for (( n=1; n <= 16 ; n++ )); do
+     for (( n=1; n <= 17 ; n++ )); do
           # Some servers use a different certificate if the ClientHello
           # specifies TLSv1.1 and doesn't include a server name extension.
           # So, for each public key type for which a certificate was found,
           # try again, but only with TLSv1.1 and without SNI.
           if [[ $n -ne 1 ]] && [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
                ciphers_to_test[n]=""
-          elif [[ $n -ge 10 ]]; then
+          elif [[ $n -ge 11 ]]; then
                ciphers_to_test[n]=""
-               [[ ${success[n-9]} -eq 0 ]] && [[ $(has_server_protocol "tls1_1") -ne 1 ]] && \
-                    ciphers_to_test[n]="${ciphers_to_test[n-9]}" && certificate_type[n]="${certificate_type[n-9]}"
+               [[ ${success[n-10]} -eq 0 ]] && [[ $(has_server_protocol "tls1_1") -ne 1 ]] && \
+                    ciphers_to_test[n]="${ciphers_to_test[n-10]}" && certificate_type[n]="${certificate_type[n-10]}"
           fi
 
           if [[ -n "${ciphers_to_test[n]}" ]]; then
-               if [[ $n -ge 10 ]]; then
+               if [[ $n -ge 11 ]]; then
                     sni="$SNI"
                     SNI=""
                     get_server_certificate "${ciphers_to_test[n]}" "tls1_1"
@@ -9288,7 +9316,7 @@ run_server_defaults() {
                     success[n]=$?
                fi
                if [[ ${success[n]} -eq 0 ]] && [[ -s "$HOSTCERT" ]]; then
-                    [[ $n -ge 10 ]] && [[ ! -e $HOSTCERT.nosni ]] && cp $HOSTCERT $HOSTCERT.nosni
+                    [[ $n -ge 11 ]] && [[ ! -e $HOSTCERT.nosni ]] && cp $HOSTCERT $HOSTCERT.nosni
                     cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
                     >$ERRFILE
                     if [[ -z "$sessticket_lifetime_hint" ]]; then
@@ -9370,7 +9398,7 @@ run_server_defaults() {
                          fi
                          i=$((i + 1))
                     done
-                    if ! "$match_found" && [[ $n -ge 10 ]] && [[ $certs_found -ne 0 ]]; then
+                    if ! "$match_found" && [[ $n -ge 11 ]] && [[ $certs_found -ne 0 ]]; then
                          # A new certificate was found using TLSv1.1 without SNI.
                          # Check to see if the new certificate should be displayed.
                          # It should be displayed if it is either a match for the
@@ -9427,7 +9455,7 @@ run_server_defaults() {
                          [[ -n "${previous_intermediates[certs_found]}" ]] && [[ -r $TEMPDIR/hostcert_issuer.pem ]] && \
                               previous_hostcert_issuer[certs_found]=$(cat $TEMPDIR/hostcert_issuer.pem)
                          previous_ordering_problem[certs_found]=$CERTIFICATE_LIST_ORDERING_PROBLEM
-                         [[ $n -ge 10 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
+                         [[ $n -ge 11 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                          tls_version[certs_found]="$DETECTED_TLS_VERSION"
                          previous_hostcert_type[certs_found]=" ${certificate_type[n]}"
                          if [[ $DEBUG -ge 1 ]]; then
@@ -10738,7 +10766,15 @@ get_pub_key_size() {
      "$HAS_PKEY" || return 1
 
      # OpenSSL displays the number of bits for RSA and ECC
-     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE | awk -F'(' '/Public-Key/ { print $2 }')
+     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE)
+     if [[ "$pubkeybits" =~ E[Dd]25519 ]]; then
+          echo "Server public key is 253 bit" >> $TMPFILE
+          return 0
+     elif [[ "$pubkeybits" =~ E[Dd]448 ]]; then
+          echo "Server public key is 456 bit" >> $TMPFILE
+          return 0
+     fi
+     pubkeybits=$(awk -F'(' '/Public-Key/ { print $2 }' <<< "$pubkeybits")
      if [[ -n $pubkeybits ]]; then
           # remainder e.g. "256 bit)"
           pubkeybits="${pubkeybits//\)/}"
@@ -14279,10 +14315,10 @@ prepare_tls_clienthello() {
 
           if [[ 0x$tls_low_byte -le 0x03 ]]; then
                extension_signature_algorithms="
-               00, 0d,                    # Type: signature_algorithms , see RFC 5246
-               00, 20, 00,1e,             # lengths
+               00, 0d,                    # Type: signature_algorithms , see RFC 5246 and RFC 8422
+               00, 24, 00,22,             # lengths
                06,01, 06,02, 06,03, 05,01, 05,02, 05,03, 04,01, 04,02, 04,03,
-               03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
+               03,01, 03,02, 03,03, 02,01, 02,02, 02,03, 08,07, 08,08"
           else
                extension_signature_algorithms="
                00, 0d,                    # Type: signature_algorithms , see RFC 8446
