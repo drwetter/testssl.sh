@@ -7553,12 +7553,12 @@ get_server_certificate() {
      "$SSL_NATIVE" && using_sockets=false
 
      CERTIFICATE_LIST_ORDERING_PROBLEM=false
-     if [[ "$1" =~ "tls1_3" ]]; then
+     if [[ "$1" =~ tls1_3 ]]; then
           [[ $(has_server_protocol "tls1_3") -eq 1 ]] && return 1
-          if "$HAS_TLS13" && "$HAS_SIGALGS" && [[ ! "$1" =~ "tls1_3_EdDSA" ]]; then
-               if [[ "$1" =~ "tls1_3_RSA" ]]; then
+          if "$HAS_TLS13" && "$HAS_SIGALGS" && [[ ! "$1" =~ tls1_3_EdDSA ]]; then
+               if [[ "$1" =~ tls1_3_RSA ]]; then
                     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs PSS+SHA256:PSS+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
-               elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
+               elif [[ "$1" =~ tls1_3_ECDSA ]]; then
                     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs ECDSA+SHA256:ECDSA+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
                else
                     return 1
@@ -7572,11 +7572,11 @@ get_server_certificate() {
                # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
                if ( [[ "$STARTTLS" =~ ldap ]] || [[ "$STARTTLS" =~ irc ]] ); then
                     return 1
-               elif [[ "$1" =~ "tls1_3_RSA" ]]; then
+               elif [[ "$1" =~ tls1_3_RSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
-               elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
+               elif [[ "$1" =~ tls1_3_ECDSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
-               elif [[ "$1" =~ "tls1_3_EdDSA" ]]; then
+               elif [[ "$1" =~ tls1_3_EdDSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,06,00,04,08,07,08,08"
                else
                     return 1
@@ -8613,19 +8613,19 @@ certificate_info() {
      cert_keyusage="$(strip_leading_space "$(awk '/X509v3 Key Usage:/ { getline; print $0 }' <<< "$cert_txt")")"
      if [[ -n "$cert_keyusage" ]]; then
           outln "$cert_keyusage"
-          if ( [[ " $cert_type " =~ " RSASig " ]] || [[ " $cert_type " =~ " DSA " ]] || [[ " $cert_type " =~ " ECDSA " ]] || [[ " $cert_type " =~ " EdDSA " ]] ) && \
-             [[ ! "$cert_keyusage" =~ "Digital Signature" ]]; then
+          if ( [[ " $cert_type " =~ \ RSASig\  ]] || [[ " $cert_type " =~ \ DSA\  ]] || [[ " $cert_type " =~ \ ECDSA\  ]] || [[ " $cert_type " =~ \ EdDSA\  ]] ) && \
+             [[ ! "$cert_keyusage" =~ Digital\ Signature ]]; then
                prln_svrty_high "$indent                              Certificate incorrectly used for digital signatures"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for digital signatures: \"$cert_keyusage\""
                outok=false
           fi
-          if [[ " $cert_type " =~ " RSAKMK " ]] && [[ ! "$cert_keyusage" =~ "Key Encipherment" ]]; then
+          if [[ " $cert_type " =~ \ RSAKMK\  ]] && [[ ! "$cert_keyusage" =~ Key\ Encipherment ]]; then
                prln_svrty_high "$indent                              Certificate incorrectly used for key encipherment"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for key encipherment: \"$cert_keyusage\""
                outok=false
           fi
-          if ( [[ " $cert_type " =~ " DH " ]] || [[ " $cert_type " =~ " ECDH " ]] ) && \
-             [[ ! "$cert_keyusage" =~ "Key Agreement" ]]; then
+          if ( [[ " $cert_type " =~ \ DH\  ]] || [[ " $cert_type " =~ \ ECDH\  ]] ) && \
+             [[ ! "$cert_keyusage" =~ Key\ Agreement ]]; then
                prln_svrty_high "$indent                              Certificate incorrectly used for key agreement"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for key agreement: \"$cert_keyusage\""
                outok=false
