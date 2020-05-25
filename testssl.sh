@@ -19557,7 +19557,7 @@ get_caa_rr_record() {
      return 0
 }
 
-# watch out: $1 can also be a cname! --> all checked
+# arg1: domain to check for. Returned will be the MX record as a string
 get_mx_record() {
      local mx=""
      local saved_openssl_conf="$OPENSSL_CONF"
@@ -19567,20 +19567,48 @@ get_mx_record() {
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      # we need the last two columns here
      if "$HAS_HOST"; then
-          mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
+          mx="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif "$HAS_DIG"; then
-          mxs="$(dig +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
+          mx="$(dig +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
      elif "$HAS_DRILL"; then
-          mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
+          mx="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
      elif "$HAS_NSLOOKUP"; then
-          mxs="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')")"
+          mx="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')")"
      else
           # shouldn't reach this, as we checked in the top
           fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
      fi
      OPENSSL_CONF="$saved_openssl_conf"
-     echo "$mxs"
+     echo "$mx"
 }
+
+# arg1: domain / hostname. Returned will be the TXT record as a string which can be multilined
+# (one entry per line), for e.g. non-MTA-STS records.
+# Is supposed to be used by MTA STS in the future like get_txt_record _mta-sts.DOMAIN.TLD
+get_txt_record() {
+     local record=""
+     local saved_openssl_conf="$OPENSSL_CONF"
+     local noidnout=""
+
+     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
+     OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
+     # we need the last two columns here and strip any remaining double quotes later
+     if "$HAS_HOST"; then
+          record="$(host -t TXT "$1" 2>/dev/null | awk -F\" '/descriptive text/ { print $(NF-1) }')"
+     elif "$HAS_DIG"; then
+          record="$(dig +short $noidnout -t TXT "$1" 2>/dev/null)"
+     elif "$HAS_DRILL"; then
+          record="$(drill txt $1 | awk -F\" '/^[a-z0-9].*TXT/ { print $(NF-1) }')"
+     elif "$HAS_NSLOOKUP"; then
+          record="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk -F= '/text/ { print $(NF-1), $NF }')")"
+     else
+          # shouldn't reach this, as we checked in the top
+          fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
+     fi
+     OPENSSL_CONF="$saved_openssl_conf"
+     echo "${record//\"/}"
+}
+
 
 
 # set IPADDRs and IP46ADDRs
