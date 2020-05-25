@@ -17996,9 +17996,9 @@ get_caa_rr_record() {
      return 0
 }
 
-# watch out: $1 can also be a cname! --> all checked
+# arg1: domain
 get_mx_record() {
-     local mx=""
+     local mxs""
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
