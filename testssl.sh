@@ -1038,8 +1038,18 @@ set_key_str_score() {
 
      "$do_rating" || return 0
 
+<<<<<<< HEAD
      if [[ $type == EC ]]; then
           if [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
+=======
+     # TODO: We need to get the size of DH params (follows the same table as the "else" clause)
+     # For now, verifying the key size will do...
+     if [[ $type == EC || $type == EdDSA ]]; then
+          if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -gt 20 ]]; then
+               let KEY_EXCH_SCORE=20
+               set_grade_cap "F" "Using an insecure key"
+          elif [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
+>>>>>>> upstream/3.1dev
                let KEY_EXCH_SCORE=40
                set_grade_cap "F" "Using an insecure key"
           elif [[ $size -lt 163 ]] && [[ $KEY_EXCH_SCORE -gt 80 ]]; then
@@ -6241,7 +6251,15 @@ read_dhtype_from_file() {
 
 # arg1: certificate file
 read_sigalg_from_file() {
-     $OPENSSL x509 -noout -text -in "$1" 2>/dev/null | awk -F':' '/Signature Algorithm/ { print $2; exit; }'
+     local sig_alg
+
+     sig_alg="$(strip_leading_space "$($OPENSSL x509 -noout -text -in "$1" 2>/dev/null | awk -F':' '/Signature Algorithm/ { print $2; exit; }')")"
+     case "$sig_alg" in
+          1.3.101.112|ED25519) tm_out "Ed25519" ;;
+          1.3.101.113|ED448)   tm_out "Ed448" ;;
+          *)                   tm_out "$sig_alg" ;;
+     esac
+
 }
 
 
@@ -6985,7 +7003,11 @@ cipher_pref_check() {
                     ! "${ciphers_found2[i]}" && ciphers_to_test+=", ${hexcode[i]}"
                done
                [[ -z "$ciphers_to_test" ]] && break
-               tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+               if "$wide" && "$SHOW_SIGALGO"; then
+                    tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "all"
+               else
+                    tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
+               fi
                [[ $? -ne 0 ]] && break
                cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                for (( i=0; i < nr_ciphers; i++ )); do
@@ -7533,12 +7555,12 @@ get_server_certificate() {
      "$SSL_NATIVE" && using_sockets=false
 
      CERTIFICATE_LIST_ORDERING_PROBLEM=false
-     if [[ "$1" =~ "tls1_3" ]]; then
+     if [[ "$1" =~ tls1_3 ]]; then
           [[ $(has_server_protocol "tls1_3") -eq 1 ]] && return 1
-          if "$HAS_TLS13" && "$HAS_SIGALGS"; then
-               if [[ "$1" =~ "tls1_3_RSA" ]]; then
+          if "$HAS_TLS13" && "$HAS_SIGALGS" && [[ ! "$1" =~ tls1_3_EdDSA ]]; then
+               if [[ "$1" =~ tls1_3_RSA ]]; then
                     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs PSS+SHA256:PSS+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
-               elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
+               elif [[ "$1" =~ tls1_3_ECDSA ]]; then
                     $OPENSSL s_client $(s_client_options "$STARTTLS $BUGS -showcerts -connect $NODEIP:$PORT $PROXY $SNI -tls1_3 -tlsextdebug -status -msg -sigalgs ECDSA+SHA256:ECDSA+SHA384") </dev/null 2>$ERRFILE >$TMPFILE
                else
                     return 1
@@ -7552,10 +7574,12 @@ get_server_certificate() {
                # For STARTTLS protcols not being implemented yet via sockets this is a bypass otherwise it won't be usable at all (e.g. LDAP)
                if ( [[ "$STARTTLS" =~ ldap ]] || [[ "$STARTTLS" =~ irc ]] ); then
                     return 1
-               elif [[ "$1" =~ "tls1_3_RSA" ]]; then
+               elif [[ "$1" =~ tls1_3_RSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,10,00,0e,08,04,08,05,08,06,04,01,05,01,06,01,02,01"
-               elif [[ "$1" =~ "tls1_3_ECDSA" ]]; then
+               elif [[ "$1" =~ tls1_3_ECDSA ]]; then
                     tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,0a,00,08,04,03,05,03,06,03,02,03"
+               elif [[ "$1" =~ tls1_3_EdDSA ]]; then
+                    tls_sockets "04" "$TLS13_CIPHER" "all" "00,12,00,00, 00,05,00,05,01,00,00,00,00, 00,0d,00,06,00,04,08,07,08,08"
                else
                     return 1
                fi
@@ -8320,8 +8344,16 @@ certificate_info() {
      GOOD_CA_BUNDLE=""
      cert_sig_algo="$(awk -F':' '/Signature Algorithm/ { print $2; if (++Match >= 1) exit; }' <<< "$cert_txt")"
      cert_sig_algo="${cert_sig_algo// /}"
+     case "$cert_sig_algo" in
+          1.3.101.112|ED25519) cert_sig_algo="Ed25519" ;;
+          1.3.101.113|ED448)   cert_sig_algo="Ed448" ;;
+     esac
      cert_key_algo="$(awk -F':' '/Public Key Algorithm:/ { print $2; if (++Match >= 1) exit; }' <<< "$cert_txt")"
      cert_key_algo="${cert_key_algo// /}"
+     case "$cert_key_algo" in
+          1.3.101.112|E[Dd]25519) cert_key_algo="Ed25519"; cert_keysize=253 ;;
+          1.3.101.113|E[Dd]448)   cert_key_algo="Ed448"; cert_keysize=456 ;;
+     esac
 
      out "$indent" ; pr_bold " Signature Algorithm          "
      jsonID="cert_signatureAlgorithm"
@@ -8429,6 +8461,10 @@ certificate_info() {
                fileout "${jsonID}${json_postfix}" "CRITICAL" "MD5"
                set_grade_cap "F" "Supports a insecure signature (MD5)"
                ;;
+          Ed25519|Ed448)
+               prln_svrty_good "$cert_sig_algo"
+               fileout "${jsonID}${json_postfix}" "OK" "$cert_sig_algo"
+               ;;
           *)
                out "$cert_sig_algo ("
                pr_warning "FIXME: can't tell whether this is good or not"
@@ -8449,6 +8485,7 @@ certificate_info() {
           case $cert_key_algo in
                *RSA*|*rsa*)             short_keyAlgo="RSA";;
                *ecdsa*|*ecPublicKey)    short_keyAlgo="EC";;
+               *Ed25519*|*Ed448*)       short_keyAlgo="EdDSA";;
                *DSA*|*dsa*)             short_keyAlgo="DSA";;
                *GOST*|*gost*)           short_keyAlgo="GOST";;
                *dh*|*DH*)               short_keyAlgo="DH" ;;
@@ -8512,6 +8549,10 @@ certificate_info() {
                fi
 
                set_key_str_score "$short_keyAlgo" "$cert_keysize"
+          elif [[ $cert_key_algo == Ed* ]]; then
+               pr_svrty_good "$cert_key_algo"
+               json_rating="OK"; json_msg="$short_keyAlgo $cert_key_algo"
+               set_key_str_score "$short_keyAlgo" "$cert_keysize"
           else
                out "$cert_key_algo + $cert_keysize bits ("
                pr_warning "FIXME: can't tell whether this is good or not"
@@ -8574,19 +8615,19 @@ certificate_info() {
      cert_keyusage="$(strip_leading_space "$(awk '/X509v3 Key Usage:/ { getline; print $0 }' <<< "$cert_txt")")"
      if [[ -n "$cert_keyusage" ]]; then
           outln "$cert_keyusage"
-          if ( [[ " $cert_type " =~ " RSASig " ]] || [[ " $cert_type " =~ " DSA " ]] || [[ " $cert_type " =~ " ECDSA " ]] ) && \
-             [[ ! "$cert_keyusage" =~ "Digital Signature" ]]; then
+          if ( [[ " $cert_type " =~ \ RSASig\  ]] || [[ " $cert_type " =~ \ DSA\  ]] || [[ " $cert_type " =~ \ ECDSA\  ]] || [[ " $cert_type " =~ \ EdDSA\  ]] ) && \
+             [[ ! "$cert_keyusage" =~ Digital\ Signature ]]; then
                prln_svrty_high "$indent                              Certificate incorrectly used for digital signatures"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for digital signatures: \"$cert_keyusage\""
                outok=false
           fi
-          if [[ " $cert_type " =~ " RSAKMK " ]] && [[ ! "$cert_keyusage" =~ "Key Encipherment" ]]; then
+          if [[ " $cert_type " =~ \ RSAKMK\  ]] && [[ ! "$cert_keyusage" =~ Key\ Encipherment ]]; then
                prln_svrty_high "$indent                              Certificate incorrectly used for key encipherment"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for key encipherment: \"$cert_keyusage\""
                outok=false
           fi
-          if ( [[ " $cert_type " =~ " DH " ]] || [[ " $cert_type " =~ " ECDH " ]] ) && \
-             [[ ! "$cert_keyusage" =~ "Key Agreement" ]]; then
+          if ( [[ " $cert_type " =~ \ DH\  ]] || [[ " $cert_type " =~ \ ECDH\  ]] ) && \
+             [[ ! "$cert_keyusage" =~ Key\ Agreement ]]; then
                prln_svrty_high "$indent                              Certificate incorrectly used for key agreement"
                fileout "${jsonID}${json_postfix}" "HIGH" "Certificate incorrectly used for key agreement: \"$cert_keyusage\""
                outok=false
@@ -9245,27 +9286,28 @@ run_server_defaults() {
      ciphers_to_test[7]=""
      ciphers_to_test[8]="tls1_3_RSA"
      ciphers_to_test[9]="tls1_3_ECDSA"
+     ciphers_to_test[10]="tls1_3_EdDSA"
      certificate_type[1]="" ; certificate_type[2]=""
      certificate_type[3]=""; certificate_type[4]=""
      certificate_type[5]="" ; certificate_type[6]=""
      certificate_type[7]="" ; certificate_type[8]="RSASig"
-     certificate_type[9]="ECDSA"
+     certificate_type[9]="ECDSA" ; certificate_type[10]="EdDSA"
 
-     for (( n=1; n <= 16 ; n++ )); do
+     for (( n=1; n <= 17 ; n++ )); do
           # Some servers use a different certificate if the ClientHello
           # specifies TLSv1.1 and doesn't include a server name extension.
           # So, for each public key type for which a certificate was found,
           # try again, but only with TLSv1.1 and without SNI.
           if [[ $n -ne 1 ]] && [[ "$OPTIMAL_PROTO" == -ssl2 ]]; then
                ciphers_to_test[n]=""
-          elif [[ $n -ge 10 ]]; then
+          elif [[ $n -ge 11 ]]; then
                ciphers_to_test[n]=""
-               [[ ${success[n-9]} -eq 0 ]] && [[ $(has_server_protocol "tls1_1") -ne 1 ]] && \
-                    ciphers_to_test[n]="${ciphers_to_test[n-9]}" && certificate_type[n]="${certificate_type[n-9]}"
+               [[ ${success[n-10]} -eq 0 ]] && [[ $(has_server_protocol "tls1_1") -ne 1 ]] && \
+                    ciphers_to_test[n]="${ciphers_to_test[n-10]}" && certificate_type[n]="${certificate_type[n-10]}"
           fi
 
           if [[ -n "${ciphers_to_test[n]}" ]]; then
-               if [[ $n -ge 10 ]]; then
+               if [[ $n -ge 11 ]]; then
                     sni="$SNI"
                     SNI=""
                     get_server_certificate "${ciphers_to_test[n]}" "tls1_1"
@@ -9276,7 +9318,7 @@ run_server_defaults() {
                     success[n]=$?
                fi
                if [[ ${success[n]} -eq 0 ]] && [[ -s "$HOSTCERT" ]]; then
-                    [[ $n -ge 10 ]] && [[ ! -e $HOSTCERT.nosni ]] && cp $HOSTCERT $HOSTCERT.nosni
+                    [[ $n -ge 11 ]] && [[ ! -e $HOSTCERT.nosni ]] && cp $HOSTCERT $HOSTCERT.nosni
                     cp "$TEMPDIR/$NODEIP.get_server_certificate.txt" $TMPFILE
                     >$ERRFILE
                     if [[ -z "$sessticket_lifetime_hint" ]]; then
@@ -9358,7 +9400,7 @@ run_server_defaults() {
                          fi
                          i=$((i + 1))
                     done
-                    if ! "$match_found" && [[ $n -ge 10 ]] && [[ $certs_found -ne 0 ]]; then
+                    if ! "$match_found" && [[ $n -ge 11 ]] && [[ $certs_found -ne 0 ]]; then
                          # A new certificate was found using TLSv1.1 without SNI.
                          # Check to see if the new certificate should be displayed.
                          # It should be displayed if it is either a match for the
@@ -9415,7 +9457,7 @@ run_server_defaults() {
                          [[ -n "${previous_intermediates[certs_found]}" ]] && [[ -r $TEMPDIR/hostcert_issuer.pem ]] && \
                               previous_hostcert_issuer[certs_found]=$(cat $TEMPDIR/hostcert_issuer.pem)
                          previous_ordering_problem[certs_found]=$CERTIFICATE_LIST_ORDERING_PROBLEM
-                         [[ $n -ge 10 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
+                         [[ $n -ge 11 ]] && sni_used[certs_found]="" || sni_used[certs_found]="$SNI"
                          tls_version[certs_found]="$DETECTED_TLS_VERSION"
                          previous_hostcert_type[certs_found]=" ${certificate_type[n]}"
                          if [[ $DEBUG -ge 1 ]]; then
@@ -10726,7 +10768,15 @@ get_pub_key_size() {
      "$HAS_PKEY" || return 1
 
      # OpenSSL displays the number of bits for RSA and ECC
-     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE | awk -F'(' '/Public-Key/ { print $2 }')
+     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE)
+     if [[ "$pubkeybits" =~ E[Dd]25519 ]]; then
+          echo "Server public key is 253 bit" >> $TMPFILE
+          return 0
+     elif [[ "$pubkeybits" =~ E[Dd]448 ]]; then
+          echo "Server public key is 456 bit" >> $TMPFILE
+          return 0
+     fi
+     pubkeybits=$(awk -F'(' '/Public-Key/ { print $2 }' <<< "$pubkeybits")
      if [[ -n $pubkeybits ]]; then
           # remainder e.g. "256 bit)"
           pubkeybits="${pubkeybits//\)/}"
@@ -12788,6 +12838,7 @@ parse_tls_serverhello() {
      local len1 len2 len3 key_bitstring="" pem_certificate
      local dh_p dh_param ephemeral_param rfc7919_param
      local -i dh_p_len dh_param_len
+     local peering_signing_digest=0 peer_signature_type=0
 
      DETECTED_TLS_VERSION=""
      [[ $DEBUG -ge 1 ]] && echo > $TMPFILE
@@ -13021,6 +13072,14 @@ parse_tls_serverhello() {
                fi
                tls_serverkeyexchange_ascii="${tls_handshake_ascii:i:msg_len}"
                tls_serverkeyexchange_ascii_len=$msg_len
+          elif [[ "$tls_msg_type" == 0F ]]; then
+               if [[ $msg_len -lt 4 ]]; then
+                    debugme tmln_warning "Response contained malformed certificate_verify message."
+                    return 1
+               fi
+               # Extract just the SignatureAndHashAlgorithm from the CertificateVerify message.
+               peering_signing_digest="${tls_handshake_ascii:i:2}"
+               peer_signature_type="${tls_handshake_ascii:$((i+2)):2}"
           elif [[ "$process_full" =~ all ]] && [[ "$tls_msg_type" == 16 ]]; then
                if [[ -n "$tls_certificate_status_ascii" ]]; then
                     debugme tmln_warning "Response contained more than one certificate_status handshake message."
@@ -13799,12 +13858,24 @@ parse_tls_serverhello() {
                          29) dh_bits=253 ; named_curve_str="X25519" ;;
                          30) dh_bits=448 ; named_curve_str="X448" ;;
                     esac
+                    if [[ "$DETECTED_TLS_VERSION" == 0303 ]]; then
+                         # Skip over the public key to get to the SignatureAndHashAlgorithm
+                         # This is TLS 1.2-only, as this field does not appear in earlier versions.
+                         len1=2*$(hex2dec "${tls_serverkeyexchange_ascii:6:2}")
+                         offset=$((len1+8))
+                         if [[ $tls_serverkeyexchange_ascii_len -ge $((offset+4)) ]]; then
+                             # The SignatureAndHashAlgorithm won't be present in an anonymous
+                             # key exhange.
+                             peering_signing_digest="${tls_serverkeyexchange_ascii:offset:2}"
+                             peer_signature_type="${tls_serverkeyexchange_ascii:$((offset+2)):2}"
+                         fi
+                    fi
                fi
                if [[ $dh_bits -ne 0 ]] && [[ $named_curve -ne 29 ]] && [[ $named_curve -ne 30 ]]; then
-                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                ECDH, $named_curve_str, $dh_bits bits\n"
+                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                ECDH, $named_curve_str, $dh_bits bits"
                     echo "Server Temp Key: ECDH, $named_curve_str, $dh_bits bits" >> $TMPFILE
                elif [[ $dh_bits -ne 0 ]]; then
-                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                $named_curve_str, $dh_bits bits\n"
+                    [[ $DEBUG -ge 3 ]] && echo -e "     dh_bits:                $named_curve_str, $dh_bits bits"
                     echo "Server Temp Key: $named_curve_str, $dh_bits bits" >> $TMPFILE
                fi
           elif [[ $rfc_cipher_suite =~ TLS_DHE_ ]] || [[ $rfc_cipher_suite =~ TLS_DH_anon ]] || \
@@ -13863,9 +13934,72 @@ parse_tls_serverhello() {
                     [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
                fi
 
-               [[ $DEBUG -ge 3 ]] && [[ $dh_bits -ne 0 ]] && echo -e "     dh_bits:                DH,$named_curve_str $dh_bits bits\n"
+               [[ $DEBUG -ge 3 ]] && [[ $dh_bits -ne 0 ]] && echo -e "     dh_bits:                DH,$named_curve_str $dh_bits bits"
                [[ $dh_bits -ne 0 ]] && echo "Server Temp Key: DH,$named_curve_str $dh_bits bits" >> $TMPFILE
+               if [[ "$DETECTED_TLS_VERSION" == 0303 ]]; then
+                    # Skip over the public key (P, G, Y) to get to the SignatureAndHashAlgorithm
+                    # This is TLS 1.2-only, as this field does not appear in earlier versions.
+                    offset=$((dh_p_len+4))
+                    if [[ $tls_serverkeyexchange_ascii_len -lt $((offset+4)) ]]; then
+                         debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                         tmpfile_handle ${FUNCNAME[0]}.txt
+                         return 1
+                    fi
+                    len1=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+                    offset+=$((len1+4))
+                    if [[ $tls_serverkeyexchange_ascii_len -lt $((offset+4)) ]]; then
+                         debugme echo "Malformed ServerKeyExchange Handshake message in ServerHello."
+                         tmpfile_handle ${FUNCNAME[0]}.txt
+                         return 1
+                    fi
+                    len1=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
+                    offset+=$((len1+4))
+                    if [[ $tls_serverkeyexchange_ascii_len -ge $((offset+4)) ]]; then
+                        # The SignatureAndHashAlgorithm won't be present in an anonymous
+                        # key exhange.
+                         peering_signing_digest="${tls_serverkeyexchange_ascii:offset:2}"
+                         peer_signature_type="${tls_serverkeyexchange_ascii:$((offset+2)):2}"
+                    fi
+               fi
           fi
+     fi
+     if [[ 0x$peering_signing_digest -eq 8 ]] && \
+        [[ 0x$peer_signature_type -ge 4 ]] && [[ 0x$peer_signature_type -le 11 ]]; then
+          case $peer_signature_type in
+               04) peering_signing_digest="SHA256"; peer_signature_type="RSA-PSS" ;;
+               05) peering_signing_digest="SHA384"; peer_signature_type="RSA-PSS" ;;
+               06) peering_signing_digest="SHA512"; peer_signature_type="RSA-PSS" ;;
+               07) peering_signing_digest=""; peer_signature_type="Ed25519" ;;
+               08) peering_signing_digest=""; peer_signature_type="Ed448" ;;
+               09) peering_signing_digest="SHA256"; peer_signature_type="RSA-PSS" ;;
+               0A) peering_signing_digest="SHA384"; peer_signature_type="RSA-PSS" ;;
+               0B) peering_signing_digest="SHA512"; peer_signature_type="RSA-PSS" ;;
+          esac
+          if [[ -n "$peering_signing_digest" ]]; then
+               echo "Peer signing digest: $peering_signing_digest" >> $TMPFILE
+               [[ $DEBUG -ge 3 ]] && echo -e "     Peer signing digest:    $peering_signing_digest"
+          fi
+          echo "Peer signature type: $peer_signature_type" >> $TMPFILE
+          [[ $DEBUG -ge 3 ]] && echo -e "     Peer signature type:    $peer_signature_type\n"
+     elif [[ 0x$peering_signing_digest -ge 1 ]] && [[ 0x$peering_signing_digest -le 6 ]] && \
+          [[ 0x$peer_signature_type -ge 1 ]] && [[ 0x$peer_signature_type -le 3 ]]; then
+          case $peering_signing_digest in
+               01) peering_signing_digest="MD5" ;;
+               02) peering_signing_digest="SHA1" ;;
+               03) peering_signing_digest="SHA224" ;;
+               04) peering_signing_digest="SHA256" ;;
+               05) peering_signing_digest="SHA384" ;;
+               06) peering_signing_digest="SHA512" ;;
+          esac
+          case $peer_signature_type in
+               01) peer_signature_type="RSA" ;;
+               02) peer_signature_type="DSA" ;;
+               03) peer_signature_type="ECDSA" ;;
+          esac
+          echo "Peer signing digest: $peering_signing_digest" >> $TMPFILE
+          [[ $DEBUG -ge 3 ]] && echo -e "     Peer signing digest:    $peering_signing_digest"
+          echo "Peer signature type: $peer_signature_type" >> $TMPFILE
+          [[ $DEBUG -ge 3 ]] && echo -e "     Peer signature type:    $peer_signature_type\n"
      fi
      tmpfile_handle ${FUNCNAME[0]}.txt
 
@@ -14183,10 +14317,10 @@ prepare_tls_clienthello() {
 
           if [[ 0x$tls_low_byte -le 0x03 ]]; then
                extension_signature_algorithms="
-               00, 0d,                    # Type: signature_algorithms , see RFC 5246
-               00, 20, 00,1e,             # lengths
+               00, 0d,                    # Type: signature_algorithms , see RFC 5246 and RFC 8422
+               00, 24, 00,22,             # lengths
                06,01, 06,02, 06,03, 05,01, 05,02, 05,03, 04,01, 04,02, 04,03,
-               03,01, 03,02, 03,03, 02,01, 02,02, 02,03"
+               03,01, 03,02, 03,03, 02,01, 02,02, 02,03, 08,07, 08,08"
           else
                extension_signature_algorithms="
                00, 0d,                    # Type: signature_algorithms , see RFC 8446
@@ -15876,14 +16010,48 @@ run_crime() {
 }
 
 
-# BREACH is a HTTP-level compression & an attack which works against any cipher suite and is agnostic
-# to the version of TLS/SSL, more: http://www.breachattack.com/ . Foreign referrers are the important thing here!
+
+# As the name says. It expects as arg1 a GET command string. It returns 1
+# when GET command was stalled or killed (which is no not always used)
+# and echos "warn_*". It return 0 when everything went ok and echos the
+# compression if any.
+sub_breach_helper() {
+     local get_command="$1"
+     local detected_compression=""
+     local -i was_killed=0
+
+     safe_echo "$get_command" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
+     wait_kill $! $HEADER_MAXSLEEP
+     was_killed=$?                 # !=0 when it was killed
+     detected_compression=$(grep -ia ^Content-Encoding: $TMPFILE)
+     detected_compression="$(strip_lf "$detected_compression")"
+     detected_compression="${detected_compression#*:}"
+     detected_compression="$(strip_spaces "$detected_compression")"
+     if [[ ! -s $TMPFILE ]]; then
+          if [[ $was_killed -eq 0 ]]; then
+               echo "warn_stalled"
+          else
+               echo "warn_killed"
+          fi
+          return 1
+     elif [[ -z $detected_compression ]]; then
+          echo "no_compression"
+     else
+          echo "$detected_compression"
+     fi
+     return 0
+}
+
+
+
+# BREACH is a HTTP-level compression & an attack which works against any cipher suite and is agnostic to the
+# version of TLS/SSL, more: http://www.breachattack.com/ . External referrers are the important thing here!
 # Mitigation: see https://community.qualys.com/message/20360
+# Any URL can be vulnerable. Here only the given URL is tested. See also $when_makesense
 #
 run_breach() {
      local header
      local -i ret=0
-     local -i was_killed=0
      local referer useragent
      local url="$1"
      local spaces="                                          "
@@ -15891,8 +16059,12 @@ run_breach() {
      local when_makesense=" Can be ignored for static pages or if no secrets in the page"
      local cve="CVE-2013-3587"
      local cwe="CWE-310"
-     local hint=""
+     local hint="" c=""
      local jsonID="BREACH"
+     local compressions="gzip deflate compress br"
+     local has_compression=()
+     local detected_compression=""
+     local get_command=""
 
      [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH" && return 7
 
@@ -15903,13 +16075,6 @@ run_breach() {
           fileout "$jsonID" "INFO" "was not tested, server side requires x509 authentication" "$cve" "$cwe"
      fi
 
-     # if [[ $NR_HEADER_FAIL -ge $MAX_HEADER_FAIL ]]; then
-     #      pr_warning "Retrieving HTTP header failed before. Skipping."
-     #      fileout "$jsonID" "WARN" "HTTP response was wampty before" "$cve" "$cwe"
-     #      outln
-     #      return 1
-     # fi
-
      [[ -z "$url" ]] && url="/"
      disclaimer=" - only supplied \"$url\" tested"
 
@@ -15917,33 +16082,80 @@ run_breach() {
      [[ "$NODE" =~ google ]] && referer="https://yandex.ru/"     # otherwise we have a false positive for google.com
      useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
-     tm_out "GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: gzip,deflate,compress\r\nAccept: text/*\r\n\r\n" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") 1>$TMPFILE 2>$ERRFILE &
-     wait_kill $! $HEADER_MAXSLEEP
-     was_killed=$?                           # !=0 was killed
-     result=$(awk '/^Content-Encoding/ { print $2 }' $TMPFILE)
-     result=$(strip_lf "$result")
-     debugme grep '^Content-Encoding' $TMPFILE
-     if [[ ! -s $TMPFILE ]]; then
-          pr_warning "failed (HTTP header request stalled or empty return"
-          if [[ $was_killed -ne 0 ]]; then
-               pr_warning " and was terminated"
-               fileout "$jsonID" "WARN" "Test failed as HTTP request stalled and was terminated" "$cve" "$cwe"
-          else
-               fileout "$jsonID" "WARN" "Test failed as HTTP response was empty" "$cve" "$cwe"
-          fi
-          prln_warning ") "
-          ret=1
-     elif [[ -z $result ]]; then
-          pr_svrty_best "no HTTP compression (OK) "
-          outln "$disclaimer"
-          fileout "$jsonID" "OK" "not vulnerable, no HTTP compression $disclaimer" "$cve" "$cwe"
-     else
-          pr_svrty_high "potentially NOT ok, uses $result HTTP compression."
-          outln "$disclaimer"
-          outln "$spaces$when_makesense"
-          fileout "$jsonID" "HIGH" "potentially VULNERABLE, uses $result HTTP compression $disclaimer" "$cve" "$cwe" "$hint"
-     fi
-     # Any URL can be vulnerable. I am testing now only the given URL!
+
+     # Assemble the GET command with all available compressions and send them all, initially.
+     # If the result is negative: we can just tell the finding and return. If it's
+     # positive: We already have identified 1x compression
+     get_command="GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: ${compressions// /,}\r\nAccept: text/*\r\n\r\n"
+     detected_compression=$(sub_breach_helper "$get_command")
+     case "$detected_compression" in
+          warn_stalled)
+               pr_warning "First request failed (HTTP header request stalled and was terminated)"
+               fileout "$jsonID" "WARN" "Test failed as first HTTP request stalled and was terminated" "$cve" "$cwe"
+               ret=1
+               ;;
+          warn_failed)
+               pr_warning "First request failed (HTTP header request was empty)"
+               fileout "$jsonID" "WARN" "Test failed as first HTTP response was empty" "$cve" "$cwe"
+               ret=1
+               ;;
+          no_compression)
+               pr_svrty_best "no gzip/deflate/compress/br HTTP compression (OK) "
+               outln "$disclaimer"
+               fileout "$jsonID" "OK" "not vulnerable, no gzip/deflate/compress/br HTTP compression $disclaimer" "$cve" "$cwe"
+               ret=0
+               ;;
+          *)   # Now assemble the remaining compressions in $compressions and loop through them
+               has_compression+=("$detected_compression:yes")
+               compressions="${compressions//$detected_compression/}"
+               for c in $compressions; do
+                    get_command="GET $url HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $useragent\r\nReferer: $referer\r\nConnection: Close\r\nAccept-encoding: ${c}\r\nAccept: text/*\r\n\r\n"
+                    detected_compression=$(sub_breach_helper "$get_command")
+                    if [[ $? -ne 0 ]]; then
+                         # This failure unlikely here. The initial request must have succeeded and this one then
+                         # failed but we'd rather treat this correctly (e.d. IDS which triggers later). Not also
+                         # we exit on the first stalled request. So if the first one with all compressions failed,
+                         # we don't get here. It seems very unlikely the first failed and subsequent will succeed.
+                         has_compression+=("$c:$compressions")
+                    elif [[ "$detected_compression" =~ no_compression ]]; then
+                         has_compression+=("$c:no")
+                         debugme echo "has_compression: $c: no"
+                    elif [[ -n "detected_compression" ]]; then
+                         has_compression+=("$c:yes")
+                         debugme echo "has_compression: $c: yes"
+                    else
+                         prln_fixme "strange reply around line $((LINENO)) from sub_breach_helper()"
+                    fi
+               done
+
+               # Final verdict (if not happened preemptively before). We reuse $detected_compression here
+               detected_compression=""
+               if [[ ${has_compression[@]} =~ warn ]]; then
+                    # warn_empty / warn_stalled
+                    if [[ ${has_compression[@]} =~ warn_empty ]]; then
+                         pr_warning "At least 1/4 checks failed (HTTP header request was empty, debug: ${has_compression[@]}"
+                         out ", debug: ${has_compression[@]})"
+                         fileout "$jsonID" "WARN" "Test failed as HTTP response was empty, debug: ${has_compression[@]}" "$cve" "$cwe"
+                    else # warn_stalled
+                         pr_warning "At least 1/4 checks failed (HTTP header request stalled and was terminated"
+                         out ", debug: ${has_compression[@]})"
+                         fileout "$jsonID" "WARN" "Test failed as HTTP request stalled and was terminated" "$cve" "$cwe"
+                    fi
+               else
+                    for c in ${has_compression[@]}; do
+                         if [[ $c =~ yes ]]; then
+                              detected_compression+="${c%:*} "
+                         fi
+                    done
+                    detected_compression="$(strip_trailing_space "$detected_compression")"
+                    pr_svrty_high "potentially NOT ok, \"$detected_compression\" HTTP compression detected."
+                    outln "$disclaimer"
+                    outln "${spaces}${when_makesense}"
+                    fileout "$jsonID" "HIGH" "potentially VULNERABLE, $detected_compression HTTP compression detected $disclaimer" "$cve" "$cwe" "$hint"
+               fi
+               debugme outln "${spaces}has_compression: ${has_compression[@]}"
+               ;;
+     esac
 
      tmpfile_handle ${FUNCNAME[0]}.txt
      return $ret
@@ -16998,7 +17210,7 @@ run_beast(){
                          ! "${ciphers_found[i]}" && ciphers_to_test+=", ${hexcode[i]}"
                     done
                     [[ -z "$ciphers_to_test" ]] && break
-                    if "$SHOW_SIGALGO"; then
+                    if "$WIDE" && "$SHOW_SIGALGO"; then
                          tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "all"
                     else
                          tls_sockets "$proto_hex" "${ciphers_to_test:2}, 00,ff" "ephemeralkey"
@@ -19347,7 +19559,7 @@ get_caa_rr_record() {
      return 0
 }
 
-# watch out: $1 can also be a cname! --> all checked
+# arg1: domain to check for. Returned will be the MX record as a string
 get_mx_record() {
      local mx=""
      local saved_openssl_conf="$OPENSSL_CONF"
@@ -19357,20 +19569,48 @@ get_mx_record() {
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      # we need the last two columns here
      if "$HAS_HOST"; then
-          mxs="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
+          mx="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif "$HAS_DIG"; then
-          mxs="$(dig +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
+          mx="$(dig +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
      elif "$HAS_DRILL"; then
-          mxs="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
+          mx="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
      elif "$HAS_NSLOOKUP"; then
-          mxs="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')")"
+          mx="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk '/mail exchanger/ { print $(NF-1), $NF }')")"
      else
           # shouldn't reach this, as we checked in the top
           fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
      fi
      OPENSSL_CONF="$saved_openssl_conf"
-     echo "$mxs"
+     echo "$mx"
 }
+
+# arg1: domain / hostname. Returned will be the TXT record as a string which can be multilined
+# (one entry per line), for e.g. non-MTA-STS records.
+# Is supposed to be used by MTA STS in the future like get_txt_record _mta-sts.DOMAIN.TLD
+get_txt_record() {
+     local record=""
+     local saved_openssl_conf="$OPENSSL_CONF"
+     local noidnout=""
+
+     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
+     OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
+     # we need the last two columns here and strip any remaining double quotes later
+     if "$HAS_HOST"; then
+          record="$(host -t TXT "$1" 2>/dev/null | awk -F\" '/descriptive text/ { print $(NF-1) }')"
+     elif "$HAS_DIG"; then
+          record="$(dig +short $noidnout -t TXT "$1" 2>/dev/null)"
+     elif "$HAS_DRILL"; then
+          record="$(drill txt $1 | awk -F\" '/^[a-z0-9].*TXT/ { print $(NF-1) }')"
+     elif "$HAS_NSLOOKUP"; then
+          record="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk -F= '/text/ { print $(NF-1), $NF }')")"
+     else
+          # shouldn't reach this, as we checked in the top
+          fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
+     fi
+     OPENSSL_CONF="$saved_openssl_conf"
+     echo "${record//\"/}"
+}
+
 
 
 # set IPADDRs and IP46ADDRs
