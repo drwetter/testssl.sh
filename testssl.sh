@@ -1039,7 +1039,7 @@ set_key_str_score() {
 
      "$do_rating" || return 0
 
-     [[ $type == DHE ]] && type_output="temporal DH key (DH parameters)" || type_output="key"
+     [[ $type == DHE ]] && type_output="ephemeral DH key (DH parameters)" || type_output="key"
 
      if [[ $type == EC || $type == EdDSA ]]; then
           if [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
