@@ -1039,26 +1039,26 @@ set_key_str_score() {
 
      "$do_rating" || return 0
 
-     [[ $type == DHE ]] && type_output="DH key exchange parameters" || type_output="key"
+     [[ $type == DHE ]] && type_output="temporal DH key (DH parameters)" || type_output="key"
 
      if [[ $type == EC || $type == EdDSA ]]; then
-          if [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
+          if [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
                let KEY_EXCH_SCORE=40
                set_grade_cap "F" "Using an insecure $type_output"
-          elif [[ $size -lt 163 ]] && [[ $KEY_EXCH_SCORE -gt 80 ]]; then
+          elif [[ $size -lt 163 ]] && [[ $KEY_EXCH_SCORE -ge 80 ]]; then
                let KEY_EXCH_SCORE=80
                set_grade_cap "B" "Using a weak $type_output"
-          elif [[ $size -lt 225 ]] && [[ $KEY_EXCH_SCORE -gt 90 ]]; then
+          elif [[ $size -lt 225 ]] && [[ $KEY_EXCH_SCORE -ge 90 ]]; then
                let KEY_EXCH_SCORE=90
           fi
      else
-          if [[ $size -lt 1024 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
+          if [[ $size -lt 1024 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
                let KEY_EXCH_SCORE=40
                set_grade_cap "F" "Using an insecure $type_output"
-          elif [[ $size -lt 2048 ]] && [[ $KEY_EXCH_SCORE -gt 80 ]]; then
+          elif [[ $size -lt 2048 ]] && [[ $KEY_EXCH_SCORE -ge 80 ]]; then
                let KEY_EXCH_SCORE=80
                set_grade_cap "B" "Using a weak $type_output"
-          elif [[ $size -lt 4096 ]] && [[ $KEY_EXCH_SCORE -gt 90 ]]; then
+          elif [[ $size -lt 4096 ]] && [[ $KEY_EXCH_SCORE -ge 90 ]]; then
                let KEY_EXCH_SCORE=90
           fi
      fi
