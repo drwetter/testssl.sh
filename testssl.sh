@@ -1035,36 +1035,29 @@ set_grade_warning() {
 set_key_str_score() {
      local type=$1
      local size=$2
+     local type_output
 
      "$do_rating" || return 0
 
-<<<<<<< HEAD
-     if [[ $type == EC ]]; then
-          if [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
-=======
-     # TODO: We need to get the size of DH params (follows the same table as the "else" clause)
-     # For now, verifying the key size will do...
+     [[ $type == DHE ]] && type_output="DH key exchange parameters" || type_output="key"
+
      if [[ $type == EC || $type == EdDSA ]]; then
-          if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -gt 20 ]]; then
-               let KEY_EXCH_SCORE=20
-               set_grade_cap "F" "Using an insecure key"
-          elif [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
->>>>>>> upstream/3.1dev
+          if [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
                let KEY_EXCH_SCORE=40
-               set_grade_cap "F" "Using an insecure key"
+               set_grade_cap "F" "Using an insecure $type_output"
           elif [[ $size -lt 163 ]] && [[ $KEY_EXCH_SCORE -gt 80 ]]; then
                let KEY_EXCH_SCORE=80
-               set_grade_cap "B" "Using a weak key"
+               set_grade_cap "B" "Using a weak $type_output"
           elif [[ $size -lt 225 ]] && [[ $KEY_EXCH_SCORE -gt 90 ]]; then
                let KEY_EXCH_SCORE=90
           fi
      else
           if [[ $size -lt 1024 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
                let KEY_EXCH_SCORE=40
-               set_grade_cap "F" "Using an insecure key / DH key exchange parameters"
+               set_grade_cap "F" "Using an insecure $type_output"
           elif [[ $size -lt 2048 ]] && [[ $KEY_EXCH_SCORE -gt 80 ]]; then
                let KEY_EXCH_SCORE=80
-               set_grade_cap "B" "Using a weak key / DH key exchange parameters"
+               set_grade_cap "B" "Using a weak $type_output"
           elif [[ $size -lt 4096 ]] && [[ $KEY_EXCH_SCORE -gt 90 ]]; then
                let KEY_EXCH_SCORE=90
           fi
@@ -8520,7 +8513,7 @@ certificate_info() {
                fi
                out " bits"
 
-               set_key_str_score "$short_keyAlgo" "$cert_keysize" # TODO: should be $dh_param_size
+               set_key_str_score "$short_keyAlgo" "$cert_keysize"
           elif [[ $cert_key_algo =~ RSA ]] || [[ $cert_key_algo =~ rsa ]] || [[ $cert_key_algo =~ dsa ]] || \
                [[ $cert_key_algo =~ dhKeyAgreement ]] || [[ $cert_key_algo == X9.42\ DH ]]; then
                if [[ "$cert_keysize" -le 512 ]]; then
