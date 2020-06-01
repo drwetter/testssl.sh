@@ -266,7 +266,6 @@ V2_HELLO_CIPHERSPEC_LENGTH=0
 declare -r NPN_PROTOs="spdy/4a2,spdy/3,spdy/3.1,spdy/2,spdy/1,http/1.1"
 # alpn_protos needs to be space-separated, not comma-seperated, including odd ones observed @ facebook and others, old ones like h2-17 omitted as they could not be found
 declare -r ALPN_PROTOs="h2 spdy/3.1 http/1.1 grpc-exp h2-fb spdy/1 spdy/2 spdy/3 stun.turn stun.nat-discovery webrtc c-webrtc ftp"
-declare -a SESS_RESUMPTION
 TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
@@ -1687,7 +1686,7 @@ http_get() {
 # There the environment variable is used automatically
 # Currently it is being used by check_pwnedkeys() only.
 http_get_header() {
-     local proto z
+     local proto
      local node="" query=""
      local dl="$2"
      local useragent="$UA_STD"
@@ -5932,7 +5931,7 @@ run_cipherlists() {
      local ossl_anon_ciphers anon_ciphers sslv2_anon_ciphers
      local ossl_exp_ciphers exp_ciphers sslv2_exp_ciphers
      local ossl_low_ciphers low_ciphers sslv2_low_ciphers
-     local ossl_tdes_ciphers tdes_ciphers sslv2_tdes_cipher
+     local ossl_tdes_ciphers tdes_ciphers sslv2_tdes_ciphers
      local ossl_obsoleted_ciphers obsoleted_ciphers
      local strong_ciphers
      local cwe="CWE-327"
@@ -6341,7 +6340,6 @@ sub_session_resumption() {
      local tmpfile=$(mktemp $TEMPDIR/session_resumption.$NODEIP.XXXXXX)
      local sess_data=$(mktemp $TEMPDIR/sub_session_data_resumption.$NODEIP.XXXXXX)
      local -a rw_line
-     local not_new_reused=false
      local protocol="$1"
 
      if [[ "$2" == ID ]]; then
@@ -6401,7 +6399,6 @@ sub_session_resumption() {
                new_sid=true
           else
                debugme echo -n "Problem with 2nd ServerHello  "
-               not_new_reused=true
           fi
           # Now get the line and compare the numbers "read" and "written" as a second criteria.
           # If the "read" number is bigger: a new session ID was probably used
@@ -6823,7 +6820,6 @@ cipher_pref_check() {
      local using_sockets="$4"
      local wide="$5"          # at the moment always = true
      local tested_cipher cipher order rfc_cipher rfc_order
-     local overflow_probe_cipherlist="ALL:-ECDHE-RSA-AES256-GCM-SHA384:-AES128-SHA:-DES-CBC3-SHA"
      local -i i nr_ciphers nr_nonossl_ciphers num_bundles bundle_size bundle end_of_bundle success
      local -i nr_ciphers_found
      local hexc ciphers_to_test
@@ -8198,7 +8194,6 @@ certificate_transparency() {
      local tls_version="$6"
      local sni=""
      local ciphers=""
-     local hexc n ciph sslver kx auth enc mac export
      local extra_extns=""
      local -i success
      # Cipher suites that use a certifiate with an RSA (signature) public key
@@ -9562,25 +9557,20 @@ run_server_defaults() {
      jsonID="sessionresumption_ticket"
      sub_session_resumption "$sessticket_proto"
      case $? in
-          0) SESS_RESUMPTION[2]="ticket=yes"
-             out "Tickets: yes, "
+          0) out "Tickets: yes, "
              fileout "$jsonID" "INFO" "supported"
           ;;
-          1) SESS_RESUMPTION[2]="ticket=no"
-             out "Tickets no, "
+          1) out "Tickets no, "
              fileout "$jsonID" "INFO" "not supported"
              ;;
-          5) SESS_RESUMPTION[2]="ticket=noclue"
-             pr_warning "Ticket resumption test failed, pls report / "
+          5) pr_warning "Ticket resumption test failed, pls report / "
              fileout "$jsonID" "WARN" "check failed, pls report"
              ((ret++))
              ;;
-          6) SESS_RESUMPTION[2]="ticket=clientauth"
-             pr_warning "Client Auth: Ticket resumption test not supported / "
+          6) pr_warning "Client Auth: Ticket resumption test not supported / "
              fileout "$jsonID" "WARN" "check couldn't be performed because of client authentication"
              ;;
-          7) SESS_RESUMPTION[2]="ticket=unsuccessful"
-             pr_warning "Connect problem: Ticket resumption test not possible / "
+          7) pr_warning "Connect problem: Ticket resumption test not possible / "
              fileout "$jsonID" "WARN" "check failed because of connect problem"
              ((ret++))
              ;;
@@ -9588,32 +9578,25 @@ run_server_defaults() {
 
      jsonID="sessionresumption_ID"
      if "$NO_SSL_SESSIONID"; then
-          SESS_RESUMPTION[1]="ID=no"
           outln "ID: no"
           fileout "$jsonID" "INFO" "No Session ID, no resumption"
      else
           sub_session_resumption "$sessticket_proto" ID
           case $? in
-               0) SESS_RESUMPTION[1]="ID=yes"
-                  outln "ID: yes"
+               0) outln "ID: yes"
                   fileout "$jsonID" "INFO" "supported"
                   ;;
-               1|2) SESS_RESUMPTION[1]="ID=no"
-                  outln "ID: no"
+               1|2) outln "ID: no"
                   fileout "$jsonID" "INFO" "not supported"
                   ;;
-               5) SESS_RESUMPTION[1]="ID=noclue"
-                  prln_warning "ID resumption test failed, pls report"
+               5) prln_warning "ID resumption test failed, pls report"
                   fileout "$jsonID" "WARN" "check failed, pls report"
                   ((ret++))
                   ;;
-               6) SESS_RESUMPTION[1]="ID=clientauth"
-                  # [[ ${SESS_RESUMPTION[2]} =~ clientauth ]] || pr_warning "Client Auth: "
-                  prln_warning "Client Auth: ID resumption test not supported"
+               6) prln_warning "Client Auth: ID resumption test not supported"
                   fileout "$jsonID" "WARN" "check couldn't be performed because of client authentication"
                   ;;
-               7) SESS_RESUMPTION[1]="ID=unsuccessful"
-                  prln_warning "ID resumption test failed"
+               7) prln_warning "ID resumption test failed"
                   fileout "$jsonID" "WARN" "check failed because of connect problem"
                   ((ret++))
                   ;;
@@ -10565,7 +10548,6 @@ starttls_mysql_dialog() {
 # returns 6 if opening the socket caused a problem, 1 if STARTTLS handshake failed, 0: all ok
 #
 fd_socket() {
-     local jabber=""
      local proyxline=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"          # sockets do not need the square brackets we have of IPv6 addresses
                                                        # we just need do it here, that's all!
@@ -14238,7 +14220,7 @@ prepare_tls_clienthello() {
      local len_client_hello_word len_all_word
      local ecc_cipher_suite_found=false
      local extension_signature_algorithms extension_heartbeat session_id
-     local extension_session_ticket extension_next_protocol extension_padding
+     local extension_session_ticket extension_next_protocol
      local extension_supported_groups="" extension_supported_point_formats=""
      local extensions_key_share="" extn_type supported_groups_c2n="" extn_psk_mode=""
      local extra_extensions extra_extensions_list="" extension_supported_versions=""
@@ -14656,11 +14638,11 @@ prepare_tls_clienthello() {
 resend_if_hello_retry_request() {
      local original_clienthello="$1"
      local tls_hello_ascii="$2"
-     local msg_type tls_low_byte server_version cipher_suite rfc_cipher_suite
+     local msg_type server_version cipher_suite rfc_cipher_suite
      local key_share="" new_key_share="" cookie="" second_clienthello data=""
      local -i i j msg_len tls_hello_ascii_len sid_len
-     local -i extns_offset hrr_extns_len extra_extensions_len len_extn
-     local extra_extensions extn_type part2 new_extra_extns=""
+     local -i extns_offset hrr_extns_len len_extn
+     local extn_type
      local sha256_hrr="CF21AD74E59A6111BE1D8C021E65B891C2A211167ABB8C5E079E09E2C8A8339C"
 
      tls_hello_ascii_len=${#tls_hello_ascii}
@@ -19480,6 +19462,7 @@ get_aaaa_record() {
 # arg1: domain to check for
 get_caa_rr_record() {
      local raw_caa=""
+     local hash len line
      local -i len_caa_property
      local caa_property_name
      local caa_property_value
