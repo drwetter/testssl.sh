@@ -145,8 +145,7 @@ in `/etc/hosts`.  The use of the switch is only useful if you either can't or ar
 
 `--phone-out` Checking for revoked certificates via CRL and OCSP is not done per default. This switch instructs testssl.sh to query external -- in a sense of the current run -- URIs. By using this switch you acknowledge that the check might have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting the endpoint which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.
 
-`--add-ca <cafile>` enables you to add your own CA(s) for trust chain checks. `cafile` can be a single path or multiple paths as a comma separated list of root CA files. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates is issued by internal CAs. Alternatively 
-ADDTL_CA_FILES is the environment variable for this.
+`--add-ca <cafile>` enables you to add your own CA(s) for trust chain checks. `cafile` can be a single path or multiple paths as a comma separated list of root CA files. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates is issued by internal CAs. Alternatively ADDTL_CA_FILES is the environment variable for this.
 
 
 ### SINGLE CHECK OPTIONS
@@ -404,7 +403,6 @@ As of writing, these checks are missing:
 * Zombie POODLE - should be graded **F** if vulnerable
 * All remaining old Symantec PKI certificates are distrusted - should be graded **T**
 * Symantec certificates issued before June 2016 are distrusted - should be graded **T**
-* ! A reading of DH params - should give correct points in `set_key_str_score()`
 * Anonymous key exchange - should give **0** points in `set_key_str_score()`
 * Exportable key exchange - should give **40** points in `set_key_str_score()`
 * Weak key (Debian OpenSSL Flaw) - should give **0** points in `set_key_str_score()`

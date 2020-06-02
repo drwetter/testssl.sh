@@ -1029,7 +1029,7 @@ set_grade_warning() {
 }
 
 # Sets the score for Category 2 (Key Exchange Strength)
-# arg1: Short key algorithm ("EC", "DH", "RSA", ...) # Can die, when we get DH_PARAMs
+# arg1: Short key algorithm ("EC", "DH", "RSA", ...), or "DHE" for ephemeral key size
 # arg2: key size (number of bits)
 set_key_str_score() {
      local type=$1
@@ -1037,32 +1037,24 @@ set_key_str_score() {
 
      "$do_rating" || return 0
 
-     # TODO: We need to get the size of DH params (follows the same table as the "else" clause)
-     # For now, verifying the key size will do...
      if [[ $type == EC || $type == EdDSA ]]; then
-          if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -gt 20 ]]; then
+          if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -ge 20 ]]; then
                let KEY_EXCH_SCORE=20
-               set_grade_cap "F" "Using an insecure key"
-          elif [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
+          elif [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
                let KEY_EXCH_SCORE=40
-               set_grade_cap "F" "Using an insecure key"
-          elif [[ $size -lt 163 ]] && [[ $KEY_EXCH_SCORE -gt 80 ]]; then
+          elif [[ $size -lt 163 ]] && [[ $KEY_EXCH_SCORE -ge 80 ]]; then
                let KEY_EXCH_SCORE=80
-               set_grade_cap "B" "Using a weak key"
-          elif [[ $size -lt 225 ]] && [[ $KEY_EXCH_SCORE -gt 90 ]]; then
+          elif [[ $size -lt 225 ]] && [[ $KEY_EXCH_SCORE -ge 90 ]]; then
                let KEY_EXCH_SCORE=90
           fi
      else
-          if [[ $size -lt 512 ]] && [[ $KEY_EXCH_SCORE -gt 20 ]]; then
+          if [[ $size -lt 512 ]] && [[ $KEY_EXCH_SCORE -ge 20 ]]; then
                let KEY_EXCH_SCORE=20
-               set_grade_cap "F" "Using an insecure key"
-          elif [[ $size -lt 1024 ]] && [[ $KEY_EXCH_SCORE -gt 40 ]]; then
+          elif [[ $size -lt 1024 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
                let KEY_EXCH_SCORE=40
-               set_grade_cap "F" "Using an insecure key"
-          elif [[ $size -lt 2048 ]] && [[ $KEY_EXCH_SCORE -gt 80 ]]; then
+          elif [[ $size -lt 2048 ]] && [[ $KEY_EXCH_SCORE -ge 80 ]]; then
                let KEY_EXCH_SCORE=80
-               set_grade_cap "B" "Using a weak key"
-          elif [[ $size -lt 4096 ]] && [[ $KEY_EXCH_SCORE -gt 90 ]]; then
+          elif [[ $size -lt 4096 ]] && [[ $KEY_EXCH_SCORE -ge 90 ]]; then
                let KEY_EXCH_SCORE=90
           fi
      fi
@@ -1070,7 +1062,7 @@ set_key_str_score() {
 }
 
 # Sets the best and worst bit size key, used to grade Category 3 (Cipher Strength)
-# This function itself doesn't actually set a score; its just in the name to keep it logical (score == grading function)
+# This function itself doesn't actually set a score; its just in the name to keep it logical (score == rating function)
 # arg1: a bit size
 set_ciph_str_score() {
      local size=$1
@@ -8513,7 +8505,7 @@ certificate_info() {
                fi
                out " bits"
 
-               set_key_str_score "$short_keyAlgo" "$cert_keysize" # TODO: should be $dh_param_size
+               set_key_str_score "$short_keyAlgo" "$cert_keysize"
           elif [[ $cert_key_algo =~ RSA ]] || [[ $cert_key_algo =~ rsa ]] || [[ $cert_key_algo =~ dsa ]] || \
                [[ $cert_key_algo =~ dhKeyAgreement ]] || [[ $cert_key_algo == X9.42\ DH ]]; then
                if [[ "$cert_keysize" -le 512 ]]; then
@@ -16861,7 +16853,6 @@ run_logjam() {
      if "$vuln_exportdh_ciphers"; then
           pr_svrty_high "VULNERABLE (NOT ok):"; out " uses DH EXPORT ciphers"
           fileout "$jsonID" "HIGH" "VULNERABLE, uses DH EXPORT ciphers" "$cve" "$cwe" "$hint"
-          set_grade_cap "B" "Uses weak DH key exchange parameters (vulnerable to LOGJAM)"
           if [[ $subret -eq 3 ]]; then
                out ", no DH key detected with <= TLS 1.2"
                fileout "$jsonID2" "OK" "no DH key detected with <= TLS 1.2"
@@ -16877,7 +16868,6 @@ run_logjam() {
      else
           if [[ $subret -eq 1 ]]; then
                out_common_prime "$jsonID2" "$cve" "$cwe"
-               set_grade_cap "A" "Uses known DH key exchange parameters"
                if ! "$openssl_no_expdhciphers"; then
                     outln ","
                     out "${spaces}but no DH EXPORT ciphers${addtl_warning}"
@@ -16909,6 +16899,8 @@ run_logjam() {
                fileout "$jsonID" "OK" "not vulnerable, no DH EXPORT ciphers,$addtl_warning" "$cve" "$cwe"
           fi
      fi
+
+     [[ $DH_GROUP_LEN_P -gt 0 ]] && set_key_str_score "DHE" $DH_GROUP_LEN_P
 
      outln
      tmpfile_handle ${FUNCNAME[0]}.txt
@@ -20868,6 +20860,12 @@ run_rating() {
           pr_bold " Protocol Support "; out "(weighted)  "; outln "$c1_score ($c1_wscore)"
 
           ## Category 2
+          if [[ $KEY_EXCH_SCORE -le 40 ]]; then
+               set_grade_cap "F" "Using an insecure public key and/or ephemeral key"
+          elif [[ $KEY_EXCH_SCORE -le 80 ]]; then
+               set_grade_cap "B" "Using a weak public key and/or ephemeral key"
+          fi
+
           let c2_score=$KEY_EXCH_SCORE
           let c2_wscore=$c2_score*30/100
 
