@@ -1039,25 +1039,23 @@ set_key_str_score() {
 
      "$do_rating" || return 0
 
-     [[ $type == DHE ]] && type_output="ephemeral DH key (DH parameters)" || type_output="key"
-
      if [[ $type == EC || $type == EdDSA ]]; then
-          if [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
+          if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -gt 20 ]]; then
+               let KEY_EXCH_SCORE=20
+          elif [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
                let KEY_EXCH_SCORE=40
-               set_grade_cap "F" "Using an insecure $type_output"
           elif [[ $size -lt 163 ]] && [[ $KEY_EXCH_SCORE -ge 80 ]]; then
                let KEY_EXCH_SCORE=80
-               set_grade_cap "B" "Using a weak $type_output"
           elif [[ $size -lt 225 ]] && [[ $KEY_EXCH_SCORE -ge 90 ]]; then
                let KEY_EXCH_SCORE=90
           fi
      else
-          if [[ $size -lt 1024 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
+          if [[ $size -lt 512 ]] && [[ $KEY_EXCH_SCORE -ge 20 ]]; then
+               let KEY_EXCH_SCORE=20
+          elif [[ $size -lt 1024 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
                let KEY_EXCH_SCORE=40
-               set_grade_cap "F" "Using an insecure $type_output"
           elif [[ $size -lt 2048 ]] && [[ $KEY_EXCH_SCORE -ge 80 ]]; then
                let KEY_EXCH_SCORE=80
-               set_grade_cap "B" "Using a weak $type_output"
           elif [[ $size -lt 4096 ]] && [[ $KEY_EXCH_SCORE -ge 90 ]]; then
                let KEY_EXCH_SCORE=90
           fi
@@ -20880,6 +20878,12 @@ run_rating() {
           pr_bold " Protocol Support "; out "(weighted)  "; outln "$c1_score ($c1_wscore)"
 
           ## Category 2
+          if [[ $KEY_EXCH_SCORE -le 40 ]]; then
+               set_grade_cap "F" "Using an insecure public key and/or ephemeral key"
+          elif [[ $KEY_EXCH_SCORE -le 80 ]]; then
+               set_grade_cap "B" "Using a weak public key and/or ephemeral key"
+          fi
+
           let c2_score=$KEY_EXCH_SCORE
           let c2_wscore=$c2_score*30/100
 
