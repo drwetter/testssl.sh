@@ -1035,12 +1035,11 @@ set_grade_warning() {
 set_key_str_score() {
      local type=$1
      local size=$2
-     local type_output
 
      "$do_rating" || return 0
 
      if [[ $type == EC || $type == EdDSA ]]; then
-          if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -gt 20 ]]; then
+          if [[ $size -lt 110 ]] && [[ $KEY_EXCH_SCORE -ge 20 ]]; then
                let KEY_EXCH_SCORE=20
           elif [[ $size -lt 123 ]] && [[ $KEY_EXCH_SCORE -ge 40 ]]; then
                let KEY_EXCH_SCORE=40
@@ -1064,7 +1063,7 @@ set_key_str_score() {
 }
 
 # Sets the best and worst bit size key, used to grade Category 3 (Cipher Strength)
-# This function itself doesn't actually set a score; its just in the name to keep it logical (score == grading function)
+# This function itself doesn't actually set a score; its just in the name to keep it logical (score == rating function)
 # arg1: a bit size
 set_ciph_str_score() {
      local size=$1
