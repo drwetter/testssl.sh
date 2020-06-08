@@ -7804,9 +7804,9 @@ wildcard_match()
 
 compare_server_name_to_cert() {
      local cert="$1"
-     local servername cn dns_sans ip_sans san dercert tag
+     local servername cns cn dns_sans ip_sans san dercert tag
      local srv_id="" xmppaddr=""
-     local -i i len len1
+     local -i i len len1 cn_match=0
      local -i subret=0             # no error condition, passing results
 
      HAS_DNS_SANS=false
@@ -7960,19 +7960,23 @@ compare_server_name_to_cert() {
           done <<< "$dns_sans"
      fi
 
-     cn="$(get_cn_from_cert "$cert")"
+     # Get every CN from the subject field and compare against the server name.
+     cns="$($OPENSSL x509 -in $1 -noout -subject -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE | awk -F'=' '/CN=/ { print $2 }')"
+     while read cn; do
+          # If the CN contains any characters that are not valid for a DNS name,
+          # then assume it does not contain a DNS name.
+          [[ -n $(sed 's/^[_\.a-zA-Z0-9*\-]*//' <<< "$cn") ]] && continue
 
-     # If the CN contains any characters that are not valid for a DNS name,
-     # then assume it does not contain a DNS name.
-     [[ -n $(sed 's/^[_\.a-zA-Z0-9*\-]*//' <<< "$cn") ]] && return $subret
+          # Check whether the CN matches the servername
+          [[ $(toupper "$cn") == "$servername" ]] && cn_match=4 && break
 
-     # Check whether the CN in the certificate matches the servername
-     [[ $(toupper "$cn") == "$servername" ]] && subret+=4 && return $subret
-
-     # Check whether the CN in the certificate is a wildcard name that matches
-     # the servername
-     wildcard_match "$servername" "$cn"
-     [[ $? -eq 0 ]] && subret+=8
+          # Check whether the CN is a wildcard name that matches the servername
+          # NOTE: Don't stop loop on a wildcard match in case there is another CN
+          # that is an exact match.
+          wildcard_match "$servername" "$cn"
+          [[ $? -eq 0 ]] && cn_match=8
+     done <<< "$cns"
+     subret+=$cn_match
      return $subret
 }
 
