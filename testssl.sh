@@ -8862,24 +8862,24 @@ certificate_info() {
           fi
      elif [[ $trust_nosni -eq 4 ]] || [[ $trust_nosni -eq 8 ]] || [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]]; then
           case $trust_nosni in
-               1) trustfinding_nosni="(w/o SNI: Ok via SAN)" ;;
-               2) trustfinding_nosni="(w/o SNI: Ok via SAN wildcard)" ;;
+               1) trustfinding_nosni=" (w/o SNI: Ok via SAN)" ;;
+               2) trustfinding_nosni=" (w/o SNI: Ok via SAN wildcard)" ;;
                4) if "$has_dns_sans_nosni"; then
-                       trustfinding_nosni="(w/o SNI: via CN, but not SAN)"
+                       trustfinding_nosni=" (w/o SNI: via CN, but not SAN)"
                   else
-                       trustfinding_nosni="(w/o SNI: via CN only)"
+                       trustfinding_nosni=" (w/o SNI: via CN only)"
                   fi
                   ;;
-               5) trustfinding_nosni="(w/o SNI: Ok via SAN and CN)" ;;
-               6) trustfinding_nosni="(w/o SNI: Ok via SAN wildcard and CN)" ;;
+               5) trustfinding_nosni=" (w/o SNI: Ok via SAN and CN)" ;;
+               6) trustfinding_nosni=" (w/o SNI: Ok via SAN wildcard and CN)" ;;
                8) if "$has_dns_sans_nosni"; then
-                       trustfinding_nosni="(w/o SNI: via CN wildcard, but not SAN)"
+                       trustfinding_nosni=" (w/o SNI: via CN wildcard, but not SAN)"
                   else
-                       trustfinding_nosni="(w/o SNI: via CN (wildcard) only)"
+                       trustfinding_nosni=" (w/o SNI: via CN (wildcard) only)"
                   fi
                   ;;
-               9) trustfinding_nosni="(w/o SNI: Ok via CN wildcard and SAN)" ;;
-              10) trustfinding_nosni="(w/o SNI: Ok via SAN wildcard and CN wildcard)" ;;
+               9) trustfinding_nosni=" (w/o SNI: Ok via CN wildcard and SAN)" ;;
+              10) trustfinding_nosni=" (w/o SNI: Ok via SAN wildcard and CN wildcard)" ;;
           esac
      elif [[ $trust_sni -ne 0 ]]; then
           trustfinding_nosni=" (works w/o SNI)"
