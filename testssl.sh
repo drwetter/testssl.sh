@@ -7204,7 +7204,7 @@ determine_trust() {
                     out "$code"
                fi
                fileout "${jsonID}${json_postfix}" "CRITICAL" "failed $code. $addtl_warning"
-               set_grade_cap "T" "Issues with certificate $code"
+               set_grade_cap "T" "Issues with the chain of trust $code"
           else
                # is one ok and the others not ==> display the culprit store
                if "$some_ok"; then
@@ -7223,7 +7223,7 @@ determine_trust() {
                                    out "$code"
                               fi
                               notok_was="${certificate_file[i]} $code $notok_was"
-                              set_grade_cap "T" "Issues with certificate $code"
+                              set_grade_cap "T" "Issues with chain of trust $code"
                          fi
                     done
                     #pr_svrty_high "$notok_was "
