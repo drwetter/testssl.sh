@@ -407,6 +407,10 @@ As of writing, these checks are missing:
 * Exportable key exchange - should give **40** points in `set_key_str_score()`
 * Weak key (Debian OpenSSL Flaw) - should give **0** points in `set_key_str_score()`
 
+#### STARTTLS
+This program rates STARTTLS connections, exactly according to the specification. However, this program adds a grade warning about STARTTLS is being used. This is not apart of the rating specification, and limits the grade a STARTTLS connection can have, to a maximum of `A-`.
+
+
 #### Implementing new grades caps or -warnings
 To implement a new grading cap, simply call the `set_grade_cap()` function, with the grade and a reason:
 ```bash
