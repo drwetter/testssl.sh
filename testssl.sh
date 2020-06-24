@@ -20802,14 +20802,7 @@ run_rating() {
      pr_headlineln " Rating (experimental) "
      outln
 
-     if [[ -n "$STARTTLS_PROTOCOL" ]]; then
-          pr_bold " Grade                        "; pr_svrty_critical "T"
-          outln   " - STARTTLS encryption is opportunistic"
-          outln   "                                  (Further details would lead to a false sense of security)"
-          fileout "grade" "CRITICAL" "T"
-          fileout "grade_cap_reasons" "INFO" "No more details shown as it would lead to a false sense of security"
-          return 0
-     fi
+     [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "Encryption via STARTTLS is not mandatory (opportunistic). This leads to a false sense of security"
 
      # Sort the reasons. This is just nicer to read in genereal
      IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))
@@ -20912,7 +20905,7 @@ run_rating() {
 
           pr_bold " Final Score                  "; outln $final_score
 
-          # get score, and somehow do something about the GRADE_CAP
+          # Calculate the pre-cap grade
           if [[ $final_score -ge 80 ]]; then
                pre_cap_grade="A"
           elif [[ $final_score -ge 65 ]]; then

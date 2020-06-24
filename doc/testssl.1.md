@@ -419,14 +419,14 @@ set_grade_warning "Documentation is always right"
 #### Implementing a new check which contains grade caps
 When implementing a new check (be it vulnerability or not) that sets grade caps, the `set_rating_state()` has to be updated (i.e. the `$do_mycheck` variable-name has to be added to the loop, and `$nr_enabled` if-statement has to be incremented)
 
-The `set_rating_state()` automatically disables ratinng, if all the required checks are *not* enabled.
+The `set_rating_state()` automatically disables rating, if all the required checks are *not* enabled.
 This is to prevent giving out a misleading or wrong grade.
 
 #### Implementing a new revision
 When a new revision of the rating specification comes around, the following has to be done:
 * New grade caps has to be either:
   1. Added to the script wherever relevant, or
-  2. Added to the above list of missing checks (if *i.* is not possible)
+  2. Added to the above list of missing checks (if above is not possible)
 * New grade warnings has to be added wherever relevant
 * The revision output in `run_rating()` function has to updated
 
