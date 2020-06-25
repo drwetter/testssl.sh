@@ -8373,7 +8373,7 @@ certificate_info() {
           outok=false
      fi
      if "$outok"; then
-          fileout "${jsonID}${json_postfix}" "INFO" "cert_ext_keyusage"
+          fileout "${jsonID}${json_postfix}" "INFO" "$cert_ext_keyusage"
      fi
 
      out "$indent"; pr_bold " Serial / Fingerprints        "
