@@ -20797,12 +20797,13 @@ run_rating() {
      local c1_worst c1_best
      local c3_worst c3_best c3_worst_cb c3_best_cb
      local old_ifs=$IFS sorted_reasons sorted_warnings reason_nr=0 warning_nr=0
+     local spaces="                             "
 
      outln "\n";
      pr_headlineln " Rating (experimental) "
      outln
 
-     [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "Encryption via STARTTLS is not mandatory (opportunistic). This leads to a false sense of security"
+     [[ -n "$STARTTLS_PROTOCOL" ]] && set_grade_cap "T" "Encryption via STARTTLS is not mandatory (opportunistic)."
 
      # Sort the reasons. This is just nicer to read in genereal
      IFS=$'\n' sorted_reasons=($(sort -ru <<<"${GRADE_CAP_REASONS[*]}"))

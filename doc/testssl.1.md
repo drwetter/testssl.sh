@@ -392,7 +392,8 @@ This program has a near-complete implementation of SSL Labs's '[SSL Server Ratin
 
 This is *not* a 100% reimplementation of the [SSL Lab's SSL Server Test](https://www.ssllabs.com/ssltest/analyze.html), but an implementation of the above rating specification, slight discrepancies may occur. Please note that for now we stick to the SSL Labs rating as good as possible. We are not responsible for their rating. Before filing issues please inspect their Rating Guide.
 
-Disclaimer: Having a good grade is **NOT** necessarily equal to having good security! Don't start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it.
+Disclaimer: Having a good grade is **NOT** necessarily equal to having good security! Don't start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it. Please note STARTTLS always results in a grade cap to T. Anything else
+would lead to a false sense of security - at least until we test for DANE or MTA-STS.
 
 As of writing, these checks are missing:
 * GOLDENDOODLE - should be graded **F** if vulnerable
