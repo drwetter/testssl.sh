@@ -650,10 +650,10 @@ To implement a new grading cap, simply call the \fBset_grade_cap()\fR function, 
 When implementing a new check (be it vulnerability or not) that sets grade caps, the \fBset_rating_state()\fR has to be updated (i\.e\. the \fB$do_mycheck\fR variable\-name has to be added to the loop, and \fB$nr_enabled\fR if\-statement has to be incremented)
 .
 .P
-The \fBset_rating_state()\fR automatically disables ratinng, if all the required checks are \fInot\fR enabled\. This is to prevent giving out a misleading or wrong grade\.
+The \fBset_rating_state()\fR automatically disables rating, if all the required checks are \fInot\fR enabled\. This is to prevent giving out a misleading or wrong grade\.
 .
 .P
-When a new revision of the rating specification comes around, the following has to be done: * New grade caps has to be either: 1\. Added to the script wherever relevant, or 2\. Added to the above list of missing checks (if \fIi\.\fR is not possible) * New grade warnings has to be added wherever relevant * The revision output in \fBrun_rating()\fR function has to updated
+When a new revision of the rating specification comes around, the following has to be done: * New grade caps has to be either: 1\. Added to the script wherever relevant, or 2\. Added to the above list of missing checks (if above is not possible) * New grade warnings has to be added wherever relevant * The revision output in \fBrun_rating()\fR function has to updated
 .
 .SH "EXAMPLES"
 .

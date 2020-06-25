@@ -515,7 +515,7 @@ set_grade_warning "Documentation is always right"
 
 <p>When implementing a new check (be it vulnerability or not) that sets grade caps, the <code>set_rating_state()</code> has to be updated (i.e. the <code>$do_mycheck</code> variable-name has to be added to the loop, and <code>$nr_enabled</code> if-statement has to be incremented)</p>
 
-<p>The <code>set_rating_state()</code> automatically disables ratinng, if all the required checks are <em>not</em> enabled.
+<p>The <code>set_rating_state()</code> automatically disables rating, if all the required checks are <em>not</em> enabled.
 This is to prevent giving out a misleading or wrong grade.</p>
 
 <h4 id="Implementing-a-new-revision">Implementing a new revision</h4>
@@ -523,7 +523,7 @@ This is to prevent giving out a misleading or wrong grade.</p>
 <p>When a new revision of the rating specification comes around, the following has to be done:
 * New grade caps has to be either:
   1. Added to the script wherever relevant, or
-  2. Added to the above list of missing checks (if <em>i.</em> is not possible)
+  2. Added to the above list of missing checks (if above is not possible)
 * New grade warnings has to be added wherever relevant
 * The revision output in <code>run_rating()</code> function has to updated</p>
 
