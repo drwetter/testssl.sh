@@ -5,6 +5,28 @@
 #
 # Instructions how to add a client simulation see file "client-simulation.wiresharked.md".
 
+     names+=("Android 7.0 (native)")
+     short+=("android_70")
+     ciphers+=("ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA:AES256-SHA")
+     ciphersuites+=("")
+     ch_sni+=("$SNI")
+     warning+=("")
+     handshakebytes+=("160301009d0100009903036cea0f867ae9fdd087adedaa810119e62971b36c0486d44fb3099e51403c8a1e000018c02bc02ccca9c02fc030cca8c013c014009c009d002f003501000058ff010001000000000d000b00000873796e6f642e696d0017000000230000000d0016001406010603050105030401040303010303020102030010000e000c02683208687474702f312e31000b00020100000a000400020017")
+     protos+=("-no_ssl3 -no_ssl2")
+     tlsvers+=("-tls1_2 -tls1_1 -tls1")
+     lowest_protocol+=("0x0301")
+     highest_protocol+=("0x0303")
+     alpn+=("h2,http/1.1")
+     service+=("HTTP,FTP")
+     minDhBits+=(-1)
+     maxDhBits+=(-1)
+     minRsaBits+=(-1)
+     maxRsaBits+=(-1)
+     minEcdsaBits+=(-1)
+     curves+=("prime256v1")
+     requiresSha2+=(false)
+     current+=(true)
+
      names+=("Android 8.1 (native)")
      short+=("android_81")
      ciphers+=("ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA:AES256-SHA")
