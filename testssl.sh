@@ -20797,7 +20797,6 @@ run_rating() {
      local c1_worst c1_best
      local c3_worst c3_best c3_worst_cb c3_best_cb
      local old_ifs=$IFS sorted_reasons sorted_warnings reason_nr=0 warning_nr=0
-     local spaces="                             "
 
      outln "\n";
      pr_headlineln " Rating (experimental) "
