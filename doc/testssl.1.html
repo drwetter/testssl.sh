@@ -484,7 +484,7 @@ Rating automatically gets disabled, to not give a wrong or misleading grade, whe
 
 <p>This is <em>not</em> a 100% reimplementation of the <a href="https://www.ssllabs.com/ssltest/analyze.html">SSL Lab's SSL Server Test</a>, but an implementation of the above rating specification, slight discrepancies may occur. Please note that for now we stick to the SSL Labs rating as good as possible. We are not responsible for their rating. Before filing issues please inspect their Rating Guide.</p>
 
-<p>Disclaimer: Having a good grade is <strong>NOT</strong> necessarily equal to having good security! Don't start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it.</p>
+<p>Disclaimer: Having a good grade is <strong>NOT</strong> necessarily equal to having good security! Don't start a competition for the best grade, at least not without monitoring the client handshakes and not without adding a portion of good sense to it. Please note STARTTLS always results in a grade cap to T. Anything else would lead to a false sense of security - at least until we test for DANE or MTA-STS.</p>
 
 <p>As of writing, these checks are missing:
 * GOLDENDOODLE - should be graded <strong>F</strong> if vulnerable
@@ -515,7 +515,7 @@ set_grade_warning "Documentation is always right"
 
 <p>When implementing a new check (be it vulnerability or not) that sets grade caps, the <code>set_rating_state()</code> has to be updated (i.e. the <code>$do_mycheck</code> variable-name has to be added to the loop, and <code>$nr_enabled</code> if-statement has to be incremented)</p>
 
-<p>The <code>set_rating_state()</code> automatically disables ratinng, if all the required checks are <em>not</em> enabled.
+<p>The <code>set_rating_state()</code> automatically disables rating, if all the required checks are <em>not</em> enabled.
 This is to prevent giving out a misleading or wrong grade.</p>
 
 <h4 id="Implementing-a-new-revision">Implementing a new revision</h4>
@@ -523,7 +523,7 @@ This is to prevent giving out a misleading or wrong grade.</p>
 <p>When a new revision of the rating specification comes around, the following has to be done:
 * New grade caps has to be either:
   1. Added to the script wherever relevant, or
-  2. Added to the above list of missing checks (if <em>i.</em> is not possible)
+  2. Added to the above list of missing checks (if above is not possible)
 * New grade warnings has to be added wherever relevant
 * The revision output in <code>run_rating()</code> function has to updated</p>
 
