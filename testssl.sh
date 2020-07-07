@@ -6108,8 +6108,7 @@ pr_ecdh_curve_quality() {
      pr_ecdh_quality "$bits" "$curve"
 }
 
-# Print $2 based on the quality of the cipher in $1. If $2 is empty, just print $1.
-# The return value is an indicator of the quality of the cipher in $1:
+# Return a value that is an indicator of the quality of the cipher in $1:
 #   0 = $1 is empty
 #   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
 #   5 = neither good nor bad, 6 = pr_svrty_good, 7 = pr_svrty_best
@@ -6119,13 +6118,11 @@ pr_ecdh_curve_quality() {
 # Hint: find out by "grep <pattern> etc/cipher-mapping.txt" but it' might be be easier
 # to look out Enc= and Au= or Mac=
 #
-pr_cipher_quality() {
+get_cipher_quality() {
      local cipher="$1"
-     local text="$2"
      local ossl_cipher
 
      [[ -z "$1" ]] && return 0
-     [[ -z "$text" ]] && text="$cipher"
 
      if [[ "$cipher" != TLS_* ]] && [[ "$cipher" != SSL_* ]]; then
           # This must be the OpenSSL name for a cipher or for TLS 1.3 ($TLS13_OSSL_CIPHERS)
@@ -6135,46 +6132,36 @@ pr_cipher_quality() {
                # the case, see "prepare_arrays()" and "./etc/cipher-mapping.txt"
                case "$cipher" in
                     *NULL*|EXP*|ADH*|AECDH*|*anon*)
-                         pr_svrty_critical "$text"
                          return 1
                          ;;
                     *RC4*|*RC2*|*MD5|*M1)
-                         pr_svrty_high "$text"
                          return 2
                          ;;
                     AES256-GCM-SHA384|AES128-GCM-SHA256|AES256-CCM*|AES128-CCM*|ARIA256-GCM-SHA384|ARIA128-GCM-SHA256)
                          # RSA kx and e.g. GCM isn't certainly the best
-                         pr_svrty_good "$text"
                          return 6
                          ;;
                     *CBC3*|*3DES*|*IDEA*)
-                         pr_svrty_medium "$text"
                          return 3
                          ;;
                     *DES*)
-                         pr_svrty_high "$text"
                          return 2
                          ;;
                     PSK-*GCM*|PSK-*CCM*|RSA-PSK-*GCM*|RSA-PSK-CHACHA20-POLY1305|PSK-CHACHA20-POLY1305)
                          # PSK kx and e.g. GCM isn't certainly the best
-                         pr_svrty_good "$text"
                          return 6
                          ;;
                     DH-*GCM*|ECDH-*GCM*)
                          # static DH or ECDH kx and GCM isn't certainly the best
-                         pr_svrty_good "$text"
                          return 6
                          ;;
                     *GCM*|*CCM*|*CHACHA20*)
-                         pr_svrty_best "$text"
                          return 7
                          ;; #best ones
                     *AES*SHA*|*CAMELLIA*SHA*|*SEED*SHA*|*CBC*|*GOST*)
-                         pr_svrty_low "$text"
                          return 4
                          ;;
                     *)
-                         out "$text"
                          return 5
                          ;;
                esac
@@ -6187,43 +6174,62 @@ pr_cipher_quality() {
      # Now we look at the RFC cipher names. The sequence matters - as above.
      case "$cipher" in
           *NULL*|*EXP*|*_DES40_*|*anon*)
-               pr_svrty_critical "$text"
                return 1
                ;;
           *RC4*|*RC2*|*MD5|*MD5_1)
-               pr_svrty_high "$text"
                return 2
                ;;
           *_DES_*)
                if [[ "$cipher" =~ EDE3 ]]; then
-                    pr_svrty_medium "$text"  # 3DES
                     return 3
                fi
-               pr_svrty_high "$text"
                return 2
                ;;
           *CBC3*|*3DES*|*IDEA*)
-               pr_svrty_medium "$text"
                return 3
                ;;
           *CBC*|*GOST*)
-               pr_svrty_low "$text"
                return 4
                ;;
           TLS_RSA_*|TLS_DH_*|TLS_ECDH_*|TLS_PSK_WITH_*)
-               pr_svrty_good "$text"
                # RSA, or static DH, ECDH, or PSK kx and e.g. GCM isn't certainly the best
                return 6
                ;;
           *GCM*|*CCM*|*CHACHA20*)
-               pr_svrty_best "$text"
                return 7
                ;;
           *)
-               out "$text"
                return 5
                ;;
      esac
+}
+
+# Print $2 based on the quality of the cipher in $1. If $2 is empty, just print $1.
+# The return value is an indicator of the quality of the cipher in $1:
+#   0 = $1 is empty
+#   1 = pr_svrty_critical, 2 = pr_svrty_high, 3 = pr_svrty_medium, 4 = pr_svrty_low
+#   5 = neither good nor bad, 6 = pr_svrty_good, 7 = pr_svrty_best
+#
+pr_cipher_quality() {
+     local cipher="$1"
+     local text="$2"
+     local -i quality
+
+     [[ -z "$1" ]] && return 0
+     [[ -z "$text" ]] && text="$cipher"
+
+     get_cipher_quality "$cipher"
+     quality=$?
+     case $quality in
+          1) pr_svrty_critical "$text" ;;
+          2) pr_svrty_high "$text" ;;
+          3) pr_svrty_medium "$text" ;;
+          4) pr_svrty_low "$text" ;;
+          5) out "$text" ;;
+          6) pr_svrty_good "$text" ;;
+          7) pr_svrty_best "$text" ;;
+     esac
+     return $quality
 }
 
 # arg1: file with input for grepping the type of ephemeral DH key (DH ECDH)
