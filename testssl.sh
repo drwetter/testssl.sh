@@ -21693,7 +21693,7 @@ parse_cmd_line() {
                (--) shift
                     break
                     ;;
-               (-*) tmln_warning "0: unrecognized option \"$1\"" 1>&2;
+               (-*) tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
                     help 1
                     ;;
                (*)  break
