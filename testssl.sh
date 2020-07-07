@@ -4378,7 +4378,7 @@ ciphers_by_strength() {
                outln "${sigalg[i]}"
                id="cipher$proto"
                id+="_${normalized_hexcode[i]}"
-               fileout "$id" "INFO" "$proto_text  $(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}") $available"
+               fileout "$id" "$(get_cipher_quality_severity "${ciph[i]}")" "$proto_text  $(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}") $available"
           fi
      done
 
@@ -6204,6 +6204,26 @@ get_cipher_quality() {
      esac
 }
 
+# Output the severity level associated with the cipher in $1.
+get_cipher_quality_severity() {
+     local cipher="$1"
+     local -i quality
+
+     [[ -z "$1" ]] && return 0
+
+     get_cipher_quality "$cipher"
+     quality=$?
+     case $quality in
+          1) tm_out "CRITICAL" ;;
+          2) tm_out "HIGH" ;;
+          3) tm_out "MEDIUM" ;;
+          4) tm_out "LOW" ;;
+          5) tm_out "INFO" ;;
+          6|7) tm_out "OK" ;;
+     esac
+     return $quality
+}
+
 # Print $2 based on the quality of the cipher in $1. If $2 is empty, just print $1.
 # The return value is an indicator of the quality of the cipher in $1:
 #   0 = $1 is empty
@@ -7051,7 +7071,7 @@ cipher_pref_check() {
                     neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}" "true"
                     outln "${sigalg[i]}"
                     id="cipher-${proto}_${normalized_hexcode[i]}"
-                    fileout "$id" "INFO" "$proto_text  $(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}")"
+                    fileout "$id" "$(get_cipher_quality_severity "${ciph[i]}")" "$proto_text  $(neat_list "${normalized_hexcode[i]}" "${ciph[i]}" "${kx[i]}" "${enc[i]}" "${export2[i]}")"
                done
           else
                outln
