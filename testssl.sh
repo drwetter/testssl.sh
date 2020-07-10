@@ -16102,7 +16102,7 @@ run_breach() {
                ret=1
                ;;
           no_compression)
-               pr_svrty_best "no gzip/deflate/compress/br HTTP compression (OK) "
+               pr_svrty_good "no gzip/deflate/compress/br HTTP compression (OK) "
                outln "$disclaimer"
                fileout "$jsonID" "OK" "not vulnerable, no gzip/deflate/compress/br HTTP compression $disclaimer" "$cve" "$cwe"
                ret=0
@@ -16150,10 +16150,10 @@ run_breach() {
                          fi
                     done
                     detected_compression="$(strip_trailing_space "$detected_compression")"
-                    pr_svrty_high "potentially NOT ok, \"$detected_compression\" HTTP compression detected."
+                    pr_svrty_medium "potentially NOT ok, \"$detected_compression\" HTTP compression detected."
                     outln "$disclaimer"
                     outln "${spaces}${when_makesense}"
-                    fileout "$jsonID" "HIGH" "potentially VULNERABLE, $detected_compression HTTP compression detected $disclaimer" "$cve" "$cwe" "$hint"
+                    fileout "$jsonID" "MEDIUM" "potentially VULNERABLE, $detected_compression HTTP compression detected $disclaimer" "$cve" "$cwe" "$hint"
                fi
                debugme outln "${spaces}has_compression: ${has_compression[@]}"
                ;;
