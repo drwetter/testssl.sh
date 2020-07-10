@@ -14628,14 +14628,14 @@ run_breach() {
           prln_warning ") "
           ret=1
      elif [[ -z $result ]]; then
-          pr_svrty_best "no HTTP compression (OK) "
+          pr_svrty_good "no HTTP compression (OK) "
           outln "$disclaimer"
           fileout "$jsonID" "OK" "not vulnerable, no HTTP compression $disclaimer" "$cve" "$cwe"
      else
-          pr_svrty_high "potentially NOT ok, \"$result\" HTTP compression detected."
+          pr_svrty_medium "potentially NOT ok, \"$result\" HTTP compression detected."
           outln "$disclaimer"
           outln "$spaces$when_makesense"
-          fileout "$jsonID" "HIGH" "potentially VULNERABLE, $result HTTP compression detected $disclaimer" "$cve" "$cwe" "$hint"
+          fileout "$jsonID" "MEDIUM" "potentially VULNERABLE, $result HTTP compression detected $disclaimer" "$cve" "$cwe" "$hint"
      fi
      # Any URL can be vulnerable. I am testing now only the given URL!
 
