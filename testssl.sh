@@ -8965,6 +8965,30 @@ certificate_info() {
 #         https://certs.opera.com/03/ev-oids.xml
 #         see #967
 
+     # courtesy Hanno Boeck (see https://github.com/hannob/badocspcert)
+     out "$indent"; pr_bold " Bad OCSP intermediate"
+     out " (exp.) "
+     jsonID="cert_bad_ocsp"
+     badocspcerts="${TESTSSL_INSTALL_DIR}/etc/bad_ocsp_certs.txt"
+
+#FIXME: there might be >1 certificate. We parse the file intermediatecerts.pem
+# but just raise the flag saying the chain is bad w/o naming the intermediate
+# cert to blame. We should have split intermediatecerts.pem e.g. into
+# intermediatecert1.pem, intermediatecert2.pem before
+     badocsp=1
+     for pem in "$TEMPDIR/intermediatecerts.pem"; do
+          hash=$($OPENSSL x509 -in "$pem" -outform der 2>/dev/null | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)
+          grep -q "$hash" "$badocspcerts"
+          badocsp=$?
+          [[ $badocsp -eq 0 ]] && break
+     done
+     if [[ $badocsp -eq 0 ]]; then
+          prln_svrty_medium "NOT ok"
+          fileout "${jsonID}${json_postfix}" "MEDIUM" "NOT ok is/are intermediate certificate(s)"
+     else
+          fileout "${jsonID}${json_postfix}" "OK" "intermediate certificate(s) is/are ok"
+     fi
+
      out "$indent"; pr_bold " ETS/\"eTLS\""
      out ", visibility info  "
      jsonID="cert_eTLS"
