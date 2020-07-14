@@ -8314,13 +8314,14 @@ certificate_info() {
      local certificate_list_ordering_problem="${12}"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_spki_info
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
+     local badocspcerts="${TESTSSL_INSTALL_DIR}/etc/bad_ocsp_certs.txt"
      local -i lineno_matched=0
      local cert_keyusage cert_ext_keyusage short_keyAlgo
      local outok=true
      local expire days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
-     local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial
+     local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial cert
      local policy_oid
      local spaces=""
      local -i trust_sni=0 trust_nosni=0 diffseconds=0
@@ -8342,6 +8343,7 @@ certificate_info() {
      local response=""
      local yearstart yearend clockstart clockend y m d
      local gt_825=false gt_825warn=false
+     local badocsp=1 
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -8969,15 +8971,22 @@ certificate_info() {
      out "$indent"; pr_bold " Bad OCSP intermediate"
      out " (exp.) "
      jsonID="cert_bad_ocsp"
-     badocspcerts="${TESTSSL_INSTALL_DIR}/etc/bad_ocsp_certs.txt"
 
-#FIXME: there might be >1 certificate. We parse the file intermediatecerts.pem
-# but just raise the flag saying the chain is bad w/o naming the intermediate
-# cert to blame. We should have split intermediatecerts.pem e.g. into
-# intermediatecert1.pem, intermediatecert2.pem before
-     badocsp=1
-     for pem in "$TEMPDIR/intermediatecerts.pem"; do
-          hash=$($OPENSSL x509 -in "$pem" -outform der 2>/dev/null | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)
+# There might be >1 certificate, so we split intermediatecerts.pem e.g. into
+# intermediatecert1.crt, intermediatecert2.cert.
+#FIXME: This is redundant code. We do that elsewhere, e.g. before in extract_certificates()
+# and run_hpkp() at least but didn't keep the result
+#
+#FIXME: We just raise the flag saying the chain is bad w/o naming the intermediate
+# cert to blame.
+
+     awk -v n=-1 "{start=1}
+          /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
+         inc { print > (\"$TEMPDIR/intermediatecert\" n \".crt\") }
+         /---END CERTIFICATE-----/{ inc=0 }"  "$TEMPDIR/intermediatecerts.pem"
+
+     for cert in $TEMPDIR/intermediatecert?.crt; do
+          hash=$($OPENSSL x509 -in "$cert" -outform der 2>/dev/null | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)
           grep -q "$hash" "$badocspcerts"
           badocsp=$?
           [[ $badocsp -eq 0 ]] && break
@@ -8986,6 +8995,7 @@ certificate_info() {
           prln_svrty_medium "NOT ok"
           fileout "${jsonID}${json_postfix}" "MEDIUM" "NOT ok is/are intermediate certificate(s)"
      else
+          prln_svrty_good "Ok"
           fileout "${jsonID}${json_postfix}" "OK" "intermediate certificate(s) is/are ok"
      fi
 
