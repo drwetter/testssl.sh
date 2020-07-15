@@ -8314,7 +8314,6 @@ certificate_info() {
      local certificate_list_ordering_problem="${12}"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_spki_info
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
-     local badocspcerts="${TESTSSL_INSTALL_DIR}/etc/bad_ocsp_certs.txt"
      local -i lineno_matched=0
      local cert_keyusage cert_ext_keyusage short_keyAlgo
      local outok=true
@@ -8986,10 +8985,8 @@ certificate_info() {
          /---END CERTIFICATE-----/{ inc=0 }"  "$TEMPDIR/intermediatecerts.pem"
 
      for cert in $TEMPDIR/intermediatecert?.crt; do
-          hash=$($OPENSSL x509 -in "$cert" -outform der 2>/dev/null | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)
-          grep -q "$hash" "$badocspcerts"
-          badocsp=$?
-          [[ $badocsp -eq 0 ]] && break
+          cert_ext_keyusage="$($OPENSSL x509 -in "$cert" -text -noout 2>/dev/null | awk '/X509v3 Extended Key Usage:/ { getline; print $0 }')"
+          [[ "$cert_ext_keyusage" =~ OCSP\ Signing ]] && badocsp=0 && break
      done
      if [[ $badocsp -eq 0 ]]; then
           prln_svrty_medium "NOT ok"
