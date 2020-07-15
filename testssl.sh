@@ -8303,15 +8303,16 @@ certificate_info() {
      local -i certificate_number=$1
      local -i number_of_certificates=$2
      local cert_txt="$3"
-     local cipher=$4
-     local cert_keysize=$5
-     local cert_type="$6"
-     local ocsp_response_binary="$7"
-     local ocsp_response=$8
-     local ocsp_response_status=$9
-     local sni_used="${10}"
-     local ct="${11}"
-     local certificate_list_ordering_problem="${12}"
+     local intermediate_certs="$4"
+     local cipher=$5
+     local cert_keysize=$6
+     local cert_type="$7"
+     local ocsp_response_binary="$8"
+     local ocsp_response=$9
+     local ocsp_response_status=${10}
+     local sni_used="${11}"
+     local ct="${12}"
+     local certificate_list_ordering_problem="${13}"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_spki_info
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local -i lineno_matched=0
@@ -8320,7 +8321,7 @@ certificate_info() {
      local expire days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
-     local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial cert
+     local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial intermediates cert
      local policy_oid
      local spaces=""
      local -i trust_sni=0 trust_nosni=0 diffseconds=0
@@ -8979,13 +8980,14 @@ certificate_info() {
 #FIXME: We just raise the flag saying the chain is bad w/o naming the intermediate
 # cert to blame.
 
-     awk -v n=-1 "{start=1}
-          /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
-         inc { print > (\"$TEMPDIR/intermediatecert\" n \".crt\") }
-         /---END CERTIFICATE-----/{ inc=0 }"  "$TEMPDIR/intermediatecerts.pem"
-
-     for cert in $TEMPDIR/intermediatecert?.crt; do
-          cert_ext_keyusage="$($OPENSSL x509 -in "$cert" -text -noout 2>/dev/null | awk '/X509v3 Extended Key Usage:/ { getline; print $0 }')"
+     intermediates="$intermediate_certs"
+     while true; do
+          [[ "$intermediates" =~ \-\-\-\-\-\BEGIN\ CERTIFICATE\-\-\-\-\- ]] || break
+          intermediates="${intermediates#*-----BEGIN CERTIFICATE-----}"
+          cert="${intermediates%%-----END CERTIFICATE-----*}"
+          intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
+          cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
+          cert_ext_keyusage="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert" | awk '/X509v3 Extended Key Usage:/ { getline; print $0 }')"
           [[ "$cert_ext_keyusage" =~ OCSP\ Signing ]] && badocsp=0 && break
      done
      if [[ $badocsp -eq 0 ]]; then
@@ -9712,7 +9714,7 @@ run_server_defaults() {
           echo "${previous_hostcert[i]}" > $HOSTCERT
           echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
           echo "${previous_hostcert_issuer[i]}" > $TEMPDIR/hostcert_issuer.pem
-          certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" \
+          certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" "${previous_intermediates[i]}" \
                "${tested_cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" \
                "${ocsp_response_binary[i]}" "${ocsp_response[i]}" \
                "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}" \
