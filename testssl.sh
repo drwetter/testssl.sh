@@ -8303,7 +8303,7 @@ certificate_info() {
      local -i certificate_number=$1
      local -i number_of_certificates=$2
      local cert_txt="$3"
-     local intermediate_certs="$4"
+     local intermediates="$4"
      local cipher=$5
      local cert_keysize=$6
      local cert_type="$7"
@@ -8321,13 +8321,14 @@ certificate_info() {
      local expire days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
-     local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial intermediates cert
+     local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial cert
+     local -a intermediate_certs=()
      local policy_oid
      local spaces=""
      local -i trust_sni=0 trust_nosni=0 diffseconds=0
      local has_dns_sans has_dns_sans_nosni
      local trust_sni_finding
-     local -i certificates_provided
+     local -i i certificates_provided=0
      local cnfinding trustfinding trustfinding_nosni
      local cnok="OK"
      local expfinding expok="OK"
@@ -8980,14 +8981,20 @@ certificate_info() {
 #FIXME: We just raise the flag saying the chain is bad w/o naming the intermediate
 # cert to blame.
 
-     intermediates="$intermediate_certs"
+     # Store all of the intermediate certificates in an array so that they can
+     # be used later (e.g., to check their expiration dates).
      while true; do
           [[ "$intermediates" =~ \-\-\-\-\-\BEGIN\ CERTIFICATE\-\-\-\-\- ]] || break
           intermediates="${intermediates#*-----BEGIN CERTIFICATE-----}"
           cert="${intermediates%%-----END CERTIFICATE-----*}"
           intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
           cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
-          cert_ext_keyusage="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert" | awk '/X509v3 Extended Key Usage:/ { getline; print $0 }')"
+          intermediate_certs[certificates_provided]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
+          certificates_provided+=1
+     done
+     certificates_provided+=1
+     for (( i=0; i < certificates_provided-1; i++ )); do
+          cert_ext_keyusage="$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' <<< "${intermediate_certs[i]}")"
           [[ "$cert_ext_keyusage" =~ OCSP\ Signing ]] && badocsp=0 && break
      done
      if [[ $badocsp -eq 0 ]]; then
@@ -9121,7 +9128,6 @@ certificate_info() {
           fileout "cert_validityPeriod${json_postfix}" "INFO" "No finding"
      fi
 
-     certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; out "   $certificates_provided"
      fileout "certs_countServer${json_postfix}" "INFO" "${certificates_provided}"
      if "$certificate_list_ordering_problem"; then
