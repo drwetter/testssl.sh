@@ -8303,18 +8303,18 @@ certificate_info() {
      local -i certificate_number=$1
      local -i number_of_certificates=$2
      local cert_txt="$3"
-     local cipher=$4
-     local cert_keysize=$5
-     local cert_type="$6"
-     local ocsp_response_binary="$7"
-     local ocsp_response=$8
-     local ocsp_response_status=$9
-     local sni_used="${10}"
-     local ct="${11}"
-     local certificate_list_ordering_problem="${12}"
+     local intermediates="$4"
+     local cipher=$5
+     local cert_keysize=$6
+     local cert_type="$7"
+     local ocsp_response_binary="$8"
+     local ocsp_response=$9
+     local ocsp_response_status=${10}
+     local sni_used="${11}"
+     local ct="${12}"
+     local certificate_list_ordering_problem="${13}"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_spki_info
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
-     local badocspcerts="${TESTSSL_INSTALL_DIR}/etc/bad_ocsp_certs.txt"
      local -i lineno_matched=0
      local cert_keyusage cert_ext_keyusage short_keyAlgo
      local outok=true
@@ -8322,12 +8322,13 @@ certificate_info() {
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial cert
+     local -a intermediate_certs=()
      local policy_oid
      local spaces=""
      local -i trust_sni=0 trust_nosni=0 diffseconds=0
      local has_dns_sans has_dns_sans_nosni
      local trust_sni_finding
-     local -i certificates_provided
+     local -i i certificates_provided=0
      local cnfinding trustfinding trustfinding_nosni
      local cnok="OK"
      local expfinding expok="OK"
@@ -8980,16 +8981,21 @@ certificate_info() {
 #FIXME: We just raise the flag saying the chain is bad w/o naming the intermediate
 # cert to blame.
 
-     awk -v n=-1 "{start=1}
-          /-----BEGIN CERTIFICATE-----/{ if (start) {inc=1; n++} }
-         inc { print > (\"$TEMPDIR/intermediatecert\" n \".crt\") }
-         /---END CERTIFICATE-----/{ inc=0 }"  "$TEMPDIR/intermediatecerts.pem"
-
-     for cert in $TEMPDIR/intermediatecert?.crt; do
-          hash=$($OPENSSL x509 -in "$cert" -outform der 2>/dev/null | $OPENSSL dgst -sha256 -binary | $OPENSSL base64)
-          grep -q "$hash" "$badocspcerts"
-          badocsp=$?
-          [[ $badocsp -eq 0 ]] && break
+     # Store all of the intermediate certificates in an array so that they can
+     # be used later (e.g., to check their expiration dates).
+     while true; do
+          [[ "$intermediates" =~ \-\-\-\-\-\BEGIN\ CERTIFICATE\-\-\-\-\- ]] || break
+          intermediates="${intermediates#*-----BEGIN CERTIFICATE-----}"
+          cert="${intermediates%%-----END CERTIFICATE-----*}"
+          intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
+          cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
+          intermediate_certs[certificates_provided]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
+          certificates_provided+=1
+     done
+     certificates_provided+=1
+     for (( i=0; i < certificates_provided-1; i++ )); do
+          cert_ext_keyusage="$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' <<< "${intermediate_certs[i]}")"
+          [[ "$cert_ext_keyusage" =~ OCSP\ Signing ]] && badocsp=0 && break
      done
      if [[ $badocsp -eq 0 ]]; then
           prln_svrty_medium "NOT ok"
@@ -9122,7 +9128,6 @@ certificate_info() {
           fileout "cert_validityPeriod${json_postfix}" "INFO" "No finding"
      fi
 
-     certificates_provided=1+$(grep -c "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem)
      out "$indent"; pr_bold " # of certificates provided"; out "   $certificates_provided"
      fileout "certs_countServer${json_postfix}" "INFO" "${certificates_provided}"
      if "$certificate_list_ordering_problem"; then
@@ -9715,7 +9720,7 @@ run_server_defaults() {
           echo "${previous_hostcert[i]}" > $HOSTCERT
           echo "${previous_intermediates[i]}" > $TEMPDIR/intermediatecerts.pem
           echo "${previous_hostcert_issuer[i]}" > $TEMPDIR/hostcert_issuer.pem
-          certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" \
+          certificate_info "$i" "$certs_found" "${previous_hostcert_txt[i]}" "${previous_intermediates[i]}" \
                "${tested_cipher[i]}" "${keysize[i]}" "${previous_hostcert_type[i]}" \
                "${ocsp_response_binary[i]}" "${ocsp_response[i]}" \
                "${ocsp_response_status[i]}" "${sni_used[i]}" "${ct[i]}" \
