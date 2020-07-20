@@ -20877,6 +20877,7 @@ run_rating() {
      pr_bold " Specification documentation  "; pr_url "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
      outln
      fileout "rating_spec" "INFO" "SSL Labs's 'SSL Server Rating Guide' (version 2009q from 2020-01-30)"
+     fileout "rating_doc" "INFO" "https://github.com/ssllabs/research/wiki/SSL-Server-Rating-Guide"
 
      # No point in calculating a score, if a cap of "F", "T", or "M" has been set
      if [[ $GRADE_CAP == F || $GRADE_CAP == T || $GRADE_CAP == M ]]; then
@@ -20893,7 +20894,7 @@ run_rating() {
           fileout "cipher_strength_score" "INFO" "0"
           fileout "cipher_strength_score_weighted" "INFO" "0"
           fileout "final_score" "INFO" "0"
-          fileout "grade" "CRITICAL" "$GRADE_CAP"
+          fileout "overall_grade" "CRITICAL" "$GRADE_CAP"
      else
           ## Category 1
           # get best score, by searching for the best protocol, until a hit occurs
@@ -21017,22 +21018,22 @@ run_rating() {
           pr_bold " Overall Grade                "
           case "$final_grade" in
                A*) prln_svrty_best $final_grade
-                   fileout "grade" "OK" "$final_grade"
+                   fileout "overall_grade" "OK" "$final_grade"
                     ;;
                B) prln_svrty_medium $final_grade
-                  fileout "grade" "MEDIUM" "$final_grade"
+                  fileout "overall_grade" "MEDIUM" "$final_grade"
                     ;;
                C) prln_svrty_medium $final_grade
                   fileout "grade" "MEDIUM" "$final_grade"
                     ;;
                D) prln_svrty_high $final_grade
-                  fileout "grade" "HIGH" "$final_grade"
+                  fileout "overall_grade" "HIGH" "$final_grade"
                     ;;
                E) prln_svrty_high $final_grade
-                  fileout "grade" "HIGH" "$final_grade"
+                  fileout "overall_grade" "HIGH" "$final_grade"
                     ;;
                F) prln_svrty_critical $final_grade
-                  fileout "grade" "CRITICAL" "$final_grade"
+                  fileout "overall_grade" "CRITICAL" "$final_grade"
                     ;;
           esac
      fi
