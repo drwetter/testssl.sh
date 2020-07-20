@@ -20885,6 +20885,14 @@ run_rating() {
           pr_bold " Cipher Strength"; out "  (weighted)  "; outln "0 (0)"
           pr_bold " Final Score                  "; outln "0"
           pr_bold " Overall Grade                "; prln_svrty_critical "$GRADE_CAP"
+
+          fileout "protocol_support_score" "INFO" "0"
+          fileout "protocol_support_score_weighted" "INFO" "0"
+          fileout "key_exchange_score" "INFO" "0"
+          fileout "key_exchange_score_weighted" "INFO" "0"
+          fileout "cipher_strength_score" "INFO" "0"
+          fileout "cipher_strength_score_weighted" "INFO" "0"
+          fileout "final_score" "INFO" "0"
           fileout "grade" "CRITICAL" "$GRADE_CAP"
      else
           ## Category 1
@@ -20920,6 +20928,8 @@ run_rating() {
           let c1_wscore=$c1_score*30/100 # Gets the weighted score for category (30%)
 
           pr_bold " Protocol Support "; out "(weighted)  "; outln "$c1_score ($c1_wscore)"
+          fileout "protocol_support_score" "INFO" "$c1_score"
+          fileout "protocol_support_score_weighted" "INFO" "$c1_wscore"
 
           ## Category 2
           if [[ $KEY_EXCH_SCORE -le 40 ]]; then
@@ -20932,6 +20942,8 @@ run_rating() {
           let c2_wscore=$c2_score*30/100
 
           pr_bold " Key Exchange "; out "    (weighted)  "; outln "$c2_score ($c2_wscore)"
+          fileout "key_exchange_score" "INFO" "$c2_score"
+          fileout "key_exchange_score_weighted" "INFO" "$c2_wscore"
 
 
           ## Category 3
@@ -20964,11 +20976,14 @@ run_rating() {
           let c3_wscore=$c3_score*40/100        # Gets the weighted score for category (40%)
 
           pr_bold " Cipher Strength "; out " (weighted)  "; outln "$c3_score ($c3_wscore)"
+          fileout "cipher_strength_score" "INFO" "$c3_score"
+          fileout "cipher_strength_score_weighted" "INFO" "$c3_wscore"
 
           ## Calculate final score and grade
           let final_score=$c1_wscore+$c2_wscore+$c3_wscore
 
           pr_bold " Final Score                  "; outln $final_score
+          fileout "final_score" "INFO" "$final_score"
 
           # Calculate the pre-cap grade
           if [[ $final_score -ge 80 ]]; then
