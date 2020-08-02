@@ -215,7 +215,7 @@ Also for multiple server certificates are being checked for as well as for the c
 
 `--c, --client-simulation`     This simulates a handshake with a number of standard clients so that you can figure out which client cannot or can connect to your site. For the latter case the protocol, cipher and curve is displayed, also if there's Forward Secrecy. testssl.sh uses a handselected set of clients which are retrieved by the SSLlabs API. The output is aligned in columns when combined with the `--wide` option. If you want the full nine yards of clients displayed use the environment variable ALL_CLIENTS.
 
-`-g, --grease` checks several server implementation bugs like tolerance to size limitations and GREASE, see https://www.ietf.org/archive/id/draft-ietf-tls-grease-01.txt . This checks doesn't run per default.
+`-g, --grease` checks several server implementation bugs like tolerance to size limitations and GREASE, see https://www.ietf.org/archive/id/draft-ietf-tls-grease-01.txt . This check doesn't run per default.
 
 
 
