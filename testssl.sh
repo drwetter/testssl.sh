@@ -10409,10 +10409,10 @@ starttls_io() {
 
 
 # Line-based send with newline characters appended (arg2 empty)
-# Stream-based send: arg2: <any>
+# Stream-based send (not in use currently): arg2: <any>.
 starttls_just_send(){
      if [[ -z "$2" ]] ; then
-          debugme echo -e "C: $1 plus lf"
+          debugme echo "C: $1\r\n"
           echo -ne "$1\r\n" >&5
      else
           debugme echo -e "C: $1"
@@ -10436,37 +10436,37 @@ starttls_just_read(){
 }
 
 starttls_full_read(){
+     local cont_pattern="$1"
+     local end_pattern="$2"
+     local regex="$3"
      local starttls_read_data=()
      local one_line=""
      local ret=0
-     local cont_pattern="$1"
-     local end_pattern="$2"
      local ret_found=0
+     local debugpad="  > found: "
 
      debugme echo "=== reading banner ... ==="
      if [[ $# -ge 3 ]]; then
-          debugme echo "=== we'll have to search for \"$3\" pattern ==="
+          debugme echo "=== we'll have to search for \"$regex\" pattern ==="
           ret_found=3
      fi
 
      local oldIFS="$IFS"
      IFS=''
      while read -r -t $STARTTLS_SLEEP one_line; ret=$?; (exit $ret); do
-          debugme echo "S: ${one_line}"
+          debugme tmln_out "S: ${one_line}"
+          if [[ $DEBUG -ge 5 ]]; then
+               echo "end_pattern/cont_pattern: ${end_pattern} / ${cont_pattern}"
+          fi
           if [[ $# -ge 3 ]]; then
-               if [[ ${one_line} =~ $3 ]]; then
+               if [[ ${one_line} =~ $regex ]]; then
                     ret_found=0
-                    debugme echo "^^^^^^^ that's what we were looking for ==="
+                    debugme tmln_out "${debugpad} ${one_line} "
                fi
           fi
           starttls_read_data+=("${one_line}")
-          if [[ $DEBUG -ge 4 ]]; then
-               echo "one_line: ${one_line}"
-               echo "end_pattern: ${end_pattern}"
-               echo "cont_pattern: ${cont_pattern}"
-          fi
           if [[ ${one_line} =~ ${end_pattern} ]]; then
-               debugme echo "=== full read finished ==="
+               debugme tmln_out "${debugpad} ${one_line} "
                IFS="${oldIFS}"
                return ${ret_found}
           fi
@@ -10488,13 +10488,15 @@ starttls_full_read(){
 }
 
 starttls_ftp_dialog() {
-     debugme echo "=== starting ftp STARTTLS dialog ==="
+     local debugpad="  > "
      local reAUTHTLS='^ AUTH TLS'
-     starttls_full_read '^220-' '^220 '                    && debugme echo "received server greeting" &&
-     starttls_just_send 'FEAT'                             && debugme echo "sent FEAT" &&
-     starttls_full_read '^(211-| )' '^211 ' "${reAUTHTLS}" && debugme echo "received server features and checked STARTTLS availability" &&
-     starttls_just_send 'AUTH TLS'                         && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '^234-' '^234 '                    && debugme echo "received ack for STARTTLS"
+
+     debugme echo "=== starting ftp STARTTLS dialog ==="
+     starttls_full_read '^220-' '^220 '                    && debugme echo "${debugpad}received server greeting" &&
+     starttls_just_send 'FEAT'                             && debugme echo "${debugpad}sent FEAT" &&
+     starttls_full_read '^(211-| )' '^211 ' "${reAUTHTLS}" && debugme echo "${debugpad}received server features and checked STARTTLS availability" &&
+     starttls_just_send 'AUTH TLS'                         && debugme echo "${debugpad}initiated STARTTLS" &&
+     starttls_full_read '^234-' '^234 '                    && debugme echo "${debugpad}received ack for STARTTLS"
      local ret=$?
      debugme echo "=== finished ftp STARTTLS dialog with ${ret} ==="
      return $ret
@@ -10503,44 +10505,55 @@ starttls_ftp_dialog() {
 # argv1: empty: SMTP, "lmtp" : LMTP
 #
 starttls_smtp_dialog() {
-     local greet_str="EHLO"
+     local greet_str="EHLO testssl.sh"
      local proto="smtp"
+     local re250STARTTLS='^250[ -]STARTTLS'
+     local debugpad="  > "
 
      if [[ "$1" == lmtp ]]; then
           proto="lmtp"
           greet_str="LHLO"
      fi
+     if [[ -n "$2" ]]; then
+          # Here we can "add" commands in the future. Please note \r\n will automatically appended
+          greet_str="$2"
+     elif "$SNEAKY"; then
+          greet_str="EHLO google.com"
+     fi
      debugme echo "=== starting $proto STARTTLS dialog ==="
 
-     local re250STARTTLS='^250[ -]STARTTLS'
-     starttls_full_read '^220-' '^220 '                    && debugme echo "received server greeting" &&
-     starttls_just_send "$greet_str testssl.sh"            && debugme echo "sent $greet_str" &&
-     starttls_full_read '^250-' '^250 ' "${re250STARTTLS}" && debugme echo "received server capabilities and checked STARTTLS availability" &&
-     starttls_just_send 'STARTTLS'                         && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '^220-' '^220 '                    && debugme echo "received ack for STARTTLS"
+     starttls_full_read '^220-' '^220 '                    && debugme echo "${debugpad}received server greeting" &&
+     starttls_just_send "$greet_str"                       && debugme echo "${debugpad}sent $greet_str" &&
+     starttls_full_read '^250-' '^250 ' "${re250STARTTLS}" && debugme echo "${debugpad}received server capabilities and checked STARTTLS availability" &&
+     starttls_just_send 'STARTTLS'                         && debugme echo "${debugpad}initiated STARTTLS" &&
+     starttls_full_read '^220-' '^220 '                    && debugme echo "${debugpad}received ack for STARTTLS"
      local ret=$?
      debugme echo "=== finished $proto STARTTLS dialog with ${ret} ==="
      return $ret
 }
 
 starttls_pop3_dialog() {
+     local debugpad="  > "
+
      debugme echo "=== starting pop3 STARTTLS dialog ==="
-     starttls_full_read '^\+OK' '^\+OK'                    && debugme echo "received server greeting" &&
-     starttls_just_send 'STLS'                             && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '^\+OK' '^\+OK'                    && debugme echo "received ack for STARTTLS"
+     starttls_full_read '^\+OK' '^\+OK'                    && debugme echo "${debugpad}received server greeting" &&
+     starttls_just_send 'STLS'                             && debugme echo "${debugpad}initiated STARTTLS" &&
+     starttls_full_read '^\+OK' '^\+OK'                    && debugme echo "${debugpad}received ack for STARTTLS"
      local ret=$?
      debugme echo "=== finished pop3 STARTTLS dialog with ${ret} ==="
      return $ret
 }
 
 starttls_imap_dialog() {
-     debugme echo "=== starting imap STARTTLS dialog ==="
      local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS(.*)?|( .*)? STARTTLS( .*)? IMAP4rev1(.*)?)$'
-     starttls_full_read '^\* ' '^\* OK '                   && debugme echo "received server greeting" &&
-     starttls_just_send 'a001 CAPABILITY'                  && debugme echo "sent CAPABILITY" &&
-     starttls_full_read '^\* ' '^a001 OK ' "${reSTARTTLS}" && debugme echo "received server capabilities and checked STARTTLS availability" &&
-     starttls_just_send 'a002 STARTTLS'                    && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '^\* ' '^a002 OK '                 && debugme echo "received ack for STARTTLS"
+     local debugpad="  > "
+
+     debugme echo "=== starting imap STARTTLS dialog ==="
+     starttls_full_read '^\* ' '^\* OK '                   && debugme echo "${debugpad}received server greeting" &&
+     starttls_just_send 'a001 CAPABILITY'                  && debugme echo "${debugpad}sent CAPABILITY" &&
+     starttls_full_read '^\* ' '^a001 OK ' "${reSTARTTLS}" && debugme echo "${debugpad}received server capabilities and checked STARTTLS availability" &&
+     starttls_just_send 'a002 STARTTLS'                    && debugme echo "${debugpad}initiated STARTTLS" &&
+     starttls_full_read '^\* ' '^a002 OK '                 && debugme echo "${debugpad}received ack for STARTTLS"
      local ret=$?
      debugme echo "=== finished imap STARTTLS dialog with ${ret} ==="
      return $ret
@@ -10562,10 +10575,12 @@ starttls_xmpp_dialog() {
 }
 
 starttls_nntp_dialog() {
+     local debugpad="  > "
+
      debugme echo "=== starting nntp STARTTLS dialog ==="
-     starttls_full_read '$^' '^20[01] '                    && debugme echo "received server greeting" &&
-     starttls_just_send 'STARTTLS'                         && debugme echo "initiated STARTTLS" &&
-     starttls_full_read '$^' '^382 '                       && debugme echo "received ack for STARTTLS"
+     starttls_full_read '$^' '^20[01] '                    && debugme echo "${debugpad}received server greeting" &&
+     starttls_just_send 'STARTTLS'                         && debugme echo "${debugpad}initiated STARTTLS" &&
+     starttls_full_read '$^' '^382 '                       && debugme echo "${debugpad}received ack for STARTTLS"
      local ret=$?
      debugme echo "=== finished nntp STARTTLS dialog with ${ret} ==="
      return $ret
@@ -10574,15 +10589,15 @@ starttls_nntp_dialog() {
 starttls_postgres_dialog() {
      debugme echo "=== starting postgres STARTTLS dialog ==="
      local init_tls=", x00, x00 ,x00 ,x08 ,x04 ,xD2 ,x16 ,x2F"
-     socksend "${init_tls}" 0                               && debugme echo "initiated STARTTLS" &&
-     starttls_io "" S 1                                     && debugme echo "received ack (="S") for STARTTLS"
+     socksend "${init_tls}" 0                               && debugme echo "${debugpad}initiated STARTTLS" &&
+     starttls_io "" S 1                                     && debugme echo "${debugpad}received ack (="S") for STARTTLS"
      local ret=$?
      debugme echo "=== finished postgres STARTTLS dialog with ${ret} ==="
      return $ret
 }
 
 starttls_mysql_dialog() {
-     debugme echo "=== starting mysql STARTTLS dialog ==="
+     local debugpad="  > "
      local login_request="
      , x20, x00, x00, x01,                   # payload_length, sequence_id
      x85, xae, xff, x00,                     # capability flags, CLIENT_SSL always set
@@ -10591,8 +10606,10 @@ starttls_mysql_dialog() {
      x00, x00, x00, x00, x00, x00, x00, x00, # string[23] reserved (all [0])
      x00, x00, x00, x00, x00, x00, x00, x00,
      x00, x00, x00, x00, x00, x00, x00"
+
+     debugme echo "=== starting mysql STARTTLS dialog ==="
      socksend "${login_request}" 0
-     starttls_just_read 1                    && debugme echo "read succeeded"
+     starttls_just_read 1                    && debugme echo "${debugpad}read succeeded"
      # 1 is the timeout value which only MySQL needs. Note, there seems no response whether STARTTLS
      # succeeded. We could try harder, see https://github.com/openssl/openssl/blob/master/apps/s_client.c
      # but atm this seems sufficient as later we will fail if there's no STARTTLS.
