@@ -491,6 +491,7 @@ Please note that for plain TLS-encrypted ports you must not specify the protocol
 * RFC 7919: Negotiated Finite Field Diffie-Hellman Ephemeral Parameters for Transport Layer Security
 * RFC 8143: Using Transport Layer Security (TLS) with Network News Transfer Protocol (NNTP)
 * RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3
+* RFC 8701: Applying Generate Random Extensions And Sustain Extensibility (GREASE) to TLS Extensibility
 * W3C CSP: Content Security Policy Level 1-3
 * TLSWG Draft: The Transport Layer Security (TLS) Protocol Version 1.3
 
