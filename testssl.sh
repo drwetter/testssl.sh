@@ -17718,7 +17718,7 @@ run_tls_truncation() {
 }
 
 # Test for various server implementation errors that aren't tested for elsewhere.
-# Inspired by https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
+# Inspired by RFC 8701.
 run_grease() {
      local -i success
      local bug_found=false
@@ -17729,7 +17729,7 @@ run_grease() {
      local ciph list temp curve_found
      local -i i j rnd alpn_list_len extn_len debug_level=""
      local -i ret=0
-     # Note: The following values were taken from https://datatracker.ietf.org/doc/draft-ietf-tls-grease.
+     # Note: The following values were taken from RFC 8701.
      # These arrays may need to be updated if the values change in the final version of this document.
      local -a -r grease_cipher_suites=( "0a,0a" "1a,1a" "2a,2a" "3a,3a" "4a,4a" "5a,5a" "6a,6a" "7a,7a" "8a,8a" "9a,9a" "aa,aa" "ba,ba" "ca,ca" "da,da" "ea,ea" "fa,fa" )
      local -a -r grease_supported_groups=( "0a,0a" "1a,1a" "2a,2a" "3a,3a" "4a,4a" "5a,5a" "6a,6a" "7a,7a" "8a,8a" "9a,9a" "aa,aa" "ba,ba" "ca,ca" "da,da" "ea,ea" "fa,fa" )
@@ -17823,7 +17823,7 @@ run_grease() {
      DEBUG="$debug_level"
 
      # Check that server ignores unrecognized extensions
-     # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+     # see RFC 8701
      if "$normal_hello_ok" && [[ "$proto" != "00" ]]; then
           # Try multiple different randomly-generated GREASE extensions,
           # but make final test use zero-length extension value, just to
@@ -17934,7 +17934,7 @@ run_grease() {
      fi
 
      # Check that server ignores unrecognized cipher suite values
-     # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+     # see RFC 8701
      if "$normal_hello_ok"; then
           list=""
           for ciph in "${grease_cipher_suites[@]}"; do
@@ -17952,7 +17952,7 @@ run_grease() {
 
      # Check that servers that support ECDHE cipher suites ignore
      # unrecognized named group values.
-     # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+     # see RFC 8701
      if [[ "$proto" != "00" ]]; then
           # Send a ClientHello that lists all of the ECDHE cipher suites
           tls_sockets "$proto" "$ecdhe_ciphers, 00,ff" "ephemeralkey"
@@ -17999,7 +17999,7 @@ run_grease() {
 
      # Check that servers that support the ALPN extension ignore
      # unrecognized ALPN values.
-     # see https://datatracker.ietf.org/doc/draft-ietf-tls-grease
+     # see RFC 8701
      if "$normal_hello_ok" && [[ -z $STARTTLS ]] && [[ "$proto" != "00" ]]; then
           for alpn_proto in $ALPN_PROTOs; do
                alpn+=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")"
