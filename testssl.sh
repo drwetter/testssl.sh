@@ -8008,8 +8008,8 @@ compare_server_name_to_cert() {
 
 # This function determines whether the certificate (arg3) contains "visibility
 # information" (see Section 4.3.3 of
-# https://www.etsi.org/deliver/etsi_ts/103500_103599/10352303/01.01.01_60/ts_10352303v010101p.pdf .
-etsi_etls_visibility_info() {
+# https://www.etsi.org/deliver/etsi_ts/103500_103599/10352303/01.02.01_60/ts_10352303v010201p.pdf.
+etsi_ets_visibility_info() {
      local jsonID="$1"
      local spaces="$2"
      local cert="$3"
@@ -8020,11 +8020,12 @@ etsi_etls_visibility_info() {
 
      # If "visibility information" is present, it will appear in the subjectAltName
      # extension (0603551D11) as an otherName with OID 0.4.0.3523.3.1 (060604009B430301).
-     # OpenSSL displays all names of type otherName as "othername:<unsupported>".
+     # OpenSSL 1.1.1 and earlier displays all names of type otherName as "othername:<unsupported>".
      # As certificates will rarely include a name encoded as an otherName, check the
      # text version of the certificate for "othername:<unsupported>" before calling
      # external functions to obtain the DER encoded certficate.
-     if [[ "$cert_txt" =~ X509v3\ Subject\ Alternative\ Name:.*othername:\<unsupported\> ]]; then
+     if [[ "$cert_txt" =~ X509v3\ Subject\ Alternative\ Name:.*othername:\<unsupported\> ]] || \
+        [[ "$cert_txt" =~ X509v3\ Subject\ Alternative\ Name:.*othername:\ 0.4.0.3523.3.1 ]]; then
           dercert="$($OPENSSL x509 -in "$cert" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
           if [[ "$dercert" =~ 0603551D110101FF04[0-9A-F]*060604009B430301 ]] || \
              [[ "$dercert" =~ 0603551D1104[0-9A-F]*060604009B430301 ]]; then
@@ -9008,7 +9009,7 @@ certificate_info() {
      out "$indent"; pr_bold " ETS/\"eTLS\""
      out ", visibility info  "
      jsonID="cert_eTLS"
-     etsi_etls_visibility_info "${jsonID}${json_postfix}" "$spaces" "$HOSTCERT" "$cert_txt"
+     etsi_ets_visibility_info "${jsonID}${json_postfix}" "$spaces" "$HOSTCERT" "$cert_txt"
      # *Currently* this is even listed as a vulnerability (CWE-310, CVE-2019-919), see
      # https://nvd.nist.gov/vuln/detail/CVE-2019-9191, https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-9191
      # For now we leave this here. We may want to change that later or add infos to other sections (FS & vulnerability)
