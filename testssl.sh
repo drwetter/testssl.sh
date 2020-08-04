@@ -18018,7 +18018,7 @@ run_grease() {
                selected_alpn_protocol="$(grep "ALPN protocol:" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/ALPN protocol:  //')"
                # If using a "normal" ALPN extension worked, then add an unrecognized
                # ALPN value to the beginning of the extension and try again.
-               alpn_proto="ignore/$selected_alpn_protocol"
+               alpn_proto="ZZ" # "ZZ" = "{0x5A,0x5A}"
                alpn=",$(printf "%02x" ${#alpn_proto}),$(string_to_asciihex "$alpn_proto")$alpn"
                alpn_list_len=${#alpn}/3
                alpn_list_len_hex=$(printf "%04x" $alpn_list_len)
@@ -18029,7 +18029,7 @@ run_grease() {
                success=$?
                if [[ $success -ne 0 ]] && [[ $success -ne 2 ]]; then
                     prln_svrty_medium " Server fails if ClientHello contains an application_layer_protocol_negotiation extension with an unrecognized ALPN value."
-                    fileout "$jsonID" "MEDIUM" "erver fails if ClientHello contains an application_layer_protocol_negotiation extension with an unrecognized ALPN value."
+                    fileout "$jsonID" "MEDIUM" "Server fails if ClientHello contains an application_layer_protocol_negotiation extension with an unrecognized ALPN value."
                     bug_found=true
                else
                     grease_selected_alpn_protocol="$(grep "ALPN protocol:" "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt" | sed 's/ALPN protocol:  //')"
@@ -18037,9 +18037,9 @@ run_grease() {
                          prln_svrty_medium " Server did not ignore unrecognized ALPN value in the application_layer_protocol_negotiation extension."
                          fileout "$jsonID" "MEDIUM" "Server did not ignore unrecognized ALPN value in the application_layer_protocol_negotiation extension."
                          bug_found=true
-                    elif [[ "$grease_selected_alpn_protocol" =~ ignore/ ]]; then
-                         prln_svrty_medium " Server selected \"ignore/\" ALPN value in the application_layer_protocol_negotiation extension."
-                         fileout "$jsonID" "MEDIUM" "Server selected \"ignore/\" ALPN value in the application_layer_protocol_negotiation extension."
+                    elif [[ "$grease_selected_alpn_protocol" == $alpn_proto ]]; then
+                         prln_svrty_medium " Server selected GREASE ALPN value ($alpn_proto) in the application_layer_protocol_negotiation extension."
+                         fileout "$jsonID" "MEDIUM" "Server selected GREASE ALPN value ($alpn_proto) in the application_layer_protocol_negotiation extension."
                          bug_found=true
                     fi
                fi
