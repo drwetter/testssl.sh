@@ -124,7 +124,7 @@ trap "child_error" USR1
 #
 declare -r VERSION="3.1dev"
 declare -r SWCONTACT="dirk aet testssl dot sh"
-grep -E -q "dev|rc|beta" <<< "$VERSION" && \
+[[ "$VERSION" =~ dev|rc|beta ]] && \
      SWURL="https://testssl.sh/dev/" ||
      SWURL="https://testssl.sh/"
 if git log &>/dev/null; then
@@ -843,24 +843,35 @@ is_ipv4addr() {
      local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
 
      [[ -z "$1" ]] && return 1
-     # more than numbers, important for hosts like AAA.BBB.CCC.DDD.in-addr.arpa.DOMAIN.TLS
-     [[ -n $(tr -d '0-9\.' <<< "$1") ]] && return 1
 
-     grep -Eq "$ipv4address" <<< "$1" && \
+     # Check that $1 contains an IPv4 address and nothing else
+     [[ "$1" =~ $ipv4address ]] && [[ "$1" == $BASH_REMATCH ]] && \
           return 0 || \
           return 1
 }
 
-# a bit easier
+# See RFC 4291, Section 2.2
 is_ipv6addr() {
+     local ipv6seg="[0-9A-Fa-f]{1,4}"
+     local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
+     local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
+     local ipv6address
+
+     ipv6address="($ipv6seg:){7}(:|$ipv6seg)"
+     ipv6address+="|($ipv6seg:){6}(:|:$ipv6seg|$ipv4address)"
+     ipv6address+="|($ipv6seg:){5}(:|(:$ipv6seg){1,2}|:$ipv4address)"
+     ipv6address+="|($ipv6seg:){4}(:|(:$ipv6seg){1,3}|:($ipv6seg:){0,1}$ipv4address)"
+     ipv6address+="|($ipv6seg:){3}(:|(:$ipv6seg){1,4}|:($ipv6seg:){0,2}$ipv4address)"
+     ipv6address+="|($ipv6seg:){2}(:|(:$ipv6seg){1,5}|:($ipv6seg:){0,3}$ipv4address)"
+     ipv6address+="|($ipv6seg:){1}(:|(:$ipv6seg){1,6}|:($ipv6seg:){0,4}$ipv4address)"
+     ipv6address+="|:((:$ipv6seg){1,7}|:($ipv6seg:){0,5}$ipv4address)"
+
      [[ -z "$1" ]] && return 1
-     # less than 2x ":"
-     [[ $(count_lines "$(tr ':' '\n' <<< "$1")") -le 1 ]] && \
+
+     # Check that $1 contains an IPv4 address and nothing else
+     [[ "$1" =~ $ipv6address ]] && [[ "$1" == $BASH_REMATCH ]] && \
+          return 0 || \
           return 1
-     # check which chars allowed:
-     [[ -n "$(tr -d '0-9:a-fA-F ' <<< "$1" | sed -e '/^$/d')" ]] && \
-          return 1
-     return 0
 }
 
 ###### END universal helper function definitions ######
@@ -2379,12 +2390,11 @@ run_http_header() {
 match_ipv4_httpheader() {
      local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
      local ipv4address="$octet\\.$octet\\.$octet\\.$octet"
-     local whitelisted_header="pagespeed|page-speed|^Content-Security-Policy|^MicrosoftSharePointTeamServices|^X-OWA-Version|^Location|^Server: PRTG"
+     local excluded_header="pagespeed|page-speed|^Content-Security-Policy|^MicrosoftSharePointTeamServices|^X-OWA-Version|^Location|^Server: "
      local your_ip_msg="(check if it's your IP address or e.g. a cluster IP)"
-     local result
+     local headers result
      local first=true
      local spaces="                              "
-     local count
      local jsonID="ipv4_in_header"
      local cwe="CWE-212"
      local cve=""
@@ -2393,27 +2403,24 @@ match_ipv4_httpheader() {
           run_http_header "$1" || return 1
      fi
 
-     # Whitelist some headers as they are mistakenly identified as ipv4 address. Issues #158, #323.
+     # Exclude some headers as they are mistakenly identified as ipv4 address. Issues #158, #323.
      # Also facebook used to have a CSP rule for 127.0.0.1
-     if grep -Evai "$whitelisted_header" $HEADERFILE | grep -Eiq "$ipv4address"; then
+     headers="$(grep -Evai "$excluded_header" $HEADERFILE)"
+     if [[ "$headers" =~ $ipv4address ]]; then
           pr_bold " IPv4 address in header       "
-          count=0
           while read line; do
-               result="$(grep -E "$ipv4address" <<< "$line")"
-               result=$(strip_lf "$result")
-               if [[ -n "$result" ]]; then
-                    if ! $first; then
-                         out "$spaces"
-                         your_ip_msg=""
-                    else
-                         first=false
-                    fi
-                    pr_svrty_medium "$result"
-                    outln "\n$spaces$your_ip_msg"
-                    fileout "$jsonID" "MEDIUM" "$result $your_ip_msg" "$cve" "$cwe"
+               [[ "$line" =~ $ipv4address ]] || continue
+               result=$(strip_lf "$line")
+               if ! $first; then
+                    out "$spaces"
+                    your_ip_msg=""
+               else
+                    first=false
                fi
-               count=$count+1
-          done < $HEADERFILE
+               pr_svrty_medium "$result"
+               outln "\n$spaces$your_ip_msg"
+               fileout "$jsonID" "MEDIUM" "$result $your_ip_msg" "$cve" "$cwe"
+          done <<< "$headers"
      fi
 }
 
@@ -8437,7 +8444,7 @@ certificate_info() {
                fileout "${jsonID}${json_postfix}" "OK" "DSA with SHA256"
                ;;
           rsassaPss)
-               cert_sig_hash_algo="$(grep -A 1 "Signature Algorithm" <<< "$cert_txt" | head -2 | tail -1 | sed 's/^.*Hash Algorithm: //')"
+               cert_sig_hash_algo="$(awk '/Signature Algorithm/ { getline; print $0; exit }' <<< "$cert_txt" | sed 's/^.*Hash Algorithm: //')"
                case $cert_sig_hash_algo in
                     sha1)
                          prln_svrty_medium "RSASSA-PSS with SHA1"
@@ -11221,7 +11228,7 @@ hmac() {
      else
           output="$(asciihex_to_binary "$text" | $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
           ret=$?
-          tm_out "$(awk  '/=/ { print $2 }' <<< "$output")"
+          tm_out "${output#*= }"
      fi
      return $ret
 }
@@ -11246,7 +11253,7 @@ hmac-transcript() {
                     $OPENSSL dgst "$hash_fn" -binary 2>/dev/null | \
                     $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
           ret=$?
-          tm_out "$(toupper "$(awk  '/=/ { print $2 }' <<< "$output")")"
+          tm_out "$(toupper "${output#*= }")"
      fi
      return $ret
 }
@@ -11336,7 +11343,8 @@ derive-secret() {
           *) return 7
      esac
 
-     hash_messages="$(asciihex_to_binary "$messages" | $OPENSSL dgst "$hash_fn" 2>/dev/null | awk  '/=/ { print $2 }')"
+     hash_messages="$(asciihex_to_binary "$messages" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
+     hash_messages="${hash_messages#*= }"
      hkdf-expand-label "$hash_fn" "$secret" "$label" "$hash_messages" "$hash_len"
      return $?
 }
@@ -11380,7 +11388,8 @@ create-initial-transcript() {
           else
                return 1
           fi
-          hash_clienthello1="$(asciihex_to_binary "$clienthello1" | $OPENSSL dgst "$hash_fn" 2>/dev/null | awk  '/=/ { print $2 }')"
+          hash_clienthello1="$(asciihex_to_binary "$clienthello1" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
+          hash_clienthello1="${hash_clienthello1#*= }"
           msg_transcript="FE0000$(printf "%02x" $((${#hash_clienthello1}/2)))$hash_clienthello1$hrr$clienthello2$serverhello"
      else
           msg_transcript="$clienthello2$serverhello"
