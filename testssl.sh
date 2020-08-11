@@ -7221,10 +7221,9 @@ determine_trust() {
           # we did to stdout the warning above already, so we could stay here with OK:
           fileout "${jsonID}${json_postfix}" "OK" "passed. $addtl_warning"
      else
-          # at least one failed
           pr_svrty_critical "NOT ok"
           if ! "$some_ok"; then
-               # all failed (we assume with the same issue), we're displaying the reason
+               # ALL failed (we assume with the same issue), we're displaying the reason
                out " "
                code="$(verify_retcode_helper "${verify_retcode[1]}")"
                if [[ "$code" =~ "pls report" ]]; then
@@ -7235,15 +7234,13 @@ determine_trust() {
                fileout "${jsonID}${json_postfix}" "CRITICAL" "failed $code. $addtl_warning"
                set_grade_cap "T" "Issues with the chain of trust $code"
           else
-               # is one ok and the others not ==> display the culprit store
+               # alt least one ok and other(s) not ==> display the culprit store(s)
                if "$some_ok"; then
                     pr_svrty_critical ":"
-                    for ((i=1;i<=num_ca_bundles;i++)); do
+                    for (( i=1; i<=num_ca_bundles; i++ )); do
                          if ${trust[i]}; then
                               ok_was="${certificate_file[i]} $ok_was"
                          else
-                              #code="$(verify_retcode_helper ${verify_retcode[i]})"
-                              #notok_was="${certificate_file[i]} $notok_was"
                               pr_svrty_high " ${certificate_file[i]} "
                               code="$(verify_retcode_helper "${verify_retcode[i]}")"
                               if [[ "$code" =~ "pls report" ]]; then
@@ -7252,11 +7249,13 @@ determine_trust() {
                                    out "$code"
                               fi
                               notok_was="${certificate_file[i]} $code $notok_was"
-                              set_grade_cap "T" "Issues with chain of trust $code"
+                              if ! [[ ${certificate_file[i]} =~ Java ]]; then
+                                   # Exemption for Java AND rating, as this store doesn't seem to be as complete.
+                                   # We won't penelize this but we still need to raise a red flag. See #1648
+                                   set_grade_cap "T" "Issues with chain of trust $code"
+                              fi
                          fi
                     done
-                    #pr_svrty_high "$notok_was "
-                    #outln "$code"
                     outln
                     # lf + green ones
                     [[ "$DEBUG" -eq 0 ]] && tm_out "$spaces"
@@ -7269,7 +7268,6 @@ determine_trust() {
      outln
      return 0
 }
-
 # not handled: Root CA supplied ("contains anchor" in SSLlabs terminology)
 
 tls_time() {
