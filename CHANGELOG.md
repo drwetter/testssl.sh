@@ -16,6 +16,7 @@
 * Don't use external pwd anymore
 * STARTTLS: XMPP server support
 * Rating (SSL Labs, not complete)
+* Don't penalize missing trust in rating when CA not in Java store
 * Added support for certificates with EdDSA signatures and pubilc keys
 
 ### Features implemented / improvements in 3.0
