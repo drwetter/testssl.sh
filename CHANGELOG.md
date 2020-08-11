@@ -15,6 +15,8 @@
 * Security fix: DNS input
 * Don't use external pwd anymore
 * STARTTLS: XMPP server support
+* Code improvements to STARTTLS
+* Detect better when no STARTTLS is offered
 * Rating (SSL Labs, not complete)
 * Don't penalize missing trust in rating when CA not in Java store
 * Added support for certificates with EdDSA signatures and pubilc keys
