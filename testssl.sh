@@ -18808,26 +18808,23 @@ help() {
 
      "$PROG_NAME [options] <URI>"    or    "$PROG_NAME <options>"
 
-
-"$PROG_NAME <options>", where <options> is:
+"$PROG_NAME <option>", where <option> is mostly standalone and one of:
 
      --help                        what you're looking at
      -b, --banner                  displays banner + version of $PROG_NAME
      -v, --version                 same as previous
-     -V, --local                   pretty print all local ciphers
-     -V, --local <pattern>         which local ciphers with <pattern> are available? If pattern is not a number: word match
+     -V, --local [pattern]         pretty print all local ciphers (of openssl only). If search pattern supplied: it is an
+                                   an ignore case word pattern of cipher hexcode or any other string in its name, kx or bits
 
-     <pattern>                     is always an ignore case word pattern of cipher hexcode or any other string in the name, kx or bits
+"$PROG_NAME [options] <URI>", where <URI> is:
 
-"$PROG_NAME <URI>", where <URI> is:
+     <URI>                         host|host:port|URL|URL:port   port 443 is default, URL can only contain HTTPS as a protocol
 
-     <URI>                         host|host:port|URL|URL:port   port 443 is default, URL can only contain HTTPS protocol)
+  and [options] is/are:
 
-"$PROG_NAME [options] <URI>", where [options] is:
-
-     -t, --starttls <protocol>     Does a default run against a STARTTLS enabled <protocol,
-                                   protocol is <ftp|smtp|lmtp|pop3|imap|xmpp|xmpp-server|telnet|ldap|nntp|postgres|mysql>
-     --xmpphost <to_domain>        For STARTTLS enabled XMPP it supplies the XML stream to-'' domain -- sometimes needed
+     -t, --starttls <protocol>     Does a run against a STARTTLS enabled service which is one of ftp, smtp, lmtp, pop3, imap,
+                                   xmpp, xmpp-server, telnet, ldap, nntp, postgres, mysql
+     --xmpphost <to_domain>        For STARTTLS xmpp or xmpp-server checks it supplies the domainname (like SNI)
      --mx <domain/host>            Tests MX records from high to low priority (STARTTLS, port 25)
      --file/-iL <fname>            Mass testing option: Reads one testssl.sh command line per line from <fname>.
                                    Can be combined with --serial or --parallel. Implicitly turns on "--warnings batch".
@@ -21345,6 +21342,9 @@ parse_cmd_line() {
 
      while [[ $# -gt 0 ]]; do
           case $1 in
+               --help|-b|--banner|-v|--version)
+                    fatal "$1 is a standalone command line option"
+                    ;;
                --mx)
                     do_mx_all_ips=true
                     PORT=25

@@ -143,15 +143,15 @@ linked OpenSSL binaries for major operating systems are supplied in <code>./bin/
 
 <p><code>&lt;URI></code> or <code>--file &lt;FILE></code> always needs to be the last parameter.</p>
 
-<h3 id="BANNER-OPTIONS">BANNER OPTIONS</h3>
+<h3 id="BANNER-OPTIONS">BANNER OPTIONS (standalone)</h3>
 
-<p><code>--help</code> (or no arg) display command line help</p>
+<p><code>--help</code> (or no arg) displays command line help</p>
 
 <p><code>-b, --banner</code>        displays testssl.sh banner, including license, usage conditions, version of testssl.sh, detected openssl version, its path to it, # of ciphers of openssl, its build date and the architecture.</p>
 
 <p><code>-v, --version</code>     same as before</p>
 
-<p><code>-V [pattern] , --local [pattern]</code>  pretty print all local ciphers supported by openssl version. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or IANA), key exchange, encryption, bits. It does a word pattern match for non-numbers, for number just a normal match applies. Numbers here are defined as [0-9,A-F]. This means (attention: catch) that the pattern CBC is matched as non-word, but AES as word.</p>
+<p><code>-V [pattern], --local [pattern]</code>  pretty print all local ciphers supported by openssl version. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or IANA), key exchange, encryption, bits. It does a word pattern match for non-numbers, for number just a normal match applies. Numbers here are defined as [0-9,A-F]. This means (attention: catch) that the pattern CBC is matched as non-word, but AES as word. This option also accepts <code>--openssl=&lt;path_to_openssl&gt;</code>.</p>
 
 <h3 id="INPUT-PARAMETERS">INPUT PARAMETERS</h3>
 
@@ -189,7 +189,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <h3 id="SPECIAL-INVOCATIONS">SPECIAL INVOCATIONS</h3>
 
-<p><code>-t &lt;protocol>, --starttls &lt;protocol></code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>,<code>xmpp-server<code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, LDAP currently only works with <code>--ssl-native</code>. <code>telnet</code> and <code>irc</code> is WIP.</p>
+<p><code>-t &lt;protocol>, --starttls &lt;protocol></code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>xmpp-server</code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, LDAP currently only works with <code>--ssl-native</code>. <code>telnet</code> and <code>irc</code> is WIP.</p>
 
 <p><code>--xmpphost &lt;jabber_domain></code> is an additional option for STARTTLS enabled XMPP: It expects the jabber domain as a parameter. This is only needed if the domain is different from the URI supplied.</p>
 
@@ -199,7 +199,7 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--proxy &lt;host>:&lt;port></code>  does ANY check via the specified proxy. <code>--proxy=auto</code> inherits the proxy setting from the environment. The hostname supplied will be resolved to the first A record. In addition if you want lookups via proxy you can specify <code>DNS_VIA_PROXY=true</code>. OCSP revocation checking (<code>-S --phone-out</code>) is not supported by OpenSSL via proxy. As supplying a proxy is an indicator for port 80 and 443 outgoing being blocked in your network an OCSP revocation check won't be performed. However if <code>IGN_OCSP_PROXY=true</code> has been supplied it will be tried directly. Authentication to the proxy is not supported. Proxying via IPv6 addresses is not possible, no HTTPS or SOCKS proxy is supported.</p>
 
-<p><code>-6</code> does (also) IPv6 checks. Please note that testssl.sh doesn't perform checks on an IPv6 address automatically, because of two reasons: testssl.sh does no connectivity checks for IPv6 and it cannot determine reliably whether the OpenSSL binary you're using has IPv6 s_client support. <code>-6</code> assumes both is the case. If both conditions are met and you in general prefer to test for IPv6 branches as well you can add <code>HAS_IPv6</code> to your shell environment. Besides the OpenSSL binary supplied IPv6 is known to work with vanilla OpenSSL >= 1.1.0 and older versions >=1.0.2 in RHEL/CentOS/FC and Gentoo.</p>
+<p><code>-6</code> does (also) IPv6 checks. Please note that testssl.sh doesn't perform checks on an IPv6 address automatically, because of two reasons: testssl.sh does no connectivity checks for IPv6 and it cannot determine reliably whether the OpenSSL binary you're using has IPv6 s_client support. <code>-6</code> assumes both is the case. If both conditions are met and you in general prefer to test for IPv6 branches as well you can add <code>HAS_IPv6</code> to your shell environment. Besides the OpenSSL binary supplied IPv6 is known to work with vanilla OpenSSL &ge; 1.1.0 and older versions &ge;1.0.2 in RHEL/CentOS/FC and Gentoo.</p>
 
 <p><code>--ssl-native</code>  Instead of using a mixture of bash sockets and a few openssl s_client connects, testssl.sh uses the latter (almost) only. This is faster at the moment but provides less accurate results, especially for the client simulation and for cipher support. For all checks you will see a warning if testssl.sh cannot tell if a particular check cannot be performed. For some checks however you might end up getting false negatives without a warning. This option is only recommended if you prefer speed over accuracy or you know that your target has sufficient overlap with the protocols and cipher provided by your openssl binary.</p>
 
@@ -667,9 +667,7 @@ from. That helps us to get bugfixes, other feedback and more contributions.
 
   <ol class='man-decor man-foot man foot'>
     <li class='tl'></li>
-    <li class='tc'>May 2020</li>
-    <li class='tr'>testssl(1)</li>
-  </ol>
+    <li class='tc'>August 2020</li> <li class='tr'>testssl(1)</li> </ol>
 
   </div>
 </body>

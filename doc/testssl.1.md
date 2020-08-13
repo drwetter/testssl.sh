@@ -66,15 +66,15 @@ Options are either short or long options. Any long or short option requiring a v
 
 `<URI>` or `--file <FILE>` always needs to be the last parameter.
 
-### BANNER OPTIONS
+### BANNER OPTIONS (standalone)
 
-`--help` (or no arg) display command line help
+`--help` (or no arg) displays command line help
 
 `-b, --banner`        displays testssl.sh banner, including license, usage conditions, version of testssl.sh, detected openssl version, its path to it, # of ciphers of openssl, its build date and the architecture.
 
 `-v, --version`     same as before
 
-`-V [pattern] , --local [pattern]`  pretty print all local ciphers supported by openssl version. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or IANA), key exchange, encryption, bits. It does a word pattern match for non-numbers, for number just a normal match applies. Numbers here are defined as [0-9,A-F]. This means (attention: catch) that the pattern CBC is matched as non-word, but AES as word.
+`-V [pattern], --local [pattern]`  pretty print all local ciphers supported by openssl version. If a pattern is supplied it performs a match (ignore case) on any of the strings supplied in the wide output, see below. The pattern will be searched in the any of the columns: hexcode, cipher suite name (OpenSSL or IANA), key exchange, encryption, bits. It does a word pattern match for non-numbers, for number just a normal match applies. Numbers here are defined as [0-9,A-F]. This means (attention: catch) that the pattern CBC is matched as non-word, but AES as word. This option also accepts `--openssl=<path_to_openssl>`.
 
 ### INPUT PARAMETERS
 
