@@ -107,8 +107,11 @@ You can also debug yourself, see [here](https://github.com/drwetter/testssl.sh/w
 
 Please address questions not specifically to the code of testssl.sh to the respective projects below.
 
-#### Cool web frontend
+#### Web frontend
 * https://github.com/TKCERT/testssl.sh-webfrontend
+
+#### Free to use Web frontend + commercial API
+* https://inspect.rapydblok.com (see also https://inspect.rapydblok.com/about)
 
 #### Mass scanner w parallel scans and elastic searching the results
 * https://github.com/TKCERT/testssl.sh-masscan
