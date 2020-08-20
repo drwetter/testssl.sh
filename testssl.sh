@@ -18882,7 +18882,7 @@ tuning / connect options (most also can be preset via environment variables):
      --sneaky                      leave less traces in target logs: user agent, referer
      --ids-friendly                skips a few vulnerability checks which may cause IDSs to block the scanning IP
      --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
-     --add-ca <cafile>             path to <cafile> or a comma separated list of CA files enables test against additional CAs.
+     --add-ca <CA files|CA dir>    path to <CAdir> with *.pem or a comma separated list of CA files to include in trust check
      --basicauth <user:pass>       provide HTTP basic auth information.
 
 output options (can also be preset via environment variables):
@@ -21844,7 +21844,11 @@ parse_cmd_line() {
      "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
      [[ -n "$CONNECT_TIMEOUT" ]] && [[ "$MASS_TESTING_MODE" == parallel ]] && fatal "Parallel mass scanning and specifying connect timeouts currently don't work together" $ERR_CMDLINE
 
-     ADDTL_CA_FILES="${ADDTL_CA_FILES//,/ }"
+     if [[ -d $ADDTL_CA_FILES ]]; then
+          ADDTL_CA_FILES="$ADDTL_CA_FILES/*.pem"
+     else
+          ADDTL_CA_FILES="${ADDTL_CA_FILES//,/ }"
+     fi
      for fname in $ADDTL_CA_FILES; do
           [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" $ERR_RESOURCE
           grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE

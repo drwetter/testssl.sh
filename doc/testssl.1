@@ -179,7 +179,7 @@ Please note that \fBfname\fR has to be in Unix format\. DOS carriage returns won
 \fB\-\-phone\-out\fR Checking for revoked certificates via CRL and OCSP is not done per default\. This switch instructs testssl\.sh to query external \-\- in a sense of the current run \-\- URIs\. By using this switch you acknowledge that the check might have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting the endpoint which testssl\.sh doesn\'t handle\. PHONE_OUT is the environment variable for this which needs to be set to true if you want this\.
 .
 .P
-\fB\-\-add\-ca <cafile>\fR enables you to add your own CA(s) for trust chain checks\. \fBcafile\fR can be a single path or multiple paths as a comma separated list of root CA files\. Internally they will be added during runtime to all CA stores\. This is (only) useful for internal hosts whose certificates is issued by internal CAs\. Alternatively ADDTL_CA_FILES is the environment variable for this\.
+\fB\-\-add\-ca <CAfile>\fR enables you to add your own CA(s) in PEM format for trust chain checks\. \fBCAfile\fR can be a directory containing files with a \.pem extension, a single file or multiple files as a comma separated list of root CAs\. Internally they will be added during runtime to all CA stores\. This is (only) useful for internal hosts whose certificates are issued by internal CAs\. Alternatively ADDTL_CA_FILES is the environment variable for this\.
 .
 .SS "SINGLE CHECK OPTIONS"
 Any single check switch supplied as an argument prevents testssl\.sh from doing a default run\. It just takes this and if supplied other options and runs them \- in the order they would also appear in the default run\.
