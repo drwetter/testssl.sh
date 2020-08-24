@@ -217,11 +217,8 @@ UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo)
 NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (external) openssl engine set this to true
 declare -r CLIENT_MIN_FS=5              # number of ciphers needed to run a test for FS
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
-GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
-CERTIFICATE_LIST_ORDERING_PROBLEM=false # Set to true if server sends a certificate list that contains a certificate
-                                        # that does not certify the one immediately preceding it. (See RFC 8446, Section 4.4.2)
-STAPLED_OCSP_RESPONSE=""
-HAS_DNS_SANS=false                      # Whether the certificate includes a subjectAltName extension with a DNS name or an application-specific identifier type.
+SOCAT="${SOCAT:-}"                      # For now we would need this for STARTTLS injection
+
 MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
 if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
      MEASURE_TIME=true
@@ -238,6 +235,8 @@ SYSTEM2=""                              # currently only being used for WSL = ba
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 CIPHERS_BY_STRENGTH_FILE=""
 TLS_DATA_FILE=""                        # mandatory file for socket-based handshakes
+OPENSSL=""                              # If you run this from github it's ~/bin/openssl.$(uname).$(uname -m) otherwise /usr/bin/openssl
+OPENSSL2=""                             # When running from github, this will be openssl version >=1.1.1 (auto determined)
 OPENSSL_LOCATION=""
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
@@ -294,13 +293,21 @@ NW_STR=""
 LEN_STR=""
 SNI=""
 POODLE=""                               # keep vulnerability status for TLS_FALLBACK_SCSV
+
+# Initialize OpenSSL variables (and others)
 OSSL_NAME=""                            # openssl name, in case of LibreSSL it's LibreSSL
 OSSL_VER=""                             # openssl version, will be auto-determined
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 CLIENT_PROB_NO=1
-HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
+
+GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
+CERTIFICATE_LIST_ORDERING_PROBLEM=false # Set to true if server sends a certificate list that contains a certificate
+                                        # that does not certify the one immediately preceding it. (See RFC 8446, Section 4.4.2)
+STAPLED_OCSP_RESPONSE=""
+HAS_DNS_SANS=false                      # Whether the certificate includes a subjectAltName extension with a DNS name or an application-specific identifier type.
+HAS_DH_BITS=${HAS_DH_BITS:-false}       # These are variables which are set by find_openssl_binary()
 HAS_CURVES=false
 OSSL_SUPPORTED_CURVES=""
 HAS_SSL2=false
@@ -332,6 +339,8 @@ HAS_CHACHA20=false
 HAS_AES128_GCM=false
 HAS_AES256_GCM=false
 HAS_ZLIB=false
+HAS_UDS=false
+HAS_UDS2=false
 HAS_DIG=false
 HAS_HOST=false
 HAS_DRILL=false
@@ -18491,7 +18500,9 @@ test_openssl_suffix() {
 
 find_openssl_binary() {
      local s_client_has=$TEMPDIR/s_client_has.txt
+     local s_client_has2=$TEMPDIR/s_client_has2.txt
      local s_client_starttls_has=$TEMPDIR/s_client_starttls_has.txt
+     local s_client_starttls_has2=$TEMPDIR/s_client_starttls_has2
      local openssl_location cwd=""
      local ossl_wo_dev_info
      local curve
@@ -18581,6 +18592,7 @@ find_openssl_binary() {
      HAS_PROXY=false
      HAS_XMPP=false
      HAS_XMPP_SERVER=false
+     HAS_XMPP_SERVER2=false
      HAS_POSTGRES=false
      HAS_MYSQL=false
      HAS_LMTP=false
@@ -18590,48 +18602,34 @@ find_openssl_binary() {
      HAS_AES128_GCM=false
      HAS_AES256_GCM=false
      HAS_ZLIB=false
+     HAS_UDS=false
+     HAS_UDS2=false
 
-     $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || \
-          OSSL_CIPHERS_S="-s"
+     $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || OSSL_CIPHERS_S="-s"
 
      # This and all other occurences we do a little trick using "invalid." to avoid plain and
      # link level DNS lookups. See issue #1418 and https://tools.ietf.org/html/rfc6761#section-6.4
-     $OPENSSL s_client -ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_SSL2=true
+     $OPENSSL s_client -ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_SSL2=true
+     $OPENSSL s_client -ssl3 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_SSL3=true
+     $OPENSSL s_client -tls1_3 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_TLS13=true
+     $OPENSSL s_client -no_ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_NO_SSL2=true
 
-     $OPENSSL s_client -ssl3 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_SSL3=true
-
-     $OPENSSL s_client -tls1_3 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_TLS13=true
-
-     $OPENSSL genpkey -algorithm X448 2>&1 | grep -aq "not found" || \
-          HAS_X448=true
-
-     $OPENSSL genpkey -algorithm X25519 2>&1 | grep -aq "not found" || \
-          HAS_X25519=true
+     $OPENSSL genpkey -algorithm X448 2>&1 | grep -aq "not found" || HAS_X448=true
+     $OPENSSL genpkey -algorithm X25519 2>&1 | grep -aq "not found" || HAS_X25519=true
+     $OPENSSL pkey -help 2>&1 | grep -q Error || HAS_PKEY=true
+     $OPENSSL pkeyutl 2>&1 | grep -q Error ||  HAS_PKUTIL=true
 
      if "$HAS_TLS13"; then
-          $OPENSSL s_client -tls1_3 -sigalgs PSS+SHA256:PSS+SHA384 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-               HAS_SIGALGS=true
+          $OPENSSL s_client -tls1_3 -sigalgs PSS+SHA256:PSS+SHA384 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_SIGALGS=true
      fi
-     $OPENSSL s_client -no_ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_NO_SSL2=true
 
-     $OPENSSL s_client -noservername -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_NOSERVERNAME=true
+     $OPENSSL s_client -noservername -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_NOSERVERNAME=true
+     $OPENSSL s_client -ciphersuites -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_CIPHERSUITES=true
 
-     $OPENSSL s_client -ciphersuites -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_CIPHERSUITES=true
+     $OPENSSL ciphers @SECLEVEL=0:ALL > /dev/null 2> /dev/null && HAS_SECLEVEL=true
 
-     $OPENSSL ciphers @SECLEVEL=0:ALL > /dev/null 2> /dev/null
-     [[ $? -eq 0 ]] && HAS_SECLEVEL=true
-
-     $OPENSSL s_client -comp -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_COMP=true
-
-     $OPENSSL s_client -no_comp -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_NO_COMP=true
+     $OPENSSL s_client -comp -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_COMP=true
+     $OPENSSL s_client -no_comp -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_NO_COMP=true
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
@@ -18648,50 +18646,40 @@ find_openssl_binary() {
           done
      fi
 
-     $OPENSSL pkey -help 2>&1 | grep -q Error || \
-          HAS_PKEY=true
-
-     $OPENSSL pkeyutl 2>&1 | grep -q Error || \
-          HAS_PKUTIL=true
-
      # For the following we feel safe enough to query the s_client help functions.
      # That was not good enough for the previous lookups
      $OPENSSL s_client -help 2>$s_client_has
-
      $OPENSSL s_client -starttls foo 2>$s_client_starttls_has
 
-     grep -qw '\-alpn' $s_client_has && \
-          HAS_ALPN=true
+     grep -q '\-proxy' $s_client_has && HAS_PROXY=true
+     grep -qw '\-alpn' $s_client_has && HAS_ALPN=true
+     grep -qw '\-nextprotoneg' $s_client_has && HAS_NPN=true
 
-     grep -qw '\-nextprotoneg' $s_client_has && \
-          HAS_NPN=true
+     grep -qw '\-fallback_scsv' $s_client_has && HAS_FALLBACK_SCSV=true
 
-     grep -qw '\-fallback_scsv' $s_client_has && \
-          HAS_FALLBACK_SCSV=true
+     grep -q 'xmpp' $s_client_starttls_has && HAS_XMPP=true
+     grep -q 'xmpp-server' $s_client_starttls_has && HAS_XMPP_SERVER=true
 
-     grep -q '\-proxy' $s_client_has && \
-          HAS_PROXY=true
+     grep -q 'postgres' $s_client_starttls_has && HAS_POSTGRES=true
+     grep -q 'mysql' $s_client_starttls_has && HAS_MYSQL=true
+     grep -q 'lmtp' $s_client_starttls_has && HAS_LMTP=true
+     grep -q 'nntp' $s_client_starttls_has && HAS_NNTP=true
+     grep -q 'irc' $s_client_starttls_has && HAS_IRC=true
 
-     grep -q 'xmpp' $s_client_starttls_has && \
-          HAS_XMPP=true
+     grep -q 'Unix-domain socket' $s_client_has && HAS_UDS=true
 
-     grep -q 'xmpp-server' $s_client_starttls_has && \
-          HAS_XMPP_SERVER=true
-
-     grep -q 'postgres' $s_client_starttls_has && \
-          HAS_POSTGRES=true
-
-     grep -q 'mysql' $s_client_starttls_has && \
-          HAS_MYSQL=true
-
-     grep -q 'lmtp' $s_client_starttls_has && \
-          HAS_LMTP=true
-
-     grep -q 'nntp' $s_client_starttls_has && \
-          HAS_NNTP=true
-
-     grep -q 'irc' $s_client_starttls_has && \
-          HAS_IRC=true
+     # Now check whether the standard $OPENSSL has Unix-domain socket and xmpp-server support. If
+     # not check /usr/bin/openssl -- if available. This is more a kludge which we shouldn't use for
+     # every openssl feature. At some point we need to decide which with openssl version we go.
+     OPENSSL2=/usr/bin/openssl
+     if [[ ! $OSSL_VER =~ 1.1.1 ]] && [[ ! $OSSL_VER_MAJOR =~ 3 ]]; then
+          if [[ -x $OPENSSL2 ]]; then
+               $OPENSSL2 s_client -help 2>$s_client_has2
+               $OPENSSL2 s_client -starttls foo 2>$s_client_starttls_has2
+               grep -q 'Unix-domain socket' $s_client_has2 && HAS_UDS2=true
+               grep -q 'xmpp-server' $s_client_starttls_has2 && HAS_XMPP_SERVER2=true
+          fi
+     fi
 
      $OPENSSL enc -chacha20 -K 12345678901234567890123456789012 -iv 01000000123456789012345678901234 > /dev/null 2> /dev/null <<< "test"
      [[ $? -eq 0 ]] && HAS_CHACHA20=true
@@ -18729,6 +18717,21 @@ find_openssl_binary() {
      fi
 
      return 0
+}
+
+
+find_socat() {
+     local result""
+
+     result=$(type -p socat)
+     if [[ $? -ne 0 ]]; then
+          return 1
+     else
+          if [[ -x $result ]] && $result -V | grep -iaq 'socat version' ; then
+               SOCAT=$result
+               return 0
+          fi
+     fi
 }
 
 
@@ -19000,11 +19003,14 @@ HAS_PKUTIL: $HAS_PKUTIL
 HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
 HAS_XMPP_SERVER: $HAS_XMPP_SERVER
+HAS_XMPP_SERVER2: $HAS_XMPP_SERVER2
 HAS_POSTGRES: $HAS_POSTGRES
 HAS_MYSQL: $HAS_MYSQL
 HAS_LMTP: $HAS_LMTP
 HAS_NNTP: $HAS_NNTP
 HAS_IRC: $HAS_IRC
+HAS_UDS: $HAS_UDS
+HAS_UDS2: $HAS_UDS2
 
 HAS_DIG: $HAS_DIG
 HAS_HOST: $HAS_HOST
@@ -19053,6 +19059,8 @@ HEARTBLEED_MAX_WAITSOCK: $HEARTBLEED_MAX_WAITSOCK
 CCS_MAX_WAITSOCK: $CCS_MAX_WAITSOCK
 USLEEP_SND $USLEEP_SND
 USLEEP_REC $USLEEP_REC
+
+SOCAT: $SOCAT
 
 EOF
           type -p locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
@@ -20216,6 +20224,7 @@ determine_service() {
                               fi
                          fi
                          if [[ "$protocol" == xmpp-server ]] && ! "$HAS_XMPP_SERVER"; then
+                              #FIXME: make use of HAS_XMPP_SERVER2
                               fatal "Your $OPENSSL does not support the \"-starttls xmpp-server\" option" $ERR_OSSLBIN
                          fi
                     elif [[ "$protocol" == postgres ]]; then
@@ -22076,6 +22085,7 @@ lets_roll() {
      set_color_functions
      maketempf
      find_openssl_binary
+     find_socat
      choose_printf
      check_resolver_bins
      prepare_debug  ; stopwatch parse
