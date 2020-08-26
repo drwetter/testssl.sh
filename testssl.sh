@@ -136,7 +136,7 @@ declare -r PROG_NAME="$(basename "$0")"
 declare -r RUN_DIR="$(dirname "$0")"
 declare -r SYSTEM="$(uname -s)"
 declare -r SYSTEMREV="$(uname -r)"
-HNAME="$(hostname)"
+HNAME="$(uname -n)"
 HNAME="${HNAME%%.*}"
 declare CMDLINE
 CMDLINE_PARSED=""                                 # This makes sure we don't let early fatal() write into files when files aren't created yet
