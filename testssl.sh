@@ -768,6 +768,7 @@ debugme() {
      [[ "$DEBUG" -ge 2 ]] && "$@"
      return 0
 }
+debugme1() { [[ "$DEBUG" -ge 2 ]] && "$@"; }
 
 hex2dec() {
      echo $((16#$1))
@@ -10659,10 +10660,13 @@ starttls_mysql_dialog() {
      return $ret
 }
 
-# arg1: fd for socket -- which we don't use as it is a hassle and it is not clear whether it works under every bash version
+# arg1: fd for socket -- which we don't use yes as it is a hassle (not clear whether it works under every bash version)
+# arg2: optional: for STARTTLS additional command to be injected
 # returns 6 if opening the socket caused a problem, 1 if STARTTLS handshake failed, 0: all ok
 #
 fd_socket() {
+     local fd="$1"
+     local payload="$2"
      local proyxline=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"          # sockets do not need the square brackets we have of IPv6 addresses
                                                        # we just need do it here, that's all!
@@ -10726,7 +10730,7 @@ fd_socket() {
                     starttls_ftp_dialog
                     ;;
                smtp|smtps) # SMTP, see https://tools.ietf.org/html/rfc{2033,3207,5321}
-                    starttls_smtp_dialog
+                    starttls_smtp_dialog "" "$payload"
                     ;;
                lmtp|lmtps) # LMTP, see https://tools.ietf.org/html/rfc{2033,3207,5321}
                     starttls_smtp_dialog lmtp
@@ -17783,6 +17787,62 @@ run_tls_truncation() {
      :
 }
 
+
+run_starttls_injection() {
+     local cve=""
+     local cwe="CWE-74"
+     local hint=""
+     local jsonID="starttls_injection"
+     local uds=""
+
+     [[ -z "$STARTTLS" ]] && return 0
+
+     if [[ -z "$SOCAT" ]]; then
+          fileout "$jsonID" "WARN" "Need socat for this" "$cve" "$cwe" "$hint"
+          debugme1 echo "Need socat for this check"
+          return 1
+     fi
+     if [[ -z "$HAS_UDS2" ]] && [[ -z "$HAS_UDS" ]]; then
+          fileout "$jsonID" "WARN" "Need OpenSSL with Unix-domain socket s_client support for this check" "$cve" "$cwe" "$hint"
+          debugme1 echo "Need an OpenSSL with Unix-domain socket s_client support for this check"
+          return 1
+     fi
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
+          outln
+          pr_headlineln " Checking for STARTTLS injection "
+          outln
+     fi
+     pr_bold " STARTTLS injection" ; out "         "
+
+     uds=$TEMPDIR/uds
+
+     fd_socket 5 "EHLO google.com"
+     socat FD:5 UNIX-LISTEN:$uds &
+     # normally the interesting fallback is in fd2:
+     openssl s_client -unix $uds >$TMPFILE 2>&1 &
+# FIXME: should be some OPENSSL
+     sleep 1
+     [[ "$DEBUG" -ge 4 ]] && cat $TMPFILE
+     if grep -Eqa '^250-|^503 ' $TMPFILE; then
+          out "likely "
+          prln_svrty_high "VULNERABLE (NOT ok)"
+          fileout "$jsonID" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
+     else
+          prln_svrty_good "not vulnerable (OK)"
+          fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
+     fi
+     outln
+
+exit 0
+
+     outln "\n"
+     tmpfile_handle ${FUNCNAME[0]}.txt
+     return 0
+
+
+}
+
+
 # Test for various server implementation errors that aren't tested for elsewhere.
 # Inspired by RFC 8701.
 run_grease() {
@@ -21180,6 +21240,7 @@ initialize_globals() {
      do_fs=false
      do_protocols=false
      do_rc4=false
+     do_starttls_injection=false
      do_grease=false
      do_renego=false
      do_cipherlists=false
@@ -21217,6 +21278,7 @@ set_scanning_defaults() {
      do_header=true
      do_fs=true
      do_rc4=true
+     do_starttls_injection=true
      do_protocols=true
      do_renego=true
      do_cipherlists=true
@@ -21238,7 +21300,7 @@ count_do_variables() {
      local true_nr=0
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_starttls_injection do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
                     "${!gbl}" && let true_nr++
@@ -21251,7 +21313,7 @@ debug_globals() {
      local gbl
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_starttls_injection do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
@@ -21459,6 +21521,7 @@ parse_cmd_line() {
                     do_beast=true
                     do_lucky13=true
                     do_rc4=true
+                    do_starttls_injection=true
                     if "$OFFENSIVE"; then
                          VULN_COUNT=16
                     else
@@ -21862,6 +21925,10 @@ parse_cmd_line() {
           grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
 
+     if "$do_starttls_injection" && [[ "$STARTTLS_PROTOCOL" =~ smtp ]]; then
+          let "VULN_COUNT++"
+     fi
+
      count_do_variables
      [[ $? -eq 0 ]] && set_scanning_defaults
      set_skip_tests
@@ -22016,6 +22083,9 @@ lets_roll() {
                fi
 
                fileout_section_header $section_number true && ((section_number++))
+
+               "$do_starttls_injection" && { run_starttls_injection; ret=$(($? + ret)); stopwatch run_starttls_injection; }
+
                "$do_heartbleed" && { run_heartbleed; ret=$(($? + ret)); stopwatch run_heartbleed; }
                "$do_ccs_injection" && { run_ccs_injection; ret=$(($? + ret)); stopwatch run_ccs_injection; }
                "$do_ticketbleed" && { run_ticketbleed; ret=$(($? + ret)); stopwatch run_ticketbleed; }
