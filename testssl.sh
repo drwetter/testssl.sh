@@ -10431,7 +10431,8 @@ starttls_just_send(){
      local -i ret=0
 
      debugme echo "C: $1\r\n"
-     echo -ne "$1\r\n" >&5
+     # We need cat here, otherwise the appended ELHO after STARTTLS will be in the next packet
+     printf "%b" "$1\r\n" | cat >&5
      ret=$?
      if [[ $ret -eq 0 ]]; then
           debugme echo "  > succeeded: $2"
@@ -10536,24 +10537,24 @@ starttls_smtp_dialog() {
      local greet_str="EHLO testssl.sh"
      local proto="smtp"
      local reSTARTTLS='^250[ -]STARTTLS'
+     local starttls="STARTTLS"
      local -i ret=0
 
+     "$SNEAKY" && greet_str="EHLO google.com"
+     if [[ -n "$2" ]]; then
+          # Here we can supply and addtional command after STARTTLS for injection tests
+          starttls="STARTTLS\r\n$2"
+     fi
      if [[ "$1" == lmtp ]]; then
           proto="lmtp"
           greet_str="LHLO"
-     fi
-     if [[ -n "$2" ]]; then
-          # Here we can "add" commands in the future. Please note \r\n will automatically be appended
-          greet_str="$2"
-     elif "$SNEAKY"; then
-          greet_str="EHLO google.com"
      fi
      debugme echo "=== starting $proto STARTTLS dialog ==="
 
      starttls_full_read '^220-' '^220 '  ''                 "received server greeting" &&
      starttls_just_send "$greet_str"                        "sent $greet_str" &&
      starttls_full_read '^250-' '^250 '  "${reSTARTTLS}"    "received server capabilities and checked STARTTLS availability" &&
-     starttls_just_send 'STARTTLS'                          "initiated STARTTLS" &&
+     starttls_just_send "$starttls"                         "initiated STARTTLS" &&
      starttls_full_read '^220-' '^220 '  ''                 "received ack for STARTTLS"
      ret=$?
      debugme echo "=== finished $proto STARTTLS dialog with ${ret} ==="
@@ -10562,10 +10563,11 @@ starttls_smtp_dialog() {
 
 starttls_pop3_dialog() {
      local -i ret=0
+     local starttls="STLS"
 
      debugme echo "=== starting pop3 STARTTLS dialog ==="
      starttls_full_read '^\+OK' '^\+OK'   ''      "received server greeting" &&
-     starttls_just_send 'STLS'                    "initiated STARTTLS" &&
+     starttls_just_send "$starttls"               "initiated STARTTLS" &&
      starttls_full_read '^\+OK' '^\+OK'   ''      "received ack for STARTTLS"
      ret=$?
      debugme echo "=== finished pop3 STARTTLS dialog with ${ret} ==="
@@ -10575,12 +10577,13 @@ starttls_pop3_dialog() {
 starttls_imap_dialog() {
      local -i ret=0
      local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS(.*)?|( .*)? STARTTLS( .*)? IMAP4rev1(.*)?)$'
+     local starttls="a002 STARTTLS"
 
      debugme echo "=== starting imap STARTTLS dialog ==="
      starttls_full_read '^\* ' '^\* OK '   ''               "received server greeting" &&
      starttls_just_send 'a001 CAPABILITY'                   "sent CAPABILITY" &&
      starttls_full_read '^\* ' '^a001 OK ' "${reSTARTTLS}"  "received server capabilities and checked STARTTLS availability" &&
-     starttls_just_send 'a002 STARTTLS'                     "initiated STARTTLS" &&
+     starttls_just_send "$starttls"                         "initiated STARTTLS" &&
      starttls_full_read '^\* ' '^a002 OK ' ''               "received ack for STARTTLS"
      ret=$?
      debugme echo "=== finished imap STARTTLS dialog with ${ret} ==="
