@@ -17761,7 +17761,6 @@ run_rc4() {
           prln_svrty_good "no RC4 ciphers detected (OK)"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
      fi
-     outln
 
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
      tmpfile_handle ${FUNCNAME[0]}.txt
@@ -17789,11 +17788,13 @@ run_tls_truncation() {
 
 
 run_starttls_injection() {
+     local uds=""
+     local openssl_bin=""
+     local -i socat_pid=424242
      local cve=""
      local cwe="CWE-74"
      local hint=""
      local jsonID="starttls_injection"
-     local uds=""
 
      [[ -z "$STARTTLS" ]] && return 0
 
@@ -17812,16 +17813,23 @@ run_starttls_injection() {
           pr_headlineln " Checking for STARTTLS injection "
           outln
      fi
-     pr_bold " STARTTLS injection" ; out "         "
+     pr_bold " STARTTLS injection" ; out " (experimental)         "
 
      uds=$TEMPDIR/uds
 
      fd_socket 5 "EHLO google.com"
-     socat FD:5 UNIX-LISTEN:$uds &
-     # normally the interesting fallback is in fd2:
-     openssl s_client -unix $uds >$TMPFILE 2>&1 &
-# FIXME: should be some OPENSSL
+     $SOCAT FD:5 UNIX-LISTEN:$uds &
+     socat_pid=$!
+
+     if "$HAS_UDS"; then
+          openssl_bin=$OPENSSL
+     else
+          openssl_bin=$OPENSSL2
+     fi
+     # normally the interesting fallback we grep later for is in fd2 but we'll catch all here
+     $openssl_bin s_client -unix $uds >$TMPFILE 2>&1 &
      sleep 1
+     kill $socat_pid
      [[ "$DEBUG" -ge 4 ]] && cat $TMPFILE
      if grep -Eqa '^250-|^503 ' $TMPFILE; then
           out "likely "
@@ -17831,15 +17839,9 @@ run_starttls_injection() {
           prln_svrty_good "not vulnerable (OK)"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
      fi
-     outln
-
-exit 0
-
-     outln "\n"
      tmpfile_handle ${FUNCNAME[0]}.txt
+
      return 0
-
-
 }
 
 
@@ -21595,6 +21597,10 @@ parse_cmd_line() {
                     do_rc4=true
                     let "VULN_COUNT++"
                     ;;
+               -SI|--SI|--starttls[-_]injection)
+                    do_starttls_injection=true
+                    let "VULN_COUNT++"
+                    ;;
                -f|--fs|--nsa|--forward-secrecy)
                     do_fs=true
                     ;;
@@ -22084,8 +22090,6 @@ lets_roll() {
 
                fileout_section_header $section_number true && ((section_number++))
 
-               "$do_starttls_injection" && { run_starttls_injection; ret=$(($? + ret)); stopwatch run_starttls_injection; }
-
                "$do_heartbleed" && { run_heartbleed; ret=$(($? + ret)); stopwatch run_heartbleed; }
                "$do_ccs_injection" && { run_ccs_injection; ret=$(($? + ret)); stopwatch run_ccs_injection; }
                "$do_ticketbleed" && { run_ticketbleed; ret=$(($? + ret)); stopwatch run_ticketbleed; }
@@ -22102,6 +22106,8 @@ lets_roll() {
                "$do_beast" && { run_beast; ret=$(($? + ret)); stopwatch run_beast; }
                "$do_lucky13" && { run_lucky13; ret=$(($? + ret)); stopwatch run_lucky13; }
                "$do_rc4" && { run_rc4; ret=$(($? + ret)); stopwatch run_rc4; }
+               "$do_starttls_injection" && { run_starttls_injection; ret=$(($? + ret)); stopwatch run_starttls_injection; }
+               outln
 
                fileout_section_header $section_number true && ((section_number++))
                "$do_allciphers" && { run_allciphers; ret=$(($? + ret)); stopwatch run_allciphers; }
