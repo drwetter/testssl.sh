@@ -10533,6 +10533,7 @@ starttls_ftp_dialog() {
 }
 
 # argv1: empty: SMTP, "lmtp" : LMTP
+# argv2: payload for STARTTLS injection test
 #
 starttls_smtp_dialog() {
      local greet_str="EHLO testssl.sh"
@@ -10542,10 +10543,7 @@ starttls_smtp_dialog() {
      local -i ret=0
 
      "$SNEAKY" && greet_str="EHLO google.com"
-     if [[ -n "$2" ]]; then
-          # Here we can supply and addtional command after STARTTLS for injection tests
-          starttls="STARTTLS\r\n$2"
-     fi
+     [[ -n "$2" ]] && starttls="$starttls\r\n$1"            # this adds a payload if supplied
      if [[ "$1" == lmtp ]]; then
           proto="lmtp"
           greet_str="LHLO"
@@ -10562,10 +10560,13 @@ starttls_smtp_dialog() {
      return $ret
 }
 
+# argv1: payload for STARTTLS injection test
+#
 starttls_pop3_dialog() {
      local -i ret=0
      local starttls="STLS"
 
+     [[ -n "$1" ]] && starttls="$starttls\r\n$1"            # this adds a payload if supplied
      debugme echo "=== starting pop3 STARTTLS dialog ==="
      starttls_full_read '^\+OK' '^\+OK'   ''      "received server greeting" &&
      starttls_just_send "$starttls"               "initiated STARTTLS" &&
@@ -10575,11 +10576,14 @@ starttls_pop3_dialog() {
      return $ret
 }
 
+# argv1: payload for STARTTLS injection test
+#
 starttls_imap_dialog() {
      local -i ret=0
      local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS(.*)?|( .*)? STARTTLS( .*)? IMAP4rev1(.*)?)$'
      local starttls="a002 STARTTLS"
 
+     [[ -n "$1" ]] && starttls="$starttls\r\n$1"            # this adds a payload if supplied
      debugme echo "=== starting imap STARTTLS dialog ==="
      starttls_full_read '^\* ' '^\* OK '   ''               "received server greeting" &&
      starttls_just_send 'a001 CAPABILITY'                   "sent CAPABILITY" &&
@@ -10736,13 +10740,13 @@ fd_socket() {
                     starttls_smtp_dialog lmtp
                     ;;
                pop3|pop3s) # POP, see https://tools.ietf.org/html/rfc2595
-                    starttls_pop3_dialog
+                    starttls_pop3_dialog "$payload"
                     ;;
                nntp|nntps) # NNTP, see https://tools.ietf.org/html/rfc4642
                     starttls_nntp_dialog
                     ;;
                imap|imaps) # IMAP, https://tools.ietf.org/html/rfc2595, https://tools.ietf.org/html/rfc3501
-                    starttls_imap_dialog
+                    starttls_imap_dialog "$payload"
                     ;;
                irc|ircs) # IRC, https://ircv3.net/specs/extensions/tls-3.1.html, https://ircv3.net/specs/core/capability-negotiation.html
                     fatal "FIXME: IRC+STARTTLS not yet supported" $ERR_NOSUPPORT
@@ -17822,7 +17826,20 @@ run_starttls_injection() {
 
      uds=$TEMPDIR/uds
 
-     fd_socket 5 "EHLO google.com"
+     case $proto in
+          smtp) fd_socket 5 "EHLO google.com"
+               ;;
+          pop)  fd_socket 5 "CAPA"
+               ;;
+          imap)
+#FIXME: check all BSDs:
+               five_random=$(tr -dc '[:upper:]' < /dev/urandom | dd bs=5 count=1 2>/dev/null)
+               fd_socket 5 "$five_random NOOP"
+              ;;
+          *)  outln "STARTTLS injection test doesn't work for $proto, yet"
+              fileout "$jsonID" "INFO" "STARTTLS injection test doesn't work for $proto" "$cve" "$cwe" "$hint"
+              ;;
+     esac
      $SOCAT FD:5 UNIX-LISTEN:$uds &
      socat_pid=$!
 
@@ -17831,12 +17848,14 @@ run_starttls_injection() {
      else
           openssl_bin=$OPENSSL2
      fi
-     # normally the interesting fallback we grep later for is in fd2 but we'll catch all here
+     # normally the interesting fallback we grep later for is in fd2 but we'll catch also stdout here
      $openssl_bin s_client -unix $uds >$TMPFILE 2>&1 &
      openssl_pid=$!
      sleep 1
 
      [[ "$DEBUG" -ge 4 ]] && cat $TMPFILE
+#FIXME: is the pattern sufficient for SMTP?
+#FIXME: check POP / IMAP output for vulnerable servers
      if grep -Eqa '^250-|^503 ' $TMPFILE; then
           out "likely "
           prln_svrty_high "VULNERABLE (NOT ok)"
