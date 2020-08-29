@@ -4638,7 +4638,7 @@ client_simulation_sockets() {
           tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
           tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
      elif [[ $ret -eq 1 ]] || [[ $ret -eq 6 ]]; then
-          close_socket
+          close_socket 5
           TMPFILE=$SOCK_REPLY_FILE
           tmpfile_handle ${FUNCNAME[0]}.dd
           return $ret
@@ -4720,7 +4720,7 @@ client_simulation_sockets() {
           debugme tmln_out
      fi
 
-     close_socket
+     close_socket 5
      TMPFILE=$SOCK_REPLY_FILE
      tmpfile_handle ${FUNCNAME[0]}.dd
      return $ret
@@ -10690,14 +10690,14 @@ fd_socket() {
                read -t $PROXY_WAIT -r proyxline <&5
                if [[ $? -ge 128 ]]; then
                     pr_warning "Proxy timed out. Unable to CONNECT via proxy. "
-                    close_socket
+                    close_socket 5
                     return 6
                elif [[ "${proyxline%/*}" == HTTP ]]; then
                     proyxline=${proyxline#* }
                     if [[ "${proyxline%% *}" != 200 ]]; then
                          pr_warning "Unable to CONNECT via proxy. "
                          [[ "$PORT" != 443 ]] && prln_warning "Check whether your proxy supports port $PORT and the underlying protocol."
-                         close_socket
+                         close_socket 5
                          return 6
                     fi
                fi
@@ -10782,7 +10782,11 @@ fd_socket() {
      return 1
 }
 
+# arg1: socket fd but atm we use 5 anyway, see comment for fd_socket()
+#
 close_socket(){
+     local fd="$1"
+
      exec 5<&-
      exec 5>&-
      return 0
@@ -14257,7 +14261,7 @@ sslv2_sockets() {
      parse_sslv2_serverhello "$SOCK_REPLY_FILE" "$parse_complete"
      ret=$?
 
-     close_socket
+     close_socket 5
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      return $ret
 }
@@ -15009,7 +15013,7 @@ tls_sockets() {
                tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
                tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
           elif [[ $ret -eq 1 ]] || [[ $ret -eq 6 ]]; then
-               close_socket
+               close_socket 5
                TMPFILE=$SOCK_REPLY_FILE
                tmpfile_handle ${FUNCNAME[0]}.dd
                return $ret
@@ -15181,7 +15185,7 @@ tls_sockets() {
           debugme echo "stuck on sending: $ret"
      fi
 
-     "$close_connection" && close_socket
+     "$close_connection" && close_socket 5
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      return $ret
 }
@@ -15387,7 +15391,7 @@ run_heartbleed(){
      fi
      outln
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
-     close_socket
+     close_socket 5
      return 0
 }
 
@@ -15577,7 +15581,7 @@ run_ccs_injection(){
      outln
 
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
-     close_socket
+     close_socket 5
      return $ret
 }
 
@@ -15784,14 +15788,14 @@ run_ticketbleed() {
                pr_svrty_best "not vulnerable (OK)"
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
                send_close_notify "${tls_hello_ascii:18:4}"
-               close_socket
+               close_socket 5
                break
           elif [[ -z "${tls_hello_ascii:0:2}" ]]; then
                pr_svrty_best "not vulnerable (OK)"
                out ", reply empty"
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
                send_close_notify "${tls_hello_ascii:18:4}"
-               close_socket
+               close_socket 5
                break
           elif [[ "${tls_hello_ascii:0:2}" == 16 ]]; then
                early_exit=false
@@ -15819,11 +15823,11 @@ run_ticketbleed() {
                out " around line $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})"
                fileout "$jsonID" "DEBUG" "test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
                send_close_notify "${tls_hello_ascii:18:4}"
-               close_socket
+               close_socket 5
                break
           fi
           send_close_notify "${tls_hello_ascii:18:4}"
-          close_socket
+          close_socket 5
      done
 
      if ! "$early_exit"; then
@@ -17790,7 +17794,8 @@ run_tls_truncation() {
 run_starttls_injection() {
      local uds=""
      local openssl_bin=""
-     local -i socat_pid=424242
+     local -i socat_pid
+     local -i openssl_pid
      local cve=""
      local cwe="CWE-74"
      local hint=""
@@ -17828,8 +17833,9 @@ run_starttls_injection() {
      fi
      # normally the interesting fallback we grep later for is in fd2 but we'll catch all here
      $openssl_bin s_client -unix $uds >$TMPFILE 2>&1 &
+     openssl_pid=$!
      sleep 1
-     kill $socat_pid
+
      [[ "$DEBUG" -ge 4 ]] && cat $TMPFILE
      if grep -Eqa '^250-|^503 ' $TMPFILE; then
           out "likely "
@@ -17839,8 +17845,12 @@ run_starttls_injection() {
           prln_svrty_good "not vulnerable (OK)"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
      fi
-     tmpfile_handle ${FUNCNAME[0]}.txt
 
+     kill $socat_pid
+     kill $openssl_pid
+     close_socket 5
+
+     tmpfile_handle ${FUNCNAME[0]}.txt
      return 0
 }
 
@@ -18346,7 +18356,7 @@ run_robot() {
                     else
                          socksend ",x15, x03, x01, x00, x02, x02, x00" 0
                     fi
-                    close_socket
+                    close_socket 5
                     prln_fixme "Conversion of public key failed around line $((LINENO - 9))"
                     fileout "$jsonID" "WARN" "Conversion of public key failed around line $((LINENO - 10)) "
                     return 1
@@ -18400,7 +18410,7 @@ run_robot() {
                fi
                debugme echo -e "\nresponse[$testnum] = ${response[testnum]}"
                [[ $DEBUG -ge 3 ]] && [[ $subret -eq 0 ]] && parse_tls_serverhello "${response[testnum]}"
-               close_socket
+               close_socket 5
 
                # Don't continue testing if it has already been determined that
                # tests need to be rerun with a longer timeout.
@@ -18921,7 +18931,8 @@ single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -H, --heartbleed              tests for Heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -T, --ticketbleed             tests for Ticketbleed vulnerability in BigIP loadbalancers
-     -BB, --robot                  tests for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability
+     --BB, --robot                 tests for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability
+     --SI, --starttls-injection    tests for STARTTLS injection issues
      -R, --renegotiation           tests for renegotiation vulnerabilities
      -C, --compression, --crime    tests for CRIME vulnerability (TLS compression issue)
      -B, --breach                  tests for BREACH vulnerability (HTTP compression issue)
@@ -20240,7 +20251,7 @@ determine_service() {
                fi
           fi
      fi
-     close_socket
+     close_socket 5
 
      outln
      if [[ -z "$1" ]]; then
@@ -21545,7 +21556,7 @@ parse_cmd_line() {
                     do_ticketbleed=true
                     let "VULN_COUNT++"
                     ;;
-               -BB|--robot)
+               -BB|--BB|--robot)
                     do_robot=true
                     ;;
                -R|--renegotiation)
