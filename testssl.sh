@@ -9150,7 +9150,7 @@ certificate_info() {
                outln ">= 825 days certificate life time but issued before 2018/03/01"
                fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) =< 825 days"
           fi
-    else
+     else
           # All is fine with valididy period
           # We ignore for now certificates < 2018/03/01. On the screen we only show debug info
           [[ "$DEBUG" -ge 1 ]] && outln "${spaces}DEBUG: all is fine with total certificate life time"
