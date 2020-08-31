@@ -1229,7 +1229,7 @@ fileout_pretty_json_banner() {
 fileout_banner() {
      if "$JSONHEADER"; then
           # "$do_json" &&                    # here we maybe should add a banner, too
-          "$do_pretty_json" && (printf "%s\n" "$(fileout_pretty_json_banner)") >> "$JSONFILE"
+          "$do_pretty_json" && FIRST_FINDING=true && (printf "%s\n" "$(fileout_pretty_json_banner)") >> "$JSONFILE"
      fi
 }
 
