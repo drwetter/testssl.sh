@@ -17809,22 +17809,24 @@ run_starttls_injection() {
 
      [[ -z "$STARTTLS" ]] && return 0
 
-     if [[ -z "$SOCAT" ]]; then
-          fileout "$jsonID" "WARN" "Need socat for this" "$cve" "$cwe" "$hint"
-          debugme1 echo "Need socat for this check"
-          return 1
-     fi
-     if [[ -z "$HAS_UDS2" ]] && [[ -z "$HAS_UDS" ]]; then
-          fileout "$jsonID" "WARN" "Need OpenSSL with Unix-domain socket s_client support for this check" "$cve" "$cwe" "$hint"
-          debugme1 echo "Need an OpenSSL with Unix-domain socket s_client support for this check"
-          return 1
-     fi
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
           outln
           pr_headlineln " Checking for STARTTLS injection "
           outln
      fi
      pr_bold " STARTTLS injection" ; out " (experimental)         "
+
+     # We'll do a soft fail here, also no warning, as I do not expect to have everybody have socat installed
+     if [[ -z "$SOCAT" ]]; then
+          fileout "$jsonID" "WARN" "Need socat for this" "$cve" "$cwe" "$hint"
+          outln "Need socat for this check"
+          return 1
+     fi
+     if [[ -z "$HAS_UDS2" ]] && [[ -z "$HAS_UDS" ]]; then
+          fileout "$jsonID" "WARN" "Need OpenSSL with Unix-domain socket s_client support for this check" "$cve" "$cwe" "$hint"
+          outln "Need an OpenSSL with Unix-domain socket s_client support for this check"
+          return 1
+     fi
 
      case $SERVICE in
           smtp) fd_socket 5 "EHLO google.com"
