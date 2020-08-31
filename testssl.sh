@@ -2167,7 +2167,8 @@ s_client_options() {
 ###### check code starts here ######
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
-# arg1 could be the protocol determined as "working". IIS6 needs that
+# arg1 could be the protocol determined as "working". IIS6 needs that.
+#
 service_detection() {
      local -i was_killed
 
@@ -8781,7 +8782,7 @@ certificate_info() {
           prln_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
           fileout "${jsonID}${json_postfix}" "INFO" "$all_san"
      else
-          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
+          if [[ $SERVICE == HTTP ]] || "$ASSUME_HTTP"; then
                pr_svrty_high "missing (NOT ok)"; outln " -- Browsers are complaining"
                fileout "${jsonID}${json_postfix}" "HIGH" "No SAN, browsers are complaining"
           else
@@ -8876,7 +8877,7 @@ certificate_info() {
           pr_svrty_high "$trustfinding"
           trust_sni_finding="HIGH"
      elif ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
-          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
+          if [[ $SERVICE == HTTP ]] || "$ASSUME_HTTP"; then
                # https://bugs.chromium.org/p/chromium/issues/detail?id=308330
                # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
                # https://www.chromestatus.com/feature/4981025180483584
@@ -10543,7 +10544,7 @@ starttls_smtp_dialog() {
      local -i ret=0
 
      "$SNEAKY" && greet_str="EHLO google.com"
-     [[ -n "$2" ]] && starttls="$starttls\r\n$1"            # this adds a payload if supplied
+     [[ -n "$2" ]] && starttls="$starttls\r\n$2"            # this adds a payload if supplied
      if [[ "$1" == lmtp ]]; then
           proto="lmtp"
           greet_str="LHLO"
@@ -17800,6 +17801,7 @@ run_starttls_injection() {
      local openssl_bin=""
      local -i socat_pid
      local -i openssl_pid
+     local vuln=false
      local cve=""
      local cwe="CWE-74"
      local hint=""
@@ -17824,39 +17826,44 @@ run_starttls_injection() {
      fi
      pr_bold " STARTTLS injection" ; out " (experimental)         "
 
-     uds=$TEMPDIR/uds
-
-     case $proto in
+     case $SERVICE in
           smtp) fd_socket 5 "EHLO google.com"
                ;;
-          pop)  fd_socket 5 "CAPA"
+          pop3) fd_socket 5 "CAPA"
                ;;
-          imap)
-#FIXME: check all BSDs:
-               five_random=$(tr -dc '[:upper:]' < /dev/urandom | dd bs=5 count=1 2>/dev/null)
-               fd_socket 5 "$five_random NOOP"
-              ;;
-          *)  outln "STARTTLS injection test doesn't work for $proto, yet"
-              fileout "$jsonID" "INFO" "STARTTLS injection test doesn't work for $proto" "$cve" "$cwe" "$hint"
-              ;;
+          imap) five_random=$(tr -dc '[:upper:]' < /dev/urandom | dd bs=5 count=1 2>/dev/null)
+                fd_socket 5 "$five_random NOOP"
+               ;;
+          *)  outln "STARTTLS injection test doesn't work for $SERVICE, yet"
+              fileout "$jsonID" "INFO" "STARTTLS injection test doesn't work for $SERVICE" "$cve" "$cwe" "$hint"
+              return 1
+             ;;
      esac
+
+     uds="$TEMPDIR/uds"
      $SOCAT FD:5 UNIX-LISTEN:$uds &
      socat_pid=$!
 
      if "$HAS_UDS"; then
-          openssl_bin=$OPENSSL
-     else
-          openssl_bin=$OPENSSL2
+          openssl_bin="$OPENSSL"
+     elif "$HAS_UDS2"; then
+          openssl_bin="$OPENSSL2"
      fi
      # normally the interesting fallback we grep later for is in fd2 but we'll catch also stdout here
      $openssl_bin s_client -unix $uds >$TMPFILE 2>&1 &
      openssl_pid=$!
      sleep 1
 
-     [[ "$DEBUG" -ge 4 ]] && cat $TMPFILE
-#FIXME: is the pattern sufficient for SMTP?
-#FIXME: check POP / IMAP output for vulnerable servers
-     if grep -Eqa '^250-|^503 ' $TMPFILE; then
+     [[ "$DEBUG" -ge 2 ]] && tail $TMPFILE
+#FIXME: is the pattern sufficient for SMTP / POP / IMAP?
+     case $SERVICE in
+          # Mind all ' ' here!
+          smtp) grep -Eqa '^250-|^503 ' $TMPFILE && vuln=true ;;
+          pop3) grep -Eqa '^USER|^PIPELINING|^\+OK ' $TMPFILE && vuln=true ;;
+          imap) grep -Eqa ' OK NOOP ' $TMPFILE && vuln=true ;;
+     esac
+
+     if "$vuln"; then
           out "likely "
           prln_svrty_high "VULNERABLE (NOT ok)"
           fileout "$jsonID" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
@@ -17865,8 +17872,8 @@ run_starttls_injection() {
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
      fi
 
-     kill $socat_pid
-     kill $openssl_pid
+     kill $socat_pid 2>/dev/null
+     kill $openssl_pid 2>/dev/null
      close_socket 5
 
      tmpfile_handle ${FUNCNAME[0]}.txt
@@ -20358,6 +20365,11 @@ determine_service() {
                     ;;
           esac
      fi
+
+     # It comes handy later also for STARTTLS injection to define this global. When we do banner grabbing
+     # or replace service_detection() we might not need that anymore
+     SERVICE=$protocol
+
      tmpfile_handle ${FUNCNAME[0]}.txt
      return 0       # OPTIMAL_PROTO, GET_REQ*/HEAD_REQ* is set now
 }
