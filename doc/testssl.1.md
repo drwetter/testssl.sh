@@ -229,7 +229,9 @@ Also for multiple server certificates are being checked for as well as for the c
 
 `-T, --ticketbleed`             Checks for Ticketbleed memory leakage in BigIP loadbalancers.
 
-`-BB, --robot`          Checks for vulnerability to ROBOT / (*Return Of Bleichenbacher's Oracle Threat*) attack.
+`--BB, --robot`          Checks for vulnerability to ROBOT / (*Return Of Bleichenbacher's Oracle Threat*) attack.
+
+`--SI, --starttls-injection`          Checks for STARTTLS injection vulnerabilities (SMTP, IMAP, POP3 only). `socat` and OpenSSL >=1.1.0 is needed.
 
 `-R, --renegotiation`           Tests renegotiation vulnerabilities. Currently there's a check for *Secure Renegotiation* and for *Secure Client-Initiated Renegotiation*. Please be aware that vulnerable servers to the latter can likely be DoSed very easily (HTTP). A check for *Insecure Client-Initiated Renegotiation* is not yet implemented.
 
