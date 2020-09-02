@@ -10775,7 +10775,11 @@ fd_socket() {
           case $ret in
                0)   return 0 ;;
                3)   fatal "No STARTTLS found in handshake" $ERR_CONNECT ;;
-               *)   ((NR_STARTTLS_FAIL++))
+               *)   if [[ $ret -eq 2 ]] && [[ -n "$payload" ]]; then
+                         # We don't want this handling for STARTTLS injection
+                         return 0
+                    fi
+                    ((NR_STARTTLS_FAIL++))
                     # This are mostly timeouts here (code >=128). We give the client a chance to try again later. For cases
                     # where we have no STARTTLS in the server banner however - ret code=3 - we don't neet to try again
                     connectivity_problem $NR_STARTTLS_FAIL $MAX_STARTTLS_FAIL "STARTTLS handshake failed (code: $ret)" "repeated STARTTLS problems, giving up ($ret)"
