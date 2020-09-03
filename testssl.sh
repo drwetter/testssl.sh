@@ -20370,11 +20370,11 @@ determine_service() {
                     fatal "momentarily only ftp, smtp, lmtp, pop3, imap, xmpp, xmpp-server, telnet, ldap, nntp, postgres and mysql allowed" $ERR_CMDLINE
                     ;;
           esac
-     fi
+          # It comes handy later also for STARTTLS injection to define this global. When we do banner grabbing
+          # or replace service_detection() we might not need that anymore
+          SERVICE=$protocol
 
-     # It comes handy later also for STARTTLS injection to define this global. When we do banner grabbing
-     # or replace service_detection() we might not need that anymore
-     SERVICE=$protocol
+     fi
 
      tmpfile_handle ${FUNCNAME[0]}.txt
      return 0       # OPTIMAL_PROTO, GET_REQ*/HEAD_REQ* is set now
