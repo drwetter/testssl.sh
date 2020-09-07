@@ -3819,7 +3819,8 @@ run_cipher_match(){
 
 
 
-# test for all ciphers locally configured (w/o distinguishing whether they are good or bad)
+# Test for all ciphers locally configured (w/o distinguishing whether they are good or bad)
+#
 run_allciphers() {
      local -i nr_ciphers_tested=0 nr_ciphers=0 nr_ossl_ciphers=0 nr_nonossl_ciphers=0 sclient_success=0
      local n auth mac hexc sslv2_ciphers="" s
@@ -4417,7 +4418,8 @@ ciphers_by_strength() {
 #FIXME: no error condition
 }
 
-# test for all ciphers per protocol locally configured (w/o distinguishing whether they are good or bad)
+# Test for all ciphers per protocol locally configured (w/o distinguishing whether they are good or bad)
+#
 run_cipher_per_proto() {
      local proto proto_hex proto_text
      local using_sockets=true
@@ -21534,7 +21536,6 @@ parse_cmd_line() {
                -9|--full)
                     set_scanning_defaults
                     do_allciphers=false
-                    do_cipher_per_proto=true
                     do_grease=true
                     ;;
                --add-ca|--add-CA|--add-ca=*|--add-CA=*)
