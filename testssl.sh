@@ -8353,6 +8353,7 @@ certificate_info() {
      local caa_node="" all_caa="" caa_property_name="" caa_property_value=""
      local response=""
      local yearstart yearend clockstart clockend y m d
+     local gt_398=false gt_398warn=false
      local gt_825=false gt_825warn=false
      local badocsp=1 
 
@@ -9111,6 +9112,26 @@ certificate_info() {
           out "$spaces"
           prln_svrty_medium ">= 5 years is too long"
           fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) days"
+     elif [[ $diffseconds -ge $((3600 * 24 * 398 + 1)) ]]; then
+     # Also "official" certificates issued from september 1st 2020 (1598918400) aren't supposed
+     # to be valid longer than 398 days which is 34387200 in epoch seconds
+          gt_398=true
+          if "$HAS_OPENBSDDATE"; then
+               if [[ 20200901 -le ${yearstart//-/} ]]; then
+                    gt_398warn=true
+               fi
+          elif [[ $(parse_date "$startdate" "+%s" $'%F %H:%M') -ge 1598918400 ]]; then
+               gt_398warn=true
+          fi
+          # Now, the verdict, depending on the issuing date
+          out "$spaces"
+          if "$gt_398warn" && "$gt_398"; then
+               prln_svrty_medium "> 398 days issued after 2020/09/01 is too long"
+               fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) > 398 days"
+          elif "$gt_398"; then
+               outln ">= 398 days certificate life time but issued before 2020/09/01"
+               fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) =< 398 days"
+          fi
      elif [[ $diffseconds -ge $((3600 * 24 * 825 + 1)) ]]; then
      # Also "official" certificates issued from March 1st, 2018 (1517353200) aren't supposed
      # to be valid longer than 825 days which is 1517353200 in epoch seconds
