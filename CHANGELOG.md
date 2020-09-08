@@ -12,6 +12,7 @@
 * Percent output char problem fixed
 * Several display/output fixes
 * BREACH check: list all compression methods and add brotli
+* test for winshock vulnerability
 * Security fix: DNS input
 * Don't use external pwd anymore
 * STARTTLS: XMPP server support
