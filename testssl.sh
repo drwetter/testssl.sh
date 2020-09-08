@@ -18950,7 +18950,7 @@ single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -H, --heartbleed              tests for Heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -T, --ticketbleed             tests for Ticketbleed vulnerability in BigIP loadbalancers
-     --BB, --robot                 tests for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability
+     -BB, --robot                  tests for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability
      -R, --renegotiation           tests for renegotiation vulnerabilities
      -C, --compression, --crime    tests for CRIME vulnerability (TLS compression issue)
      -B, --breach                  tests for BREACH vulnerability (HTTP compression issue)
@@ -18959,7 +18959,7 @@ single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -W, --sweet32                 tests 64 bit block ciphers (3DES, RC2 and IDEA): SWEET32 vulnerability
      -A, --beast                   tests for BEAST vulnerability
      -L, --lucky13                 tests for LUCKY13
-     --WS, --winshock              tests for winshock vulnerability
+     -WS, --winshock               tests for winshock vulnerability
      -F, --freak                   tests for FREAK vulnerability
      -J, --logjam                  tests for LOGJAM vulnerability
      -D, --drown                   tests for DROWN vulnerability
@@ -21569,7 +21569,7 @@ parse_cmd_line() {
                     do_ticketbleed=true
                     let "VULN_COUNT++"
                     ;;
-               -BB|--BB|--robot)
+               -BB|--robot)
                     do_robot=true
                     ;;
                -R|--renegotiation)
@@ -21617,7 +21617,7 @@ parse_cmd_line() {
                     do_lucky13=true
                     let "VULN_COUNT++"
                     ;;
-               -WS|--WS|--winshock)
+               -WS|--winshock)
                     do_winshock=true
                     let "VULN_COUNT++"
                     ;;
