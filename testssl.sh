@@ -17432,7 +17432,6 @@ run_winshock() {
      local server_banner=""
      local cve="CVE-2014-6321"
      local cwe="CWE-94"
-     local hint=""
      local jsonID="winshock"
 
      if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
