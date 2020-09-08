@@ -39,6 +39,9 @@ Full contribution, see git log.
 * Christoph Badura
   - NetBSD fixes
 
+* Jim Blankendaal
+  - maximum certificate lifespan of 398 days 
+
 * Frank Breedijk
   - Detection of insecure redirects
   - JSON and CSV output

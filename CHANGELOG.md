@@ -21,6 +21,7 @@
 * Don't penalize missing trust in rating when CA not in Java store
 * Added support for certificates with EdDSA signatures and pubilc keys
 * --add-ca can also now be a directory with \*.pem files
+* Warning of 398 day limit for certificates issued after 2020/9/1
 
 ### Features implemented / improvements in 3.0
 
