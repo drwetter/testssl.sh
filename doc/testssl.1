@@ -385,6 +385,9 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, Expect\-CT,\.\.\. , CSP
 \fB\-L, \-\-lucky13\fR Checks for LUCKY13 vulnerability\. It checks for the presence of CBC ciphers in TLS versions 1\.0 \- 1\.2\.
 .
 .P
+\fB\-WS, \-\-winshock\fR Checks for Winshock vulnerability\. It tests for absence of GCM ciphers which were introduced in the fix and correlates that with the server banner\.
+.
+.P
 \fB\-4, \-\-rc4, \-\-appelbaum\fR Checks which RC4 stream ciphers are being offered\.
 .
 .SS "OUTPUT OPTIONS"

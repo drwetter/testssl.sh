@@ -254,6 +254,8 @@ Also for multiple server certificates are being checked for as well as for the c
 
 `-L, --lucky13`                 Checks for LUCKY13 vulnerability. It checks for the presence of CBC ciphers in TLS versions 1.0 - 1.2.
 
+`-WS, --winshock`               Checks for Winshock vulnerability. It tests for absence of GCM ciphers which were introduced in the fix and correlates that with the server banner.
+
 `-4, --rc4, --appelbaum`        Checks which RC4 stream ciphers are being offered.
 
 

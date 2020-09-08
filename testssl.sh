@@ -17437,6 +17437,101 @@ run_beast(){
      return 0
 }
 
+# This is a quick test for Winshock, MS14-066, a vulnerability in the TLS stack of Microsoft which
+# leads to RCE. See https://support.microsoft.com/en-us/help/2992611/ms14-066-vulnerability-in-schannel-could-allow-remote-code-execution-n
+# and http://www.securitysift.com/exploiting-ms14-066-cve-2014-6321-aka-winshock for exploiting.
+# What we do here is giving a hint, as with the Rollup patch MS introduced later is to supply the additional ciphers
+# TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 TLS_RSA_WITH_AES_256_GCM_SHA384 TLS_RSA_WITH_AES_128_GCM_SHA256
+# = DHE-RSA-AES256-GCM-SHA384 DHE-RSA-AES128-GCM-SHA256 AES256-GCM-SHA384 AES128-GCM-SHA256.
+# We check for those (in sockets only to avoid overhead) and for port 443 we also grab the server banner to be more sure.
+# This vulnerability affected all SChannel services -- most notably RDP (port 3398 normally -- but other than
+#
+run_winshock() {
+     local ws_ciphers_hex='00,9F, 00,9D, 00,9E, 00,9C'
+     local -i sclient_success=0
+     local is_iis8=true
+     local server_banner=""
+     local cve="CVE-2014-6321"
+     local cwe="CWE-94"
+     local jsonID="winshock"
+
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
+          outln
+          pr_headlineln " Testing for winshock vulnerability "
+          outln
+     fi
+     pr_bold " Winshock"; out " ($cve), experimental    "
+
+     if [[ "$(has_server_protocol "tls1_3")" -eq 0 ]] ; then
+          # There's no MS server supporting TLS 1.3. Winshock was way back in time
+          prln_svrty_best "not vulnerable (OK)"
+          fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
+          return 0
+     fi
+
+     # Next we weed out is whether we run HTTP or RDP (on standard port)
+     if [[ $SERVICE != HTTP ]] && [[ $PORT != 3389 ]]; then
+          prln_svrty_best "not vulnerable (OK) - no HTTP or RDP"
+          fileout "$jsonID" "OK" "not vulnerable - no HTTP or RDP" "$cve" "$cwe"
+          return 0
+     fi
+
+     # Now we have RDP and HTTP left
+     tls_sockets "01" "${ws_ciphers_hex}, 00,ff"
+     sclient_success=$?
+     [[ "$sclient_success" -eq 2 ]] && sclient_success=0
+     if [[ $sclient_success -eq 0 ]]; then
+          # has rollup ciphers
+          prln_svrty_best "not vulnerable (OK)"
+          fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
+          return 0
+     elif [[ $sclient_success -ne 1 ]]; then
+          prln_warning "check failed, connect problem"
+          fileout "$jsonID" "WARN" "check failed, connect problem" "$cve" "$cwe"
+          return 1
+     fi
+
+     if [[ $SERVICE != HTTP ]] && [[ $PORT == 3389 ]]; then
+          # We take a guess here.
+          out "probably "
+          pr_svrty_critical "vulnerable (NOT ok)"
+          outln " - check patches locally to confirm"
+          fileout "${jsonID}" "CRITICAL" "probably vulnerable (NOT OK). Check patches locally to confirm"
+     fi
+
+     # Now we have potentially vulnerable HTTP servers left where we garb the server banner.
+     # First choice for that is the HTTP header # file which we retrieved in a default run.
+     # From the service detection we also should have a header though as a fall back.
+     if [[ -s $HEADERFILE ]]; then
+          server_banner="$(grep -Eai '^Server:' $HEADERFILE)"
+     elif [[ -s "$TEMPDIR/$NODEIP.service_detection.txt" ]]; then
+          server_banner="$(grep -Eai '^Server:' "$TEMPDIR/$NODEIP.service_detection.txt")"
+     else
+          # We can't use run_http_header here as it messes up the screen. We could automatically
+          # run it when --winshock is requested though but this should suffice here.
+          prln_warning "check failed, rerun with cmd line option--header "
+          fileout "$jsonID" "WARN" "check failed, connect problem" "$cve" "$cwe"
+          return 1
+     fi
+     if [[ $server_banner =~ Microsoft-IIS\/8.5 ]]; then
+          # Windows 2012 R2 is less likely than Windows 2012
+          out "probably "
+          pr_svrty_critical "vulnerable (NOT ok)"
+          outln " - check patches locally to confirm"
+          fileout "${jsonID}" "CRITICAL" "probably vulnerable (NOT OK). Check patches locally to confirm"
+     elif [[ $server_banner =~ Microsoft-IIS\/8.0 ]]; then
+          out "likely "
+          pr_svrty_critical "VULNERABLE (NOT ok)"
+          outln " - check patches locally to confirm"
+          fileout "${jsonID}" "CRITICAL" "likely vulnerable (NOT OK). Check patches locally to confirm"
+     else
+          pr_svrty_best "not vulnerable (OK)"
+          outln " - doesn't seem to be IIS 8.x"
+          fileout "$jsonID" "OK" "not vulnerable - doesn't seem to be IIS 8.x" "$cve" "$cwe"
+     fi
+     return 0
+}
+
 
 # https://web.archive.org/web/20200324101422/http://www.isg.rhul.ac.uk/tls/Lucky13.html
 # Paper: https://doi.org/10.1109/SP.2013.42
@@ -18885,6 +18980,7 @@ single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -W, --sweet32                 tests 64 bit block ciphers (3DES, RC2 and IDEA): SWEET32 vulnerability
      -A, --beast                   tests for BEAST vulnerability
      -L, --lucky13                 tests for LUCKY13
+     -WS, --winshock               tests for winshock vulnerability
      -F, --freak                   tests for FREAK vulnerability
      -J, --logjam                  tests for LOGJAM vulnerability
      -D, --drown                   tests for DROWN vulnerability
@@ -21191,6 +21287,7 @@ initialize_globals() {
      do_fs=false
      do_protocols=false
      do_rc4=false
+     do_winshock=false
      do_grease=false
      do_renego=false
      do_cipherlists=false
@@ -21228,6 +21325,7 @@ set_scanning_defaults() {
      do_header=true
      do_fs=true
      do_rc4=true
+     do_winshock=false
      do_protocols=true
      do_renego=true
      do_cipherlists=true
@@ -21236,9 +21334,9 @@ set_scanning_defaults() {
      do_tls_fallback_scsv=true
      do_client_simulation=true
      if "$OFFENSIVE"; then
-          VULN_COUNT=16
+          VULN_COUNT=17
      else
-          VULN_COUNT=12
+          VULN_COUNT=13
      fi
      do_rating=true
 }
@@ -21250,7 +21348,7 @@ count_do_variables() {
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
-               do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
+               do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv do_winshock \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
                     "${!gbl}" && let true_nr++
      done
@@ -21263,7 +21361,7 @@ debug_globals() {
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
                do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
-               do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv \
+               do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv do_winshock \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
      done
@@ -21469,11 +21567,12 @@ parse_cmd_line() {
                     do_logjam=true
                     do_beast=true
                     do_lucky13=true
+                    do_winshock=true
                     do_rc4=true
                     if "$OFFENSIVE"; then
-                         VULN_COUNT=16
+                         VULN_COUNT=17
                     else
-                         VULN_COUNT=12
+                         VULN_COUNT=13
                     fi
                     ;;
                --ids-friendly)
@@ -21537,6 +21636,10 @@ parse_cmd_line() {
                     ;;
                -L|--lucky13)
                     do_lucky13=true
+                    let "VULN_COUNT++"
+                    ;;
+               -WS|--winshock)
+                    do_winshock=true
                     let "VULN_COUNT++"
                     ;;
                -4|--rc4|--appelbaum)
@@ -22045,6 +22148,7 @@ lets_roll() {
                "$do_logjam" && { run_logjam; ret=$(($? + ret)); stopwatch run_logjam; }
                "$do_beast" && { run_beast; ret=$(($? + ret)); stopwatch run_beast; }
                "$do_lucky13" && { run_lucky13; ret=$(($? + ret)); stopwatch run_lucky13; }
+               "$do_winshock" && { run_winshock; ret=$(($? + ret)); stopwatch run_winshock; }
                "$do_rc4" && { run_rc4; ret=$(($? + ret)); stopwatch run_rc4; }
 
                fileout_section_header $section_number true && ((section_number++))
