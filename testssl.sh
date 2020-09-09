@@ -17437,17 +17437,23 @@ run_beast(){
      return 0
 }
 
-# This is a quick test for Winshock, MS14-066, a vulnerability in the TLS stack of Microsoft which
-# leads to RCE. See https://support.microsoft.com/en-us/help/2992611/ms14-066-vulnerability-in-schannel-could-allow-remote-code-execution-n
-# and http://www.securitysift.com/exploiting-ms14-066-cve-2014-6321-aka-winshock for exploiting.
+# This is a quick test for Winshock, MS14-066, a vulnerability in the TLS stack of Microsoft which leads to RCE.
+# This vulnerability affected all SChannel services -- most notably RDP (port 3398 normally). See
+# https://support.microsoft.com/en-us/help/2992611/ms14-066-vulnerability-in-schannel-could-allow-remote-code-execution-n
+# and http://www.securitysift.com/exploiting-ms14-066-cve-2014-6321-aka-winshock for "exploiting"/crashing lsass.exe.
+#
 # What we do here is giving a hint, as with the Rollup patch MS introduced later is to supply the additional ciphers
 # TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 TLS_RSA_WITH_AES_256_GCM_SHA384 TLS_RSA_WITH_AES_128_GCM_SHA256
 # = DHE-RSA-AES256-GCM-SHA384 DHE-RSA-AES128-GCM-SHA256 AES256-GCM-SHA384 AES128-GCM-SHA256.
 # We check for those (in sockets only to avoid overhead) and for port 443 we also grab the server banner to be more sure.
-# This vulnerability affected all SChannel services -- most notably RDP (port 3398 normally -- but other than
+# Also we check whether TLS 1.3 is available and some ciphers (ARIA, CCM, CAMELLIA  and CHACHAPOLY). Those ciphers could
+# also be retrieved from our array TLS_CIPHER_RFC_NAME[i] and using TLS_CIPHER_HEXCODE[i]. The latter will be done later.
 #
 run_winshock() {
      local ws_ciphers_hex='00,9F, 00,9D, 00,9E, 00,9C'
+     local aria_ciphers='C0,3D,C0,3F,C0,41,C0,43,C0,45,C0,47,C0,49,C0,4B,C0,4D,C0,4F,C0,51,C0,53,C0,55,C0,57,C0,59,C0,5B,C0,5D,C0,5F,C0,61,C0,63,C0,65,C0,67,C0,69,C0,6B,C0,6D,C0,6F,C0,71,C0,3C,C0,3E,C0,40,C0,42,C0,44,C0,46,C0,48,C0,4A,C0,4C,C0,4E,C0,50,C0,52,C0,54,C0,56,C0,58,C0,5A,C0,5C,C0,5E,C0,60,C0,62,C0,64,C0,66,C0,68,C0,6A,C0,6C,C0,6E,C0,70'
+     local camellia_ciphers='C0,9B,C0,99,C0,97,C0,95,C0,77,C0,73,00,C4,00,C3,00,C2,00,C1,00,88,00,87,00,86,00,85,00,C5,00,89,C0,79,C0,75,00,C0,00,84,C0,7B,C0,7D,C0,7F,C0,81,C0,83,C0,85,C0,87,C0,89,C0,8B,C0,8D,C0,8F,C0,91,C0,93,C0,76,C0,72,00,BE,00,BD,00,BC,00,BB,00,45,00,44,00,43,00,42,00,BF,00,46,C0,78,C0,74,00,BA,00,41,C0,9A,C0,98,C0,96,C0,94,C0,7A,C0,7C,C0,7E,C0,80,C0,82,C0,84,C0,86,C0,88,C0,8A,C0,8C,C0,8E,C0,90,C0,92'
+     local chacha_ccm_ciphers='CC,14,CC,13,CC,15,CC,A9,CC,A8,CC,AA,C0,AF,C0,AD,C0,A3,C0,9F,CC,AE,CC,AD,CC,AC,C0,AB,C0,A7,C0,A1,C0,9D,CC,AB,C0,A9,C0,A5,16,B7,16,B8,13,04,13,05,C0,AE,C0,AC,C0,A2,C0,9E,C0,AA,C0,A6,C0,A0,C0,9C,C0,A8,C0,A4'
      local -i sclient_success=0
      local is_iis8=true
      local server_banner=""
@@ -17464,8 +17470,10 @@ run_winshock() {
 
      if [[ "$(has_server_protocol "tls1_3")" -eq 0 ]] ; then
           # There's no MS server supporting TLS 1.3. Winshock was way back in time
-          prln_svrty_best "not vulnerable (OK)"
-          fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
+          pr_svrty_best "not vulnerable (OK)"
+          debugme echo " - TLS 1.3 found"
+          fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
+          outln
           return 0
      fi
 
@@ -17476,14 +17484,36 @@ run_winshock() {
           return 0
      fi
 
-     # Now we have RDP and HTTP left
-     tls_sockets "01" "${ws_ciphers_hex}, 00,ff"
+     # Now we check whether any CAMELLIA, ARIA, CCM or CHACHA cipher is available.
+     # We do this in two shots in order to stay below the 128 cipher limit
+     tls_sockets "03" "${aria_ciphers},${chacha_ccm_ciphers}, 00,ff"
      sclient_success=$?
-     [[ "$sclient_success" -eq 2 ]] && sclient_success=0
-     if [[ $sclient_success -eq 0 ]]; then
+     if [[ $sclient_success -eq 0 ]] || [[ "$sclient_success" -eq 2 ]]; then
+          pr_svrty_best "not vulnerable (OK)"
+          debugme echo " - ARIA, CHACHA or CCM ciphers found"
+          fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
+          outln
+          return 0
+     fi
+     tls_sockets "03" "${camellia_ciphers}, 00,ff"
+     sclient_success=$?
+     if [[ $sclient_success -eq 0 ]] || [[ "$sclient_success" -eq 2 ]]; then
+          pr_svrty_best "not vulnerable (OK)"
+          debugme echo " - CAMELLIA ciphers found"
+          fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
+          outln
+          return 0
+     fi
+
+     # Now we have RDP and HTTP left and need to check the fixed ciphers
+     tls_sockets "03" "${ws_ciphers_hex}, 00,ff"
+     sclient_success=$?
+     if [[ $sclient_success -eq 0 ]] || [[ "$sclient_success" -eq 2 ]]; then
           # has rollup ciphers
-          prln_svrty_best "not vulnerable (OK)"
+          pr_svrty_best "not vulnerable (OK)"
+          debugme echo " - GCM rollup ciphers found"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
+          outln
           return 0
      elif [[ $sclient_success -ne 1 ]]; then
           prln_warning "check failed, connect problem"
@@ -17492,14 +17522,15 @@ run_winshock() {
      fi
 
      if [[ $SERVICE != HTTP ]] && [[ $PORT == 3389 ]]; then
-          # We take a guess here.
+          # We take a guess here for RDP as we don't have a banner
           out "probably "
           pr_svrty_critical "vulnerable (NOT ok)"
           outln " - check patches locally to confirm"
           fileout "${jsonID}" "CRITICAL" "probably vulnerable (NOT OK). Check patches locally to confirm"
+          return 0
      fi
 
-     # Now we have potentially vulnerable HTTP servers left where we garb the server banner.
+     # Now we have potentially vulnerable HTTP servers left where we grab the server banner.
      # First choice for that is the HTTP header # file which we retrieved in a default run.
      # From the service detection we also should have a header though as a fall back.
      if [[ -s $HEADERFILE ]]; then
@@ -17509,7 +17540,7 @@ run_winshock() {
      else
           # We can't use run_http_header here as it messes up the screen. We could automatically
           # run it when --winshock is requested though but this should suffice here.
-          prln_warning "check failed, rerun with cmd line option--header "
+          prln_warning "check failed, rerun with cmd line option --header "
           fileout "$jsonID" "WARN" "check failed, connect problem" "$cve" "$cwe"
           return 1
      fi
