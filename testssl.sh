@@ -21356,7 +21356,7 @@ set_scanning_defaults() {
      do_header=true
      do_fs=true
      do_rc4=true
-     do_winshock=false
+     do_winshock=true
      do_protocols=true
      do_renego=true
      do_cipherlists=true
