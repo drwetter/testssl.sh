@@ -17454,6 +17454,10 @@ run_winshock() {
      local aria_ciphers='C0,3D,C0,3F,C0,41,C0,43,C0,45,C0,47,C0,49,C0,4B,C0,4D,C0,4F,C0,51,C0,53,C0,55,C0,57,C0,59,C0,5B,C0,5D,C0,5F,C0,61,C0,63,C0,65,C0,67,C0,69,C0,6B,C0,6D,C0,6F,C0,71,C0,3C,C0,3E,C0,40,C0,42,C0,44,C0,46,C0,48,C0,4A,C0,4C,C0,4E,C0,50,C0,52,C0,54,C0,56,C0,58,C0,5A,C0,5C,C0,5E,C0,60,C0,62,C0,64,C0,66,C0,68,C0,6A,C0,6C,C0,6E,C0,70'
      local camellia_ciphers='C0,9B,C0,99,C0,97,C0,95,C0,77,C0,73,00,C4,00,C3,00,C2,00,C1,00,88,00,87,00,86,00,85,00,C5,00,89,C0,79,C0,75,00,C0,00,84,C0,7B,C0,7D,C0,7F,C0,81,C0,83,C0,85,C0,87,C0,89,C0,8B,C0,8D,C0,8F,C0,91,C0,93,C0,76,C0,72,00,BE,00,BD,00,BC,00,BB,00,45,00,44,00,43,00,42,00,BF,00,46,C0,78,C0,74,00,BA,00,41,C0,9A,C0,98,C0,96,C0,94,C0,7A,C0,7C,C0,7E,C0,80,C0,82,C0,84,C0,86,C0,88,C0,8A,C0,8C,C0,8E,C0,90,C0,92'
      local chacha_ccm_ciphers='CC,14,CC,13,CC,15,CC,A9,CC,A8,CC,AA,C0,AF,C0,AD,C0,A3,C0,9F,CC,AE,CC,AD,CC,AC,C0,AB,C0,A7,C0,A1,C0,9D,CC,AB,C0,A9,C0,A5,16,B7,16,B8,13,04,13,05,C0,AE,C0,AC,C0,A2,C0,9E,C0,AA,C0,A6,C0,A0,C0,9C,C0,A8,C0,A4'
+     # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 / TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 = ECDHE-RSA-AES128-GCM-SHA256 / ECDHE-RSA-AES256-GCM-SHA384
+     # came in Server 2016, see https://notsomany.com/2016/08/26/achieve-a-on-sslabs-iis-8-5-windows-2012-r2/
+     #                          https://docs.microsoft.com/en-us/windows/win32/secauthn/cipher-suites-in-schannel
+     local more_excluded_ciphers='C0,2f, C0,30'
      local -i sclient_success=0
      local is_iis8=true
      local server_banner=""
@@ -17495,11 +17499,11 @@ run_winshock() {
           outln
           return 0
      fi
-     tls_sockets "03" "${camellia_ciphers}, 00,ff"
+     tls_sockets "03" "${camellia_ciphers},${more_excluded_ciphers}, 00,ff"
      sclient_success=$?
      if [[ $sclient_success -eq 0 ]] || [[ "$sclient_success" -eq 2 ]]; then
           pr_svrty_best "not vulnerable (OK)"
-          debugme echo " - CAMELLIA ciphers found"
+          debugme echo " - CAMELLIA or ECDHE_RSA GCM ciphers found"
           fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
           outln
           return 0
