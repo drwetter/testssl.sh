@@ -17503,7 +17503,7 @@ run_winshock() {
      sclient_success=$?
      if [[ $sclient_success -eq 0 ]] || [[ "$sclient_success" -eq 2 ]]; then
           pr_svrty_best "not vulnerable (OK)"
-          debugme echo " - CAMELLIA or ECDHE_RSA ciphers found"
+          debugme echo " - CAMELLIA or ECDHE_RSA GCM ciphers found"
           fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
           outln
           return 0
