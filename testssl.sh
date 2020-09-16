@@ -15951,7 +15951,6 @@ run_renego() {
                ;;   # all ok
      esac
 
-
      if "$TLS13_ONLY"; then
           pr_svrty_best "not vulnerable (OK)"
           [[ $DEBUG -ge 1 ]] && out ", no renegotiation support in TLS 1.3 only servers"
@@ -15973,7 +15972,14 @@ run_renego() {
           else
                # second try in the foreground as we are sure now it won't hang
                echo R | $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
-               sec_client_renego=$?                                                  # 0=client is renegotiating & doesn't return an error --> vuln!
+               sec_client_renego=$?
+               # 0 means client is renegotiating & doesn't return an error --> vuln!
+               # 1 means client tried to renegotiating but the server side errored then. You still see RENEGOTIATING in the output
+               if tail -5 $TMPFILE| grep -qa '^closed'; then
+                    # Exemption from above: server closed the connection but return value was zero
+                    # See https://github.com/drwetter/testssl.sh/issues/1725 and referenced issue @haproxy
+                    sec_client_renego=1
+               fi
                case "$sec_client_renego" in
                     0)   # We try again if server is HTTP. This could be either a node.js server or something else.
                          # node.js has a mitigation which allows 3x R and then blocks. So we test 4x
