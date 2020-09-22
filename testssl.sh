@@ -8783,7 +8783,7 @@ certificate_info() {
           prln_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
           fileout "${jsonID}${json_postfix}" "INFO" "$all_san"
      else
-          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
+          if [[ $SERVICE == HTTP ]] || "$ASSUME_HTTP"; then
                pr_svrty_high "missing (NOT ok)"; outln " -- Browsers are complaining"
                fileout "${jsonID}${json_postfix}" "HIGH" "No SAN, browsers are complaining"
           else
@@ -8878,7 +8878,7 @@ certificate_info() {
           pr_svrty_high "$trustfinding"
           trust_sni_finding="HIGH"
      elif ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
-          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
+          if [[ $SERVICE == HTTP ]] || "$ASSUME_HTTP"; then
                # https://bugs.chromium.org/p/chromium/issues/detail?id=308330
                # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
                # https://www.chromestatus.com/feature/4981025180483584
@@ -8941,7 +8941,7 @@ certificate_info() {
      fi
      if [[ -n "$sni_used" ]] || [[ $trust_nosni -eq 0 ]] || ( [[ $trust_nosni -ne 4 ]] && [[ $trust_nosni -ne 8 ]] ); then
           outln "$trustfinding_nosni"
-     elif [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
+     elif [[ $SERVICE == HTTP ]] || "$ASSUME_HTTP"; then
           prln_svrty_high "$trustfinding_nosni"
      else
           prln_svrty_medium "$trustfinding_nosni"
@@ -17498,6 +17498,10 @@ run_winshock() {
           fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
           outln
           return 0
+     fi
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
      fi
 
      # Now we check whether any CAMELLIA, ARIA, CCM or CHACHA cipher is available.
