@@ -17606,6 +17606,9 @@ run_winshock() {
           server_banner="$(grep -Eai '^Server:' $HEADERFILE)"
      elif [[ -s "$TEMPDIR/$NODEIP.service_detection.txt" ]]; then
           server_banner="$(grep -Eai '^Server:' "$TEMPDIR/$NODEIP.service_detection.txt")"
+     elif "$EXPERIMENTAL"; then
+          # If testing e.g. an SMTP server
+          :
      else
           # We can't use run_http_header here as it messes up the screen. We could automatically
           # run it when --winshock is requested though but this should suffice here.
@@ -17636,6 +17639,9 @@ run_winshock() {
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
                outln
           fi
+     elif "$EXPERIMENTAL"; then
+          out "seems "; pr_svrty_critical "vulnerable (NOT ok)"; outln "$check_patches"
+          fileout "${jsonID}" "CRITICAL" "seems vulnerable (NOT OK) $check_patches"
      else
           pr_svrty_best "not vulnerable (OK)"
           outln " - doesn't seem to be IIS 8.x"
