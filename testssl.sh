@@ -759,6 +759,10 @@ debugme() {
      [[ "$DEBUG" -ge 2 ]] && "$@"
      return 0
 }
+debugme1() {
+     [[ "$DEBUG" -ge 1 ]] && "$@"
+     return 0
+}
 
 hex2dec() {
      echo $((16#$1))
@@ -7436,8 +7440,13 @@ determine_tls_extensions() {
           [[ $success -eq 0 ]] && extract_new_tls_extensions $TMPFILE
           tmpfile_handle ${FUNCNAME[0]}.txt
      fi
+
+     # Keep it "on file" for debugging purposes
+     debugme1 safe_echo "$TLS_EXTENSIONS" >"$TEMPDIR/$NODE.$NODEIP.tls_extensions.txt"
+
      return $success
 }
+
 
 extract_certificates() {
      local version="$1"
@@ -8774,7 +8783,7 @@ certificate_info() {
           prln_italic "$(out_row_aligned_max_width "$all_san" "$indent                              " $TERM_WIDTH)"
           fileout "${jsonID}${json_postfix}" "INFO" "$all_san"
      else
-          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
+          if [[ $SERVICE == HTTP ]] || "$ASSUME_HTTP"; then
                pr_svrty_high "missing (NOT ok)"; outln " -- Browsers are complaining"
                fileout "${jsonID}${json_postfix}" "HIGH" "No SAN, browsers are complaining"
           else
@@ -8869,7 +8878,7 @@ certificate_info() {
           pr_svrty_high "$trustfinding"
           trust_sni_finding="HIGH"
      elif ( [[ $trust_sni -eq 4 ]] || [[ $trust_sni -eq 8 ]] ); then
-          if [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
+          if [[ $SERVICE == HTTP ]] || "$ASSUME_HTTP"; then
                # https://bugs.chromium.org/p/chromium/issues/detail?id=308330
                # https://bugzilla.mozilla.org/show_bug.cgi?id=1245280
                # https://www.chromestatus.com/feature/4981025180483584
@@ -8932,7 +8941,7 @@ certificate_info() {
      fi
      if [[ -n "$sni_used" ]] || [[ $trust_nosni -eq 0 ]] || ( [[ $trust_nosni -ne 4 ]] && [[ $trust_nosni -ne 8 ]] ); then
           outln "$trustfinding_nosni"
-     elif [[ $SERVICE == "HTTP" ]] || "$ASSUME_HTTP"; then
+     elif [[ $SERVICE == HTTP ]] || "$ASSUME_HTTP"; then
           prln_svrty_high "$trustfinding_nosni"
      else
           prln_svrty_medium "$trustfinding_nosni"
@@ -10150,6 +10159,8 @@ run_fs() {
      fi
      CURVES_OFFERED="$curves_offered"
      CURVES_OFFERED=$(strip_trailing_space "$CURVES_OFFERED")
+     # Keep it "on file" for debugging purposes
+     debugme1 safe_echo "$CURVES_OFFERED" >"$TEMPDIR/$NODE.$NODEIP.curves_offered.txt"
 
      # find out what groups are supported.
      if "$using_sockets" && ( "$fs_tls13_offered" || "$ffdhe_offered" ); then
@@ -13333,6 +13344,7 @@ parse_tls_serverhello() {
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
+               # https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
                case $extension_type in
                     0000) tls_extensions+="TLS server extension \"server name\" (id=0), len=$extension_len\n" ;;
                     0001) tls_extensions+="TLS server extension \"max fragment length\" (id=1), len=$extension_len\n" ;;
@@ -17447,26 +17459,33 @@ run_beast(){
 # This vulnerability affected all SChannel services -- most notably RDP (port 3398 normally). See
 # https://support.microsoft.com/en-us/help/2992611/ms14-066-vulnerability-in-schannel-could-allow-remote-code-execution-n
 # and http://www.securitysift.com/exploiting-ms14-066-cve-2014-6321-aka-winshock for "exploiting"/crashing lsass.exe.
+# What we do here is giving a strong hint.
 #
-# What we do here is giving a hint, as with the Rollup patch MS introduced later is to supply the additional ciphers
+# First we check whether TLS 1.3 is available. Then with the fix MS introduced came additional ciphers
 # TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 TLS_RSA_WITH_AES_256_GCM_SHA384 TLS_RSA_WITH_AES_128_GCM_SHA256
 # = DHE-RSA-AES256-GCM-SHA384 DHE-RSA-AES128-GCM-SHA256 AES256-GCM-SHA384 AES128-GCM-SHA256.
-# We check for those (in sockets only to avoid overhead) and for port 443 we also grab the server banner to be more sure.
-# Also we check whether TLS 1.3 is available and some ciphers (ARIA, CCM, CAMELLIA  and CHACHAPOLY). Those ciphers could
-# also be retrieved from our array TLS_CIPHER_RFC_NAME[i] and using TLS_CIPHER_HEXCODE[i]. The latter will be done later.
+# We also check for the absence of ciphers which came in way later (ECDHE-RSA-AES128-GCM-SHA256 / ECDHE-RSA-AES256-GCM-SHA384), or
+# more ciphers like ARIA, CCM, CAMELLIA and CHACHAPOLY. (Those ciphers could also be retrieved from our array TLS_CIPHER_RFC_NAME[i]
+# and using TLS_CIPHER_HEXCODE[i]. We may want to # do that later. We check for all this in sockets only to avoid overhead.)
+# Then we check for absence of elliptical curves and TLS extensions.
+#    That all should minimize false # positives because of middle boxes, proxies and later Windows versions.
+# The last straw then is to check for webserver banners (http.sys, IIS/8.0 and IIS/8.5).
 #
 run_winshock() {
-     local ws_ciphers_hex='00,9F, 00,9D, 00,9E, 00,9C'
+     local wsfixed_ciphers='00,9F, 00,9D, 00,9E, 00,9C'
      local aria_ciphers='C0,3D,C0,3F,C0,41,C0,43,C0,45,C0,47,C0,49,C0,4B,C0,4D,C0,4F,C0,51,C0,53,C0,55,C0,57,C0,59,C0,5B,C0,5D,C0,5F,C0,61,C0,63,C0,65,C0,67,C0,69,C0,6B,C0,6D,C0,6F,C0,71,C0,3C,C0,3E,C0,40,C0,42,C0,44,C0,46,C0,48,C0,4A,C0,4C,C0,4E,C0,50,C0,52,C0,54,C0,56,C0,58,C0,5A,C0,5C,C0,5E,C0,60,C0,62,C0,64,C0,66,C0,68,C0,6A,C0,6C,C0,6E,C0,70'
      local camellia_ciphers='C0,9B,C0,99,C0,97,C0,95,C0,77,C0,73,00,C4,00,C3,00,C2,00,C1,00,88,00,87,00,86,00,85,00,C5,00,89,C0,79,C0,75,00,C0,00,84,C0,7B,C0,7D,C0,7F,C0,81,C0,83,C0,85,C0,87,C0,89,C0,8B,C0,8D,C0,8F,C0,91,C0,93,C0,76,C0,72,00,BE,00,BD,00,BC,00,BB,00,45,00,44,00,43,00,42,00,BF,00,46,C0,78,C0,74,00,BA,00,41,C0,9A,C0,98,C0,96,C0,94,C0,7A,C0,7C,C0,7E,C0,80,C0,82,C0,84,C0,86,C0,88,C0,8A,C0,8C,C0,8E,C0,90,C0,92'
      local chacha_ccm_ciphers='CC,14,CC,13,CC,15,CC,A9,CC,A8,CC,AA,C0,AF,C0,AD,C0,A3,C0,9F,CC,AE,CC,AD,CC,AC,C0,AB,C0,A7,C0,A1,C0,9D,CC,AB,C0,A9,C0,A5,16,B7,16,B8,13,04,13,05,C0,AE,C0,AC,C0,A2,C0,9E,C0,AA,C0,A6,C0,A0,C0,9C,C0,A8,C0,A4'
      # TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 / TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 = ECDHE-RSA-AES128-GCM-SHA256 / ECDHE-RSA-AES256-GCM-SHA384
      # came in Server 2016, see https://notsomany.com/2016/08/26/achieve-a-on-sslabs-iis-8-5-windows-2012-r2/
      #                          https://docs.microsoft.com/en-us/windows/win32/secauthn/cipher-suites-in-schannel
-     local more_excluded_ciphers='C0,2f, C0,30'
+     local more_excluded_ciphers='C0,2F, C0,30'
+     # These are the three NIST curves allowed only. Keep in mind prime256v1=secp256r1 and MS labels them as P256, P384 and P521
+     local allowed_curves="prime256v1 secp384r1 secp521r1"
+     local curve="" tls_ext=""
      local -i sclient_success=0
-     local is_iis8=true
      local server_banner=""
+     local check_patches=" - check patches locally to confirm"
      local cve="CVE-2014-6321"
      local cwe="CWE-94"
      local jsonID="winshock"
@@ -17481,17 +17500,14 @@ run_winshock() {
      if [[ "$(has_server_protocol "tls1_3")" -eq 0 ]] ; then
           # There's no MS server supporting TLS 1.3. Winshock was way back in time
           pr_svrty_best "not vulnerable (OK)"
-          debugme echo " - TLS 1.3 found"
+          debugme1 echo " - TLS 1.3 found"
           fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
           outln
           return 0
      fi
-
-     # Next we weed out is whether we run HTTP or RDP (on standard port)
-     if [[ $SERVICE != HTTP ]] && [[ $PORT != 3389 ]]; then
-          prln_svrty_best "not vulnerable (OK) - no HTTP or RDP"
-          fileout "$jsonID" "OK" "not vulnerable - no HTTP or RDP" "$cve" "$cwe"
-          return 0
+     if ( [[ "$STARTTLS_PROTOCOL" =~ ldap ]] || [[ "$STARTTLS_PROTOCOL" =~ irc ]] ); then
+          prln_local_problem "STARTTLS/$STARTTLS_PROTOCOL and --ssl-native collide here"
+          return 1
      fi
 
      # Now we check whether any CAMELLIA, ARIA, CCM or CHACHA cipher is available.
@@ -17499,31 +17515,25 @@ run_winshock() {
      tls_sockets "03" "${aria_ciphers},${chacha_ccm_ciphers}, 00,ff"
      sclient_success=$?
      if [[ $sclient_success -eq 0 ]] || [[ "$sclient_success" -eq 2 ]]; then
-          pr_svrty_best "not vulnerable (OK)"
-          debugme echo " - ARIA, CHACHA or CCM ciphers found"
+          pr_svrty_best "not vulnerable (OK)" ; outln " - ARIA, CHACHA or CCM ciphers found"
           fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
-          outln
           return 0
      fi
      tls_sockets "03" "${camellia_ciphers},${more_excluded_ciphers}, 00,ff"
      sclient_success=$?
      if [[ $sclient_success -eq 0 ]] || [[ "$sclient_success" -eq 2 ]]; then
-          pr_svrty_best "not vulnerable (OK)"
-          debugme echo " - CAMELLIA or ECDHE_RSA GCM ciphers found"
+          pr_svrty_best "not vulnerable (OK)"; outln " - CAMELLIA or ECDHE_RSA GCM ciphers found"
           fileout "$jsonID" "OK" "not vulnerable " "$cve" "$cwe"
-          outln
           return 0
      fi
 
-     # Now we have RDP and HTTP left and need to check the fixed ciphers
-     tls_sockets "03" "${ws_ciphers_hex}, 00,ff"
+     # Now we need to check the fixed ciphers
+     tls_sockets "03" "${wsfixed_ciphers}, 00,ff"
      sclient_success=$?
      if [[ $sclient_success -eq 0 ]] || [[ "$sclient_success" -eq 2 ]]; then
           # has rollup ciphers
-          pr_svrty_best "not vulnerable (OK)"
-          debugme echo " - GCM rollup ciphers found"
+          pr_svrty_best "not vulnerable (OK)";  outln " - GCM rollup ciphers found"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
-          outln
           return 0
      elif [[ $sclient_success -ne 1 ]]; then
           prln_warning "check failed, connect problem"
@@ -17531,12 +17541,71 @@ run_winshock() {
           return 1
      fi
 
+     # Basic idea: https://en.wikipedia.org/wiki/Comparison_of_TLS_implementations#Supported_elliptic_curves
+     # [[ -z "$CURVES_OFFERED" ]] && sub_check_curves
+     if [[ -n "$CURVES_OFFERED" ]]; then
+          # Check whether there are any additional curves besides $allowed_curves
+          for curve in $CURVES_OFFERED; do
+               if ! [[  $allowed_curves =~ $curve ]]; then
+                    pr_svrty_best "not vulnerable (OK)"; outln " - curve $curve detected"
+                    fileout "$jsonID" "OK" "not vulnerable  - curve $curve detected" "$cve" "$cwe"
+                    return 0
+               fi
+          done
+     fi
+     #FIXME: The catch is that when a user didn't invoke run_fs() before, this wasn't processed + CURVES_OFFERED
+     # is empty. So we could call it like above but need to move curves detection into a seperate function
+     # (~ sub_check_curves) which is some work. But also for the sake of clean code this needs to be done.
+
+
+     [[ -z "$TLS_EXTENSIONS" ]] && determine_tls_extensions
+     # Basis of the following https://en.wikipedia.org/wiki/Comparison_of_TLS_implementations#Extensions
+     # Our standard: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml
+
+     # According to Wikipedia above these are the ones which can be detected unders version of  Windows
+     # Secure Renegotiation, Server Name Indication, Certificate Status Request, Supplemental Data, Extended Master Secret, ALPN
+     # supplemental_data(23) (RFC 4680) seems to have been overwritten by extended master secret(23) RFC 7627
+     # local -a allowed_tls_ext=("server name" "status_request" "extended master secret" "application layer protocol negotiation")
+     # Instead we rather focus on the ones which according to that source weren't available
+     # Encrypt-then-MAC, Maximum Fragment Length,  Keying Material Exporter, TLS Fallback SCSV, ClientHello Padding
+     # Padding is client side. Don't know what they mean by the fallback SCSV. That is not an extension
+     local -a forbidden_tls_ext=("encrypt-then-mac" "max fragment length")
+     # Open whether ec_point_formats, supported_groups(=elliptic_curves), heartbeat are supported under windows <=2012
+     # key_share and supported_versions are extensions which came with TLS 1.3. We checked the protocol before.
+     if [[ -n "$TLS_EXTENSIONS" ]]; then
+          # Check whether there are any TLS extension which should not be available under <= Windows 2012 R2
+          for tls_ext in $TLS_EXTENSIONS; do
+               # We use the whole array, got to be careful when the array becomes bigger (unintented match)
+               if [[ ${forbidden_tls_ext[@]} =~ $tls_ext ]]; then
+                  pr_svrty_best "not vulnerable (OK)"; outln " - TLS extension $tls_ext detected"
+                  fileout "$jsonID" "OK" "not vulnerable  - TLS extension $tls_ext detected" "$cve" "$cwe"
+                  return 0
+               fi
+          done
+     fi
+
+     # More would be possible if we look @ the following:
+     # See also https://github.com/cisco/joy/blob/master/fingerprinting/resources/fingerprint_db.json.gz
+     # https://resources.sei.cmu.edu/asset_files/Presentation/2019_017_001_539902.pdf
+     # https://raw.githubusercontent.com/cisco/joy/master/doc/using-joy-fingerprinting-00.pdf
+
+
+
+     # Now the solid determination more or less done. What's left now is to detect the service
+     # and perform an educated guess.
+
+     # Next we weed out is whether we run HTTP or RDP (on standard port).
+     # Using the experimental flag we can test it also on other ports / services
+     if [[ $SERVICE != HTTP ]] && [[ $PORT != 3389 ]] && ! "$EXPERIMENTAL"; then
+          pr_svrty_best "not vulnerable (OK)"; outln " - no HTTP or RDP"
+          fileout "$jsonID" "OK" "not vulnerable - no HTTP or RDP" "$cve" "$cwe"
+          return 0
+     fi
+
      if [[ $SERVICE != HTTP ]] && [[ $PORT == 3389 ]]; then
-          # We take a guess here for RDP as we don't have a banner
-          out "probably "
-          pr_svrty_critical "vulnerable (NOT ok)"
-          outln " - check patches locally to confirm"
-          fileout "${jsonID}" "CRITICAL" "probably vulnerable (NOT OK). Check patches locally to confirm"
+          # We take a security guess here (better safe than sorry) for RDP as we don't have a banner
+          out "probably "; pr_svrty_critical "vulnerable (NOT ok)"; outln "$check_patches"
+          fileout "${jsonID}" "CRITICAL" "probably vulnerable (NOT OK) $check_patches"
           return 0
      fi
 
@@ -17547,6 +17616,9 @@ run_winshock() {
           server_banner="$(grep -Eai '^Server:' $HEADERFILE)"
      elif [[ -s "$TEMPDIR/$NODEIP.service_detection.txt" ]]; then
           server_banner="$(grep -Eai '^Server:' "$TEMPDIR/$NODEIP.service_detection.txt")"
+     elif "$EXPERIMENTAL"; then
+          # If testing e.g. an SMTP server
+          :
      else
           # We can't use run_http_header here as it messes up the screen. We could automatically
           # run it when --winshock is requested though but this should suffice here.
@@ -17556,15 +17628,30 @@ run_winshock() {
      fi
      if [[ $server_banner =~ Microsoft-IIS\/8.5 ]]; then
           # Windows 2012 R2 is less likely than Windows 2012
-          out "probably "
-          pr_svrty_critical "vulnerable (NOT ok)"
-          outln " - check patches locally to confirm"
-          fileout "${jsonID}" "CRITICAL" "probably vulnerable (NOT OK). Check patches locally to confirm"
+          out "probably "; pr_svrty_critical "vulnerable (NOT ok)"; outln "$check_patches"
+          fileout "${jsonID}" "CRITICAL" "probably vulnerable (NOT OK) $check_patches"
      elif [[ $server_banner =~ Microsoft-IIS\/8.0 ]]; then
-          out "likely "
-          pr_svrty_critical "VULNERABLE (NOT ok)"
-          outln " - check patches locally to confirm"
-          fileout "${jsonID}" "CRITICAL" "likely vulnerable (NOT OK). Check patches locally to confirm"
+          out "likely "; pr_svrty_critical "VULNERABLE (NOT ok)"; outln "$check_patches"
+          fileout "${jsonID}" "CRITICAL" "likely vulnerable (NOT OK) $check_patches"
+     elif [[ $server_banner =~ Microsoft-HTTPAPI\/2.0 ]]; then
+          # This is http.sys. It may or may not indicate a 2012 server. IIS is not yet configured though.
+          # So we have a peek on port 80
+          http_get $NODE "$TEMPDIR/$NODE.$NODEIP.http-header.txt"
+          server_banner="$(grep -Eai '^Server:' $TEMPDIR/$NODE.$NODEIP.http-header.txt)"
+          if [[ $server_banner =~ Microsoft-IIS\/8.5 ]]; then
+               out "probably "; pr_svrty_critical "vulnerable (NOT ok)"; outln "$check_patches"
+               fileout "${jsonID}" "CRITICAL" "probably vulnerable (NOT OK) $check_patches"
+          elif [[ $server_banner =~ Microsoft-IIS\/8.0 ]]; then
+               out "likely "; pr_svrty_critical "VULNERABLE (NOT ok)"; outln "$check_patches"
+               fileout "${jsonID}" "CRITICAL" "likely vulnerable (NOT OK) $check_patches"
+          else
+               out "likely "; prln_svrty_best "not vulnerable (OK)"
+               fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
+               outln
+          fi
+     elif "$EXPERIMENTAL"; then
+          out "seems "; pr_svrty_critical "vulnerable (NOT ok)"; outln "$check_patches"
+          fileout "${jsonID}" "CRITICAL" "seems vulnerable (NOT OK) $check_patches"
      else
           pr_svrty_best "not vulnerable (OK)"
           outln " - doesn't seem to be IIS 8.x"
