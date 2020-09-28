@@ -8317,6 +8317,13 @@ certificate_transparency() {
      return 0
 }
 
+determine_certs_fingerprints_serial() {
+     local cert="$1"
+     local ossl_command="$2"
+
+}
+
+
 certificate_info() {
      local proto
      local -i certificate_number=$1
@@ -8341,7 +8348,7 @@ certificate_info() {
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial cert
-     local -a intermediate_certs=()
+     local -a intermediate_certs_txt=()
      local policy_oid
      local spaces=""
      local -i trust_sni=0 trust_nosni=0 diffseconds=0
@@ -8364,7 +8371,7 @@ certificate_info() {
      local yearstart yearend clockstart clockend y m d
      local gt_398=false gt_398warn=false
      local gt_825=false gt_825warn=false
-     local badocsp=1 
+     local badocsp=1
 
      if [[ $number_of_certificates -gt 1 ]]; then
           [[ $certificate_number -eq 1 ]] && outln
@@ -8700,14 +8707,19 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " Serial / Fingerprints        "
-     cert_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE | sed 's/serial=//')"
+     cert_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE)"
+     cert_serial="${cert_serial//serial=}"
      fileout "cert_serialNumber${json_postfix}" "INFO" "$cert_serial"
 
-     cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g')"
-     fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1//SHA1 /}"
+     cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE)"
+     cert_fingerprint_sha1="${cert_fingerprint_sha1//Fingerprint=}"
+     cert_fingerprint_sha1="${cert_fingerprint_sha1//:/}"
      outln "$cert_serial / $cert_fingerprint_sha1"
+     fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1//SHA1 /}"
 
-     cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE | sed 's/Fingerprint=//' | sed 's/://g' )"
+     cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE)"
+     cert_fingerprint_sha2="${cert_fingerprint_sha2//Fingerprint=}"
+     cert_fingerprint_sha2="${cert_fingerprint_sha2//:/}"
      fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2//SHA256 /}"
      outln "$spaces$cert_fingerprint_sha2"
 
@@ -8988,20 +9000,13 @@ certificate_info() {
 #         https://certs.opera.com/03/ev-oids.xml
 #         see #967
 
-     # courtesy Hanno Boeck (see https://github.com/hannob/badocspcert)
-     out "$indent"; pr_bold " Bad OCSP intermediate"
-     out " (exp.) "
-     jsonID="cert_bad_ocsp"
 
 # There might be >1 certificate, so we split intermediatecerts.pem e.g. into
 # intermediatecert1.crt, intermediatecert2.cert.
-#FIXME: This is redundant code. We do that elsewhere, e.g. before in extract_certificates()
-# and run_hpkp() at least but didn't keep the result
-#
-#FIXME: We just raise the flag saying the chain is bad w/o naming the intermediate
-# cert to blame.
+#FIXME: This is somewhat redundant code. We do similar stuff elsewhere, e.g. in extract_certificates()
+# and run_hpkp() but don't keep the result
 
-     # Store all of the intermediate certificates in an array so that they can
+     # Store all of the text output of the intermediate certificates in an array so that they can
      # be used later (e.g., to check their expiration dates).
      while true; do
           [[ "$intermediates" =~ \-\-\-\-\-\BEGIN\ CERTIFICATE\-\-\-\-\- ]] || break
@@ -9009,14 +9014,24 @@ certificate_info() {
           cert="${intermediates%%-----END CERTIFICATE-----*}"
           intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
           cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
-          intermediate_certs[certificates_provided]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
+          # we count as humans in the file output here. This needs later to be adjusted in the code
+          fileout "intermediate_cert $((certificates_provided + 1 ))" "INFO" "$cert"
+          intermediate_certs_txt[certificates_provided]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
           certificates_provided+=1
      done
+
+     # courtesy Hanno Boeck (see https://github.com/hannob/badocspcert)
+     out "$indent"; pr_bold " Bad OCSP intermediate"
+     out " (exp.) "
+     jsonID="cert_bad_ocsp"
+
      certificates_provided+=1
      for (( i=0; i < certificates_provided-1; i++ )); do
-          cert_ext_keyusage="$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' <<< "${intermediate_certs[i]}")"
+          cert_ext_keyusage="$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' <<< "${intermediate_certs_txt[i]}")"
           [[ "$cert_ext_keyusage" =~ OCSP\ Signing ]] && badocsp=0 && break
      done
+
+     #FIXME: We only raise the flag saying the chain is bad w/o naming the intermediate cert to blame.
      if [[ $badocsp -eq 0 ]]; then
           prln_svrty_medium "NOT ok"
           fileout "${jsonID}${json_postfix}" "MEDIUM" "NOT ok is/are intermediate certificate(s)"
