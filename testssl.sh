@@ -8317,10 +8317,20 @@ certificate_transparency() {
      return 0
 }
 
-determine_certs_fingerprints_serial() {
+# replacement for inline $OPENSSL x509 -noout -in $HOSTCERT -serial
+#                   and  $OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256/-sha1
+#
+determine_cert_fingerprint_serial() {
      local cert="$1"
      local ossl_command="$2"
+     local result=""
 
+     result="$($OPENSSL x509 -noout -in $1 $2 2>>$ERRFILE)"
+     # remove strings in text output, colon only appear in fingerprints
+     result="${result//Fingerprint=}"
+     result="${result//serial=}"
+     result="${result//:/}"
+     safe_echo "$result"
 }
 
 
@@ -8707,23 +8717,18 @@ certificate_info() {
      fi
 
      out "$indent"; pr_bold " Serial / Fingerprints        "
-     cert_serial="$($OPENSSL x509 -noout -in $HOSTCERT -serial 2>>$ERRFILE)"
-     cert_serial="${cert_serial//serial=}"
+     cert_serial="$(determine_cert_fingerprint_serial "$HOSTCERT" "-serial")"
      fileout "cert_serialNumber${json_postfix}" "INFO" "$cert_serial"
 
-     cert_fingerprint_sha1="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha1 2>>$ERRFILE)"
-     cert_fingerprint_sha1="${cert_fingerprint_sha1//Fingerprint=}"
-     cert_fingerprint_sha1="${cert_fingerprint_sha1//:/}"
+     cert_fingerprint_sha1="$(determine_cert_fingerprint_serial "$HOSTCERT" "-fingerprint -sha1")"
      outln "$cert_serial / $cert_fingerprint_sha1"
      fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1//SHA1 /}"
 
-     cert_fingerprint_sha2="$($OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256 2>>$ERRFILE)"
-     cert_fingerprint_sha2="${cert_fingerprint_sha2//Fingerprint=}"
-     cert_fingerprint_sha2="${cert_fingerprint_sha2//:/}"
+     cert_fingerprint_sha2="$(determine_cert_fingerprint_serial "$HOSTCERT" "-fingerprint -sha256")"
      fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2//SHA256 /}"
      outln "$spaces$cert_fingerprint_sha2"
 
-     # " " needs to be converted back to lf in JSON/CSV output
+     # " " needs to be converted back to lf in JSON/CSV output. watch out leading/ending line containting "CERTIFICATE"
      fileout "cert${json_postfix}" "INFO" "$(< $HOSTCERT)"
 
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
