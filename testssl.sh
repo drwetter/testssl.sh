@@ -3567,7 +3567,7 @@ run_cipher_match(){
                     hexc="${TLS_CIPHER_HEXCODE[i]}"
                     if [[ ${#hexc} -eq 9 ]]; then
                          hexcode[nr_ciphers]="${hexc:2:2},${hexc:7:2}"
-                         if [[ "${hexc:2:2}" == "00" ]]; then
+                         if [[ "${hexc:2:2}" == 00 ]]; then
                               normalized_hexcode[nr_ciphers]="x${hexc:7:2}"
                          else
                               normalized_hexcode[nr_ciphers]="x${hexc:2:2}${hexc:7:2}"
@@ -8321,17 +8321,72 @@ certificate_transparency() {
 #                   and  $OPENSSL x509 -noout -in $HOSTCERT -fingerprint -sha256/-sha1
 #
 determine_cert_fingerprint_serial() {
-     local cert="$1"
+     local cert_file="$1"
      local ossl_command="$2"
      local result=""
 
-     result="$($OPENSSL x509 -noout -in $1 $2 2>>$ERRFILE)"
+     if [[ -r "$cert_file" ]]; then
+          result="$($OPENSSL x509 -noout -in $cert_file $ossl_command 2>>$ERRFILE)"
+     else
+          # not really a file but the variable which holds the certificate
+          result="$($OPENSSL x509 -noout $ossl_command 2>>$ERRFILE <<< "$cert_file")"
+     fi
      # remove strings in text output, colon only appear in fingerprints
      result="${result//Fingerprint=}"
      result="${result//serial=}"
      result="${result//:/}"
      safe_echo "$result"
 }
+
+# Returns startdate, enddate, diffseconds, days2expire as CSVs as strings
+# arg1: human readable text string for certificate (openssl x509 -text -noout)
+#
+determine_dates_certificate () {
+     local cert_txt="$1"
+     local startdate enddate yearnow y m d yearstart clockstart yearend clockend
+     local diffseconds=0 days2expire=0
+
+     startdate="${cert_txt#*Validity*Not Before: }"
+     # FreeBSD + OSX can't swallow the leading blank:
+     startdate="${startdate%%GMT*}GMT"
+     enddate="${cert_txt#*Validity*Not Before: *Not After : }"
+     enddate="${enddate%%GMT*}GMT"
+     debugme echo "$enddate - $startdate"
+     # Now we have a normalized enddate and startdate like "Feb 27 10:03:20 2017 GMT" -- also for OpenBSD
+     if "$HAS_OPENBSDDATE"; then
+          # Best we want to do under old versions of OpenBSD, first just remove the GMT and keep start/endate for later output
+          startdate="$(parse_date "$startdate" "+%s")"
+          enddate="$(parse_date "$enddate" "+%s")"
+          # Now we extract a date block and a time block which we need for later output
+          startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          read yearstart clockstart <<< "$startdate"
+          read yearend clockend <<< "$enddate"
+          debugme echo "$yearstart, $clockstart"
+          debugme echo "$yearend, $clockend"
+          y=$(( ${yearend:0:4} - ${yearstart:0:4} ))
+          m=$(( ${yearend:5:1} - ${yearstart:5:1} + ${yearend:6:1} - ${yearstart:6:1} ))
+          d=$(( ${yearend:8:2} - ${yearstart:8:2} ))
+          # We take the year, month, days here as old OpenBSD's date is too difficult for real conversion
+          # see comment in parse_date(). In diffseconds then we have the estimated absolute validity period
+          diffseconds=$(( d + ((m*30)) + ((y*365)) ))
+          diffseconds=$((diffseconds * 3600 * 24))
+          # Now we estimate the days left plus length of month/year:
+          yearnow="$(date -juz GMT "+%Y-%m-%d %H:%M")"
+          y=$(( ${yearend:0:4} - ${yearnow:0:4} ))
+          m=$(( ${yearend:5:1} - ${yearnow:5:1} + ${yearend:6:1} - ${yearnow:6:1} ))
+          d=$(( ${yearend:8:2} - ${yearnow:8:2} ))
+          days2expire=$(( d + ((m*30)) + ((y*365)) ))
+     else
+          startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
+          days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
+          days2expire=$((days2expire  / 3600 / 24 ))
+          diffseconds=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(parse_date "$startdate" "+%s" $'%F %H:%M') ))
+     fi
+     safe_echo "$startdate, $enddate, $diffseconds, $days2expire, $yearstart"
+}
+
 
 
 certificate_info() {
@@ -8378,7 +8433,7 @@ certificate_info() {
      local provides_stapling=false
      local caa_node="" all_caa="" caa_property_name="" caa_property_value=""
      local response=""
-     local yearstart yearend clockstart clockend y m d
+     local yearstart
      local gt_398=false gt_398warn=false
      local gt_825=false gt_825warn=false
      local badocsp=1
@@ -8735,7 +8790,7 @@ certificate_info() {
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" ||
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2 $CERT_FINGERPRINT_SHA2"
      [[ -z $RSA_CERT_FINGERPRINT_SHA2 ]] && \
-          ( [[ $cert_key_algo = *RSA* ]] || [[ $cert_key_algo = *rsa* ]] ) &&
+          ( [[ $cert_key_algo =~ RSA ]] || [[ $cert_key_algo =~ rsa ]] ) &&
           RSA_CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2"
 
      out "$indent"; pr_bold " Common Name (CN)             "
@@ -8812,7 +8867,7 @@ certificate_info() {
      out "$indent"; pr_bold " Issuer                       "
      jsonID="cert_caIssuers"
      #FIXME: oid would be better maybe (see above)
-     issuer="$($OPENSSL x509 -in  $HOSTCERT -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
+     issuer="$($OPENSSL x509 -in $HOSTCERT -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
      issuer_O="$(awk -F'=' '/O=/ { print $2 }' <<< "$issuer")"
      issuer_C="$(awk -F'=' '/ C=/ { print $2 }' <<< "$issuer")"
@@ -9019,9 +9074,19 @@ certificate_info() {
           cert="${intermediates%%-----END CERTIFICATE-----*}"
           intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
           cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
+
           # we count as humans in the file output here. This needs later to be adjusted in the code
-          fileout "intermediate_cert $((certificates_provided + 1 ))" "INFO" "$cert"
+          fileout "intermediate_cert${json_postfix} $((certificates_provided + 1 ))" "INFO" "$cert"
+
+          fileout "intermediate_cert_fingerprintSHA256${json_postfix} $((certificates_provided + 1 ))" "INFO" "$(determine_cert_fingerprint_serial "$cert" "-fingerprint -sha256")"
+
           intermediate_certs_txt[certificates_provided]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
+
+          # We don't need every value here. For the sake of consistency we add the rest
+          IFS=',' read -r startdate enddate diffseconds days2expire yearstart < <(determine_dates_certificate "${intermediate_certs_txt[certificates_provided]}")
+          fileout "intermediate_cert_notBefore${json_postfix} $((certificates_provided + 1))" "INFO" "$startdate"
+          expok="OK"     #FIXME!
+          fileout "intermediate_cert_notAfter${json_postfix} $((certificates_provided + 1))" "$expok" "$enddate"
           certificates_provided+=1
      done
 
@@ -9054,44 +9119,8 @@ certificate_info() {
      # For now we leave this here. We may want to change that later or add infos to other sections (FS & vulnerability)
 
      out "$indent"; pr_bold " Certificate Validity (UTC)   "
-     # FreeBSD + OSX can't swallow the leading blank:
-     startdate="${cert_txt#*Validity*Not Before: }"
-     startdate="${startdate%%GMT*}GMT"
-     enddate="${cert_txt#*Validity*Not Before: *Not After : }"
-     enddate="${enddate%%GMT*}GMT"
-     debugme echo "$enddate - $startdate"
-     # Now we have a normalized enddate and startdate like "Feb 27 10:03:20 2017 GMT" -- also for OpenBSD
-     if "$HAS_OPENBSDDATE"; then
-          # Best we want to do under old versions of OpenBSD, first just remove the GMT and keep start/endate for later output
-          startdate="$(parse_date "$startdate" "+%s")"
-          enddate="$(parse_date "$enddate" "+%s")"
-          # Now we extract a date block and a time block which we need for later output
-          startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
-          enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
-          read yearstart clockstart <<< "$startdate"
-          read yearend clockend <<< "$enddate"
-          debugme echo "$yearstart, $clockstart"
-          debugme echo "$yearend, $clockend"
-          y=$(( ${yearend:0:4} - ${yearstart:0:4} ))
-          m=$(( ${yearend:5:1} - ${yearstart:5:1} + ${yearend:6:1} - ${yearstart:6:1} ))
-          d=$(( ${yearend:8:2} - ${yearstart:8:2} ))
-          # We take the year, month, days here as old OpenBSD's date is too difficult for real conversion
-          # see comment in parse_date(). In diffseconds then we have the estimated absolute validity period
-          diffseconds=$(( d + ((m*30)) + ((y*365)) ))
-          diffseconds=$((diffseconds * 3600 * 24))
-          # Now we estimate the days left plus length of month/year:
-          yearnow="$(date -juz GMT "+%Y-%m-%d %H:%M")"
-          y=$(( ${yearend:0:4} - ${yearnow:0:4} ))
-          m=$(( ${yearend:5:1} - ${yearnow:5:1} + ${yearend:6:1} - ${yearnow:6:1} ))
-          d=$(( ${yearend:8:2} - ${yearnow:8:2} ))
-          days2expire=$(( d + ((m*30)) + ((y*365)) ))
-     else
-          startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
-          enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
-          days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
-          days2expire=$((days2expire  / 3600 / 24 ))
-          diffseconds=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(parse_date "$startdate" "+%s" $'%F %H:%M') ))
-     fi
+     IFS=',' read -r startdate enddate diffseconds days2expire yearstart < <(determine_dates_certificate "$cert_txt")
+
      # We adjust the thresholds by %50 for LE certificates, relaxing warnings for those certificates.
      # . instead of \' because it does not break syntax highlighting in vim
      if [[ "$issuer_CN" =~ ^Let.s\ Encrypt\ Authority ]] ; then
