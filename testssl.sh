@@ -6468,9 +6468,8 @@ run_server_preference() {
      local cipher1="" cipher2="" tls13_cipher1="" tls13_cipher2="" default_proto=""
      local default_cipher=""
      local limitedsense="" supported_sslv2_ciphers
-     local -a offered_cipher offered_proto
      local proto_ossl proto_txt proto_hex cipherlist i
-     local -i ret=0 j sclient_success str_len
+     local -i ret=0 j sclient_success
      local list_fwd="DHE-RSA-SEED-SHA:SEED-SHA:DES-CBC3-SHA:RC4-MD5:DES-CBC-SHA:RC4-SHA:AES128-SHA:AES128-SHA256:AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:ECDH-RSA-DES-CBC3-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-AES256-SHA:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:DHE-DSS-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-GCM-SHA256:AES256-SHA256:ECDHE-RSA-DES-CBC3-SHA:ECDHE-RSA-AES128-SHA256:AES256-GCM-SHA384:AES128-GCM-SHA256:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-SHA256:ADH-AES256-GCM-SHA384:AECDH-AES128-SHA:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-AES128-SHA"
      local list_reverse="ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-RC4-SHA:AECDH-AES128-SHA:ADH-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-GCM-SHA256:AES128-GCM-SHA256:AES256-GCM-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-DES-CBC3-SHA:AES256-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-DSS-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDH-RSA-AES256-SHA:ECDH-RSA-AES128-SHA:ECDH-RSA-DES-CBC3-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES256-SHA:AES128-SHA256:AES128-SHA:RC4-SHA:DES-CBC-SHA:RC4-MD5:DES-CBC3-SHA:SEED-SHA:DHE-RSA-SEED-SHA"
      tls_list_fwd="c0,2c, c0,30, 00,9f, cc,a9, cc,a8, cc,aa, c0,2b, c0,2f, 00,9e, c0,24, c0,28, 00,6b, c0,23, c0,27, 00,67, c0,0a, 00,04, 00,05, 00,09, 00,0a, 00,9a, 00,96,
@@ -8335,13 +8334,15 @@ determine_cert_fingerprint_serial() {
      result="${result//Fingerprint=}"
      result="${result//serial=}"
      result="${result//:/}"
+     result="${result//SHA1 /}"
+     result="${result//SHA256 /}"
      safe_echo "$result"
 }
 
 # Returns startdate, enddate, diffseconds, days2expire as CSVs as strings
 # arg1: human readable text string for certificate (openssl x509 -text -noout)
 #
-determine_dates_certificate () {
+determine_dates_certificate() {
      local cert_txt="$1"
      local startdate enddate yearnow y m d yearstart clockstart yearend clockend
      local diffseconds=0 days2expire=0
@@ -8360,8 +8361,8 @@ determine_dates_certificate () {
           # Now we extract a date block and a time block which we need for later output
           startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
           enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
-          read yearstart clockstart <<< "$startdate"
-          read yearend clockend <<< "$enddate"
+          read -r yearstart clockstart <<< "$startdate"
+          read -r yearend clockend <<< "$enddate"
           debugme echo "$yearstart, $clockstart"
           debugme echo "$yearend, $clockend"
           y=$(( ${yearend:0:4} - ${yearstart:0:4} ))
@@ -8384,7 +8385,7 @@ determine_dates_certificate () {
           days2expire=$((days2expire  / 3600 / 24 ))
           diffseconds=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(parse_date "$startdate" "+%s" $'%F %H:%M') ))
      fi
-     safe_echo "$startdate, $enddate, $diffseconds, $days2expire, $yearstart"
+     safe_echo "$startdate,$enddate,$diffseconds,$days2expire,$yearstart"
 }
 
 
@@ -8436,6 +8437,7 @@ certificate_info() {
      local yearstart
      local gt_398=false gt_398warn=false
      local gt_825=false gt_825warn=false
+     local first=true
      local badocsp=1
 
      if [[ $number_of_certificates -gt 1 ]]; then
@@ -8445,7 +8447,7 @@ certificate_info() {
           pr_headline "Server Certificate #$certificate_number"
           [[ -z "$sni_used" ]] && pr_underline " (in response to request w/o SNI)"
           outln
-          json_postfix=" <cert#${certificate_number}>"
+          json_postfix=" <hostCert#${certificate_number}>"
           spaces="                                "
      else
           spaces="                              "
@@ -8600,7 +8602,7 @@ certificate_info() {
                *GOST*|*gost*)           short_keyAlgo="GOST";;
                *dh*|*DH*)               short_keyAlgo="DH" ;;
                *)                       pr_fixme "don't know $cert_key_algo "
-                                        let ret++ ;;
+                                        ((ret++)) ;;
           esac
           out "$short_keyAlgo "
           # https://tools.ietf.org/html/rfc4492,  https://www.keylength.com/en/compare/
@@ -8776,12 +8778,12 @@ certificate_info() {
      fileout "cert_serialNumber${json_postfix}" "INFO" "$cert_serial"
 
      cert_fingerprint_sha1="$(determine_cert_fingerprint_serial "$HOSTCERT" "-fingerprint -sha1")"
-     outln "$cert_serial / $cert_fingerprint_sha1"
-     fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1//SHA1 /}"
+     outln "$cert_serial / SHA1 $cert_fingerprint_sha1"
+     fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1}"
 
      cert_fingerprint_sha2="$(determine_cert_fingerprint_serial "$HOSTCERT" "-fingerprint -sha256")"
-     fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2//SHA256 /}"
-     outln "$spaces$cert_fingerprint_sha2"
+     fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2}"
+     outln "${spaces}SHA256 ${cert_fingerprint_sha2}"
 
      # " " needs to be converted back to lf in JSON/CSV output. watch out leading/ending line containting "CERTIFICATE"
      fileout "cert${json_postfix}" "INFO" "$(< $HOSTCERT)"
@@ -9060,56 +9062,6 @@ certificate_info() {
 #         https://certs.opera.com/03/ev-oids.xml
 #         see #967
 
-
-# There might be >1 certificate, so we split intermediatecerts.pem e.g. into
-# intermediatecert1.crt, intermediatecert2.cert.
-#FIXME: This is somewhat redundant code. We do similar stuff elsewhere, e.g. in extract_certificates()
-# and run_hpkp() but don't keep the result
-
-     # Store all of the text output of the intermediate certificates in an array so that they can
-     # be used later (e.g., to check their expiration dates).
-     while true; do
-          [[ "$intermediates" =~ \-\-\-\-\-\BEGIN\ CERTIFICATE\-\-\-\-\- ]] || break
-          intermediates="${intermediates#*-----BEGIN CERTIFICATE-----}"
-          cert="${intermediates%%-----END CERTIFICATE-----*}"
-          intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
-          cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
-
-          # we count as humans in the file output here. This needs later to be adjusted in the code
-          fileout "intermediate_cert${json_postfix} $((certificates_provided + 1 ))" "INFO" "$cert"
-
-          fileout "intermediate_cert_fingerprintSHA256${json_postfix} $((certificates_provided + 1 ))" "INFO" "$(determine_cert_fingerprint_serial "$cert" "-fingerprint -sha256")"
-
-          intermediate_certs_txt[certificates_provided]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
-
-          # We don't need every value here. For the sake of consistency we add the rest
-          IFS=',' read -r startdate enddate diffseconds days2expire yearstart < <(determine_dates_certificate "${intermediate_certs_txt[certificates_provided]}")
-          fileout "intermediate_cert_notBefore${json_postfix} $((certificates_provided + 1))" "INFO" "$startdate"
-          expok="OK"     #FIXME!
-          fileout "intermediate_cert_notAfter${json_postfix} $((certificates_provided + 1))" "$expok" "$enddate"
-          certificates_provided+=1
-     done
-
-     # courtesy Hanno Boeck (see https://github.com/hannob/badocspcert)
-     out "$indent"; pr_bold " Bad OCSP intermediate"
-     out " (exp.) "
-     jsonID="cert_bad_ocsp"
-
-     certificates_provided+=1
-     for (( i=0; i < certificates_provided-1; i++ )); do
-          cert_ext_keyusage="$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' <<< "${intermediate_certs_txt[i]}")"
-          [[ "$cert_ext_keyusage" =~ OCSP\ Signing ]] && badocsp=0 && break
-     done
-
-     #FIXME: We only raise the flag saying the chain is bad w/o naming the intermediate cert to blame.
-     if [[ $badocsp -eq 0 ]]; then
-          prln_svrty_medium "NOT ok"
-          fileout "${jsonID}${json_postfix}" "MEDIUM" "NOT ok is/are intermediate certificate(s)"
-     else
-          prln_svrty_good "Ok"
-          fileout "${jsonID}${json_postfix}" "OK" "intermediate certificate(s) is/are ok"
-     fi
-
      out "$indent"; pr_bold " ETS/\"eTLS\""
      out ", visibility info  "
      jsonID="cert_eTLS"
@@ -9217,7 +9169,10 @@ certificate_info() {
           fileout "cert_validityPeriod${json_postfix}" "INFO" "No finding"
      fi
 
-     out "$indent"; pr_bold " # of certificates provided"; out "   $certificates_provided"
+     out "$indent"; pr_bold " Certificates provided"
+     certificates_provided="$(grep -ac '\-\-\-\-\-BEGIN\ CERTIFICATE\-\-\-\-\-' <<< "$intermediates")"
+     ((certificates_provided++))                  # plus host certificate
+     out "        $certificates_provided"
      fileout "certs_countServer${json_postfix}" "INFO" "${certificates_provided}"
      if "$certificate_list_ordering_problem"; then
           prln_svrty_low " (certificate list ordering problem)"
@@ -9281,7 +9236,7 @@ certificate_info() {
      else
           if [[ $(count_lines "$ocsp_uri") -eq 1 ]]; then
                out "$ocsp_uri"
-               if [[ "$expfinding" != "expired" ]]; then
+               if [[ "$expfinding" != expired ]]; then
                     check_revocation_ocsp "$ocsp_uri" "" "cert_ocspRevoked${json_postfix}"
                fi
                ret=$((ret +$?))
@@ -9295,7 +9250,7 @@ certificate_info() {
                          out "$spaces"
                     fi
                     out "$line"
-                    if [[ "$expfinding" != "expired" ]]; then
+                    if [[ "$expfinding" != expired ]]; then
                          check_revocation_ocsp "$line" "" "cert_ocspRevoked${json_postfix}"
                          ret=$((ret +$?))
                     fi
@@ -9339,7 +9294,7 @@ certificate_info() {
                else
                     out "(response status unknown)"
                     fileout "${jsonID}${json_postfix}" "OK" " not sure what's going on here, '$ocsp_response'"
-                    debugme grep -a -A20 -B2 "OCSP response"  <<<"$ocsp_response"
+                    debugme grep -a -A20 -B2 "OCSP response" <<< "$ocsp_response"
                     ((ret++))
                fi
           fi
@@ -9391,6 +9346,79 @@ certificate_info() {
           outln "$ct"
           fileout "${jsonID}${json_postfix}" "INFO" "$ct"
      fi
+
+# Now we take care of the intermediate certificates. We basically (should) have them on disk
+# as "intermediatecerts.pem" (which could be split into intermediatecert1.crt, intermediatecert2.crt, ..)
+# However we do this in RAM which is better as it was passed to this function.
+# We should keep in mind though this is somewhat redundant code. We do similar stuff elsewhere,
+# e.g. in extract_certificates() and run_hpkp() but don't keep the certificates
+
+#FIXME: output
+#       intermediate CN / (what about issuer. moving it?)
+#       fix the numbering schem of certificates_provided below
+
+     # Store all of the text output of the intermediate certificates in an array so that they can
+     # be used later (e.g., to check their expiration dates).
+     certificates_provided=0
+     while true; do
+          [[ "$intermediates" =~ \-\-\-\-\-BEGIN\ CERTIFICATE\-\-\-\-\- ]] || break
+          intermediates="${intermediates#*-----BEGIN CERTIFICATE-----}"
+          cert="${intermediates%%-----END CERTIFICATE-----*}"
+          intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
+          cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
+
+          # we count as humans in the file output here. This needs later to be adjusted in the code
+          fileout "intermediate_cert <#$((certificates_provided + 1))>${json_postfix}" "INFO" "$cert"
+
+          fileout "intermediate_cert_fingerprintSHA256 <#$((certificates_provided + 1))>${json_postfix}" "INFO" "$(determine_cert_fingerprint_serial "$cert" "-fingerprint -sha256")"
+
+          intermediate_certs_txt[certificates_provided]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
+
+          # We don't need every value here. For the sake of being consistent here we add the rest
+          IFS=',' read -r startdate enddate diffseconds days2expire yearstart < <(determine_dates_certificate "${intermediate_certs_txt[certificates_provided]}")
+          fileout "intermediate_cert_notBefore <#$((certificates_provided + 1))>${json_postfix}"  "INFO" "$startdate"
+
+          if $first; then
+               out "$indent"; pr_bold " Intermediate cert validity   "
+               first=false
+          else
+               out "$indent$spaces"
+          fi
+          if ! $OPENSSL x509 -checkend $((24*3600*20)) 2>>$ERRFILE <<< "$cert" | grep -qw not; then
+               out "#$((certificates_provided+1)): less then "; pr_svrty_high "20 days"
+               outln " at $enddate"
+               expok="HIGH"
+          elif ! $OPENSSL x509 -checkend $((24*3600*40)) 2>>$ERRFILE <<< "$cert" | grep -qw not; then
+               out "#$((certificates_provided+1)): less then "; pr_svrty_medium "40 days"
+               outln " at $enddate"
+               expok="MEDIUM"
+          else
+               outln "#$((certificates_provided+1)): longer than 40 days ($enddate)"
+          fi
+          fileout "intermediate_cert_notAfter <#$((certificates_provided + 1))>${json_postfix}" "$expok" "$enddate"
+          certificates_provided+=1
+     done
+
+     # Courtesy Hanno Böck (see https://github.com/hannob/badocspcert)
+     out "$indent"; pr_bold " Intermediate Bad OCSP"
+     out " (exp.) "
+     jsonID="intermediate_cert_badOCSP"
+
+     certificates_provided+=1
+     for (( i=0; i < certificates_provided-1; i++ )); do
+          cert_ext_keyusage="$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' <<< "${intermediate_certs_txt[i]}")"
+          [[ "$cert_ext_keyusage" =~ OCSP\ Signing ]] && badocsp=0 && break
+     done
+
+     #FIXME: We only raise the flag saying the chain is bad w/o naming the intermediate cert to blame.
+     if [[ $badocsp -eq 0 ]]; then
+          prln_svrty_medium "NOT ok"
+          fileout "${jsonID}${json_postfix}" "MEDIUM" "NOT ok is/are intermediate certificate(s)"
+     else
+          prln_svrty_good "Ok"
+          fileout "${jsonID}${json_postfix}" "OK" "intermediate certificate(s) is/are ok"
+     fi
+
      outln
      return $ret
 }
