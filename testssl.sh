@@ -8043,7 +8043,7 @@ etsi_ets_visibility_info() {
      # external functions to obtain the DER encoded certficate.
      if [[ "$cert_txt" =~ X509v3\ Subject\ Alternative\ Name:.*othername:\<unsupported\> ]] || \
         [[ "$cert_txt" =~ X509v3\ Subject\ Alternative\ Name:.*othername:\ 0.4.0.3523.3.1 ]]; then
-          dercert="$($OPENSSL x509 -in "$cert" -outform DER 2>>$ERRFILE | hexdump -v -e '16/1 "%02X"')"
+          dercert="$($OPENSSL x509 -outform DER 2>>$ERRFILE <<< "$cert" | hexdump -v -e '16/1 "%02X"')"
           if [[ "$dercert" =~ 0603551D110101FF04[0-9A-F]*060604009B430301 ]] || \
              [[ "$dercert" =~ 0603551D1104[0-9A-F]*060604009B430301 ]]; then
                # Look for the beginning of the subjectAltName extension. It
@@ -8346,6 +8346,7 @@ determine_dates_certificate() {
      local cert_txt="$1"
      local startdate enddate yearnow y m d yearstart clockstart yearend clockend
      local diffseconds=0 days2expire=0
+     local -i secsaday=86400
 
      startdate="${cert_txt#*Validity*Not Before: }"
      # FreeBSD + OSX can't swallow the leading blank:
@@ -8371,7 +8372,7 @@ determine_dates_certificate() {
           # We take the year, month, days here as old OpenBSD's date is too difficult for real conversion
           # see comment in parse_date(). In diffseconds then we have the estimated absolute validity period
           diffseconds=$(( d + ((m*30)) + ((y*365)) ))
-          diffseconds=$((diffseconds * 3600 * 24))
+          diffseconds=$((diffseconds * secsaday))
           # Now we estimate the days left plus length of month/year:
           yearnow="$(date -juz GMT "+%Y-%m-%d %H:%M")"
           y=$(( ${yearend:0:4} - ${yearnow:0:4} ))
@@ -8382,7 +8383,7 @@ determine_dates_certificate() {
           startdate="$(parse_date "$startdate" +"%F %H:%M" "%b %d %T %Y %Z")"
           enddate="$(parse_date "$enddate" +"%F %H:%M" "%b %d %T %Y %Z")"
           days2expire=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(LC_ALL=C date "+%s") ))  # first in seconds
-          days2expire=$((days2expire  / 3600 / 24 ))
+          days2expire=$((days2expire / secsaday))
           diffseconds=$(( $(parse_date "$enddate" "+%s" $'%F %H:%M') - $(parse_date "$startdate" "+%s" $'%F %H:%M') ))
      fi
      safe_echo "$startdate,$enddate,$diffseconds,$days2expire,$yearstart"
@@ -8406,11 +8407,12 @@ certificate_info() {
      local ct="${12}"
      local certificate_list_ordering_problem="${13}"
      local cert_sig_algo cert_sig_hash_algo cert_key_algo cert_spki_info
+     local hostcert=""
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local -i lineno_matched=0
      local cert_keyusage cert_ext_keyusage short_keyAlgo
      local outok=true
-     local expire days2expire secs2warn ocsp_uri crl
+     local days2expire secs2warn ocsp_uri crl
      local startdate enddate issuer_CN issuer_C issuer_O issuer sans san all_san="" cn
      local issuer_DC issuerfinding cn_nosni=""
      local cert_fingerprint_sha1 cert_fingerprint_sha2 cert_serial cert
@@ -8421,7 +8423,7 @@ certificate_info() {
      local has_dns_sans has_dns_sans_nosni
      local trust_sni_finding
      local -i i certificates_provided=0
-     local cnfinding trustfinding trustfinding_nosni
+     local cn_finding trustfinding trustfinding_nosni
      local cnok="OK"
      local expfinding expok="OK"
      local -i ret=0
@@ -8437,6 +8439,7 @@ certificate_info() {
      local yearstart
      local gt_398=false gt_398warn=false
      local gt_825=false gt_825warn=false
+     local -i secsaday=86400
      local first=true
      local badocsp=1
 
@@ -8773,20 +8776,22 @@ certificate_info() {
           fileout "${jsonID}${json_postfix}" "INFO" "$cert_ext_keyusage"
      fi
 
+     hostcert="$(<$HOSTCERT)"
+
      out "$indent"; pr_bold " Serial / Fingerprints        "
-     cert_serial="$(determine_cert_fingerprint_serial "$HOSTCERT" "-serial")"
+     cert_serial="$(determine_cert_fingerprint_serial "$hostcert" "-serial")"
      fileout "cert_serialNumber${json_postfix}" "INFO" "$cert_serial"
 
-     cert_fingerprint_sha1="$(determine_cert_fingerprint_serial "$HOSTCERT" "-fingerprint -sha1")"
+     cert_fingerprint_sha1="$(determine_cert_fingerprint_serial "$hostcert" "-fingerprint -sha1")"
      outln "$cert_serial / SHA1 $cert_fingerprint_sha1"
      fileout "cert_fingerprintSHA1${json_postfix}" "INFO" "${cert_fingerprint_sha1}"
 
-     cert_fingerprint_sha2="$(determine_cert_fingerprint_serial "$HOSTCERT" "-fingerprint -sha256")"
+     cert_fingerprint_sha2="$(determine_cert_fingerprint_serial "$hostcert" "-fingerprint -sha256")"
      fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2}"
      outln "${spaces}SHA256 ${cert_fingerprint_sha2}"
 
      # " " needs to be converted back to lf in JSON/CSV output. watch out leading/ending line containting "CERTIFICATE"
-     fileout "cert${json_postfix}" "INFO" "$(< $HOSTCERT)"
+     fileout "cert${json_postfix}" "INFO" "$hostcert"
 
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
           CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2" ||
@@ -8796,19 +8801,19 @@ certificate_info() {
           RSA_CERT_FINGERPRINT_SHA2="$cert_fingerprint_sha2"
 
      out "$indent"; pr_bold " Common Name (CN)             "
-     cnfinding="Common Name (CN) : "
+     cn_finding="Common Name (CN) : "
      cn="$(get_cn_from_cert $HOSTCERT)"
      if [[ -n "$cn" ]]; then
           pr_italic "$cn"
-          cnfinding="$cn"
+          cn_finding="$cn"
      else
           cn="no CN field in subject"
           out "($cn)"
-          cnfinding="$cn"
+          cn_finding="$cn"
           cnok="INFO"
      fi
-     fileout "cert_commonName${json_postfix}" "$cnok" "$cnfinding"
-     cnfinding=""
+     fileout "cert_commonName${json_postfix}" "$cnok" "$cn_finding"
+     cn_finding=""
 
      if [[ -n "$sni_used" ]]; then
           if grep -q "\-\-\-\-\-BEGIN" "$HOSTCERT.nosni"; then
@@ -8822,24 +8827,24 @@ certificate_info() {
 
      if [[ -z "$sni_used" ]] || [[ "$(toupper "$cn_nosni")" == "$(toupper "$cn")" ]]; then
           outln
-          cnfinding="$cn"
+          cn_finding="$cn"
      elif [[ -z "$cn_nosni" ]]; then
           out " (request w/o SNI didn't succeed";
-          cnfinding+="request w/o SNI didn't succeed"
+          cn_finding+="request w/o SNI didn't succeed"
           if [[ $cert_sig_algo =~ ecdsa ]]; then
                out ", usual for EC certificates"
-               cnfinding+=", usual for EC certificates"
+               cn_finding+=", usual for EC certificates"
           fi
           outln ")"
-          cnfinding+=""
+          cn_finding+=""
      elif [[ "$cn_nosni" == *"no CN field"* ]]; then
           outln ", (request w/o SNI: $cn_nosni)"
-          cnfinding="$cn_nosni"
+          cn_finding="$cn_nosni"
      else
           out " (CN in response to request w/o SNI: "; pr_italic "$cn_nosni"; outln ")"
-          cnfinding="$cn_nosni"
+          cn_finding="$cn_nosni"
      fi
-     fileout "cert_commonName_wo_SNI${json_postfix}" "INFO" "$cnfinding"
+     fileout "cert_commonName_wo_SNI${json_postfix}" "INFO" "$cn_finding"
 
      sans=$(grep -A2 "Subject Alternative Name" <<< "$cert_txt" | \
           grep -E "DNS:|IP Address:|email:|URI:|DirName:|Registered ID:" | tr ',' '\n' | \
@@ -8868,14 +8873,14 @@ certificate_info() {
 
      out "$indent"; pr_bold " Issuer                       "
      jsonID="cert_caIssuers"
-     #FIXME: oid would be better maybe (see above)
-     issuer="$($OPENSSL x509 -in $HOSTCERT -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE)"
+     #FIXME: oid would be better maybe (see above). And the line by line input could be done w/o awk
+     issuer="$($OPENSSL x509 -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE <<< "$hostcert")"
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
      issuer_O="$(awk -F'=' '/O=/ { print $2 }' <<< "$issuer")"
      issuer_C="$(awk -F'=' '/ C=/ { print $2 }' <<< "$issuer")"
      issuer_DC="$(awk -F'=' '/DC=/ { print $2 }' <<< "$issuer")"
 
-     if [[ "$issuer_O" == "issuer=" ]] || [[ "$issuer_O" == "issuer= " ]] || [[ "$issuer_CN" == "$cn" ]]; then
+     if [[ "$issuer_O" == issuer= ]] || [[ "$issuer_O" == issuer=\  ]] || [[ "$issuer_CN" == "$cn" ]]; then
           prln_svrty_critical "self-signed (NOT ok)"
           fileout "${jsonID}${json_postfix}" "CRITICAL" "selfsigned"
           set_grade_cap "T" "Self-signed certificate"
@@ -9065,7 +9070,7 @@ certificate_info() {
      out "$indent"; pr_bold " ETS/\"eTLS\""
      out ", visibility info  "
      jsonID="cert_eTLS"
-     etsi_ets_visibility_info "${jsonID}${json_postfix}" "$spaces" "$HOSTCERT" "$cert_txt"
+     etsi_ets_visibility_info "${jsonID}${json_postfix}" "$spaces" "$hostcert" "$cert_txt"
      # *Currently* this is even listed as a vulnerability (CWE-310, CVE-2019-919), see
      # https://nvd.nist.gov/vuln/detail/CVE-2019-9191, https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-9191
      # For now we leave this here. We may want to change that later or add infos to other sections (FS & vulnerability)
@@ -9081,19 +9086,16 @@ certificate_info() {
      fi
 
      debugme echo -n "diffseconds: $diffseconds"
-     expire=$($OPENSSL x509 -in $HOSTCERT -checkend 1 2>>$ERRFILE)
-     if ! grep -qw not <<< "$expire" ; then
+     if ! [[ "$($OPENSSL x509 -checkend 1 2>>$ERRFILE <<< "$hostcert")" =~ \ not\  ]]; then
           pr_svrty_critical "expired"
           expfinding="expired"
           expok="CRITICAL"
           set_grade_cap "T" "Certificate expired"
      else
-          secs2warn=$((24 * 60 * 60 * days2warn2))          # low threshold first
-          expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
-          if grep -qw not <<< "$expire"; then
-               secs2warn=$((24 * 60 * 60 * days2warn1))     # high threshold
-               expire=$($OPENSSL x509 -in $HOSTCERT -checkend $secs2warn 2>>$ERRFILE)
-               if grep -qw not <<< "$expire"; then
+          # low threshold first
+          if ! [[ "$($OPENSSL x509 -checkend $((secsaday*days2warn2)) 2>>$ERRFILE <<< "$cert")" =~ \ not\  ]]; then
+               # high threshold
+               if ! [[ "$($OPENSSL x509 -checkend $((secsaday*days2warn1)) 2>>$ERRFILE <<< "$cert")" =~ \ not\  ]]; then
                     pr_svrty_good "$days2expire >= $days2warn1 days"
                     expfinding+="$days2expire >= $days2warn1 days"
                else
@@ -9114,15 +9116,15 @@ certificate_info() {
 
      # Internal certificates or those from appliances often have too high validity periods.
      # We check for ~10 years and >~ 5 years
-     if [[ $diffseconds -ge $((3600 * 24 * 365 * 10)) ]]; then
+     if [[ $diffseconds -ge $((secsaday*365*10)) ]]; then
           out "$spaces"
           prln_svrty_high ">= 10 years is way too long"
-          fileout "cert_validityPeriod${json_postfix}" "HIGH" "$((diffseconds / (3600 * 24) )) days"
-     elif [[ $diffseconds -ge $((3600 * 24 * 365 * 5)) ]]; then
+          fileout "cert_validityPeriod${json_postfix}" "HIGH" "$((diffseconds / secsaday)) days"
+     elif [[ $diffseconds -ge $((secsaday*365*5)) ]]; then
           out "$spaces"
           prln_svrty_medium ">= 5 years is too long"
-          fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) days"
-     elif [[ $diffseconds -ge $((3600 * 24 * 398 + 1)) ]]; then
+          fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / secsaday)) days"
+     elif [[ $diffseconds -ge $((secsaday*398 + 1)) ]]; then
      # Also "official" certificates issued from september 1st 2020 (1598918400) aren't supposed
      # to be valid longer than 398 days which is 34387200 in epoch seconds
           gt_398=true
@@ -9137,12 +9139,12 @@ certificate_info() {
           out "$spaces"
           if "$gt_398warn" && "$gt_398"; then
                prln_svrty_medium "> 398 days issued after 2020/09/01 is too long"
-               fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) > 398 days"
+               fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / secsaday)) > 398 days"
           elif "$gt_398"; then
                outln ">= 398 days certificate life time but issued before 2020/09/01"
-               fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) =< 398 days"
+               fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / secsaday)) =< 398 days"
           fi
-     elif [[ $diffseconds -ge $((3600 * 24 * 825 + 1)) ]]; then
+     elif [[ $diffseconds -ge $((secsaday*825 + 1)) ]]; then
      # Also "official" certificates issued from March 1st, 2018 (1517353200) aren't supposed
      # to be valid longer than 825 days which is 1517353200 in epoch seconds
           gt_825=true
@@ -9157,10 +9159,10 @@ certificate_info() {
           out "$spaces"
           if "$gt_825warn" && "$gt_825"; then
                prln_svrty_medium "> 825 days issued after 2018/03/01 is too long"
-               fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / (3600 * 24) )) > 825 days"
+               fileout "cert_validityPeriod${json_postfix}" "MEDIUM" "$((diffseconds / secsaday)) > 825 days"
           elif "$gt_825"; then
                outln ">= 825 days certificate life time but issued before 2018/03/01"
-               fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / (3600 * 24) )) =< 825 days"
+               fileout "cert_validityPeriod${json_postfix}" "INFO" "$((diffseconds / secsaday)) =< 825 days"
           fi
      else
           # All is fine with valididy period
@@ -9229,7 +9231,7 @@ certificate_info() {
 
      out "$indent"; pr_bold " OCSP URI                     "
      jsonID="cert_ocspURL"
-     ocsp_uri=$($OPENSSL x509 -in $HOSTCERT -noout -ocsp_uri 2>>$ERRFILE)
+     ocsp_uri="$($OPENSSL x509 -noout -ocsp_uri 2>>$ERRFILE <<< "$hostcert")"
      if [[ -z "$ocsp_uri" ]]; then
           outln "--"
           fileout "${jsonID}${json_postfix}" "INFO" "--"
@@ -9353,9 +9355,7 @@ certificate_info() {
 # We should keep in mind though this is somewhat redundant code. We do similar stuff elsewhere,
 # e.g. in extract_certificates() and run_hpkp() but don't keep the certificates
 
-#FIXME: output
-#       intermediate CN / (what about issuer. moving it?)
-#       fix the numbering schem of certificates_provided below
+#FIXME: the numbering scheme of certificates_provided below: we start @ 0 and always add 1. Careful with Intermediate Bad OCSP
 
      # Store all of the text output of the intermediate certificates in an array so that they can
      # be used later (e.g., to check their expiration dates).
@@ -9367,9 +9367,7 @@ certificate_info() {
           intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
           cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
 
-          # we count as humans in the file output here. This needs later to be adjusted in the code
           fileout "intermediate_cert <#$((certificates_provided + 1))>${json_postfix}" "INFO" "$cert"
-
           fileout "intermediate_cert_fingerprintSHA256 <#$((certificates_provided + 1))>${json_postfix}" "INFO" "$(determine_cert_fingerprint_serial "$cert" "-fingerprint -sha256")"
 
           intermediate_certs_txt[certificates_provided]="$($OPENSSL x509 -text -noout 2>/dev/null <<< "$cert")"
@@ -9384,18 +9382,31 @@ certificate_info() {
           else
                out "$indent$spaces"
           fi
-          if ! $OPENSSL x509 -checkend $((24*3600*20)) 2>>$ERRFILE <<< "$cert" | grep -qw not; then
-               out "#$((certificates_provided+1)): less then "; pr_svrty_high "20 days"
-               outln " at $enddate"
+          out "#$((certificates_provided+1)): "
+          if ! [[ "$($OPENSSL x509 -checkend 1 2>>$ERRFILE <<< "$cert")" =~ \ not\  ]]; then
+               cn_finding="expired!"
+               pr_svrty_critical "$cn_finding"
+               expok="CRITICAL"
+          elif ! [[ "$($OPENSSL x509 -checkend $((secsaday*20)) 2>>$ERRFILE <<< "$cert")" =~ \ not\  ]]; then
+               cn_finding="expires <= 20 days"
+               pr_svrty_high "$cn_finding"
                expok="HIGH"
-          elif ! $OPENSSL x509 -checkend $((24*3600*40)) 2>>$ERRFILE <<< "$cert" | grep -qw not; then
-               out "#$((certificates_provided+1)): less then "; pr_svrty_medium "40 days"
-               outln " at $enddate"
+          elif ! [[ "$($OPENSSL x509 -checkend $((secsaday*40)) 2>>$ERRFILE <<< "$cert")" =~ \ not\  ]]; then
+               cn_finding="expires <= 40 days"
+               pr_svrty_medium "$cn_finding"
                expok="MEDIUM"
           else
-               outln "#$((certificates_provided+1)): longer than 40 days ($enddate)"
+               cn_finding="valid > 40 days"
+               pr_svrty_good "$cn_finding"
+               expok="OK"
           fi
+          out " ($enddate). "
+          cn="$(awk -F= '/Subject:.*CN/ { print $NF }' <<< "${intermediate_certs_txt[certificates_provided]}")"
+          issuer_CN="$(awk -F= '/Issuer:.*CN/ { print $NF }' <<< "${intermediate_certs_txt[certificates_provided]}")"
+          pr_italic "$cn"; out " <-- "; prln_italic "$issuer_CN"
           fileout "intermediate_cert_notAfter <#$((certificates_provided + 1))>${json_postfix}" "$expok" "$enddate"
+          fileout "intermediate_cert_expiration <#$((certificates_provided + 1))>${json_postfix}" "$expok" "$cn_finding"
+          fileout "intermediate_cert_chain <#$((certificates_provided + 1))>${json_postfix}" "INFO" "$cn <-- $issuer_CN"
           certificates_provided+=1
      done
 
@@ -9404,8 +9415,7 @@ certificate_info() {
      out " (exp.) "
      jsonID="intermediate_cert_badOCSP"
 
-     certificates_provided+=1
-     for (( i=0; i < certificates_provided-1; i++ )); do
+     for (( i=1; i < certificates_provided; i++ )); do
           cert_ext_keyusage="$(awk '/X509v3 Extended Key Usage:/ { getline; print $0 }' <<< "${intermediate_certs_txt[i]}")"
           [[ "$cert_ext_keyusage" =~ OCSP\ Signing ]] && badocsp=0 && break
      done
