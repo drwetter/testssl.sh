@@ -1992,10 +1992,10 @@ elif "$HAS_FREEBSDDATE"; then      # FreeBSD, OS X and newer (~6.6) OpenBSD vers
           LC_ALL=C TZ=GMT date -j -f "$3" "$2" "$1"
      }
 elif "$HAS_OPENBSDDATE"; then
-# We bascially echo it as a conversion as we want it is too difficult. Approach for that would be:
-#  printf '%s\n' "$1" | awk '{ printf "%04d%02d%02d\n", $4, $2, (index("JanFebMarAprMayJunJulAugSepOctNovDec",$1)+2)/3}'
-# 4: year, 1: month, 2: day, $3: time  (e.g. "Dec 8 10:16:13 2016")
-# This way we could also kind of convert args to epoch but as newer OpenBSDs "date" behave like FreeBSD
+     # We bascially echo it as a conversion as we want it is too difficult. Approach for that would be:
+     #  printf '%s\n' "$1" | awk '{ printf "%04d%02d%02d\n", $4, $2, (index("JanFebMarAprMayJunJulAugSepOctNovDec",$1)+2)/3}'
+     # 4: year, 1: month, 2: day, $3: time  (e.g. "Dec 8 10:16:13 2016")
+     # This way we could also kind of convert args to epoch but as newer OpenBSDs "date" behave like FreeBSD
      parse_date() {
           local tmp=""
           if [[ $2 == +%s* ]]; then
@@ -2011,8 +2011,9 @@ else
      }
 fi
 
-# arg1: An ASCII-HEX string
-# Print $arg1 in binary format
+
+# Print $arg1 in binary format. arg1: An ASCII-HEX string
+#
 asciihex_to_binary() {
      local string="$1"
      local -i len
@@ -8348,7 +8349,6 @@ determine_dates_certificate() {
      startdate="${startdate%%GMT*}GMT"
      enddate="${cert_txt#*Validity*Not Before: *Not After : }"
      enddate="${enddate%%GMT*}GMT"
-     debugme echo "$enddate - $startdate"
      # Now we have a normalized enddate and startdate like "Feb 27 10:03:20 2017 GMT" -- also for OpenBSD
      if "$HAS_OPENBSDDATE"; then
           # Best we want to do under old versions of OpenBSD, first just remove the GMT and keep start/endate for later output
@@ -8866,48 +8866,12 @@ certificate_info() {
           fi
      fi
 
-     out "$indent"; pr_bold " Issuer                       "
-     jsonID="cert_caIssuers"
-     #FIXME: oid would be better maybe (see above). And the line by line input could be done w/o awk
+     # Determine the issuer now as we need them for host certificate warning
      issuer="$($OPENSSL x509 -noout -issuer -nameopt multiline,-align,sname,-esc_msb,utf8,-space_eq 2>>$ERRFILE <<< "$hostcert")"
      issuer_CN="$(awk -F'=' '/CN=/ { print $2 }' <<< "$issuer")"
      issuer_O="$(awk -F'=' '/O=/ { print $2 }' <<< "$issuer")"
      issuer_C="$(awk -F'=' '/ C=/ { print $2 }' <<< "$issuer")"
      issuer_DC="$(awk -F'=' '/DC=/ { print $2 }' <<< "$issuer")"
-
-     if [[ "$issuer_O" == issuer= ]] || [[ "$issuer_O" == issuer=\  ]] || [[ "$issuer_CN" == "$cn" ]]; then
-          prln_svrty_critical "self-signed (NOT ok)"
-          fileout "${jsonID}${json_postfix}" "CRITICAL" "selfsigned"
-          set_grade_cap "T" "Self-signed certificate"
-     else
-          issuerfinding="$issuer_CN"
-          pr_italic "$issuer_CN"
-          if [[ -z "$issuer_O" ]] && [[ -n "$issuer_DC" ]]; then
-               for san in $issuer_DC; do
-                    if [[ -z "$issuer_O" ]]; then
-                         issuer_O="${san}"
-                    else
-                         issuer_O="${san}.${issuer_O}"
-                    fi
-               done
-          fi
-          if [[ -n "$issuer_O" ]]; then
-               issuerfinding+=" ("
-               out " ("
-               issuerfinding+="$issuer_O"
-               pr_italic "$issuer_O"
-               if [[ -n "$issuer_C" ]]; then
-                    issuerfinding+=" from "
-                    out " from "
-                    issuerfinding+="$issuer_C"
-                    pr_italic "$issuer_C"
-               fi
-               issuerfinding+=")"
-               out ")"
-          fi
-          outln
-          fileout "${jsonID}${json_postfix}" "INFO" "$issuerfinding"
-     fi
 
      out "$indent"; pr_bold " Trust (hostname)             "
      compare_server_name_to_cert "$HOSTCERT"
@@ -9054,7 +9018,7 @@ certificate_info() {
           out "no "
           fileout "${jsonID}${json_postfix}" "INFO" "no"
      fi
-     debugme echo "($(newline_to_spaces "$policy_oid"))"
+     debugme1 echo -n "($(newline_to_spaces "$policy_oid"))"
      outln
 #TODO: check browser OIDs:
 #         https://dxr.mozilla.org/mozilla-central/source/security/certverifier/ExtendedValidation.cpp
@@ -9072,7 +9036,7 @@ certificate_info() {
           days2warn1=$((days2warn1 / 2))
      fi
 
-     debugme echo -n "diffseconds: $diffseconds"
+     debugme echo -n "(diffseconds: $diffseconds)"
      if ! [[ "$($OPENSSL x509 -checkend 1 2>>$ERRFILE <<< "$hostcert")" =~ \ not\  ]]; then
           pr_svrty_critical "expired"
           expfinding="expired"
@@ -9154,7 +9118,7 @@ certificate_info() {
      else
           # All is fine with validity period
           # We ignore for now certificates < 2018/03/01. On the screen we only show debug info
-          debugme1 outln "${spaces}DEBUG: all is fine with total certificate life time"
+          debugme1 echo "${spaces}DEBUG: all is fine with total certificate life time"
           fileout "cert_extlifeSpan${json_postfix}" "OK" "certificate has no extended life time according to browser forum"
      fi
 
@@ -9298,7 +9262,7 @@ certificate_info() {
           caa_node=${caa_node#*.}
      done
      if [[ -n "$caa" ]]; then
-          pr_svrty_good "available"; out " - please check for match with \"Issuer\" above"
+          pr_svrty_good "available"; out " - please check for match with \"Issuer\" below"
           if [[ $(count_lines "$caa") -eq 1 ]]; then
                out ": "
           else
@@ -9344,6 +9308,44 @@ certificate_info() {
           outln
      fi
 
+     out "$indent"; pr_bold " Issuer                       "
+     jsonID="cert_caIssuers"
+
+     if [[ "$issuer_O" == issuer= ]] || [[ "$issuer_O" == issuer=\  ]] || [[ "$issuer_CN" == "$cn" ]]; then
+          prln_svrty_critical "self-signed (NOT ok)"
+          fileout "${jsonID}${json_postfix}" "CRITICAL" "selfsigned"
+          set_grade_cap "T" "Self-signed certificate"
+     else
+          issuerfinding="$issuer_CN"
+          pr_italic "$issuer_CN"
+          if [[ -z "$issuer_O" ]] && [[ -n "$issuer_DC" ]]; then
+               for san in $issuer_DC; do
+                    if [[ -z "$issuer_O" ]]; then
+                         issuer_O="${san}"
+                    else
+                         issuer_O="${san}.${issuer_O}"
+                    fi
+               done
+          fi
+          if [[ -n "$issuer_O" ]]; then
+               issuerfinding+=" ("
+               out " ("
+               issuerfinding+="$issuer_O"
+               pr_italic "$issuer_O"
+               if [[ -n "$issuer_C" ]]; then
+                    issuerfinding+=" from "
+                    out " from "
+                    issuerfinding+="$issuer_C"
+                    pr_italic "$issuer_C"
+               fi
+               issuerfinding+=")"
+               out ")"
+          fi
+          outln
+          fileout "${jsonID}${json_postfix}" "INFO" "$issuerfinding"
+     fi
+
+
 # Now we take care of the intermediate certificates. We basically (should) have them on disk
 # as "intermediatecerts.pem" (which could be split into intermediatecert1.crt, intermediatecert2.crt, ..)
 # However we do this in RAM which is better as it was passed to this function.
@@ -9388,7 +9390,7 @@ certificate_info() {
                pr_svrty_medium "$cn_finding"
                expok="MEDIUM"
           else
-               cn_finding="valid > 40 days"
+               cn_finding="ok > 40 days"
                pr_svrty_good "$cn_finding"
                expok="OK"
           fi
