@@ -4522,10 +4522,11 @@ modify_clienthello() {
                # the SNI extension or replace it with the correct server name.
                sni_extension_found=true
                if [[ -n "$SNI" ]]; then
+                    servername=${XMPP_HOST:-${NODE}}
                     # Create a server name extension that corresponds to $SNI
-                    len_servername=${#NODE}
+                    len_servername=${#servername}
                     hexdump_format_str="$len_servername/1 \"%02x\""
-                    servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}")
+                    servername_hexstr=$(printf $servername | hexdump -v -e "${hexdump_format_str}")
                     # convert lengths we need to fill in from dec to hex:
                     len_servername_hex=$(printf "%02x\n" $len_servername)
                     len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
@@ -14514,9 +14515,10 @@ prepare_tls_clienthello() {
                #00       # server_name type (hostname)
                #00 15    # server_name length
                #66 66 66 66 66 66 2e 66 66 66 66 66 66 66 66 66 66 2e 66 66 66  target.mydomain1.tld # server_name target
-               len_servername=${#NODE}
+               servername=${XMPP_HOST:-${NODE}}
+               len_servername=${#servername}
                hexdump_format_str="$len_servername/1 \"%02x,\""
-               servername_hexstr=$(printf $NODE | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
+               servername_hexstr=$(printf $servername | hexdump -v -e "${hexdump_format_str}" | sed 's/,$//')
                # convert lengths we need to fill in from dec to hex:
                len_servername_hex=$(printf "%02x\n" $len_servername)
                len_sni_listlen=$(printf "%02x\n" $((len_servername+3)))
@@ -19710,7 +19712,12 @@ parse_hn_port() {
      fi
 
      debugme echo $NODE:$PORT
-     SNI="-servername $NODE"
+     if [[ -n "$XMPP_HOST" ]]; then
+          # XMPP host is set, force SNI to be that
+          SNI="-servername $XMPP_HOST"
+     else
+          SNI="-servername $NODE"
+     fi
      URL_PATH=$(sed 's/https:\/\///' <<< "$1" | sed 's/'"${NODE}"'//' | sed 's/.*'"${PORT}"'//')      # remove protocol and node part and port
      URL_PATH=$(sed 's/\/\//\//g' <<< "$URL_PATH")          # we rather want // -> /
      URL_PATH=${URL_PATH%%.}                                # strip trailing "." so that it is not interpreted as URL
