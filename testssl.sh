@@ -19207,7 +19207,7 @@ tuning / connect options (most also can be preset via environment variables):
                                    b) arg "one" means: just test the first DNS returns (useful for multiple IPs)
      -n, --nodns <min|none>        if "none": do not try any DNS lookups, "min" queries A, AAAA and MX records
      --sneaky                      leave less traces in target logs: user agent, referer
-     --user-agent                  set a custom user agent instead of the standard user agent
+     --user-agent <user agent>     set a custom user agent instead of the standard user agent
      --ids-friendly                skips a few vulnerability checks which may cause IDSs to block the scanning IP
      --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
      --add-ca <CA files|CA dir>    path to <CAdir> with *.pem or a comma separated list of CA files to include in trust check
