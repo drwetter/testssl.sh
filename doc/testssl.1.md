@@ -141,6 +141,8 @@ in `/etc/hosts`.  The use of the switch is only useful if you either can't or ar
 
 `--sneaky` For HTTP header checks testssl.sh uses normally the server friendly HTTP user agent `TLS tester from ${URL}`. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
 
+`--user-agent <user agent>` tells testssl.sh to use the supplied HTTP user agent instead of the standard user agent `TLS tester from ${URL}`.
+
 `--ids-friendly` is a switch which may help to get a scan finished which otherwise would be blocked by a server side IDS. This switch skips tests for the following vulnerabilities: Heartbleed, CCS Injection, Ticketbleed and ROBOT. The environment variable OFFENSIVE set to false will achieve the same result. Please be advised that as an alternative or as a general approach you can try to apply evasion techniques by changing the variables USLEEP_SND and / or USLEEP_REC and maybe MAX_WAITSOCK.
 
 `--phone-out` Checking for revoked certificates via CRL and OCSP is not done per default. This switch instructs testssl.sh to query external -- in a sense of the current run -- URIs. By using this switch you acknowledge that the check might have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting the endpoint which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.

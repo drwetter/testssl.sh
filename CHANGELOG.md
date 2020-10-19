@@ -23,6 +23,7 @@
 * Added support for certificates with EdDSA signatures and pubilc keys
 * --add-ca can also now be a directory with \*.pem files
 * Warning of 398 day limit for certificates issued after 2020/9/1
+* Added --user-agent argument to support using a custom User Agent
 
 ### Features implemented / improvements in 3.0
 

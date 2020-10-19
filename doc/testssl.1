@@ -171,6 +171,8 @@ Please note that \fBfname\fR has to be in Unix format\. DOS carriage returns won
 .
 .P
 \fB\-\-sneaky\fR For HTTP header checks testssl\.sh uses normally the server friendly HTTP user agent \fBTLS tester from ${URL}\fR\. With this option your traces are less verbose and a Firefox user agent is being used\. Be aware that it doesn\'t hide your activities\. That is just not possible (environment preset via \fBSNEAKY=true\fR)\.
+.P
+\fB\-\-user\-agent\fR tells testssl.sh to use the supplied HTTP user agent instead of the standard user agent \fBTLS tester from ${URL}\fR\.
 .
 .P
 \fB\-\-ids\-friendly\fR is a switch which may help to get a scan finished which otherwise would be blocked by a server side IDS\. This switch skips tests for the following vulnerabilities: Heartbleed, CCS Injection, Ticketbleed and ROBOT\. The environment variable OFFENSIVE set to false will achieve the same result\. Please be advised that as an alternative or as a general approach you can try to apply evasion techniques by changing the variables USLEEP_SND and / or USLEEP_REC and maybe MAX_WAITSOCK\.
