@@ -231,6 +231,7 @@ fi
 DISPLAY_CIPHERNAMES="openssl"           # display OpenSSL ciphername (but both OpenSSL and RFC ciphernames in wide mode)
 declare UA_STD="TLS tester from $SWURL"
 declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0"
+SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-6}       # number of times to check SSL Renegotiation
 
 ########### Initialization part, further global vars just being declared here
 #
@@ -15969,6 +15970,7 @@ run_renego() {
      local cwe="CWE-310"
      local hint=""
      local jsonID=""
+     local ssl_reneg_attempts=$SSL_RENEG_ATTEMPTS
      # No SNI needed here as there won't be two different SSL stacks for one IP
 
      "$HAS_TLS13" && [[ -z "$proto" ]] && proto="-no_tls1_3"
@@ -16074,24 +16076,27 @@ run_renego() {
                fi
                case "$sec_client_renego" in
                     0)   # We try again if server is HTTP. This could be either a node.js server or something else.
-                         # node.js has a mitigation which allows 3x R and then blocks. So we test 4x
+			 # Mitigations (default values) for:
+                         # 	- node.js allows 3x R and then blocks. So then 4x should be tested. 
+			 #	- F5 BIG-IP ADS allows 5x R and then blocks. So then 6x should be tested.
                          # This way we save a couple seconds as we weeded out the ones which are more robust
+			 # Amount of times tested before breaking is set in SSL_RENEG_ATTEMPTS.
                          if [[ $SERVICE != HTTP ]]; then
                               pr_svrty_medium "VULNERABLE (NOT ok)"; outln ", potential DoS threat"
                               fileout "$jsonID" "MEDIUM" "VULNERABLE, potential DoS threat" "$cve" "$cwe" "$hint"
                          else
-                              (for i in {1..4}; do echo R; sleep 1; done) | \
+			      (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep 1; done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
                               case $? in
-                                   0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat"
+				   0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat ($ssl_reneg_attempts attempts)"
                                       fileout "$jsonID" "HIGH" "VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
                                       ;;
                                    1) pr_svrty_good "not vulnerable (OK)"
-                                      outln " -- mitigated"
+				      outln " -- mitigated (disconnect within $ssl_reneg_attempts)"
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
-                                   *) prln_warning "FIXME (bug): $sec_client_renego (4 tries)"
-                                      fileout "$jsonID" "DEBUG" "FIXME (bug 4 tries) $sec_client_renego" "$cve" "$cwe"
+                                   *) prln_warning "FIXME (bug): $sec_client_renego ($ssl_reneg_attempts tries)"
+                                      fileout "$jsonID" "DEBUG" "FIXME (bug $ssl_reneg_attempts tries) $sec_client_renego" "$cve" "$cwe"
                                       ret=1
                                       ;;
                               esac
