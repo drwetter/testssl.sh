@@ -24,6 +24,7 @@
 * --add-ca can also now be a directory with \*.pem files
 * Warning of 398 day limit for certificates issued after 2020/9/1
 * Added environment variable for amount of attempts for ssl renegotiation check
+* Added --user-agent argument to support using a custom User Agent
 
 ### Features implemented / improvements in 3.0
 
