@@ -16076,23 +16076,22 @@ run_renego() {
                fi
                case "$sec_client_renego" in
                     0)   # We try again if server is HTTP. This could be either a node.js server or something else.
-			 # Mitigations (default values) for:
-                         # 	- node.js allows 3x R and then blocks. So then 4x should be tested. 
-			 #	- F5 BIG-IP ADS allows 5x R and then blocks. So then 6x should be tested.
+                         # Mitigations (default values) for:
+                         # - node.js allows 3x R and then blocks. So then 4x should be tested.
+                         # - F5 BIG-IP ADS allows 5x R and then blocks. So then 6x should be tested.
                          # This way we save a couple seconds as we weeded out the ones which are more robust
-			 # Amount of times tested before breaking is set in SSL_RENEG_ATTEMPTS.
+                         # Amount of times tested before breaking is set in SSL_RENEG_ATTEMPTS.
                          if [[ $SERVICE != HTTP ]]; then
                               pr_svrty_medium "VULNERABLE (NOT ok)"; outln ", potential DoS threat"
                               fileout "$jsonID" "MEDIUM" "VULNERABLE, potential DoS threat" "$cve" "$cwe" "$hint"
                          else
-			      (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep 1; done) | \
+                              (for ((i=0; i < ssl_reneg_attempts; i++ )); do echo R; sleep 1; done) | \
                                    $OPENSSL s_client $(s_client_options "$proto $legacycmd $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY") >$TMPFILE 2>>$ERRFILE
                               case $? in
-				   0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat ($ssl_reneg_attempts attempts)"
+                                   0) pr_svrty_high "VULNERABLE (NOT ok)"; outln ", DoS threat ($ssl_reneg_attempts attempts)"
                                       fileout "$jsonID" "HIGH" "VULNERABLE, DoS threat" "$cve" "$cwe" "$hint"
                                       ;;
-                                   1) pr_svrty_good "not vulnerable (OK)"
-				      outln " -- mitigated (disconnect within $ssl_reneg_attempts)"
+                                   1) pr_svrty_good "not vulnerable (OK)"; outln " -- mitigated (disconnect within $ssl_reneg_attempts)"
                                       fileout "$jsonID" "OK" "not vulnerable, mitigated" "$cve" "$cwe"
                                       ;;
                                    *) prln_warning "FIXME (bug): $sec_client_renego ($ssl_reneg_attempts tries)"
