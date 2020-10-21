@@ -20357,6 +20357,8 @@ check_proxy() {
      fi
 }
 
+# Given the ASCII-HEX of a DER-encoded distinguished name, return the string
+# representation of the name.
 print_dn() {
      local dn="$1"
      local cert name
@@ -20389,6 +20391,9 @@ print_dn() {
      return 0
 }
 
+# Given the OpenSSL output of a response from a TLS server (with the -msg option)
+# in which the response includes a CertificateRequest message, return the list of
+# distinguished names that are in the CA list.
 extract_calist() {
      local response="$1"
      local is_tls13=false
@@ -20396,15 +20401,18 @@ extract_calist() {
      local calist_string=""
      local -i len type
 
-     [[ "$response" =~ CertificateRequest ]] || return 0
-     [[ "$response" =~ TLS\ 1.3[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]] && is_tls13=true
+     # Determine whether this is a TLS 1.3 response, since the information
+     # is encoded in a different place for TLS 1.3.
+     [[ "$response" =~ \<\<\<\ TLS\ 1.3[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]] && is_tls13=true
 
+     # Extract just the CertificateRequest message as an ASCII-HEX string.
      certreq="${response##*CertificateRequest}"
      certreq="0d${certreq#*0d}"
      certreq="${certreq%%<<<*}"
      certreq="$(strip_spaces "$(newline_to_spaces "$certreq")")"
      certreq="${certreq:8}"
 
+     # Get the list of DNs from the CertificateRequest message.
      if "$is_tls13"; then
           # struct {
           #     opaque certificate_request_context<0..2^8-1>;
@@ -20443,6 +20451,7 @@ extract_calist() {
           len=2*$(hex2dec "${certreq:0:4}")
           calist="${certreq:4}"
      fi
+     # Convert each DN to a string.
      while true; do
           [[ -z "$calist" ]] && break
           len=2*$(hex2dec "${calist:0:4}")
@@ -20459,23 +20468,36 @@ extract_calist() {
 # with client authentication, a server with no SSL session ID switched off
 #
 sclient_auth() {
-     if grep -q '^<<< .*CertificateRequest' "$2"; then                     # CertificateRequest message in -msg
-          CLIENT_AUTH="require"
-          [[ $1 -eq 0 ]] && CLIENT_AUTH="optional"
-          CLIENT_AUTH_CA_LIST="$(extract_calist "$(< "$2")")"
-          return 0
-     fi
-     [[ $1 -eq 0 ]] && return 0
-     if [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]]; then           # connect succeeded
-          if [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]]; then      # probably no SSL session
-               if [[ 2 -eq $(grep -c CERTIFICATE "$2") ]]; then            # do another sanity check to be sure
+     local server_hello="$(cat -v "$2")"
+     local re='Master-Key: ([^\
+]*)'
+     local connect_success=false
+     
+     [[ $1 -eq 0 ]] && connect_success=true
+     ! "$connect_success" && [[ "$server_hello" =~ $re ]] && \
+          [[ -n "${BASH_REMATCH[1]}" ]] && connect_success=true
+     ! "$connect_success" && \
+          [[ "$server_hello" =~ (New|Reused)\,\ (SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)\,\ Cipher\ is\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]] && \
+          connect_success=true
+     if "$connect_success"; then
+          if [[ "$server_hello" =~ \<\<\<\ (SSL\ [23]|TLS\ 1)(\.[0-3])?[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
+               # CertificateRequest message in -msg
+               CLIENT_AUTH="require"
+               [[ $1 -eq 0 ]] && CLIENT_AUTH="optional"
+               CLIENT_AUTH_CA_LIST="$(extract_calist "$server_hello")"
+               return 0
+          fi
+          [[ $1 -eq 0 ]] && return 0
+          if [[ ! "$server_hello" =~ Session-ID:\ [a-fA-F0-9]{2,64} ]]; then   # probably no SSL session
+               # do another sanity check to be sure
+               if [[ "$server_hello" =~ \-\-\-BEGIN\ CERTIFICATE\-\-\-.*\-\-\-END\ CERTIFICATE\-\-\- ]]; then 
                     CLIENT_AUTH="none"
-                    NO_SSL_SESSIONID=true                                  # NO_SSL_SESSIONID is preset globally to false for all other cases
+                    NO_SSL_SESSIONID=true  # NO_SSL_SESSIONID is preset globally to false for all other cases
                     return 0
                fi
           fi
      fi
-     # what's left now is: master key empty, handshake returned not successful, session ID empty --> not successful
+     # what's left now is: no protocol and ciphersuite specified, handshake returned not successful, session ID empty --> not successful
      return 1
 }
 
