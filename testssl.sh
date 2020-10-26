@@ -9046,9 +9046,9 @@ certificate_info() {
           set_grade_cap "T" "Certificate expired"
      else
           # low threshold first
-          if ! [[ "$($OPENSSL x509 -checkend $((secsaday*days2warn2)) 2>>$ERRFILE <<< "$cert")" =~ \ not\  ]]; then
+          if [[ "$($OPENSSL x509 -checkend $((secsaday*days2warn2)) 2>>$ERRFILE <<< "$hostcert")" =~ \ not\  ]]; then
                # high threshold
-               if ! [[ "$($OPENSSL x509 -checkend $((secsaday*days2warn1)) 2>>$ERRFILE <<< "$cert")" =~ \ not\  ]]; then
+               if [[ "$($OPENSSL x509 -checkend $((secsaday*days2warn1)) 2>>$ERRFILE <<< "$hostcert")" =~ \ not\  ]]; then
                     pr_svrty_good "$days2expire >= $days2warn1 days"
                     expfinding+="$days2expire >= $days2warn1 days"
                else
