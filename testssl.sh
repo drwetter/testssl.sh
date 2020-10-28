@@ -1250,6 +1250,10 @@ strip_inconsistent_ciphers() {
      return 0
 }
 
+count_chars() {
+     echo $(wc -c <<< "$1")
+}
+
 newline_to_spaces() {
      tr '\n' ' ' <<< "$1" | sed 's/ $//'
 }
@@ -12769,19 +12773,18 @@ parse_tls_serverhello() {
 #         1,4,6,7: see return value of parse_sslv2_serverhello()
 sslv2_sockets() {
      local ret
-     local client_hello cipher_suites len_client_hello
+     local cipher_suites="$1"
+     local client_hello len_client_hello
      local len_ciph_suites_byte len_ciph_suites
      local server_hello sock_reply_file2
      local -i response_len server_hello_len
      local parse_complete=false
 
-     # this could be empty so swe use '=='
+     # this could be empty so we use '=='
      if [[ "$2" == true ]]; then
           parse_complete=true
      fi
-     if [[ -n "$1" ]]; then
-          cipher_suites="$1"
-     else
+     if [[ -z "$cipher_suites" ]]; then
           cipher_suites="
           05,00,80, # 1st cipher   9 cipher specs, only classical V2 ciphers are used here, see  FIXME below
           03,00,80, # 2nd          there are v3 in v2!!! : https://tools.ietf.org/html/rfc6101#appendix-E
@@ -12824,22 +12827,24 @@ sslv2_sockets() {
 
      sockread_serverhello 32768
      if "$parse_complete"; then
-          server_hello=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
-          server_hello_len=2+$(hex2dec "${server_hello:1:3}")
-          response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
-          for (( 1; response_len < server_hello_len; 1 )); do
-               sock_reply_file2=${SOCK_REPLY_FILE}.2
-               mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
+          if [[ -s "$SOCK_REPLY_FILE" ]]; then
+               server_hello=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
+               server_hello_len=$((2 + $(hex2dec "${server_hello:1:3}") ))
+               response_len=$(count_chars "$SOCK_REPLY_FILE")
+               for (( 1; response_len < server_hello_len; 1 )); do
+                    sock_reply_file2=${SOCK_REPLY_FILE}.2
+                    mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
 
-               debugme echo -n "requesting more server hello data... "
-               socksend "" $USLEEP_SND
-               sockread_serverhello 32768
+                    debugme echo -n "requesting more server hello data... "
+                    socksend "" $USLEEP_SND
+                    sockread_serverhello 32768
 
-               [[ ! -s "$SOCK_REPLY_FILE" ]] && break
-               cat "$SOCK_REPLY_FILE" >> "$sock_reply_file2"
-               mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
-               response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
-          done
+                    [[ ! -s "$SOCK_REPLY_FILE" ]] && break
+                    cat "$SOCK_REPLY_FILE" >> "$sock_reply_file2"
+                    mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
+                    response_len=$(count_chars "$SOCK_REPLY_FILE")
+               done
+          fi
      fi
      debugme echo "reading server hello... "
      if [[ "$DEBUG" -ge 4 ]]; then
@@ -12854,6 +12859,7 @@ sslv2_sockets() {
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      return $ret
 }
+
 
 # arg1: supported groups extension
 # arg2: "all" - process full response (including Certificate and certificate_status handshake messages)
@@ -15081,7 +15087,6 @@ run_freak() {
      else
           nr_supported_ciphers=$(count_ciphers $(actually_supported_osslciphers $exportrsa_cipher_list))
      fi
-     #echo "========= ${PIPESTATUS[*]}
 
      case $nr_supported_ciphers in
           0)   prln_local_problem "$OPENSSL doesn't have any EXPORT RSA ciphers configured"
@@ -15099,7 +15104,9 @@ run_freak() {
           tls_sockets "03" "$exportrsa_tls_cipher_list_hex, 00,ff"
           sclient_success=$?
           [[ $sclient_success -eq 2 ]] && sclient_success=0
-          if [[ $sclient_success -ne 0 ]]; then
+
+          # TLS handshake failed with ciphers above. Now we check SSLv2 -- unless we know it's not available
+          if [[ $sclient_success -ne 0 ]] && [[ $(has_server_protocol ssl2) -ne 1 ]]; then
                sslv2_sockets "$exportrsa_ssl2_cipher_list_hex" "true"
                if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
                     exportrsa_ssl2_cipher_list_hex="$(strip_spaces "${exportrsa_ssl2_cipher_list_hex//,/}")"
@@ -15912,7 +15919,8 @@ run_rc4() {
           return 0
      fi
 
-     # get a list of all the cipher suites to test
+     # Get a list of all the cipher suites to test. #FIXME: This is rather ineffective as RC4 ciphers won't change.
+     # We should instead build a fixed list here like @ other functions
      if "$using_sockets" || [[ $OSSL_VER_MAJOR -lt 1 ]]; then
           for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
                if [[ "${TLS_CIPHER_RFC_NAME[i]}" =~ RC4 ]] && ( "$using_sockets" || "${TLS_CIPHER_OSSL_SUPPORTED[i]}" ); then
@@ -15967,7 +15975,7 @@ run_rc4() {
           done < <($OPENSSL ciphers $OSSL_CIPHERS_S -V 'ALL:COMPLEMENTOFALL:@STRENGTH' 2>>$ERRFILE)
      fi
 
-     if "$using_sockets" && [[ -n "$sslv2_ciphers_hex" ]]; then
+     if "$using_sockets" && [[ -n "$sslv2_ciphers_hex" ]] && [[ $(has_server_protocol ssl2) -ne 1 ]]; then
           sslv2_sockets "${sslv2_ciphers_hex:2}" "true"
           if [[ $? -eq 3 ]] && [[ "$V2_HELLO_CIPHERSPEC_LENGTH" -ne 0 ]]; then
                supported_sslv2_ciphers="$(grep "Supported cipher: " "$TEMPDIR/$NODEIP.parse_sslv2_serverhello.txt")"
@@ -15980,7 +15988,7 @@ run_rc4() {
                     fi
                done
           fi
-     elif "$HAS_SSL2" && [[ -n "$sslv2_ciphers_ossl" ]]; then
+     elif "$HAS_SSL2" && [[ -n "$sslv2_ciphers_ossl" ]] && [[ $(has_server_protocol ssl2) -ne 1 ]]; then
           $OPENSSL s_client -cipher "${sslv2_ciphers_ossl:1}" $STARTTLS $BUGS -connect $NODEIP:$PORT $PROXY -ssl2 >$TMPFILE 2>$ERRFILE </dev/null
           sclient_connect_successful $? "$TMPFILE"
           if [[ $? -eq 0 ]]; then
