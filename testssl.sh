@@ -803,6 +803,10 @@ count_ciphers() {
      echo $(wc -w <<< "${1//:/ }")
 }
 
+count_chars() {
+     echo $(wc -c <<< "$1")
+}
+
 newline_to_spaces() {
      tr '\n' ' ' <<< "$1" | sed 's/ $//'
 }
@@ -14331,8 +14335,8 @@ sslv2_sockets() {
      if "$parse_complete"; then
           if [[ -s "$SOCK_REPLY_FILE" ]]; then
                server_hello=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
-               server_hello_len=2 + $(hex2dec "${server_hello:1:3}")
-               response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
+               server_hello_len=$((2 + $(hex2dec "${server_hello:1:3}") ))
+               response_len=$(count_chars "$SOCK_REPLY_FILE")
                for (( 1; response_len < server_hello_len; 1 )); do
                     sock_reply_file2=${SOCK_REPLY_FILE}.2
                     mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
@@ -14344,7 +14348,7 @@ sslv2_sockets() {
                     [[ ! -s "$SOCK_REPLY_FILE" ]] && break
                     cat "$SOCK_REPLY_FILE" >> "$sock_reply_file2"
                     mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
-                    response_len=$(wc -c "$SOCK_REPLY_FILE" | awk '{ print $1 }')
+                    response_len=$(count_chars "$SOCK_REPLY_FILE")
                done
           fi
      fi
@@ -14361,6 +14365,7 @@ sslv2_sockets() {
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      return $ret
 }
+
 
 # arg1: supported groups extension
 # arg2: "all" - process full response (including Certificate and certificate_status handshake messages)
