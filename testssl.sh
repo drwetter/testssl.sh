@@ -3185,9 +3185,7 @@ run_cookie_flags() {     # ARG1: Path
 
 
 run_security_headers() {
-     local good_header="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
-     local other_header="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible Cache-Control Pragma"
-     local header header_output
+     local header header_output svrty header_and_svrty
      local first=true
      local spaces="                              "
      local have_header=false
@@ -3197,36 +3195,43 @@ run_security_headers() {
      fi
 
      pr_bold " Security headers             "
-     for header in $good_header; do
-          [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$header\""
+     # X-XSS-Protection is useless and at worst harmful, see https://news.ycombinator.com/item?id=20472947
+     for header_and_svrty in "X-Frame-Options OK" \
+                             "X-Content-Type-Options OK" \
+                             "Content-Security-Policy OK" \
+                             "X-Content-Security-Policy OK" \
+                             "X-WebKit-CSP OK" \
+                             "Content-Security-Policy-Report-Only OK" \
+                             "Expect-CT OK" \
+                             "Permissions-Policy OK" \
+                             "X-XSS-Protection LOW" \
+                             "Access-Control-Allow-Origin INFO" \
+                             "Upgrade INFO" \
+                             "X-Served-By INFO" \
+                             "Referrer-Policy INFO" \
+                             "X-UA-Compatible Cache-Control INFO" \
+                             "Pragma INFO"; do
+          read header svrty <<< "${header_and_svrty}"
+          [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$header\" (severity \"$svrty\")"
           match_httpheader_key "$header" "$header" "$spaces" "$first"
           if [[ $? -ge 1 ]]; then
                have_header=true
                if "$first"; then
                     first=false
                fi
+               case "$svrty" in
+                    OK) pr_svrty_good "$header" ;;
+                    LOW) pr_svrty_low "$header" ;;
+                    INFO) pr_litecyan "$header" ;;
+               esac
                # Include $header when determining where to insert line breaks, but print $header
                # separately.
-               pr_svrty_good "$header"
-               header_output="$(out_row_aligned_max_width "${header:2} $HEADERVALUE" "$spaces  " $TERM_WIDTH)"
+               header_output="$(out_row_aligned_max_width "${header:2}: $HEADERVALUE" "$spaces  " $TERM_WIDTH)"
                outln "${header_output#${header:2}}"
-               fileout "$header" "OK" "$HEADERVALUE"
+               fileout "$header" "$svrty" "$HEADERVALUE"
           fi
      done
 
-     for header in $other_header; do
-          [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$header\""
-          match_httpheader_key "$header" "$header" "$spaces" "$first"
-          if [[ $? -ge 1 ]]; then
-               have_header=true
-               if "$first"; then
-                    first=false
-               fi
-               pr_litecyan "$header"
-               outln " $HEADERVALUE"     # shouldn't be that long
-               fileout "$header" "INFO" "$HEADERVALUE"
-          fi
-     done
      #TODO: I am not testing for the correctness or anything stupid yet, e.g. "X-Frame-Options: allowall" or Access-Control-Allow-Origin: *
 
      if ! "$have_header"; then
