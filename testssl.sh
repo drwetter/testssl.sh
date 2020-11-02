@@ -3204,12 +3204,13 @@ run_security_headers() {
                              "Content-Security-Policy-Report-Only OK" \
                              "Expect-CT OK" \
                              "Permissions-Policy OK" \
-                             "X-XSS-Protection LOW" \
+                             "X-XSS-Protection INFO" \
                              "Access-Control-Allow-Origin INFO" \
                              "Upgrade INFO" \
                              "X-Served-By INFO" \
                              "Referrer-Policy INFO" \
-                             "X-UA-Compatible Cache-Control INFO" \
+                             "X-UA-Compatible INFO" \
+                             "Cache-Control INFO" \
                              "Pragma INFO"; do
           read header svrty <<< "${header_and_svrty}"
           [[ "$DEBUG" -ge 5 ]] &&  echo "testing \"$header\" (severity \"$svrty\")"
