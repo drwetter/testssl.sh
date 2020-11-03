@@ -849,7 +849,7 @@ strip_quote() {
 # " deconfuse vim\'s syntax highlighting ;-)
 
 strip_pemheader() {
-     # remote the strings -----BEGIN CERTIFICATE----- and -----END CERTIFICATE-----
+     # remove the strings -----BEGIN CERTIFICATE----- and -----END CERTIFICATE-----
      sed -e 's/^-----[A-Z]* [A-Z]*-----//' \
          -e 's/-----[A-Z]* [A-Z]*-----$//' <<< "$1"
 }
