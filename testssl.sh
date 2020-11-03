@@ -848,6 +848,11 @@ strip_quote() {
 
 # " deconfuse vim\'s syntax highlighting ;-)
 
+strip_pemheader() {
+     # remote the strings -----BEGIN CERTIFICATE----- and -----END CERTIFICATE-----
+     sed -e 's/^-----[A-Z]* [A-Z]*-----//' \
+         -e 's/-----[A-Z]* [A-Z]*-----$//' <<< "$1"
+}
 
 is_ipv4addr() {
      local octet="(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
@@ -1305,9 +1310,15 @@ fileout() {
 
      if ( "$do_pretty_json" && [[ "$1" == service ]] ) || show_finding "$severity"; then
           local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")           # additional quotes will mess up screen output
-          [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
+          # https://github.com/drwetter/testssl.sh/issues/1747
+          # If we output a certificate, remove PEM headers.
+          ([[ "$1" == "cert" ]] || [[ "$1" =~ ^intermediate_cert[[:blank:]]\<\#[0-9]*\> ]]) && finding=$(strip_pemheader "$finding" | tr -d ' ')
+
+          [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && \
+               fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
           "$do_csv" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && \
                fileout_csv_finding "$1" "$NODE/$NODEIP" "$PORT" "$severity" "$finding" "$cve" "$cwe" "$hint"
+
           "$FIRST_FINDING" && FIRST_FINDING=false
      fi
 }
@@ -8797,7 +8808,7 @@ certificate_info() {
      fileout "cert_fingerprintSHA256${json_postfix}" "INFO" "${cert_fingerprint_sha2}"
      outln "${spaces}SHA256 ${cert_fingerprint_sha2}"
 
-     # " " needs to be converted back to lf in JSON/CSV output. watch out leading/ending line containting "CERTIFICATE"
+     # fileout() will remove PEM headers and newline/spaces for certificates.
      fileout "cert${json_postfix}" "INFO" "$hostcert"
 
      [[ -z $CERT_FINGERPRINT_SHA2 ]] && \
@@ -9373,6 +9384,7 @@ certificate_info() {
           intermediates="${intermediates#${cert}-----END CERTIFICATE-----}"
           cert="-----BEGIN CERTIFICATE-----${cert}-----END CERTIFICATE-----"
 
+          # fileout() will remove PEM headers and newline/spaces for certificates.
           fileout "intermediate_cert <#${i}>${json_postfix}" "INFO" "$cert"
           fileout "intermediate_cert_fingerprintSHA256 <#${i}>${json_postfix}" "INFO" "$(determine_cert_fingerprint_serial "$cert" "-fingerprint -sha256")"
 
