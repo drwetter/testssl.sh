@@ -3223,7 +3223,7 @@ run_security_headers() {
                case "$svrty" in
                     OK) pr_svrty_good "$header" ;;
                     LOW) pr_svrty_low "$header" ;;
-                    INFO) pr_litecyan "$header" ;;
+                    INFO) out "$header" ;;
                esac
                # Include $header when determining where to insert line breaks, but print $header
                # separately.
