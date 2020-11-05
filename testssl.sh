@@ -10623,7 +10623,7 @@ starttls_full_read(){
      else
           if [[ $ret -ge 128 ]]; then
                debugme echo "=== timeout reading ==="
-               $ret_found=$ret
+               ret_found=$ret
           fi
      fi
      IFS="${oldIFS}"
