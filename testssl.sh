@@ -3036,8 +3036,8 @@ run_cookie_flags() {     # ARG1: Path
 
 
 run_security_headers() {
-     local good_header="X-Frame-Options X-XSS-Protection X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
-     local other_header="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible Cache-Control Pragma"
+     local good_header="X-Frame-Options X-Content-Type-Options Content-Security-Policy X-Content-Security-Policy X-WebKit-CSP Content-Security-Policy-Report-Only Expect-CT"
+     local other_header="Access-Control-Allow-Origin Upgrade X-Served-By Referrer-Policy X-UA-Compatible Cache-Control Pragma X-XSS-Protection"
      local header header_output
      local first=true
      local spaces="                              "
@@ -3058,7 +3058,7 @@ run_security_headers() {
                fi
                # Include $header when determining where to insert line breaks, but print $header
                # separately.
-               pr_svrty_good "$header"
+               pr_svrty_good "$header"; out ":"
                header_output="$(out_row_aligned_max_width "${header:2} $HEADERVALUE" "$spaces  " $TERM_WIDTH)"
                outln "${header_output#${header:2}}"
                fileout "$header" "OK" "$HEADERVALUE"
@@ -3073,8 +3073,8 @@ run_security_headers() {
                if "$first"; then
                     first=false
                fi
-               pr_litecyan "$header"
-               outln " $HEADERVALUE"     # shouldn't be that long
+               out "$header"
+               outln ": $HEADERVALUE"     # shouldn't be that long
                fileout "$header" "INFO" "$HEADERVALUE"
           fi
      done
