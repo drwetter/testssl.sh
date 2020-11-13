@@ -327,7 +327,9 @@ Rating automatically gets disabled, to not give a wrong or misleading grade, whe
 
 `--severity <severity>` For CSV and both JSON outputs this will only add findings to the output file if a severity is equal or higher than the `severity` value specified. Allowed are `<LOW|MEDIUM|HIGH|CRITICAL>`. WARN is another level which translates to a client-side scanning error or problem. Thus you will always see them in a file if they occur.
 
-`--append` Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file exit with an error. `--append` however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
+`--append` Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file and exit with an error. `--append` however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
+
+`--overwrite` Normally, if an output file already exists and it has a file size greater zero, testssl.sh will not allow you to overwrite this file. This option will do that **without any warning**. The environment variable OVERWRITE does the same. Be careful, you have been warned!
 
 `--outprefix <fname_prefix>` Prepend output filename prefix <fname_prefix> before '${NODE}-'. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named `<fname_prefix>-${NODE}-p${port}${YYYYMMDD-HHMM}.<format>` when no file name of the respective output option was specified. If you do not like the separator '-' you can as well supply a `<fname_prefix>` ending in '.',  '_' or ','. In this case or if you already supplied '-' no additional '-' will be appended to `<fname_prefix>`.
 
