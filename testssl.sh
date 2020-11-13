@@ -179,7 +179,8 @@ CSVFILE="${CSVFILE:-""}"                # csvfile if used
 HTMLFILE="${HTMLFILE:-""}"              # HTML if used
 FNAME=${FNAME:-""}                      # file name to read commands from
 FNAME_PREFIX=${FNAME_PREFIX:-""}        # output filename prefix, see --outprefix
-APPEND=${APPEND:-false}                 # append to csv/json file instead of overwriting it
+APPEND=${APPEND:-false}                 # append to csv/json/html/log file
+OVERWRITE=${OVERWRITE:-false}           # overwriting csv/json/html/log file
 [[ -z "$NODNS" ]] && declare NODNS      # If unset it does all DNS lookups per default. "min" only for hosts or "none" at all
 HAS_IPv6=${HAS_IPv6:-false}             # if you have OpenSSL with IPv6 support AND IPv6 networking set it to yes
 ALL_CLIENTS=${ALL_CLIENTS:-false}       # do you want to run all client simulation form all clients supplied by SSLlabs?
@@ -1349,7 +1350,10 @@ json_header() {
      if "$APPEND"; then
           JSONHEADER=false
      else
-          [[ -s "$JSONFILE" ]] && fatal "non-empty \"$JSONFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+          if [[ -s "$JSONFILE" ]]; then
+               "$OVERWRITE" || fatal "non-empty \"$JSONFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+               cp /dev/null "$JSONFILE"
+          fi
           "$do_json" && echo "[" > "$JSONFILE"
           "$do_pretty_json" && echo "{" > "$JSONFILE"
      fi
@@ -1390,7 +1394,10 @@ csv_header() {
      if "$APPEND"; then
           CSVHEADER=false
      else
-          [[ -s "$CSVFILE" ]] && fatal "non-empty \"$CSVFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+          if [[ -s "$CSVFILE" ]]; then
+               "$OVERWRITE" || fatal "non-empty \"$CSVFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+               cp /dev/null "$CSVFILE"
+          fi
           touch "$CSVFILE"
           if "$GIVE_HINTS"; then
                fileout_csv_finding "id" "fqdn/ip" "port" "severity" "finding" "cve" "cwe" "hint"
@@ -1440,7 +1447,10 @@ html_header() {
      if "$APPEND"; then
           HTMLHEADER=false
      else
-          [[ -s "$HTMLFILE" ]] && fatal "non-empty \"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+          if [[ -s "$HTMLFILE" ]]; then
+               "$OVERWRITE" || fatal "non-empty \"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+               cp /dev/null "$HTMLFILE"
+          fi
           html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
           html_out "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n"
           html_out "<!-- This file was created with testssl.sh. https://testssl.sh -->\n"
@@ -1499,7 +1509,10 @@ prepare_logging() {
      fi
 
      if ! "$APPEND"; then
-          [[ -s "$LOGFILE" ]] && fatal "non-empty \"$LOGFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+          if [[ -s "$LOGFILE" ]]; then
+               "$OVERWRITE" || fatal "non-empty \"$LOGFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+               cp /dev/null "$LOGFILE"
+          fi
      fi
      tmln_out "## Scan started as: \"$PROG_NAME $CMDLINE\"" >>"$LOGFILE"
      tmln_out "## at $HNAME:$OPENSSL_LOCATION" >>"$LOGFILE"
@@ -19260,6 +19273,7 @@ file output options (can also be preset via environment variables)
      --hints                       additional hints to findings
      --severity <severity>         severities with lower level will be filtered for CSV+JSON, possible values <LOW|MEDIUM|HIGH|CRITICAL>
      --append                      if (non-empty) <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists, append to file. Omits any header
+     --overwrite                   if <logfile>, <csvfile>, <jsonfile> or <htmlfile> exists it overwrites it without any warning
      --outprefix <fname_prefix>    before  '\${NODE}.' above prepend <fname_prefix>
 
 
@@ -22118,7 +22132,12 @@ parse_cmd_line() {
                     do_csv=true
                     do_logging=true
                     ;;
+               --overwrite)
+                    "$APPEND" && fatal "using --overwrite and --append is contradicting" $ERR_CMDLINE
+                    OVERWRITE=true
+                    ;;
                --append)
+                    "$OVERWRITE" && fatal "using --append and --overwrite is contradicting" $ERR_CMDLINE
                     APPEND=true
                     ;;
                --outprefix)
