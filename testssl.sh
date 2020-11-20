@@ -117,7 +117,7 @@ trap "child_error" USR1
 
 ########### Internal definitions
 #
-declare -r VERSION="3.0.3"
+declare -r VERSION="3.0.3.1"
 declare -r SWCONTACT="dirk aet testssl dot sh"
 grep -E -q "dev|rc|beta" <<< "$VERSION" && \
      SWURL="https://testssl.sh/dev/" ||
@@ -1248,10 +1248,6 @@ strip_inconsistent_ciphers() {
      fi
      echo "$cipherlist"
      return 0
-}
-
-count_chars() {
-     echo $(wc -c <<< "$1")
 }
 
 newline_to_spaces() {
@@ -12776,7 +12772,7 @@ sslv2_sockets() {
      local cipher_suites="$1"
      local client_hello len_client_hello
      local len_ciph_suites_byte len_ciph_suites
-     local server_hello sock_reply_file2
+     local server_hello sock_reply_file2 foo
      local -i response_len server_hello_len
      local parse_complete=false
 
@@ -12830,7 +12826,8 @@ sslv2_sockets() {
           if [[ -s "$SOCK_REPLY_FILE" ]]; then
                server_hello=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
                server_hello_len=$((2 + $(hex2dec "${server_hello:1:3}") ))
-               response_len=$(count_chars "$SOCK_REPLY_FILE")
+               foo="$(wc -c "$SOCK_REPLY_FILE")"
+               response_len="${foo% *}"
                for (( 1; response_len < server_hello_len; 1 )); do
                     sock_reply_file2=${SOCK_REPLY_FILE}.2
                     mv "$SOCK_REPLY_FILE" "$sock_reply_file2"
@@ -12842,10 +12839,12 @@ sslv2_sockets() {
                     [[ ! -s "$SOCK_REPLY_FILE" ]] && break
                     cat "$SOCK_REPLY_FILE" >> "$sock_reply_file2"
                     mv "$sock_reply_file2" "$SOCK_REPLY_FILE"
-                    response_len=$(count_chars "$SOCK_REPLY_FILE")
+                    foo="$(wc -c "$SOCK_REPLY_FILE")"
+                    response_len="${foo% *}"
                done
           fi
      fi
+
      debugme echo "reading server hello... "
      if [[ "$DEBUG" -ge 4 ]]; then
           hexdump -C "$SOCK_REPLY_FILE" | head -6
