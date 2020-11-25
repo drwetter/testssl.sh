@@ -21,6 +21,5 @@ A clear and concise description of what you expected to happen.
  - Version if running from git repo: ``git log | head -1``
  - OpenSSL: ``testssl.sh -b 2>/dev/null | awk -F':' '/openssl/ { print $2}'``
 
-
 **Additional context**
 Add any other context about the problem here.
