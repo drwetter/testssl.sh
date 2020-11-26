@@ -6,6 +6,7 @@
 use strict;
 use Test::More;
 use Data::Dumper;
+use Text::Diff;
 
 my $tests = 0;
 my $prg="./testssl.sh";
@@ -15,7 +16,7 @@ my $html="";
 my $debughtml="";
 my $edited_html="";
 my $check2run="--ip=one --color 0 --htmlfile tmp.html";
-
+my $diff="";
 die "Unable to open $prg" unless -f $prg;
 
 printf "\n%s\n", "Doing HTML output checks";
@@ -47,6 +48,9 @@ $edited_html =~ s/&apos;/'/g;
 cmp_ok($edited_html, "eq", $out, "HTML file matches terminal output");
 $tests++;
 
+$diff = diff \$edited_html, \$out;
+printf "\n%s\n", "$diff";
+
 #2
 printf "\n%s\n", " .. running again $prg against \"$uri\", now with --debug 4 to create HTML output (may take another ~2 minutes)";
 # Redirect stderr to /dev/null in order to avoid some unexplained "date: invalid date" error messages
@@ -71,6 +75,11 @@ $debughtml =~ s/.*DEBUG:.*\n//g;
 
 cmp_ok($debughtml, "eq", $html, "HTML file created with --debug 4 matches HTML file created without --debug");
 $tests++;
+
+$diff = diff \$debughtml, \$html;
+printf "\n%s\n", "$diff";
+
+
 
 printf "\n";
 done_testing($tests);

@@ -1,3 +1,4 @@
+04lRnjNdzOBl/GE7TR+IOd/8Cpt/QpnEwpl8TurTL5I= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Client Authentication Root R45
 05gKrdIWOMcNdKS7H4q14Rck5i7UCPn6jT1NkWkAKGs= subject=C = JP, O = "SECOM Trust Systems CO.,LTD.", CN = Security Communication RootCA3
 0cRTd+vc1hjNFlHcLgLCHXUeWqn80bNDH/bs9qMTSPo= subject=C = US, ST = Texas, L = Houston, O = SSL Corporation, CN = SSL.com Root Certification Authority RSA
 0d4q5hyN8vpiOWYWPUxz1GC/xCjldYW+a/65pWMj0bY= subject=C = DE, O = Deutsche Telekom AG, OU = T-TeleSec Trust Center, CN = Deutsche Telekom Root CA 2
@@ -17,8 +18,10 @@
 2xXABitSDzGKGdrP7NZPnno/vmCf1YZ5byCuAo6OMFg= subject=C = CN, O = WoSign CA Limited, CN = CA \E6\B2\83\E9\80\9A\E6\A0\B9\E8\AF\81\E4\B9\A6
 31MLrJ/NkUwlLC+9zt3GGD1K6MaArWXwPiBIYd17HHM= subject=DC = com, DC = microsoft, CN = Microsoft Root Certificate Authority
 3AU9An/BhufEHNGTrzD8CXlOufPZ5nNtzgQUQNh2qAE= subject=C = ES, O = Colegio de Registradores de la Propiedad y Mercantiles de Espa\C3\B1a, OU = Certificado Propio, CN = Registradores de Espa\C3\B1a - CA Ra\C3\ADz
+3ntpMunERYLODeB6vat+6pDHXW0qBzMd9XvVy4hVPRM= subject=C = PL, O = Asseco Data Systems S.A., OU = Certum Certification Authority, CN = Certum EC-384 CA
 3V7RwJD59EgGG6qUprsRAXVE6e76ogzHFM5sYz9dxik= subject=C = CN, O = China Financial Certification Authority, CN = CFCA EV ROOT
 3ViZswh7Dv8rbge2b07dzs5NAYAaoISV1ZBvChNBcWs= subject=C = BR, O = ICP-Brasil, OU = Instituto Nacional de Tecnologia da Informacao - ITI, CN = Autoridade Certificadora Raiz Brasileira v5
+4EoCLOMvTM8sf2BGKHuCijKpCfXnUUR/g/0scfb9gXM= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Root E46
 4MeAximQPhJvHZGVcNznxJb4XzOq5muaMUfudfjRYgo= subject=C = AT, ST = Wien, L = Wien, O = e-commerce monitoring GmbH, OU = GLOBALTRUST Certification Service, CN = GLOBALTRUST 2015
 4O+ILaSKsLfvsNm6FbJxfdCPBDwlrAm1a4tX/O61o10= subject=C = LT, O = Skaitmeninio sertifikavimo centras, OU = Certification Authority, CN = SSC Root CA C
 4VZEX6IMMq0Ak3sn0Ja4ljvMhjlQMzqHfmj6aXB6A68= subject=C = JP, O = LGPKI, CN = Application CA G3 Root
@@ -36,7 +39,7 @@
 7Rsing4IdQIcHxdgw0B/sdZgjtp63XGj4ydc7QlpD3w= subject=C = SG, O = Netrust Certificate Authority 1, OU = Netrust CA1
 80OOI7POUyUi+s8weSP1j9GGCOm6et3DDpUrQ8SWFsM= subject=C = BM, O = QuoVadis Limited, CN = QuoVadis Root CA 3 G3
 8ca6Zwz8iOTfUpc8rkIPCgid1HQUT+WAbEIAZOFZEik= subject=C = US, O = DigiCert Inc, OU = www.digicert.com, CN = DigiCert Assured ID Root G2
-8mzaocSOLTaerySZOkJPgpCYOvcJSlvenH1ENB8uJCg= subject=C = US, ST = Washington, L = Redmond, O = Microsoft Corporation, CN = Microsoft EV ECC Root Certificate Authority 2017
+8mzaocSOLTaerySZOkJPgpCYOvcJSlvenH1ENB8uJCg= subject=C = US, O = Microsoft Corporation, CN = Microsoft EV ECC Root Certificate Authority 2017
 8qTmsmPQpVKt/12F3Ja1gg/WaqCxgij0j9sIfI2zQTM= subject=C = US, ST = FL, L = Jacksonville, O = Network Solutions L.L.C., CN = Network Solutions RSA Certificate Authority
 96/0GycJ8XX4q6F+VnsnBGst1Uv25+Jj0ylYc0N7nP8= subject=C = AT, O = A-Trust Ges. f. Sicherheitssysteme im elektr. Datenverkehr GmbH, OU = A-Trust-Qual-03, CN = A-Trust-Qual-03
 9CNSw8w9hLhRiYnWR8iMowHIj7mRk4u87MnuYOVl03c= subject=C = ES, serialNumber = Q2863006I, O = CONSEJO GENERAL DE LA ABOGACIA, CN = ACA ROOT
@@ -49,8 +52,10 @@
 9+ze1cZgR9KO1kZrVDxA4HQ6voHRCSVNz4RdTCx4U8U= subject=C = US, O = Amazon, CN = Amazon Root CA 4
 9zvl66U2kSxVf7hVUXrR7gSHvY9jSYw5SRZBd7oGxd4= subject=C = CZ, CN = I.CA - Standard root certificate, O = Prvni certifikacni autorita a.s.
 a8/IbI3cKvLmoRgKLdq7N7fqN1Uxa2S5uJUb8Mo1HwY= subject=C = SK, L = Bratislava, O = Disig a.s., CN = CA Disig Root R1
+aB3EgsKWyEAsbrsg5oMJo7yEZSOuNLmEqE7ml6MxLbc= subject=C = PL, O = Asseco Data Systems S.A., OU = Certum Certification Authority, CN = Certum Trusted Root CA
 aCdH+LpiG4fN07wpXtXKvOciocDANj0daLOJKNJ4fx4= subject=OU = GlobalSign Root CA - R6, O = GlobalSign, CN = GlobalSign
 AEEkrWA3/V8zGeeiPU2cgR9VmNZsR1QVWwqqno8AYh8= subject=C = BE, O = Certipost s.a./n.v., CN = Certipost E-Trust TOP Root CA
+aev+v/YekQ4V8l7qcTByaSOdIXCSsg+m3JKnh3dk2qA= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Document Signing Root E45
 AG1751Vd2CAmRCxPGieoDomhmJy4ezREjtIZTBgZbV4= subject=C = GB, ST = Greater Manchester, L = Salford, O = COMODO CA Limited, CN = COMODO Certification Authority
 Agbq0WOxDqL4Ygho69ehX2SiAlDRbNV9bofE//GiGXw= subject=C = DE, O = Deutscher Sparkassen Verlag GmbH, OU = S-TRUST Certification Services, CN = S-TRUST Universal Root CA
 AGyyJqdyxxgtd3I4Pjc/DyKeff40RIEKjW5QkF0g1mE= subject=C = FI, ST = Finland, O = Vaestorekisterikeskus CA, OU = Certification Authority Services, OU = Varmennepalvelut, CN = VRK Gov. Root CA
@@ -59,7 +64,7 @@ aJv0WzCD/erVXxR/0QXjzyGK1Y7fPkswHAxe7qbPIQ0= subject=C = NL, O = Digidentity B.V
 AjyBzOjnxk+pQtPBUEhwfTXZu1uH9PVExb8bxWQ68vo= subject=C = US, O = "VeriSign, Inc.", OU = Class 3 Public Primary Certification Authority - G2, OU = "(c) 1998 VeriSign, Inc. - For authorized use only", OU = VeriSign Trust Network
 /AKkni4ejkiMopEhNVcswvjnG7Di8oWWs3IimfXLnGI= subject=C = US, ST = Washington, L = Redmond, O = Microsoft Corporation, CN = Microsoft Time Stamp Root Certificate Authority 2014
 akNrWNnYMOjVuKZCUFrWtBQGrc1olNlBT3vgoUZ7rbc= subject=C = DE, O = DATEV eG, CN = CA DATEV STD 02
-aKpjVFHYOWIWfoj7CPhnjXOuxm/FWUYhN8/50bw9OHE= subject=C = US, ST = Washington, L = Redmond, O = Microsoft Corporation, CN = Microsoft EV RSA Root Certificate Authority 2017
+aKpjVFHYOWIWfoj7CPhnjXOuxm/FWUYhN8/50bw9OHE= subject=C = US, O = Microsoft Corporation, CN = Microsoft EV RSA Root Certificate Authority 2017
 aMNpIhRyTUtVp2D0cLT8qLXg/h1ynP8i/rTKiKzTmAk= subject=CN = ComSign CA, O = ComSign, C = IL
 aN7ZogP/bjZ+EqpJl3zSAPcSeoAPqm+Fnwuv7YKGpPs= subject=C = US, ST = Washington, L = Redmond, O = Microsoft Corporation, CN = Microsoft ECC Product Root Certificate Authority 2018
 axpQXgJG8vYMSQ/wwJenvichDLt1ACN/iLDNSCmLybg= subject=C = FR, O = Certinomis, OU = 0002 433998903, CN = Certinomis - Root CA
@@ -72,6 +77,7 @@ B+hU8mp8vTiZJ6oEG/7xts0h3RQ4GK2UfcZVqeWH/og= subject=C = US, O = IdenTrust, CN =
 bjZLYTPe79y7ISc8X0RaIK+8BQONWwIcDCFTA5AWNFs= subject=C = PL, O = Krajowa Izba Rozliczeniowa S.A., CN = SZAFIR ROOT CA2
 BRz5+pXkDpuD7a7aaWH2Fox4ecRmAXJHnN1RqwPOpis= subject=C = US, OU = www.xrampsecurity.com, O = XRamp Security Services Inc, CN = XRamp Global Certification Authority
 BStocQfshOhzA4JFLsKidFF0XXSFpX1vRk4Np6G2ryo= subject=C = SE, O = AddTrust AB, OU = AddTrust TTP Network, CN = AddTrust Class 1 CA Root
+btDb2Vni7L6DI5gWCCb2Au5EHhqW8BVXm/OmcpKmDT4= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Document Signing Root R45
 BVcK5usPzrQhDm23lIa3CUyvIAQB4Um2Z3RBtfJeRJs= subject=CN = ACCVRAIZ1, OU = PKIACCV, O = ACCV, C = ES
 bW8MNAlxohijHRAzDqmufHplUFNMbu/t3SEY4RTbRz4= subject=C = FR, O = OpenTrust, CN = OpenTrust Root CA G1
 bz4Hf+VQRkbAGRr85JTk62gYPjmPWk3AVmn4tubmgv4= subject=C = JP, O = Japanese Government, OU = ApplicationCA
@@ -117,6 +123,7 @@ fKbRP+N/gOJ1xJ4eaBPO4u2AwS5J3LugQOO44iadsos= subject=L = Internet, O = "VeriSign
 fKoDRlEkWQxgHlZ+UhSOlSwM/+iQAFMP4NlbbVDqrkE= subject=C = US, O = GeoTrust Inc., CN = GeoTrust Universal CA 2
 fNZ8JI9p2D/C+bsB3LH3rWejY9BGBDeW0JhMOiMfa7A= subject=C = US, ST = Texas, L = Houston, O = SSL Corporation, CN = SSL.com EV Root Certification Authority RSA R2
 foeCwVDOOVL4AuY2AjpdPpW7XWjjPoWtsroXgSXOvxU= subject=O = "Cybertrust, Inc", CN = Cybertrust Global Root
+FrDVUEKn2c6y8SBKpkxls6kEbp7PG+9UIfPSvhvF/6w= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Timestamping Root R45
 FSg5faISiQqDCwuVpZlozvI0dzd531GBzxD6ZHU0u2U= subject=C = IL, O = StartCom Ltd., CN = StartCom Certification Authority G2
 FtgtZ6Htjon5q1j30P0+sNABdof8ruzUBHXxAIOltZM= subject=C = JP, O = "Japan Certification Services, Inc.", CN = SecureSign RootCA1
 fWw+v56nNdGFS+6ny5QaseNQNRXgh7u1vmldBfL1VuQ= subject=C = US, ST = FL, L = Jacksonville, O = Network Solutions L.L.C., CN = Network Solutions ECC Certificate Authority
@@ -203,6 +210,7 @@ lBWyXbo7vXEUOeKplkt6Ulav87BcdyyKNObJNWarpjo= subject=C = CH, O = Swiss Governmen
 lCppFqbkrlJ3EcVFAkeip0+44VaoJUymbnOaEUk7tEU= subject=C = SE, O = AddTrust AB, OU = AddTrust External TTP Network, CN = AddTrust External CA Root
 LgbK4fwgsgDm+3SFV6RES+yTF9//LkFRZp4PeUTwqeA= subject=C = US, ST = Illinois, L = Chicago, O = "Trustwave Holdings, Inc.", CN = Trustwave Global Certification Authority
 LgCRWp974GqyNwx7fCAMCpbVrGpQzhh02+/eQCLU3o4= subject=C = US, O = VISA, OU = Visa International Service Association, CN = Visa Information Delivery Root CA
+ljUtCth1wCfbgtWZuqjULlxHJkmYHs7tO/xl9Mgf1cE= subject=C = BR, O = ICP-Brasil, OU = Instituto Nacional de Tecnologia da Informacao - ITI, CN = Autoridade Certificadora Raiz Brasileira v10
 lLlLv5oHJvF7CXOvbUHp+y5wmWUby+/d2XsKXyqrsN0= subject=C = TW, O = TAIWAN-CA, OU = Root CA, CN = TWCA Root Certification Authority
 lnsM2T/O9/J84sJFdnrpsFp3awZJ+ZZbYpCWhGloaHI= subject=C = US, O = "VeriSign, Inc.", OU = VeriSign Trust Network, OU = "(c) 2008 VeriSign, Inc. - For authorized use only", CN = VeriSign Universal Root Certification Authority
 lpkiXF3lLlbN0y3y6W0c/qWqPKC7Us2JM8I7XCdEOCA= subject=C = US, O = GeoTrust Inc., CN = GeoTrust Universal CA
@@ -218,12 +226,14 @@ mAki7uB/hrx/Xl6V1X24va5o4XpCHE5yqWpwioeSASQ= subject=C = HU, L = Budapest, O = M
 MCeimPpXMU3A490QGUEbj0BMQ8P5NM4734VlEsgKoVw= subject=C = US, O = Symantec Corporation, OU = Symantec Trust Network, CN = Symantec Class 2 Public Primary Certification Authority - G4
 mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c= subject=C = US, O = Google Trust Services LLC, CN = GTS Root R4
 MhmwkRT/SVo+tusAwu/qs0ACrl8KVsdnnqCHo/oDfk8= subject=C = US, O = AffirmTrust, CN = AffirmTrust Premium ECC
+MhY4wxAbP/w28oDwljGF/BbTE/KpLKvtK8H6FvscqjE= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Secure Mail Root R45
 MJ8T1J6mb1IyQbVVJHREZOKMwbgu95tk5NWBiA3Ndx8= subject=C = CA, ST = Ontario, L = Toronto, O = Echoworx Corporation, OU = Certification Services, CN = Echoworx Root CA2
 MLccT5EiR252HmIO7EK/pfhMSTzUm7sYNLJuVV9g3kA= subject=C = ES, O = Agencia Notarial de Certificacion S.L. Unipersonal - CIF B83395988, CN = ANCERT Certificados Notariales
 mLPxCgJQQZEPGXzxfKD83+11+yyMFKhD4E1WVsnrrBo= subject=O = Digital Signature Trust Co., CN = DST Root CA X4
 M/paUwBhPUZub4XIBRaVvtXR+tWfJeBArNoEcqdPPCA= subject=C = CZ, O = "Prvn\C3\AD certifika\C4\8Dn\C3\AD autorita, a.s.", CN = I.CA Root CA/RSA, serialNumber = NTRCZ-26439395
 MtGA7THJNVieydu7ciEjuIO1/C3BD5/KOpXXfhv8tTQ= subject=C = US, O = Network Solutions L.L.C., CN = Network Solutions Certificate Authority
 mTM8OmZc8O+7dIizgHuLZfh7WynWiA8CjtwoRC7q5mk= subject=C = SI, O = Halcom, CN = Halcom Root CA
+mUkjO7hQqWajLbFRktJM+ISJ8nPHemlNOTWY5vEn4PY= subject=C = CZ, O = "Prvn\C3\AD certifika\C4\8Dn\C3\AD autorita, a.s.", organizationIdentifier = NTRCZ-26439395, CN = I.CA Root CA/ECC 12/2016
 MVEmgCM/XyofKUN/VtSYjPCvxBzGxdpidZKOnAvq3ic= subject=C = US, O = Symantec Corporation, OU = Symantec Trust Network, CN = Symantec Class 1 Public Primary Certification Authority - G4
 mWKrFpmw63x+ileLx5iTBCAxwRWMYzYTGZqQuWUqKnU= subject=CN = CAEDICOM Root, O = EDICOM, C = ES
 myGdD7/zal+zIJBXGQa87qaGF8gzo/YbgeliqOZNuK8= subject=CN = Apple Root CA - G3, OU = Apple Certification Authority, O = Apple Inc., C = US
@@ -231,7 +241,8 @@ Mym/oTtgB6tfw3E/CssolCbi+8mcxcEQqRSxOVcWALY= subject=C = JP, O = "SECOM Trust Sy
 N2oacIKlk9zMINVh0Rnpq40w8RzDIdCjf6QfDfKE4Bw= subject=C = IN, OU = emSign PKI, O = eMudhra Technologies Limited, CN = emSign Root CA - G1
 ncOKntz4KEK2dNoYa21iFaueLsbXL1ewioknKMMUMfM= subject=C = JP, O = "Japan Certification Services, Inc.", CN = SecureSign RootCA3
 ndVfxXP1RstqODHRES2HEKb0+C3If1+unToaAo3Tbks= subject=C = CN, O = China Internet Network Information Center, CN = China Internet Network Information Center EV Certificates Root
-NfU84SZGEeAzQP434ex9TMmGxWE9ynD9BKpEVF8tryg= subject=C = US, ST = Washington, L = Redmond, O = Microsoft Corporation, CN = Microsoft ECC Root Certificate Authority 2017
+Nf9rT12ikQ+Ofm1YNADtjHzm/IWSTiXXTr0nwx7nrAs= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Secure Mail Root E45
+NfU84SZGEeAzQP434ex9TMmGxWE9ynD9BKpEVF8tryg= subject=C = US, O = Microsoft Corporation, CN = Microsoft ECC Root Certificate Authority 2017
 nG9qEjy6pO402+zu4kyX1ziHjLQj88InOQNCT10fbdU= subject=C = ZA, ST = Western Cape, L = Cape Town, O = Thawte Consulting cc, OU = Certification Services Division, CN = Thawte Server CA, emailAddress = server-certs@thawte.com
 NIdnza073SiyuN1TUa7DDGjOxc1p0nbfOCfbxPWAZGQ= subject=C = US, ST = Texas, L = Houston, O = SSL Corporation, CN = SSL.com EV Root Certification Authority ECC
 NJn5P9OUUjv7HsTDrU37MQEx++nuVHa95ild6AjV3Y8= subject=C = ch, O = Swisscom, OU = Digital Certificate Services, CN = Swisscom Root CA 1
@@ -276,12 +287,14 @@ Q8dCYvdJJmLSRZvMmJm6xUpOzAHho/XnZViZK0AVJBg= subject=C = CH, O = The Federal Aut
 q8rfo1/4Ncs6CguGQAYiuA1egMdlvAJ/GxxOCmIPXhw= subject=C = AT, O = A-Trust Ges. f. Sicherheitssysteme im elektr. Datenverkehr GmbH, OU = A-Trust-Root-05, CN = A-Trust-Root-05
 QAL80xHQczFWfnG82XHkYEjI3OjRZZcRdTs9qiommvo= subject=C = US, ST = UT, L = Salt Lake City, O = The USERTRUST Network, OU = http://www.usertrust.com, CN = UTN - DATACorp SGC
 qBKTRF2xlqIDD55FX+PHSppPgxewKwFAYCeocIF0Q0w= subject=C = TW, O = Government Root Certification Authority
+QEIRZtHurpZ01aarsNXmoWqpdk/rcTGhUhBjVrTlyp8= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Code Signing Root R45
 qGvauPSAtuuJQquRcL3QmRlxp60TXfu8tyhfB6fR44o= subject=C = CN, O = UniTrust, CN = UCA Root
 qHRDs9iW6yV8zOmbla2pvIG5204xQqqama8JQssKSjo= subject=C = GB, O = Trustis Limited, OU = Trustis FPS Root CA
 QiOJQAOogcXfa6sWPbI1wiGhjVS/dZlFgg5nDaguPzk= subject=C = NL, O = Staat der Nederlanden, CN = Staat der Nederlanden Root CA - G3
 qiYwp7YXsE0KKUureoyqpQFubb5gSDeoOoVxn6tmfrU= subject=C = PL, O = Unizeto Technologies S.A., OU = Certum Certification Authority, CN = Certum Trusted Network CA
 qjiH1bsTPLJO7L7NltFcyKgbKy9zb5z9r5RIZX7wSq0= subject=C = LT, O = Skaitmeninio sertifikavimo centras, OU = CA ROOT Services, CN = SSC GDL CA Root A
 /qK31kX7pz11PB7Jp4cMQOH3sMVh6Se5hb9xGGbjbyI= subject=C = US, O = "Entrust, Inc.", OU = See www.entrust.net/legal-terms, OU = "(c) 2012 Entrust, Inc. - for authorized use only", CN = Entrust Root Certification Authority - EC1
+QkMWJ+p2zHhpf5FeNFWxsuyC/y9jgO5kI+88CEC35jE= subject=C = HU, L = Budapest, O = Microsec Ltd., organizationIdentifier = VATHU-23584497, CN = e-Szigno Root CA 2017
 QPz8KIddzL/ry99s10MzEtpjxO/PO9extQXCICCuAnQ= subject=C = CH, O = SwissSign AG, CN = SwissSign Gold CA - G2
 QqcJhP/TmcTq8OcCpEvvKtinm4v0ZI9rshDhI/0HV5M= subject=C = IN, O = India PKI, CN = CCA India 2011
 QqgHzsWunA8DtAygQ6xwRotSGb11zFu+pR2SHdEAFW8= subject=C = US, ST = Texas, L = Houston, O = SSL Corporation, CN = SSL.com EV Root Certification Authority RSA
@@ -293,6 +306,7 @@ rER97dBDKqucBw8sygG22rCb7wfPTKaqp1VjT4V7MVo= subject=C = JP, O = LGPKI, CN = App
 RGLBB8SF3WpUQ/XnoWBEFgNKN0w/TRCHXxw3FQJ1Y68= subject=OU = Copyright (c) 1997 Microsoft Corp., OU = Microsoft Corporation, CN = Microsoft Root Authority
 RKPYDT9TSFltgKCYQsI6OXdEOfiwuRkjnSoD2sXOUhM= subject=C = SE, O = Carelink, CN = SITHS CA v3
 r/mIkG3eEpVdm+u/ko/cwxzOMo1bk4TyHIlByibiA5E= subject=C = US, O = DigiCert Inc, OU = www.digicert.com, CN = DigiCert Global Root CA
+rn+WLLnmp9v3uDP7GPqbcaiRdd+UnCMrap73yz3yu/w= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Root R46
 rTBMiEpdN2vRlSCaFMOeB/DT9c+JPYArBT4bkm5V13Q= subject=C = PT, O = SCEE, CN = ECRaizEstado
 RTt0gJtpAZYn8vhDAB21lQzdHUU3EFPn89/bw3FBE8Y= subject=C = ES, O = FNMT-RCM, OU = Ceres, organizationIdentifier = VATES-Q2826004J, CN = AC RAIZ FNMT-RCM SERVIDORES SEGUROS
 rxEPa1rot2fqxuCqJz84FuekCmRO2stDmBRjVud1CdY= subject=C = UY, O = ADMINISTRACION NACIONAL DE CORREOS, OU = SERVICIOS ELECTRONICOS, CN = Correo Uruguayo - Root CA
@@ -311,7 +325,7 @@ SkntvS+PgjC9VZKzE1c/4cFypF+pgBHMHt27Nq3j/OU= subject=C = BM, O = QuoVadis Limite
 sPbxW0gX6+b+C0v819Os5MdYsKtvip2i7ZLmGCOdnJg= subject=CN = ACEDICOM Root, OU = PKI, O = EDICOM, C = ES
 SQVGZiOrQXi+kqxcvWWE96HhfydlLVqFr4lQTqI5qqo= subject=C = US, O = GeoTrust Inc., CN = GeoTrust Primary Certification Authority
 sRJBQqWhpaKIGcc1NA7/jJ4vgWj+47oYfyU7waOS1+I= subject=C = US, O = "VeriSign, Inc.", OU = Class 3 Public Primary Certification Authority
-svcpi1K/LDysTd/nLeTWgqxYlXWVmC8rYjAa9ZfGmcU= subject=C = US, ST = Washington, L = Redmond, O = Microsoft Corporation, CN = Microsoft RSA Root Certificate Authority 2017
+svcpi1K/LDysTd/nLeTWgqxYlXWVmC8rYjAa9ZfGmcU= subject=C = US, O = Microsoft Corporation, CN = Microsoft RSA Root Certificate Authority 2017
 SVqWumuteCQHvVIaALrOZXuzVVVeS7f4FGxxu6V+es4= subject=C = US, O = "VeriSign, Inc.", OU = VeriSign Trust Network, OU = "(c) 1999 VeriSign, Inc. - For authorized use only", CN = VeriSign Class 3 Public Primary Certification Authority - G3
 sWyxulKaOeLf1Ts/9aefGQRhTYPjEwTwJ4u0CzjPeCQ= subject=C = CN, O = CFCA GT CA
 SXEo/JBla4cpBIKyI++3IkD+nEIeeZON5fgRDLC+kFY= subject=C = US, ST = Illinois, L = Chicago, O = "Trustwave Holdings, Inc.", CN = Trustwave Global ECC P256 Certification Authority
@@ -332,6 +346,7 @@ u0Eo7JYg8tKknOjixOJXrrrZOg8RxWtfpLAOI3Wfo50= subject=C = JP, O = "Japan Certific
 u1IIbQY56NszJ3Wsj06ENdks6wD04k8o/A6r4kB3LoA= subject=C = GR, L = Athens, O = Hellenic Academic and Research Institutions Cert. Authority, CN = Hellenic Academic and Research Institutions ECC RootCA 2015
 U3VmJij6CmhArsjFkr9djeVk7T77YsfJMvyo11TZu9Y= subject=C = FR, O = Certplus, CN = Certplus Root CA G2
 UI+MYXivMpu2u3U6uUPZAjvnlsOtu2xc1GZLZv7syuU= subject=C = CH, O = The Federal Authorities of the Swiss Confederation, OU = Services, OU = Certification Authorities, CN = Swiss Government Root CA I
+/uivkpF1aH9GOKP8mD247NDl4qg+c38/t3tMIvy6wKY= subject=C = AT, O = e-commerce monitoring GmbH, CN = GLOBALTRUST 2020
 UJS3O3Nq33Ogy/Q+J78UQHtKNqo2OkV/zjOUnOuo5kk= subject=C = HU, L = Budapest, O = NetLock Kft., OU = Tan\C3\BAs\C3\ADtv\C3\A1nykiad\C3\B3k (Certification Services), CN = NetLock Platina (Class Platinum) F\C5\91tan\C3\BAs\C3\ADtv\C3\A1ny
 uJvLuKzUdMG+p9rWUDf0jc7MnfqgYSw8JEWVZBnfMv4= subject=C = ES, ST = MADRID, L = MADRID, OU = see current address at www.camerfirma.com/address, OU = CHAMBERS OF COMMERCE ROOT - 2016, serialNumber = A82743287, organizationIdentifier = VATES-A82743287, O = AC CAMERFIRMA S.A., CN = CHAMBERS OF COMMERCE ROOT - 2016
 UMyGupbbMmPHmkPq0HVT2fVmWeaQfnLYwCZjehzchdw= subject=C = GR, L = Athens, O = Hellenic Academic and Research Institutions Cert. Authority, CN = Hellenic Academic and Research Institutions RootCA 2015
@@ -339,6 +354,7 @@ UQ0g5cR/Y89mayD2GvYrwJmkKsgk/6RDotp8kLGAipE= subject=C = FR, O = Dhimyotis, CN =
 UUPkdWmh1fyGeJPgzEEsQfVXFdp45Z6fjkN3AAjKQtI= subject=C = ES, ST = Barcelona, L = Barcelona (see current address at https://www.anf.es/address/), O = ANF Autoridad de Certificaci\C3\B3n, OU = ANF Clase 1 CA, serialNumber = G63287510, CN = ANF Server CA
 uUwZgwDOxcBXrQcntwu+kYFpkiVkOaezL0WYEZ3anJc= subject=C = US, O = DigiCert Inc, OU = www.digicert.com, CN = DigiCert Global Root G3
 UZJDjsNp1+4M5x9cbbdflB779y5YRBcV6Z6rBMLIrO4= subject=C = US, O = "VeriSign, Inc.", OU = VeriSign Trust Network, OU = "(c) 2007 VeriSign, Inc. - For authorized use only", CN = VeriSign Class 3 Public Primary Certification Authority - G4
+v9cyWw0aotVPnkvpOMciA+S9c5BDQbDBg2NhwmMhIuE= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Code Signing Root E45
 VeAL4nfOsFRSmfJP2fh34qzzKFLbQ//NKbynSzm0yfo= subject=C = TR, L = Gebze - Kocaeli, O = Turkiye Bilimsel ve Teknolojik Arastirma Kurumu - TUBITAK, OU = Kamu Sertifikasyon Merkezi - Kamu SM, CN = TUBITAK Kamu SM SSL Kok Sertifikasi - Surum 1
 Vfd95BwDeSQo+NUYxVEEIlvkOlWY2SalKK1lPhzOx78= subject=C = US, O = Google Trust Services LLC, CN = GTS Root R2
 v+gpCYcuRDTxFcUaVhaAGVlNDgPco2PZ87SDnQurzeU= subject=C = US, O = Verizon Business, OU = OmniRoot, CN = Verizon Global Root CA
@@ -349,6 +365,7 @@ VjLZe/p3W/PJnd6lL8JVNBCGQBZynFLdZSTIqcO0SJ8= subject=C = US, O = "The Go Daddy G
 Vjs8r4z+80wjNcr1YKepWQboSIRi63WsWXhIMN+eWys= subject=O = Digital Signature Trust Co., CN = DST Root CA X3
 vM6OK7rucbY1jd1kHLv8Jd5FQAMAYnH3W1C3JtZ8O8k= subject=C = PL, O = Krajowa Izba Rozliczeniowa S.A., CN = SZAFIR ROOT CA
 vPtEqrmtAhAVcGtBIep2HIHJ6IlnWQ9vlK50TciLePs= subject=C = US, O = GeoTrust Inc., OU = (c) 2007 GeoTrust Inc. - For authorized use only, CN = GeoTrust Primary Certification Authority - G2
++vpvUuZnrn0+F0B/SfWFynBc1Vl/WFDP/fpk2muz0Ms= subject=C = BE, O = GlobalSign nv-sa, CN = GlobalSign Client Authentication Root E45
 vRU+17BDT2iGsXvOi76E7TQMcTLXAqj0+jGPdW7L1vM= subject=C = GB, ST = Greater Manchester, L = Salford, O = Comodo CA Limited, CN = AAA Certificate Services
 vt2LyX6oZJcZWgeKmZojegYK664HvAoLm3eJgrpfYvQ= subject=C = SI, O = Halcom, CN = Halcom CA PO 2
 vwHDXzNxE/FntKUBhnZeex44kK9YYyjxhc0Na66BNSE= subject=C = ES, O = Agencia Notarial de Certificacion S.L.U. - CIF B83395988, CN = ANCERT Certificados CGN V2
@@ -388,6 +405,7 @@ Yo46EVb2+qkvlLQJJY1Muj8gR0gNMBlPrz++0F6utbI= subject=C = TR, O = Elektronik Bilg
 YOOF2fbmkG6F5D+esOQ+ZScZMZ6cgKYUaJG+I69f4uk= subject=O = VeriSign Trust Network, OU = "VeriSign, Inc.", OU = VeriSign Time Stamping Service Root, OU = "NO LIABILITY ACCEPTED, (c)97 VeriSign, Inc."
 yQ0AnEfuufKimuhI9dkw8rQe9e28XFaVwUFDRcHdZ7Q= subject=C = DE, ST = Baden-Wuerttemberg (BW), L = Stuttgart, O = Deutscher Sparkassen Verlag GmbH, CN = S-TRUST Authentication and Encryption Root CA 2005:PN
 YQbA46CimYMYdRJ719PMGFmAPVEcrBHrbghA3RZvwQ4= subject=C = DE, O = T-Systems Enterprise Services GmbH, OU = T-Systems Trust Center, CN = T-TeleSec GlobalRoot Class 2
+yUImLAx8CpW7FStxxCVW3b6aBPqDeDc1UNK3zifZUqM= subject=C = TN, O = Agence Nationale de Certification Electronique, CN = TunTrust Root CA
 YWFnIBQzrqbI5eMHCvyvZ0kYj4FL0auxea6NrTq/Juw= subject=C = HU, L = Budapest, O = Microsec Ltd., CN = Microsec e-Szigno Root CA 2009, emailAddress = info@e-szigno.hu
 y+WsFdiLXKw/gebfO/tXvqYJWIE6R7d/PFy2uYGRvbU= subject=emailAddress = pki@sk.ee, C = EE, O = AS Sertifitseerimiskeskus, CN = Juur-SK
 yZBbDuASAik8oCbmTwhBJELFUEwG5Eyn6XJtYfIOQIk= subject=C = US, ST = Washington, L = Redmond, O = Microsoft Corporation, CN = Microsoft Root Certificate Authority 2010

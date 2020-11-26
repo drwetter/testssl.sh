@@ -17,7 +17,7 @@ use Data::Dumper;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $check2run_smtp="--protocols --standard --pfs --server-preference --headers --vulnerable --each-cipher -q --ip=one --color 0";
+my $check2run_smtp="--protocols --standard --fs --server-preference --headers --vulnerable --each-cipher -q --ip=one --color 0";
 my $check2run="-q --ip=one --color 0";
 my $uri="";
 my $socket_out="";
@@ -98,6 +98,13 @@ $openssl_out = `./testssl.sh --ssl-native $check2run -t xmpp $uri 2>&1`;
 # $openssl_json = json('tmp.json');
 unlike($openssl_out, qr/$openssl_regex_bl/, "");
 $tests++;
+
+# $uri="jabber.ccc.de:5269";
+# printf "\n%s\n", "Quick STARTTLS XMPP S2S unit tests via sockets --> $uri ...";
+# $openssl_out = `./testssl.sh --openssl=/usr/bin/openssl -p $check2run -t xmpp-server $uri 2>&1`;
+# # $openssl_json = json('tmp.json');
+# unlike($openssl_out, qr/$openssl_regex_bl/, "");
+# $tests++;
 
 
 $uri="ldap.uni-rostock.de:21";
