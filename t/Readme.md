@@ -6,5 +6,5 @@
 * 50-69:  Are the results what I expect (server side)?
 
 Please help to write Travis/CI tests! Documentation can be found [here](https://perldoc.perl.org/Test/More.html).
-You can consult the existing code here. Feel free to use `20_baseline_ipv4_http.t` or `23_client_simulation.t` as a
+You can consult the existing code here. Feel free to use `10_baseline_ipv4_http.t` or `23_client_simulation.t` as a
 template.
