@@ -12,7 +12,8 @@
 * Percent output char problem fixed
 * Several display/output fixes
 * BREACH check: list all compression methods and add brotli
-* test for winshock vulnerability
+* Test for old winshock vulnerability
+* Test for STARTTLS injection vulnerabilities (SMTP, POP3, IMAP)
 * Security fix: DNS input
 * Don't use external pwd anymore
 * STARTTLS: XMPP server support
@@ -26,7 +27,7 @@
 * Added environment variable for amount of attempts for ssl renegotiation check
 * Added --user-agent argument to support using a custom User Agent
 * Added --overwrite argument to support overwriting output files without warning
-* Headerflag X-XSS-Protection is labeled as INFO 
+* Headerflag X-XSS-Protection is labeled as INFO
 
 ### Features implemented / improvements in 3.0
 
