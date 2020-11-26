@@ -15761,14 +15761,17 @@ run_ccs_injection(){
 }
 
 sub_session_ticket_tls() {
-     local tls_proto="$1"
      local sessticket_tls=""
+     local line=""
+     local tls_proto="$1"
+     local first=true
+
      #FIXME: we likely have done this already before (either @ run_server_defaults() or at least the output
      #       from a previous handshake) --> would save 1x connect. We have TLS_TICKET but not yet the ticket itself
      # We DO NOT use SNI here as we assume ticketbleed is a TLS stack. vulnerability. If we'd use SNI here, we'd also need
      # it to use in the ClientHello of run_ticketbleed() otherwise the ticket will be different and the whole thing won't work!
      #
-     sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $tls_proto $PROXY -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
+     sessticket_tls="$($OPENSSL s_client $(s_client_options "$BUGS $tls_proto $PROXY $SNI -connect $NODEIP:$PORT") </dev/null 2>$ERRFILE | awk '/TLS session ticket:/,/^$/' | awk '!/TLS session ticket/')"
      debugme echo "$sessticket_tls" >&2      # This needs to be on stderr (return value)
 
      if [[ -z "$sessticket_tls" ]] || [[ "$sessticket_tls" == " " ]]; then
