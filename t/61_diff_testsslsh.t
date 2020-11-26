@@ -1,8 +1,8 @@
 #!/usr/bin/env perl
 
-# Baseline diff test against testssl, (csv output)
+# Baseline diff test against testssl.sh (csv output)
 #
-# We don't use a full run yet and omiy the certificate section.
+# We don't use a full run yet and only the certificate section.
 # There we would need to blacklist at least:
 # cert_serialNumber, cert_fingerprintSHA1, cert_fingerprintSHA256, cert
 # cert_expirationStatus, cert_notBefore, cert_notAfter, cert_caIssuers, intermediate_cert
@@ -12,7 +12,6 @@
 use strict;
 use Test::More;
 use Data::Dumper;
-use File::Compare;
 use Text::Diff;
 
 my $tests = 0;
@@ -47,9 +46,8 @@ $master_socket_csv=`cat $master_socket_csv`;
 $socket_csv=~ s/HTTP_clock_skew.*\n//g;
 $master_socket_csv=~ s/HTTP_clock_skew.*\n//g;
 
-# Compare and print the differences if there are some
-# Filtering takes place later, so if ther will be a difference detected
-# it'll also show HTTP_clock_skew
+# Compare the differences to the master file -- and print differences if there were detected.
+# Filtering takes place later, so if there will be a difference detected it'll also show HTTP_clock_skew :-(
 #
 cmp_ok($socket_csv, "eq", $master_socket_csv, "Check whether CSV output matches master file from $uri") and
      printf "\n%s\n", "$diff";
