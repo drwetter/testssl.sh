@@ -141,12 +141,15 @@ in `/etc/hosts`.  The use of the switch is only useful if you either can't or ar
 
 `--sneaky` For HTTP header checks testssl.sh uses normally the server friendly HTTP user agent `TLS tester from ${URL}`. With this option your traces are less verbose and a Firefox user agent is being used. Be aware that it doesn't hide your activities. That is just not possible (environment preset via `SNEAKY=true`).
 
+`--user-agent <user agent>` tells testssl.sh to use the supplied HTTP user agent instead of the standard user agent `TLS tester from ${URL}`.
+
 `--ids-friendly` is a switch which may help to get a scan finished which otherwise would be blocked by a server side IDS. This switch skips tests for the following vulnerabilities: Heartbleed, CCS Injection, Ticketbleed and ROBOT. The environment variable OFFENSIVE set to false will achieve the same result. Please be advised that as an alternative or as a general approach you can try to apply evasion techniques by changing the variables USLEEP_SND and / or USLEEP_REC and maybe MAX_WAITSOCK.
 
 `--phone-out` Checking for revoked certificates via CRL and OCSP is not done per default. This switch instructs testssl.sh to query external -- in a sense of the current run -- URIs. By using this switch you acknowledge that the check might have privacy issues, a download of several megabytes (CRL file) may happen and there may be network connectivity problems while contacting the endpoint which testssl.sh doesn't handle. PHONE_OUT is the environment variable for this which needs to be set to true if you want this.
 
-`--add-ca <cafile>` enables you to add your own CA(s) for trust chain checks. `cafile` can be a single path or multiple paths as a comma separated list of root CA files. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates is issued by internal CAs. Alternatively ADDTL_CA_FILES is the environment variable for this.
-
+`--add-ca <CAfile>` enables you to add your own CA(s) in PEM format for trust chain checks. `CAfile` can be a directory containing files with a \.pem extension, a single file or multiple files as a comma separated list of root CAs. Internally they will be added during runtime to all CA stores. This is (only) useful for internal hosts whose certificates are issued by internal CAs. Alternatively ADDTL_CA_FILES is the environment variable for this.
+.
+.SS "SINGLE CHECK OPTIONS"
 
 ### SINGLE CHECK OPTIONS
 
@@ -213,7 +216,7 @@ Also for multiple server certificates are being checked for as well as for the c
 * Decodes BIG IP F5 non-encrypted cookies
 * Security headers (X-Frame-Options, X-XSS-Protection, Expect-CT,... , CSP headers). Nonsense is not yet detected here.
 
-`--c, --client-simulation`     This simulates a handshake with a number of standard clients so that you can figure out which client cannot or can connect to your site. For the latter case the protocol, cipher and curve is displayed, also if there's Forward Secrecy. testssl.sh uses a handselected set of clients which are retrieved by the SSLlabs API. The output is aligned in columns when combined with the `--wide` option. If you want the full nine yards of clients displayed use the environment variable ALL_CLIENTS.
+`-c, --client-simulation`     This simulates a handshake with a number of standard clients so that you can figure out which client cannot or can connect to your site. For the latter case the protocol, cipher and curve is displayed, also if there's Forward Secrecy. testssl.sh uses a handselected set of clients which are retrieved by the SSLlabs API. The output is aligned in columns when combined with the `--wide` option. If you want the full nine yards of clients displayed use the environment variable ALL_CLIENTS.
 
 `-g, --grease` checks several server implementation bugs like tolerance to size limitations and GREASE, see RFC 8701. This check doesn't run per default.
 
@@ -254,6 +257,8 @@ Also for multiple server certificates are being checked for as well as for the c
 `-A, --beast`                   Checks BEAST vulnerabilities in SSL 3 and TLS 1.0 by testing the usage of CBC ciphers.
 
 `-L, --lucky13`                 Checks for LUCKY13 vulnerability. It checks for the presence of CBC ciphers in TLS versions 1.0 - 1.2.
+
+`-WS, --winshock`               Checks for Winshock vulnerability. It tests for the absence of a lot of ciphers, some TLS extensions and ec curves which were introduced later in Windows. In the end the server banner is being looked at.
 
 `-4, --rc4, --appelbaum`        Checks which RC4 stream ciphers are being offered.
 
@@ -324,7 +329,9 @@ Rating automatically gets disabled, to not give a wrong or misleading grade, whe
 
 `--severity <severity>` For CSV and both JSON outputs this will only add findings to the output file if a severity is equal or higher than the `severity` value specified. Allowed are `<LOW|MEDIUM|HIGH|CRITICAL>`. WARN is another level which translates to a client-side scanning error or problem. Thus you will always see them in a file if they occur.
 
-`--append` Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file exit with an error. `--append` however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
+`--append` Normally, if an output file already exists and it has a file size greater zero, testssl.sh will prompt you to manually remove the file and exit with an error. `--append` however will append to this file, without a header. The environment variable APPEND does the same. Be careful using this switch/variable. A complementary option which overwrites an existing file doesn't exist per design.
+
+`--overwrite` Normally, if an output file already exists and it has a file size greater zero, testssl.sh will not allow you to overwrite this file. This option will do that **without any warning**. The environment variable OVERWRITE does the same. Be careful, you have been warned!
 
 `--outprefix <fname_prefix>` Prepend output filename prefix <fname_prefix> before '${NODE}-'. You can use as well the environment variable FNAME_PREFIX. Using this any output files will be named `<fname_prefix>-${NODE}-p${port}${YYYYMMDD-HHMM}.<format>` when no file name of the respective output option was specified. If you do not like the separator '-' you can as well supply a `<fname_prefix>` ending in '.',  '_' or ','. In this case or if you already supplied '-' no additional '-' will be appended to `<fname_prefix>`.
 
