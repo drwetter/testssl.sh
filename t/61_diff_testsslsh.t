@@ -18,7 +18,7 @@ my $tests = 0;
 my $prg="./testssl.sh";
 my $master_socket_csv="./t/baseline_data/default_testssl.csvfile";
 my $socket_csv="tmp.csv";
- my $check2run="-p -s -P --fs -h -U -c -q --ip=one --color 0 --csvfile $socket_csv";
+my $check2run="-p -s -P --fs -h -U -c -q --ip=one --color 0 --csvfile $socket_csv";
 #my $check2run="-p --color 0 --csvfile $socket_csv";
 my $uri="testssl.sh";
 my $diff="";
@@ -49,8 +49,8 @@ $master_socket_csv=~ s/HTTP_clock_skew.*\n//g;
 # Compare the differences to the master file -- and print differences if there were detected.
 # Filtering takes place later, so if there will be a difference detected it'll also show HTTP_clock_skew :-(
 #
-cmp_ok($socket_csv, "eq", $master_socket_csv, "Check whether CSV output matches master file from $uri") and
-     printf "\n%s\n", "$diff";
+cmp_ok($socket_csv, "eq", $master_socket_csv, "Check whether CSV output matches master file from $uri") or
+     diag ("\n%s\n", "$diff");
 
 $tests++;
 
