@@ -36,14 +36,14 @@ You can pull the image from dockerhub and run:
 docker run --rm -t drwetter/testssl.sh --fs example.com
 ```
 
-Tags supported are: ``3.1dev`` and ``latest`` are the same, i.e. is the rolling release. ``3.0`` is the latest stable version from git which might have a few improvements over the released 3.0.X.
+Supported tages are: ``3.1dev`` and ``latest`, which are the same, i.e. the rolling release. ``3.0`` is the latest stable version from git which might have a few improvements (see git log) over the released version 3.0.X.
 
 ``docker run --rm -t drwetter/testssl.sh:stable example.com``.
 
-Keep in mind that any output file (--log, --html, --json etc.) will be created in the container. If you wish to have this created in a local directory you can mount a volume into the container and change the output prefix where the container user has write access to, e.g.:
+Keep in mind that any output file (--log, --html, --json etc.) will be created within the container. If you wish to have this created in a local directory on your host you can mount a volume into the container and change the output prefix where the container user has write access to, e.g.:
 
 ```
 docker run --rm -t -v /tmp:/data drwetter/testssl.sh --htmlfile /data/ example.com
 ```
 
-which writes the output to ``/tmp/example.com_p443-<date>-<time>.html.`` The uid/gid is the one from the docker user but normally the file is 644. testssl.sh's docker container uses a non-root user (usually with user/groupid 1000:1000).
+which writes the HTML output to ``/tmp/example.com_p443-<date>-<time>.html.`` The uid/gid is the one from the docker user. Normally the file is 644. testssl.sh's docker container uses a non-root user (usually with user/groupid 1000:1000).
