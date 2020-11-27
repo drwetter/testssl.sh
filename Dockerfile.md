@@ -1,6 +1,21 @@
-## Usage:
+## Usage
 
-(in git directory):
+### From git directory
+
+```
+docker build .
+```
+
+Catch is when you run without image tags you need to catch the ID when building
+
+```
+[..]
+---> 889fa2f99933
+Successfully built 889fa2f99933
+```
+
+More comfortable is
+
 ```
 docker build -t mytestssl .
 docker run --rm -t mytestssl example.com
@@ -13,17 +28,17 @@ docker run -t mytestssl --help
 docker run --rm -t mytestssl -p --header example.com
 ```
 
-or pull the image from dockerhub and run:
+### From dockerhub
+
+You can pull the image from dockerhub and run:
 
 ```
-docker run --rm -t drwetter/testssl.sh --pfs example.com
+docker run --rm -t drwetter/testssl.sh --fs example.com
 ```
 
-Tags supported are: ``latest``, ``stable`` which _for now_ are all the same and point to ``3.0``.
+Tags supported are: ``3.1dev`` and ``latest`` are the same, i.e. is the rolling release. ``3.0`` is the latest stable version from git which might have a few improvements over the released 3.0.X.
 
 ``docker run --rm -t drwetter/testssl.sh:stable example.com``.
-
-And for the indomitable users who prefer to run old stuff you can use the tag ``2.9.5``. Please note ``2.9dev`` should not be used anymore.
 
 Keep in mind that any output file (--log, --html, --json etc.) will be created in the container. If you wish to have this created in a local directory you can mount a volume into the container and change the output prefix where the container user has write access to, e.g.:
 
