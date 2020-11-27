@@ -17,14 +17,14 @@ use Data::Dumper;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $check2run_smtp="--protocols --standard --fs --server-preference --headers --vulnerable --each-cipher -q --ip=one --color 0";
+my $check2run_smtp="--protocols --standard --fs --server-preference --headers --vulnerable -q --ip=one --color 0";
 my $check2run="-q --ip=one --color 0";
 my $uri="";
 my $socket_out="";
 my $openssl_out="";
 # Blacklists we use to trigger an error:
-my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal';
-my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem';
+my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal|(c|C)ommand not found';
+my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem|(c|C)ommand not found';
 
 # my $socket_json="";
 # my $openssl_json="";
@@ -60,12 +60,14 @@ $socket_out = `./testssl.sh $check2run -t pop3 $uri 2>&1`;
 unlike($socket_out, qr/$socket_regex_bl/, "");
 $tests++;
 
+# commented out, bc of travis' limits
+#
+#printf "\n%s\n", "STARTTLS POP3 unit tests via OpenSSL --> $uri ...";
 # unlink "tmp.json";
-printf "\n%s\n", "STARTTLS POP3 unit tests via OpenSSL --> $uri ...";
-$openssl_out = `./testssl.sh --ssl-native $check2run -t pop3 $uri 2>&1`;
+#$openssl_out = `./testssl.sh --ssl-native $check2run -t pop3 $uri 2>&1`;
 # $openssl_json = json('tmp.json');
-unlike($openssl_out, qr/$openssl_regex_bl/, "");
-$tests++;
+#unlike($openssl_out, qr/$openssl_regex_bl/, "");
+#$tests++;
 
 
 $uri="imap.gmx.net:143";
@@ -93,11 +95,13 @@ $socket_out = `./testssl.sh $check2run -t xmpp $uri 2>&1`;
 unlike($openssl_out, qr/$openssl_regex_bl/, "");
 $tests++;
 
-printf "\n%s\n", "STARTTLS XMPP unit tests via OpenSSL --> $uri ...";
-$openssl_out = `./testssl.sh --ssl-native $check2run -t xmpp $uri 2>&1`;
+# commented out, bc of travis' limits
+#
+#printf "\n%s\n", "STARTTLS XMPP unit tests via OpenSSL --> $uri ...";
+#$openssl_out = `./testssl.sh --ssl-native $check2run -t xmpp $uri 2>&1`;
 # $openssl_json = json('tmp.json');
-unlike($openssl_out, qr/$openssl_regex_bl/, "");
-$tests++;
+#unlike($openssl_out, qr/$openssl_regex_bl/, "");
+#$tests++;
 
 # $uri="jabber.ccc.de:5269";
 # printf "\n%s\n", "Quick STARTTLS XMPP S2S unit tests via sockets --> $uri ...";
@@ -118,13 +122,15 @@ $socket_out =~ s/ error querying OCSP responder .*\n//g;
 unlike($socket_out, qr/$socket_regex_bl/, "");
 $tests++;
 
-printf "\n%s\n", "STARTTLS FTP unit tests via OpenSSL --> $uri ...";
-$openssl_out = `./testssl.sh --ssl-native $check2run -t ftp $uri 2>&1`;
+# commented out, bc of travis' limits
+#
+# printf "\n%s\n", "STARTTLS FTP unit tests via OpenSSL --> $uri ...";
+# $openssl_out = `./testssl.sh --ssl-native $check2run -t ftp $uri 2>&1`;
 # $openssl_json = json('tmp.json');
 # OCSP stapling fails sometimes with: 'offered, error querying OCSP responder (ERROR: No Status found)'
-$openssl_out =~ s/ error querying OCSP responder .*\n//g;
-unlike($openssl_out, qr/$openssl_regex_bl/, "");
-$tests++;
+# $openssl_out =~ s/ error querying OCSP responder .*\n//g;
+# unlike($openssl_out, qr/$openssl_regex_bl/, "");
+# $tests++;
 
 
 # https://ldapwiki.com/wiki/Public%20LDAP%20Servers
@@ -146,11 +152,13 @@ $socket_out = `./testssl.sh $check2run -t nntp $uri 2>&1`;
 unlike($socket_out, qr/$socket_regex_bl/, "");
 $tests++;
 
-printf "\n%s\n", "STARTTLS NNTP unit tests via OpenSSL --> $uri ...";
-$openssl_out = `./testssl.sh --ssl-native $check2run -t nntp $uri 2>&1`;
+# commented out, bc of travis' limits
+#
+#printf "\n%s\n", "STARTTLS NNTP unit tests via OpenSSL --> $uri ...";
+#$openssl_out = `./testssl.sh --ssl-native $check2run -t nntp $uri 2>&1`;
 # $openssl_json = json('tmp.json');
-unlike($openssl_out, qr/$openssl_regex_bl/, "");
-$tests++;
+#unlike($openssl_out, qr/$openssl_regex_bl/, "");
+#$tests++;
 
 
 # IRC: missing

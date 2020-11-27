@@ -9,13 +9,13 @@ use JSON;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $check2run ="--ip=one -q --color 0";
+my $check2run ="--ip=one --ids-friendly -q --color 0";
 my $uri="";
 my $json="";
 my $out="";
 # Blacklists we use to trigger an error:
-my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal';
-my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem';
+my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal|(c|C)ommand not found';
+my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem|(c|C)ommand not found';
 
 die "Unable to open $prg" unless -f $prg;
 
@@ -44,7 +44,7 @@ $tests++;
 
 
 #3
-# This testss.sh run deliberately does NOT work as travis-ci.org blocks port 25 egress.
+# This testssl.sh run deliberately does NOT work as travis-ci.org blocks port 25 egress.
 # but the output should be fine. The idea is to have a unit test for a failed connection.
 printf "%s\n", ".. plain JSON for a failed run: '--mx $uri' ...";
 $out = `./testssl.sh --ssl-native --openssl-timeout=10 $check2run --jsonfile tmp.json --mx $uri`;

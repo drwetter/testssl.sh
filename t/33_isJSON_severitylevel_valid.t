@@ -21,7 +21,7 @@ unlink 'tmp.json';
 
 #1
 pass(" .. running testssl.sh against badssl.com to create a JSON report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
-$out = `./testssl.sh -S -e -U --jsonfile tmp.json --severity LOW --color 0 badssl.com`;
+$out = `./testssl.sh -S -e -U --ids-friendly --jsonfile tmp.json --severity LOW --color 0 badssl.com`;
 $json = json('tmp.json');
 unlink 'tmp.json';
 $found = 0;
@@ -36,7 +36,7 @@ is($found,0,"We should not have any finding with INFO level"); $tests++;
 
 #2
 pass(" .. running testssl.sh against badssl.com to create a JSON-PRETTY report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
-$out = `./testssl.sh -S -e -U --jsonfile-pretty tmp.json --severity LOW --color 0 badssl.com`;
+$out = `./testssl.sh -S -e -U --ids-friendly --jsonfile-pretty tmp.json --severity LOW --color 0 badssl.com`;
 $json_pretty = json('tmp.json');
 unlink 'tmp.json';
 $found = 0;

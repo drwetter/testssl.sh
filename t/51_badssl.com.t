@@ -14,7 +14,7 @@ my (
 );
 # OK
 pass("Running testssl.sh against badssl.com to create a baseline (may take 2~3 minutes)"); $tests++;
-my $okout = `./testssl.sh -S -e --freak --logjam --drown --rc4 --sweet32 --breach --crime --jsonfile tmp.json --color 0 badssl.com`;
+my $okout = `./testssl.sh -S -e --freak --logjam --drown --rc4 --sweet32 --breach --winshock --crime --jsonfile tmp.json --color 0 badssl.com`;
 my $okjson = json('tmp.json');
 unlink 'tmp.json';
 cmp_ok(@$okjson,'>',10,"We have more then 10 findings"); $tests++;
