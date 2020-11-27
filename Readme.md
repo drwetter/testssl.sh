@@ -60,7 +60,7 @@ Think of 3.1dev like a rolling release, see below. For the stable version help y
 Testssl.sh has minimal requirements. As stated you don't have to install or build anything. You can just run it from the pulled/cloned directory. Still if you don't want to pull the github repo to your directory of choice you can pull a container from dockerhub and run it:
 
 ```
-docker run --rm -ti  drwetter/testssl.sh:3.1dev <your_cmd_line>
+docker run --rm -ti  drwetter/testssl.sh <your_cmd_line>
 ```
 
 Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and run
@@ -73,7 +73,9 @@ For more please consult [Dockerfile.md](https://github.com/drwetter/testssl.sh/b
 
 ### Status
 
-We're currently in the development phase, version 3.1dev. 3.1dev will eventually become 3.2. Bigger features are developed in a separate branch before merged into 3.1dev to avoid hiccups or inconsistencies. Albeit we try to keep 3.1dev as solid as possible things will certainly change in 3.1dev. So if you need stability the 3.0 branch is better for you. Think of the 3.1dev branch like a rolling release.
+We're currently in the development phase, version 3.1dev. 3.1dev will eventually become 3.2. Bigger features are developed in a separate branch before merged into 3.1dev to avoid hiccups or inconsistencies. Albeit we try to keep 3.1dev as solid as possible things will certainly change in 3.1dev. Think of the 3.1dev branch like a rolling release. So if you need stability the 3.0 branch is better for you. 
+
+Version 3.0.X receives bugfixes, labeled as 3.0.1, 3.0.2 and so on. This will happen until 3.2 is released. 
 
 Support for 2.9.5 has been dropped. Supported is >= 3.0.x only.
 
@@ -86,7 +88,7 @@ Support for 2.9.5 has been dropped. Supported is >= 3.0.x only.
 
 ### Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/blob/3.0/CONTRIBUTING.md) for details.
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/blob/3.1dev/CONTRIBUTING.md) for details. Please also have a look at the [Coding Convention](https://github.com/drwetter/testssl.sh/blob/3.1dev/Coding_Convention.md}.
 
 ### Bug reports
 
