@@ -9,7 +9,7 @@ use JSON;
 
 my $tests = 0;
 my $prg="./testssl.sh";
-my $check2run ="--ip=one -q --color 0";
+my $check2run ="--ip=one --ids-friendly -q --color 0";
 my $uri="";
 my $json="";
 my $out="";
@@ -44,7 +44,7 @@ $tests++;
 
 
 #3
-# This testss.sh run deliberately does NOT work as travis-ci.org blocks port 25 egress.
+# This testssl.sh run deliberately does NOT work as travis-ci.org blocks port 25 egress.
 # but the output should be fine. The idea is to have a unit test for a failed connection.
 printf "%s\n", ".. plain JSON for a failed run: '--mx $uri' ...";
 $out = `./testssl.sh --ssl-native --openssl-timeout=10 $check2run --jsonfile tmp.json --mx $uri`;
