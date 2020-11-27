@@ -36,7 +36,7 @@ to get bugfixes, other feedback and more contributions.
 testssl.sh is working on every Linux/BSD distribution out of the box. Latest by 2.9dev
 most of the limitations of disabled features from the openssl client are gone
 due to bash-socket-based checks. As a result you can also use e.g. LibreSSL or OpenSSL
-1.1.1 . testssl.sh also works on other unixoid system out of the box, supposed they have
+1.1.1 . testssl.sh also works on other unixoid systems out of the box, supposed they have
 `/bin/bash` >= version 3.2 and standard tools like sed and awk installed. An implicit
 (silent) check for binaries is done when you start testssl.sh . System V needs probably
 to have GNU grep installed. MacOS X and Windows (using MSYS2, Cygwin or WSL) work too.
@@ -49,32 +49,26 @@ You can download testssl.sh by cloning this git repository:
 
     git clone --depth 1 https://github.com/drwetter/testssl.sh.git
 
-and checkout the 3.0 branch. For this stable version you also can help yourself by downloading the [ZIP](https://github.com/drwetter/testssl.sh/archive/3.0.2.zip) or [tar.gz](https://github.com/drwetter/testssl.sh/archive/3.0.2.zip) archive. Then
-just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
+and checkout the 3.0 branch. For the stable version help yourself by downloading the [ZIP](https://codeload.github.com/drwetter/testssl.sh/zip/3.0.4) or [tar.gz](https://codeload.github.com/drwetter/testssl.sh/tar.gz/3.0.4) archive. Just ``cd`` to the directory created (=INSTALLDIR) and run it off there.
 
 #### Docker
 
-Testssl.sh has minimal requirements. As stated you don't have to install or build anything.  You can just run it from the pulled/cloned directory. Still if you don't want to pull the github repo to your directory of choice you can pull a container from dockerhub and run it:
+Testssl.sh has minimal requirements. As stated you don't have to install or build anything. You can just run it from the pulled/cloned directory. Still if you don't want to pull the github repo to your directory of choice you can pull a container from dockerhub and run it:
 ```
 docker run --rm -ti drwetter/testssl.sh:3.0 <your_cmd_line>
 ```
-Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR and run
+Or if you have cloned this repo you also can just ``cd`` to the INSTALLDIR (change to 3.0, do a git pull) and run
 ```
-docker build .
+docker build . -t drfooimage && docker run --rm -t drfooimage example.com
 ```
 
-followed by ``docker run -ti <ID> <your_cmd_line>`` where ``ID`` is the identifier in the last line from the build command like
-
-```
- ---> 889fa2f99933
-Successfully built 889fa2f99933
-```
+For more please consult [Dockerfile.md](https://github.com/drwetter/testssl.sh/blob/3.0/Dockerfile.md).
 
 ### Status
 
 This is the stable 3.0 version. That means you can and should use it for production and let us know if you encounter any additional bugs. Features implemented in 3.0 are listed in the [Changelog](https://github.com/drwetter/testssl.sh/blob/3.0/CHANGELOG.md). Support for 2.9.5 has been dropped.
 
-The version 3.0 will receive bugfixes, labled as 3.0.1, 3.0.2 and so on. This will happen until 3.2 is released. Development is taking place in the [3.1dev](https://github.com/drwetter/testssl.sh/tree/3.1dev) branch which will eventually lead to version 3.2. We try to keep 3.1dev as solid as possible but things will certainly change in 3.1dev. Think of the 3.1dev branch like a rolling release.
+The version 3.0 receives bugfixes, labeled as 3.0.1, 3.0.2 and so on. This will happen until 3.2 is released. Development is taking place in the [3.1dev](https://github.com/drwetter/testssl.sh/tree/3.1dev) branch which will eventually lead to version 3.2. We try to keep 3.1dev as solid as possible but things will certainly change in 3.1dev. Think of the 3.1dev branch like a rolling release.
 
 
 ### Documentation
