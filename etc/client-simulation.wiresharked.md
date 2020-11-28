@@ -14,7 +14,7 @@ The whole process is done manually.
 * Retrieve "handshakebytes" by marking the Record Layer --> Copy --> As a hex stream.
 * Figure out "protos" and "tlsvers" by looking at the supported_versions TLS extension (43=0x002b). May work only on modern clients. Be careful as some do not list all TLS versions here (OpenSSL 1.1.1 lists only TLS 1.2/1.3 here)
 * Adjust "lowest_protocol" and "highest_protocol" accordingly.
-* For "urves" mark the supported groups TLS extension --> Copy --> As a hex stream, remove any leading GREASE ciphers (?a?a) and supply it to `~/utils/hexstream2curves.sh`
+* For "curves" mark the supported groups TLS extension --> Copy --> As a hex stream, remove any leading GREASE ciphers (?a?a) and supply it to `~/utils/hexstream2curves.sh`
 * Retrieve "alpn" by looking at the alpn TLS extension 16 (=0x0010).
 * Review TLS extension 13 (=0x000d) whether any SHA1 signature algorithm is listed. If not "requiresSha2" is true
 * Leave "maxDhBits"/"minDhBits" and "minRsaBits"/"maxRsaBits" at -1, unless you know for sure what the client can handle
