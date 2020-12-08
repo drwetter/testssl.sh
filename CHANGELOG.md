@@ -26,7 +26,8 @@
 * Added environment variable for amount of attempts for ssl renegotiation check
 * Added --user-agent argument to support using a custom User Agent
 * Added --overwrite argument to support overwriting output files without warning
-* Headerflag X-XSS-Protection is labeled as INFO 
+* Headerflag X-XSS-Protection is now labeled as INFO
+* Client simulation runs in wide mode which is even better readable
 
 ### Features implemented / improvements in 3.0
 
