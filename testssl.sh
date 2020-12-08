@@ -4814,21 +4814,19 @@ run_client_simulation() {
      outln
      debugme echo
 
-     if "$WIDE"; then
-          if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
-               out " Browser                      Protocol  Cipher Suite Name (OpenSSL)       "
-               ( "$using_sockets" || "$HAS_DH_BITS") && out "Forward Secrecy"
-               outln
-               out "--------------------------------------------------------------------------"
-          else
-               out " Browser                      Protocol  Cipher Suite Name (IANA/RFC)                      "
-               ( "$using_sockets" || "$HAS_DH_BITS") && out "Forward Secrecy"
-               outln
-               out "------------------------------------------------------------------------------------------"
-          fi
-          ( "$using_sockets" || "$HAS_DH_BITS") && out "----------------------"
+     if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
+          out " Browser                      Protocol  Cipher Suite Name (OpenSSL)       "
+          ( "$using_sockets" || "$HAS_DH_BITS") && out "Forward Secrecy"
           outln
+          out "--------------------------------------------------------------------------"
+     else
+          out " Browser                      Protocol  Cipher Suite Name (IANA/RFC)                      "
+          ( "$using_sockets" || "$HAS_DH_BITS") && out "Forward Secrecy"
+          outln
+          out "------------------------------------------------------------------------------------------"
      fi
+     ( "$using_sockets" || "$HAS_DH_BITS") && out "----------------------"
+     outln
      if ! "$using_sockets"; then
           # We can't use the connectivity checker here as of now the openssl reply is always empty (reason??)
           save_max_ossl_fail=$MAX_OSSL_FAIL
@@ -4938,27 +4936,23 @@ run_client_simulation() {
                               cipher="$(openssl2rfc "$cipher")"
                               [[ -z "$cipher" ]] && cipher=$(get_cipher $TMPFILE)
                          fi
-                         out "$proto "
-                         "$WIDE" && out "  "
+                         out "$proto   "
                          if [[ "$COLOR" -le 2 ]]; then
                               out "$cipher"
                          else
                               pr_cipher_quality "$cipher"
                          fi
-                         if "$WIDE"; then
-                              if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
-                                   for (( j=${#cipher}; j < 34; j++ )); do
-                                        out " "
-                                   done
-                              else
-                                   for (( j=${#cipher}; j < 50; j++ )); do
-                                        out " "
-                                   done
-                              fi
+                         if [[ "$DISPLAY_CIPHERNAMES" =~ openssl ]]; then
+                              for (( j=${#cipher}; j < 34; j++ )); do
+                                   out " "
+                              done
+                         else
+                              for (( j=${#cipher}; j < 50; j++ )); do
+                                   out " "
+                              done
                          fi
                          if [[ -n "$what_dh" ]]; then
                               [[ -n "$curve" ]] && curve="($curve)"
-                              "$WIDE" || out ", "
                               if [[ "$what_dh" == ECDH ]]; then
                                    pr_ecdh_quality "$bits" "$(printf -- "%-12s" "$bits bit $what_dh") $curve"
                               else
@@ -4966,7 +4960,6 @@ run_client_simulation() {
                               fi
                          else
                               if "$HAS_DH_BITS" || ( "$using_sockets" && [[ -n "${handshakebytes[i]}" ]] ); then
-                                   "$WIDE" || out ", "
                                    out "No FS"
                               fi
                          fi
