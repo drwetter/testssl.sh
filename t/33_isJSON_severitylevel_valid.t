@@ -15,13 +15,18 @@ my (
 
 $tests = 0;
 
+my $prg="./testssl.sh";
+my $check2run = '-S -e --ids-friendly -U --severity LOW --color 0';
+my $uri = 'badssl.com';
 
 printf "\n%s\n", "Doing severity level checks";
+
+die "Unable to open $prg" unless -f $prg;
 unlink 'tmp.json';
 
 #1
-pass(" .. running testssl.sh against badssl.com to create a JSON report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
-$out = `./testssl.sh -S -e -U --ids-friendly --jsonfile tmp.json --severity LOW --color 0 badssl.com`;
+pass(" .. running testssl.sh against $uri to create a JSON report with severity level >= LOW (may take 2~3 minutes)"); $tests++;
+$out = `$prg $check2run --jsonfile tmp.json $uri`;
 $json = json('tmp.json');
 unlink 'tmp.json';
 $found = 0;
@@ -35,8 +40,8 @@ foreach my $f ( @$json ) {
 is($found,0,"We should not have any finding with INFO level"); $tests++;
 
 #2
-pass(" .. running testssl.sh against badssl.com to create a JSON-PRETTY report with severity level equal greater than LOW (may take 2~3 minutes)"); $tests++;
-$out = `./testssl.sh -S -e -U --ids-friendly --jsonfile-pretty tmp.json --severity LOW --color 0 badssl.com`;
+pass(" .. running testssl.sh against $uri to create a JSON-PRETTY report with severity level >= LOW (may take 2~3 minutes)"); $tests++;
+$out = `$prg $check2run --jsonfile-pretty tmp.json $uri`;
 $json_pretty = json('tmp.json');
 unlink 'tmp.json';
 $found = 0;
