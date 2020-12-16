@@ -1325,7 +1325,6 @@ json_header() {
      #  * this is an individual test within a mass test and all output is being placed in a single file.
      ! "$do_json" && ! "$do_pretty_json" && JSONHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && JSONHEADER=false && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && JSONHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1369,7 +1368,6 @@ csv_header() {
      # CSV similar to JSON
      ! "$do_csv" && CSVHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && CSVHEADER=false && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && CSVHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1422,7 +1420,6 @@ html_header() {
      #  * this is an individual test within a mass test and all HTML output is being placed in a single file.
      ! "$do_html" && HTMLHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && HTMLHEADER=false && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && HTMLHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
