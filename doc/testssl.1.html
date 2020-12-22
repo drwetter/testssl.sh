@@ -187,6 +187,8 @@ The same can be achieved by setting the environment variable <code>WARNINGS</cod
 
 <p><code>--basicauth &lt;user:pass&gt;</code> This can be set to provide HTTP basic auth credentials which are used during checks for security headers. BASICAUTH is the ENV variable you can use instead.</p>
 
+<p><code>--customhttpheader &lt;header&gt;</code> This can be used to add additional HTTP request headers in the correct format <code>Headername: headercontent</code>. This parameter can be called multiple times if required. For example: <code>--customhttpheader &#39;Proxy-Authorization: Basic dGVzdHNzbDpydWxlcw==&#39; --customhttpheader &#39;ClientID: 0xDEADBEAF&#39;</code>. CUSTOMHTTPHEADER is the corresponding environment variable.</p>
+
 <h3 id="SPECIAL-INVOCATIONS">SPECIAL INVOCATIONS</h3>
 
 <p><code>-t &lt;protocol>, --starttls &lt;protocol></code>    does a default run against a STARTTLS enabled <code>protocol</code>. <code>protocol</code> must be one of <code>ftp</code>, <code>smtp</code>,  <code>pop3</code>, <code>imap</code>, <code>xmpp</code>, <code>xmpp-server</code>, <code>telnet</code>, <code>ldap</code>, <code>irc</code>, <code>lmtp</code>, <code>nntp</code>, <code>postgres</code>, <code>mysql</code>. For the latter four you need e.g. the supplied OpenSSL or OpenSSL version 1.1.1. Please note: MongoDB doesn't offer a STARTTLS connection, LDAP currently only works with <code>--ssl-native</code>. <code>telnet</code> and <code>irc</code> is WIP.</p>
