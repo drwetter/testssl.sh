@@ -162,6 +162,7 @@ QUIET=${QUIET:-false}                   # don't output the banner. By doing this
 SSL_NATIVE=${SSL_NATIVE:-false}         # we do per default bash sockets where possible "true": switch back to "openssl native"
 ASSUME_HTTP=${ASSUME_HTTP:-false}       # in seldom cases (WAF, old servers, grumpy SSL) service detection fails. "True" enforces HTTP checks
 BASICAUTH=${BASICAUTH:-""}              # HTTP basic auth credentials can be set here like user:pass
+REQHEADER=${REQHEADER:-""}              # HTTP custom request header can be set here like Header: content. Can be used multiple times.
 BUGS=${BUGS:-""}                        # -bugs option from openssl, needed for some BIG IP F5
 WARNINGS=${WARNINGS:-""}                # can be either off or batch
 DEBUG=${DEBUG:-0}                       # 1: normal output the files in /tmp/ are kept for further debugging purposes
@@ -373,6 +374,7 @@ TLS_NOW=""                              # Similar
 TLS_DIFFTIME_SET=false                  # Tells TLS functions to measure the TLS difftime or not
 NOW_TIME=""
 HTTP_TIME=""
+REQHEADERS=()
 GET_REQ11=""
 START_TIME=0                            # time in epoch when the action started
 END_TIME=0                              # .. ended
@@ -884,6 +886,15 @@ is_ipv6addr() {
      [[ "$1" =~ $ipv6address ]] && [[ "$1" == $BASH_REMATCH ]] && \
           return 0 || \
           return 1
+}
+
+join_by() {
+     # joins an array using a custom delimiter https://web.archive.org/web/20201222183540/https://stackoverflow.com/questions/1527049/how-can-i-join-elements-of-an-array-in-bash/17841619#17841619
+     local d=$1
+     shift
+     local f=$1
+     shift
+     printf %s "$f" "${@/#/$d}";
 }
 
 ###### END universal helper function definitions ######
@@ -19239,6 +19250,7 @@ tuning / connect options (most also can be preset via environment variables):
      --phone-out                   allow to contact external servers for CRL download and querying OCSP responder
      --add-ca <CA files|CA dir>    path to <CAdir> with *.pem or a comma separated list of CA files to include in trust check
      --basicauth <user:pass>       provide HTTP basic auth information.
+     --reqheader <header>          add custom http request headers
 
 output options (can also be preset via environment variables):
      --quiet                       don't output the banner. By doing this you acknowledge usage terms normally appearing in the banner
@@ -19391,6 +19403,7 @@ SHOW_EACH_C: $SHOW_EACH_C
 SSL_NATIVE: $SSL_NATIVE
 ASSUME_HTTP $ASSUME_HTTP
 BASICAUTH: $BASICAUTH
+REQHEADER: $REQHEADER
 SNEAKY: $SNEAKY
 OFFENSIVE: $OFFENSIVE
 PHONE_OUT: $PHONE_OUT
@@ -20514,6 +20527,7 @@ determine_service() {
      local ua
      local protocol
      local basicauth_header=""
+     local reqheader=""
 
      # Check if we can connect to $NODEIP:$PORT. Attention: This ALWAYS uses sockets. Thus timeouts for --ssl-=native do not apply
      if ! fd_socket 5; then
@@ -20541,7 +20555,10 @@ determine_service() {
           if [[ -n "$BASICAUTH" ]]; then
                basicauth_header="Authorization: Basic $(safe_echo "$BASICAUTH" | $OPENSSL base64 2>/dev/null)\r\n"
           fi
-          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n${basicauth_header}Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
+          if [[ -n "$REQHEADERS" ]]; then
+               reqheader="$(join_by "\r\n" "${REQHEADERS[@]}")\r\n" #Add all required custom http headers to one string with newlines
+          fi
+          GET_REQ11="GET $URL_PATH HTTP/1.1\r\nHost: $NODE\r\nUser-Agent: $ua\r\n${basicauth_header}${reqheader}Accept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n"
           # returns always 0:
           service_detection $OPTIMAL_PROTO
      else # STARTTLS
@@ -22192,6 +22209,11 @@ parse_cmd_line() {
                --basicauth|--basicauth=*)
                     BASICAUTH="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
+                    ;;
+               --reqheader|--reqheader=*)
+                    REQHEADER="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    REQHEADERS+=("$REQHEADER")
                     ;;
                (--) shift
                     break

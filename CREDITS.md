@@ -42,6 +42,7 @@ Full contribution, see git log.
 * Jim Blankendaal
   - maximum certificate lifespan of 398 days
   - ssl renegotiation amount variable
+  - custom http request headers
 
 * Frank Breedijk
   - Detection of insecure redirects
@@ -181,4 +182,3 @@ Probably more I forgot to mention which did give me feedback, bug reports and he
 * Ivan Ristic/Qualys for the liberal license which made it possible to make partly use of the client data
 
 * My family for supporting me doing this work
-

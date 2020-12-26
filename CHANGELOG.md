@@ -28,6 +28,7 @@
 * Added --overwrite argument to support overwriting output files without warning
 * Headerflag X-XSS-Protection is now labeled as INFO
 * Client simulation runs in wide mode which is even better readable
+* Added --reqheader to support custom headers in HTTP requests
 
 ### Features implemented / improvements in 3.0
 
