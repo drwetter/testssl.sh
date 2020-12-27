@@ -29,6 +29,7 @@
 * Headerflag X-XSS-Protection is now labeled as INFO
 * Client simulation runs in wide mode which is even better readable
 * Added --reqheader to support custom headers in HTTP requests
+* `--phone-out` checks the HSTS preload list on https://hstspreload.org/
 
 ### Features implemented / improvements in 3.0
 
