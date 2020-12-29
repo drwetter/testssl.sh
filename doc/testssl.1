@@ -354,7 +354,10 @@ Security headers (X\-Frame\-Options, X\-XSS\-Protection, Expect\-CT,\.\.\. , CSP
 \fB\-T, \-\-ticketbleed\fR Checks for Ticketbleed memory leakage in BigIP loadbalancers\.
 .
 .P
-\fB\-BB, \-\-robot\fR Checks for vulnerability to ROBOT / (\fIReturn Of Bleichenbacher\'s Oracle Threat\fR) attack\.
+\fB\-\-BB, \-\-robot\fR Checks for vulnerability to ROBOT / (\fIReturn Of Bleichenbacher\'s Oracle Threat\fR) attack\.
+.
+.P
+\fB\-\-SI, \-\-starttls\-injection\fR Checks for STARTTLS injection vulnerabilities (SMTP, IMAP, POP3 only)\. \fIsocat\fR and OpenSSL >=1.1.0 is needed\.
 .
 .P
 \fB\-R, \-\-renegotiation\fR Tests renegotiation vulnerabilities\. Currently there\'s a check for \fISecure Renegotiation\fR and for \fISecure Client\-Initiated Renegotiation\fR\. Please be aware that vulnerable servers to the latter can likely be DoSed very easily (HTTP)\. A check for \fIInsecure Client\-Initiated Renegotiation\fR is not yet implemented\.

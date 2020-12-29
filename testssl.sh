@@ -219,11 +219,8 @@ UNBRACKTD_IPV6=${UNBRACKTD_IPV6:-false} # some versions of OpenSSL (like Gentoo)
 NO_ENGINE=${NO_ENGINE:-false}           # if there are problems finding the (external) openssl engine set this to true
 declare -r CLIENT_MIN_FS=5              # number of ciphers needed to run a test for FS
 CAPATH="${CAPATH:-/etc/ssl/certs/}"     # Does nothing yet (FC has only a CA bundle per default, ==> openssl version -d)
-GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
-CERTIFICATE_LIST_ORDERING_PROBLEM=false # Set to true if server sends a certificate list that contains a certificate
-                                        # that does not certify the one immediately preceding it. (See RFC 8446, Section 4.4.2)
-STAPLED_OCSP_RESPONSE=""
-HAS_DNS_SANS=false                      # Whether the certificate includes a subjectAltName extension with a DNS name or an application-specific identifier type.
+SOCAT="${SOCAT:-}"                      # For now we would need this for STARTTLS injection
+
 MEASURE_TIME_FILE=${MEASURE_TIME_FILE:-""}
 if [[ -n "$MEASURE_TIME_FILE" ]] && [[ -z "$MEASURE_TIME" ]]; then
      MEASURE_TIME=true
@@ -241,6 +238,8 @@ SYSTEM2=""                              # currently only being used for WSL = ba
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 CIPHERS_BY_STRENGTH_FILE=""
 TLS_DATA_FILE=""                        # mandatory file for socket-based handshakes
+OPENSSL=""                              # If you run this from github it's ~/bin/openssl.$(uname).$(uname -m) otherwise /usr/bin/openssl
+OPENSSL2=""                             # When running from github, this will be openssl version >=1.1.1 (auto determined)
 OPENSSL_LOCATION=""
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
@@ -297,13 +296,21 @@ NW_STR=""
 LEN_STR=""
 SNI=""
 POODLE=""                               # keep vulnerability status for TLS_FALLBACK_SCSV
+
+# Initialize OpenSSL variables (and others)
 OSSL_NAME=""                            # openssl name, in case of LibreSSL it's LibreSSL
 OSSL_VER=""                             # openssl version, will be auto-determined
 OSSL_VER_MAJOR=0
 OSSL_VER_MINOR=0
 OSSL_VER_APPENDIX="none"
 CLIENT_PROB_NO=1
-HAS_DH_BITS=${HAS_DH_BITS:-false}       # initialize openssl variables
+
+GOOD_CA_BUNDLE=""                       # A bundle of CA certificates that can be used to validate the server's certificate
+CERTIFICATE_LIST_ORDERING_PROBLEM=false # Set to true if server sends a certificate list that contains a certificate
+                                        # that does not certify the one immediately preceding it. (See RFC 8446, Section 4.4.2)
+STAPLED_OCSP_RESPONSE=""
+HAS_DNS_SANS=false                      # Whether the certificate includes a subjectAltName extension with a DNS name or an application-specific identifier type.
+HAS_DH_BITS=${HAS_DH_BITS:-false}       # These are variables which are set by find_openssl_binary()
 HAS_CURVES=false
 OSSL_SUPPORTED_CURVES=""
 HAS_SSL2=false
@@ -335,6 +342,8 @@ HAS_CHACHA20=false
 HAS_AES128_GCM=false
 HAS_AES256_GCM=false
 HAS_ZLIB=false
+HAS_UDS=false
+HAS_UDS2=false
 HAS_DIG=false
 HAS_HOST=false
 HAS_DRILL=false
@@ -763,10 +772,8 @@ debugme() {
      [[ "$DEBUG" -ge 2 ]] && "$@"
      return 0
 }
-debugme1() {
-     [[ "$DEBUG" -ge 1 ]] && "$@"
-     return 0
-}
+
+debugme1() { [[ "$DEBUG" -ge 2 ]] && "$@"; }
 
 hex2dec() {
      echo $((16#$1))
@@ -2191,7 +2198,8 @@ s_client_options() {
 ###### check code starts here ######
 
 # determines whether the port has an HTTP service running or not (plain TLS, no STARTTLS)
-# arg1 could be the protocol determined as "working". IIS6 needs that
+# arg1 could be the protocol determined as "working". IIS6 needs that.
+#
 service_detection() {
      local -i was_killed
 
@@ -4671,7 +4679,7 @@ client_simulation_sockets() {
           tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
           tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
      elif [[ $ret -eq 1 ]] || [[ $ret -eq 6 ]]; then
-          close_socket
+          close_socket 5
           TMPFILE=$SOCK_REPLY_FILE
           tmpfile_handle ${FUNCNAME[0]}.dd
           return $ret
@@ -4753,7 +4761,7 @@ client_simulation_sockets() {
           debugme tmln_out
      fi
 
-     close_socket
+     close_socket 5
      TMPFILE=$SOCK_REPLY_FILE
      tmpfile_handle ${FUNCNAME[0]}.dd
      return $ret
@@ -10563,7 +10571,8 @@ starttls_just_send(){
      local -i ret=0
 
      debugme echo "C: $1\r\n"
-     echo -ne "$1\r\n" >&5
+     # We need cat here, otherwise the appended ELHO after STARTTLS will be in the next packet
+     printf "%b" "$1\r\n" | cat >&5
      ret=$?
      if [[ $ret -eq 0 ]]; then
           debugme echo "  > succeeded: $2"
@@ -10663,56 +10672,62 @@ starttls_ftp_dialog() {
 }
 
 # argv1: empty: SMTP, "lmtp" : LMTP
+# argv2: payload for STARTTLS injection test
 #
 starttls_smtp_dialog() {
      local greet_str="EHLO testssl.sh"
      local proto="smtp"
      local reSTARTTLS='^250[ -]STARTTLS'
+     local starttls="STARTTLS"
      local -i ret=0
 
+     "$SNEAKY" && greet_str="EHLO google.com"
+     [[ -n "$2" ]] && starttls="$starttls\r\n$2"            # this adds a payload if supplied
      if [[ "$1" == lmtp ]]; then
           proto="lmtp"
           greet_str="LHLO"
-     fi
-     if [[ -n "$2" ]]; then
-          # Here we can "add" commands in the future. Please note \r\n will automatically be appended
-          greet_str="$2"
-     elif "$SNEAKY"; then
-          greet_str="EHLO google.com"
      fi
      debugme echo "=== starting $proto STARTTLS dialog ==="
 
      starttls_full_read '^220-' '^220 '  ''                 "received server greeting" &&
      starttls_just_send "$greet_str"                        "sent $greet_str" &&
      starttls_full_read '^250-' '^250 '  "${reSTARTTLS}"    "received server capabilities and checked STARTTLS availability" &&
-     starttls_just_send 'STARTTLS'                          "initiated STARTTLS" &&
+     starttls_just_send "$starttls"                         "initiated STARTTLS" &&
      starttls_full_read '^220-' '^220 '  ''                 "received ack for STARTTLS"
      ret=$?
      debugme echo "=== finished $proto STARTTLS dialog with ${ret} ==="
      return $ret
 }
 
+# argv1: payload for STARTTLS injection test
+#
 starttls_pop3_dialog() {
      local -i ret=0
+     local starttls="STLS"
 
+     [[ -n "$1" ]] && starttls="$starttls\r\n$1"            # this adds a payload if supplied
      debugme echo "=== starting pop3 STARTTLS dialog ==="
      starttls_full_read '^\+OK' '^\+OK'   ''      "received server greeting" &&
-     starttls_just_send 'STLS'                    "initiated STARTTLS" &&
+     starttls_just_send "$starttls"               "initiated STARTTLS" &&
      starttls_full_read '^\+OK' '^\+OK'   ''      "received ack for STARTTLS"
      ret=$?
      debugme echo "=== finished pop3 STARTTLS dialog with ${ret} ==="
      return $ret
 }
 
+# argv1: payload for STARTTLS injection test
+#
 starttls_imap_dialog() {
      local -i ret=0
      local reSTARTTLS='^\* CAPABILITY(( .*)? IMAP4rev1( .*)? STARTTLS(.*)?|( .*)? STARTTLS( .*)? IMAP4rev1(.*)?)$'
+     local starttls="a002 STARTTLS"
 
+     [[ -n "$1" ]] && starttls="$starttls\r\n$1"            # this adds a payload if supplied
      debugme echo "=== starting imap STARTTLS dialog ==="
      starttls_full_read '^\* ' '^\* OK '   ''               "received server greeting" &&
      starttls_just_send 'a001 CAPABILITY'                   "sent CAPABILITY" &&
      starttls_full_read '^\* ' '^a001 OK ' "${reSTARTTLS}"  "received server capabilities and checked STARTTLS availability" &&
-     starttls_just_send 'a002 STARTTLS'                     "initiated STARTTLS" &&
+     starttls_just_send "$starttls"                         "initiated STARTTLS" &&
      starttls_full_read '^\* ' '^a002 OK ' ''               "received ack for STARTTLS"
      ret=$?
      debugme echo "=== finished imap STARTTLS dialog with ${ret} ==="
@@ -10788,10 +10803,13 @@ starttls_mysql_dialog() {
      return $ret
 }
 
-# arg1: fd for socket -- which we don't use as it is a hassle and it is not clear whether it works under every bash version
+# arg1: fd for socket -- which we don't use yes as it is a hassle (not clear whether it works under every bash version)
+# arg2: optional: for STARTTLS additional command to be injected
 # returns 6 if opening the socket caused a problem, 1 if STARTTLS handshake failed, 0: all ok
 #
 fd_socket() {
+     local fd="$1"
+     local payload="$2"
      local proyxline=""
      local nodeip="$(tr -d '[]' <<< $NODEIP)"          # sockets do not need the square brackets we have of IPv6 addresses
                                                        # we just need do it here, that's all!
@@ -10815,14 +10833,14 @@ fd_socket() {
                read -t $PROXY_WAIT -r proyxline <&5
                if [[ $? -ge 128 ]]; then
                     pr_warning "Proxy timed out. Unable to CONNECT via proxy. "
-                    close_socket
+                    close_socket 5
                     return 6
                elif [[ "${proyxline%/*}" == HTTP ]]; then
                     proyxline=${proyxline#* }
                     if [[ "${proyxline%% *}" != 200 ]]; then
                          pr_warning "Unable to CONNECT via proxy. "
                          [[ "$PORT" != 443 ]] && prln_warning "Check whether your proxy supports port $PORT and the underlying protocol."
-                         close_socket
+                         close_socket 5
                          return 6
                     fi
                fi
@@ -10855,19 +10873,19 @@ fd_socket() {
                     starttls_ftp_dialog
                     ;;
                smtp|smtps) # SMTP, see https://tools.ietf.org/html/rfc{2033,3207,5321}
-                    starttls_smtp_dialog
+                    starttls_smtp_dialog "" "$payload"
                     ;;
                lmtp|lmtps) # LMTP, see https://tools.ietf.org/html/rfc{2033,3207,5321}
                     starttls_smtp_dialog lmtp
                     ;;
                pop3|pop3s) # POP, see https://tools.ietf.org/html/rfc2595
-                    starttls_pop3_dialog
+                    starttls_pop3_dialog "$payload"
                     ;;
                nntp|nntps) # NNTP, see https://tools.ietf.org/html/rfc4642
                     starttls_nntp_dialog
                     ;;
                imap|imaps) # IMAP, https://tools.ietf.org/html/rfc2595, https://tools.ietf.org/html/rfc3501
-                    starttls_imap_dialog
+                    starttls_imap_dialog "$payload"
                     ;;
                irc|ircs) # IRC, https://ircv3.net/specs/extensions/tls-3.1.html, https://ircv3.net/specs/core/capability-negotiation.html
                     fatal "FIXME: IRC+STARTTLS not yet supported" $ERR_NOSUPPORT
@@ -10895,7 +10913,11 @@ fd_socket() {
           case $ret in
                0)   return 0 ;;
                3)   fatal "No STARTTLS found in handshake" $ERR_CONNECT ;;
-               *)   ((NR_STARTTLS_FAIL++))
+               *)   if [[ $ret -eq 2 ]] && [[ -n "$payload" ]]; then
+                         # We don't want this handling for STARTTLS injection
+                         return 0
+                    fi
+                    ((NR_STARTTLS_FAIL++))
                     # This are mostly timeouts here (code >=128). We give the client a chance to try again later. For cases
                     # where we have no STARTTLS in the server banner however - ret code=3 - we don't neet to try again
                     connectivity_problem $NR_STARTTLS_FAIL $MAX_STARTTLS_FAIL "STARTTLS handshake failed (code: $ret)" "repeated STARTTLS problems, giving up ($ret)"
@@ -10907,7 +10929,11 @@ fd_socket() {
      return 1
 }
 
+# arg1: socket fd but atm we use 5 anyway, see comment for fd_socket()
+#
 close_socket(){
+     local fd="$1"
+
      exec 5<&-
      exec 5>&-
      return 0
@@ -14387,7 +14413,7 @@ sslv2_sockets() {
      parse_sslv2_serverhello "$SOCK_REPLY_FILE" "$parse_complete"
      ret=$?
 
-     close_socket
+     close_socket 5
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      return $ret
 }
@@ -15141,7 +15167,7 @@ tls_sockets() {
                tls_hello_ascii=$(hexdump -v -e '16/1 "%02X"' "$SOCK_REPLY_FILE")
                tls_hello_ascii="${tls_hello_ascii%%[!0-9A-F]*}"
           elif [[ $ret -eq 1 ]] || [[ $ret -eq 6 ]]; then
-               close_socket
+               close_socket 5
                TMPFILE=$SOCK_REPLY_FILE
                tmpfile_handle ${FUNCNAME[0]}.dd
                return $ret
@@ -15313,7 +15339,7 @@ tls_sockets() {
           debugme echo "stuck on sending: $ret"
      fi
 
-     "$close_connection" && close_socket
+     "$close_connection" && close_socket 5
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
      return $ret
 }
@@ -15519,7 +15545,7 @@ run_heartbleed(){
      fi
      outln
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
-     close_socket
+     close_socket 5
      return 0
 }
 
@@ -15709,7 +15735,7 @@ run_ccs_injection(){
      outln
 
      tmpfile_handle ${FUNCNAME[0]}.dd $SOCK_REPLY_FILE
-     close_socket
+     close_socket 5
      return $ret
 }
 
@@ -15916,14 +15942,14 @@ run_ticketbleed() {
                pr_svrty_best "not vulnerable (OK)"
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
                send_close_notify "${tls_hello_ascii:18:4}"
-               close_socket
+               close_socket 5
                break
           elif [[ -z "${tls_hello_ascii:0:2}" ]]; then
                pr_svrty_best "not vulnerable (OK)"
                out ", reply empty"
                fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
                send_close_notify "${tls_hello_ascii:18:4}"
-               close_socket
+               close_socket 5
                break
           elif [[ "${tls_hello_ascii:0:2}" == 16 ]]; then
                early_exit=false
@@ -15951,11 +15977,11 @@ run_ticketbleed() {
                out " around line $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})"
                fileout "$jsonID" "DEBUG" "test failed, around $LINENO (debug info: ${tls_hello_ascii:0:2}, ${tls_hello_ascii:2:10})" "$cve" "$cwe"
                send_close_notify "${tls_hello_ascii:18:4}"
-               close_socket
+               close_socket 5
                break
           fi
           send_close_notify "${tls_hello_ascii:18:4}"
-          close_socket
+          close_socket 5
      done
 
      if ! "$early_exit"; then
@@ -18109,7 +18135,6 @@ run_rc4() {
           prln_svrty_good "no RC4 ciphers detected (OK)"
           fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
      fi
-     outln
 
      "$using_sockets" && HAS_DH_BITS="$has_dh_bits"
      tmpfile_handle ${FUNCNAME[0]}.txt
@@ -18134,6 +18159,94 @@ run_tls_truncation() {
      #FIXME: difficult to test, is there any test available: pls let me know
      :
 }
+
+
+run_starttls_injection() {
+     local uds=""
+     local openssl_bin=""
+     local -i socat_pid
+     local -i openssl_pid
+     local vuln=false
+     local cve=""
+     local cwe="CWE-74"
+     local hint=""
+     local jsonID="starttls_injection"
+
+     [[ -z "$STARTTLS" ]] && return 0
+
+     if [[ $VULN_COUNT -le $VULN_THRESHLD ]]; then
+          outln
+          pr_headlineln " Checking for STARTTLS injection "
+          outln
+     fi
+     pr_bold " STARTTLS injection" ; out " (experimental)         "
+
+     # We'll do a soft fail here, also no warning, as I do not expect to have everybody have socat installed
+     if [[ -z "$SOCAT" ]]; then
+          fileout "$jsonID" "WARN" "Need socat for this" "$cve" "$cwe" "$hint"
+          outln "Need socat for this check"
+          return 1
+     fi
+     if [[ -z "$HAS_UDS2" ]] && [[ -z "$HAS_UDS" ]]; then
+          fileout "$jsonID" "WARN" "Need OpenSSL with Unix-domain socket s_client support for this check" "$cve" "$cwe" "$hint"
+          outln "Need an OpenSSL with Unix-domain socket s_client support for this check"
+          return 1
+     fi
+
+     case $SERVICE in
+          smtp) fd_socket 5 "EHLO google.com"
+               ;;
+          pop3) fd_socket 5 "CAPA"
+               ;;
+          imap) five_random=$(tr -dc '[:upper:]' < /dev/urandom | dd bs=5 count=1 2>/dev/null)
+                fd_socket 5 "$five_random NOOP"
+               ;;
+          *)  outln "STARTTLS injection test doesn't work for $SERVICE, yet"
+              fileout "$jsonID" "INFO" "STARTTLS injection test doesn't work for $SERVICE" "$cve" "$cwe" "$hint"
+              return 1
+             ;;
+     esac
+
+     uds="$TEMPDIR/uds"
+     $SOCAT FD:5 UNIX-LISTEN:$uds &
+     socat_pid=$!
+
+     if "$HAS_UDS"; then
+          openssl_bin="$OPENSSL"
+     elif "$HAS_UDS2"; then
+          openssl_bin="$OPENSSL2"
+     fi
+     # normally the interesting fallback we grep later for is in fd2 but we'll catch also stdout here
+     $openssl_bin s_client -unix $uds >$TMPFILE 2>&1 &
+     openssl_pid=$!
+     sleep 1
+
+     [[ "$DEBUG" -ge 2 ]] && tail $TMPFILE
+#FIXME: is the pattern sufficient for SMTP / POP / IMAP?
+     case $SERVICE in
+          # Mind all ' ' here!
+          smtp) grep -Eqa '^250-|^503 ' $TMPFILE && vuln=true ;;
+          pop3) grep -Eqa '^USER|^PIPELINING|^\+OK ' $TMPFILE && vuln=true ;;
+          imap) grep -Eqa ' OK NOOP ' $TMPFILE && vuln=true ;;
+     esac
+
+     if "$vuln"; then
+          out "likely "
+          prln_svrty_high "VULNERABLE (NOT ok)"
+          fileout "$jsonID" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
+     else
+          prln_svrty_good "not vulnerable (OK)"
+          fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
+     fi
+
+     kill $socat_pid 2>/dev/null
+     kill $openssl_pid 2>/dev/null
+     close_socket 5
+
+     tmpfile_handle ${FUNCNAME[0]}.txt
+     return 0
+}
+
 
 # Test for various server implementation errors that aren't tested for elsewhere.
 # Inspired by RFC 8701.
@@ -18636,7 +18749,7 @@ run_robot() {
                     else
                          socksend ",x15, x03, x01, x00, x02, x02, x00" 0
                     fi
-                    close_socket
+                    close_socket 5
                     prln_fixme "Conversion of public key failed around line $((LINENO - 9))"
                     fileout "$jsonID" "WARN" "Conversion of public key failed around line $((LINENO - 10)) "
                     return 1
@@ -18690,7 +18803,7 @@ run_robot() {
                fi
                debugme echo -e "\nresponse[$testnum] = ${response[testnum]}"
                [[ $DEBUG -ge 3 ]] && [[ $subret -eq 0 ]] && parse_tls_serverhello "${response[testnum]}"
-               close_socket
+               close_socket 5
 
                # Don't continue testing if it has already been determined that
                # tests need to be rerun with a longer timeout.
@@ -18855,7 +18968,9 @@ test_openssl_suffix() {
 
 find_openssl_binary() {
      local s_client_has=$TEMPDIR/s_client_has.txt
+     local s_client_has2=$TEMPDIR/s_client_has2.txt
      local s_client_starttls_has=$TEMPDIR/s_client_starttls_has.txt
+     local s_client_starttls_has2=$TEMPDIR/s_client_starttls_has2
      local openssl_location cwd=""
      local ossl_wo_dev_info
      local curve
@@ -18945,6 +19060,7 @@ find_openssl_binary() {
      HAS_PROXY=false
      HAS_XMPP=false
      HAS_XMPP_SERVER=false
+     HAS_XMPP_SERVER2=false
      HAS_POSTGRES=false
      HAS_MYSQL=false
      HAS_LMTP=false
@@ -18954,48 +19070,34 @@ find_openssl_binary() {
      HAS_AES128_GCM=false
      HAS_AES256_GCM=false
      HAS_ZLIB=false
+     HAS_UDS=false
+     HAS_UDS2=false
 
-     $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || \
-          OSSL_CIPHERS_S="-s"
+     $OPENSSL ciphers -s 2>&1 | grep -aiq "unknown option" || OSSL_CIPHERS_S="-s"
 
      # This and all other occurences we do a little trick using "invalid." to avoid plain and
      # link level DNS lookups. See issue #1418 and https://tools.ietf.org/html/rfc6761#section-6.4
-     $OPENSSL s_client -ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_SSL2=true
+     $OPENSSL s_client -ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_SSL2=true
+     $OPENSSL s_client -ssl3 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_SSL3=true
+     $OPENSSL s_client -tls1_3 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_TLS13=true
+     $OPENSSL s_client -no_ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_NO_SSL2=true
 
-     $OPENSSL s_client -ssl3 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_SSL3=true
-
-     $OPENSSL s_client -tls1_3 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_TLS13=true
-
-     $OPENSSL genpkey -algorithm X448 2>&1 | grep -aq "not found" || \
-          HAS_X448=true
-
-     $OPENSSL genpkey -algorithm X25519 2>&1 | grep -aq "not found" || \
-          HAS_X25519=true
+     $OPENSSL genpkey -algorithm X448 2>&1 | grep -aq "not found" || HAS_X448=true
+     $OPENSSL genpkey -algorithm X25519 2>&1 | grep -aq "not found" || HAS_X25519=true
+     $OPENSSL pkey -help 2>&1 | grep -q Error || HAS_PKEY=true
+     $OPENSSL pkeyutl 2>&1 | grep -q Error ||  HAS_PKUTIL=true
 
      if "$HAS_TLS13"; then
-          $OPENSSL s_client -tls1_3 -sigalgs PSS+SHA256:PSS+SHA384 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-               HAS_SIGALGS=true
+          $OPENSSL s_client -tls1_3 -sigalgs PSS+SHA256:PSS+SHA384 -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_SIGALGS=true
      fi
-     $OPENSSL s_client -no_ssl2 -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_NO_SSL2=true
 
-     $OPENSSL s_client -noservername -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_NOSERVERNAME=true
+     $OPENSSL s_client -noservername -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_NOSERVERNAME=true
+     $OPENSSL s_client -ciphersuites -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_CIPHERSUITES=true
 
-     $OPENSSL s_client -ciphersuites -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_CIPHERSUITES=true
+     $OPENSSL ciphers @SECLEVEL=0:ALL > /dev/null 2> /dev/null && HAS_SECLEVEL=true
 
-     $OPENSSL ciphers @SECLEVEL=0:ALL > /dev/null 2> /dev/null
-     [[ $? -eq 0 ]] && HAS_SECLEVEL=true
-
-     $OPENSSL s_client -comp -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_COMP=true
-
-     $OPENSSL s_client -no_comp -connect invalid. 2>&1 | grep -aiq "unknown option" || \
-          HAS_NO_COMP=true
+     $OPENSSL s_client -comp -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_COMP=true
+     $OPENSSL s_client -no_comp -connect invalid. 2>&1 | grep -aiq "unknown option" || HAS_NO_COMP=true
 
      OPENSSL_NR_CIPHERS=$(count_ciphers "$(actually_supported_osslciphers 'ALL:COMPLEMENTOFALL' 'ALL')")
 
@@ -19012,50 +19114,40 @@ find_openssl_binary() {
           done
      fi
 
-     $OPENSSL pkey -help 2>&1 | grep -q Error || \
-          HAS_PKEY=true
-
-     $OPENSSL pkeyutl 2>&1 | grep -q Error || \
-          HAS_PKUTIL=true
-
      # For the following we feel safe enough to query the s_client help functions.
      # That was not good enough for the previous lookups
      $OPENSSL s_client -help 2>$s_client_has
-
      $OPENSSL s_client -starttls foo 2>$s_client_starttls_has
 
-     grep -qw '\-alpn' $s_client_has && \
-          HAS_ALPN=true
+     grep -q '\-proxy' $s_client_has && HAS_PROXY=true
+     grep -qw '\-alpn' $s_client_has && HAS_ALPN=true
+     grep -qw '\-nextprotoneg' $s_client_has && HAS_NPN=true
 
-     grep -qw '\-nextprotoneg' $s_client_has && \
-          HAS_NPN=true
+     grep -qw '\-fallback_scsv' $s_client_has && HAS_FALLBACK_SCSV=true
 
-     grep -qw '\-fallback_scsv' $s_client_has && \
-          HAS_FALLBACK_SCSV=true
+     grep -q 'xmpp' $s_client_starttls_has && HAS_XMPP=true
+     grep -q 'xmpp-server' $s_client_starttls_has && HAS_XMPP_SERVER=true
 
-     grep -q '\-proxy' $s_client_has && \
-          HAS_PROXY=true
+     grep -q 'postgres' $s_client_starttls_has && HAS_POSTGRES=true
+     grep -q 'mysql' $s_client_starttls_has && HAS_MYSQL=true
+     grep -q 'lmtp' $s_client_starttls_has && HAS_LMTP=true
+     grep -q 'nntp' $s_client_starttls_has && HAS_NNTP=true
+     grep -q 'irc' $s_client_starttls_has && HAS_IRC=true
 
-     grep -q 'xmpp' $s_client_starttls_has && \
-          HAS_XMPP=true
+     grep -q 'Unix-domain socket' $s_client_has && HAS_UDS=true
 
-     grep -q 'xmpp-server' $s_client_starttls_has && \
-          HAS_XMPP_SERVER=true
-
-     grep -q 'postgres' $s_client_starttls_has && \
-          HAS_POSTGRES=true
-
-     grep -q 'mysql' $s_client_starttls_has && \
-          HAS_MYSQL=true
-
-     grep -q 'lmtp' $s_client_starttls_has && \
-          HAS_LMTP=true
-
-     grep -q 'nntp' $s_client_starttls_has && \
-          HAS_NNTP=true
-
-     grep -q 'irc' $s_client_starttls_has && \
-          HAS_IRC=true
+     # Now check whether the standard $OPENSSL has Unix-domain socket and xmpp-server support. If
+     # not check /usr/bin/openssl -- if available. This is more a kludge which we shouldn't use for
+     # every openssl feature. At some point we need to decide which with openssl version we go.
+     OPENSSL2=/usr/bin/openssl
+     if [[ ! $OSSL_VER =~ 1.1.1 ]] && [[ ! $OSSL_VER_MAJOR =~ 3 ]]; then
+          if [[ -x $OPENSSL2 ]]; then
+               $OPENSSL2 s_client -help 2>$s_client_has2
+               $OPENSSL2 s_client -starttls foo 2>$s_client_starttls_has2
+               grep -q 'Unix-domain socket' $s_client_has2 && HAS_UDS2=true
+               grep -q 'xmpp-server' $s_client_starttls_has2 && HAS_XMPP_SERVER2=true
+          fi
+     fi
 
      $OPENSSL enc -chacha20 -K 12345678901234567890123456789012 -iv 01000000123456789012345678901234 > /dev/null 2> /dev/null <<< "test"
      [[ $? -eq 0 ]] && HAS_CHACHA20=true
@@ -19093,6 +19185,21 @@ find_openssl_binary() {
      fi
 
      return 0
+}
+
+
+find_socat() {
+     local result""
+
+     result=$(type -p socat)
+     if [[ $? -ne 0 ]]; then
+          return 1
+     else
+          if [[ -x $result ]] && $result -V | grep -iaq 'socat version' ; then
+               SOCAT=$result
+               return 0
+          fi
+     fi
 }
 
 
@@ -19217,7 +19324,8 @@ single check as <options>  ("$PROG_NAME URI" does everything except -E and -g):
      -H, --heartbleed              tests for Heartbleed vulnerability
      -I, --ccs, --ccs-injection    tests for CCS injection vulnerability
      -T, --ticketbleed             tests for Ticketbleed vulnerability in BigIP loadbalancers
-     -BB, --robot                  tests for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability
+     --BB, --robot                 tests for Return of Bleichenbacher's Oracle Threat (ROBOT) vulnerability
+     --SI, --starttls-injection    tests for STARTTLS injection issues
      -R, --renegotiation           tests for renegotiation vulnerabilities
      -C, --compression, --crime    tests for CRIME vulnerability (TLS compression issue)
      -B, --breach                  tests for BREACH vulnerability (HTTP compression issue)
@@ -19368,11 +19476,14 @@ HAS_PKUTIL: $HAS_PKUTIL
 HAS_PROXY: $HAS_PROXY
 HAS_XMPP: $HAS_XMPP
 HAS_XMPP_SERVER: $HAS_XMPP_SERVER
+HAS_XMPP_SERVER2: $HAS_XMPP_SERVER2
 HAS_POSTGRES: $HAS_POSTGRES
 HAS_MYSQL: $HAS_MYSQL
 HAS_LMTP: $HAS_LMTP
 HAS_NNTP: $HAS_NNTP
 HAS_IRC: $HAS_IRC
+HAS_UDS: $HAS_UDS
+HAS_UDS2: $HAS_UDS2
 
 HAS_DIG: $HAS_DIG
 HAS_HOST: $HAS_HOST
@@ -19422,6 +19533,8 @@ HEARTBLEED_MAX_WAITSOCK: $HEARTBLEED_MAX_WAITSOCK
 CCS_MAX_WAITSOCK: $CCS_MAX_WAITSOCK
 USLEEP_SND $USLEEP_SND
 USLEEP_REC $USLEEP_REC
+
+SOCAT: $SOCAT
 
 EOF
           type -p locale &>/dev/null && locale >>$TEMPDIR/environment.txt || echo "locale doesn't exist" >>$TEMPDIR/environment.txt
@@ -20542,7 +20655,7 @@ determine_service() {
                fi
           fi
      fi
-     close_socket
+     close_socket 5
 
      outln
      if [[ -z "$1" ]]; then
@@ -20594,6 +20707,7 @@ determine_service() {
                               fi
                          fi
                          if [[ "$protocol" == xmpp-server ]] && ! "$HAS_XMPP_SERVER"; then
+                              #FIXME: make use of HAS_XMPP_SERVER2
                               fatal "Your $OPENSSL does not support the \"-starttls xmpp-server\" option" $ERR_OSSLBIN
                          fi
                     elif [[ "$protocol" == postgres ]]; then
@@ -20631,7 +20745,12 @@ determine_service() {
                     fatal "momentarily only ftp, smtp, lmtp, pop3, imap, xmpp, xmpp-server, telnet, ldap, nntp, postgres and mysql allowed" $ERR_CMDLINE
                     ;;
           esac
+          # It comes handy later also for STARTTLS injection to define this global. When we do banner grabbing
+          # or replace service_detection() we might not need that anymore
+          SERVICE=$protocol
+
      fi
+
      tmpfile_handle ${FUNCNAME[0]}.txt
      return 0       # OPTIMAL_PROTO, GET_REQ*/HEAD_REQ* is set now
 }
@@ -21546,6 +21665,7 @@ initialize_globals() {
      do_fs=false
      do_protocols=false
      do_rc4=false
+     do_starttls_injection=false
      do_winshock=false
      do_grease=false
      do_renego=false
@@ -21584,6 +21704,7 @@ set_scanning_defaults() {
      do_header=true
      do_fs=true
      do_rc4=true
+     do_starttls_injection=true
      do_winshock=true
      do_protocols=true
      do_renego=true
@@ -21606,7 +21727,7 @@ count_do_variables() {
      local true_nr=0
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_starttls_injection do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv do_winshock \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
                     "${!gbl}" && let true_nr++
@@ -21619,7 +21740,7 @@ debug_globals() {
      local gbl
 
      for gbl in do_allciphers do_vulnerabilities do_beast do_lucky13 do_breach do_ccs_injection do_ticketbleed do_cipher_per_proto do_crime \
-               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_grease do_robot do_renego \
+               do_freak do_logjam do_drown do_header do_heartbleed do_mx_all_ips do_fs do_protocols do_rc4 do_starttls_injection do_grease do_robot do_renego \
                do_cipherlists do_server_defaults do_server_preference do_ssl_poodle do_tls_fallback_scsv do_winshock \
                do_sweet32 do_client_simulation do_cipher_match do_tls_sockets do_mass_testing do_display_only do_rating; do
           printf "%-22s = %s\n" $gbl "${!gbl}"
@@ -21828,6 +21949,7 @@ parse_cmd_line() {
                     do_lucky13=true
                     do_winshock=true
                     do_rc4=true
+                    do_starttls_injection=true
                     if "$OFFENSIVE"; then
                          VULN_COUNT=17
                     else
@@ -21849,7 +21971,7 @@ parse_cmd_line() {
                     do_ticketbleed=true
                     let "VULN_COUNT++"
                     ;;
-               -BB|--robot)
+               -BB|--BB|--robot)
                     do_robot=true
                     ;;
                -R|--renegotiation)
@@ -21903,6 +22025,10 @@ parse_cmd_line() {
                     ;;
                -4|--rc4|--appelbaum)
                     do_rc4=true
+                    let "VULN_COUNT++"
+                    ;;
+               -SI|--SI|--starttls[-_]injection)
+                    do_starttls_injection=true
                     let "VULN_COUNT++"
                     ;;
                -f|--fs|--nsa|--forward-secrecy)
@@ -22252,6 +22378,10 @@ parse_cmd_line() {
           grep -q "BEGIN CERTIFICATE" "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
 
+     if "$do_starttls_injection" && [[ "$STARTTLS_PROTOCOL" =~ smtp ]]; then
+          let "VULN_COUNT++"
+     fi
+
      count_do_variables
      [[ $? -eq 0 ]] && set_scanning_defaults
      set_skip_tests
@@ -22406,6 +22536,7 @@ lets_roll() {
                fi
 
                fileout_section_header $section_number true && ((section_number++))
+
                "$do_heartbleed" && { run_heartbleed; ret=$(($? + ret)); stopwatch run_heartbleed; }
                "$do_ccs_injection" && { run_ccs_injection; ret=$(($? + ret)); stopwatch run_ccs_injection; }
                "$do_ticketbleed" && { run_ticketbleed; ret=$(($? + ret)); stopwatch run_ticketbleed; }
@@ -22423,6 +22554,8 @@ lets_roll() {
                "$do_lucky13" && { run_lucky13; ret=$(($? + ret)); stopwatch run_lucky13; }
                "$do_winshock" && { run_winshock; ret=$(($? + ret)); stopwatch run_winshock; }
                "$do_rc4" && { run_rc4; ret=$(($? + ret)); stopwatch run_rc4; }
+               "$do_starttls_injection" && { run_starttls_injection; ret=$(($? + ret)); stopwatch run_starttls_injection; }
+               outln
 
                fileout_section_header $section_number true && ((section_number++))
                "$do_allciphers" && { run_allciphers; ret=$(($? + ret)); stopwatch run_allciphers; }
@@ -22479,6 +22612,7 @@ lets_roll() {
      set_color_functions
      maketempf
      find_openssl_binary
+     find_socat
      choose_printf
      check_resolver_bins
      prepare_debug  ; stopwatch parse

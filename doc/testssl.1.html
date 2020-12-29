@@ -320,7 +320,9 @@ Also for multiple server certificates are being checked for as well as for the c
 
 <p><code>-T, --ticketbleed</code>             Checks for Ticketbleed memory leakage in BigIP loadbalancers.</p>
 
-<p><code>-BB, --robot</code>          Checks for vulnerability to ROBOT / (<em>Return Of Bleichenbacher's Oracle Threat</em>) attack.</p>
+<p><code>--BB, --robot</code>          Checks for vulnerability to ROBOT / (<em>Return Of Bleichenbacher's Oracle Threat</em>) attack.</p>
+
+<p><code>--SI, --starttls-injection</code>          Checks for STARTTLS injection vulnerabilities (SMTP, IMAP, POP3 only). <code>socat</code> and OpenSSL &ge;1.1.0 is needed.</p>
 
 <p><code>-R, --renegotiation</code>           Tests renegotiation vulnerabilities. Currently there's a check for <em>Secure Renegotiation</em> and for <em>Secure Client-Initiated Renegotiation</em>. Please be aware that vulnerable servers to the latter can likely be DoSed very easily (HTTP). A check for <em>Insecure Client-Initiated Renegotiation</em> is not yet implemented.</p>
 

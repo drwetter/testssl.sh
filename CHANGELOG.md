@@ -12,7 +12,8 @@
 * Percent output char problem fixed
 * Several display/output fixes
 * BREACH check: list all compression methods and add brotli
-* test for winshock vulnerability
+* Test for old winshock vulnerability
+* Test for STARTTLS injection vulnerabilities (SMTP, POP3, IMAP)
 * Security fix: DNS input
 * Don't use external pwd anymore
 * STARTTLS: XMPP server support
@@ -29,6 +30,7 @@
 * Headerflag X-XSS-Protection is now labeled as INFO
 * Client simulation runs in wide mode which is even better readable
 * Added --reqheader to support custom headers in HTTP requests
+
 
 ### Features implemented / improvements in 3.0
 
