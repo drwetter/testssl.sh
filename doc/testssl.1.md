@@ -110,6 +110,8 @@ The same can be achieved by setting the environment variable `WARNINGS`.
 
 `--basicauth <user:pass>` This can be set to provide HTTP basic auth credentials which are used during checks for security headers. BASICAUTH is the ENV variable you can use instead.
 
+`--reqheader <header>` This can be used to add additional HTTP request headers in the correct format `Headername: headercontent`. This parameter can be called multiple times if required. For example: `--reqheader 'Proxy-Authorization: Basic dGVzdHNzbDpydWxlcw==' --reqheader 'ClientID: 0xDEADBEAF'`. REQHEADER is the corresponding environment variable.
+
 
 ### SPECIAL INVOCATIONS
 

@@ -18,8 +18,8 @@ my $uri="";
 my $socket_out="";
 my $openssl_out="";
 # Blacklists we use to trigger an error:
-my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal';
-my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem';
+my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal|(c|C)ommand not found';
+my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem|(c|C)ommand not found';
 
 # my $socket_json="";
 # my $openssl_json="";
@@ -53,12 +53,14 @@ $socket_out = `./testssl.sh $check2run -t smtp $uri 2>&1`;
 unlike($socket_out, qr/$socket_regex_bl/, "");
 $tests++;
 
+# commented out, bc of travis' limits
+#
 # unlink "tmp.json";
-printf "\n%s\n", "STARTTLS: Client simulations unit test via OpenSSL --> $uri ...";
-$openssl_out = `./testssl.sh --ssl-native $check2run -t smtp $uri 2>&1`;
-# $openssl_json = json('tmp.json');
-unlike($openssl_out, qr/$openssl_regex_bl/, "");
-$tests++;
+#printf "\n%s\n", "STARTTLS: Client simulations unit test via OpenSSL --> $uri ...";
+#$openssl_out = `./testssl.sh --ssl-native $check2run -t smtp $uri 2>&1`;
+## $openssl_json = json('tmp.json');
+#unlike($openssl_out, qr/$openssl_regex_bl/, "");
+#$tests++;
 
 done_testing($tests);
 unlink "tmp.json";

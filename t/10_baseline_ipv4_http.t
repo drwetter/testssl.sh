@@ -20,8 +20,8 @@ my $uri="google.com";
 my $socket_out="";
 my $openssl_out="";
 # Blacklists we use to trigger an error:
-my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal';
-my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem';
+my $socket_regex_bl='(e|E)rror|\.\/testssl\.sh: line |(f|F)atal|(c|C)ommand not found';
+my $openssl_regex_bl='(e|E)rror|(f|F)atal|\.\/testssl\.sh: line |Oops|s_client connect problem|(c|C)ommand not found';
 my $json_regex_bl='(id".*:\s"scanProblem"|severity".*:\s"FATAL"|"Scan interrupted")';
 
 my $socket_json="";
