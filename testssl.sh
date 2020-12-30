@@ -1176,7 +1176,7 @@ fileout_json_print_parameter() {
      local parameter="$1"
      local filler="$2"
      local value="$3"
-     local not_last="$4"
+     local not_last="$4"      # decides whether to use a trailing comma on a single line (not the whole object)
      local spaces=""
 
      "$do_json" && \
@@ -1239,6 +1239,7 @@ fileout_json_finding() {
 fileout_pretty_json_banner() {
      local target
 
+     #FIXME: is this \/ a relic?
      if ! "$do_mass_testing"; then
           [[ -z "$NODE" ]] && parse_hn_port "${URI}"
           # NODE, URL_PATH, PORT, IPADDR and IP46ADDR is set now  --> wrong place
@@ -1246,17 +1247,39 @@ fileout_pretty_json_banner() {
           $do_mx_all_ips && target="$URI"
      fi
 
-     echo -e "          \"Invocation\"  : \"$PROG_NAME $CMDLINE\",
-          \"at\"          : \"$HNAME:$OPENSSL_LOCATION\",
-          \"version\"     : \"$VERSION $GIT_REL_SHORT\",
+     echo -e "          \"cmdLine\"    : \"$PROG_NAME $CMDLINE\",
+          \"scanHost\"    : \"$HNAME:$OPENSSL_LOCATION\",
+          \"swVersion\"   : \"$VERSION $GIT_REL_SHORT\",
           \"openssl\"     : \"$OSSL_NAME $OSSL_VER from $OSSL_BUILD_DATE\",
           \"startTime\"   : \"$START_TIME\",
           \"scanResult\"  : ["
 }
 
+fileout_json_banner() {
+     # We also use a special header here as for JSON pretty. The "usual" $NODE/$NODEIP
+     # and PORT output which we could have used from fileout_json_finding() is not used.
+     # NODEIP is not set yet.
+     #
+     "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
+     echo -e "         {"  >> "$JSONFILE"
+     fileout_json_print_parameter "id" "           " "$1" true
+     fileout_json_print_parameter "severity" "     " "$2" true
+     fileout_json_print_parameter "finding" "      " "$3" false
+     echo -e "\n          }" >> "$JSONFILE"
+     fileout_separator
+}
+
+
 fileout_banner() {
      if "$JSONHEADER"; then
-          # "$do_json" &&                    # here we maybe should add a banner, too
+          if "$do_json" ; then
+               # We could have used a single function as for JSON pretty below
+               # which would be more consistent.
+               fileout_json_banner "cmdLine" "INFO" "$PROG_NAME $CMDLINE"
+               fileout_json_banner "swlVersion" "INFO" "$VERSION $GIT_REL_SHORT"
+               fileout_json_banner "scanHost" "INFO" "$HNAME:$OPENSSL_LOCATION"
+               fileout_json_banner "startTime" "INFO" "$START_TIME"
+          fi
           "$do_pretty_json" && FIRST_FINDING=true && (printf "%s\n" "$(fileout_pretty_json_banner)") >> "$JSONFILE"
      fi
 }
