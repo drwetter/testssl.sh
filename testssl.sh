@@ -2210,7 +2210,7 @@ service_detection() {
                # trying with sockets is better than not even trying.
                tls_sockets "04" "$TLS13_CIPHER" "all+" "" "" false
                if [[ $? -eq 0 ]]; then
-                    plaintext="$(tm_out "$GET_REQ11" | hexdump -v -e '16/1 "%02X"')"
+                    plaintext="$(safe_echo "$GET_REQ11" | hexdump -v -e '16/1 "%02X"')"
                     plaintext="${plaintext%%[!0-9A-F]*}"
                     send_app_data "$plaintext"
                     if [[ $? -eq 0 ]]; then
@@ -2225,7 +2225,7 @@ service_detection() {
                fi
           else
                # SNI is not standardized for !HTTPS but fortunately for other protocols s_client doesn't seem to care
-               tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE &
+               safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$1 -quiet $BUGS -connect $NODEIP:$PORT $PROXY $SNI") >$TMPFILE 2>$ERRFILE &
                wait_kill $! $HEADER_MAXSLEEP
                was_killed=$?
           fi
@@ -2321,12 +2321,12 @@ run_http_header() {
 
      pr_bold " HTTP Status Code           "
      [[ -z "$1" ]] && url="/" || url="$1"
-     tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
+     safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE &
      wait_kill $! $HEADER_MAXSLEEP
      if [[ $? -eq 0 ]]; then
           # Issue HTTP GET again as it properly finished within $HEADER_MAXSLEEP and didn't hang.
           # Doing it again in the foreground to get an accurate header time
-          tm_out "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
+          safe_echo "$GET_REQ11" | $OPENSSL s_client $(s_client_options "$OPTIMAL_PROTO $BUGS -quiet -ign_eof -connect $NODEIP:$PORT $PROXY $SNI") >$HEADERFILE 2>$ERRFILE
           NOW_TIME=$(date "+%s")
           HTTP_TIME=$(awk -F': ' '/^date:/ { print $2 }  /^Date:/ { print $2 }' $HEADERFILE)
           HAD_SLEPT=0
@@ -7354,6 +7354,124 @@ tls_time() {
      return 0
 }
 
+# rfc8461
+sub_mta_sts() {
+     local mta_sts_record=""
+     local policy=""
+     local smtp_tls_record=""
+     local spaces="$1"
+     local useragent="$UA_STD"
+     $SNEAKY && useragent="$UA_SNEAKY"
+
+     [[ ! "$STARTTLS_PROTOCOL" =~ smtp ]] && return 0
+
+     # This works currently only when the MX record is equal the domainname like with the testcase dev.testssl.sh
+     # So either we must only execute this when called --mx or we must deduce the domain name from $NODE somehow.
+     # For the latter we could reverse check again with get_mx_record whether the name passed later passed
+     # to this function is an mx record from this domain.
+     # So the plan is to chek whether $CMDLINE matches --mx. If not we check whether there is an MX record
+     # for $NODE which matches the current $NODE. If not we subsequently remove the leading hostname part of
+     # the $NODE and check whether this is a domainname and has a MX which matches the original node.
+     # If we end up @ DOMAIN.TLD and didn't find anything we emit a message and return.
+
+     pr_bold " MTA-STS Policy               "
+
+     mta_sts_record="$(get_txt_record _mta-sts.$NODE)"
+     # look for exact match for 'v=STSv1'
+     # look for exact match for 'id='
+
+     # echo "$mta_sts_record"; echo
+
+     policy="$(safe_echo "GET /.well-known/mta-sts.txt HTTP/1.1\r\nHost: mta-sts.$NODE\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n" | $OPENSSL s_client $(s_client_options "-quiet -ign_eof -connect $NODEIP:443 $PROXY $SNI") 2>$ERRFILE)"
+     # here also the openssl return val needs to be checked
+
+     #tmp="$(printf "$policy" | awk '/^$/ { p=1;next } { if(!p) { print } }')"
+     # policy="$(awk '/^$/ { p=1;next } { if(!p) { print } }' <<< "$policy")"
+     policy="$(print_after_blankline "$policy")"
+     #echo "POLICY2: $tmp "
+     # echo "$policy"; echo
+
+     # header needs to be stripped. Either the lower bytes which come after Content-Length in the header.
+     # or starting from version or starting after blank line
+
+     # check policy:
+     # - grep -Ew 'version|mode|mx|max_age'
+     # - version.*STSv1$
+     # - grep 'mode:.*testing|mode:.*enforce'
+     # - grep 'max_age:.*[0-9](5-10)'
+     # - max_age should be sufficient otherwise caching it is ~useless, see HSTS
+     # - whether mx record matches
+
+     if [[ $DEBUG -ge 1 ]]; then
+          echo "$mta_sts_record" >$TMPFILE/_mta-sts.$NODE.txt
+          echo "$policy" >$TMPFILE/$NODE.mta-sts.well-known_mta-sts.txt
+          echo "$smtp_tls_record" > $TMPFILE/_smtp._tls.$NODE
+     fi
+
+     smtp_tls_record="$(get_txt_record _smtp._tls.$NODE)"
+
+     outln "valid _mta-sts TXT record \"$mta_sts_record\""
+     out "$spaces"
+     outln "valid enforced policy \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+     out "$spaces"
+     outln "optional _smtp._tls TXT record \"$smtp_tls_record\""
+
+     return 0
+}
+
+# e.g. for removing the HTTP header
+#
+print_after_blankline() {
+     # doesn't work (oneliner with $1 instead of multiline):
+     #awk '/^$/ { p=1;next } { if(p) { print } }' <<< $1
+     local first=true
+     local line=""
+
+     while read -r line; do
+          if ! "$first"; then
+               safe_echo "$line\n"
+          else
+               # ignore everything until we hit an empty line or a line with a blank or a CR / LF
+               if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]$ ]]; then
+                    first=false
+                    continue
+               fi
+          fi
+     done <<< $1
+set +x
+}
+
+# e.g. for removing the body
+#
+print_before_blankline() {
+     # doesn't work (oneliner with $1 instead of multiline):
+     awk '/^$/ { p=1;next } { if(!p) { print } }' <<< $1
+}
+
+
+# RFC 6394
+# RFC 6698
+# RFC 7218
+# RFC 7671
+# RFC 7672
+# RFC 7673
+sub_dane() {
+     local tlsa_record=""
+     local rrsig_record=""
+     local spaces="$1"
+
+     # Not yet implemeted
+     return 0
+
+     pr_bold " DANE / DNSSEC                "
+
+     tlsa_record="$(get_tlsa_record _$PORT._tcp.$NODE)"
+     # parsing TLSA certificate usage, TLSA selector, TLSA matching type, hash
+     rrsig_record="$(get_rrsig_record $NODE)"
+
+     # return 0
+}
+
 # core function determining whether handshake succeeded or not
 # arg1: return value of "openssl s_client connect"
 # arg2: temporary file with the server hello
@@ -9475,6 +9593,7 @@ run_server_defaults() {
      local -a -i success
      local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
      local using_sockets=true
+     local spaces="                              "
 
      "$SSL_NATIVE" && using_sockets=false
 
@@ -9820,6 +9939,9 @@ run_server_defaults() {
      fi
 
      tls_time
+
+     sub_mta_sts "$spaces"
+     sub_dane "$spaces"
 
      if [[ -n "$SNI" ]] && [[ $certs_found -ne 0 ]] && [[ ! -e $HOSTCERT.nosni ]]; then
           # no cipher suites specified here. We just want the default vhost subject
