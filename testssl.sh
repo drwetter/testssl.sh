@@ -19195,7 +19195,7 @@ find_socat() {
      if [[ $? -ne 0 ]]; then
           return 1
      else
-          if [[ -x $result ]] && $result -V | grep -iaq 'socat version' ; then
+          if [[ -x $result ]] && $result -V 2>&1 | grep -iaq 'socat version' ; then
                SOCAT=$result
                return 0
           fi
