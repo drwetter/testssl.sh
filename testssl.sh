@@ -7354,12 +7354,15 @@ tls_time() {
      return 0
 }
 
-# rfc8461
+# rfc8461, rfc8460
 sub_mta_sts() {
      local mta_sts_record=""
      local policy=""
      local smtp_tls_record=""
      local spaces="$1"
+     # we might reconsider this as booleans arent very flexible:
+     local mta_sts_record_ok=false policy_ok=false smtp_tls_record_ok=false
+     local jsonID="smtp_mtasts"
      local useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
 
@@ -7377,22 +7380,18 @@ sub_mta_sts() {
      pr_bold " MTA-STS Policy               "
 
      mta_sts_record="$(get_txt_record _mta-sts.$NODE)"
-     # look for exact match for 'v=STSv1'
-     # look for exact match for 'id='
-
+     # look for exact match for 'v=STSv1' and 'id='
+     if [[ "$mta_sts_record" =~ v=STSv1 ]] && [[ "$mta_sts_record" =~ id= ]] && [[ "$mta_sts_record" =~ \; ]]; then
+          # id check needs to improved , see sts-id in https://tools.ietf.org/html/rfc8461#section-3.1
+          mta_sts_record_ok=true
+     fi
      # echo "$mta_sts_record"; echo
 
      policy="$(safe_echo "GET /.well-known/mta-sts.txt HTTP/1.1\r\nHost: mta-sts.$NODE\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n" | $OPENSSL s_client $(s_client_options "-quiet -ign_eof -connect $NODEIP:443 $PROXY $SNI") 2>$ERRFILE)"
      # here also the openssl return val needs to be checked
 
-     #tmp="$(printf "$policy" | awk '/^$/ { p=1;next } { if(!p) { print } }')"
-     # policy="$(awk '/^$/ { p=1;next } { if(!p) { print } }' <<< "$policy")"
      policy="$(print_after_blankline "$policy")"
-     #echo "POLICY2: $tmp "
      # echo "$policy"; echo
-
-     # header needs to be stripped. Either the lower bytes which come after Content-Length in the header.
-     # or starting from version or starting after blank line
 
      # check policy:
      # - grep -Ew 'version|mode|mx|max_age'
@@ -7402,6 +7401,9 @@ sub_mta_sts() {
      # - max_age should be sufficient otherwise caching it is ~useless, see HSTS
      # - whether mx record matches
 
+     # for the time being:
+     [[ -n "$policy" ]] && policy_ok=true
+
      if [[ $DEBUG -ge 1 ]]; then
           echo "$mta_sts_record" >$TMPFILE/_mta-sts.$NODE.txt
           echo "$policy" >$TMPFILE/$NODE.mta-sts.well-known_mta-sts.txt
@@ -7409,21 +7411,44 @@ sub_mta_sts() {
      fi
 
      smtp_tls_record="$(get_txt_record _smtp._tls.$NODE)"
+     # for the time being:
+     [[ -n "$smtp_tls_record" ]] && smtp_tls_record_ok=true
 
-     outln "valid _mta-sts TXT record \"$mta_sts_record\""
+     if "$mta_sts_record_ok"; then
+          pr_svrty_good "valid"
+          fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record \"$mta_sts_record\""
+     else
+          pr_svrty_low "invalid"
+          fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record \"$mta_sts_record\""
+     fi
+     outln " _mta-sts TXT record \"$mta_sts_record\""
      out "$spaces"
-     outln "valid enforced policy \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+
+     if "$policy_ok"; then
+          pr_svrty_good "valid and enforced"
+          fileout "${jsonID}_policy" "OK" "valid and enforced policy file \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+     else
+          # missing: too short, not enforced, etc..
+          pr_svrty_low "invalid"
+          fileout "${jsonID}_policy" "LOW" "invalid policy file \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+     fi
+     outln " policy file \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
      out "$spaces"
-     outln "optional _smtp._tls TXT record \"$smtp_tls_record\""
+
+     if "$smtp_tls_record_ok"; then
+          outln "optional _smtp._tls TXT record \"$smtp_tls_record\""
+          fileout "${jsonID}_tlsrpt" "INFO" "optional _smtp._tls TXT record \"$smtp_tls_record\""
+     else
+          outln "No TLS RPT record"
+          fileout "${jsonID}_tlsrpt" "INFO" "no or invalid optional _smtp._tls TXT record \"$smtp_tls_record\""
+     fi
 
      return 0
 }
 
-# e.g. for removing the HTTP header
+# e.g. for removing the HTTP header. To be moved to the top
 #
 print_after_blankline() {
-     # doesn't work (oneliner with $1 instead of multiline):
-     #awk '/^$/ { p=1;next } { if(p) { print } }' <<< $1
      local first=true
      local line=""
 
@@ -7438,15 +7463,8 @@ print_after_blankline() {
                fi
           fi
      done <<< $1
-set +x
 }
 
-# e.g. for removing the body
-#
-print_before_blankline() {
-     # doesn't work (oneliner with $1 instead of multiline):
-     awk '/^$/ { p=1;next } { if(!p) { print } }' <<< $1
-}
 
 
 # RFC 6394
