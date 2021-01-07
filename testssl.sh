@@ -9056,7 +9056,7 @@ certificate_info() {
 
      # We adjust the thresholds by %50 for LE certificates, relaxing warnings for those certificates.
      # . instead of \' because it does not break syntax highlighting in vim
-     if [[ "$issuer_CN" =~ ^Let.s\ Encrypt\ Authority ]] ; then
+     if [[ "$issuer_O" =~ ^Let.s\ Encrypt ]] ; then
           days2warn2=$((days2warn2 / 2))
           days2warn1=$((days2warn1 / 2))
      fi
