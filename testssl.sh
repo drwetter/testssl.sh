@@ -7362,11 +7362,17 @@ sub_mta_sts() {
      local spaces="$1"
      # we might reconsider this as booleans arent very flexible:
      local mta_sts_record_ok=false policy_ok=false smtp_tls_record_ok=false
+     local -a failreason_policy=()
+     local -a failreason_mtasts_rec=()
      local jsonID="smtp_mtasts"
+     local mx_record=""
      local useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
 
      [[ ! "$STARTTLS_PROTOCOL" =~ smtp ]] && return 0
+
+     # rather move to the caller?
+     mx_record=$(get_mx_record "$NODE")
 
      # This works currently only when the MX record is equal the domainname like with the testcase dev.testssl.sh
      # So either we must only execute this when called --mx or we must deduce the domain name from $NODE somehow.
@@ -7380,12 +7386,33 @@ sub_mta_sts() {
      pr_bold " MTA-STS Policy               "
 
      mta_sts_record="$(get_txt_record _mta-sts.$NODE)"
-     # look for exact match for 'v=STSv1' and 'id='
-     if [[ "$mta_sts_record" =~ v=STSv1 ]] && [[ "$mta_sts_record" =~ id= ]] && [[ "$mta_sts_record" =~ \; ]]; then
-          # id check needs to improved , see sts-id in https://tools.ietf.org/html/rfc8461#section-3.1
-          mta_sts_record_ok=true
-     fi
      # echo "$mta_sts_record"; echo
+
+     mta_sts_record_ok=true
+     if [[ -z "$mta_sts_record" ]]; then
+          failreason_mtasts_rec+=("no record")
+          mta_sts_record_ok=false
+     else
+          if [[ $(count_lines "$(safe_echo "$mta_sts_record" | tr ';' '\n')") -ne 2 ]]; then
+               failreason_mtasts_rec+=("number of ; should be 2")
+               mta_sts_record_ok=false
+          fi
+          IFS=';' read v id <<< "${mta_sts_record}"
+          if [[ ! "$v" =~ v=STSv1 ]] ; then
+               failreason_mtasts_rec+=("v seems wrong")
+               mta_sts_record_ok=false
+          fi
+          if [[ ! "$id" =~ id= ]]; then
+               failreason_mtasts_rec+=("id seems wrong")
+               mta_sts_record_ok=false
+          else
+               id="${id#*=}"       # strip key
+               if [[ ! "$id" =~ ^[[:alnum:]]{1,32}$ ]]; then
+                    failreason_mtasts_rec+=("should be up to 32 alnum chars ")
+                    mta_sts_record_ok=false
+               fi
+          fi
+     fi
 
      policy="$(safe_echo "GET /.well-known/mta-sts.txt HTTP/1.1\r\nHost: mta-sts.$NODE\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n" | $OPENSSL s_client $(s_client_options "-quiet -ign_eof -connect $NODEIP:443 $PROXY $SNI") 2>$ERRFILE)"
      # here also the openssl return val needs to be checked
@@ -7393,27 +7420,55 @@ sub_mta_sts() {
      policy="$(print_after_blankline "$policy")"
      # echo "$policy"; echo
 
+     # Syntax check, keep in mind $policy appears in bash as a single line with Unix LF (0a).
+     policy_ok=true
+     if [[ -z "$policy" ]]; then
+          failreason_policy+=("policy https://mta-sts.$NODE/.well-known/mta-sts.txt not found")
+          policy_ok=false
+     else
+          for c in version mode mx max_age; do
+               if [[ ! "$policy" =~ $c: ]] && [[ ! "$policy" =~ $c\ : ]]; then
+                    policy_ok=false
+                    failreason_policy+=("$c wrong formatted/missing")
+               fi
+          done
+
+          # we use at most 10 spaces. ToDo: look into the policy
+          if "$policy_ok"; then
+               if [[ ! "$policy" =~ version[\ ]{0,10}:[\ ]{0,10}STSv1 ]]; then
+                    failreason_policy+=("version should be STSv1 ")
+               fi
+               if [[ ! "$policy" =~ max_age[\ ]{0,10}:[\ ]{0,10}[0-9]{1,20} ]]; then
+                    failreason_policy+=("max age is not a number")
+               fi
+               if [[ ! "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}(enforce|testing) ]]; then
+                    failreason_policy+=("policy is neither testing or enforce")
+               fi
+               if [[ "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}testing ]]; then
+                    policy_mode=testing
+               fi
+          fi
+     fi
+     [[ -n "$failreason_policy" ]] && policy_ok=false
+     # get max_age:
+
      # check policy:
-     # - grep -Ew 'version|mode|mx|max_age'
-     # - version.*STSv1$
-     # - grep 'mode:.*testing|mode:.*enforce'
-     # - grep 'max_age:.*[0-9](5-10)'
      # - max_age should be sufficient otherwise caching it is ~useless, see HSTS
      # - whether mx record matches
-
-     # for the time being:
-     [[ -n "$policy" ]] && policy_ok=true
+     # - check against https://tools.ietf.org/html/rfc8461#section-3.2
 
      if [[ $DEBUG -ge 1 ]]; then
-          echo "$mta_sts_record" >$TMPFILE/_mta-sts.$NODE.txt
-          echo "$policy" >$TMPFILE/$NODE.mta-sts.well-known_mta-sts.txt
-          echo "$smtp_tls_record" > $TMPFILE/_smtp._tls.$NODE
+          echo "$mta_sts_record" >$TEMPDIR/_mta-sts.$NODE.txt
+          echo "$policy" >$TEMPDIR/$NODE.policy_mta-sts.txt
+          echo "$smtp_tls_record" > $TEMPDIR/_smtp._tls.$NODE
      fi
 
      smtp_tls_record="$(get_txt_record _smtp._tls.$NODE)"
      # for the time being:
      [[ -n "$smtp_tls_record" ]] && smtp_tls_record_ok=true
 
+
+     # now the verdicts
      if "$mta_sts_record_ok"; then
           pr_svrty_good "valid"
           fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record \"$mta_sts_record\""
@@ -7425,22 +7480,28 @@ sub_mta_sts() {
      out "$spaces"
 
      if "$policy_ok"; then
-          pr_svrty_good "valid and enforced"
-          fileout "${jsonID}_policy" "OK" "valid and enforced policy file \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+          if [[ $policy_mode == testing ]]; then
+               out "valid but not enforced"
+               fileout "${jsonID}_policy" "INFO" "valid but not enforced policy \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+          else
+               pr_svrty_good "valid and enforced"
+               fileout "${jsonID}_policy" "OK" "valid and enforced policy \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+          fi
+          outln " policy https://mta-sts.$NODE/.well-known/mta-sts.txt"
      else
           # missing: too short, not enforced, etc..
-          pr_svrty_low "invalid"
-          fileout "${jsonID}_policy" "LOW" "invalid policy file \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+          pr_svrty_low "invalid policy"
+          fileout "${jsonID}_policy" "LOW" "invalid policy \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+          outln " \"https://mta-sts.$NODE/.well-known/mta-sts.txt\": ${failreason_policy[@]}"
      fi
-     outln " policy file \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
      out "$spaces"
 
      if "$smtp_tls_record_ok"; then
-          outln "optional _smtp._tls TXT record \"$smtp_tls_record\""
-          fileout "${jsonID}_tlsrpt" "INFO" "optional _smtp._tls TXT record \"$smtp_tls_record\""
+          outln "found (optional) TLS RPT TXT record \"$smtp_tls_record\""
+          fileout "${jsonID}_tlsrpt" "INFO" "optional TLS-RPT TXT record \"$smtp_tls_record\""
      else
           outln "No TLS RPT record"
-          fileout "${jsonID}_tlsrpt" "INFO" "no or invalid optional _smtp._tls TXT record \"$smtp_tls_record\""
+          fileout "${jsonID}_tlsrpt" "INFO" "no or invalid (optional) TLS RPT record \"$smtp_tls_record\""
      fi
 
      return 0
