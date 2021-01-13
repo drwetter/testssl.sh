@@ -17322,11 +17322,10 @@ prepare_debug() {
           cat >$TEMPDIR/environment.txt << EOF
 
 
-CVS_REL: $CVS_REL
 GIT_REL: $GIT_REL
 
 PID: $$
-commandline: "$CMDLINE"
+commandline: "${CMDLINE[@]}"
 bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}
 status: ${BASH_VERSINFO[4]}
 machine: ${BASH_VERSINFO[5]}
@@ -17696,7 +17695,6 @@ parse_hn_port() {
      NODE="$1"
      NODE="${NODE/https\:\/\//}"        # strip "https"
      NODE="${NODE%%/*}"                 # strip trailing urlpath
-     NODE="${NODE%%.}"                  # strip trailing "." if supplied
      if grep -q ':$' <<< "$NODE"; then
           if grep -wq http <<< "$NODE"; then
                fatal "\"http\" is not what you meant probably" $ERR_CMDLINE
@@ -17718,6 +17716,7 @@ parse_hn_port() {
           grep -q ':' <<< "$NODE" && \
                PORT=$(sed 's/^.*\://' <<< "$NODE") && NODE=$(sed 's/\:.*$//' <<< "$NODE")
      fi
+     NODE="${NODE%%.}"                  # strip trailing "." if supplied
 
      # We check for non-ASCII chars now. If there are some we'll try to convert it if IDN/IDN2 is installed
      # If not, we'll continue. Hoping later that dig can use it. If not the error handler will tell
