@@ -7366,26 +7366,51 @@ sub_mta_sts() {
      local -a failreason_mtasts_rec=()
      local jsonID="smtp_mtasts"
      local mx_record=""
+     local domain=""
+     local fqdnparts=$(count_words "${URI//./ }")
      local useragent="$UA_STD"
      $SNEAKY && useragent="$UA_SNEAKY"
 
      [[ ! "$STARTTLS_PROTOCOL" =~ smtp ]] && return 0
 
-     # rather move to the caller?
-     mx_record=$(get_mx_record "$NODE")
-
-     # This works currently only when the MX record is equal the domainname like with the testcase dev.testssl.sh
-     # So either we must only execute this when called --mx or we must deduce the domain name from $NODE somehow.
-     # For the latter we could reverse check again with get_mx_record whether the name passed later passed
-     # to this function is an mx record from this domain.
-     # So the plan is to chek whether $CMDLINE matches --mx. If not we check whether there is an MX record
-     # for $NODE which matches the current $NODE. If not we subsequently remove the leading hostname part of
-     # the $NODE and check whether this is a domainname and has a MX which matches the original node.
-     # If we end up @ DOMAIN.TLD and didn't find anything we emit a message and return.
+# echo "NODE: $NODE / URI: $URI / CMDLINE: ${CMDLINE[@]}"
 
      pr_bold " MTA-STS Policy               "
 
-     mta_sts_record="$(get_txt_record _mta-sts.$NODE)"
+     if [[ "${CMDLINE[@]}" =~ \ --mx\  ]]; then
+          domain="$URI"
+     elif [[ fqdnparts -eq 2 ]] && [[ "$NODE" == ${URI%:*} ]]; then
+          # remove the port an check whether bot are the same when there's no subdomain
+          domain="$NODE"
+     else
+          # What's left is a sub.domain.tld or sub.sub.domain.tld
+          # But we implement first a safety measure to prevent querying a tld
+          if [[ $(count_words "${NODE//./ }") -ge 3 ]]; then
+               # we query sub.domain.tld first whether is has a _mta-sts TXT record
+               domain=$NODE
+               mta_sts_record="$(get_txt_record _mta-sts.$domain)"
+               if [[ -z "$mta_sts_record" ]]; then
+                    # strip the (first sub):
+                    domain=${NODE#*.}
+                    mta_sts_record="$(get_txt_record _mta-sts.$domain)"
+               fi
+               if [[ -z "$mta_sts_record" ]]; then
+                    # unset to signal we didn't have success
+                    domain=""
+               fi
+          else
+               echo "#FIXME"
+               echo "NODE: $NODE / URI: $URI / CMDLINE: ${CMDLINE[@]}"
+          fi
+     fi
+     # 2+ level of subdomains?
+     # we check only for the TXT record in subdomains and give up if there's nothing??
+     # Possible that TXT record for domain overrides sub domain. if so: when ?
+     # error: ./testssl.sh -S --mx gmail.com --> no _mta-sts TXT record
+     # --mx does this test for every single MX. We need to save the values
+
+
+     [[ -z "mta_sts_record" ]] && mta_sts_record="$(get_txt_record _mta-sts.$domain)"
      # echo "$mta_sts_record"; echo
 
      mta_sts_record_ok=true
@@ -7414,7 +7439,7 @@ sub_mta_sts() {
           fi
      fi
 
-     policy="$(safe_echo "GET /.well-known/mta-sts.txt HTTP/1.1\r\nHost: mta-sts.$NODE\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n" | $OPENSSL s_client $(s_client_options "-quiet -ign_eof -connect $NODEIP:443 $PROXY $SNI") 2>$ERRFILE)"
+     policy="$(safe_echo "GET /.well-known/mta-sts.txt HTTP/1.1\r\nHost: mta-sts.$domain\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n" | $OPENSSL s_client $(s_client_options "-quiet -ign_eof -connect mta-sts.$domain:443 $PROXY -servername mta-sts.$domain") 2>$ERRFILE)"
      # here also the openssl return val needs to be checked
 
      policy="$(print_after_blankline "$policy")"
@@ -7423,7 +7448,6 @@ sub_mta_sts() {
      # Syntax check, keep in mind $policy appears in bash as a single line with Unix LF (0a).
      policy_ok=true
      if [[ -z "$policy" ]]; then
-          failreason_policy+=("policy https://mta-sts.$NODE/.well-known/mta-sts.txt not found")
           policy_ok=false
      else
           for c in version mode mx max_age; do
@@ -7437,12 +7461,15 @@ sub_mta_sts() {
           if "$policy_ok"; then
                if [[ ! "$policy" =~ version[\ ]{0,10}:[\ ]{0,10}STSv1 ]]; then
                     failreason_policy+=("version should be STSv1 ")
+                    policy_ok=false
                fi
                if [[ ! "$policy" =~ max_age[\ ]{0,10}:[\ ]{0,10}[0-9]{1,20} ]]; then
                     failreason_policy+=("max age is not a number")
+                    policy_ok=false
                fi
                if [[ ! "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}(enforce|testing) ]]; then
                     failreason_policy+=("policy is neither testing or enforce")
+                    policy_ok=false
                fi
                if [[ "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}testing ]]; then
                     policy_mode=testing
@@ -7458,41 +7485,49 @@ sub_mta_sts() {
      # - check against https://tools.ietf.org/html/rfc8461#section-3.2
 
      if [[ $DEBUG -ge 1 ]]; then
-          echo "$mta_sts_record" >$TEMPDIR/_mta-sts.$NODE.txt
-          echo "$policy" >$TEMPDIR/$NODE.policy_mta-sts.txt
-          echo "$smtp_tls_record" > $TEMPDIR/_smtp._tls.$NODE
+          echo "$mta_sts_record" >$TEMPDIR/_mta-sts.$domain.txt
+          echo "$policy" >$TEMPDIR/$domain.policy_mta-sts.txt
+          echo "$smtp_tls_record" > $TEMPDIR/_smtp._tls.$domain
      fi
 
-     smtp_tls_record="$(get_txt_record _smtp._tls.$NODE)"
+     smtp_tls_record="$(get_txt_record _smtp._tls.$domain)"
      # for the time being:
      [[ -n "$smtp_tls_record" ]] && smtp_tls_record_ok=true
-
 
      # now the verdicts
      if "$mta_sts_record_ok"; then
           pr_svrty_good "valid"
           fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record \"$mta_sts_record\""
+          outln " _mta-sts TXT record \"$mta_sts_record\""
+     elif [[ -z "$mta_sts_record" ]]; then
+          pr_svrty_low "no"
+          fileout "${jsonID}_txtrecord" "LOW" "no _mta-sts TXT record"
+          outln " _mta-sts TXT record"
      else
           pr_svrty_low "invalid"
-          fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record \"$mta_sts_record\""
+          fileout "${jsonID}_txtrecord" "LOW" "invalid _mta-sts TXT record \"$mta_sts_record\""
+          outln " _mta-sts TXT record \"$mta_sts_record\""
      fi
-     outln " _mta-sts TXT record \"$mta_sts_record\""
      out "$spaces"
 
      if "$policy_ok"; then
           if [[ $policy_mode == testing ]]; then
                out "valid but not enforced"
-               fileout "${jsonID}_policy" "INFO" "valid but not enforced policy \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+               fileout "${jsonID}_policy" "INFO" "valid but not enforced policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
           else
                pr_svrty_good "valid and enforced"
-               fileout "${jsonID}_policy" "OK" "valid and enforced policy \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
+               fileout "${jsonID}_policy" "OK" "valid and enforced policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
           fi
-          outln " policy https://mta-sts.$NODE/.well-known/mta-sts.txt"
+          outln " policy https://mta-sts.$domain/.well-known/mta-sts.txt"
+     elif [[ -z "$policy" ]]; then
+          pr_svrty_low "no policy"
+          fileout "${jsonID}_policy" "LOW" "no policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
+          outln " \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
      else
           # missing: too short, not enforced, etc..
           pr_svrty_low "invalid policy"
-          fileout "${jsonID}_policy" "LOW" "invalid policy \"https://mta-sts.$NODE/.well-known/mta-sts.txt\""
-          outln " \"https://mta-sts.$NODE/.well-known/mta-sts.txt\": ${failreason_policy[@]}"
+          fileout "${jsonID}_policy" "LOW" "invalid policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
+          outln " \"https://mta-sts.$domain/.well-known/mta-sts.txt\": ${failreason_policy[@]}"
      fi
      out "$spaces"
 
@@ -19631,11 +19666,11 @@ prepare_debug() {
           cat >$TEMPDIR/environment.txt << EOF
 
 
-CVS_REL: $CVS_REL
 GIT_REL: $GIT_REL
 
 PID: $$
-commandline: "$CMDLINE"
+commandline: ${CMDLINE[@]}
+URI: $URI
 bash version: ${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}.${BASH_VERSINFO[2]}
 status: ${BASH_VERSINFO[4]}
 machine: ${BASH_VERSINFO[5]}
@@ -20019,7 +20054,7 @@ parse_hn_port() {
      NODE="$1"
      NODE="${NODE/https\:\/\//}"        # strip "https"
      NODE="${NODE%%/*}"                 # strip trailing urlpath
-     NODE="${NODE%%.}"                  # strip trailing "." if supplied
+
      if grep -q ':$' <<< "$NODE"; then
           if grep -wq http <<< "$NODE"; then
                fatal "\"http\" is not what you meant probably" $ERR_CMDLINE
@@ -20041,6 +20076,7 @@ parse_hn_port() {
           grep -q ':' <<< "$NODE" && \
                PORT=$(sed 's/^.*\://' <<< "$NODE") && NODE=$(sed 's/\:.*$//' <<< "$NODE")
      fi
+     NODE="${NODE%%.}"                  # strip trailing "." if supplied
 
      # We check for non-ASCII chars now. If there are some we'll try to convert it if IDN/IDN2 is installed
      # If not, we'll continue. Hoping later that dig can use it. If not the error handler will tell
@@ -20364,8 +20400,8 @@ get_mx_record() {
 }
 
 # arg1: domain / hostname. Returned will be the TXT record as a string which can be multilined
-# (one entry per line), for e.g. non-MTA-STS records.
-# Is supposed to be used by MTA STS in the future like get_txt_record _mta-sts.DOMAIN.TLD
+# (one entry per line), for e.g. MTA-STS records.
+#
 get_txt_record() {
      local record=""
      local saved_openssl_conf="$OPENSSL_CONF"
