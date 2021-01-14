@@ -7394,23 +7394,19 @@ sub_mta_sts() {
                     domain=${NODE#*.}
                     mta_sts_record="$(get_txt_record _mta-sts.$domain)"
                fi
-               if [[ -z "$mta_sts_record" ]]; then
-                    # unset to signal we didn't have success
-                    domain=""
-               fi
           else
                echo "#FIXME"
                echo "NODE: $NODE / URI: $URI / CMDLINE: ${CMDLINE[@]}"
           fi
      fi
+
      # 2+ level of subdomains?
      # we check only for the TXT record in subdomains and give up if there's nothing??
      # Possible that TXT record for domain overrides sub domain. if so: when ?
-     # error: ./testssl.sh -S --mx gmail.com --> no _mta-sts TXT record
-     # --mx does this test for every single MX. We need to save the values
+     # - ./testssl.sh -S --mx gmail.com --> no _mta-sts TXT record ?
+     # -  --mx does this for every single MX. As the values are domain specific: global array?
 
-
-     [[ -z "mta_sts_record" ]] && mta_sts_record="$(get_txt_record _mta-sts.$domain)"
+     [[ -z "$mta_sts_record" ]] && mta_sts_record="$(get_txt_record _mta-sts.$domain)"
      # echo "$mta_sts_record"; echo
 
      mta_sts_record_ok=true
@@ -7457,7 +7453,7 @@ sub_mta_sts() {
                fi
           done
 
-          # we use at most 10 spaces. ToDo: look into the policy
+          # we use at most 10 spaces. ToDo: check with RFC wrt to the format of the policy
           if "$policy_ok"; then
                if [[ ! "$policy" =~ version[\ ]{0,10}:[\ ]{0,10}STSv1 ]]; then
                     failreason_policy+=("version should be STSv1 ")
@@ -7468,7 +7464,7 @@ sub_mta_sts() {
                     policy_ok=false
                fi
                if [[ ! "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}(enforce|testing) ]]; then
-                    failreason_policy+=("policy is neither testing or enforce")
+                    failreason_policy+=("policy should be either testing or enforce")
                     policy_ok=false
                fi
                if [[ "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}testing ]]; then
