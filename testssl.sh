@@ -7383,15 +7383,15 @@ sub_mta_sts() {
           # remove the port an check whether bot are the same when there's no subdomain
           domain="$NODE"
      else
-          # What's left is a sub.domain.tld or sub.sub.domain.tld
+          # What's left now is a sub.domain.tld or sub.sub.domain.tld or ...
           # But we implement first a safety measure to prevent querying a tld
           if [[ $(count_words "${NODE//./ }") -ge 3 ]]; then
                # we query sub.domain.tld first whether is has a _mta-sts TXT record
-               domain=$NODE
+               domain="$NODE"
                mta_sts_record="$(get_txt_record _mta-sts.$domain)"
                if [[ -z "$mta_sts_record" ]]; then
                     # strip the (first sub):
-                    domain=${NODE#*.}
+                    domain="${NODE#*.}"
                     mta_sts_record="$(get_txt_record _mta-sts.$domain)"
                fi
           else
@@ -7405,31 +7405,43 @@ sub_mta_sts() {
      # Possible that TXT record for domain overrides sub domain. if so: when ?
      # - ./testssl.sh -S --mx gmail.com --> no _mta-sts TXT record ?
      # -  --mx does this for every single MX. As the values are domain specific: global array?
+     # How about policy delegation (CNAME?) --> Not tested yet
 
      [[ -z "$mta_sts_record" ]] && mta_sts_record="$(get_txt_record _mta-sts.$domain)"
      # echo "$mta_sts_record"; echo
 
      mta_sts_record_ok=true
+
      if [[ -z "$mta_sts_record" ]]; then
           failreason_mtasts_rec+=("no record")
           mta_sts_record_ok=false
      else
+          # The TXT record string is enclosed in double quotes. We check this and remove them, only there!
+#FIXME: probably wrong place --> get_txt_record()
+          if [[ "${mta_sts_record:0:1}" == \" ]] && [[ "${mta_sts_record:$((${#mta_sts_record}-1)):1}" ]]; then
+               # remove first char (here: double quote) and last (here: double quote)
+               mta_sts_record="${mta_sts_record:1:$((${#mta_sts_record}-1))}"
+               mta_sts_record="${mta_sts_record:0:$((${#mta_sts_record}-1))}"
+          else
+               failreason_mtasts_rec+=("record is not enclosed in double quotes")
+               mta_sts_record_ok=false
+          fi
           if [[ $(count_lines "$(safe_echo "$mta_sts_record" | tr ';' '\n')") -ne 2 ]]; then
                failreason_mtasts_rec+=("number of ; should be 2")
                mta_sts_record_ok=false
           fi
           IFS=';' read v id <<< "${mta_sts_record}"
-          if [[ ! "$v" =~ v=STSv1 ]] ; then
+          if [[ ! "$v" == v=STSv1 ]] ; then
                failreason_mtasts_rec+=("v seems wrong")
                mta_sts_record_ok=false
           fi
-          if [[ ! "$id" =~ id= ]]; then
-               failreason_mtasts_rec+=("id seems wrong")
+          if [[ ! "$id" =~ ^id= ]]; then
+               failreason_mtasts_rec+=("id seems wrong: $id")
                mta_sts_record_ok=false
           else
                id="${id#*=}"       # strip key
                if [[ ! "$id" =~ ^[[:alnum:]]{1,32}$ ]]; then
-                    failreason_mtasts_rec+=("should be up to 32 alnum chars ")
+                    failreason_mtasts_rec+=("\'id\' should be up to 32 alnum chars ")
                     mta_sts_record_ok=false
                fi
           fi
@@ -7463,12 +7475,15 @@ sub_mta_sts() {
                     failreason_policy+=("max age is not a number")
                     policy_ok=false
                fi
-               if [[ ! "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}(enforce|testing) ]]; then
-                    failreason_policy+=("policy should be either testing or enforce")
+               if [[ ! "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}(enforce|testing|none) ]]; then
+                    failreason_policy+=("policy should be either testing, enforce or none")
                     policy_ok=false
                fi
                if [[ "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}testing ]]; then
                     policy_mode=testing
+               fi
+               if [[ "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}none ]]; then
+                    policy_mode=none
                fi
           fi
      fi
@@ -7493,21 +7508,26 @@ sub_mta_sts() {
      # now the verdicts
      if "$mta_sts_record_ok"; then
           pr_svrty_good "valid"
-          fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record \"$mta_sts_record\""
-          outln " _mta-sts TXT record \"$mta_sts_record\""
+          outln " _mta-sts TXT record $mta_sts_record"
+          # quotes!
+          fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record $mta_sts_record"
      elif [[ -z "$mta_sts_record" ]]; then
           pr_svrty_low "no"
-          fileout "${jsonID}_txtrecord" "LOW" "no _mta-sts TXT record"
           outln " _mta-sts TXT record"
+          fileout "${jsonID}_txtrecord" "LOW" "no _mta-sts TXT record"
      else
           pr_svrty_low "invalid"
-          fileout "${jsonID}_txtrecord" "LOW" "invalid _mta-sts TXT record \"$mta_sts_record\""
-          outln " _mta-sts TXT record \"$mta_sts_record\""
+          # quotes!
+          fileout "${jsonID}_txtrecord" "LOW" "invalid _mta-sts TXT record $mta_sts_record"
+          outln " _mta-sts TXT record ${mta_sts_record}: ${failreason_mtasts_rec[@]}"
      fi
      out "$spaces"
 
      if "$policy_ok"; then
           if [[ $policy_mode == testing ]]; then
+               out "\"none\" is a valid policy but why are you using it?"
+               fileout "${jsonID}_policy" "INFO" "none is valid but not a helpful policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
+          elif [[ $policy_mode == testing ]]; then
                out "valid but not enforced"
                fileout "${jsonID}_policy" "INFO" "valid but not enforced policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
           else
@@ -7517,13 +7537,13 @@ sub_mta_sts() {
           outln " policy https://mta-sts.$domain/.well-known/mta-sts.txt"
      elif [[ -z "$policy" ]]; then
           pr_svrty_low "no policy"
-          fileout "${jsonID}_policy" "LOW" "no policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
           outln " \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
+          fileout "${jsonID}_policy" "LOW" "no policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
      else
           # missing: too short, not enforced, etc..
           pr_svrty_low "invalid policy"
-          fileout "${jsonID}_policy" "LOW" "invalid policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
           outln " \"https://mta-sts.$domain/.well-known/mta-sts.txt\": ${failreason_policy[@]}"
+          fileout "${jsonID}_policy" "LOW" "invalid policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
      fi
      out "$spaces"
 
@@ -20244,7 +20264,7 @@ get_a_record() {
           ip4=$(filter_ip4_address $(strip_lf "$(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/ { getline; print $NF }')"))
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     echo "$ip4"
+     safe_echo "$ip4"
 }
 
 # arg1: a host name. Returned will be 0-n IPv6 addresses
@@ -20285,7 +20305,7 @@ get_aaaa_record() {
           fi
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     echo "$ip6"
+     safe_echo "$ip6"
 }
 
 # RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
@@ -20407,21 +20427,28 @@ get_txt_record() {
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      # we need the last two columns here and strip any remaining double quotes later
      if "$HAS_HOST"; then
-          record="$(host -t TXT "$1" 2>/dev/null | awk -F\" '/descriptive text/ { print $(NF-1) }')"
+          record="$(host -t TXT "$1" 2>/dev/null | grep 'descriptive text')"
      elif "$HAS_DIG"; then
           record="$(dig +short $noidnout -t TXT "$1" 2>/dev/null)"
+          record="${record% from*}"
      elif "$HAS_DRILL"; then
-          record="$(drill txt $1 | awk -F\" '/^[a-z0-9].*TXT/ { print $(NF-1) }')"
+          record="$(drill txt $1 | grep "^$1.*TXT")"
      elif "$HAS_NSLOOKUP"; then
-          record="$(strip_lf "$(nslookup -type=MX "$1" 2>/dev/null | awk -F= '/text/ { print $(NF-1), $NF }')")"
+          record="$(nslookup -type=TXT "$1" 2>/dev/null | grep -w text)"
      else
           # shouldn't reach this, as we checked in the top
           fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
      fi
      OPENSSL_CONF="$saved_openssl_conf"
-     echo "${record//\"/}"
+     # Now, strip everything until the first double quote. Attention: $record may contain a couple of quotes!
+     # Also we readd the leading double quote. That is wrong if the record is empty. So we need to fix that
+     record="$(printf "%s" "\"${record#*\"}")"
+     if [[ "${record}" == \" ]]; then
+          echo
+     else
+          safe_echo "${record}"
+     fi
 }
-
 
 
 # set IPADDRs and IP46ADDRs
