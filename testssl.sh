@@ -817,6 +817,13 @@ count_chars() {
      echo $(wc -c <<< "$1")
 }
 
+# arg1: string to search within
+# arg2: char to count (or pattern like 1|2 )
+count_char_occurence() {
+     local nr=${1//[^$2]}
+     echo ${#nr}
+}
+
 newline_to_spaces() {
      tr '\n' ' ' <<< "$1" | sed 's/ $//'
 }
@@ -7413,35 +7420,24 @@ sub_mta_sts() {
      mta_sts_record_ok=true
 
      if [[ -z "$mta_sts_record" ]]; then
-          failreason_mtasts_rec+=("no record")
-          mta_sts_record_ok=false
+          failreason_mtasts_rec="no record"
      else
-          # The TXT record string is enclosed in double quotes. We check this and remove them, only there!
-#FIXME: probably wrong place --> get_txt_record()
-          if [[ "${mta_sts_record:0:1}" == \" ]] && [[ "${mta_sts_record:$((${#mta_sts_record}-1)):1}" ]]; then
-               # remove first char (here: double quote) and last (here: double quote)
-               mta_sts_record="${mta_sts_record:1:$((${#mta_sts_record}-1))}"
-               mta_sts_record="${mta_sts_record:0:$((${#mta_sts_record}-1))}"
-          else
-               failreason_mtasts_rec+=("record is not enclosed in double quotes")
-               mta_sts_record_ok=false
-          fi
-          if [[ $(count_lines "$(safe_echo "$mta_sts_record" | tr ';' '\n')") -ne 2 ]]; then
-               failreason_mtasts_rec+=("number of ; should be 2")
+          if [[ $(count_char_occurence "$mta_sts_record" ';') -ne 2 ]]; then
+               failreason_mtasts_rec+="number of ; should be 2"
                mta_sts_record_ok=false
           fi
           IFS=';' read v id <<< "${mta_sts_record}"
           if [[ ! "$v" == v=STSv1 ]] ; then
-               failreason_mtasts_rec+=("v seems wrong")
+               failreason_mtasts_rec+="v seems wrong"
                mta_sts_record_ok=false
           fi
-          if [[ ! "$id" =~ ^id= ]]; then
-               failreason_mtasts_rec+=("id seems wrong: $id")
+          if [[ ! "$id" =~ ^[\ ]+id= ]]; then
+               failreason_mtasts_rec+="id seems wrong: $id"
                mta_sts_record_ok=false
           else
                id="${id#*=}"       # strip key
                if [[ ! "$id" =~ ^[[:alnum:]]{1,32}$ ]]; then
-                    failreason_mtasts_rec+=("\'id\' should be up to 32 alnum chars ")
+                    failreason_mtasts_rec+="\'id\' should be up to 32 alnum chars "
                     mta_sts_record_ok=false
                fi
           fi
@@ -7467,22 +7463,22 @@ sub_mta_sts() {
 
           # we use at most 10 spaces. ToDo: check with RFC wrt to the format of the policy
           if "$policy_ok"; then
-               if [[ ! "$policy" =~ version[\ ]{0,10}:[\ ]{0,10}STSv1 ]]; then
+               if [[ ! "$policy" =~ version:[\ ]+STSv1 ]]; then
                     failreason_policy+=("version should be STSv1 ")
                     policy_ok=false
                fi
-               if [[ ! "$policy" =~ max_age[\ ]{0,10}:[\ ]{0,10}[0-9]{1,20} ]]; then
+               if [[ ! "$policy" =~ max_age:[\ ]+[0-9]{1,20} ]]; then
                     failreason_policy+=("max age is not a number")
                     policy_ok=false
                fi
-               if [[ ! "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}(enforce|testing|none) ]]; then
+               if [[ ! "$policy" =~ mode:[\ ]+(enforce|testing|none) ]]; then
                     failreason_policy+=("policy should be either testing, enforce or none")
                     policy_ok=false
                fi
-               if [[ "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}testing ]]; then
+               if [[ "$policy" =~ mode:[\ ]+testing ]]; then
                     policy_mode=testing
                fi
-               if [[ "$policy" =~ mode[\ ]{0,10}:[\ ]{0,10}none ]]; then
+               if [[ "$policy" =~ mode:[\ ]+none ]]; then
                     policy_mode=none
                fi
           fi
@@ -7518,8 +7514,8 @@ sub_mta_sts() {
      else
           pr_svrty_low "invalid"
           # quotes!
-          fileout "${jsonID}_txtrecord" "LOW" "invalid _mta-sts TXT record $mta_sts_record"
-          outln " _mta-sts TXT record ${mta_sts_record}: ${failreason_mtasts_rec[@]}"
+          fileout "${jsonID}_txtrecord" "LOW" "invalid _mta-sts TXT record $mta_sts_record ${failreason_mtasts_rec[@]}"
+          outln " _mta-sts TXT record ${mta_sts_record} | ${failreason_mtasts_rec[@]}"
      fi
      out "$spaces"
 
@@ -7542,6 +7538,7 @@ sub_mta_sts() {
      else
           # missing: too short, not enforced, etc..
           pr_svrty_low "invalid policy"
+#FIXME: for multiple failures we need to format ${failreason_policy[@]}, here?
           outln " \"https://mta-sts.$domain/.well-known/mta-sts.txt\": ${failreason_policy[@]}"
           fileout "${jsonID}_policy" "LOW" "invalid policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
      fi
@@ -20444,10 +20441,14 @@ get_txt_record() {
      # Also we readd the leading double quote. That is wrong if the record is empty. So we need to fix that
      record="$(printf "%s" "\"${record#*\"}")"
      if [[ "${record}" == \" ]]; then
-          echo
-     else
-          safe_echo "${record}"
+          record=''
      fi
+     if [[ "${record:0:1}" == \" ]] && [[ "${record:$((${#record}-1)):1}" == \" ]]; then
+          # remove first char (here: double quote) and last (here: double quote)
+          record="${record:1:$((${#record}-1))}"
+          record="${record:0:$((${#record}-1))}"
+     fi
+     safe_echo "${record}"
 }
 
 
