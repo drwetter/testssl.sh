@@ -42,12 +42,16 @@ $diff = diff $socket_csv, $master_socket_csv;
 $socket_csv=`cat tmp.csv`;
 $master_socket_csv=`cat $master_socket_csv`;
 
-# Filter, for now only HTTP_clock_skew
+# Filter for changes that are allowed to occur
 $socket_csv=~ s/HTTP_clock_skew.*\n//g;
 $master_socket_csv=~ s/HTTP_clock_skew.*\n//g;
 
+# DROWN
+$socket_csv=~ s/censys.io.*\n//g;
+$master_socket_csv=~ s/censys.io.*\n//g;
+
+
 # Compare the differences to the master file -- and print differences if there were detected.
-# Filtering takes place later, so if there will be a difference detected it'll also show HTTP_clock_skew :-(
 #
 cmp_ok($socket_csv, "eq", $master_socket_csv, "Check whether CSV output matches master file from $uri") or
      diag ("\n%s\n", "$diff");
