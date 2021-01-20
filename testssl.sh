@@ -15531,16 +15531,16 @@ run_heartbleed(){
                          out "likely "
                          pr_svrty_critical "VULNERABLE (NOT ok)"
                          [[ $DEBUG -lt 3 ]] && tm_out ", use debug >=3 to confirm"
-                         fileout "$jsonID" "CRITICAL" "VULNERABLE $cve" "$cwe" "$hint"
+                         fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                     fi
                else
                     pr_svrty_critical "VULNERABLE (NOT ok)"
-                    fileout "$jsonID" "CRITICAL" "VULNERABLE $cve" "$cwe" "$hint"
+                    fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                     set_grade_cap "F" "Vulnerable to Heartbleed"
                fi
           else
                pr_svrty_best "not vulnerable (OK)"
-               fileout "$jsonID" "OK" "not vulnerable $cve" "$cwe"
+               fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           fi
      fi
      outln
