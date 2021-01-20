@@ -13830,15 +13830,15 @@ run_heartbleed(){
                          out "likely "
                          pr_svrty_critical "VULNERABLE (NOT ok)"
                          [[ $DEBUG -lt 3 ]] && tm_out ", use debug >=3 to confirm"
-                         fileout "$jsonID" "CRITICAL" "VULNERABLE $cve" "$cwe" "$hint"
+                         fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                     fi
                else
                     pr_svrty_critical "VULNERABLE (NOT ok)"
-                    fileout "$jsonID" "CRITICAL" "VULNERABLE $cve" "$cwe" "$hint"
+                    fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                fi
           else
                pr_svrty_best "not vulnerable (OK)"
-               fileout "$jsonID" "OK" "not vulnerable $cve" "$cwe"
+               fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           fi
      fi
      outln
@@ -17883,7 +17883,7 @@ get_a_record() {
           ip4=$(filter_ip4_address $(strip_lf "$(nslookup -querytype=a "$1" 2>/dev/null | awk '/^Name/ { getline; print $NF }')"))
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     echo "$ip4"
+     safe_echo "$ip4"
 }
 
 # arg1: a host name. Returned will be 0-n IPv6 addresses
@@ -17924,7 +17924,7 @@ get_aaaa_record() {
           fi
      fi
      OPENSSL_CONF="$saved_openssl_conf"      # see https://github.com/drwetter/testssl.sh/issues/134
-     echo "$ip6"
+     safe_echo "$ip6"
 }
 
 # RFC6844: DNS Certification Authority Authorization (CAA) Resource Record
