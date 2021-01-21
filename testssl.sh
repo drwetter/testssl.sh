@@ -7423,21 +7423,21 @@ sub_mta_sts() {
           failreason_mtasts_rec="no record"
      else
           if [[ $(count_char_occurence "$mta_sts_record" ';') -ne 2 ]]; then
-               failreason_mtasts_rec+="number of ; should be 2"
+               failreason_mtasts_rec+=("number of ; should be 2")
                mta_sts_record_ok=false
           fi
           IFS=';' read v id <<< "${mta_sts_record}"
           if [[ ! "$v" == v=STSv1 ]] ; then
-               failreason_mtasts_rec+="v seems wrong"
+               failreason_mtasts_rec+=("v seems wrong")
                mta_sts_record_ok=false
           fi
           if [[ ! "$id" =~ ^[\ ]+id= ]]; then
-               failreason_mtasts_rec+="id seems wrong: $id"
+               failreason_mtasts_rec+=("id seems wrong: $id")
                mta_sts_record_ok=false
           else
                id="${id#*=}"       # strip key
                if [[ ! "$id" =~ ^[[:alnum:]]{1,32}$ ]]; then
-                    failreason_mtasts_rec+="\'id\' should be up to 32 alnum chars "
+                    failreason_mtasts_rec+=("'id' should be up to 32 alnum chars ")
                     mta_sts_record_ok=false
                fi
           fi
@@ -7504,7 +7504,7 @@ sub_mta_sts() {
      # now the verdicts
      if "$mta_sts_record_ok"; then
           pr_svrty_good "valid"
-          outln " _mta-sts TXT record $mta_sts_record"
+          outln " _mta-sts TXT record \'$mta_sts_record\'"
           # quotes!
           fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record $mta_sts_record"
      elif [[ -z "$mta_sts_record" ]]; then
@@ -7513,43 +7513,46 @@ sub_mta_sts() {
           fileout "${jsonID}_txtrecord" "LOW" "no _mta-sts TXT record"
      else
           pr_svrty_low "invalid"
-          # quotes!
-          fileout "${jsonID}_txtrecord" "LOW" "invalid _mta-sts TXT record $mta_sts_record ${failreason_mtasts_rec[@]}"
-          outln " _mta-sts TXT record ${mta_sts_record} | ${failreason_mtasts_rec[@]}"
+          # Append to every element a string, here: '|'. n would work as well but we'd need $spaces.
+          # Catch is also for the last, so maybe we should avoid arrays
+          # Hint is from http://web.archive.org/web/20101114051536/http://codesnippets.joyent.com/posts/show/1826
+          failreason_mtasts_rec=( "${failreason_mtasts_rec[@]/%/ | }" )
+          fileout "${jsonID}_txtrecord" "LOW" "invalid _mta-sts TXT record $mta_sts_record $(printf '%s | ' "{failreason_mtasts_rec[@]}")"
+          outln " _mta-sts TXT record '${mta_sts_record}'\n${spaces}   $(printf '%s' "${failreason_mtasts_rec[@]}")"
      fi
      out "$spaces"
 
      if "$policy_ok"; then
           if [[ $policy_mode == testing ]]; then
                out "\"none\" is a valid policy but why are you using it?"
-               fileout "${jsonID}_policy" "INFO" "none is valid but not a helpful policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
+               fileout "${jsonID}_policy" "INFO" "none is valid but not a helpful policy  at https://mta-sts.$domain/.well-known/mta-sts.txt"
           elif [[ $policy_mode == testing ]]; then
                out "valid but not enforced"
-               fileout "${jsonID}_policy" "INFO" "valid but not enforced policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
+               fileout "${jsonID}_policy" "INFO" "valid but not enforced policy  at https://mta-sts.$domain/.well-known/mta-sts.txt"
           else
                pr_svrty_good "valid and enforced"
-               fileout "${jsonID}_policy" "OK" "valid and enforced policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
+               fileout "${jsonID}_policy" "OK" "valid and enforced policy  at https://mta-sts.$domain/.well-known/mta-sts.txt"
           fi
           outln " policy https://mta-sts.$domain/.well-known/mta-sts.txt"
      elif [[ -z "$policy" ]]; then
           pr_svrty_low "no policy"
-          outln " \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
-          fileout "${jsonID}_policy" "LOW" "no policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
+          outln " at https://mta-sts.$domain/.well-known/mta-sts.txt"
+          fileout "${jsonID}_policy" "LOW" "no policy at https://mta-sts.$domain/.well-known/mta-sts.txt"
      else
           # missing: too short, not enforced, etc..
           pr_svrty_low "invalid policy"
-#FIXME: for multiple failures we need to format ${failreason_policy[@]}, here?
-          outln " \"https://mta-sts.$domain/.well-known/mta-sts.txt\": ${failreason_policy[@]}"
-          fileout "${jsonID}_policy" "LOW" "invalid policy \"https://mta-sts.$domain/.well-known/mta-sts.txt\""
+          failreason_policy=( "${failreason_policy[@]/%/ | }" )
+          fileout "${jsonID}_policy" "LOW" "invalid policy  https://mta-sts.$domain/.well-known/mta-sts.txt: $(printf '%s' ${failreason_policy[@]})"
+          outln " at https://mta-sts.$domain/.well-known/mta-sts.txt: $(printf '%s' ${failreason_policy[@]})"
      fi
      out "$spaces"
 
      if "$smtp_tls_record_ok"; then
-          outln "found (optional) TLS RPT TXT record \"$smtp_tls_record\""
-          fileout "${jsonID}_tlsrpt" "INFO" "optional TLS-RPT TXT record \"$smtp_tls_record\""
+          outln "found (optional) TLS RPT TXT record '$smtp_tls_record'"
+          fileout "${jsonID}_tlsrpt" "INFO" "optional TLS-RPT TXT record '$smtp_tls_record'"
      else
           outln "No TLS RPT record"
-          fileout "${jsonID}_tlsrpt" "INFO" "no or invalid (optional) TLS RPT record \"$smtp_tls_record\""
+          fileout "${jsonID}_tlsrpt" "INFO" "no or invalid (optional) TLS RPT record '$smtp_tls_record'"
      fi
 
      return 0
@@ -20226,7 +20229,6 @@ get_a_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      if [[ "$1" == localhost ]]; then
           # This is a bit ugly but prevents from doing DNS lookups which could fail
@@ -20249,6 +20251,7 @@ get_a_record() {
           fi
      fi
      if [[ -z "$ip4" ]] && "$HAS_DIG"; then
+          "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
           ip4=$(filter_ip4_address $(dig +short +timeout=2 +tries=2 $noidnout -t a "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
      fi
      if [[ -z "$ip4" ]] && "$HAS_HOST"; then
@@ -20271,7 +20274,6 @@ get_aaaa_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      [[ "$NODNS" == none ]] && return 0      # if no DNS lookup was instructed, leave here
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      if is_ipv6addr "$1"; then
@@ -20292,6 +20294,7 @@ get_aaaa_record() {
                     fatal "Local hostname given but no 'avahi-resolve' or 'dig' available." $ERR_DNSBIN
                fi
           elif "$HAS_DIG"; then
+               "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
                ip6=$(filter_ip6_address $(dig +short +timeout=2 +tries=2 $noidnout -t aaaa "$1" 2>/dev/null | awk '/^[0-9]/ { print $1 }'))
           elif "$HAS_HOST"; then
                ip6=$(filter_ip6_address $(host -t aaaa "$1" | awk '/address/ { print $NF }'))
@@ -20317,7 +20320,6 @@ get_caa_rr_record() {
      local all_caa=""
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
 
      [[ -n "$NODNS" ]] && return 0           # if minimum DNS lookup was instructed, leave here
      # if there's a type257 record there are two output formats here, mostly depending on age of distribution
@@ -20328,6 +20330,7 @@ get_caa_rr_record() {
      # caa_property then has key/value pairs, see https://tools.ietf.org/html/rfc6844#section-3
      OPENSSL_CONF=""
      if "$HAS_DIG"; then
+          "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
           raw_caa="$(dig +short +timeout=3 +tries=3 $noidnout type257 "$1" 2>/dev/null | awk '{ print $1" "$2" "$3 }')"
           # empty if no CAA record
      elif "$HAS_DRILL"; then
@@ -20393,12 +20396,12 @@ get_mx_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      # we need the last two columns here
      if "$HAS_HOST"; then
           mx="$(host -t MX "$1" 2>/dev/null | awk '/is handled by/ { print $(NF-1), $NF }')"
      elif "$HAS_DIG"; then
+          "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
           mx="$(dig +short $noidnout -t MX "$1" 2>/dev/null | awk '/^[0-9]/ { print $1" "$2 }')"
      elif "$HAS_DRILL"; then
           mx="$(drill mx $1 | awk '/IN[ \t]MX[ \t]+/ { print $(NF-1), $NF }')"
@@ -20409,7 +20412,7 @@ get_mx_record() {
           fatal "No dig, host, drill or nslookup" $ERR_DNSBIN
      fi
      OPENSSL_CONF="$saved_openssl_conf"
-     echo "$mx"
+     safe_echo "$mx"
 }
 
 # arg1: domain / hostname. Returned will be the TXT record as a string which can be multilined
@@ -20420,12 +20423,12 @@ get_txt_record() {
      local saved_openssl_conf="$OPENSSL_CONF"
      local noidnout=""
 
-     "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
      OPENSSL_CONF=""                         # see https://github.com/drwetter/testssl.sh/issues/134
      # we need the last two columns here and strip any remaining double quotes later
      if "$HAS_HOST"; then
           record="$(host -t TXT "$1" 2>/dev/null | grep 'descriptive text')"
      elif "$HAS_DIG"; then
+          "$HAS_DIG_NOIDNOUT" && noidnout="+noidnout"
           record="$(dig +short $noidnout -t TXT "$1" 2>/dev/null)"
           record="${record% from*}"
      elif "$HAS_DRILL"; then
