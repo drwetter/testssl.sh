@@ -7515,7 +7515,7 @@ sub_mta_sts() {
           pr_svrty_low "invalid"
           # Append to every element a string, here: '|'. n would work as well but we'd need $spaces.
           # Catch is also for the last, so maybe we should avoid arrays
-          # Hint is from http://web.archive.org/web/20101114051536/http://codesnippets.joyent.com/posts/show/1826
+          # Hint is from https://web.archive.org/web/20101114051536/http://codesnippets.joyent.com/posts/show/1826
           failreason_mtasts_rec=( "${failreason_mtasts_rec[@]/%/ | }" )
           fileout "${jsonID}_txtrecord" "LOW" "invalid _mta-sts TXT record $mta_sts_record $(printf '%s | ' "{failreason_mtasts_rec[@]}")"
           outln " _mta-sts TXT record '${mta_sts_record}'\n${spaces}   $(printf '%s' "${failreason_mtasts_rec[@]}")"
