@@ -2224,7 +2224,7 @@ s_client_options() {
 service_detection() {
      local -i was_killed
 
-     if [[ "$CLIENT_AUTH" != require ]]; then
+     if [[ "$CLIENT_AUTH" != required ]]; then
           if ! "$HAS_TLS13" && "$TLS13_ONLY"; then
                # Using sockets is a lot slower than using OpenSSL, and it is
                # not as reliable, but if OpenSSL can't connect to the server,
@@ -2273,7 +2273,7 @@ service_detection() {
                out " $SERVICE, thus skipping HTTP specific checks"
                fileout "${jsonID}" "INFO" "$SERVICE, thus skipping HTTP specific checks"
                ;;
-          *)   if [[ "$CLIENT_AUTH" == require ]]; then
+          *)   if [[ "$CLIENT_AUTH" == required ]]; then
                     out " certificate-based authentication => skipping all HTTP checks"
                     echo "certificate-based authentication => skipping all HTTP checks" >$TMPFILE
                     fileout "${jsonID}" "INFO" "certificate-based authentication => skipping all HTTP checks"
@@ -2495,7 +2495,7 @@ run_http_date() {
      local spaces="                              "
      jsonID="HTTP_clock_skew"
 
-     if [[ $SERVICE != HTTP ]] || [[ "$CLIENT_AUTH" == require ]]; then
+     if [[ $SERVICE != HTTP ]] || [[ "$CLIENT_AUTH" == required ]]; then
           return 0
      fi
      if [[ ! -s $HEADERFILE ]]; then
@@ -6444,7 +6444,7 @@ sub_session_resumption() {
                return 1
           fi
      fi
-     [[ "$CLIENT_AUTH" == require ]] && return 6
+     [[ "$CLIENT_AUTH" == required ]] && return 6
      if ! "$HAS_TLS13" && "$HAS_NO_SSL2"; then
           addcmd+=" -no_ssl2"
      else
@@ -8366,7 +8366,7 @@ certificate_transparency() {
           fi
      fi
 
-     if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != require ]]; then
+     if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]]; then
           # At the moment Certificate Transparency only applies to HTTPS.
           tm_out "N/A"
      else
@@ -9494,7 +9494,7 @@ run_server_defaults() {
      local -a ocsp_response_binary ocsp_response ocsp_response_status sni_used tls_version ct
      local -a ciphers_to_test certificate_type
      local -a -i success
-     local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
+     local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions client_auth_ca
      local using_sockets=true
 
      "$SSL_NATIVE" && using_sockets=false
@@ -9841,6 +9841,26 @@ run_server_defaults() {
      fi
 
      tls_time
+
+     jsonID="clientAuth"
+     pr_bold " Client Authentication        "
+     outln "$CLIENT_AUTH"
+     fileout "$jsonID" "INFO" "$CLIENT_AUTH"
+     if [[ "$CLIENT_AUTH" != none ]]; then
+          jsonID="clientAuth_CA_list"
+          pr_bold " CA List for Client Auth      "
+          out_row_aligned "$CLIENT_AUTH_CA_LIST" "                              "
+          if [[ "$CLIENT_AUTH_CA_LIST" == empty ]] || [[ $(count_lines "$CLIENT_AUTH_CA_LIST") -eq 1 ]]; then
+               fileout "$jsonID" "INFO" "$CLIENT_AUTH_CA_LIST"
+          else
+               i=1
+               while read client_auth_ca; do
+                    fileout "$jsonID #$i" "INFO" "$client_auth_ca"
+                    i+=1
+               done <<< "$CLIENT_AUTH_CA_LIST"
+               fi
+     fi
+     
 
      if [[ -n "$SNI" ]] && [[ $certs_found -ne 0 ]] && [[ ! -e $HOSTCERT.nosni ]]; then
           # no cipher suites specified here. We just want the default vhost subject
@@ -15799,7 +15819,7 @@ run_ticketbleed() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
 
-     if [[ "$SERVICE" != HTTP ]] && [[ "$CLIENT_AUTH" != require ]]; then
+     if [[ "$SERVICE" != HTTP ]] && [[ "$CLIENT_AUTH" != required ]]; then
           outln "--   (applicable only for HTTPS)"
           fileout "$jsonID" "INFO" "not applicable, not HTTP" "$cve" "$cwe"
           return 0
@@ -16129,7 +16149,7 @@ run_renego() {
           [[ $DEBUG -ge 1 ]] && out ", no renegotiation support in TLS 1.3 only servers"
           outln
           fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
-     elif [[ "$CLIENT_AUTH" == require ]]; then
+     elif [[ "$CLIENT_AUTH" == required ]]; then
           prln_warning "client x509-based authentication prevents this from being tested"
           fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
           sec_client_renego=1
@@ -16252,14 +16272,14 @@ run_crime() {
           ret=1
      elif grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
           pr_svrty_good "not vulnerable (OK)"
-          if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != require ]];  then
+          if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]];  then
                out " (not using HTTP anyway)"
                fileout "CRIME_TLS" "OK" "not vulnerable (not using HTTP anyway)" "$cve" "$cwe"
           else
                fileout "CRIME_TLS" "OK" "not vulnerable" "$cve" "$cwe"
           fi
      else
-          if [[ $SERVICE == HTTP ]] || [[ "$CLIENT_AUTH" == require ]]; then
+          if [[ $SERVICE == HTTP ]] || [[ "$CLIENT_AUTH" == required ]]; then
                pr_svrty_high "VULNERABLE (NOT ok)"
                fileout "CRIME_TLS" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
           else
@@ -16365,11 +16385,11 @@ run_breach() {
      local detected_compression=""
      local get_command=""
 
-     [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != require ]] && return 7
+     [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]] && return 7
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
-     if [[ "$CLIENT_AUTH" == require ]]; then
+     if [[ "$CLIENT_AUTH" == required ]]; then
           outln "cannot be tested (server side requires x509 authentication)"
           fileout "$jsonID" "INFO" "was not tested, server side requires x509 authentication" "$cve" "$cwe"
      fi
@@ -20397,7 +20417,7 @@ print_dn() {
 extract_calist() {
      local response="$1"
      local is_tls13=false
-     local certreq calist certtypes sigalgs dn
+     local certreq calist="" certtypes sigalgs dn
      local calist_string=""
      local -i len type
 
@@ -20430,7 +20450,7 @@ extract_calist() {
                   # This is the certificate_authorities extension
                   calist="${certreq:8:len}"
                   len=2*$(hex2dec "${calist:0:4}")
-                  calist="${calist:4}"
+                  calist="${calist:4:len}"
                   break
                fi
                certreq="${certreq:$((len+8))}"
@@ -20449,7 +20469,7 @@ extract_calist() {
           sigalgs="${certreq:4:len}"
           certreq="${certreq:$((len+4))}"
           len=2*$(hex2dec "${certreq:0:4}")
-          calist="${certreq:4}"
+          calist="${certreq:4:len}"
      fi
      # Convert each DN to a string.
      while true; do
@@ -20482,7 +20502,7 @@ sclient_auth() {
      if "$connect_success"; then
           if [[ "$server_hello" =~ \<\<\<\ (SSL\ [23]|TLS\ 1)(\.[0-3])?[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
                # CertificateRequest message in -msg
-               CLIENT_AUTH="require"
+               CLIENT_AUTH="required"
                [[ $1 -eq 0 ]] && CLIENT_AUTH="optional"
                CLIENT_AUTH_CA_LIST="$(extract_calist "$server_hello")"
                return 0
