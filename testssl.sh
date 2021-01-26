@@ -7421,6 +7421,7 @@ sub_mta_sts() {
 
      if [[ -z "$mta_sts_record" ]]; then
           failreason_mtasts_rec="no record"
+          mta_sts_record_ok=false
      else
           if [[ $(count_char_occurence "$mta_sts_record" ';') -ne 2 ]]; then
                failreason_mtasts_rec+=("number of ; should be 2")
@@ -7442,6 +7443,7 @@ sub_mta_sts() {
                fi
           fi
      fi
+set +x
 
      policy="$(safe_echo "GET /.well-known/mta-sts.txt HTTP/1.1\r\nHost: mta-sts.$domain\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n" | $OPENSSL s_client $(s_client_options "-quiet -ign_eof -connect mta-sts.$domain:443 $PROXY -servername mta-sts.$domain") 2>$ERRFILE)"
      # here also the openssl return val needs to be checked
@@ -7504,7 +7506,7 @@ sub_mta_sts() {
      # now the verdicts
      if "$mta_sts_record_ok"; then
           pr_svrty_good "valid"
-          outln " _mta-sts TXT record \'$mta_sts_record\'"
+          outln " _mta-sts TXT record '$mta_sts_record'"
           # quotes!
           fileout "${jsonID}_txtrecord" "OK" "valid _mta-sts TXT record $mta_sts_record"
      elif [[ -z "$mta_sts_record" ]]; then
