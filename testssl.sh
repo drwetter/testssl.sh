@@ -9865,7 +9865,7 @@ run_server_defaults() {
           if $TLS13_ONLY; then
                generic_nonfatal "Client problem: We need openssl supporting TLS 1.3. We can't continue with \"server defaults\" as we cannot retrieve the certificate. "
           else
-               generic_nonfatal "Client problem, No server cerificate could be retrieved. Thus we can't continue with \"server defaults\"."
+               generic_nonfatal "Client problem: No server certificate could be retrieved. Thus we can't continue with \"server defaults\"."
           fi
      fi
      [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
