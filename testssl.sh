@@ -251,6 +251,10 @@ GIVE_HINTS=false                        # give an additional info to findings
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
 MULTIPLE_CHECKS=false                   # need to know whether an MX record or a hostname resolves to multiple IPs to check
 CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
+PARENT_LOGFILE=""                       # logfile if mass testing and all output sent to a single file
+PARENT_JSONFILE=""                      # jsonfile if mass testing and all output sent to a single file
+PARENT_CSVFILE=""                       # csvfile if mass testing and all output sent to a single file
+PARENT_HTMLFILE=""                      # HTML if mass testing and all output sent to a single file
 TIMEOUT_CMD=""
 HAD_SLEPT=0
 NR_SOCKET_FAIL=0                        # Counter for socket failures
@@ -1336,6 +1340,10 @@ json_header() {
      local fname_prefix
      local filename_provided=false
 
+     if [[ -n "$PARENT_JSONFILE" ]]; then
+          [[ -n "$JSONFILE" ]] && fatal "Can't write to both $PARENT_JSONFILE and $JSONFILE"
+          JSONFILE="$PARENT_JSONFILE"
+     fi
      [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && filename_provided=true
      # Similar to HTML: Don't create headers and footers in the following scenarios:
      #  * no JSON/CSV output is being created.
@@ -1343,7 +1351,7 @@ json_header() {
      #  * this is an individual test within a mass test and all output is being placed in a single file.
      ! "$do_json" && ! "$do_pretty_json" && JSONHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && JSONHEADER=false && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && JSONHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && [[ -n "$PARENT_JSONFILE" ]] && JSONHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1383,11 +1391,15 @@ csv_header() {
      local fname_prefix
      local filename_provided=false
 
+     if [[ -n "$PARENT_CSVFILE" ]]; then
+          [[ -n "$CSVFILE" ]] && fatal "Can't write to both $PARENT_CSVFILE and $CSVFILE"
+          CSVFILE="$PARENT_CSVFILE"
+     fi
      [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && filename_provided=true
      # CSV similar to JSON
      ! "$do_csv" && CSVHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && CSVHEADER=false && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && CSVHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && [[ -n "$PARENT_CSVFILE" ]] && CSVHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1433,6 +1445,10 @@ html_header() {
      local fname_prefix
      local filename_provided=false
 
+     if [[ -n "$PARENT_HTMLFILE" ]]; then
+          [[ -n "$HTMLFILE" ]] && fatal "Can't write to both $PARENT_HTMLFILE and $HTMLFILE"
+          HTMLFILE="$PARENT_HTMLFILE"
+     fi
      [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && filename_provided=true
      # Don't create HTML headers and footers in the following scenarios:
      #  * HTML output is not being created.
@@ -1440,7 +1456,7 @@ html_header() {
      #  * this is an individual test within a mass test and all HTML output is being placed in a single file.
      ! "$do_html" && HTMLHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && HTMLHEADER=false && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && HTMLHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && [[ -n "$PARENT_HTMLFILE" ]] && HTMLHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1508,12 +1524,16 @@ prepare_logging() {
      local fname_prefix="$1"
      local filename_provided=false
 
+     if [[ -n "$PARENT_LOGFILE" ]]; then
+          [[ -n "$LOGFILE" ]] && fatal "Can't write to both $PARENT_LOGFILE and $LOGFILE"
+          LOGFILE="$PARENT_LOGFILE"
+     fi
      [[ -n "$LOGFILE" ]] && [[ ! -d "$LOGFILE" ]] && filename_provided=true
 
      # Similar to html_header():
      ! "$do_logging" && return 0
      "$do_mass_testing" && ! "$filename_provided" && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && [[ -n "$PARENT_LOGFILE" ]] && return 0
 
      [[ -z "$fname_prefix" ]] && fname_prefix="${FNAME_PREFIX}${NODE}_p${PORT}"
 
@@ -20880,7 +20900,7 @@ run_mx_all_ips() {
           word="the only"
      fi
      mxport=${2:-25}
-     if [[ -n "$LOGFILE" ]]; then
+     if [[ -n "$LOGFILE" ]] || [[ -n "$PARENT_LOGFILE" ]]; then
           prepare_logging
      else
           prepare_logging "${FNAME_PREFIX}mx-$1"
@@ -20966,35 +20986,53 @@ create_mass_testing_cmdline() {
           elif [[ "$testing_type" == serial ]]; then
                if "$JSONHEADER" && ( [[ "$cmd" =~ --jsonfile-pretty ]] || [[ "$cmd" =~ -oJ ]] ); then
                     >"$TEMPDIR/jsonfile_child.json"
-                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty-parent=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
                     [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
                     [[ "$cmd" == -oJ ]] && skip_next=true
                elif "$JSONHEADER" && ( [[ "$cmd" =~ --jsonfile ]] || [[ "$cmd" =~ -oj ]] ); then
                     >"$TEMPDIR/jsonfile_child.json"
-                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-parent=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
                     [[ "$cmd" == --jsonfile ]] && skip_next=true
                     [[ "$cmd" == -oj ]] && skip_next=true
+               elif "$CSVHEADER" && ( [[ "$cmd" =~ --csvfile ]] || [[ "$cmd" =~ -oC ]] ); then
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$outfile_arg"
+                    # next is the filename itself, as no '=' was supplied
+                    [[ "$cmd" == --csvfile ]] && skip_next=true
+                    [[ "$cmd" == -oC ]] && skip_next=true
+               elif "$HTMLHEADER" && ( [[ "$cmd" =~ --htmlfile ]] || [[ "$cmd" =~ -oH ]] ); then
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$outfile_arg"
+                    # next is the filename itself, as no '=' was supplied
+                    [[ "$cmd" == --htmlfile ]] && skip_next=true
+                    [[ "$cmd" == -oH ]] && skip_next=true   
+               elif ( [[ "$cmd" =~ --logfile ]] || [[ "$cmd" =~ -oL ]] ); then
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--logfile-parent=$outfile_arg"
+                    # next is the filename itself, as no '=' was supplied
+                    [[ "$cmd" == --logfile ]] && skip_next=true
+                    [[ "$cmd" == -oL ]] && skip_next=true
                elif "$JSONHEADER" && ( [[ "$cmd" =~ --outFile ]] || [[ "$cmd" =~ -oA ]] ); then
                     outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
                     >"$TEMPDIR/jsonfile_child.json"
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oJ=$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty-parent=$TEMPDIR/jsonfile_child.json"
                     nr_cmds+=1
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oC=$outfile_arg.csv"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$outfile_arg.csv"
                     nr_cmds+=1
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oH=$outfile_arg.html"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$outfile_arg.html"
                     # next is the filename itself, as no '=' was supplied
                     [[ "$cmd" == --outFile ]] && skip_next=true
                     [[ "$cmd" == -oA ]] && skip_next=true
                elif "$JSONHEADER" && ( [[ "$cmd" =~ --outfile ]] || [[ "$cmd" =~ -oa ]] ); then
                     outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
                     >"$TEMPDIR/jsonfile_child.json"
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oj=$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-parent=$TEMPDIR/jsonfile_child.json"
                     nr_cmds+=1
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oC=$outfile_arg.csv"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$outfile_arg.csv"
                     nr_cmds+=1
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oH=$outfile_arg.html"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$outfile_arg.html"
                     # next is the filename itself, as no '=' was supplied
                     [[ "$cmd" == --outfile ]] && skip_next=true
                     [[ "$cmd" == -oa ]] && skip_next=true
@@ -21009,7 +21047,7 @@ create_mass_testing_cmdline() {
                          # file name to each child process. If <jsonfile> is a
                          # directory, then just pass it on to the child processes.
                          if "$JSONHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_${test_number}.json"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-parent=$TEMPDIR/jsonfile_${test_number}.json"
                               # next is the jsonfile itself, as no '=' was supplied
                               [[ "$cmd" == --jsonfile ]] && skip_next=true
                               [[ "$cmd" == -oj ]] && skip_next=true
@@ -21019,7 +21057,7 @@ create_mass_testing_cmdline() {
                          ;;
                     --jsonfile-pretty|--jsonfile-pretty=*|-oJ|-oJ=*)
                          if "$JSONHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_${test_number}.json"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty-parent=$TEMPDIR/jsonfile_${test_number}.json"
                               [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
                               [[ "$cmd" == -oJ ]] && skip_next=true
                          else
@@ -21028,7 +21066,7 @@ create_mass_testing_cmdline() {
                          ;;
                     --csvfile|--csvfile=*|-oC|-oC=*)
                          if "$CSVHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile=$TEMPDIR/csvfile_${test_number}.csv"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$TEMPDIR/csvfile_${test_number}.csv"
                               [[ "$cmd" == --csvfile ]] && skip_next=true
                               [[ "$cmd" == -oC ]] && skip_next=true
                          else
@@ -21037,20 +21075,26 @@ create_mass_testing_cmdline() {
                          ;;
                     --htmlfile|--htmlfile=*|-oH|-oH=*)
                          if "$HTMLHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile=$TEMPDIR/htmlfile_${test_number}.html"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$TEMPDIR/htmlfile_${test_number}.html"
                               [[ "$cmd" == --htmlfile ]] && skip_next=true
                               [[ "$cmd" == -oH ]] && skip_next=true
                          else
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
                          ;;
+                    --logfile|--logfile=*|-oL|-oL=*)
+                         outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
+                         MASS_TESTING_CMDLINE[nr_cmds]="--logfile-parent=$outfile_arg"
+                         [[ "$cmd" == --logfile ]] && skip_next=true
+                         [[ "$cmd" == -oL ]] && skip_next=true
+                         ;;
                     --outfile|--outfile=*|-oa|-oa=*)
                          if "$JSONHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oj=$TEMPDIR/jsonfile_${test_number}.json"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-parent=$TEMPDIR/jsonfile_${test_number}.json"
                               nr_cmds+=1
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oC=$TEMPDIR/csvfile_${test_number}.csv"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$TEMPDIR/csvfile_${test_number}.csv"
                               nr_cmds+=1
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oH=$TEMPDIR/htmlfile_${test_number}.html"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$TEMPDIR/htmlfile_${test_number}.html"
                               # next is the filename itself, as no '=' was supplied
                               [[ "$cmd" == --outfile ]] && skip_next=true
                               [[ "$cmd" == -oa ]] && skip_next=true
@@ -21060,11 +21104,11 @@ create_mass_testing_cmdline() {
                          ;;
                     --outFile|--outFile=*|-oA|-oA=*)
                          if "$JSONHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oJ=$TEMPDIR/jsonfile_${test_number}.json"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty-parent=$TEMPDIR/jsonfile_${test_number}.json"
                               nr_cmds+=1
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oC=$TEMPDIR/csvfile_${test_number}.csv"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$TEMPDIR/csvfile_${test_number}.csv"
                               nr_cmds+=1
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oH=$TEMPDIR/htmlfile_${test_number}.html"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$TEMPDIR/htmlfile_${test_number}.html"
                               # next is the filename itself, as no '=' was supplied
                               [[ "$cmd" == --outFile ]] && skip_next=true
                               [[ "$cmd" == -oA ]] && skip_next=true
@@ -22161,6 +22205,15 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_logging=true
                     ;;
+               --logfile-parent|--logfile-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_LOGFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_logging=true
+                    ;;
                --json)
                     "$do_pretty_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     "$do_json" && fatal "--json and --jsonfile are mutually exclusive" $ERR_CMDLINE
@@ -22177,6 +22230,15 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_json=true
                     ;;
+               --jsonfile-parent|--jsonfile-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_json=true
+                    ;;
                --json-pretty)
                     "$do_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     "$do_pretty_json" && fatal "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
@@ -22189,6 +22251,15 @@ parse_cmd_line() {
                     "$do_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     "$do_pretty_json" && fatal "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_pretty_json=true
+                    ;;
+               --jsonfile-pretty-parent|--jsonfile-pretty-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_pretty_json=true
                     ;;
@@ -22213,6 +22284,15 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
                     ;;
+               --csvfile-parent|--csvfile-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_CSVFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_csv=true
+                    ;;
                --html)
                     "$do_html" && fatal "two --html* arguments" $ERR_CMDLINE
                     if [[ "$2" =~ \.(htm|html|HTM|HTML)$ ]]; then
@@ -22224,6 +22304,15 @@ parse_cmd_line() {
                --htmlfile|--htmlfile=*|-oH|-oH=*)
                     "$do_html" && fatal "two --html* arguments" $ERR_CMDLINE
                     HTMLFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_html=true
+                    ;;
+               --htmlfile-parent|--htmlfile-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_HTMLFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_html=true
                     ;;
