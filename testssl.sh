@@ -20387,7 +20387,12 @@ print_dn() {
      # Use $OPENSSL to print the DN by creating a certificate containing the DN
      # as the issuer and then having $OPENSSL print the issuer field in the
      # resulting certificate.
+
+     # Create the to-be-signed portion of the certificate: version || serialNumber || signature || issuer || validity || subject || subjectPublicKeyInfo
+     # with the DN to be printed being the issuer.
      cert="A003020102020100300A06082A8648CE3D040302${dn}301E170D3139303830353038333030305A170D3139303830353038333030305A30003019301306072A8648CE3D020106082A8648CE3D030107030200FF"
+
+     # Make a SEQUENCE of the to-be-signed portion of the certificate.
      len=$((${#cert}/2))
      if [[ $len -lt 128 ]]; then
           cert="30$(printf "%02x" $len)$cert"
@@ -20396,6 +20401,10 @@ print_dn() {
      else
           cert="3082$(printf "%04x" $len)$cert"
      fi
+
+     # Append a signature algorithm and signature value to the end of the
+     # to-be-signed portion of the certificate and then make a SEQUENCE of
+     # the result.
      cert+="300A06082A8648CE3D040302030200FF"
      len=$((${#cert}/2))
      if [[ $len -lt 128 ]]; then
@@ -20405,6 +20414,8 @@ print_dn() {
      else
           cert="3082$(printf "%04x" $len)$cert"
      fi
+     # Use the LDAP String Representation of Distinguished Names (RFC 2253),
+     # The current specification is in RFC 4514.
      name="$(asciihex_to_binary "$cert" | $OPENSSL x509 -issuer -noout -inform DER -nameopt RFC2253 2>/dev/null)"
      name="${name#issuer=}"
      tm_out "$(strip_leading_space "$name")"
