@@ -277,7 +277,8 @@ declare -r ALPN_PROTOs="h2 spdy/3.1 http/1.1 grpc-exp h2-fb spdy/1 spdy/2 spdy/3
 TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
-CLIENT_AUTH=false
+CLIENT_AUTH="none"
+CLIENT_AUTH_CA_LIST=""
 TLS_TICKETS=false
 NO_SSL_SESSIONID=false
 CERT_COMPRESSION=${CERT_COMPRESSION:-false}  # secret flag to set in addition to --devel for certificate compression
@@ -2223,7 +2224,7 @@ s_client_options() {
 service_detection() {
      local -i was_killed
 
-     if ! "$CLIENT_AUTH"; then
+     if [[ "$CLIENT_AUTH" != required ]]; then
           if ! "$HAS_TLS13" && "$TLS13_ONLY"; then
                # Using sockets is a lot slower than using OpenSSL, and it is
                # not as reliable, but if OpenSSL can't connect to the server,
@@ -2272,7 +2273,7 @@ service_detection() {
                out " $SERVICE, thus skipping HTTP specific checks"
                fileout "${jsonID}" "INFO" "$SERVICE, thus skipping HTTP specific checks"
                ;;
-          *)   if "$CLIENT_AUTH"; then
+          *)   if [[ "$CLIENT_AUTH" == required ]]; then
                     out " certificate-based authentication => skipping all HTTP checks"
                     echo "certificate-based authentication => skipping all HTTP checks" >$TMPFILE
                     fileout "${jsonID}" "INFO" "certificate-based authentication => skipping all HTTP checks"
@@ -2494,7 +2495,7 @@ run_http_date() {
      local spaces="                              "
      jsonID="HTTP_clock_skew"
 
-     if [[ $SERVICE != HTTP ]] || "$CLIENT_AUTH"; then
+     if [[ $SERVICE != HTTP ]] || [[ "$CLIENT_AUTH" == required ]]; then
           return 0
      fi
      if [[ ! -s $HEADERFILE ]]; then
@@ -6443,7 +6444,7 @@ sub_session_resumption() {
                return 1
           fi
      fi
-     "$CLIENT_AUTH" && return 6
+     [[ "$CLIENT_AUTH" == required ]] && return 6
      if ! "$HAS_TLS13" && "$HAS_NO_SSL2"; then
           addcmd+=" -no_ssl2"
      else
@@ -8365,7 +8366,7 @@ certificate_transparency() {
           fi
      fi
 
-     if [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH"; then
+     if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]]; then
           # At the moment Certificate Transparency only applies to HTTPS.
           tm_out "N/A"
      else
@@ -9493,7 +9494,7 @@ run_server_defaults() {
      local -a ocsp_response_binary ocsp_response ocsp_response_status sni_used tls_version ct
      local -a ciphers_to_test certificate_type
      local -a -i success
-     local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
+     local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions client_auth_ca
      local using_sockets=true
 
      "$SSL_NATIVE" && using_sockets=false
@@ -9840,6 +9841,26 @@ run_server_defaults() {
      fi
 
      tls_time
+
+     jsonID="clientAuth"
+     pr_bold " Client Authentication        "
+     outln "$CLIENT_AUTH"
+     fileout "$jsonID" "INFO" "$CLIENT_AUTH"
+     if [[ "$CLIENT_AUTH" != none ]]; then
+          jsonID="clientAuth_CA_list"
+          pr_bold " CA List for Client Auth      "
+          out_row_aligned "$CLIENT_AUTH_CA_LIST" "                              "
+          if [[ "$CLIENT_AUTH_CA_LIST" == empty ]] || [[ $(count_lines "$CLIENT_AUTH_CA_LIST") -eq 1 ]]; then
+               fileout "$jsonID" "INFO" "$CLIENT_AUTH_CA_LIST"
+          else
+               i=1
+               while read client_auth_ca; do
+                    fileout "$jsonID #$i" "INFO" "$client_auth_ca"
+                    i+=1
+               done <<< "$CLIENT_AUTH_CA_LIST"
+               fi
+     fi
+     
 
      if [[ -n "$SNI" ]] && [[ $certs_found -ne 0 ]] && [[ ! -e $HOSTCERT.nosni ]]; then
           # no cipher suites specified here. We just want the default vhost subject
@@ -15798,7 +15819,7 @@ run_ticketbleed() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
 
-     if [[ "$SERVICE" != HTTP ]] && ! "$CLIENT_AUTH"; then
+     if [[ "$SERVICE" != HTTP ]] && [[ "$CLIENT_AUTH" != required ]]; then
           outln "--   (applicable only for HTTPS)"
           fileout "$jsonID" "INFO" "not applicable, not HTTP" "$cve" "$cwe"
           return 0
@@ -16128,7 +16149,7 @@ run_renego() {
           [[ $DEBUG -ge 1 ]] && out ", no renegotiation support in TLS 1.3 only servers"
           outln
           fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
-     elif "$CLIENT_AUTH"; then
+     elif [[ "$CLIENT_AUTH" == required ]]; then
           prln_warning "client x509-based authentication prevents this from being tested"
           fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
           sec_client_renego=1
@@ -16251,14 +16272,14 @@ run_crime() {
           ret=1
      elif grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
           pr_svrty_good "not vulnerable (OK)"
-          if [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH";  then
+          if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]];  then
                out " (not using HTTP anyway)"
                fileout "CRIME_TLS" "OK" "not vulnerable (not using HTTP anyway)" "$cve" "$cwe"
           else
                fileout "CRIME_TLS" "OK" "not vulnerable" "$cve" "$cwe"
           fi
      else
-          if [[ $SERVICE == HTTP ]] || "$CLIENT_AUTH"; then
+          if [[ $SERVICE == HTTP ]] || [[ "$CLIENT_AUTH" == required ]]; then
                pr_svrty_high "VULNERABLE (NOT ok)"
                fileout "CRIME_TLS" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
           else
@@ -16364,11 +16385,11 @@ run_breach() {
      local detected_compression=""
      local get_command=""
 
-     [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH" && return 7
+     [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]] && return 7
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
-     if "$CLIENT_AUTH"; then
+     if [[ "$CLIENT_AUTH" == required ]]; then
           outln "cannot be tested (server side requires x509 authentication)"
           fileout "$jsonID" "INFO" "was not tested, server side requires x509 authentication" "$cve" "$cwe"
      fi
@@ -20356,26 +20377,158 @@ check_proxy() {
      fi
 }
 
+# Given the ASCII-HEX of a DER-encoded distinguished name, return the string
+# representation of the name.
+print_dn() {
+     local dn="$1"
+     local cert name
+     local -i len
+
+     # Use $OPENSSL to print the DN by creating a certificate containing the DN
+     # as the issuer and then having $OPENSSL print the issuer field in the
+     # resulting certificate.
+
+     # Create the to-be-signed portion of the certificate: version || serialNumber || signature || issuer || validity || subject || subjectPublicKeyInfo
+     # with the DN to be printed being the issuer.
+     cert="A003020102020100300A06082A8648CE3D040302${dn}301E170D3139303830353038333030305A170D3139303830353038333030305A30003019301306072A8648CE3D020106082A8648CE3D030107030200FF"
+
+     # Make a SEQUENCE of the to-be-signed portion of the certificate.
+     len=$((${#cert}/2))
+     if [[ $len -lt 128 ]]; then
+          cert="30$(printf "%02x" $len)$cert"
+     elif [[ $len -lt 256 ]]; then
+          cert="3081$(printf "%02x" $len)$cert"
+     else
+          cert="3082$(printf "%04x" $len)$cert"
+     fi
+
+     # Append a signature algorithm and signature value to the end of the
+     # to-be-signed portion of the certificate and then make a SEQUENCE of
+     # the result.
+     cert+="300A06082A8648CE3D040302030200FF"
+     len=$((${#cert}/2))
+     if [[ $len -lt 128 ]]; then
+          cert="30$(printf "%02x" $len)$cert"
+     elif [[ $len -lt 256 ]]; then
+          cert="3081$(printf "%02x" $len)$cert"
+     else
+          cert="3082$(printf "%04x" $len)$cert"
+     fi
+     # Use the LDAP String Representation of Distinguished Names (RFC 2253),
+     # The current specification is in RFC 4514.
+     name="$(asciihex_to_binary "$cert" | $OPENSSL x509 -issuer -noout -inform DER -nameopt RFC2253 2>/dev/null)"
+     name="${name#issuer=}"
+     tm_out "$(strip_leading_space "$name")"
+     return 0
+}
+
+# Given the OpenSSL output of a response from a TLS server (with the -msg option)
+# in which the response includes a CertificateRequest message, return the list of
+# distinguished names that are in the CA list.
+extract_calist() {
+     local response="$1"
+     local is_tls13=false
+     local certreq calist="" certtypes sigalgs dn
+     local calist_string=""
+     local -i len type
+
+     # Determine whether this is a TLS 1.3 response, since the information
+     # is encoded in a different place for TLS 1.3.
+     [[ "$response" =~ \<\<\<\ TLS\ 1.3[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]] && is_tls13=true
+
+     # Extract just the CertificateRequest message as an ASCII-HEX string.
+     certreq="${response##*CertificateRequest}"
+     certreq="0d${certreq#*0d}"
+     certreq="${certreq%%<<<*}"
+     certreq="$(strip_spaces "$(newline_to_spaces "$certreq")")"
+     certreq="${certreq:8}"
+
+     # Get the list of DNs from the CertificateRequest message.
+     if "$is_tls13"; then
+          # struct {
+          #     opaque certificate_request_context<0..2^8-1>;
+          #     Extension extensions<2..2^16-1>;
+          # } CertificateRequest;
+          len=2*$(hex2dec "${certreq:0:2}")
+          certreq="${certreq:$((len+2))}"
+          len=2*$(hex2dec "${certreq:0:4}")
+          certreq="${certreq:4}"
+          while true; do
+               [[ -z "$certreq" ]] && break
+               type=$(hex2dec "${certreq:0:4}")
+               len=2*$(hex2dec "${certreq:4:4}")
+               if [[ $type -eq 47 ]]; then
+                  # This is the certificate_authorities extension
+                  calist="${certreq:8:len}"
+                  len=2*$(hex2dec "${calist:0:4}")
+                  calist="${calist:4:len}"
+                  break
+               fi
+               certreq="${certreq:$((len+8))}"
+          done
+     else
+          # struct {
+          #     ClientCertificateType certificate_types<1..2^8-1>;
+          #     SignatureAndHashAlgorithm
+          #     supported_signature_algorithms<2^16-1>;
+          #     DistinguishedName certificate_authorities<0..2^16-1>;
+          # } CertificateRequest;
+          len=2*$(hex2dec "${certreq:0:2}")
+          certtypes="${certreq:2:len}"
+          certreq="${certreq:$((len+2))}"
+          len=2*$(hex2dec "${certreq:0:4}")
+          sigalgs="${certreq:4:len}"
+          certreq="${certreq:$((len+4))}"
+          len=2*$(hex2dec "${certreq:0:4}")
+          calist="${certreq:4:len}"
+     fi
+     # Convert each DN to a string.
+     while true; do
+          [[ -z "$calist" ]] && break
+          len=2*$(hex2dec "${calist:0:4}")
+          dn="${calist:4:len}"
+          calist_string+="$(print_dn "$dn")\n"
+          calist="${calist:$((len+4))}"
+     done
+     [[ -z "$calist_string" ]] && calist_string="empty"
+     tm_out "$calist_string"
+     return 0
+}
 
 # this is only being called from determine_optimal_proto in order to check whether we have a server
 # with client authentication, a server with no SSL session ID switched off
 #
 sclient_auth() {
-     [[ $1 -eq 0 ]] && return 0                                            # no client auth (CLIENT_AUTH=false is preset globally)
-     if [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]]; then           # connect succeeded
-          if grep -q '^<<< .*CertificateRequest' "$2"; then                # CertificateRequest message in -msg
-               CLIENT_AUTH=true
+     local server_hello="$(cat -v "$2")"
+     local re='Master-Key: ([^\
+]*)'
+     local connect_success=false
+     
+     [[ $1 -eq 0 ]] && connect_success=true
+     ! "$connect_success" && [[ "$server_hello" =~ $re ]] && \
+          [[ -n "${BASH_REMATCH[1]}" ]] && connect_success=true
+     ! "$connect_success" && \
+          [[ "$server_hello" =~ (New|Reused)\,\ (SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)\,\ Cipher\ is\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]] && \
+          connect_success=true
+     if "$connect_success"; then
+          if [[ "$server_hello" =~ \<\<\<\ (SSL\ [23]|TLS\ 1)(\.[0-3])?[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
+               # CertificateRequest message in -msg
+               CLIENT_AUTH="required"
+               [[ $1 -eq 0 ]] && CLIENT_AUTH="optional"
+               CLIENT_AUTH_CA_LIST="$(extract_calist "$server_hello")"
                return 0
           fi
-          if [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]]; then      # probably no SSL session
-               if [[ 2 -eq $(grep -c CERTIFICATE "$2") ]]; then            # do another sanity check to be sure
-                    CLIENT_AUTH=false
-                    NO_SSL_SESSIONID=true                                  # NO_SSL_SESSIONID is preset globally to false for all other cases
+          [[ $1 -eq 0 ]] && return 0
+          if [[ ! "$server_hello" =~ Session-ID:\ [a-fA-F0-9]{2,64} ]]; then   # probably no SSL session
+               # do another sanity check to be sure
+               if [[ "$server_hello" =~ \-\-\-BEGIN\ CERTIFICATE\-\-\-.*\-\-\-END\ CERTIFICATE\-\-\- ]]; then 
+                    CLIENT_AUTH="none"
+                    NO_SSL_SESSIONID=true  # NO_SSL_SESSIONID is preset globally to false for all other cases
                     return 0
                fi
           fi
      fi
-     # what's left now is: master key empty, handshake returned not successful, session ID empty --> not successful
+     # what's left now is: no protocol and ciphersuite specified, handshake returned not successful, session ID empty --> not successful
      return 1
 }
 
