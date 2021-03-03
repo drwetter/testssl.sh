@@ -106,6 +106,7 @@ You can also debug yourself, see [here](https://github.com/drwetter/testssl.sh/w
 Please address questions not specifically to the code of testssl.sh to the respective projects below.
 
 #### Web frontend
+* https://github.com/johannesschaefer/webnettools
 * https://github.com/TKCERT/testssl.sh-webfrontend
 
 #### Free to use Web frontend + commercial API
