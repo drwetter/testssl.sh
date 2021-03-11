@@ -135,3 +135,6 @@ Please address questions not specifically to the code of testssl.sh to the respe
 
 #### Daemon for batch processing of testssl.sh JSON result files for sending Slack alerts, reactive copying etc
 * https://github.com/bitsofinfo/testssl.sh-alerts
+
+#### GitHub Actions
+* https://github.com/marketplace/actions/testssl-sh-scan
