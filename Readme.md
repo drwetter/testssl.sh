@@ -88,7 +88,7 @@ Support for 2.9.5 has been dropped. Supported is >= 3.0.x only.
 
 ### Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/blob/3.1dev/CONTRIBUTING.md) for details. Please also have a look at the [Coding Convention](https://github.com/drwetter/testssl.sh/blob/3.1dev/Coding_Convention.md}.
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/blob/3.1dev/CONTRIBUTING.md) for details. Please also have a look at the [Coding Convention](https://github.com/drwetter/testssl.sh/blob/3.1dev/Coding_Convention.md).
 
 ### Bug reports
 
