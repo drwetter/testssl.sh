@@ -2062,7 +2062,8 @@ fi
 
 
 # Print $arg1 in binary format. arg1: An ASCII-HEX string
-#
+# The string represented by $arg1 may be binary data (a certificate or public
+# key) or a text string (e.g., ASCII-encoded text).
 hex2binary() {
      local s="$1"
      local -i len remainder
@@ -2089,6 +2090,11 @@ hex2binary() {
           esac
      fi
      return 0
+}
+
+# convert 414243 into ABC
+hex2ascii() {
+     hex2binary $1
 }
 
 # arg1: text string
@@ -11374,7 +11380,7 @@ parse_sslv2_serverhello() {
 
           if [[ "${v2_hello_ascii:0:2}" == "35" ]] && "$do_starttls"; then
                # this could be a 500/5xx for some weird reason where the STARTTLS handshake failed
-               debugme echo "$(hex2binary "$v2_hello_ascii")"
+               debugme echo "$(hex2ascii "$v2_hello_ascii")"
                ret=4
           elif [[ "${v2_hello_ascii:0:4}" == "1503" ]]; then
                # Cloudflare does this, OpenSSL 1.1.1 and picoTLS. With different alert messages
@@ -13187,11 +13193,11 @@ parse_tls_serverhello() {
           if "$do_starttls" ; then
                if [[ $tls_content_type == 35 ]] || [[ $tls_content_type == 34 ]]; then
                     # STARTTLS handshake failed and server replied plaintext with a 5xx or 4xx
-                    [[ $DEBUG -ge 2 ]] && printf "%s\n" "400/500: $(hex2binary "$tls_hello_ascii" 2>/dev/null)"
+                    [[ $DEBUG -ge 2 ]] && printf "%s\n" "400/500: $(hex2ascii "$tls_hello_ascii" 2>/dev/null)"
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 4
                elif [[ "$tls_hello_ascii" =~ 6130303220 ]]; then
-                    [[ $DEBUG -ge 2 ]] && printf "%s\n" "probably IMAP plaintext reply \"$(hex2binary "${tls_hello_ascii:0:32}" 2>/dev/null)\""
+                    [[ $DEBUG -ge 2 ]] && printf "%s\n" "probably IMAP plaintext reply \"$(hex2ascii "${tls_hello_ascii:0:32}" 2>/dev/null)\""
                     [[ $DEBUG -ge 1 ]] && tmpfile_handle ${FUNCNAME[0]}.txt
                     return 3
                fi
@@ -20143,8 +20149,8 @@ get_caa_rr_record() {
                     len_caa_property=$(printf "%0d" "$((10#${line:2:2}))")      # get len and do type casting, for posteo we have 05 or 09 here as a string
                     len_caa_property=$((len_caa_property*2))                    # =>word! Now get name from 4th and value from 4th+len position...
                     line="${line/ /}"                                           # especially with iodefs there's a blank in the string which we just skip
-                    caa_property_name="$(hex2binary ${line:4:$len_caa_property})"
-                    caa_property_value="$(hex2binary "${line:$((4+len_caa_property)):100}")"
+                    caa_property_name="$(hex2ascii ${line:4:$len_caa_property})"
+                    caa_property_value="$(hex2ascii "${line:$((4+len_caa_property)):100}")"
                     # echo "${caa_property_name}=${caa_property_value}"
                     all_caa+="${caa_property_name}=${caa_property_value}\n"
                else
