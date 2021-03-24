@@ -357,6 +357,7 @@ HAS_IDN=false
 HAS_IDN2=false
 HAS_AVAHIRESOLVE=false
 HAS_DIG_NOIDNOUT=false
+HAS_XXD=false
 
 OSSL_CIPHERS_S=""
 PORT=443                                # unless otherwise auto-determined, see below
@@ -782,15 +783,6 @@ debugme1() { [[ "$DEBUG" -ge 2 ]] && "$@"; }
 
 hex2dec() {
      echo $((16#$1))
-}
-
-# convert 414243 into ABC
-hex2ascii() {
-          for (( i=0; i<${#1}; i+=2 )); do
-               # 2>/dev/null added because 'warning: command substitution: ignored null byte in input'
-               # --> didn't help though
-               printf "\x${1:$i:2}" 2>/dev/null
-          done
 }
 
 # convert decimal number < 256 to hex
@@ -1959,7 +1951,7 @@ check_revocation_ocsp() {
      grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      if [[ -n "$stapled_response" ]]; then
-          asciihex_to_binary "$stapled_response" > "$TEMPDIR/stapled_ocsp_response.dd"
+          hex2binary "$stapled_response" > "$TEMPDIR/stapled_ocsp_response.dd"
           $OPENSSL ocsp -no_nonce -respin "$TEMPDIR/stapled_ocsp_response.dd" \
                -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
                -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
@@ -2070,33 +2062,39 @@ fi
 
 
 # Print $arg1 in binary format. arg1: An ASCII-HEX string
-#
-asciihex_to_binary() {
-     local string="$1"
-     local -i len
-     local -i i ip2 ip4 ip6 ip8 ip10 ip12 ip14
-     local -i remainder
+# The string represented by $arg1 may be binary data (a certificate or public
+# key) or a text string (e.g., ASCII-encoded text).
+hex2binary() {
+     local s="$1"
+     local -i len remainder
 
-     len=${#string}
+     len=${#s}
      [[ $len%2 -ne 0 ]] && return 1
 
-     for (( i=0; i <= len-16 ; i+=16 )); do
-          ip2=$((i+2)); ip4=$((i+4)); ip6=$((i+6)); ip8=$((i+8)); ip10=$((i+10)); ip12=$((i+12)); ip14=$((i+14))
-          printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}\x${string:ip14:2}"
-     done
+     if "$HAS_XXD"; then
+          xxd -r -p <<< "$s"
+     else
+          for (( i=0; i <= len-16 ; i+=16 )); do
+               printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}\x${s:$((i+8)):2}\x${s:$((i+10)):2}\x${s:$((i+12)):2}\x${s:$((i+14)):2}"
+          done
 
-     ip2=$((i+2)); ip4=$((i+4)); ip6=$((i+6)); ip8=$((i+8)); ip10=$((i+10)); ip12=$((i+12)); ip14=$((i+14))
-     remainder=$len-$i
-     case $remainder in
-           2) printf -- "\x${string:i:2}" ;;
-           4) printf -- "\x${string:i:2}\x${string:ip2:2}" ;;
-           6) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}" ;;
-           8) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}" ;;
-          10) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}" ;;
-          12) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}" ;;
-          14) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}" ;;
-     esac
+          remainder=$((len-i))
+          case $remainder in
+                2) printf -- "\x${s:i:2}" ;;
+                4) printf -- "\x${s:i:2}\x${s:$((i+2)):2}" ;;
+                6) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}" ;;
+                8) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}" ;;
+               10) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}\x${s:$((i+8)):2}" ;;
+               12) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}\x${s:$((i+8)):2}\x${s:$((i+10)):2}" ;;
+               14) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}\x${s:$((i+8)):2}\x${s:$((i+10)):2}\x${s:$((i+12)):2}" ;;
+          esac
+     fi
      return 0
+}
+
+# convert 414243 into ABC
+hex2ascii() {
+     hex2binary $1
 }
 
 # arg1: text string
@@ -8026,7 +8024,7 @@ compare_server_name_to_cert() {
                                                   j+=2
                                              fi
                                              if [[ $len1 -ne 0 ]]; then
-                                                  san="$(asciihex_to_binary "${dercert:j:len1}")"
+                                                  san="$(hex2binary "${dercert:j:len1}")"
                                                   if [[ "${dercert:i:20}" == "06082B06010505070805" ]]; then
                                                        xmppaddr+="$san "
                                                   else
@@ -8192,7 +8190,7 @@ etsi_ets_visibility_info() {
                               # Next is the 10-byte fingerprint, encoded as an OCTET STRING (04)
                               [[ "${dercert:j:4}" == 040A ]] || continue
                               j+=4
-                              fingerprint[nr_visnames]="$(asciihex_to_binary "${dercert:j:20}")"
+                              fingerprint[nr_visnames]="$(hex2binary "${dercert:j:20}")"
                               j+=20
                               # Finally comes the access description, encoded as a UTF8String (0C).
                               [[ "${dercert:j:2}" == 0C ]] || continue
@@ -8209,7 +8207,7 @@ etsi_ets_visibility_info() {
                                    len1=2*0x${dercert:j:2}
                                    j+=2
                               fi
-                              access_description[nr_visnames]=""$(asciihex_to_binary "${dercert:j:len1}")""
+                              access_description[nr_visnames]=""$(hex2binary "${dercert:j:len1}")""
                               nr_visnames+=1
                          done
                     fi
@@ -11319,7 +11317,7 @@ get_dh_ephemeralkey() {
           len1="82$(printf "%04x" $((i/2)))"
      fi
      key_bitstring="30${len1}${dh_param}${dh_y}"
-     key_bitstring="$(asciihex_to_binary "$key_bitstring" | $OPENSSL pkey -pubin -inform DER 2> $ERRFILE)"
+     key_bitstring="$(hex2binary "$key_bitstring" | $OPENSSL pkey -pubin -inform DER 2> $ERRFILE)"
      [[ -z "$key_bitstring" ]] && return 1
      tm_out "$key_bitstring"
      return 0
@@ -11424,7 +11422,7 @@ parse_sslv2_serverhello() {
           certificate_len=2*$(hex2dec "$v2_hello_cert_length")
 
           if [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
-               asciihex_to_binary "${v2_hello_ascii:26:certificate_len}" | \
+               hex2binary "${v2_hello_ascii:26:certificate_len}" | \
                     $OPENSSL x509 -inform DER -outform PEM -out $HOSTCERT 2>$ERRFILE
                if [[ $? -ne 0 ]]; then
                     debugme echo "Malformed certificate in ServerHello."
@@ -11457,11 +11455,11 @@ hmac() {
      local -i ret
 
      if [[ ! "$OSSL_NAME" =~ LibreSSL ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]]; then
-          output="$(asciihex_to_binary "$text" | $OPENSSL mac -macopt digest:"${hash_fn/-/}" -macopt hexkey:"$key" HMAC 2>/dev/null)"
+          output="$(hex2binary "$text" | $OPENSSL mac -macopt digest:"${hash_fn/-/}" -macopt hexkey:"$key" HMAC 2>/dev/null)"
           ret=$?
           tm_out "$(strip_lf "$output")"
      else
-          output="$(asciihex_to_binary "$text" | $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
+          output="$(hex2binary "$text" | $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
           ret=$?
           tm_out "${output#*= }"
      fi
@@ -11478,13 +11476,13 @@ hmac-transcript() {
      local -i ret
 
      if [[ ! "$OSSL_NAME" =~ LibreSSL ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]]; then
-          output="$(asciihex_to_binary "$transcript" | \
+          output="$(hex2binary "$transcript" | \
                     $OPENSSL dgst "$hash_fn" -binary 2>/dev/null | \
                     $OPENSSL mac -macopt digest:"${hash_fn/-/}" -macopt hexkey:"$key" HMAC 2>/dev/null)"
           ret=$?
           tm_out "$(toupper "$(strip_lf "$output")")"
      else
-          output="$(asciihex_to_binary "$transcript" | \
+          output="$(hex2binary "$transcript" | \
                     $OPENSSL dgst "$hash_fn" -binary 2>/dev/null | \
                     $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
           ret=$?
@@ -11578,7 +11576,7 @@ derive-secret() {
           *) return 7
      esac
 
-     hash_messages="$(asciihex_to_binary "$messages" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
+     hash_messages="$(hex2binary "$messages" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
      hash_messages="${hash_messages#*= }"
      hkdf-expand-label "$hash_fn" "$secret" "$label" "$hash_messages" "$hash_len"
      return $?
@@ -11623,7 +11621,7 @@ create-initial-transcript() {
           else
                return 1
           fi
-          hash_clienthello1="$(asciihex_to_binary "$clienthello1" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
+          hash_clienthello1="$(hex2binary "$clienthello1" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
           hash_clienthello1="${hash_clienthello1#*= }"
           msg_transcript="FE0000$(printf "%02x" $((${#hash_clienthello1}/2)))$hash_clienthello1$hrr$clienthello2$serverhello"
      else
@@ -12018,7 +12016,7 @@ chacha20() {
      local keystream plaintext=""
 
      if "$HAS_CHACHA20"; then
-          plaintext="$(asciihex_to_binary "$ciphertext" | \
+          plaintext="$(hex2binary "$ciphertext" | \
                        $OPENSSL enc -chacha20 -K "$key" -iv "01000000$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           tm_out "$(strip_spaces "$plaintext")"
           return 0
@@ -12273,17 +12271,17 @@ chacha20_aead_encrypt() {
 # See Section 6.1, Section 6.2, and Appendix A.3 of NIST SP 800-38C and
 # Section 5.3 of RFC 5116.
 generate-ccm-counter-blocks() {
-     local ctr="02${1}000000" ctr_msb ctr_lsb1
+     local ctr="02${1}000000" ctr_msb blocks=""
      local -i i ctr_lsb n="$2"
 
      ctr_msb="${ctr:0:24}"
      ctr_lsb=0x${ctr:24:8}
 
      for (( i=0; i <= n; i+=1 )); do
-          ctr_lsb1="$(printf "%08X" "$ctr_lsb")"
-          printf "\x${ctr_msb:0:2}\x${ctr_msb:2:2}\x${ctr_msb:4:2}\x${ctr_msb:6:2}\x${ctr_msb:8:2}\x${ctr_msb:10:2}\x${ctr_msb:12:2}\x${ctr_msb:14:2}\x${ctr_msb:16:2}\x${ctr_msb:18:2}\x${ctr_msb:20:2}\x${ctr_msb:22:2}\x${ctr_lsb1:0:2}\x${ctr_lsb1:2:2}\x${ctr_lsb1:4:2}\x${ctr_lsb1:6:2}"
+          blocks+="${ctr_msb}$(printf "%08X" "$ctr_lsb")"
           ctr_lsb+=1
      done
+     hex2binary "$blocks"
      return 0
 }
 
@@ -12359,8 +12357,7 @@ ccm-compute-tag() {
           [[ $i -ne 0 ]] &&
                tag="$(printf "%08X%08X%08X%08X" "$((0x${b:0:8} ^ 0x${tag:0:8}))" "$((0x${b:8:8} ^ 0x${tag:8:8}))" "$((0x${b:16:8} ^ 0x${tag:16:8}))" "$((0x${b:24:8} ^ 0x${tag:24:8}))")"
 
-          tag="$(printf "\x${tag:0:2}\x${tag:2:2}\x${tag:4:2}\x${tag:6:2}\x${tag:8:2}\x${tag:10:2}\x${tag:12:2}\x${tag:14:2}\x${tag:16:2}\x${tag:18:2}\x${tag:20:2}\x${tag:22:2}\x${tag:24:2}\x${tag:26:2}\x${tag:28:2}\x${tag:30:2}" | $OPENSSL enc "$cipher" -K "$key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
-
+          tag="$(hex2binary "$tag" | $OPENSSL enc "$cipher" -K "$key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           b="${b:32}"
      done
 
@@ -12562,13 +12559,13 @@ gcm_mult() {
 generate_gcm_ctr() {
      local -i nr_blocks="$1"
      local nonce="$2"
-     local i
-     local lsb ctr=""
+     local -i i
+     local ctr=""
 
      for (( i=1; i <= nr_blocks; i++ )); do
-          lsb="$(printf "%08X" "$i")"
-          printf "\x${nonce:0:2}\x${nonce:2:2}\x${nonce:4:2}\x${nonce:6:2}\x${nonce:8:2}\x${nonce:10:2}\x${nonce:12:2}\x${nonce:14:2}\x${nonce:16:2}\x${nonce:18:2}\x${nonce:20:2}\x${nonce:22:2}\x${lsb:0:2}\x${lsb:2:2}\x${lsb:4:2}\x${lsb:6:2}"
+          ctr+="${nonce}$(printf "%08X" "$i")"
      done
+     hex2binary "$ctr"
      return 0
 }
 
@@ -12727,12 +12724,12 @@ gcm-decrypt() {
      [[ ${#nonce} -ne 24 ]] && return 7
 
      if [[ "$cipher" == TLS_AES_128_GCM_SHA256 ]] && "$HAS_AES128_GCM" && ! "$compute_tag"; then
-          plaintext="$(asciihex_to_binary "$ciphertext" | \
+          plaintext="$(hex2binary "$ciphertext" | \
                        $OPENSSL enc -aes-128-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           tm_out "$(strip_spaces "$plaintext")"
           return 0
      elif [[ "$cipher" == TLS_AES_256_GCM_SHA384 ]] && "$HAS_AES256_GCM" && ! "$compute_tag"; then
-          plaintext="$(asciihex_to_binary "$ciphertext" | \
+          plaintext="$(hex2binary "$ciphertext" | \
                        $OPENSSL enc -aes-256-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           tm_out "$(strip_spaces "$plaintext")"
           return 0
@@ -13414,7 +13411,7 @@ parse_tls_serverhello() {
                     tls_certificate_ascii_len=2*0x${tls_handshake_ascii:offset:6}
                     offset=$((i+16))
                     len1=$((msg_len-16))
-                    tls_certificate_ascii="$(asciihex_to_binary "${tls_handshake_ascii:offset:len1}" | $OPENSSL zlib -d 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+                    tls_certificate_ascii="$(hex2binary "${tls_handshake_ascii:offset:len1}" | $OPENSSL zlib -d 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
                     tls_certificate_ascii="${tls_certificate_ascii%%[!0-9A-F]*}"
                     if [[ ${#tls_certificate_ascii} -ne $tls_certificate_ascii_len ]]; then
                          debugme tmln_warning "Length of uncompressed certificates did not match specified length."
@@ -13602,7 +13599,7 @@ parse_tls_serverhello() {
                                     return 1
                                fi
                                offset=$((offset+2))
-                               asciihex_to_binary "${tls_serverhello_ascii:offset:j}" >> "$TMPFILE"
+                               hex2binary "${tls_serverhello_ascii:offset:j}" >> "$TMPFILE"
                                echo "" >> $TMPFILE
                                echo "===============================================================================" >> $TMPFILE
                           fi
@@ -13698,7 +13695,7 @@ parse_tls_serverhello() {
                                     key_bitstring="3082${len1}$key_bitstring"
                                fi
                                if [[ -n "$key_bitstring" ]]; then
-                                    key_bitstring="$(asciihex_to_binary "$key_bitstring" | $OPENSSL pkey -pubin -inform DER 2>$ERRFILE)"
+                                    key_bitstring="$(hex2binary "$key_bitstring" | $OPENSSL pkey -pubin -inform DER 2>$ERRFILE)"
                                     if [[ -z "$key_bitstring" ]] && [[ $DEBUG -ge 2 ]]; then
                                          if [[ -n "$named_curve_str" ]]; then
                                               prln_warning "Your $OPENSSL doesn't support $named_curve_str"
@@ -13745,7 +13742,7 @@ parse_tls_serverhello() {
                                          return 1
                                     fi
                                     offset=$((offset+2))
-                                    asciihex_to_binary "${tls_serverhello_ascii:offset:protocol_len}" >> "$TMPFILE"
+                                    hex2binary "${tls_serverhello_ascii:offset:protocol_len}" >> "$TMPFILE"
                                     offset=$((offset+protocol_len))
                                     [[ $j+$protocol_len+2 -lt $extension_len ]] && echo -n ", " >> $TMPFILE
                                done
@@ -14002,7 +13999,7 @@ parse_tls_serverhello() {
                tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
-          asciihex_to_binary "${tls_certificate_ascii:12:certificate_len}" | \
+          hex2binary "${tls_certificate_ascii:12:certificate_len}" | \
                $OPENSSL x509 -inform DER -outform PEM -out "$HOSTCERT" 2>$ERRFILE
           if [[ $? -ne 0 ]]; then
                debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
@@ -14036,7 +14033,7 @@ parse_tls_serverhello() {
                     tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
-               pem_certificate="$(asciihex_to_binary "${tls_certificate_ascii:i:certificate_len}" | \
+               pem_certificate="$(hex2binary "${tls_certificate_ascii:i:certificate_len}" | \
                                   $OPENSSL x509 -inform DER -outform PEM 2>$ERRFILE)"
                if [[ $? -ne 0 ]]; then
                     debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
@@ -14104,10 +14101,10 @@ parse_tls_serverhello() {
           echo "OCSP response:" >> $TMPFILE
           echo "===============================================================================" >> $TMPFILE
           if [[ -n "$hostcert_issuer" ]]; then
-               asciihex_to_binary "$STAPLED_OCSP_RESPONSE" | \
+               hex2binary "$STAPLED_OCSP_RESPONSE" | \
                     $OPENSSL ocsp -no_nonce -CAfile $TEMPDIR/intermediatecerts.pem -issuer $hostcert_issuer -cert $HOSTCERT -respin /dev/stdin -resp_text >> $TMPFILE 2>$ERRFILE
           else
-               asciihex_to_binary "$STAPLED_OCSP_RESPONSE" | \
+               hex2binary "$STAPLED_OCSP_RESPONSE" | \
                     $OPENSSL ocsp -respin /dev/stdin -resp_text >> $TMPFILE 2>$ERRFILE
           fi
           echo "===============================================================================" >> $TMPFILE
@@ -15477,7 +15474,7 @@ receive_app_data() {
           [[ -z "$ciphertext" ]] && break
      done
      APP_TRAF_KEY_INFO="$tls_version $cipher $server_key $server_iv $server_seq $client_key $client_iv $client_seq"
-     asciihex_to_binary "$plaintext" > "$TMPFILE"
+     hex2binary "$plaintext" > "$TMPFILE"
      return 0
 }
 
@@ -18781,7 +18778,7 @@ run_robot() {
                esac
 
                # Encrypt the padded premaster secret using the server's public key.
-               encrypted_pms="$(asciihex_to_binary "$padded_pms" | \
+               encrypted_pms="$(hex2binary "$padded_pms" | \
                     $OPENSSL pkeyutl -encrypt -certin -inkey $HOSTCERT -pkeyopt rsa_padding_mode:none 2>/dev/null | \
                     hexdump -v -e '16/1 "%02x"')"
                if [[ -z "$encrypted_pms" ]]; then
@@ -19534,6 +19531,7 @@ HAS_IDN: $HAS_IDN
 HAS_IDN2: $HAS_IDN2
 HAS_AVAHIRESOLVE: $HAS_AVAHIRESOLVE
 HAS_DIG_NOIDNOUT: $HAS_DIG_NOIDNOUT
+HAS_XXD: $HAS_XXD
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -20416,7 +20414,7 @@ print_dn() {
      fi
      # Use the LDAP String Representation of Distinguished Names (RFC 2253),
      # The current specification is in RFC 4514.
-     name="$(asciihex_to_binary "$cert" | $OPENSSL x509 -issuer -noout -inform DER -nameopt RFC2253 2>/dev/null)"
+     name="$(hex2binary "$cert" | $OPENSSL x509 -issuer -noout -inform DER -nameopt RFC2253 2>/dev/null)"
      name="${name#issuer=}"
      tm_out "$(strip_leading_space "$name")"
      return 0
@@ -22011,6 +22009,11 @@ check_base_requirements() {
                fatal "${binary} is from busybox. Please install a regular binary" $ERR_RESOURCE
           fi
      done
+     # testssl.sh works without xxd, but using xxd is faster. The following checks that the xxd
+     # binary is available and (just to be safe) that "xxd -r -p" works as expected.
+     if type -p xxd &> /dev/null && [[ "$(xxd -r -p <<< "30313233343536373839" 2>/dev/null)" == 0123456789 ]]; then
+          HAS_XXD=true
+     fi
 }
 
 parse_cmd_line() {
