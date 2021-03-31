@@ -2066,7 +2066,7 @@ fi
 # key) or a text string (e.g., ASCII-encoded text).
 hex2binary() {
      local s="$1"
-     local -i len remainder
+     local -i i len remainder
 
      len=${#s}
      [[ $len%2 -ne 0 ]] && return 1
