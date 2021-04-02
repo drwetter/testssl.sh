@@ -3442,7 +3442,7 @@ rfc2hexcode() {
      local -i i
 
      for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-          [[ "$1" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
+          [[ "$1" == ${TLS_CIPHER_RFC_NAME[i]} ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
      done
      [[ -z "$hexc" ]] && return 1
      tm_out "$hexc"
@@ -7040,7 +7040,7 @@ cipher_pref_check() {
                [[ $? -ne 0 ]] && break
                cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
-                    [[ "$cipher" == "${rfc_ciph[i]}" ]] && ciphers_found2[i]=true && break
+                    [[ "$cipher" == ${rfc_ciph[i]} ]] && ciphers_found2[i]=true && break
                done
                i=${index[i]}
                ciphers_found[i]=true
