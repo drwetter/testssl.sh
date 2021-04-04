@@ -234,6 +234,7 @@ SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-6}       # number of times to check SSL
 
 ########### Initialization part, further global vars just being declared here
 #
+LC_COLLATE=en_US.UTF-8                  # ensures certain regex patterns work as expected and aren't localized, see #1860
 SYSTEM2=""                              # currently only being used for WSL = bash on windows
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 CIPHERS_BY_STRENGTH_FILE=""
