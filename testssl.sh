@@ -269,6 +269,7 @@ declare -r UA_SNEAKY="Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Fi
 
 ########### Initialization part, further global vars just being declared here
 #
+LC_COLLATE=en_US.UTF-8                  # ensures certain regex patterns work as expected and aren't localized, see #1860
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?
