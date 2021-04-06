@@ -1170,10 +1170,18 @@ fileout_section_footer() {
      SECTION_FOOTER_NEEDED=false
 }
 
+sanitize_json_string() {
+     local str="$1"
+     str=${str//	/\\t} # \t (tab)
+
+     echo -n "$str"
+}
+
+
 fileout_json_print_parameter() {
      local parameter="$1"
      local filler="$2"
-     local value="$3"
+     local value=$(sanitize_json_string "$3")
      local not_last="$4"
      local spaces=""
 
