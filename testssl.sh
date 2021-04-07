@@ -8760,7 +8760,7 @@ certificate_info() {
           "DH")  if [[ -s "$common_primes_file" ]]; then
                       cert_spki_info="${cert_txt##*Subject Public Key Info:}"
                       cert_spki_info="${cert_spki_info##*Public Key Algorithm:}"
-                      cert_spki_info="$(awk '/prime:|prime P:/,/generator:|generator G:/' <<< "$cert_spki_info" | grep -Ev "prime|generator")"
+                      cert_spki_info="$(awk '/prime:|P:/,/generator:|G:/' <<< "$cert_spki_info" | grep -Ev "prime|P:|generator|G:")"
                       cert_spki_info="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$cert_spki_info")")")"
                       [[ "${cert_spki_info:0:2}" == 00 ]] && cert_spki_info="${cert_spki_info:2}"
                       cert_spki_info="$(toupper "$cert_spki_info")"
@@ -11068,7 +11068,7 @@ get_pub_key_size() {
      "$HAS_PKEY" || return 1
 
      # OpenSSL displays the number of bits for RSA and ECC
-     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE)
+     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text_pub 2>>$ERRFILE)
      if [[ "$pubkeybits" =~ E[Dd]25519 ]]; then
           echo "Server public key is 253 bit" >> $TMPFILE
           return 0
@@ -14231,9 +14231,18 @@ parse_tls_serverhello() {
                esac
                [[ -z "$key_bitstring" ]] && named_curve=0 && named_curve_str=""
                if "$HAS_PKEY" && [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ BEGIN ]]; then
-                    ephemeral_param="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | grep -EA 1000 "prime:|prime P:")"
-                    rfc7919_param="$($OPENSSL pkey -text -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -EA 1000 "prime:|prime P:")"
-                    [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
+                    ephemeral_param="$($OPENSSL pkey -pubin -text_pub -noout 2>>$ERRFILE <<< "$key_bitstring")"
+                    # OpenSSL 3.0.0 outputs the group name rather than the actual parameter values for some named groups.
+                    if [[ "$ephemeral_param" =~ GROUP: ]]; then
+                         ephemeral_param="${ephemeral_param#*GROUP: }"
+                         rfc7919_param="${named_curve_str# }"
+                         rfc7919_param="${rfc7919_param%,}"
+                         [[ "$ephemeral_param" =~ $rfc7919_param ]] || named_curve_str=""
+                    else
+                       ephemeral_param="$(grep -EA 1000 "prime:|P:" <<< "$ephemeral_param")"
+                       rfc7919_param="$($OPENSSL pkey -text_pub -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -EA 1000 "prime:|P:")"
+                       [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
+                    fi
                fi
 
                [[ $DEBUG -ge 3 ]] && [[ $dh_bits -ne 0 ]] && echo -e "     dh_bits:                DH,$named_curve_str $dh_bits bits"
@@ -17003,13 +17012,31 @@ get_common_prime() {
      local jsonID2="$1"
      local key_bitstring="$2"
      local spaces="$3"
-     local dh_p=""
+     local pubkey dh_p=""
      local -i subret=0
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local -i lineno_matched=0
 
      "$HAS_PKEY" || return 2
-     dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:|prime P:/,/generator:|generator G:/' | grep -Ev "prime|generator")"
+     pubkey="$($OPENSSL pkey -pubin -text_pub -noout 2>>$ERRFILE <<< "$key_bitstring")"
+     if [[ "$pubkey" =~ GROUP: ]]; then
+          DH_GROUP_OFFERED="${pubkey#*GROUP: }"
+          case "$DH_GROUP_OFFERED" in
+               modp_1536)   DH_GROUP_OFFERED="RFC3526/Oakley Group 5" ;;
+               modp_2048)   DH_GROUP_OFFERED="RFC3526/Oakley Group 14" ;;
+               modp_3072)   DH_GROUP_OFFERED="RFC3526/Oakley Group 15" ;;
+               modp_4096)   DH_GROUP_OFFERED="RFC3526/Oakley Group 16" ;;
+               modp_6144)   DH_GROUP_OFFERED="RFC3526/Oakley Group 17" ;;
+               modp_8192)   DH_GROUP_OFFERED="RFC3526/Oakley Group 18" ;;
+               dh_1024_160) DH_GROUP_OFFERED="RFC5114/1024-bit DSA group with 160-bit prime order subgroup" ;;
+               dh_2048_224) DH_GROUP_OFFERED="RFC5114/2048-bit DSA group with 224-bit prime order subgroup" ;;
+               dh_2048_256) DH_GROUP_OFFERED="RFC5114/2048-bit DSA group with 256-bit prime order subgroup" ;;
+          esac
+          pubkey="$(awk -F'(' '/Public-Key/ { print $2 }' <<< "$pubkey")"
+          DH_GROUP_LEN_P="${pubkey%% bit*}"
+          return 0
+     fi
+     dh_p="$(awk '/prime:|P:/,/generator:|G:/' <<< "$pubkey" | grep -Ev "prime|P:|generator|G:")"
      dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
      [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
      DH_GROUP_LEN_P="$((4*${#dh_p}))"
@@ -18755,7 +18782,7 @@ run_robot() {
                # <random> should be a length that makes total length of $padded_pms
                # the same as the length of the public key. <random> should contain no 00 bytes.
                pubkeybits="$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | \
-                             $OPENSSL pkey -pubin -text 2>>$ERRFILE | awk -F'(' '/Public-Key/ { print $2 }')"
+                             $OPENSSL pkey -pubin -text_pub 2>>$ERRFILE | awk -F'(' '/Public-Key/ { print $2 }')"
                pubkeybits="${pubkeybits%%bit*}"
                pubkeybytes=$pubkeybits/8
                [[ $((pubkeybits%8)) -ne 0 ]] && pubkeybytes+=1
