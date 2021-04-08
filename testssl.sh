@@ -1420,7 +1420,7 @@ json_header() {
      local filename_provided=false
 
      if [[ -n "$PARENT_JSONFILE" ]]; then
-          [[ -n "$JSONFILE" ]] && fatal "Can't write to both $PARENT_JSONFILE and $JSONFILE" $ERR_CMDLINE
+          [[ -n "$JSONFILE" ]] && fatal_cmd_line "Can't write to both $PARENT_JSONFILE and $JSONFILE" $ERR_CMDLINE
           JSONFILE="$PARENT_JSONFILE"
      fi
      [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && filename_provided=true
@@ -1456,7 +1456,7 @@ json_header() {
           JSONHEADER=false
      else
           if [[ -s "$JSONFILE" ]]; then
-               "$OVERWRITE" || fatal "non-empty \"$JSONFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+               "$OVERWRITE" || fatal_cmd_line "non-empty \"$JSONFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
                cp /dev/null "$JSONFILE"
           fi
           "$do_json" && echo "[" > "$JSONFILE"
@@ -1471,7 +1471,7 @@ csv_header() {
      local filename_provided=false
 
      if [[ -n "$PARENT_CSVFILE" ]]; then
-          [[ -n "$CSVFILE" ]] && fatal "Can't write to both $PARENT_CSVFILE and $CSVFILE" $ERR_CMDLINE
+          [[ -n "$CSVFILE" ]] && fatal_cmd_line "Can't write to both $PARENT_CSVFILE and $CSVFILE" $ERR_CMDLINE
           CSVFILE="$PARENT_CSVFILE"
      fi
      [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && filename_provided=true
@@ -1504,7 +1504,7 @@ csv_header() {
           CSVHEADER=false
      else
           if [[ -s "$CSVFILE" ]]; then
-               "$OVERWRITE" || fatal "non-empty \"$CSVFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+               "$OVERWRITE" || fatal_cmd_line "non-empty \"$CSVFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
                cp /dev/null "$CSVFILE"
           fi
           touch "$CSVFILE"
@@ -1525,7 +1525,7 @@ html_header() {
      local filename_provided=false
 
      if [[ -n "$PARENT_HTMLFILE" ]]; then
-          [[ -n "$HTMLFILE" ]] && fatal "Can't write to both $PARENT_HTMLFILE and $HTMLFILE" $ERR_CMDLINE
+          [[ -n "$HTMLFILE" ]] && fatal_cmd_line "Can't write to both $PARENT_HTMLFILE and $HTMLFILE" $ERR_CMDLINE
           HTMLFILE="$PARENT_HTMLFILE"
      fi
      [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && filename_provided=true
@@ -1561,7 +1561,7 @@ html_header() {
           HTMLHEADER=false
      else
           if [[ -s "$HTMLFILE" ]]; then
-               "$OVERWRITE" || fatal "non-empty \"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+               "$OVERWRITE" || fatal_cmd_line "non-empty \"$HTMLFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
                cp /dev/null "$HTMLFILE"
           fi
           html_out "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n"
@@ -1604,7 +1604,7 @@ prepare_logging() {
      local filename_provided=false
 
      if [[ -n "$PARENT_LOGFILE" ]]; then
-          [[ -n "$LOGFILE" ]] && fatal "Can't write to both $PARENT_LOGFILE and $LOGFILE" $ERR_CMDLINE
+          [[ -n "$LOGFILE" ]] && fatal_cmd_line "Can't write to both $PARENT_LOGFILE and $LOGFILE" $ERR_CMDLINE
           LOGFILE="$PARENT_LOGFILE"
      fi
      [[ -n "$LOGFILE" ]] && [[ ! -d "$LOGFILE" ]] && filename_provided=true
@@ -1627,7 +1627,7 @@ prepare_logging() {
 
      if ! "$APPEND"; then
           if [[ -s "$LOGFILE" ]]; then
-               "$OVERWRITE" || fatal "non-empty \"$LOGFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
+               "$OVERWRITE" || fatal_cmd_line "non-empty \"$LOGFILE\" exists. Either use \"--append\" or (re)move it" $ERR_FCREATE
                cp /dev/null "$LOGFILE"
           fi
      fi
@@ -3443,7 +3443,7 @@ prettyprint_local() {
      local re='^[0-9A-Fa-f]+$'
 
      if [[ "$1" == 0x* ]] || [[ "$1" == 0X* ]]; then
-          fatal "pls supply x<number> instead" $ERR_CMDLINE
+          fatal_cmd_line "pls supply x<number> instead" $ERR_CMDLINE
      fi
 
      if [[ -z "$1" ]]; then
@@ -20798,6 +20798,28 @@ fatal() {
      exit $2
 }
 
+# Program terminates as a result of an error in the command line.
+# arg1: string to print / to write to file
+# arg2: global error code, see ERR_* above
+# arg3: an optional hint (string)
+#
+fatal_cmd_line() {
+     outln
+     prln_magenta "Fatal error: $1" >&2
+     [[ -n "$LOGFILE" ]] && prln_magenta "Fatal error: $1" >>$LOGFILE
+     if [[ -n "$3" ]]; then
+          outln "$3" >&2
+          [[ -n "$LOGFILE" ]] && outln "$3" >>$LOGFILE
+     fi
+     # Make sure we don't try to write into files when not created yet.
+     # No shorthand expression to avoid errors when $CMDLINE_PARSED haven't been filled yet.
+     HTMLHEADER=false
+     JSONHEADER=false
+     [[ $CMDLINE_PARSED == true ]] && fileout "scanProblem" "FATAL" "$1"
+     "$CHILD_MASS_TESTING" && kill -s USR1 $PPID
+     exit $2
+}
+
 # This OTOH doesn't exit but puts a fatal error to the screen but continues with the next
 # IP/hostname. It should only be used if a single IP/Hostname in a scan is not reachable.
 # arg1: string to print / to write to file
@@ -23226,7 +23248,7 @@ parse_cmd_line() {
      while [[ $# -gt 0 ]]; do
           case $1 in
                --help|-b|--banner|-v|--version)
-                    fatal "$1 is a standalone command line option" $ERR_CMDLINE
+                    fatal_cmd_line "$1 is a standalone command line option" $ERR_CMDLINE
                     ;;
                --mx)
                     do_mx_all_ips=true
@@ -23255,7 +23277,7 @@ parse_cmd_line() {
                     NODNS="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     if [[ "$NODNS" != none ]] && [[ "$NODNS" != min ]]; then
-                         fatal "Value for nodns switch can be either \"min\" or \"none\"" $ERR_CMDLINE
+                         fatal_cmd_line "Value for nodns switch can be either \"min\" or \"none\"" $ERR_CMDLINE
                     fi
                     ;;
                -V|-V=*|--local|--local=*)    # attention, this could have a value or not!
@@ -23541,12 +23563,12 @@ parse_cmd_line() {
                     COLORBLIND=true
                     ;;
                --log|--logging)
-                    "$do_logging" && fatal "two --log* arguments" $ERR_CMDLINE
+                    "$do_logging" && fatal_cmd_line "two --log* arguments" $ERR_CMDLINE
                     do_logging=true
                     ;;   # DEFINITION of LOGFILE if no arg specified: automagically in parse_hn_port()
                     # following does the same but additionally we can specify a log location
                --logfile|--logfile=*|-oL|-oL=*)
-                    "$do_logging" && fatal "two --log* arguments" $ERR_CMDLINE
+                    "$do_logging" && fatal_cmd_line "two --log* arguments" $ERR_CMDLINE
                     LOGFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_logging=true
@@ -23561,17 +23583,17 @@ parse_cmd_line() {
                     do_logging=true
                     ;;
                --json)
-                    "$do_pretty_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
-                    "$do_json" && fatal "--json and --jsonfile are mutually exclusive" $ERR_CMDLINE
+                    "$do_pretty_json" && fatal_cmd_line "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_json" && fatal_cmd_line "--json and --jsonfile are mutually exclusive" $ERR_CMDLINE
                     if [[ "$2" =~ \.(json|JSON)$ ]]; then
-                         fatal "No file name allowed after \"--json\" (use \"--jsonfile\" instead)" $ERR_CMDLINE
+                         fatal_cmd_line "No file name allowed after \"--json\" (use \"--jsonfile\" instead)" $ERR_CMDLINE
                     fi
                     do_json=true
                     ;;   # DEFINITION of JSONFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but additionally we can specify a log location
                --jsonfile|--jsonfile=*|-oj|-oj=*)
-                    "$do_pretty_json"  && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
-                    "$do_json" && fatal "--json and --jsonfile are mutually exclusive" $ERR_CMDLINE
+                    "$do_pretty_json"  && fatal_cmd_line "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_json" && fatal_cmd_line "--json and --jsonfile are mutually exclusive" $ERR_CMDLINE
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_json=true
@@ -23586,16 +23608,16 @@ parse_cmd_line() {
                     do_json=true
                     ;;
                --json-pretty)
-                    "$do_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
-                    "$do_pretty_json" && fatal "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
+                    "$do_json" && fatal_cmd_line "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_pretty_json" && fatal_cmd_line "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
                     if [[ "$2" =~ \.(json|JSON)$ ]]; then
-                         fatal "No file name allowed after \"--json\" (use \"--jsonfile-pretty\" instead)" $ERR_CMDLINE
+                         fatal_cmd_line "No file name allowed after \"--json\" (use \"--jsonfile-pretty\" instead)" $ERR_CMDLINE
                     fi
                     do_pretty_json=true
                     ;;
                --jsonfile-pretty|--jsonfile-pretty=*|-oJ|-oJ=*)
-                    "$do_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
-                    "$do_pretty_json" && fatal "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
+                    "$do_json" && fatal_cmd_line "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
+                    "$do_pretty_json" && fatal_cmd_line "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_pretty_json=true
@@ -23617,15 +23639,15 @@ parse_cmd_line() {
                     GIVE_HINTS=true
                     ;;
                --csv)
-                    "$do_csv" && fatal "two --csv* arguments" $ERR_CMDLINE
+                    "$do_csv" && fatal_cmd_line "two --csv* arguments" $ERR_CMDLINE
                     if [[ "$2" =~ \.(csv|CSV)$ ]]; then
-                         fatal "No file name allowed after \"--csv\" (use \"--csvfile\" instead)" $ERR_CMDLINE
+                         fatal_cmd_line "No file name allowed after \"--csv\" (use \"--csvfile\" instead)" $ERR_CMDLINE
                     fi
                     do_csv=true
                     ;;   # DEFINITION of CSVFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but additionally we can specify a log location
                --csvfile|--csvfile=*|-oC|-oC=*)
-                    "$do_csv" && fatal "two --csv* arguments" $ERR_CMDLINE
+                    "$do_csv" && fatal_cmd_line "two --csv* arguments" $ERR_CMDLINE
                     CSVFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
@@ -23640,15 +23662,15 @@ parse_cmd_line() {
                     do_csv=true
                     ;;
                --html)
-                    "$do_html" && fatal "two --html* arguments" $ERR_CMDLINE
+                    "$do_html" && fatal_cmd_line "two --html* arguments" $ERR_CMDLINE
                     if [[ "$2" =~ \.(htm|html|HTM|HTML)$ ]]; then
-                         fatal "No file name allowed after \"--html\" (use \"--htmlfile\" instead)" $ERR_CMDLINE
+                         fatal_cmd_line "No file name allowed after \"--html\" (use \"--htmlfile\" instead)" $ERR_CMDLINE
                     fi
                     do_html=true
                     ;;  # DEFINITION of HTMLFILE is not arg specified: automagically in parse_hn_port()
                     # following does the same but additionally we can specify a file location
                --htmlfile|--htmlfile=*|-oH|-oH=*)
-                    "$do_html" && fatal "two --html* arguments" $ERR_CMDLINE
+                    "$do_html" && fatal_cmd_line "two --html* arguments" $ERR_CMDLINE
                     HTMLFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_html=true
@@ -23663,7 +23685,7 @@ parse_cmd_line() {
                     do_html=true
                     ;;
                --outfile|--outfile=*|-oa|-oa=*)
-                    { "$do_html" || "$do_json" || "$do_pretty_json" || "$do_csv" || "$do_logging"; } && fatal "check your arguments four multiple file output options" $ERR_CMDLINE
+                    { "$do_html" || "$do_json" || "$do_pretty_json" || "$do_csv" || "$do_logging"; } && fatal_cmd_line "check your arguments four multiple file output options" $ERR_CMDLINE
                     outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
                     if [[ "$outfile_arg" != "auto" ]]; then
                          if [[ -d "$outfile_arg" ]]; then
@@ -23685,7 +23707,7 @@ parse_cmd_line() {
                     do_logging=true
                     ;;
                --outFile|--outFile=*|-oA|-oA=*)
-                    { "$do_html" || "$do_json" || "$do_pretty_json" || "$do_csv" || "$do_logging"; } && fatal "check your arguments four multiple file output options" $ERR_CMDLINE
+                    { "$do_html" || "$do_json" || "$do_pretty_json" || "$do_csv" || "$do_logging"; } && fatal_cmd_line "check your arguments four multiple file output options" $ERR_CMDLINE
                     outfile_arg="$(parse_opt_equal_sign "$1" "$2")"
                     if [[ "$outfile_arg" != "auto" ]]; then
                          if [[ -d "$outfile_arg" ]]; then
@@ -23707,11 +23729,11 @@ parse_cmd_line() {
                     do_logging=true
                     ;;
                --overwrite)
-                    "$APPEND" && fatal "using --overwrite and --append is contradicting" $ERR_CMDLINE
+                    "$APPEND" && fatal_cmd_line "using --overwrite and --append is contradicting" $ERR_CMDLINE
                     OVERWRITE=true
                     ;;
                --append)
-                    "$OVERWRITE" && fatal "using --append and --overwrite is contradicting" $ERR_CMDLINE
+                    "$OVERWRITE" && fatal_cmd_line "using --append and --overwrite is contradicting" $ERR_CMDLINE
                     APPEND=true
                     ;;
                --outprefix)
@@ -23790,17 +23812,17 @@ parse_cmd_line() {
 
      # Show usage if no further options were specified
      if [[ -z "$1" ]] && [[ -z "$FNAME" ]] && ! "$do_display_only"; then
-          fatal "URI missing" $ERR_CMDLINE
+          fatal_cmd_line "URI missing" $ERR_CMDLINE
      else
      # What is left here should be the URI.
           URI="$1"
-          [[ -n "$2" ]] && fatal "URI comes last" $ERR_CMDLINE
+          [[ -n "$2" ]] && fatal_cmd_line "URI comes last" $ERR_CMDLINE
      fi
 
      # Now spot some incompatibilities in cmdlines
-     [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal "\"--ip=one\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
-     [[ $CMDLINE_IP == one ]] && ( is_ipv4addr "$URI" || is_ipv6addr "$URI" )  && fatal "\"--ip=one\" plus supplying an IP address doesn't work" $ERR_CMDLINE
-     "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
+     [[ $CMDLINE_IP == one ]] && [[ "$NODNS" == none ]] && fatal_cmd_line "\"--ip=one\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
+     [[ $CMDLINE_IP == one ]] && ( is_ipv4addr "$URI" || is_ipv6addr "$URI" )  && fatal_cmd_line "\"--ip=one\" plus supplying an IP address doesn't work" $ERR_CMDLINE
+     "$do_mx_all_ips" && [[ "$NODNS" == none ]] && fatal_cmd_line "\"--mx\" and \"--nodns=none\" don't work together" $ERR_CMDLINE
 
      if [[ -d $ADDTL_CA_FILES ]]; then
           ADDTL_CA_FILES="$ADDTL_CA_FILES/*.pem"
@@ -23808,8 +23830,8 @@ parse_cmd_line() {
           ADDTL_CA_FILES="${ADDTL_CA_FILES//,/ }"
      fi
      for fname in $ADDTL_CA_FILES; do
-          [[ -s "$fname" ]] || fatal "CA file \"$fname\" does not exist" $ERR_RESOURCE
-          grep -q 'BEGIN CERTIFICATE' "$fname" || fatal "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
+          [[ -s "$fname" ]] || fatal_cmd_line "CA file \"$fname\" does not exist" $ERR_RESOURCE
+          grep -q 'BEGIN CERTIFICATE' "$fname" || fatal_cmd_line "\"$fname\" is not CA file in PEM format" $ERR_RESOURCE
      done
 
      "$FAST" && pr_warning "\n'--fast' can have some undesired side effects thus it is not recommended to use anymore\n"
