@@ -1316,6 +1316,7 @@ fileout_csv_finding() {
 # ID, SEVERITY, FINDING, CVE, CWE, HINT
 fileout() {
      local severity="$2"
+     local finding="$3"
      local cve="$4"
      local cwe="$5"
      local hint="$6"
