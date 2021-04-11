@@ -1181,6 +1181,49 @@ fileout_json_print_parameter() {
           spaces="              " || \
           spaces="                                "
      if [[ -n "$value" ]] || [[ "$parameter" == finding ]]; then
+          value=$(echo "$value" | sed -e '
+               s@"@\\"@g
+               s@/@\\/@g
+               s@\\@\\@g
+               s@\x08@\\b@g
+               s@\x0c@\\f@g
+               s@\x0a@\\n@g
+               s@\x0d@\\r@g
+               s@\x09@\\t@g
+               s@\x7f@\\u007f@g
+               s@\x80@\\u0080@g; s@\x81@\\u0081@g; s@\x82@\\u0082@g; s@\x83@\\u0083@g;
+               s@\x84@\\u0084@g; s@\x85@\\u0085@g; s@\x86@\\u0086@g; s@\x87@\\u0087@g;
+               s@\x88@\\u0088@g; s@\x89@\\u0089@g; s@\x8a@\\u008a@g; s@\x8b@\\u008b@g;
+               s@\x8c@\\u008c@g; s@\x8d@\\u008d@g; s@\x8e@\\u008e@g; s@\x8f@\\u008f@g;
+               s@\x90@\\u0090@g; s@\x91@\\u0091@g; s@\x92@\\u0092@g; s@\x93@\\u0093@g;
+               s@\x94@\\u0094@g; s@\x95@\\u0095@g; s@\x96@\\u0096@g; s@\x97@\\u0097@g;
+               s@\x98@\\u0098@g; s@\x99@\\u0099@g; s@\x9a@\\u009a@g; s@\x9b@\\u009b@g;
+               s@\x9c@\\u009c@g; s@\x9d@\\u009d@g; s@\x9e@\\u009e@g; s@\x9f@\\u009f@g;
+               s@\xa0@\\u00a0@g; s@\xa1@\\u00a1@g; s@\xa2@\\u00a2@g; s@\xa3@\\u00a3@g;
+               s@\xa4@\\u00a4@g; s@\xa5@\\u00a5@g; s@\xa6@\\u00a6@g; s@\xa7@\\u00a7@g;
+               s@\xa8@\\u00a8@g; s@\xa9@\\u00a9@g; s@\xaa@\\u00aa@g; s@\xab@\\u00ab@g;
+               s@\xac@\\u00ac@g; s@\xad@\\u00ad@g; s@\xae@\\u00ae@g; s@\xaf@\\u00af@g;
+               s@\xb0@\\u00b0@g; s@\xb1@\\u00b1@g; s@\xb2@\\u00b2@g; s@\xb3@\\u00b3@g;
+               s@\xb4@\\u00b4@g; s@\xb5@\\u00b5@g; s@\xb6@\\u00b6@g; s@\xb7@\\u00b7@g;
+               s@\xb8@\\u00b8@g; s@\xb9@\\u00b9@g; s@\xba@\\u00ba@g; s@\xbb@\\u00bb@g;
+               s@\xbc@\\u00bc@g; s@\xbd@\\u00bd@g; s@\xbe@\\u00be@g; s@\xbf@\\u00bf@g;
+               s@\xc0@\\u00c0@g; s@\xc1@\\u00c1@g; s@\xc2@\\u00c2@g; s@\xc3@\\u00c3@g;
+               s@\xc4@\\u00c4@g; s@\xc5@\\u00c5@g; s@\xc6@\\u00c6@g; s@\xc7@\\u00c7@g;
+               s@\xc8@\\u00c8@g; s@\xc9@\\u00c9@g; s@\xca@\\u00ca@g; s@\xcb@\\u00cb@g;
+               s@\xcc@\\u00cc@g; s@\xcd@\\u00cd@g; s@\xce@\\u00ce@g; s@\xcf@\\u00cf@g;
+               s@\xd0@\\u00d0@g; s@\xd1@\\u00d1@g; s@\xd2@\\u00d2@g; s@\xd3@\\u00d3@g;
+               s@\xd4@\\u00d4@g; s@\xd5@\\u00d5@g; s@\xd6@\\u00d6@g; s@\xd7@\\u00d7@g;
+               s@\xd8@\\u00d8@g; s@\xd9@\\u00d9@g; s@\xda@\\u00da@g; s@\xdb@\\u00db@g;
+               s@\xdc@\\u00dc@g; s@\xdd@\\u00dd@g; s@\xde@\\u00de@g; s@\xdf@\\u00df@g;
+               s@\xe0@\\u00e0@g; s@\xe1@\\u00e1@g; s@\xe2@\\u00e2@g; s@\xe3@\\u00e3@g;
+               s@\xe4@\\u00e4@g; s@\xe5@\\u00e5@g; s@\xe6@\\u00e6@g; s@\xe7@\\u00e7@g;
+               s@\xe8@\\u00e8@g; s@\xe9@\\u00e9@g; s@\xea@\\u00ea@g; s@\xeb@\\u00eb@g;
+               s@\xec@\\u00ec@g; s@\xed@\\u00ed@g; s@\xee@\\u00ee@g; s@\xef@\\u00ef@g;
+               s@\xf0@\\u00f0@g; s@\xf1@\\u00f1@g; s@\xf2@\\u00f2@g; s@\xf3@\\u00f3@g;
+               s@\xf4@\\u00f4@g; s@\xf5@\\u00f5@g; s@\xf6@\\u00f6@g; s@\xf7@\\u00f7@g;
+               s@\xf8@\\u00f8@g; s@\xf9@\\u00f9@g; s@\xfa@\\u00fa@g; s@\xfb@\\u00fb@g;
+               s@\xfc@\\u00fc@g; s@\xfd@\\u00fd@g; s@\xfe@\\u00fe@g; s@\xff@\\u00ff@g;
+          ')
           printf "%s%s%s%s" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
           "$not_last" && printf ",\n" >> "$JSONFILE"
      fi
