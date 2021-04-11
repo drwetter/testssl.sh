@@ -1236,8 +1236,18 @@ fileout_json_finding() {
      local cwe="$5"
      local hint="$6"
 
+     local initial_do_pretty_json="$do_pretty_json"
+     local initial_do_json="$do_json"
+     local do_stream_mode="false"
+     if [[ "$do_stream_json" = "true" ]]; then
+          do_json="true"
+          do_stream_mode="true"
+     fi
+
      if "$do_json"; then
-          "$FIRST_FINDING" || echo -n ","
+          if [[ "$do_stream_mode" != "true" ]]; then
+               "$FIRST_FINDING" || echo -n ","
+          fi
           echo -e "         {"
           fileout_json_print_parameter "id" "           " "$1" true
           fileout_json_print_parameter "ip" "           " "$NODE/$NODEIP" true
@@ -1264,7 +1274,11 @@ fileout_json_finding() {
                     \"service\"         : \"$finding\","
                $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","
           else
-               ("$FIRST_FINDING" && echo -n "                            {") || echo -n ",{"
+               if [[ "$do_stream_mode" != "true" ]]; then
+                    ("$FIRST_FINDING" && echo -n "                            {") || echo -n ",{"
+               else
+                    echo "{"
+               fi
                echo -e -n "\n"
                fileout_json_print_parameter "id" "           " "$1" true
                fileout_json_print_parameter "severity" "     " "$2" true
@@ -1275,6 +1289,9 @@ fileout_json_finding() {
                echo -e -n "\n                           }"
           fi
      fi
+
+     do_pretty_json="$initial_do_pretty_json"
+     do_json="$initial_do_json"
 }
 
 fileout_pretty_json_banner() {
@@ -1364,6 +1381,10 @@ fileout() {
      local cwe="$5"
      local hint="$6"
 
+     if [[ "$do_stream_json" == "true" ]]; then
+          fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint" | tr -d '\n' | sed -e 's/  */ /g' >&4
+          echo >&4
+     fi
      if ( "$do_pretty_json" && [[ "$1" == service ]] ) || show_finding "$severity"; then
           local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")           # additional quotes will mess up screen output
           [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint" >> "$JSONFILE"
@@ -19482,6 +19503,7 @@ output options (can also be preset via environment variables):
      --colorblind                  swap green and blue in the output
      --debug <0-6>                 1: screen output normal but keeps debug output in /tmp/.  2-6: see "grep -A 5 '^DEBUG=' testssl.sh"
      --disable-rating              Explicitly disables the rating output
+     --stream-json-fd4             Stream JSON objects as ouput on file descriptor 4. Each line contains one JSON object.
 
 file output options (can also be preset via environment variables)
      --log, --logging              logs stdout to '\${NODE}-p\${port}\${YYYYMMDD-HHMM}.log' in current working directory (cwd)
@@ -21927,6 +21949,7 @@ initialize_globals() {
      do_logging=false
      do_json=false
      do_pretty_json=false
+     do_stream_json=false
      do_csv=false
      do_html=false
      do_fs=false
@@ -22418,6 +22441,9 @@ parse_cmd_line() {
                               tmln_magenta "\nunrecognized color: \"$1\", must be between 0..3" 1>&2
                               help 1
                     esac
+                    ;;
+               --stream-json-fd4)
+                    do_stream_json=true
                     ;;
                --colorblind)
                     COLORBLIND=true
