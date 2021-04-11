@@ -1130,9 +1130,9 @@ fileout_json_footer() {
      fi
      if "$do_pretty_json"; then
           if [[ "$SCAN_TIME" -eq 0 ]]; then
-               echo -e "          ],\n                    \"scanTime\"  : \"Scan interrupted\"\n}" >> "$JSONFILE"
+               echo -e "          ],\n                    \"scanTime\"  : \"Scan interrupted\"\n}"
           else
-               echo -e "          ],\n                    \"scanTime\"  : ${SCAN_TIME}\n}" >> "$JSONFILE"
+               echo -e "          ],\n                    \"scanTime\"  : ${SCAN_TIME}\n}"
           fi
      fi
 }
@@ -1224,8 +1224,8 @@ fileout_json_print_parameter() {
                s@\xf8@\\u00f8@g; s@\xf9@\\u00f9@g; s@\xfa@\\u00fa@g; s@\xfb@\\u00fb@g;
                s@\xfc@\\u00fc@g; s@\xfd@\\u00fd@g; s@\xfe@\\u00fe@g; s@\xff@\\u00ff@g;
           ')
-          printf "%s%s%s%s" "$spaces" "\"$parameter\"" "$filler" ": \"$value\"" >> "$JSONFILE"
-          "$not_last" && printf ",\n" >> "$JSONFILE"
+          printf "%s%s%s%s" "$spaces" "\"$parameter\"" "$filler" ": \"$value\""
+          "$not_last" && printf ",\n"
      fi
 }
 
@@ -1237,8 +1237,8 @@ fileout_json_finding() {
      local hint="$6"
 
      if "$do_json"; then
-          "$FIRST_FINDING" || echo -n "," >> "$JSONFILE"
-          echo -e "         {"  >> "$JSONFILE"
+          "$FIRST_FINDING" || echo -n ","
+          echo -e "         {"
           fileout_json_print_parameter "id" "           " "$1" true
           fileout_json_print_parameter "ip" "           " "$NODE/$NODEIP" true
           fileout_json_print_parameter "port" "         " "$PORT" true
@@ -1247,12 +1247,12 @@ fileout_json_finding() {
           fileout_json_print_parameter "cwe" "          " "$cwe" true
           "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
           fileout_json_print_parameter "finding" "      " "$finding" false
-          echo -e "\n          }" >> "$JSONFILE"
+          echo -e "\n          }"
      fi
      if "$do_pretty_json"; then
           if [[ "$1" == service ]]; then
                if [[ $SERVER_COUNTER -gt 1 ]]; then
-                    echo "          ," >> "$JSONFILE"
+                    echo "          ,"
                fi
                target="$NODE"
                $do_mx_all_ips && target="$URI"
@@ -1261,18 +1261,18 @@ fileout_json_finding() {
                     \"ip\"              : \"$NODEIP\",
                     \"port\"            : \"$PORT\",
                     \"rDNS\"            : \"$rDNS\",
-                    \"service\"         : \"$finding\"," >> "$JSONFILE"
-               $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","  >> "$JSONFILE"
+                    \"service\"         : \"$finding\","
+               $do_mx_all_ips && echo -e "                    \"hostname\"        : \"$NODE\","
           else
-               ("$FIRST_FINDING" && echo -n "                            {" >> "$JSONFILE") || echo -n ",{" >> "$JSONFILE"
-               echo -e -n "\n"  >> "$JSONFILE"
+               ("$FIRST_FINDING" && echo -n "                            {") || echo -n ",{"
+               echo -e -n "\n"
                fileout_json_print_parameter "id" "           " "$1" true
                fileout_json_print_parameter "severity" "     " "$2" true
                fileout_json_print_parameter "cve" "          " "$cve" true
                fileout_json_print_parameter "cwe" "          " "$cwe" true
                "$GIVE_HINTS" && fileout_json_print_parameter "hint" "         " "$hint" true
                fileout_json_print_parameter "finding" "      " "$finding" false
-               echo -e -n "\n                           }" >> "$JSONFILE"
+               echo -e -n "\n                           }"
           fi
      fi
 }
@@ -1311,7 +1311,7 @@ fileout_separator() {
 
 fileout_footer() {
      if "$JSONHEADER"; then
-          fileout_json_footer
+          fileout_json_footer >> "$JSONFILE"
      fi
      # CSV: no footer
      return 0
@@ -1366,7 +1366,7 @@ fileout() {
 
      if ( "$do_pretty_json" && [[ "$1" == service ]] ) || show_finding "$severity"; then
           local finding=$(strip_lf "$(newline_to_spaces "$(strip_quote "$3")")")           # additional quotes will mess up screen output
-          [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint"
+          [[ -e "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && fileout_json_finding "$1" "$severity" "$finding" "$cve" "$cwe" "$hint" >> "$JSONFILE"
           "$do_csv" && [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && \
                fileout_csv_finding "$1" "$NODE/$NODEIP" "$PORT" "$severity" "$finding" "$cve" "$cwe" "$hint"
           "$FIRST_FINDING" && FIRST_FINDING=false
