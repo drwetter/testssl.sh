@@ -241,7 +241,7 @@ STARTTLS_SLEEP=${STARTTLS_SLEEP:-10}    # max time wait on a socket for STARTTLS
 FAST_STARTTLS=${FAST_STARTTLS:-true}    # at the cost of reliability decrease the handshakes for STARTTLS
 USLEEP_SND=${USLEEP_SND:-0.1}           # sleep time for general socket send
 USLEEP_REC=${USLEEP_REC:-0.2}           # sleep time for general socket receive
-HSTS_MIN=${HSTS_MIN:-179}               # >179 days is ok for HSTS
+HSTS_MIN=${HSTS_MIN:-180}               # >=180 days is ok for HSTS
      HSTS_MIN=$((HSTS_MIN * 86400))     # correct to seconds
 HPKP_MIN=${HPKP_MIN:-30}                # >=30 days should be ok for HPKP_MIN, practical hints?
      HPKP_MIN=$((HPKP_MIN * 86400))     # correct to seconds
@@ -2424,11 +2424,11 @@ run_hsts() {
           elif [[ $hsts_age_sec -eq 0 ]]; then
                pr_svrty_low "HSTS max-age is set to 0. HSTS is disabled"
                fileout "${jsonID}_time" "LOW" "0. HSTS is disabled"
-          elif [[ $hsts_age_sec -gt $HSTS_MIN ]]; then
+          elif [[ $hsts_age_sec -ge $HSTS_MIN ]]; then
                pr_svrty_good "$hsts_age_days days" ; out "=$hsts_age_sec s"
                fileout "${jsonID}_time" "OK" "$hsts_age_days days (=$hsts_age_sec seconds) > $HSTS_MIN seconds"
           else
-               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >=$HSTS_MIN seconds recommended)"
+               pr_svrty_medium "$hsts_age_sec s = $hsts_age_days days is too short ( >= $HSTS_MIN seconds recommended)"
                fileout "${jsonID}_time" "MEDIUM" "max-age too short. $hsts_age_days days (=$hsts_age_sec seconds) < $HSTS_MIN seconds"
           fi
           if includeSubDomains "$TMPFILE"; then
