@@ -5434,7 +5434,7 @@ run_protocols() {
                add_proto_offered tls1_1 no
                if [[ -z $latest_supported ]]; then
                     outln
-                    fileout "$jsonID" "INFO" "is not offered"    # neither good or bad
+                    fileout "$jsonID" "INFO" "not offered"    # neither good or bad
                else
                     prln_svrty_critical " -- connection failed rather than downgrading to $latest_supported_string"
                     fileout "$jsonID" "CRITICAL" "connection failed rather than downgrading to $latest_supported_string"
@@ -5470,7 +5470,7 @@ run_protocols() {
                fileout "$jsonID" "WARN" "TLS downgraded to STARTTLS plaintext"
                ;;
           4)   out "likely not offered, "
-               fileout "$jsonID" "INFO" "is not offered"
+               fileout "$jsonID" "INFO" "not offered"
                add_proto_offered tls1_1 no
                pr_warning "received 4xx/5xx after STARTTLS handshake"; outln "$debug_recomm"
                fileout "$jsonID" "WARN" "received 4xx/5xx after STARTTLS handshake${debug_recomm}"
