@@ -75,8 +75,6 @@
 "X-Frame-Options","testssl.sh/81.169.166.184","443","OK","DENY","",""
 "X-Content-Type-Options","testssl.sh/81.169.166.184","443","OK","nosniff","",""
 "Content-Security-Policy","testssl.sh/81.169.166.184","443","OK","script-src 'unsafe-inline'; style-src 'unsafe-inline' 'self'; default-src 'self' ; child-src 'none'; object-src 'self'; frame-ancestors 'self'; upgrade-insecure-requests","",""
-"Expect-CT","testssl.sh/81.169.166.184","443","OK","max-age=86400, enforce","",""
-"X-XSS-Protection","testssl.sh/81.169.166.184","443","INFO","1; mode=block","",""
 "banner_reverseproxy","testssl.sh/81.169.166.184","443","INFO","--","","CWE-200"
 "heartbleed","testssl.sh/81.169.166.184","443","OK","not vulnerable, no heartbeat extension","CVE-2014-0160","CWE-119"
 "CCS","testssl.sh/81.169.166.184","443","OK","not vulnerable","CVE-2014-0224","CWE-310"

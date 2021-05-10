@@ -7,8 +7,9 @@ assignees: ''
 
 ---
 
-_**Please don't remove this template. We would like to reproduce the bug and need concise information. **_
+_**Fee free to remove this line but please stick to this template. We would like to reproduce the bug and need concise information. **_
 
+**Please check this repo whether this is a known issue**
 
 **Command line / docker command to reproduce**
 In addition the target of your scan would be helpful. If you don't want to disclose it publicly: ``grep SWCONTACT testssl.sh``.

@@ -88,7 +88,7 @@ Support for 2.9.5 has been dropped. Supported is >= 3.0.x only.
 
 ### Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/blob/3.1dev/CONTRIBUTING.md) for details. Please also have a look at the [Coding Convention](https://github.com/drwetter/testssl.sh/blob/3.1dev/Coding_Convention.md}.
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/testssl.sh/blob/3.1dev/CONTRIBUTING.md) for details. Please also have a look at the [Coding Convention](https://github.com/drwetter/testssl.sh/blob/3.1dev/Coding_Convention.md).
 
 ### Bug reports
 
@@ -106,6 +106,7 @@ You can also debug yourself, see [here](https://github.com/drwetter/testssl.sh/w
 Please address questions not specifically to the code of testssl.sh to the respective projects below.
 
 #### Web frontend
+* https://github.com/johannesschaefer/webnettools
 * https://github.com/TKCERT/testssl.sh-webfrontend
 
 #### Free to use Web frontend + commercial API
@@ -134,3 +135,6 @@ Please address questions not specifically to the code of testssl.sh to the respe
 
 #### Daemon for batch processing of testssl.sh JSON result files for sending Slack alerts, reactive copying etc
 * https://github.com/bitsofinfo/testssl.sh-alerts
+
+#### GitHub Actions
+* https://github.com/marketplace/actions/testssl-sh-scan

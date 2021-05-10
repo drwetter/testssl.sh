@@ -234,6 +234,7 @@ SSL_RENEG_ATTEMPTS=${SSL_RENEG_ATTEMPTS:-6}       # number of times to check SSL
 
 ########### Initialization part, further global vars just being declared here
 #
+LC_COLLATE=en_US.UTF-8                  # ensures certain regex patterns work as expected and aren't localized, see #1860
 SYSTEM2=""                              # currently only being used for WSL = bash on windows
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 CIPHERS_BY_STRENGTH_FILE=""
@@ -251,6 +252,10 @@ GIVE_HINTS=false                        # give an additional info to findings
 SERVER_SIZE_LIMIT_BUG=false             # Some servers have either a ClientHello total size limit or a 128 cipher limit (e.g. old ASAs)
 MULTIPLE_CHECKS=false                   # need to know whether an MX record or a hostname resolves to multiple IPs to check
 CHILD_MASS_TESTING=${CHILD_MASS_TESTING:-false}
+PARENT_LOGFILE=""                       # logfile if mass testing and all output sent to a single file
+PARENT_JSONFILE=""                      # jsonfile if mass testing and all output sent to a single file
+PARENT_CSVFILE=""                       # csvfile if mass testing and all output sent to a single file
+PARENT_HTMLFILE=""                      # HTML if mass testing and all output sent to a single file
 TIMEOUT_CMD=""
 HAD_SLEPT=0
 NR_SOCKET_FAIL=0                        # Counter for socket failures
@@ -273,7 +278,8 @@ declare -r ALPN_PROTOs="h2 spdy/3.1 http/1.1 grpc-exp h2-fb spdy/1 spdy/2 spdy/3
 TEMPDIR=""
 TMPFILE=""
 ERRFILE=""
-CLIENT_AUTH=false
+CLIENT_AUTH="none"
+CLIENT_AUTH_CA_LIST=""
 TLS_TICKETS=false
 NO_SSL_SESSIONID=false
 CERT_COMPRESSION=${CERT_COMPRESSION:-false}  # secret flag to set in addition to --devel for certificate compression
@@ -352,6 +358,7 @@ HAS_IDN=false
 HAS_IDN2=false
 HAS_AVAHIRESOLVE=false
 HAS_DIG_NOIDNOUT=false
+HAS_XXD=false
 
 OSSL_CIPHERS_S=""
 PORT=443                                # unless otherwise auto-determined, see below
@@ -777,15 +784,6 @@ debugme1() { [[ "$DEBUG" -ge 2 ]] && "$@"; }
 
 hex2dec() {
      echo $((16#$1))
-}
-
-# convert 414243 into ABC
-hex2ascii() {
-          for (( i=0; i<${#1}; i+=2 )); do
-               # 2>/dev/null added because 'warning: command substitution: ignored null byte in input'
-               # --> didn't help though
-               printf "\x${1:$i:2}" 2>/dev/null
-          done
 }
 
 # convert decimal number < 256 to hex
@@ -1343,6 +1341,10 @@ json_header() {
      local fname_prefix
      local filename_provided=false
 
+     if [[ -n "$PARENT_JSONFILE" ]]; then
+          [[ -n "$JSONFILE" ]] && fatal "Can't write to both $PARENT_JSONFILE and $JSONFILE"
+          JSONFILE="$PARENT_JSONFILE"
+     fi
      [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && filename_provided=true
      # Similar to HTML: Don't create headers and footers in the following scenarios:
      #  * no JSON/CSV output is being created.
@@ -1350,7 +1352,7 @@ json_header() {
      #  * this is an individual test within a mass test and all output is being placed in a single file.
      ! "$do_json" && ! "$do_pretty_json" && JSONHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && JSONHEADER=false && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && JSONHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && [[ -n "$PARENT_JSONFILE" ]] && JSONHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1390,11 +1392,15 @@ csv_header() {
      local fname_prefix
      local filename_provided=false
 
+     if [[ -n "$PARENT_CSVFILE" ]]; then
+          [[ -n "$CSVFILE" ]] && fatal "Can't write to both $PARENT_CSVFILE and $CSVFILE"
+          CSVFILE="$PARENT_CSVFILE"
+     fi
      [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && filename_provided=true
      # CSV similar to JSON
      ! "$do_csv" && CSVHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && CSVHEADER=false && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && CSVHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && [[ -n "$PARENT_CSVFILE" ]] && CSVHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1440,6 +1446,10 @@ html_header() {
      local fname_prefix
      local filename_provided=false
 
+     if [[ -n "$PARENT_HTMLFILE" ]]; then
+          [[ -n "$HTMLFILE" ]] && fatal "Can't write to both $PARENT_HTMLFILE and $HTMLFILE"
+          HTMLFILE="$PARENT_HTMLFILE"
+     fi
      [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && filename_provided=true
      # Don't create HTML headers and footers in the following scenarios:
      #  * HTML output is not being created.
@@ -1447,7 +1457,7 @@ html_header() {
      #  * this is an individual test within a mass test and all HTML output is being placed in a single file.
      ! "$do_html" && HTMLHEADER=false && return 0
      "$do_mass_testing" && ! "$filename_provided" && HTMLHEADER=false && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && HTMLHEADER=false && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && [[ -n "$PARENT_HTMLFILE" ]] && HTMLHEADER=false && return 0
 
      if "$do_display_only"; then
           fname_prefix="local-ciphers"
@@ -1515,12 +1525,16 @@ prepare_logging() {
      local fname_prefix="$1"
      local filename_provided=false
 
+     if [[ -n "$PARENT_LOGFILE" ]]; then
+          [[ -n "$LOGFILE" ]] && fatal "Can't write to both $PARENT_LOGFILE and $LOGFILE"
+          LOGFILE="$PARENT_LOGFILE"
+     fi
      [[ -n "$LOGFILE" ]] && [[ ! -d "$LOGFILE" ]] && filename_provided=true
 
      # Similar to html_header():
      ! "$do_logging" && return 0
      "$do_mass_testing" && ! "$filename_provided" && return 0
-     "$CHILD_MASS_TESTING" && "$filename_provided" && return 0
+     "$CHILD_MASS_TESTING" && "$filename_provided" && [[ -n "$PARENT_LOGFILE" ]] && return 0
 
      [[ -z "$fname_prefix" ]] && fname_prefix="${FNAME_PREFIX}${NODE}_p${PORT}"
 
@@ -1945,7 +1959,7 @@ check_revocation_ocsp() {
      grep -q "\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-" $TEMPDIR/intermediatecerts.pem || return 0
      tmpfile=$TEMPDIR/${NODE}-${NODEIP}.${uri##*\/} || exit $ERR_FCREATE
      if [[ -n "$stapled_response" ]]; then
-          asciihex_to_binary "$stapled_response" > "$TEMPDIR/stapled_ocsp_response.dd"
+          hex2binary "$stapled_response" > "$TEMPDIR/stapled_ocsp_response.dd"
           $OPENSSL ocsp -no_nonce -respin "$TEMPDIR/stapled_ocsp_response.dd" \
                -issuer $TEMPDIR/hostcert_issuer.pem -verify_other $TEMPDIR/intermediatecerts.pem \
                -CAfile <(cat $ADDTL_CA_FILES "$GOOD_CA_BUNDLE") -cert $HOSTCERT -text &> "$tmpfile"
@@ -2056,33 +2070,39 @@ fi
 
 
 # Print $arg1 in binary format. arg1: An ASCII-HEX string
-#
-asciihex_to_binary() {
-     local string="$1"
-     local -i len
-     local -i i ip2 ip4 ip6 ip8 ip10 ip12 ip14
-     local -i remainder
+# The string represented by $arg1 may be binary data (a certificate or public
+# key) or a text string (e.g., ASCII-encoded text).
+hex2binary() {
+     local s="$1"
+     local -i i len remainder
 
-     len=${#string}
+     len=${#s}
      [[ $len%2 -ne 0 ]] && return 1
 
-     for (( i=0; i <= len-16 ; i+=16 )); do
-          ip2=$((i+2)); ip4=$((i+4)); ip6=$((i+6)); ip8=$((i+8)); ip10=$((i+10)); ip12=$((i+12)); ip14=$((i+14))
-          printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}\x${string:ip14:2}"
-     done
+     if "$HAS_XXD"; then
+          xxd -r -p <<< "$s"
+     else
+          for (( i=0; i <= len-16 ; i+=16 )); do
+               printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}\x${s:$((i+8)):2}\x${s:$((i+10)):2}\x${s:$((i+12)):2}\x${s:$((i+14)):2}"
+          done
 
-     ip2=$((i+2)); ip4=$((i+4)); ip6=$((i+6)); ip8=$((i+8)); ip10=$((i+10)); ip12=$((i+12)); ip14=$((i+14))
-     remainder=$len-$i
-     case $remainder in
-           2) printf -- "\x${string:i:2}" ;;
-           4) printf -- "\x${string:i:2}\x${string:ip2:2}" ;;
-           6) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}" ;;
-           8) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}" ;;
-          10) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}" ;;
-          12) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}" ;;
-          14) printf -- "\x${string:i:2}\x${string:ip2:2}\x${string:ip4:2}\x${string:ip6:2}\x${string:ip8:2}\x${string:ip10:2}\x${string:ip12:2}" ;;
-     esac
+          remainder=$((len-i))
+          case $remainder in
+                2) printf -- "\x${s:i:2}" ;;
+                4) printf -- "\x${s:i:2}\x${s:$((i+2)):2}" ;;
+                6) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}" ;;
+                8) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}" ;;
+               10) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}\x${s:$((i+8)):2}" ;;
+               12) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}\x${s:$((i+8)):2}\x${s:$((i+10)):2}" ;;
+               14) printf -- "\x${s:i:2}\x${s:$((i+2)):2}\x${s:$((i+4)):2}\x${s:$((i+6)):2}\x${s:$((i+8)):2}\x${s:$((i+10)):2}\x${s:$((i+12)):2}" ;;
+          esac
+     fi
      return 0
+}
+
+# convert 414243 into ABC
+hex2ascii() {
+     hex2binary $1
 }
 
 # arg1: text string
@@ -2210,7 +2230,7 @@ s_client_options() {
 service_detection() {
      local -i was_killed
 
-     if ! "$CLIENT_AUTH"; then
+     if [[ "$CLIENT_AUTH" != required ]]; then
           if ! "$HAS_TLS13" && "$TLS13_ONLY"; then
                # Using sockets is a lot slower than using OpenSSL, and it is
                # not as reliable, but if OpenSSL can't connect to the server,
@@ -2259,7 +2279,7 @@ service_detection() {
                out " $SERVICE, thus skipping HTTP specific checks"
                fileout "${jsonID}" "INFO" "$SERVICE, thus skipping HTTP specific checks"
                ;;
-          *)   if "$CLIENT_AUTH"; then
+          *)   if [[ "$CLIENT_AUTH" == required ]]; then
                     out " certificate-based authentication => skipping all HTTP checks"
                     echo "certificate-based authentication => skipping all HTTP checks" >$TMPFILE
                     fileout "${jsonID}" "INFO" "certificate-based authentication => skipping all HTTP checks"
@@ -2481,7 +2501,7 @@ run_http_date() {
      local spaces="                              "
      jsonID="HTTP_clock_skew"
 
-     if [[ $SERVICE != HTTP ]] || "$CLIENT_AUTH"; then
+     if [[ $SERVICE != HTTP ]] || [[ "$CLIENT_AUTH" == required ]]; then
           return 0
      fi
      if [[ ! -s $HEADERFILE ]]; then
@@ -3430,7 +3450,7 @@ rfc2hexcode() {
      local -i i
 
      for (( i=0; i < TLS_NR_CIPHERS; i++ )); do
-          [[ "$1" == "${TLS_CIPHER_RFC_NAME[i]}" ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
+          [[ "$1" == ${TLS_CIPHER_RFC_NAME[i]} ]] && hexc="${TLS_CIPHER_HEXCODE[i]}" && break
      done
      [[ -z "$hexc" ]] && return 1
      tm_out "$hexc"
@@ -6430,7 +6450,7 @@ sub_session_resumption() {
                return 1
           fi
      fi
-     "$CLIENT_AUTH" && return 6
+     [[ "$CLIENT_AUTH" == required ]] && return 6
      if ! "$HAS_TLS13" && "$HAS_NO_SSL2"; then
           addcmd+=" -no_ssl2"
      else
@@ -7028,7 +7048,7 @@ cipher_pref_check() {
                [[ $? -ne 0 ]] && break
                cipher=$(get_cipher "$TEMPDIR/$NODEIP.parse_tls_serverhello.txt")
                for (( i=bundle*bundle_size; i < end_of_bundle; i++ )); do
-                    [[ "$cipher" == "${rfc_ciph[i]}" ]] && ciphers_found2[i]=true && break
+                    [[ "$cipher" == ${rfc_ciph[i]} ]] && ciphers_found2[i]=true && break
                done
                i=${index[i]}
                ciphers_found[i]=true
@@ -8257,7 +8277,7 @@ compare_server_name_to_cert() {
                                                   j+=2
                                              fi
                                              if [[ $len1 -ne 0 ]]; then
-                                                  san="$(asciihex_to_binary "${dercert:j:len1}")"
+                                                  san="$(hex2binary "${dercert:j:len1}")"
                                                   if [[ "${dercert:i:20}" == "06082B06010505070805" ]]; then
                                                        xmppaddr+="$san "
                                                   else
@@ -8423,7 +8443,7 @@ etsi_ets_visibility_info() {
                               # Next is the 10-byte fingerprint, encoded as an OCTET STRING (04)
                               [[ "${dercert:j:4}" == 040A ]] || continue
                               j+=4
-                              fingerprint[nr_visnames]="$(asciihex_to_binary "${dercert:j:20}")"
+                              fingerprint[nr_visnames]="$(hex2binary "${dercert:j:20}")"
                               j+=20
                               # Finally comes the access description, encoded as a UTF8String (0C).
                               [[ "${dercert:j:2}" == 0C ]] || continue
@@ -8440,7 +8460,7 @@ etsi_ets_visibility_info() {
                                    len1=2*0x${dercert:j:2}
                                    j+=2
                               fi
-                              access_description[nr_visnames]=""$(asciihex_to_binary "${dercert:j:len1}")""
+                              access_description[nr_visnames]=""$(hex2binary "${dercert:j:len1}")""
                               nr_visnames+=1
                          done
                     fi
@@ -8597,7 +8617,7 @@ certificate_transparency() {
           fi
      fi
 
-     if [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH"; then
+     if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]]; then
           # At the moment Certificate Transparency only applies to HTTPS.
           tm_out "N/A"
      else
@@ -8992,7 +9012,7 @@ certificate_info() {
           "DH")  if [[ -s "$common_primes_file" ]]; then
                       cert_spki_info="${cert_txt##*Subject Public Key Info:}"
                       cert_spki_info="${cert_spki_info##*Public Key Algorithm:}"
-                      cert_spki_info="$(awk '/prime:|prime P:/,/generator:|generator G:/' <<< "$cert_spki_info" | grep -Ev "prime|generator")"
+                      cert_spki_info="$(awk '/prime:|P:/,/generator:|G:/' <<< "$cert_spki_info" | grep -Ev "prime|P:|generator|G:")"
                       cert_spki_info="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$cert_spki_info")")")"
                       [[ "${cert_spki_info:0:2}" == 00 ]] && cert_spki_info="${cert_spki_info:2}"
                       cert_spki_info="$(toupper "$cert_spki_info")"
@@ -9320,7 +9340,7 @@ certificate_info() {
 
      # We adjust the thresholds by %50 for LE certificates, relaxing warnings for those certificates.
      # . instead of \' because it does not break syntax highlighting in vim
-     if [[ "$issuer_CN" =~ ^Let.s\ Encrypt\ Authority ]] ; then
+     if [[ "$issuer_O" =~ ^Let.s\ Encrypt ]] ; then
           days2warn2=$((days2warn2 / 2))
           days2warn1=$((days2warn1 / 2))
      fi
@@ -9725,7 +9745,7 @@ run_server_defaults() {
      local -a ocsp_response_binary ocsp_response ocsp_response_status sni_used tls_version ct
      local -a ciphers_to_test certificate_type
      local -a -i success
-     local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions
+     local cn_nosni cn_sni sans_nosni sans_sni san tls_extensions client_auth_ca
      local using_sockets=true
      local spaces="                              "
 
@@ -10077,6 +10097,25 @@ run_server_defaults() {
      sub_mta_sts "$spaces"
      sub_dane "$spaces"
 
+     jsonID="clientAuth"
+     pr_bold " Client Authentication        "
+     outln "$CLIENT_AUTH"
+     fileout "$jsonID" "INFO" "$CLIENT_AUTH"
+     if [[ "$CLIENT_AUTH" != none ]]; then
+          jsonID="clientAuth_CA_list"
+          pr_bold " CA List for Client Auth      "
+          out_row_aligned "$CLIENT_AUTH_CA_LIST" "                              "
+          if [[ "$CLIENT_AUTH_CA_LIST" == empty ]] || [[ $(count_lines "$CLIENT_AUTH_CA_LIST") -eq 1 ]]; then
+               fileout "$jsonID" "INFO" "$CLIENT_AUTH_CA_LIST"
+          else
+               i=1
+               while read client_auth_ca; do
+                    fileout "$jsonID #$i" "INFO" "$client_auth_ca"
+                    i+=1
+               done <<< "$CLIENT_AUTH_CA_LIST"
+          fi
+     fi
+
      if [[ -n "$SNI" ]] && [[ $certs_found -ne 0 ]] && [[ ! -e $HOSTCERT.nosni ]]; then
           # no cipher suites specified here. We just want the default vhost subject
           if ! "$HAS_TLS13" && [[ $(has_server_protocol "tls1_3") -eq 0 ]]; then
@@ -10121,7 +10160,7 @@ run_server_defaults() {
           if $TLS13_ONLY; then
                generic_nonfatal "Client problem: We need openssl supporting TLS 1.3. We can't continue with \"server defaults\" as we cannot retrieve the certificate. "
           else
-               generic_nonfatal "Client problem, No server cerificate could be retrieved. Thus we can't continue with \"server defaults\"."
+               generic_nonfatal "Client problem: No server certificate could be retrieved. Thus we can't continue with \"server defaults\"."
           fi
      fi
      [[ $DEBUG -ge 1 ]] && [[ -e $HOSTCERT.nosni ]] && $OPENSSL x509 -in $HOSTCERT.nosni -text -noout 2>>$ERRFILE > $HOSTCERT.nosni.txt
@@ -11284,7 +11323,7 @@ get_pub_key_size() {
      "$HAS_PKEY" || return 1
 
      # OpenSSL displays the number of bits for RSA and ECC
-     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text 2>>$ERRFILE)
+     pubkeybits=$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | $OPENSSL pkey -pubin -text_pub 2>>$ERRFILE)
      if [[ "$pubkeybits" =~ E[Dd]25519 ]]; then
           echo "Server public key is 253 bit" >> $TMPFILE
           return 0
@@ -11534,7 +11573,7 @@ get_dh_ephemeralkey() {
           len1="82$(printf "%04x" $((i/2)))"
      fi
      key_bitstring="30${len1}${dh_param}${dh_y}"
-     key_bitstring="$(asciihex_to_binary "$key_bitstring" | $OPENSSL pkey -pubin -inform DER 2> $ERRFILE)"
+     key_bitstring="$(hex2binary "$key_bitstring" | $OPENSSL pkey -pubin -inform DER 2> $ERRFILE)"
      [[ -z "$key_bitstring" ]] && return 1
      tm_out "$key_bitstring"
      return 0
@@ -11639,7 +11678,7 @@ parse_sslv2_serverhello() {
           certificate_len=2*$(hex2dec "$v2_hello_cert_length")
 
           if [[ "$v2_cert_type" == "01" ]] && [[ "$v2_hello_cert_length" != "00" ]]; then
-               asciihex_to_binary "${v2_hello_ascii:26:certificate_len}" | \
+               hex2binary "${v2_hello_ascii:26:certificate_len}" | \
                     $OPENSSL x509 -inform DER -outform PEM -out $HOSTCERT 2>$ERRFILE
                if [[ $? -ne 0 ]]; then
                     debugme echo "Malformed certificate in ServerHello."
@@ -11672,11 +11711,11 @@ hmac() {
      local -i ret
 
      if [[ ! "$OSSL_NAME" =~ LibreSSL ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]]; then
-          output="$(asciihex_to_binary "$text" | $OPENSSL mac -macopt digest:"${hash_fn/-/}" -macopt hexkey:"$key" HMAC 2>/dev/null)"
+          output="$(hex2binary "$text" | $OPENSSL mac -macopt digest:"${hash_fn/-/}" -macopt hexkey:"$key" HMAC 2>/dev/null)"
           ret=$?
           tm_out "$(strip_lf "$output")"
      else
-          output="$(asciihex_to_binary "$text" | $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
+          output="$(hex2binary "$text" | $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
           ret=$?
           tm_out "${output#*= }"
      fi
@@ -11693,13 +11732,13 @@ hmac-transcript() {
      local -i ret
 
      if [[ ! "$OSSL_NAME" =~ LibreSSL ]] && [[ $OSSL_VER_MAJOR.$OSSL_VER_MINOR == 3.0.0* ]]; then
-          output="$(asciihex_to_binary "$transcript" | \
+          output="$(hex2binary "$transcript" | \
                     $OPENSSL dgst "$hash_fn" -binary 2>/dev/null | \
                     $OPENSSL mac -macopt digest:"${hash_fn/-/}" -macopt hexkey:"$key" HMAC 2>/dev/null)"
           ret=$?
           tm_out "$(toupper "$(strip_lf "$output")")"
      else
-          output="$(asciihex_to_binary "$transcript" | \
+          output="$(hex2binary "$transcript" | \
                     $OPENSSL dgst "$hash_fn" -binary 2>/dev/null | \
                     $OPENSSL dgst "$hash_fn" -mac HMAC -macopt hexkey:"$key" 2>/dev/null)"
           ret=$?
@@ -11793,7 +11832,7 @@ derive-secret() {
           *) return 7
      esac
 
-     hash_messages="$(asciihex_to_binary "$messages" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
+     hash_messages="$(hex2binary "$messages" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
      hash_messages="${hash_messages#*= }"
      hkdf-expand-label "$hash_fn" "$secret" "$label" "$hash_messages" "$hash_len"
      return $?
@@ -11838,7 +11877,7 @@ create-initial-transcript() {
           else
                return 1
           fi
-          hash_clienthello1="$(asciihex_to_binary "$clienthello1" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
+          hash_clienthello1="$(hex2binary "$clienthello1" | $OPENSSL dgst "$hash_fn" 2>/dev/null)"
           hash_clienthello1="${hash_clienthello1#*= }"
           msg_transcript="FE0000$(printf "%02x" $((${#hash_clienthello1}/2)))$hash_clienthello1$hrr$clienthello2$serverhello"
      else
@@ -12233,7 +12272,7 @@ chacha20() {
      local keystream plaintext=""
 
      if "$HAS_CHACHA20"; then
-          plaintext="$(asciihex_to_binary "$ciphertext" | \
+          plaintext="$(hex2binary "$ciphertext" | \
                        $OPENSSL enc -chacha20 -K "$key" -iv "01000000$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           tm_out "$(strip_spaces "$plaintext")"
           return 0
@@ -12488,17 +12527,17 @@ chacha20_aead_encrypt() {
 # See Section 6.1, Section 6.2, and Appendix A.3 of NIST SP 800-38C and
 # Section 5.3 of RFC 5116.
 generate-ccm-counter-blocks() {
-     local ctr="02${1}000000" ctr_msb ctr_lsb1
+     local ctr="02${1}000000" ctr_msb blocks=""
      local -i i ctr_lsb n="$2"
 
      ctr_msb="${ctr:0:24}"
      ctr_lsb=0x${ctr:24:8}
 
      for (( i=0; i <= n; i+=1 )); do
-          ctr_lsb1="$(printf "%08X" "$ctr_lsb")"
-          printf "\x${ctr_msb:0:2}\x${ctr_msb:2:2}\x${ctr_msb:4:2}\x${ctr_msb:6:2}\x${ctr_msb:8:2}\x${ctr_msb:10:2}\x${ctr_msb:12:2}\x${ctr_msb:14:2}\x${ctr_msb:16:2}\x${ctr_msb:18:2}\x${ctr_msb:20:2}\x${ctr_msb:22:2}\x${ctr_lsb1:0:2}\x${ctr_lsb1:2:2}\x${ctr_lsb1:4:2}\x${ctr_lsb1:6:2}"
+          blocks+="${ctr_msb}$(printf "%08X" "$ctr_lsb")"
           ctr_lsb+=1
      done
+     hex2binary "$blocks"
      return 0
 }
 
@@ -12574,8 +12613,7 @@ ccm-compute-tag() {
           [[ $i -ne 0 ]] &&
                tag="$(printf "%08X%08X%08X%08X" "$((0x${b:0:8} ^ 0x${tag:0:8}))" "$((0x${b:8:8} ^ 0x${tag:8:8}))" "$((0x${b:16:8} ^ 0x${tag:16:8}))" "$((0x${b:24:8} ^ 0x${tag:24:8}))")"
 
-          tag="$(printf "\x${tag:0:2}\x${tag:2:2}\x${tag:4:2}\x${tag:6:2}\x${tag:8:2}\x${tag:10:2}\x${tag:12:2}\x${tag:14:2}\x${tag:16:2}\x${tag:18:2}\x${tag:20:2}\x${tag:22:2}\x${tag:24:2}\x${tag:26:2}\x${tag:28:2}\x${tag:30:2}" | $OPENSSL enc "$cipher" -K "$key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
-
+          tag="$(hex2binary "$tag" | $OPENSSL enc "$cipher" -K "$key" -nopad 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           b="${b:32}"
      done
 
@@ -12777,13 +12815,13 @@ gcm_mult() {
 generate_gcm_ctr() {
      local -i nr_blocks="$1"
      local nonce="$2"
-     local i
-     local lsb ctr=""
+     local -i i
+     local ctr=""
 
      for (( i=1; i <= nr_blocks; i++ )); do
-          lsb="$(printf "%08X" "$i")"
-          printf "\x${nonce:0:2}\x${nonce:2:2}\x${nonce:4:2}\x${nonce:6:2}\x${nonce:8:2}\x${nonce:10:2}\x${nonce:12:2}\x${nonce:14:2}\x${nonce:16:2}\x${nonce:18:2}\x${nonce:20:2}\x${nonce:22:2}\x${lsb:0:2}\x${lsb:2:2}\x${lsb:4:2}\x${lsb:6:2}"
+          ctr+="${nonce}$(printf "%08X" "$i")"
      done
+     hex2binary "$ctr"
      return 0
 }
 
@@ -12942,12 +12980,12 @@ gcm-decrypt() {
      [[ ${#nonce} -ne 24 ]] && return 7
 
      if [[ "$cipher" == TLS_AES_128_GCM_SHA256 ]] && "$HAS_AES128_GCM" && ! "$compute_tag"; then
-          plaintext="$(asciihex_to_binary "$ciphertext" | \
+          plaintext="$(hex2binary "$ciphertext" | \
                        $OPENSSL enc -aes-128-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           tm_out "$(strip_spaces "$plaintext")"
           return 0
      elif [[ "$cipher" == TLS_AES_256_GCM_SHA384 ]] && "$HAS_AES256_GCM" && ! "$compute_tag"; then
-          plaintext="$(asciihex_to_binary "$ciphertext" | \
+          plaintext="$(hex2binary "$ciphertext" | \
                        $OPENSSL enc -aes-256-gcm -K "$key" -iv "$nonce" 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
           tm_out "$(strip_spaces "$plaintext")"
           return 0
@@ -13629,7 +13667,7 @@ parse_tls_serverhello() {
                     tls_certificate_ascii_len=2*0x${tls_handshake_ascii:offset:6}
                     offset=$((i+16))
                     len1=$((msg_len-16))
-                    tls_certificate_ascii="$(asciihex_to_binary "${tls_handshake_ascii:offset:len1}" | $OPENSSL zlib -d 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
+                    tls_certificate_ascii="$(hex2binary "${tls_handshake_ascii:offset:len1}" | $OPENSSL zlib -d 2>/dev/null | hexdump -v -e '16/1 "%02X"')"
                     tls_certificate_ascii="${tls_certificate_ascii%%[!0-9A-F]*}"
                     if [[ ${#tls_certificate_ascii} -ne $tls_certificate_ascii_len ]]; then
                          debugme tmln_warning "Length of uncompressed certificates did not match specified length."
@@ -13817,7 +13855,7 @@ parse_tls_serverhello() {
                                     return 1
                                fi
                                offset=$((offset+2))
-                               asciihex_to_binary "${tls_serverhello_ascii:offset:j}" >> "$TMPFILE"
+                               hex2binary "${tls_serverhello_ascii:offset:j}" >> "$TMPFILE"
                                echo "" >> $TMPFILE
                                echo "===============================================================================" >> $TMPFILE
                           fi
@@ -13913,7 +13951,7 @@ parse_tls_serverhello() {
                                     key_bitstring="3082${len1}$key_bitstring"
                                fi
                                if [[ -n "$key_bitstring" ]]; then
-                                    key_bitstring="$(asciihex_to_binary "$key_bitstring" | $OPENSSL pkey -pubin -inform DER 2>$ERRFILE)"
+                                    key_bitstring="$(hex2binary "$key_bitstring" | $OPENSSL pkey -pubin -inform DER 2>$ERRFILE)"
                                     if [[ -z "$key_bitstring" ]] && [[ $DEBUG -ge 2 ]]; then
                                          if [[ -n "$named_curve_str" ]]; then
                                               prln_warning "Your $OPENSSL doesn't support $named_curve_str"
@@ -13960,7 +13998,7 @@ parse_tls_serverhello() {
                                          return 1
                                     fi
                                     offset=$((offset+2))
-                                    asciihex_to_binary "${tls_serverhello_ascii:offset:protocol_len}" >> "$TMPFILE"
+                                    hex2binary "${tls_serverhello_ascii:offset:protocol_len}" >> "$TMPFILE"
                                     offset=$((offset+protocol_len))
                                     [[ $j+$protocol_len+2 -lt $extension_len ]] && echo -n ", " >> $TMPFILE
                                done
@@ -14217,7 +14255,7 @@ parse_tls_serverhello() {
                tmpfile_handle ${FUNCNAME[0]}.txt
                return 1
           fi
-          asciihex_to_binary "${tls_certificate_ascii:12:certificate_len}" | \
+          hex2binary "${tls_certificate_ascii:12:certificate_len}" | \
                $OPENSSL x509 -inform DER -outform PEM -out "$HOSTCERT" 2>$ERRFILE
           if [[ $? -ne 0 ]]; then
                debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
@@ -14251,7 +14289,7 @@ parse_tls_serverhello() {
                     tmpfile_handle ${FUNCNAME[0]}.txt
                     return 1
                fi
-               pem_certificate="$(asciihex_to_binary "${tls_certificate_ascii:i:certificate_len}" | \
+               pem_certificate="$(hex2binary "${tls_certificate_ascii:i:certificate_len}" | \
                                   $OPENSSL x509 -inform DER -outform PEM 2>$ERRFILE)"
                if [[ $? -ne 0 ]]; then
                     debugme echo "Malformed certificate in Certificate Handshake message in ServerHello."
@@ -14319,10 +14357,10 @@ parse_tls_serverhello() {
           echo "OCSP response:" >> $TMPFILE
           echo "===============================================================================" >> $TMPFILE
           if [[ -n "$hostcert_issuer" ]]; then
-               asciihex_to_binary "$STAPLED_OCSP_RESPONSE" | \
+               hex2binary "$STAPLED_OCSP_RESPONSE" | \
                     $OPENSSL ocsp -no_nonce -CAfile $TEMPDIR/intermediatecerts.pem -issuer $hostcert_issuer -cert $HOSTCERT -respin /dev/stdin -resp_text >> $TMPFILE 2>$ERRFILE
           else
-               asciihex_to_binary "$STAPLED_OCSP_RESPONSE" | \
+               hex2binary "$STAPLED_OCSP_RESPONSE" | \
                     $OPENSSL ocsp -respin /dev/stdin -resp_text >> $TMPFILE 2>$ERRFILE
           fi
           echo "===============================================================================" >> $TMPFILE
@@ -14448,9 +14486,18 @@ parse_tls_serverhello() {
                esac
                [[ -z "$key_bitstring" ]] && named_curve=0 && named_curve_str=""
                if "$HAS_PKEY" && [[ $named_curve -ne 0 ]] && [[ "${TLS13_KEY_SHARES[named_curve]}" =~ BEGIN ]]; then
-                    ephemeral_param="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | grep -EA 1000 "prime:|prime P:")"
-                    rfc7919_param="$($OPENSSL pkey -text -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -EA 1000 "prime:|prime P:")"
-                    [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
+                    ephemeral_param="$($OPENSSL pkey -pubin -text_pub -noout 2>>$ERRFILE <<< "$key_bitstring")"
+                    # OpenSSL 3.0.0 outputs the group name rather than the actual parameter values for some named groups.
+                    if [[ "$ephemeral_param" =~ GROUP: ]]; then
+                         ephemeral_param="${ephemeral_param#*GROUP: }"
+                         rfc7919_param="${named_curve_str# }"
+                         rfc7919_param="${rfc7919_param%,}"
+                         [[ "$ephemeral_param" =~ $rfc7919_param ]] || named_curve_str=""
+                    else
+                       ephemeral_param="$(grep -EA 1000 "prime:|P:" <<< "$ephemeral_param")"
+                       rfc7919_param="$($OPENSSL pkey -text_pub -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -EA 1000 "prime:|P:")"
+                       [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
+                    fi
                fi
 
                [[ $DEBUG -ge 3 ]] && [[ $dh_bits -ne 0 ]] && echo -e "     dh_bits:                DH,$named_curve_str $dh_bits bits"
@@ -15692,7 +15739,7 @@ receive_app_data() {
           [[ -z "$ciphertext" ]] && break
      done
      APP_TRAF_KEY_INFO="$tls_version $cipher $server_key $server_iv $server_seq $client_key $client_iv $client_seq"
-     asciihex_to_binary "$plaintext" > "$TMPFILE"
+     hex2binary "$plaintext" > "$TMPFILE"
      return 0
 }
 
@@ -15787,16 +15834,16 @@ run_heartbleed(){
                          out "likely "
                          pr_svrty_critical "VULNERABLE (NOT ok)"
                          [[ $DEBUG -lt 3 ]] && tm_out ", use debug >=3 to confirm"
-                         fileout "$jsonID" "CRITICAL" "VULNERABLE $cve" "$cwe" "$hint"
+                         fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                     fi
                else
                     pr_svrty_critical "VULNERABLE (NOT ok)"
-                    fileout "$jsonID" "CRITICAL" "VULNERABLE $cve" "$cwe" "$hint"
+                    fileout "$jsonID" "CRITICAL" "VULNERABLE" "$cve" "$cwe" "$hint"
                     set_grade_cap "F" "Vulnerable to Heartbleed"
                fi
           else
                pr_svrty_best "not vulnerable (OK)"
-               fileout "$jsonID" "OK" "not vulnerable $cve" "$cwe"
+               fileout "$jsonID" "OK" "not vulnerable" "$cve" "$cwe"
           fi
      fi
      outln
@@ -16034,7 +16081,7 @@ run_ticketbleed() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for Ticketbleed vulnerability " && outln
      pr_bold " Ticketbleed"; out " ($cve), experiment.  "
 
-     if [[ "$SERVICE" != HTTP ]] && ! "$CLIENT_AUTH"; then
+     if [[ "$SERVICE" != HTTP ]] && [[ "$CLIENT_AUTH" != required ]]; then
           outln "--   (applicable only for HTTPS)"
           fileout "$jsonID" "INFO" "not applicable, not HTTP" "$cve" "$cwe"
           return 0
@@ -16364,7 +16411,7 @@ run_renego() {
           [[ $DEBUG -ge 1 ]] && out ", no renegotiation support in TLS 1.3 only servers"
           outln
           fileout "$jsonID" "OK" "not vulnerable, TLS 1.3 only" "$cve" "$cwe"
-     elif "$CLIENT_AUTH"; then
+     elif [[ "$CLIENT_AUTH" == required ]]; then
           prln_warning "client x509-based authentication prevents this from being tested"
           fileout "$jsonID" "WARN" "client x509-based authentication prevents this from being tested"
           sec_client_renego=1
@@ -16487,14 +16534,14 @@ run_crime() {
           ret=1
      elif grep -a Compression $TMPFILE | grep -aq NONE >/dev/null; then
           pr_svrty_good "not vulnerable (OK)"
-          if [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH";  then
+          if [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]];  then
                out " (not using HTTP anyway)"
                fileout "CRIME_TLS" "OK" "not vulnerable (not using HTTP anyway)" "$cve" "$cwe"
           else
                fileout "CRIME_TLS" "OK" "not vulnerable" "$cve" "$cwe"
           fi
      else
-          if [[ $SERVICE == HTTP ]] || "$CLIENT_AUTH"; then
+          if [[ $SERVICE == HTTP ]] || [[ "$CLIENT_AUTH" == required ]]; then
                pr_svrty_high "VULNERABLE (NOT ok)"
                fileout "CRIME_TLS" "HIGH" "VULNERABLE" "$cve" "$cwe" "$hint"
           else
@@ -16600,11 +16647,11 @@ run_breach() {
      local detected_compression=""
      local get_command=""
 
-     [[ $SERVICE != HTTP ]] && ! "$CLIENT_AUTH" && return 7
+     [[ $SERVICE != HTTP ]] && [[ "$CLIENT_AUTH" != required ]] && return 7
 
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for BREACH (HTTP compression) vulnerability " && outln
      pr_bold " BREACH"; out " ($cve)                    "
-     if "$CLIENT_AUTH"; then
+     if [[ "$CLIENT_AUTH" == required ]]; then
           outln "cannot be tested (server side requires x509 authentication)"
           fileout "$jsonID" "INFO" "was not tested, server side requires x509 authentication" "$cve" "$cwe"
      fi
@@ -17220,13 +17267,31 @@ get_common_prime() {
      local jsonID2="$1"
      local key_bitstring="$2"
      local spaces="$3"
-     local dh_p=""
+     local pubkey dh_p=""
      local -i subret=0
      local common_primes_file="$TESTSSL_INSTALL_DIR/etc/common-primes.txt"
      local -i lineno_matched=0
 
      "$HAS_PKEY" || return 2
-     dh_p="$($OPENSSL pkey -pubin -text -noout 2>>$ERRFILE <<< "$key_bitstring" | awk '/prime:|prime P:/,/generator:|generator G:/' | grep -Ev "prime|generator")"
+     pubkey="$($OPENSSL pkey -pubin -text_pub -noout 2>>$ERRFILE <<< "$key_bitstring")"
+     if [[ "$pubkey" =~ GROUP: ]]; then
+          DH_GROUP_OFFERED="${pubkey#*GROUP: }"
+          case "$DH_GROUP_OFFERED" in
+               modp_1536)   DH_GROUP_OFFERED="RFC3526/Oakley Group 5" ;;
+               modp_2048)   DH_GROUP_OFFERED="RFC3526/Oakley Group 14" ;;
+               modp_3072)   DH_GROUP_OFFERED="RFC3526/Oakley Group 15" ;;
+               modp_4096)   DH_GROUP_OFFERED="RFC3526/Oakley Group 16" ;;
+               modp_6144)   DH_GROUP_OFFERED="RFC3526/Oakley Group 17" ;;
+               modp_8192)   DH_GROUP_OFFERED="RFC3526/Oakley Group 18" ;;
+               dh_1024_160) DH_GROUP_OFFERED="RFC5114/1024-bit DSA group with 160-bit prime order subgroup" ;;
+               dh_2048_224) DH_GROUP_OFFERED="RFC5114/2048-bit DSA group with 224-bit prime order subgroup" ;;
+               dh_2048_256) DH_GROUP_OFFERED="RFC5114/2048-bit DSA group with 256-bit prime order subgroup" ;;
+          esac
+          pubkey="$(awk -F'(' '/Public-Key/ { print $2 }' <<< "$pubkey")"
+          DH_GROUP_LEN_P="${pubkey%% bit*}"
+          return 0
+     fi
+     dh_p="$(awk '/prime:|P:/,/generator:|G:/' <<< "$pubkey" | grep -Ev "prime|P:|generator|G:")"
      dh_p="$(strip_spaces "$(colon_to_spaces "$(newline_to_spaces "$dh_p")")")"
      [[ "${dh_p:0:2}" == "00" ]] && dh_p="${dh_p:2}"
      DH_GROUP_LEN_P="$((4*${#dh_p}))"
@@ -18972,7 +19037,7 @@ run_robot() {
                # <random> should be a length that makes total length of $padded_pms
                # the same as the length of the public key. <random> should contain no 00 bytes.
                pubkeybits="$($OPENSSL x509 -noout -pubkey -in $HOSTCERT 2>>$ERRFILE | \
-                             $OPENSSL pkey -pubin -text 2>>$ERRFILE | awk -F'(' '/Public-Key/ { print $2 }')"
+                             $OPENSSL pkey -pubin -text_pub 2>>$ERRFILE | awk -F'(' '/Public-Key/ { print $2 }')"
                pubkeybits="${pubkeybits%%bit*}"
                pubkeybytes=$pubkeybits/8
                [[ $((pubkeybits%8)) -ne 0 ]] && pubkeybytes+=1
@@ -18996,7 +19061,7 @@ run_robot() {
                esac
 
                # Encrypt the padded premaster secret using the server's public key.
-               encrypted_pms="$(asciihex_to_binary "$padded_pms" | \
+               encrypted_pms="$(hex2binary "$padded_pms" | \
                     $OPENSSL pkeyutl -encrypt -certin -inkey $HOSTCERT -pkeyopt rsa_padding_mode:none 2>/dev/null | \
                     hexdump -v -e '16/1 "%02x"')"
                if [[ -z "$encrypted_pms" ]]; then
@@ -19451,7 +19516,7 @@ find_socat() {
      if [[ $? -ne 0 ]]; then
           return 1
      else
-          if [[ -x $result ]] && $result -V | grep -iaq 'socat version' ; then
+          if [[ -x $result ]] && $result -V 2>&1 | grep -iaq 'socat version' ; then
                SOCAT=$result
                return 0
           fi
@@ -19749,6 +19814,7 @@ HAS_IDN: $HAS_IDN
 HAS_IDN2: $HAS_IDN2
 HAS_AVAHIRESOLVE: $HAS_AVAHIRESOLVE
 HAS_DIG_NOIDNOUT: $HAS_DIG_NOIDNOUT
+HAS_XXD: $HAS_XXD
 
 PATH: $PATH
 PROG_NAME: $PROG_NAME
@@ -20604,26 +20670,158 @@ check_proxy() {
      fi
 }
 
+# Given the ASCII-HEX of a DER-encoded distinguished name, return the string
+# representation of the name.
+print_dn() {
+     local dn="$1"
+     local cert name
+     local -i len
+
+     # Use $OPENSSL to print the DN by creating a certificate containing the DN
+     # as the issuer and then having $OPENSSL print the issuer field in the
+     # resulting certificate.
+
+     # Create the to-be-signed portion of the certificate: version || serialNumber || signature || issuer || validity || subject || subjectPublicKeyInfo
+     # with the DN to be printed being the issuer.
+     cert="A003020102020100300A06082A8648CE3D040302${dn}301E170D3139303830353038333030305A170D3139303830353038333030305A30003019301306072A8648CE3D020106082A8648CE3D030107030200FF"
+
+     # Make a SEQUENCE of the to-be-signed portion of the certificate.
+     len=$((${#cert}/2))
+     if [[ $len -lt 128 ]]; then
+          cert="30$(printf "%02x" $len)$cert"
+     elif [[ $len -lt 256 ]]; then
+          cert="3081$(printf "%02x" $len)$cert"
+     else
+          cert="3082$(printf "%04x" $len)$cert"
+     fi
+
+     # Append a signature algorithm and signature value to the end of the
+     # to-be-signed portion of the certificate and then make a SEQUENCE of
+     # the result.
+     cert+="300A06082A8648CE3D040302030200FF"
+     len=$((${#cert}/2))
+     if [[ $len -lt 128 ]]; then
+          cert="30$(printf "%02x" $len)$cert"
+     elif [[ $len -lt 256 ]]; then
+          cert="3081$(printf "%02x" $len)$cert"
+     else
+          cert="3082$(printf "%04x" $len)$cert"
+     fi
+     # Use the LDAP String Representation of Distinguished Names (RFC 2253),
+     # The current specification is in RFC 4514.
+     name="$(hex2binary "$cert" | $OPENSSL x509 -issuer -noout -inform DER -nameopt RFC2253 2>/dev/null)"
+     name="${name#issuer=}"
+     tm_out "$(strip_leading_space "$name")"
+     return 0
+}
+
+# Given the OpenSSL output of a response from a TLS server (with the -msg option)
+# in which the response includes a CertificateRequest message, return the list of
+# distinguished names that are in the CA list.
+extract_calist() {
+     local response="$1"
+     local is_tls13=false
+     local certreq calist="" certtypes sigalgs dn
+     local calist_string=""
+     local -i len type
+
+     # Determine whether this is a TLS 1.3 response, since the information
+     # is encoded in a different place for TLS 1.3.
+     [[ "$response" =~ \<\<\<\ TLS\ 1.3[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]] && is_tls13=true
+
+     # Extract just the CertificateRequest message as an ASCII-HEX string.
+     certreq="${response##*CertificateRequest}"
+     certreq="0d${certreq#*0d}"
+     certreq="${certreq%%<<<*}"
+     certreq="$(strip_spaces "$(newline_to_spaces "$certreq")")"
+     certreq="${certreq:8}"
+
+     # Get the list of DNs from the CertificateRequest message.
+     if "$is_tls13"; then
+          # struct {
+          #     opaque certificate_request_context<0..2^8-1>;
+          #     Extension extensions<2..2^16-1>;
+          # } CertificateRequest;
+          len=2*$(hex2dec "${certreq:0:2}")
+          certreq="${certreq:$((len+2))}"
+          len=2*$(hex2dec "${certreq:0:4}")
+          certreq="${certreq:4}"
+          while true; do
+               [[ -z "$certreq" ]] && break
+               type=$(hex2dec "${certreq:0:4}")
+               len=2*$(hex2dec "${certreq:4:4}")
+               if [[ $type -eq 47 ]]; then
+                  # This is the certificate_authorities extension
+                  calist="${certreq:8:len}"
+                  len=2*$(hex2dec "${calist:0:4}")
+                  calist="${calist:4:len}"
+                  break
+               fi
+               certreq="${certreq:$((len+8))}"
+          done
+     else
+          # struct {
+          #     ClientCertificateType certificate_types<1..2^8-1>;
+          #     SignatureAndHashAlgorithm
+          #     supported_signature_algorithms<2^16-1>;
+          #     DistinguishedName certificate_authorities<0..2^16-1>;
+          # } CertificateRequest;
+          len=2*$(hex2dec "${certreq:0:2}")
+          certtypes="${certreq:2:len}"
+          certreq="${certreq:$((len+2))}"
+          len=2*$(hex2dec "${certreq:0:4}")
+          sigalgs="${certreq:4:len}"
+          certreq="${certreq:$((len+4))}"
+          len=2*$(hex2dec "${certreq:0:4}")
+          calist="${certreq:4:len}"
+     fi
+     # Convert each DN to a string.
+     while true; do
+          [[ -z "$calist" ]] && break
+          len=2*$(hex2dec "${calist:0:4}")
+          dn="${calist:4:len}"
+          calist_string+="$(print_dn "$dn")\n"
+          calist="${calist:$((len+4))}"
+     done
+     [[ -z "$calist_string" ]] && calist_string="empty"
+     tm_out "$calist_string"
+     return 0
+}
 
 # this is only being called from determine_optimal_proto in order to check whether we have a server
 # with client authentication, a server with no SSL session ID switched off
 #
 sclient_auth() {
-     [[ $1 -eq 0 ]] && return 0                                            # no client auth (CLIENT_AUTH=false is preset globally)
-     if [[ -n $(awk '/Master-Key: / { print $2 }' "$2") ]]; then           # connect succeeded
-          if grep -q '^<<< .*CertificateRequest' "$2"; then                # CertificateRequest message in -msg
-               CLIENT_AUTH=true
+     local server_hello="$(cat -v "$2")"
+     local re='Master-Key: ([^\
+]*)'
+     local connect_success=false
+     
+     [[ $1 -eq 0 ]] && connect_success=true
+     ! "$connect_success" && [[ "$server_hello" =~ $re ]] && \
+          [[ -n "${BASH_REMATCH[1]}" ]] && connect_success=true
+     ! "$connect_success" && \
+          [[ "$server_hello" =~ (New|Reused)\,\ (SSLv[23]|TLSv1(\.[0-3])?(\/SSLv3)?)\,\ Cipher\ is\ ([A-Z0-9]+-[A-Za-z0-9\-]+|TLS_[A-Za-z0-9_]+) ]] && \
+          connect_success=true
+     if "$connect_success"; then
+          if [[ "$server_hello" =~ \<\<\<\ (SSL\ [23]|TLS\ 1)(\.[0-3])?[\,]?\ Handshake\ \[length\ [0-9a-fA-F]*\]\,\ CertificateRequest ]]; then
+               # CertificateRequest message in -msg
+               CLIENT_AUTH="required"
+               [[ $1 -eq 0 ]] && CLIENT_AUTH="optional"
+               CLIENT_AUTH_CA_LIST="$(extract_calist "$server_hello")"
                return 0
           fi
-          if [[ -z $(awk '/Session-ID: / { print $2 }' "$2") ]]; then      # probably no SSL session
-               if [[ 2 -eq $(grep -c CERTIFICATE "$2") ]]; then            # do another sanity check to be sure
-                    CLIENT_AUTH=false
-                    NO_SSL_SESSIONID=true                                  # NO_SSL_SESSIONID is preset globally to false for all other cases
+          [[ $1 -eq 0 ]] && return 0
+          if [[ ! "$server_hello" =~ Session-ID:\ [a-fA-F0-9]{2,64} ]]; then   # probably no SSL session
+               # do another sanity check to be sure
+               if [[ "$server_hello" =~ \-\-\-BEGIN\ CERTIFICATE\-\-\-.*\-\-\-END\ CERTIFICATE\-\-\- ]]; then 
+                    CLIENT_AUTH="none"
+                    NO_SSL_SESSIONID=true  # NO_SSL_SESSIONID is preset globally to false for all other cases
                     return 0
                fi
           fi
      fi
-     # what's left now is: master key empty, handshake returned not successful, session ID empty --> not successful
+     # what's left now is: no protocol and ciphersuite specified, handshake returned not successful, session ID empty --> not successful
      return 1
 }
 
@@ -21148,7 +21346,7 @@ run_mx_all_ips() {
           word="the only"
      fi
      mxport=${2:-25}
-     if [[ -n "$LOGFILE" ]]; then
+     if [[ -n "$LOGFILE" ]] || [[ -n "$PARENT_LOGFILE" ]]; then
           prepare_logging
      else
           prepare_logging "${FNAME_PREFIX}mx-$1"
@@ -21234,35 +21432,53 @@ create_mass_testing_cmdline() {
           elif [[ "$testing_type" == serial ]]; then
                if "$JSONHEADER" && ( [[ "$cmd" =~ --jsonfile-pretty ]] || [[ "$cmd" =~ -oJ ]] ); then
                     >"$TEMPDIR/jsonfile_child.json"
-                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty-parent=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
                     [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
                     [[ "$cmd" == -oJ ]] && skip_next=true
                elif "$JSONHEADER" && ( [[ "$cmd" =~ --jsonfile ]] || [[ "$cmd" =~ -oj ]] ); then
                     >"$TEMPDIR/jsonfile_child.json"
-                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-parent=$TEMPDIR/jsonfile_child.json"
                     # next is the jsonfile itself, as no '=' was supplied
                     [[ "$cmd" == --jsonfile ]] && skip_next=true
                     [[ "$cmd" == -oj ]] && skip_next=true
+               elif "$CSVHEADER" && ( [[ "$cmd" =~ --csvfile ]] || [[ "$cmd" =~ -oC ]] ); then
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$outfile_arg"
+                    # next is the filename itself, as no '=' was supplied
+                    [[ "$cmd" == --csvfile ]] && skip_next=true
+                    [[ "$cmd" == -oC ]] && skip_next=true
+               elif "$HTMLHEADER" && ( [[ "$cmd" =~ --htmlfile ]] || [[ "$cmd" =~ -oH ]] ); then
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$outfile_arg"
+                    # next is the filename itself, as no '=' was supplied
+                    [[ "$cmd" == --htmlfile ]] && skip_next=true
+                    [[ "$cmd" == -oH ]] && skip_next=true   
+               elif ( [[ "$cmd" =~ --logfile ]] || [[ "$cmd" =~ -oL ]] ); then
+                    outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--logfile-parent=$outfile_arg"
+                    # next is the filename itself, as no '=' was supplied
+                    [[ "$cmd" == --logfile ]] && skip_next=true
+                    [[ "$cmd" == -oL ]] && skip_next=true
                elif "$JSONHEADER" && ( [[ "$cmd" =~ --outFile ]] || [[ "$cmd" =~ -oA ]] ); then
                     outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
                     >"$TEMPDIR/jsonfile_child.json"
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oJ=$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty-parent=$TEMPDIR/jsonfile_child.json"
                     nr_cmds+=1
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oC=$outfile_arg.csv"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$outfile_arg.csv"
                     nr_cmds+=1
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oH=$outfile_arg.html"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$outfile_arg.html"
                     # next is the filename itself, as no '=' was supplied
                     [[ "$cmd" == --outFile ]] && skip_next=true
                     [[ "$cmd" == -oA ]] && skip_next=true
                elif "$JSONHEADER" && ( [[ "$cmd" =~ --outfile ]] || [[ "$cmd" =~ -oa ]] ); then
                     outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
                     >"$TEMPDIR/jsonfile_child.json"
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oj=$TEMPDIR/jsonfile_child.json"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-parent=$TEMPDIR/jsonfile_child.json"
                     nr_cmds+=1
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oC=$outfile_arg.csv"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$outfile_arg.csv"
                     nr_cmds+=1
-                    MASS_TESTING_CMDLINE[nr_cmds]="-oH=$outfile_arg.html"
+                    MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$outfile_arg.html"
                     # next is the filename itself, as no '=' was supplied
                     [[ "$cmd" == --outfile ]] && skip_next=true
                     [[ "$cmd" == -oa ]] && skip_next=true
@@ -21277,7 +21493,7 @@ create_mass_testing_cmdline() {
                          # file name to each child process. If <jsonfile> is a
                          # directory, then just pass it on to the child processes.
                          if "$JSONHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile=$TEMPDIR/jsonfile_${test_number}.json"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-parent=$TEMPDIR/jsonfile_${test_number}.json"
                               # next is the jsonfile itself, as no '=' was supplied
                               [[ "$cmd" == --jsonfile ]] && skip_next=true
                               [[ "$cmd" == -oj ]] && skip_next=true
@@ -21287,7 +21503,7 @@ create_mass_testing_cmdline() {
                          ;;
                     --jsonfile-pretty|--jsonfile-pretty=*|-oJ|-oJ=*)
                          if "$JSONHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty=$TEMPDIR/jsonfile_${test_number}.json"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty-parent=$TEMPDIR/jsonfile_${test_number}.json"
                               [[ "$cmd" == --jsonfile-pretty ]] && skip_next=true
                               [[ "$cmd" == -oJ ]] && skip_next=true
                          else
@@ -21296,7 +21512,7 @@ create_mass_testing_cmdline() {
                          ;;
                     --csvfile|--csvfile=*|-oC|-oC=*)
                          if "$CSVHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile=$TEMPDIR/csvfile_${test_number}.csv"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$TEMPDIR/csvfile_${test_number}.csv"
                               [[ "$cmd" == --csvfile ]] && skip_next=true
                               [[ "$cmd" == -oC ]] && skip_next=true
                          else
@@ -21305,20 +21521,26 @@ create_mass_testing_cmdline() {
                          ;;
                     --htmlfile|--htmlfile=*|-oH|-oH=*)
                          if "$HTMLHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile=$TEMPDIR/htmlfile_${test_number}.html"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$TEMPDIR/htmlfile_${test_number}.html"
                               [[ "$cmd" == --htmlfile ]] && skip_next=true
                               [[ "$cmd" == -oH ]] && skip_next=true
                          else
                               MASS_TESTING_CMDLINE[nr_cmds]="$cmd"
                          fi
                          ;;
+                    --logfile|--logfile=*|-oL|-oL=*)
+                         outfile_arg="$(parse_opt_equal_sign "$cmd" "${CMDLINE_ARRAY[i+1]}")"
+                         MASS_TESTING_CMDLINE[nr_cmds]="--logfile-parent=$outfile_arg"
+                         [[ "$cmd" == --logfile ]] && skip_next=true
+                         [[ "$cmd" == -oL ]] && skip_next=true
+                         ;;
                     --outfile|--outfile=*|-oa|-oa=*)
                          if "$JSONHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oj=$TEMPDIR/jsonfile_${test_number}.json"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-parent=$TEMPDIR/jsonfile_${test_number}.json"
                               nr_cmds+=1
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oC=$TEMPDIR/csvfile_${test_number}.csv"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$TEMPDIR/csvfile_${test_number}.csv"
                               nr_cmds+=1
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oH=$TEMPDIR/htmlfile_${test_number}.html"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$TEMPDIR/htmlfile_${test_number}.html"
                               # next is the filename itself, as no '=' was supplied
                               [[ "$cmd" == --outfile ]] && skip_next=true
                               [[ "$cmd" == -oa ]] && skip_next=true
@@ -21328,11 +21550,11 @@ create_mass_testing_cmdline() {
                          ;;
                     --outFile|--outFile=*|-oA|-oA=*)
                          if "$JSONHEADER"; then
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oJ=$TEMPDIR/jsonfile_${test_number}.json"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--jsonfile-pretty-parent=$TEMPDIR/jsonfile_${test_number}.json"
                               nr_cmds+=1
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oC=$TEMPDIR/csvfile_${test_number}.csv"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--csvfile-parent=$TEMPDIR/csvfile_${test_number}.csv"
                               nr_cmds+=1
-                              MASS_TESTING_CMDLINE[nr_cmds]="-oH=$TEMPDIR/htmlfile_${test_number}.html"
+                              MASS_TESTING_CMDLINE[nr_cmds]="--htmlfile-parent=$TEMPDIR/htmlfile_${test_number}.html"
                               # next is the filename itself, as no '=' was supplied
                               [[ "$cmd" == --outFile ]] && skip_next=true
                               [[ "$cmd" == -oA ]] && skip_next=true
@@ -22082,6 +22304,11 @@ check_base_requirements() {
                fatal "${binary} is from busybox. Please install a regular binary" $ERR_RESOURCE
           fi
      done
+     # testssl.sh works without xxd, but using xxd is faster. The following checks that the xxd
+     # binary is available and (just to be safe) that "xxd -r -p" works as expected.
+     if type -p xxd &> /dev/null && [[ "$(xxd -r -p <<< "30313233343536373839" 2>/dev/null)" == 0123456789 ]]; then
+          HAS_XXD=true
+     fi
 }
 
 parse_cmd_line() {
@@ -22429,6 +22656,15 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_logging=true
                     ;;
+               --logfile-parent|--logfile-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_LOGFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_logging=true
+                    ;;
                --json)
                     "$do_pretty_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     "$do_json" && fatal "--json and --jsonfile are mutually exclusive" $ERR_CMDLINE
@@ -22445,6 +22681,15 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_json=true
                     ;;
+               --jsonfile-parent|--jsonfile-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_json=true
+                    ;;
                --json-pretty)
                     "$do_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     "$do_pretty_json" && fatal "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
@@ -22457,6 +22702,15 @@ parse_cmd_line() {
                     "$do_json" && fatal "flat and pretty JSON output are mutually exclusive" $ERR_CMDLINE
                     "$do_pretty_json" && fatal "--json-pretty and --jsonfile-pretty are mutually exclusive" $ERR_CMDLINE
                     JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_pretty_json=true
+                    ;;
+               --jsonfile-pretty-parent|--jsonfile-pretty-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_JSONFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_pretty_json=true
                     ;;
@@ -22481,6 +22735,15 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     do_csv=true
                     ;;
+               --csvfile-parent|--csvfile-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_CSVFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_csv=true
+                    ;;
                --html)
                     "$do_html" && fatal "two --html* arguments" $ERR_CMDLINE
                     if [[ "$2" =~ \.(htm|html|HTM|HTML)$ ]]; then
@@ -22492,6 +22755,15 @@ parse_cmd_line() {
                --htmlfile|--htmlfile=*|-oH|-oH=*)
                     "$do_html" && fatal "two --html* arguments" $ERR_CMDLINE
                     HTMLFILE="$(parse_opt_equal_sign "$1" "$2")"
+                    [[ $? -eq 0 ]] && shift
+                    do_html=true
+                    ;;
+               --htmlfile-parent|--htmlfile-parent=*)
+                    if ! "$CHILD_MASS_TESTING"; then
+                         tmln_warning "$0: unrecognized option \"$1\"" 1>&2;
+                         help 1
+                    fi
+                    PARENT_HTMLFILE="$(parse_opt_equal_sign "$1" "$2")"
                     [[ $? -eq 0 ]] && shift
                     do_html=true
                     ;;
