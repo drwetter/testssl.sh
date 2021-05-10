@@ -7362,6 +7362,7 @@ tls_time() {
 }
 
 # rfc8461, rfc8460
+#
 sub_mta_sts() {
      local mta_sts_record=""
      local policy=""
@@ -7387,7 +7388,7 @@ sub_mta_sts() {
      if [[ "${CMDLINE[@]}" =~ \ --mx\  ]]; then
           domain="$URI"
      elif [[ fqdnparts -eq 2 ]] && [[ "$NODE" == ${URI%:*} ]]; then
-          # remove the port an check whether bot are the same when there's no subdomain
+          # remove the port and check whether bot are the same when there's no subdomain
           domain="$NODE"
      else
           # What's left now is a sub.domain.tld or sub.sub.domain.tld or ...
@@ -7443,10 +7444,11 @@ sub_mta_sts() {
                fi
           fi
      fi
-set +x
 
      policy="$(safe_echo "GET /.well-known/mta-sts.txt HTTP/1.1\r\nHost: mta-sts.$domain\r\nUser-Agent: $useragent\r\nAccept-Encoding: identity\r\nAccept: text/*\r\nConnection: Close\r\n\r\n" | $OPENSSL s_client $(s_client_options "-quiet -ign_eof -connect mta-sts.$domain:443 $PROXY -servername mta-sts.$domain") 2>$ERRFILE)"
-     # here also the openssl return val needs to be checked
+     # echo "${PIPESTATUS[0]} ${PIPESTATUS[1]} ${PIPESTATUS[2]}"
+     # set -o pipefail? --> https://unix.stackexchange.com/questions/14270/get-exit-status-of-process-thats-piped-to-another
+    # here also the openssl return val needs to be checked
 
      policy="$(print_after_blankline "$policy")"
      # echo "$policy"; echo
@@ -7463,7 +7465,7 @@ set +x
                fi
           done
 
-          # we use at most 10 spaces. ToDo: check with RFC wrt to the format of the policy
+          #TODO: check with RFC wrt to the format of the policy
           if "$policy_ok"; then
                if [[ ! "$policy" =~ version:[\ ]+STSv1 ]]; then
                     failreason_policy+=("version should be STSv1 ")
@@ -7527,13 +7529,13 @@ set +x
      if "$policy_ok"; then
           if [[ $policy_mode == testing ]]; then
                out "\"none\" is a valid policy but why are you using it?"
-               fileout "${jsonID}_policy" "INFO" "none is valid but not a helpful policy  at https://mta-sts.$domain/.well-known/mta-sts.txt"
+               fileout "${jsonID}_policy" "INFO" "none is valid but not a helpful policy at https://mta-sts.$domain/.well-known/mta-sts.txt"
           elif [[ $policy_mode == testing ]]; then
                out "valid but not enforced"
-               fileout "${jsonID}_policy" "INFO" "valid but not enforced policy  at https://mta-sts.$domain/.well-known/mta-sts.txt"
+               fileout "${jsonID}_policy" "INFO" "valid but not enforced policy at https://mta-sts.$domain/.well-known/mta-sts.txt"
           else
                pr_svrty_good "valid and enforced"
-               fileout "${jsonID}_policy" "OK" "valid and enforced policy  at https://mta-sts.$domain/.well-known/mta-sts.txt"
+               fileout "${jsonID}_policy" "OK" "valid and enforced policy at https://mta-sts.$domain/.well-known/mta-sts.txt"
           fi
           outln " policy https://mta-sts.$domain/.well-known/mta-sts.txt"
      elif [[ -z "$policy" ]]; then
@@ -7550,11 +7552,11 @@ set +x
      out "$spaces"
 
      if "$smtp_tls_record_ok"; then
-          outln "found (optional) TLS RPT TXT record '$smtp_tls_record'"
+          outln "found optional TLS RPT TXT record '$smtp_tls_record'"
           fileout "${jsonID}_tlsrpt" "INFO" "optional TLS-RPT TXT record '$smtp_tls_record'"
      else
           outln "No TLS RPT record"
-          fileout "${jsonID}_tlsrpt" "INFO" "no or invalid (optional) TLS RPT record '$smtp_tls_record'"
+          fileout "${jsonID}_tlsrpt" "INFO" "no or invalid optional TLS RPT record '$smtp_tls_record'"
      fi
 
      return 0
