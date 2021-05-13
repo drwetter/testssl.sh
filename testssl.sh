@@ -1335,7 +1335,7 @@ json_header() {
      local filename_provided=false
 
      if [[ -n "$PARENT_JSONFILE" ]]; then
-          [[ -n "$JSONFILE" ]] && fatal "Can't write to both $PARENT_JSONFILE and $JSONFILE"
+          [[ -n "$JSONFILE" ]] && fatal "Can't write to both $PARENT_JSONFILE and $JSONFILE" $ERR_CMDLINE
           JSONFILE="$PARENT_JSONFILE"
      fi
      [[ -n "$JSONFILE" ]] && [[ ! -d "$JSONFILE" ]] && filename_provided=true
@@ -1386,7 +1386,7 @@ csv_header() {
      local filename_provided=false
 
      if [[ -n "$PARENT_CSVFILE" ]]; then
-          [[ -n "$CSVFILE" ]] && fatal "Can't write to both $PARENT_CSVFILE and $CSVFILE"
+          [[ -n "$CSVFILE" ]] && fatal "Can't write to both $PARENT_CSVFILE and $CSVFILE" $ERR_CMDLINE
           CSVFILE="$PARENT_CSVFILE"
      fi
      [[ -n "$CSVFILE" ]] && [[ ! -d "$CSVFILE" ]] && filename_provided=true
@@ -1440,7 +1440,7 @@ html_header() {
      local filename_provided=false
 
      if [[ -n "$PARENT_HTMLFILE" ]]; then
-          [[ -n "$HTMLFILE" ]] && fatal "Can't write to both $PARENT_HTMLFILE and $HTMLFILE"
+          [[ -n "$HTMLFILE" ]] && fatal "Can't write to both $PARENT_HTMLFILE and $HTMLFILE" $ERR_CMDLINE
           HTMLFILE="$PARENT_HTMLFILE"
      fi
      [[ -n "$HTMLFILE" ]] && [[ ! -d "$HTMLFILE" ]] && filename_provided=true
@@ -1519,7 +1519,7 @@ prepare_logging() {
      local filename_provided=false
 
      if [[ -n "$PARENT_LOGFILE" ]]; then
-          [[ -n "$LOGFILE" ]] && fatal "Can't write to both $PARENT_LOGFILE and $LOGFILE"
+          [[ -n "$LOGFILE" ]] && fatal "Can't write to both $PARENT_LOGFILE and $LOGFILE" $ERR_CMDLINE
           LOGFILE="$PARENT_LOGFILE"
      fi
      [[ -n "$LOGFILE" ]] && [[ ! -d "$LOGFILE" ]] && filename_provided=true
@@ -22072,7 +22072,7 @@ parse_cmd_line() {
      while [[ $# -gt 0 ]]; do
           case $1 in
                --help|-b|--banner|-v|--version)
-                    fatal "$1 is a standalone command line option"
+                    fatal "$1 is a standalone command line option" $ERR_CMDLINE
                     ;;
                --mx)
                     do_mx_all_ips=true
