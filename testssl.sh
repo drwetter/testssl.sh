@@ -19680,7 +19680,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case "$MASS_TESTING_MODE" in
                          serial|parallel) ;;
-                         *)   tmln_magenta "\nmass testing mode can be either \"serial\" or \"parallel\""
+                         *)   tmln_magenta "\nmass testing mode can be either \"serial\" or \"parallel\"" 1>&2
                               help 1
                     esac
                     ;;
@@ -19695,7 +19695,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case "$WARNINGS" in
                          batch|off) ;;
-                         *)   tmln_magenta "\nwarnings can be either \"batch\", or \"off\""
+                         *)   tmln_magenta "\nwarnings can be either \"batch\", or \"off\"" 1>&2
                               help 1
                     esac
                     ;;
@@ -19713,7 +19713,7 @@ parse_cmd_line() {
                     [[ $? -eq 0 ]] && shift
                     case $DEBUG in
                          [0-6]) ;;
-                         *)   tmln_magenta_term "\nunrecognized debug value \"$1\", must be between 0..6" 1>&2
+                         *)   tmln_magenta "\nunrecognized debug value \"$1\", must be between 0..6" 1>&2
                               help 1
                     esac
                     ;;
@@ -19886,7 +19886,7 @@ parse_cmd_line() {
                          no-rfc|no-iana) DISPLAY_CIPHERNAMES="openssl-only" ;;
                          openssl) DISPLAY_CIPHERNAMES="openssl" ;;
                          rfc|iana) DISPLAY_CIPHERNAMES="rfc" ;;
-                         *)   tmln_warning "\nmapping can only be \"no-openssl\", \"no-iana\"(\"no-rfc\"), \"openssl\" or \"iana\"(\"rfc\")"
+                         *)   tmln_warning "\nmapping can only be \"no-openssl\", \"no-iana\"(\"no-rfc\"), \"openssl\" or \"iana\"(\"rfc\")" 1>&2
                               help 1 ;;
                     esac
                     ;;
