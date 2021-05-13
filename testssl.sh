@@ -138,7 +138,7 @@ ADDITIONAL_CA_FILES="${ADDITIONAL_CA_FILES:-""}"  # single file with a CA in PEM
 CIPHERS_BY_STRENGTH_FILE=""
 TLS_DATA_FILE=""                                  # mandatory file for socket-based handshakes
 OPENSSL_LOCATION=""
-HNAME="$(hostname)"
+HNAME="$(uname -n)"
 HNAME="${HNAME%%.*}"
 
 declare CMDLINE
