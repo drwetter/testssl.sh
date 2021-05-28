@@ -9,7 +9,7 @@
 #
 # Development version       https://github.com/drwetter/testssl.sh
 # Stable version            https://testssl.sh
-# File bugs at github       https://github.com/drwetter/testssl.sh/issues
+# File bugs at GitHub       https://github.com/drwetter/testssl.sh/issues
 #
 # Project lead and initiator: Dirk Wetter, copyleft: 2007-today, contributions so far see CREDITS.md
 # Main contributions from David Cooper
@@ -239,8 +239,8 @@ SYSTEM2=""                              # currently only being used for WSL = ba
 PRINTF=""                               # which external printf to use. Empty presets the internal one, see #1130
 CIPHERS_BY_STRENGTH_FILE=""
 TLS_DATA_FILE=""                        # mandatory file for socket-based handshakes
-OPENSSL=""                              # If you run this from github it's ~/bin/openssl.$(uname).$(uname -m) otherwise /usr/bin/openssl
-OPENSSL2=""                             # When running from github, this will be openssl version >=1.1.1 (auto determined)
+OPENSSL=""                              # If you run this from GitHub it's ~/bin/openssl.$(uname).$(uname -m) otherwise /usr/bin/openssl
+OPENSSL2=""                             # When running from GitHub, this will be openssl version >=1.1.1 (auto determined)
 OPENSSL_LOCATION=""
 IKNOW_FNAME=false
 FIRST_FINDING=true                      # is this the first finding we are outputting to file?

@@ -23,7 +23,7 @@ cryptographic flaws.
 * Reliability: features are tested thoroughly.
 * Privacy: It's only you who sees the result, not a third party.
 * Freedom: It's 100% open source. You can look at the code, see what's going on.
-* The development is open (github) and participation is welcome.
+* The development is open (GitHub) and participation is welcome.
 
 ### License
 
@@ -57,7 +57,7 @@ Think of 3.1dev like a rolling release, see below. For the stable version help y
 
 #### Docker
 
-Testssl.sh has minimal requirements. As stated you don't have to install or build anything. You can just run it from the pulled/cloned directory. Still if you don't want to pull the github repo to your directory of choice you can pull a container from dockerhub and run it:
+Testssl.sh has minimal requirements. As stated you don't have to install or build anything. You can just run it from the pulled/cloned directory. Still if you don't want to pull the GitHub repo to your directory of choice you can pull a container from dockerhub and run it:
 
 ```
 docker run --rm -ti  drwetter/testssl.sh <your_cmd_line>
@@ -94,7 +94,7 @@ Contributions are welcome! See [CONTRIBUTING.md](https://github.com/drwetter/tes
 
 Bug reports are important. It makes this project more robust.
 
-Please file bugs in the issue tracker @ github. Do not forget to provide detailed information, see template for issue, and further details @
+Please file bugs in the issue tracker @ GitHub. Do not forget to provide detailed information, see template for issue, and further details @
 https://github.com/drwetter/testssl.sh/wiki/Bug-reporting. Nobody can read your thoughts -- yet. And only agencies your screen ;-)
 
 You can also debug yourself, see [here](https://github.com/drwetter/testssl.sh/wiki/Findings-and-HowTo-Fix-them).

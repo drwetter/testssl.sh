@@ -2,7 +2,7 @@
 #
 #  vim:tw=90:ts=5:sw=5
 #
-# Script compiling OpenSSL 1.1.1 from github. Not yet particular sophisticated.
+# Script compiling OpenSSL 1.1.1 from GitHub. Not yet particular sophisticated.
 # Just meant to provide a help to get the compile job done
 
 echo
