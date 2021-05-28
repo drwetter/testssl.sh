@@ -16446,7 +16446,7 @@ run_breach() {
                     elif [[ "$detected_compression" =~ no_compression ]]; then
                          has_compression+=("$c:no")
                          debugme echo "has_compression: $c: no"
-                    elif [[ -n "detected_compression" ]]; then
+                    elif [[ -n "$detected_compression" ]]; then
                          has_compression+=("$c:yes")
                          debugme echo "has_compression: $c: yes"
                     else
