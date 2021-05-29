@@ -1633,7 +1633,7 @@ out_row_aligned_max_width_by_entry() {
           fi
           out " "
           prev_entry="$entry"
-    done <<< "$resp"
+     done <<< "$resp"
 }
 
 print_fixed_width() {
@@ -6808,7 +6808,7 @@ run_server_preference() {
                     ( [[ $proto_ossl != tls1_3 ]] && ! "$has_cipher_order" ]] ) || \
                     ( [[ $proto_ossl == tls1_3 ]] && ! "$has_tls13_cipher_order" ]] ); then
                if [[ $proto_ossl == ssl2 ]]; then
-                   outln " (listed by strength)"
+                    outln " (listed by strength)"
                elif [[ $proto_ossl == tls1_3 ]]; then
                     outln " (no server order, thus listed by strength)"
                else
@@ -6939,12 +6939,12 @@ cipher_pref_check() {
                while true; do
                     if [[ $proto != tls1_3 ]]; then
                          if [[ -n "$ciphers_found" ]]; then
-                                  ciphers_to_test=""
-                                  for cipher in $ciphers_found; do
-                                       [[ ! "$tested_cipher:" =~ :-$cipher: ]] && ciphers_to_test+=":$cipher"
-                                  done
-                                  [[ -z "$ciphers_to_test" ]] && break
-                                  ciphers_to_test="-cipher ${ciphers_to_test:1}"
+                              ciphers_to_test=""
+                              for cipher in $ciphers_found; do
+                                   [[ ! "$tested_cipher:" =~ :-$cipher: ]] && ciphers_to_test+=":$cipher"
+                              done
+                              [[ -z "$ciphers_to_test" ]] && break
+                              ciphers_to_test="-cipher ${ciphers_to_test:1}"
                          else
                               ciphers_to_test="-cipher ALL:COMPLEMENTOFALL${tested_cipher}"
                          fi
@@ -14166,10 +14166,10 @@ parse_tls_serverhello() {
                          len1=2*$(hex2dec "${tls_serverkeyexchange_ascii:6:2}")
                          offset=$((len1+8))
                          if [[ $tls_serverkeyexchange_ascii_len -ge $((offset+4)) ]]; then
-                             # The SignatureAndHashAlgorithm won't be present in an anonymous
-                             # key exhange.
-                             peering_signing_digest="${tls_serverkeyexchange_ascii:offset:2}"
-                             peer_signature_type="${tls_serverkeyexchange_ascii:$((offset+2)):2}"
+                              # The SignatureAndHashAlgorithm won't be present in an anonymous
+                              # key exhange.
+                              peering_signing_digest="${tls_serverkeyexchange_ascii:offset:2}"
+                              peer_signature_type="${tls_serverkeyexchange_ascii:$((offset+2)):2}"
                          fi
                     fi
                fi
@@ -14239,9 +14239,9 @@ parse_tls_serverhello() {
                          rfc7919_param="${rfc7919_param%,}"
                          [[ "$ephemeral_param" =~ $rfc7919_param ]] || named_curve_str=""
                     else
-                       ephemeral_param="$(grep -EA 1000 "prime:|P:" <<< "$ephemeral_param")"
-                       rfc7919_param="$($OPENSSL pkey -text_pub -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -EA 1000 "prime:|P:")"
-                       [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
+                         ephemeral_param="$(grep -EA 1000 "prime:|P:" <<< "$ephemeral_param")"
+                         rfc7919_param="$($OPENSSL pkey -text_pub -noout 2>>$ERRFILE <<< "${TLS13_KEY_SHARES[named_curve]}" | grep -EA 1000 "prime:|P:")"
+                         [[ "$ephemeral_param" != "$rfc7919_param" ]] && named_curve_str=""
                     fi
                fi
 
@@ -14266,8 +14266,8 @@ parse_tls_serverhello() {
                     len1=2*$(hex2dec "${tls_serverkeyexchange_ascii:offset:4}")
                     offset+=$((len1+4))
                     if [[ $tls_serverkeyexchange_ascii_len -ge $((offset+4)) ]]; then
-                        # The SignatureAndHashAlgorithm won't be present in an anonymous
-                        # key exhange.
+                         # The SignatureAndHashAlgorithm won't be present in an anonymous
+                         # key exhange.
                          peering_signing_digest="${tls_serverkeyexchange_ascii:offset:2}"
                          peer_signature_type="${tls_serverkeyexchange_ascii:$((offset+2)):2}"
                     fi
@@ -14320,53 +14320,53 @@ parse_tls_serverhello() {
 
 # ASCII-HEX encoded session ticket
 parse_tls13_new_session_ticket() {
-    local tls_version="$1"
-    local new_session_ticket="$2"
-    local -i len ticket_lifetime ticket_age_add min_len remainder
-    local ticket_nonce ticket extensions
-    local has_nonce=true
+     local tls_version="$1"
+     local new_session_ticket="$2"
+     local -i len ticket_lifetime ticket_age_add min_len remainder
+     local ticket_nonce ticket extensions
+     local has_nonce=true
 
-    [[ "${new_session_ticket:0:2}" == 04 ]] || return 7
-    # Prior to draft 21 the NewSessionTicket did not include a ticket_nonce.
-    [[ "${tls_version:0:2}" == 7F ]] && [[ 0x${tls_version:2:2} -le 20 ]] && has_nonce=false
+     [[ "${new_session_ticket:0:2}" == 04 ]] || return 7
+     # Prior to draft 21 the NewSessionTicket did not include a ticket_nonce.
+     [[ "${tls_version:0:2}" == 7F ]] && [[ 0x${tls_version:2:2} -le 20 ]] && has_nonce=false
 
-    # Set min_len to the minimum length that a session ticket can be.
-    min_len=28
-    "$has_nonce" || min_len=$((min_len-2))
+     # Set min_len to the minimum length that a session ticket can be.
+     min_len=28
+     "$has_nonce" || min_len=$((min_len-2))
 
-    remainder=$((2*0x${new_session_ticket:2:6}))
-    [[ $remainder -ge $min_len ]] || return 7
-    [[ ${#new_session_ticket} -ge $((remainder + 8)) ]] || return 7
+     remainder=$((2*0x${new_session_ticket:2:6}))
+     [[ $remainder -ge $min_len ]] || return 7
+     [[ ${#new_session_ticket} -ge $((remainder + 8)) ]] || return 7
 
-    ticket_lifetime=0x${new_session_ticket:8:8}
-    ticket_age_add=0x${new_session_ticket:16:8}
-    new_session_ticket="${new_session_ticket:24}"
-    remainder=$((remainder-16))
+     ticket_lifetime=0x${new_session_ticket:8:8}
+     ticket_age_add=0x${new_session_ticket:16:8}
+     new_session_ticket="${new_session_ticket:24}"
+     remainder=$((remainder-16))
 
-    if "$has_nonce"; then
-         len=$((2*0x${new_session_ticket:0:2}))
-         new_session_ticket="${new_session_ticket:2}"
-         [[ $remainder -ge $((len + 12)) ]] || return 7
-         ticket_nonce="${new_session_ticket:0:len}"
-         new_session_ticket="${new_session_ticket:len}"
-         remainder=$((remainder-len-2))
-    fi
+     if "$has_nonce"; then
+          len=$((2*0x${new_session_ticket:0:2}))
+          new_session_ticket="${new_session_ticket:2}"
+          [[ $remainder -ge $((len + 12)) ]] || return 7
+          ticket_nonce="${new_session_ticket:0:len}"
+          new_session_ticket="${new_session_ticket:len}"
+          remainder=$((remainder-len-2))
+     fi
 
-    len=$((2*0x${new_session_ticket:0:4}))
-    new_session_ticket="${new_session_ticket:4}"
-    [[ $remainder -ge $((len + 8)) ]] || return 7
-    ticket="${new_session_ticket:0:len}"
-    new_session_ticket="${new_session_ticket:len}"
-    remainder=$((remainder-len-4))
+     len=$((2*0x${new_session_ticket:0:4}))
+     new_session_ticket="${new_session_ticket:4}"
+     [[ $remainder -ge $((len + 8)) ]] || return 7
+     ticket="${new_session_ticket:0:len}"
+     new_session_ticket="${new_session_ticket:len}"
+     remainder=$((remainder-len-4))
 
-    len=$((2*0x${new_session_ticket:0:4}))
-    new_session_ticket="${new_session_ticket:4}"
-    [[ $remainder -eq $((len + 4)) ]] || return 7
-    extensions="${new_session_ticket:0:len}"
+     len=$((2*0x${new_session_ticket:0:4}))
+     new_session_ticket="${new_session_ticket:4}"
+     [[ $remainder -eq $((len + 4)) ]] || return 7
+     extensions="${new_session_ticket:0:len}"
 
-    echo "    TLS session ticket lifetime hint: $ticket_lifetime (seconds)" > $TMPFILE
-    tmpfile_handle ${FUNCNAME[0]}.txt $TMPFILE
-    return 0
+     echo "    TLS session ticket lifetime hint: $ticket_lifetime (seconds)" > $TMPFILE
+     tmpfile_handle ${FUNCNAME[0]}.txt $TMPFILE
+     return 0
 }
 
 #arg1 (optional): list of ciphers suites or empty
@@ -16915,7 +16915,7 @@ run_freak() {
      [[ $VULN_COUNT -le $VULN_THRESHLD ]] && outln && pr_headlineln " Testing for FREAK attack " && outln
      pr_bold " FREAK"; out " ($cve)                     "
 
-    if "$TLS13_ONLY"; then
+     if "$TLS13_ONLY"; then
           pr_svrty_best "not vulnerable (OK)"
           [[ $DEBUG -ge 1 ]] && out ", TLS 1.3 only server"
           outln
@@ -17786,9 +17786,9 @@ run_winshock() {
           for tls_ext in $TLS_EXTENSIONS; do
                # We use the whole array, got to be careful when the array becomes bigger (unintented match)
                if [[ ${forbidden_tls_ext[@]} =~ $tls_ext ]]; then
-                  pr_svrty_best "not vulnerable (OK)"; outln " - TLS extension $tls_ext detected"
-                  fileout "$jsonID" "OK" "not vulnerable  - TLS extension $tls_ext detected" "$cve" "$cwe"
-                  return 0
+                    pr_svrty_best "not vulnerable (OK)"; outln " - TLS extension $tls_ext detected"
+                    fileout "$jsonID" "OK" "not vulnerable  - TLS extension $tls_ext detected" "$cve" "$cwe"
+                    return 0
                fi
           done
      fi
@@ -20484,11 +20484,11 @@ extract_calist() {
                type=$(hex2dec "${certreq:0:4}")
                len=2*$(hex2dec "${certreq:4:4}")
                if [[ $type -eq 47 ]]; then
-                  # This is the certificate_authorities extension
-                  calist="${certreq:8:len}"
-                  len=2*$(hex2dec "${calist:0:4}")
-                  calist="${calist:4:len}"
-                  break
+                    # This is the certificate_authorities extension
+                    calist="${certreq:8:len}"
+                    len=2*$(hex2dec "${calist:0:4}")
+                    calist="${calist:4:len}"
+                    break
                fi
                certreq="${certreq:$((len+8))}"
           done
@@ -22774,7 +22774,7 @@ lets_roll() {
                fileout_section_header $section_number true && ((section_number++))
                "$do_cipherlists" && { run_cipherlists; ret=$(($? + ret)); stopwatch run_cipherlists; }
 
-              fileout_section_header $section_number true && ((section_number++))
+               fileout_section_header $section_number true && ((section_number++))
                "$do_server_preference" && { run_server_preference; ret=$(($? + ret)); stopwatch run_server_preference; }
 
                fileout_section_header $section_number true && ((section_number++))
