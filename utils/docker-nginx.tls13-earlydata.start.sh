@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 image="rsnow/nginx"
 docker pull $image

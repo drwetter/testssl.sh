@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 #  vim:tw=90:ts=5:sw=5
 #

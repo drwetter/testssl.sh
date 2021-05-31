@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # simple check for seesion resumption 1) by SID, 2) by tickets
 # Author: Dirk Wetter, GPLv2 see https://testssl.sh/LICENSE.txt
